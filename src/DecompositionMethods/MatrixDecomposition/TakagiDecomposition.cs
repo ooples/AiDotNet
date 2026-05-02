@@ -128,113 +128,148 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> S, Matrix<Complex<T>> U) ComputeTakagiJacobi(Matrix<T> matrix)
     {
+        // Cyclic-Jacobi sweep, same algorithmic structure as
+        // EigenDecomposition.ComputeEigenJacobi (issue #1230 long-term fix):
+        //   - Each sweep walks every (p,q) pair with p<q.
+        //   - In-place 2-axis rotation: O(n) per rotation.
+        //   - n*(n-1)/2 rotations per sweep ⇒ O(n^3) per sweep.
+        //   - 6–10 sweeps to convergence ⇒ O(n^3) total (vs the prior
+        //     single-pivot O(n^4) at best, O(n^5) when the rotation matrix
+        //     was materialised explicitly).
+        //
+        // The Takagi rotation form is G^T A G with G[p,q] = -s, G[q,p] = s
+        // (sign flip versus the EigenDecomposition convention), so the
+        // diagonal-update / off-diagonal-update / V-update formulas below
+        // use the matching sign convention.
+
         int n = matrix.Rows;
         var S = new Matrix<T>(n, n);
-        // Start with real identity for eigenvector accumulation
         var V = Matrix<T>.CreateIdentityMatrix(n);
         var A = matrix.Clone();
 
-        const int maxIterations = 100;
-        var tolerance = NumOps.FromDouble(1e-10);
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+        T half = NumOps.FromDouble(0.5);
+        T two = NumOps.FromDouble(2);
+        T tiny = NumOps.FromDouble(1e-30);
+        T machineEps = NumOps.FromDouble(1e-15);
 
-        for (int iter = 0; iter < maxIterations; iter++)
+        // Convergence threshold: ‖off-diag(A)‖_F^2 < (1e-12 · ‖A‖_F)^2.
+        T frobNormSq = SumSquaredEntries(A);
+        T frobTolSq = NumOps.Multiply(frobNormSq, NumOps.FromDouble(1e-24));
+        T frobFloorSq = NumOps.FromDouble(1e-30);
+        T convergenceThresholdSq = NumOps.GreaterThan(frobTolSq, frobFloorSq) ? frobTolSq : frobFloorSq;
+
+        const int maxSweeps = 50;
+
+        for (int sweep = 0; sweep < maxSweeps; sweep++)
         {
-            var maxOffDiagonal = NumOps.Zero;
-            int p = 0, q = 0;
-
-            // Find the largest off-diagonal element
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i + 1; j < n; j++)
-                {
-                    var absValue = NumOps.Abs(A[i, j]);
-                    if (NumOps.GreaterThan(absValue, maxOffDiagonal))
-                    {
-                        maxOffDiagonal = absValue;
-                        p = i;
-                        q = j;
-                    }
-                }
-            }
-
-            if (NumOps.LessThan(maxOffDiagonal, tolerance))
+            T offDiagSumSq = SumSquaredOffDiagonal(A);
+            if (NumOps.LessThan(offDiagSumSq, convergenceThresholdSq))
             {
                 break;
             }
 
-            // Compute the Jacobi rotation angle
-            T app = A[p, p];
-            T aqq = A[q, q];
-            T apq = A[p, q];
-
-            // Handle case when app == aqq
-            T diff = NumOps.Subtract(app, aqq);  // Note: (app - aqq), not (aqq - app)
-            T c, s;
-            if (NumOps.LessThan(NumOps.Abs(diff), tolerance))
+            T threshold;
+            if (sweep < 3)
             {
-                // When diagonal elements are equal, use 45-degree rotation
-                c = NumOps.FromDouble(Math.Sqrt(0.5));
-                s = NumOps.FromDouble(Math.Sqrt(0.5));
-                if (NumOps.LessThan(apq, NumOps.Zero))
-                {
-                    s = NumOps.Negate(s);
-                }
+                T scale = NumOps.FromDouble(0.2 / ((double)n * n));
+                threshold = NumOps.Multiply(scale, offDiagSumSq);
             }
             else
             {
-                // For A' = G^T * A * G to zero out A'[p,q], we need:
-                // A'[p,q] = (c² - s²)*apq + cs*(aqq - app) = 0
-                // This gives tan(2θ) = 2*apq / (app - aqq)
-                // For Jacobi eigenvalue algorithm, t = tan(θ) where:
-                // t = tau / (sqrt(1 + tau²) + 1) [numerically stable form]
-                T tau = NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2), apq), diff);
-                T sqrtTerm = NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Square(tau)));
-                T t = NumOps.Divide(tau, NumOps.Add(sqrtTerm, NumOps.One));
-                c = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Square(t))));
-                s = NumOps.Multiply(t, c);
+                threshold = zero;
             }
 
-            // Update A with correct Jacobi rotation formulas
-            // For G^T * A * G where G has G[p,q] = -s, G[q,p] = s:
-            // A'[p,p] = c²*app + 2*c*s*apq + s²*aqq
-            // A'[q,q] = s²*app - 2*c*s*apq + c²*aqq
-            T c2 = NumOps.Square(c);
-            T s2 = NumOps.Square(s);
-            T cs2 = NumOps.Multiply(NumOps.Multiply(NumOps.FromDouble(2), c), s);
-            T csapq = NumOps.Multiply(cs2, apq);
-
-            T newApp = NumOps.Add(NumOps.Add(NumOps.Multiply(c2, app), NumOps.Multiply(s2, aqq)), csapq);
-            T newAqq = NumOps.Subtract(NumOps.Add(NumOps.Multiply(s2, app), NumOps.Multiply(c2, aqq)), csapq);
-
-            // Update off-diagonal elements: A' = G^T * A * G
-            // A'[i,p] = c*A[i,p] + s*A[i,q]  (for i != p,q)
-            // A'[i,q] = -s*A[i,p] + c*A[i,q]
-            for (int i = 0; i < n; i++)
+            for (int p = 0; p < n - 1; p++)
             {
-                if (i != p && i != q)
+                for (int q = p + 1; q < n; q++)
                 {
-                    T api = A[p, i];
-                    T aqi = A[q, i];
-                    A[p, i] = NumOps.Add(NumOps.Multiply(c, api), NumOps.Multiply(s, aqi));
-                    A[i, p] = A[p, i];
-                    A[q, i] = NumOps.Subtract(NumOps.Multiply(c, aqi), NumOps.Multiply(s, api));
-                    A[i, q] = A[q, i];
-                }
-            }
-            A[p, p] = newApp;
-            A[q, q] = newAqq;
-            A[p, q] = NumOps.Zero;
-            A[q, p] = NumOps.Zero;
+                    T apq = A[p, q];
+                    T absApqSq = NumOps.Multiply(apq, apq);
 
-            // Update eigenvectors V: V' = V * G
-            // V'[:,p] = c*V[:,p] + s*V[:,q]
-            // V'[:,q] = -s*V[:,p] + c*V[:,q]
-            for (int i = 0; i < n; i++)
-            {
-                T vip = V[i, p];
-                T viq = V[i, q];
-                V[i, p] = NumOps.Add(NumOps.Multiply(c, vip), NumOps.Multiply(s, viq));
-                V[i, q] = NumOps.Subtract(NumOps.Multiply(c, viq), NumOps.Multiply(s, vip));
+                    if (sweep > 3)
+                    {
+                        T diagScale = NumOps.Add(NumOps.Abs(A[p, p]), NumOps.Abs(A[q, q]));
+                        T tinyAllowed = NumOps.Multiply(NumOps.FromDouble(100), NumOps.Multiply(machineEps, diagScale));
+                        if (NumOps.LessThan(NumOps.Abs(apq), tinyAllowed))
+                        {
+                            A[p, q] = zero;
+                            A[q, p] = zero;
+                            continue;
+                        }
+                    }
+
+                    if (sweep < 3 && NumOps.LessThan(absApqSq, threshold))
+                    {
+                        continue;
+                    }
+                    if (NumOps.LessThan(NumOps.Abs(apq), tiny))
+                    {
+                        continue;
+                    }
+
+                    // Rotation parameters. Takagi convention:
+                    //   tan(2θ) = 2·apq / (app - aqq)
+                    //   t = tan(θ), and we pick the smaller-magnitude root
+                    //   for numerical stability per Numerical Recipes §11.1.
+                    T app = A[p, p];
+                    T aqq = A[q, q];
+                    T diff = NumOps.Subtract(app, aqq);
+                    T c, s;
+                    if (NumOps.LessThan(NumOps.Abs(diff), NumOps.Multiply(machineEps, NumOps.Abs(apq))))
+                    {
+                        // 45-degree rotation when diagonals are equal.
+                        c = NumOps.FromDouble(System.Math.Sqrt(0.5));
+                        s = NumOps.FromDouble(System.Math.Sqrt(0.5));
+                        if (NumOps.LessThan(apq, zero))
+                        {
+                            s = NumOps.Negate(s);
+                        }
+                    }
+                    else
+                    {
+                        T tau = NumOps.Divide(NumOps.Multiply(two, apq), diff);
+                        T sqrtTerm = NumOps.Sqrt(NumOps.Add(one, NumOps.Multiply(tau, tau)));
+                        T t = NumOps.Divide(tau, NumOps.Add(sqrtTerm, one));
+                        c = NumOps.Divide(one, NumOps.Sqrt(NumOps.Add(one, NumOps.Multiply(t, t))));
+                        s = NumOps.Multiply(t, c);
+                    }
+
+                    // Diagonals: A' = G^T A G with G[p,q] = -s, G[q,p] = s.
+                    T c2 = NumOps.Multiply(c, c);
+                    T s2 = NumOps.Multiply(s, s);
+                    T cs2 = NumOps.Multiply(NumOps.Multiply(two, c), s);
+                    T csapq = NumOps.Multiply(cs2, apq);
+
+                    T newApp = NumOps.Add(NumOps.Add(NumOps.Multiply(c2, app), NumOps.Multiply(s2, aqq)), csapq);
+                    T newAqq = NumOps.Subtract(NumOps.Add(NumOps.Multiply(s2, app), NumOps.Multiply(c2, aqq)), csapq);
+
+                    // Off-diagonals i != p,q
+                    for (int i = 0; i < n; i++)
+                    {
+                        if (i == p || i == q) continue;
+                        T api = A[p, i];
+                        T aqi = A[q, i];
+                        A[p, i] = NumOps.Add(NumOps.Multiply(c, api), NumOps.Multiply(s, aqi));
+                        A[i, p] = A[p, i];
+                        A[q, i] = NumOps.Subtract(NumOps.Multiply(c, aqi), NumOps.Multiply(s, api));
+                        A[i, q] = A[q, i];
+                    }
+                    A[p, p] = newApp;
+                    A[q, q] = newAqq;
+                    A[p, q] = zero;
+                    A[q, p] = zero;
+
+                    // V' = V · G
+                    for (int i = 0; i < n; i++)
+                    {
+                        T vip = V[i, p];
+                        T viq = V[i, q];
+                        V[i, p] = NumOps.Add(NumOps.Multiply(c, vip), NumOps.Multiply(s, viq));
+                        V[i, q] = NumOps.Subtract(NumOps.Multiply(c, viq), NumOps.Multiply(s, vip));
+                    }
+                }
             }
         }
 
@@ -698,5 +733,36 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         return xVector;
+    }
+
+    /// <summary>
+    /// Sum of squared entries — used for the Frobenius-norm-based convergence
+    /// threshold in the cyclic-Jacobi sweep loop.
+    /// </summary>
+    private T SumSquaredEntries(Matrix<T> m)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < m.Columns; j++)
+                sum = NumOps.Add(sum, NumOps.Multiply(m[i, j], m[i, j]));
+        return sum;
+    }
+
+    /// <summary>
+    /// Sum of squared off-diagonal entries (i ≠ j). Drives the cyclic-Jacobi
+    /// per-sweep convergence check.
+    /// </summary>
+    private T SumSquaredOffDiagonal(Matrix<T> m)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < m.Rows; i++)
+        {
+            for (int j = 0; j < m.Columns; j++)
+            {
+                if (i == j) continue;
+                sum = NumOps.Add(sum, NumOps.Multiply(m[i, j], m[i, j]));
+            }
+        }
+        return sum;
     }
 }
