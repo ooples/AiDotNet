@@ -2200,10 +2200,38 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // shape. We re-read GetOutputShape after ResolveFromShape
                 // so a lazy layer that just resolved contributes its
                 // real shape to the next iteration.
+                //
+                // Always keep the leading batch dim across the walk. Many
+                // layers' GetOutputShape returns rank-3 [C, H, W] (channels-
+                // first, no batch) — BN / LayerNorm / etc. dispatch off
+                // input.Shape[1] expecting batch in axis 0, so feeding them
+                // a rank-3 shape would size their per-channel weights to
+                // the H dim instead of C. Pre-resolved blocks (already
+                // resolved during model construction) hit this path even
+                // though their ResolveShapesOnly call was skipped — their
+                // stored OutputShape is rank-3 by convention.
                 int[] outShape = layer.GetOutputShape();
                 if (outShape != null && outShape.Length > 0 && System.Array.TrueForAll(outShape, d => d > 0))
                 {
-                    currentShape = outShape;
+                    int leadingBatch = currentShape.Length > 0 ? currentShape[0] : 1;
+                    // Heuristic: outShape is rank-3 [C, H, W] (vision/CNN) or
+                    // rank-2 [seq, dim] (transformer/attention) when it omits
+                    // the batch axis. If the outShape's first dim could plausibly
+                    // be the batch dim (matches the inbound batch) keep as-is;
+                    // otherwise treat it as a channels-first / features-last
+                    // shape and prepend the inbound batch.
+                    bool outHasBatch = outShape.Length >= 2 && outShape[0] == leadingBatch;
+                    if (!outHasBatch && outShape.Length <= currentShape.Length)
+                    {
+                        int[] withBatch = new int[outShape.Length + 1];
+                        withBatch[0] = leadingBatch;
+                        for (int k = 0; k < outShape.Length; k++) withBatch[k + 1] = outShape[k];
+                        currentShape = withBatch;
+                    }
+                    else
+                    {
+                        currentShape = outShape;
+                    }
                 }
                 else
                 {
