@@ -39,16 +39,6 @@ namespace AiDotNet.Diffusion.Attention;
 /// </remarks>
 public class DiffusionAttention<T> : LayerBase<T>
 {
-    // Pooled buffers for the eval-mode shape-shuffle around the attention
-    // micro-kernel: each call permutes [B,C,H,W] -> [B,H,W,C] (entry) and
-    // [B,H,W,C] -> [B,C,H,W] (exit). Each permute previously allocated a
-    // fresh ~10 MB tensor at SD shapes — pool them keyed by shape so
-    // repeated calls (multiple ResBlock attention blocks per UNet, ×N
-    // inference steps) reuse the same buffers. Tape-active mode keeps the
-    // allocating Engine.TensorPermute so backward can recover gradients.
-    private Tensor<T>? _preAllocatedEntryPermute;
-    private Tensor<T>? _preAllocatedExitPermute;
-
     /// <summary>
     /// Number of channels.
     /// </summary>
@@ -210,9 +200,6 @@ public class DiffusionAttention<T> : LayerBase<T>
     {
         _lastInput = input;
 
-        bool useInPlace = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-                          || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
-
         // Determine if input is image format [B, C, H, W] or sequence format [B, S, D]
         bool isImageFormat = input.Shape.Length == 4;
         int batchSize, sequenceLength, channels;
@@ -226,30 +213,11 @@ public class DiffusionAttention<T> : LayerBase<T>
             int width = input.Shape[3];
             sequenceLength = height * width;
 
-            // Reshape [B, C, H, W] -> [B, H, W, C] -> [B, H*W, C]. Every shape op
-            // must go through Engine so the gradient tape records the
-            // transformation — direct Tensor<T>.Transpose / .Reshape bypass
-            // the tape and break gradient flow through the attention block.
-            // Eval mode (no tape) routes the permute through TensorPermuteInto
-            // with a pooled output buffer to skip the per-call ~10 MB
-            // allocation; tape mode keeps the allocating TensorPermute so
-            // backward can recover gradients.
-            int[] entryShape = new[] { batchSize, height, width, channels };
-            Tensor<T> permuted;
-            if (useInPlace)
-            {
-                if (_preAllocatedEntryPermute is null
-                    || !ShapeEquals(_preAllocatedEntryPermute._shape, entryShape))
-                {
-                    _preAllocatedEntryPermute = new Tensor<T>(entryShape);
-                }
-                permuted = _preAllocatedEntryPermute;
-                Engine.TensorPermuteInto(permuted, input, new[] { 0, 2, 3, 1 });
-            }
-            else
-            {
-                permuted = Engine.TensorPermute(input, new[] { 0, 2, 3, 1 });
-            }
+            // Reshape [B, C, H, W] -> [B, H*W, C]. Every shape op must go
+            // through Engine so the gradient tape records the transformation —
+            // direct Tensor<T>.Transpose / .Reshape bypass the tape and break
+            // gradient flow through the attention block.
+            var permuted = Engine.TensorPermute(input, new[] { 0, 2, 3, 1 });
             x = Engine.Reshape(permuted, new[] { batchSize, sequenceLength, channels });
         }
         else
@@ -281,31 +249,10 @@ public class DiffusionAttention<T> : LayerBase<T>
             int height = input.Shape[2];
             int width = input.Shape[3];
             var reshaped = Engine.Reshape(output, new[] { batchSize, height, width, channels });
-            int[] outShape = new[] { batchSize, channels, height, width };
-            if (useInPlace)
-            {
-                if (_preAllocatedExitPermute is null
-                    || !ShapeEquals(_preAllocatedExitPermute._shape, outShape))
-                {
-                    _preAllocatedExitPermute = new Tensor<T>(outShape);
-                }
-                Engine.TensorPermuteInto(_preAllocatedExitPermute, reshaped, new[] { 0, 3, 1, 2 });
-                output = _preAllocatedExitPermute;
-            }
-            else
-            {
-                output = Engine.TensorPermute(reshaped, new[] { 0, 3, 1, 2 });
-            }
+            output = Engine.TensorPermute(reshaped, new[] { 0, 3, 1, 2 });
         }
 
         return output;
-    }
-
-    private static bool ShapeEquals(int[] a, int[] b)
-    {
-        if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
-        return true;
     }
 
     /// <summary>
