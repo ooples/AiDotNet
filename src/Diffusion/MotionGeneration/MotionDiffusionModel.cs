@@ -77,7 +77,12 @@ public class MotionDiffusionModel<T> : LatentDiffusionModelBase<T>
     [MemberNotNull(nameof(_predictor), nameof(_vae))]
     private void InitializeLayers(SiTPredictor<T>? predictor, StandardVAE<T>? vae, int? seed)
     {
-        _predictor = predictor ?? new SiTPredictor<T>(seed: seed);
+        // MDM / MotionDiffusionModel (Tevet et al. 2023, "Human Motion
+        // Diffusion Model") §3.1: each frame is a 263-dim joint-pose feature
+        // (HumanML3D representation). The predictor runs on these directly,
+        // no spatial latent — set inputChannels to LATENT_CHANNELS so
+        // patchify shapes line up.
+        _predictor = predictor ?? new SiTPredictor<T>(inputChannels: LATENT_CHANNELS, seed: seed);
         _vae = vae ?? new StandardVAE<T>(inputChannels: LATENT_CHANNELS, latentChannels: LATENT_CHANNELS,
             baseChannels: 128, channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocksPerLevel: 2, seed: seed);
     }

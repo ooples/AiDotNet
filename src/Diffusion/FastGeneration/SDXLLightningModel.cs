@@ -85,7 +85,8 @@ public class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.00085,
-                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
+                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear,
+                DefaultInferenceSteps = DEFAULT_STEPS
             },
             scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)

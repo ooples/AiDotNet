@@ -114,13 +114,23 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         // Default learning rates: decrease with level
         _learningRates = learningRates ?? CreateDefaultLearningRates(numFrequencyLevels);
 
-        // Create chain of MLP blocks (DenseLayer with ReLU activation)
+        // Create chain of MLP blocks (DenseLayer with ReLU activation).
+        // Eagerly resolve each block's input shape so ParameterCount is
+        // correct at construction time — without this, every block stays
+        // lazy until first forward, which means SetParameters at deserialize
+        // time sees ParameterCount=0 and rejects the saved weight vector
+        // (HopeNetwork Clone_AfterTraining_ShouldPreserveLearnedWeights and
+        // similar Clone-via-serialize tests fail with "Parameter vector
+        // length (N) does not match total parameters (0)"). Block i's input
+        // is block (i-1)'s output (== hiddenDim) for i ≥ 1, and the layer's
+        // declared inputShape[0] for i = 0.
         _mlpBlocks = new DenseLayer<T>[numFrequencyLevels];
         int currentDim = inputShape[0];
 
         for (int i = 0; i < numFrequencyLevels; i++)
         {
             _mlpBlocks[i] = new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
+            _mlpBlocks[i].ResolveFromShape(new[] { currentDim });
             RegisterSubLayer(_mlpBlocks[i]);
             currentDim = hiddenDim;
         }
@@ -553,4 +563,16 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         }
     }
 
+    // Constructor-level metadata required to round-trip the layer through
+    // Serialize / DeserializationHelper.CreateLayerFromType. Without these
+    // entries the deserializer falls back to defaults (numFrequencyLevels=3,
+    // hiddenDim derived from OutputShape) and rebuilds a layer with the
+    // wrong parameter count when the saved network used non-default values.
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumFrequencyLevels"] = _mlpBlocks.Length.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["HiddenDim"] = OutputShape[0].ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
 }

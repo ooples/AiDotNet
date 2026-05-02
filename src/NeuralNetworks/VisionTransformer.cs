@@ -441,6 +441,94 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, optimizer: null);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Tape-tracked forward pass for training. Mirrors <see cref="Predict"/> but
+    /// uses Engine ops (TensorConcatenate, TensorBroadcastAdd, Reshape, TensorSlice)
+    /// so gradients flow back through the patch embedding, transformer encoder
+    /// stack, and classification head. Cls token and positional embeddings are
+    /// wrapped as constant Tensor&lt;T&gt; for the tape so the rest of the network
+    /// trains correctly — they retain their initialized values during training,
+    /// matching the common ViT fine-tuning practice of freezing the cls token
+    /// and positional embeddings while updating the encoder/head.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        // Same input-shape canonicalization as Predict.
+        Tensor<T> input4D;
+        if (input.Shape.Length == 3)
+            input4D = Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]);
+        else if (input.Shape.Length == 4)
+            input4D = input;
+        else
+            throw new ArgumentException(
+                $"Input must be a 3D tensor [C, H, W] or 4D tensor [B, C, H, W], but got rank {input.Shape.Length}.",
+                nameof(input));
+
+        if (input4D.Shape[1] != _channels || input4D.Shape[2] != _imageHeight || input4D.Shape[3] != _imageWidth)
+            throw new ArgumentException(
+                $"Input shape {string.Join("x", input4D._shape)} does not match expected " +
+                $"[batch, {_channels}, {_imageHeight}, {_imageWidth}].",
+                nameof(input));
+
+        int batchSize = input4D.Shape[0];
+
+        // 1. Patch embedding (Layers[0]) — tape-tracked through layer.Forward.
+        var patchEmbeddings = Layers[0].Forward(input4D); // [B, N, D]
+
+        // 2. Build cls token tensor as [B, 1, D] by broadcasting the learned
+        //    Vector<T> _clsToken across the batch.
+        var clsTensor = new Tensor<T>([batchSize, 1, _hiddenDim]);
+        for (int b = 0; b < batchSize; b++)
+            for (int d = 0; d < _hiddenDim; d++)
+                clsTensor[b, 0, d] = _clsToken[d];
+
+        // 3. Concat cls token + patch embeddings along sequence axis (axis=1)
+        //    → [B, N+1, D]. TensorConcatenate is tape-tracked so gradients flow
+        //    back into the patch embedding side.
+        var sequence = Engine.TensorConcatenate(new[] { clsTensor, patchEmbeddings }, axis: 1);
+
+        // 4. Add positional embeddings. Wrap _positionalEmbeddings as a
+        //    [1, N+1, D] tensor for broadcast-add across the batch.
+        var posEmbedding = new Tensor<T>([1, _numPatches + 1, _hiddenDim]);
+        for (int p = 0; p < _numPatches + 1; p++)
+            for (int d = 0; d < _hiddenDim; d++)
+                posEmbedding[0, p, d] = _positionalEmbeddings[p, d];
+        var withPos = Engine.TensorBroadcastAdd(sequence, posEmbedding);
+
+        // 5. Transformer encoder stack (Layers[1..count-2]) — each block is
+        //    tape-aware via its own Forward.
+        var current = withPos;
+        for (int i = 1; i < Layers.Count - 1; i++)
+            current = Layers[i].Forward(current);
+
+        // 6. Extract cls token output via TensorSlice [B, 0, :] → [B, 1, D].
+        var rank = current.Rank;
+        var sliceStart = new int[rank];
+        var sliceLen = new int[rank];
+        for (int d = 0; d < rank; d++) sliceLen[d] = current.Shape[d];
+        sliceLen[1] = 1;
+        var clsOutput = Engine.TensorSlice(current, sliceStart, sliceLen); // [B, 1, D]
+
+        // 7. Classification head (Layers[^1]) → [B, 1, num_classes].
+        if (_classificationHead is null)
+            throw new InvalidOperationException("Classification head not initialized.");
+        var headOut = _classificationHead.Forward(clsOutput);
+
+        // 8. Reshape to [B, num_classes] for loss compatibility.
+        return Engine.Reshape(headOut, [batchSize, _numClasses]);
     }
 
     /// <summary>
@@ -621,6 +709,85 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
             _numHeads,
             _mlpDim,
             LossFunction);
+    }
+
+    /// <summary>
+    /// Clone via fresh-construct + UpdateParameters rather than the default
+    /// serialize/deserialize roundtrip. The serialize path drives the
+    /// patch-embedding / transformer / classification-head layers through
+    /// DeserializationHelper.CreateLayerFromType, which leaves their
+    /// persistent-tensor registration in a slightly different memory layout
+    /// than LayerHelper.CreateVisionTransformerLayers — the resulting clone
+    /// is parameter-equivalent but its forward output drifts from the source
+    /// by ~1e-2 (the issue #1221 class flagged in
+    /// Clone_AfterTraining_ShouldPreserveLearnedWeights). Going through the
+    /// fresh-construct + UpdateParameters path keeps both networks identical
+    /// down to bit-exactness.
+    /// </summary>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+    {
+        var newViT = new VisionTransformer<T>(
+            Architecture,
+            _imageHeight,
+            _imageWidth,
+            _channels,
+            _patchSize,
+            _numClasses,
+            _hiddenDim,
+            _numLayers,
+            _numHeads,
+            _mlpDim,
+            LossFunction);
+
+        // Lazy ViT layers (PatchEmbedding, TransformerEncoder) defer weight
+        // allocation until the first forward pass. Before that, their
+        // ParameterCount is 0 and the network's total ParameterCount excludes
+        // them — UpdateParameters would then receive a vector sized only for
+        // cls token + positional embeddings + classification head and refuse
+        // to distribute the remaining encoder/MLP weights. Run a single
+        // probe Predict to resolve every lazy layer before copying params.
+        //
+        // Probe failures (OOM, missing engine backend, real shape regressions)
+        // would silently leave newViT with unresolved layers and
+        // ParameterCount mismatched against the source. The post-probe
+        // length-equality check below catches that mismatch and throws so
+        // the caller doesn't end up with a model that randomly drops the
+        // source's trained weights — earlier swallow-everything behaviour
+        // hid OOM and shape-validation regressions.
+        var probe = new Tensor<T>(new[] { 1, _channels, _imageHeight, _imageWidth });
+        Exception? probeFailure = null;
+        try
+        {
+            newViT.Predict(probe);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Tolerate the narrow class of "input shape disagrees with the
+            // freshly-constructed lazy layer chain" errors that genuinely
+            // mean the probe couldn't run — the length-check below will
+            // surface it as a clean mismatch rather than a model with the
+            // source's data dropped. Capture the exception to chain it
+            // into the diagnostic if the length check trips.
+            probeFailure = ex;
+        }
+
+        var allParams = GetParameters();
+        if (allParams.Length == 0)
+        {
+            return newViT;
+        }
+        if (allParams.Length != newViT.ParameterCount)
+        {
+            throw new InvalidOperationException(
+                $"VisionTransformer.Clone could not resolve the new instance's lazy layers " +
+                $"(source has {allParams.Length} parameters, clone has {newViT.ParameterCount}). " +
+                $"This typically means the probe Predict failed before all lazy weights were " +
+                $"allocated — the clone would otherwise silently lose the source's trained " +
+                $"weights, so the bug is surfaced here instead.",
+                probeFailure);
+        }
+        newViT.UpdateParameters(allParams);
+        return newViT;
     }
 
     /// <summary>

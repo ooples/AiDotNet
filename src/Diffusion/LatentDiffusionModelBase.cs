@@ -86,10 +86,14 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
             if (equal) return base.Predict(input);
         }
 
-        // Rebuild a shape-canonical input, preserving the first few values
-        // from the original (so the seed-derivation hash stays input-
-        // dependent) and zero-padding the rest. Then delegate to the base
-        // Predict which does the seed derive + Generate call.
+        // Rebuild a shape-canonical input by copying the original values
+        // into the leading prefix of the canonical-shape buffer (any extra
+        // channels picked up by the canonicalization stay zero). The base
+        // DiffusionModelBase.Predict no longer hashes the input to derive
+        // a seed — the prior commit in this branch
+        // (predict-treats-input-as-noisy-sample) wired Predict to forward
+        // the input as the initial sample to Generate so the prior comment
+        // about "seed-derivation hash" was stale once that landed.
         var shapedInput = new Tensor<T>(genShape);
         int copyLen = Math.Min(input.Length, shapedInput.Length);
         for (int i = 0; i < copyLen; i++)
@@ -109,12 +113,25 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// </list>
     /// Higher-rank or zero-channel predictors pass through unchanged.
     /// </summary>
-    protected static int[] CanonicalizeGenShape(int[] inputShape, INoisePredictor<T> predictor)
+    protected int[] CanonicalizeGenShape(int[] inputShape, INoisePredictor<T> predictor)
     {
         if (predictor is null)
             return (int[])inputShape.Clone();
 
-        int targetChannels = predictor.InputChannels;
+        // The denoising loop tracks the LATENT (LatentChannels-deep), not the
+        // UNet input. For SD inpainting variants the UNet inputChannels is
+        // LatentChannels + 1 (mask) + LatentChannels (masked_image_latent) = 9
+        // (HF SD-Inpainting) or 12 (mask + 8-channel masked_image when the VAE
+        // is upcast). The denoising sample at every step is still 4-channel —
+        // PredictNoise pads the sample to inputChannels internally and strips
+        // the result back to LatentChannels (see PredictNoise override). If we
+        // canonicalize to predictor.InputChannels here, base.Generate
+        // allocates a 12-channel sample, the PredictNoise override returns a
+        // 4-channel result, and the denoising loop throws
+        // "PredictNoise output length (16384) does not match the latent /
+        // sample length (49152)" after the first step — which is exactly the
+        // CatVTON / IPAdapterPlus / SDXLInpainting test failure.
+        int targetChannels = LatentChannels > 0 ? LatentChannels : predictor.InputChannels;
         if (targetChannels <= 0)
             return (int[])inputShape.Clone();
 
@@ -504,10 +521,20 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         // If latent shape is provided, use it directly; otherwise assume image dimensions
         int[] latentShape;
 
+        // Track whether the caller asked for latent-space output. When the
+        // input shape is already latent (channel dim == LatentChannels) we
+        // preserve latent semantics: noise predictor only, no VAE decode.
+        // This matches PyTorch's `pipeline(... output_type='latent')`. It
+        // also avoids a multi-hundred-second VAE decode at default sizes
+        // when the caller never wanted pixels — confirmed by dotnet-trace
+        // showing DecodeFromLatent dominates wall clock for latent input.
+        bool inputIsLatent = false;
+
         if (shape.Length >= 4 && shape[1] == LatentChannels)
         {
             // Already latent shape
             latentShape = shape;
+            inputIsLatent = true;
         }
         else if (shape.Length >= 4)
         {
@@ -529,7 +556,20 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
         // Generate in latent space
         var latentSample = base.Generate(latentShape, numInferenceSteps, seed);
 
-        // Decode to image
+        // Latent-in / latent-out semantics: caller already supplied a latent,
+        // so skip the (expensive) VAE decode and return the latent directly.
+        if (inputIsLatent)
+        {
+            for (int i = 0; i < latentSample.Length; i++)
+            {
+                double v = NumOps.ToDouble(latentSample[i]);
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                    latentSample[i] = NumOps.Zero;
+            }
+            return latentSample;
+        }
+
+        // Pixel-space output: decode the latent through the VAE.
         var decoded = DecodeFromLatent(latentSample);
 
         // Final NaN/Inf guard. Ho et al. 2020 §3.2 and Song et al. 2020

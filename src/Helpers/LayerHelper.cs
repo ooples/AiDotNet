@@ -903,13 +903,18 @@ public static class LayerHelper<T>
         yield return new DenseLayer<T>(hiddenSize, hiddenActivation);
         currentSize = hiddenSize;
 
-        // Residual blocks using Dense layers
+        // Residual blocks using Dense layers. The inner DenseLayer must report
+        // matching input/output shapes for ResidualLayer.ValidateInnerLayer to
+        // succeed — its ctor reports input as [-1] (lazy) until first forward,
+        // so we eagerly resolve to [currentSize] here.
         for (int i = 0; i < blockCount; i++)
         {
             for (int j = 0; j < blockSize; j++)
             {
+                var inner = new DenseLayer<T>(currentSize, hiddenActivation);
+                inner.ResolveFromShape(new[] { currentSize });
                 yield return new ResidualLayer<T>(
-                    innerLayer: new DenseLayer<T>(currentSize, hiddenActivation),
+                    innerLayer: inner,
                     activationFunction: new LeakyReLUActivation<T>()
                 );
             }
@@ -3873,9 +3878,9 @@ public static class LayerHelper<T>
         int numResidualBlocks = Math.Max(1, hiddenLayerCount / 2);
         for (int i = 0; i < numResidualBlocks; i++)
         {
-            yield return new ResidualLayer<T>(
-                new DenseLayer<T>(hiddenLayerSize, hiddenActivation),
-                hiddenActivation);
+            var inner = new DenseLayer<T>(hiddenLayerSize, hiddenActivation);
+            inner.ResolveFromShape(new[] { hiddenLayerSize });
+            yield return new ResidualLayer<T>(inner, hiddenActivation);
         }
 
         // Output layer - linear for energy/solution values
@@ -10960,16 +10965,34 @@ public static class LayerHelper<T>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="vocabSize">The size of the vocabulary.</param>
     /// <param name="embeddingDimension">The dimension of the embedding vectors.</param>
-    /// <returns>A collection of layers forming a GloVe model.</returns>
+    /// <returns>The four GloVe parameter layers in canonical paper order:
+    ///   W (word embeddings), W̃ (context embeddings), b (word biases), b̃ (context biases).</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> GloVe creates word embeddings by learning from the co-occurrence
-    /// statistics of words. It uses two sets of embeddings and two sets of biases.
+    /// Paper reference: Pennington, Socher, Manning (2014), "GloVe: Global Vectors
+    /// for Word Representation", Eq. 8: <c>J = Σ_ij f(X_ij)·(w_i^T w̃_j + b_i + b̃_j − log X_ij)²</c>.
+    /// The four parameter sets are:
+    /// </para>
+    /// <list type="number">
+    ///   <item><b>W</b> — word embedding matrix [vocab × d]; paper's <c>w_i</c>.</item>
+    ///   <item><b>W̃</b> — context embedding matrix [vocab × d]; paper's <c>w̃_j</c>.
+    ///         Same shape as W; the symmetry is what allows the paper's "use W + W̃"
+    ///         final-vector recipe (Section 4.3 footnote 5).</item>
+    ///   <item><b>b</b> — word bias vector [vocab × 1]; paper's <c>b_i</c>.</item>
+    ///   <item><b>b̃</b> — context bias vector [vocab × 1]; paper's <c>b̃_j</c>.</item>
+    /// </list>
+    /// <para>
+    /// <b>Important:</b> these layers are <b>not</b> a sequential feed-forward stack;
+    /// chaining their <c>Forward</c> calls would be meaningless. The GloVe model's
+    /// <c>Forward</c> method consumes them as paper components: it returns
+    /// <c>W[input] + W̃[input]</c> at inference (paper Section 4.3 footnote 5),
+    /// and a future pair-objective trainer would compute
+    /// <c>dot(W[i], W̃[j]) + b[i] + b̃[j]</c> per Eq. 8.
     /// </para>
     /// <para>
-    /// <b>Note:</b> The layers returned by this method are <b>not</b> intended to be used as a sequential
-    /// feed-forward stack. They represent the four components (W, W_tilde, b, b_tilde) required for
-    /// the GloVe model's custom forward pass.
+    /// <b>For Beginners:</b> GloVe creates word embeddings by learning from the co-occurrence
+    /// statistics of words. It uses two sets of embeddings (W and W̃) and two sets of
+    /// biases (b and b̃) — four components in total.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultGloVeLayers(
@@ -10981,15 +11004,17 @@ public static class LayerHelper<T>
         if (vocabSize < 1) throw new ArgumentOutOfRangeException(nameof(vocabSize));
         if (embeddingDimension < 1) throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
 
-        // GloVe training is typically dot(W_i, W_tilde_j) + b_i + b_tilde_j = log(X_ij)
-        // To represent this sequentially for standard backprop:
-        // Input is a pair of indices (i, j).
-        // This is tricky for a strictly sequential ILayer stack.
-        // However, for inference/embedding lookup, we just need W and W_tilde.
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension); // W
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension); // W_tilde
-        yield return new EmbeddingLayer<T>(vocabSize, 1); // b
-        yield return new EmbeddingLayer<T>(vocabSize, 1); // b_tilde
+        // Paper uses integer token indices; force the four embedding layers
+        // into Indices mode so the model never silently switches to continuous
+        // linear projection (the paper does not define that path).
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension)   // W       (paper w_i)
+            { InputMode = EmbeddingInputMode.Indices };
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDimension)   // W̃       (paper w̃_j)
+            { InputMode = EmbeddingInputMode.Indices };
+        yield return new EmbeddingLayer<T>(vocabSize, 1)                    // b       (paper b_i)
+            { InputMode = EmbeddingInputMode.Indices };
+        yield return new EmbeddingLayer<T>(vocabSize, 1)                    // b̃       (paper b̃_j)
+            { InputMode = EmbeddingInputMode.Indices };
     }
 
     /// <summary>
@@ -23212,12 +23237,28 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 14,
+        int inputChannels = 3)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
+
+        // === CLIP ViT patch embedding ===
+        // Per Radford et al. 2021 (CLIP) §2.4 / Dosovitskiy et al. 2020 (ViT)
+        // §3: a Conv2d(in_channels, visionDim, kernel=patchSize, stride=patchSize)
+        // splits the image into non-overlapping patches, then flattens spatial
+        // dims to produce a [B, num_patches, visionDim] token sequence ready
+        // for self-attention. ViT-L/14 (the LLaVA / GeoChat / Ferret / Shikra
+        // / Cambrian / etc. CLIP backbone per their respective paper §3.1)
+        // uses patchSize=14, embeddingDim=1024. PatchEmbeddingLayer is the
+        // codebase's tape-tracked impl that does the conv + flatten + permute
+        // into BSC token format. Without it the downstream
+        // MultiHeadAttentionLayer reads spatial dims as feature dim and the
+        // weight shape mismatch is unrecoverable.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
 
         // === Vision Encoder (CLIP ViT) ===
         yield return new LayerNormalizationLayer<T>();
@@ -30043,22 +30084,51 @@ public static class LayerHelper<T>
         int vocabularySize = 49408,
         int maxSequenceLength = 77)
     {
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "patchSize must be positive.");
+        if (imageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageSize), "imageSize must be positive.");
+        if (imageSize % patchSize != 0)
+            throw new ArgumentException(
+                $"imageSize ({imageSize}) must be evenly divisible by patchSize ({patchSize}); ViT-style patch embedding requires (imageSize / patchSize)² complete patches.",
+                nameof(imageSize));
+
         int visionFfnDim = visionHiddenDim * 4;
         int temporalFfnDim = visionHiddenDim * 4;
         int textFfnDim = textHiddenDim * 4;
 
-        // Vision frame encoder (shared across frames)
+        // Vision frame encoder. PatchEmbedding stays lazy — its cached spatial
+        // dims (_imageHeight, _numPatches) derive from the actual frame shape on
+        // first forward, so eager-resolving at the option default (224x224) would
+        // make the layer reject any other resolution at runtime. Weights size
+        // depends only on (patchSize, channels, embeddingDim), so deferring
+        // weight allocation to first forward is free in terms of param count.
         yield return new PatchEmbeddingLayer<T>(patchSize, visionHiddenDim);
 
+        // TransformerEncoderLayer's only resolved dim is _embeddingSize from
+        // input.Shape[^1] — independent of seq length — so eager resolve at a
+        // synthetic seqLen=1 is safe and gives the network non-zero ParameterCount
+        // before the first forward (closes the freshly-built-model parameter
+        // count gap that lazy ctors introduced).
+        int[] frameTokenShape = new[] { 1, visionHiddenDim };
         for (int i = 0; i < numFrameEncoderLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, visionFfnDim);
+            var enc = new TransformerEncoderLayer<T>(numHeads, visionFfnDim);
+            enc.ResolveFromShape(frameTokenShape);
+            yield return enc;
         }
 
-        // Temporal encoder layers
+        // Temporal encoder operates over a frame sequence [seqLen, embeddingDim].
+        // seqLen is the runtime number of frames in the clip; TransformerEncoderLayer
+        // resolves only the trailing embeddingDim, so the placeholder seqLen we
+        // pass here doesn't affect parameter allocation. Use 8 as a documented
+        // typical short-clip length rather than the misleading sentinel 1.
+        int[] temporalTokenShape = new[] { 8, visionHiddenDim };
         for (int i = 0; i < numTemporalLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, temporalFfnDim);
+            var enc = new TransformerEncoderLayer<T>(numHeads, temporalFfnDim);
+            enc.ResolveFromShape(temporalTokenShape);
+            yield return enc;
         }
 
         // Video projection
@@ -30068,9 +30138,12 @@ public static class LayerHelper<T>
         yield return new EmbeddingLayer<T>(vocabularySize, textHiddenDim);
 
         // Text encoder layers
+        int[] textTokenShape = new[] { 1, textHiddenDim };
         for (int i = 0; i < numTextLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, textFfnDim);
+            var enc = new TransformerEncoderLayer<T>(numHeads, textFfnDim);
+            enc.ResolveFromShape(textTokenShape);
+            yield return enc;
         }
 
         // Text projection
@@ -32194,12 +32267,17 @@ public static class LayerHelper<T>
         var identityActivation = new IdentityActivation<T>() as IActivationFunction<T>;
 
         // === Stacked Transformer Encoder layers ===
-        // Each layer has multi-head self-attention + feed-forward network with residual connections
+        // Each layer has multi-head self-attention + feed-forward network with residual connections.
+        // Pass embeddingSize = hiddenDimension so the encoder can declare its parameter count
+        // analytically before first forward — required by the model-family
+        // Parameters_ShouldBeNonEmpty existence check, which reads ParameterCount immediately
+        // after construction without running a forward pass.
         for (int layer = 0; layer < numTransformerLayers; layer++)
         {
             yield return new TransformerEncoderLayer<T>(
                 numHeads: numAttentionHeads,
-                feedForwardDim: intermediateDimension);
+                feedForwardDim: intermediateDimension,
+                embeddingSize: hiddenDimension);
 
             // Dropout between transformer layers for regularization
             if (dropoutRate > 0 && layer < numTransformerLayers - 1)

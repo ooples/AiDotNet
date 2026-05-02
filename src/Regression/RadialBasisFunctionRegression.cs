@@ -488,50 +488,20 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     private Vector<T> SolveLinearRegression(Matrix<T> x, Vector<T> y)
     {
-        // RBF design matrices are often severely ill-conditioned: when a few
-        // centers end up far from every input, the corresponding columns
-        // become near-zero and X^T·X has a huge condition number. The
-        // previous implementation inverted X^T·X + λI directly, which
-        // amplified that roundoff into nan predictions
-        // (Predictions_ShouldBeFinite, SingleFeature_ShouldWork,
-        // CollinearFeatures_ShouldNotCrash) and catastrophic negative R²
-        // (R2_ShouldBePositive_OnLinearData saw R² ≈ -10¹²).
-        //
-        // Solve via SVD pseudoinverse of X directly, dropping singular
-        // values below a relative tolerance. This is numerically far more
-        // stable than forming the normal equations and sidesteps
-        // Matrix.Inverse entirely.
-        var svd = new AiDotNet.DecompositionMethods.MatrixDecomposition.SvdDecomposition<T>(x);
-
-        T sigmaMax = NumOps.Zero;
-        for (int i = 0; i < svd.S.Length; i++)
+        // Solve via SVD pseudoinverse first; if that returns null / non-finite
+        // weights, OR weights so small they collapse predictions to zero
+        // relative to the response magnitude (a symptom seen when a parallel
+        // GPU SVD silently produces near-zero singular values on the second
+        // model in TranslationEquivariance_ShiftingTargets_ShiftsPredictions),
+        // fall back to a normal-equations ridge solve. The fallback is the
+        // straightforward (XᵀX + λI)⁻¹·Xᵀy form with λ scaled to the trace
+        // of XᵀX so it matches the design matrix's magnitude regardless of
+        // input scale; that path doesn't depend on the GPU SVD kernel and
+        // delivers the right-magnitude bias term needed to track a shifted Y.
+        Vector<T>? weights = TrySvdSolve(x, y);
+        if (weights == null || !ModelTestHelpers_AllFinite(weights) || PredictionsCollapseToZero(x, y, weights))
         {
-            if (NumOps.GreaterThan(svd.S[i], sigmaMax))
-                sigmaMax = svd.S[i];
-        }
-
-        // Tikhonov-regularized SVD solve: weights = V · diag(σ / (σ² + λ²)) · Uᵀ · y.
-        // Unlike a hard tolerance-based pseudoinverse this smoothly damps
-        // small singular values instead of zeroing them, which matters
-        // here because the linear-feature and RBF columns of the design
-        // matrix have very different scales — a tolerance-only truncation
-        // can drop real signal directions along with roundoff-driven ones
-        // and leave R² strongly negative. Small λ ≈ 1e-6 · σ_max gives a
-        // stable solve while barely biasing the well-conditioned directions.
-        T lambda = NumOps.Multiply(sigmaMax, NumOps.FromDouble(1e-6));
-        T lambdaSq = NumOps.Multiply(lambda, lambda);
-
-        var weights = new Vector<T>(svd.Vt.Columns);
-        for (int i = 0; i < svd.S.Length; i++)
-        {
-            T sigma = svd.S[i];
-            T sigmaSq = NumOps.Multiply(sigma, sigma);
-            T damped = NumOps.Divide(sigma, NumOps.Add(sigmaSq, lambdaSq));
-
-            Vector<T> uCol = svd.U.GetColumn(i);
-            T coeff = NumOps.Multiply(uCol.DotProduct(y), damped);
-            Vector<T> vtRow = svd.Vt.GetRow(i);
-            weights = weights.Add(vtRow.Multiply(coeff));
+            weights = NormalEquationsRidgeSolve(x, y);
         }
 
         // Apply external regularization (if any) on the learned weight
@@ -543,6 +513,100 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         }
 
         return weights;
+    }
+
+    private bool PredictionsCollapseToZero(Matrix<T> x, Vector<T> y, Vector<T> weights)
+    {
+        // Compute training predictions and compare magnitude to response.
+        // If predictions are <1% of y's magnitude, the SVD solve produced
+        // a degenerate weight vector and we should fall back.
+        var preds = x.Multiply(weights);
+        double maxPred = 0;
+        for (int i = 0; i < preds.Length; i++)
+            maxPred = Math.Max(maxPred, Math.Abs(NumOps.ToDouble(preds[i])));
+        double maxY = 0;
+        for (int i = 0; i < y.Length; i++)
+            maxY = Math.Max(maxY, Math.Abs(NumOps.ToDouble(y[i])));
+        return maxY > 1e-10 && maxPred < maxY * 0.01;
+    }
+
+    private Vector<T>? TrySvdSolve(Matrix<T> x, Vector<T> y)
+    {
+        try
+        {
+            var svd = new AiDotNet.DecompositionMethods.MatrixDecomposition.SvdDecomposition<T>(x);
+
+            T sigmaMax = NumOps.Zero;
+            for (int i = 0; i < svd.S.Length; i++)
+            {
+                if (NumOps.GreaterThan(svd.S[i], sigmaMax))
+                    sigmaMax = svd.S[i];
+            }
+
+            double sigmaMaxD = NumOps.ToDouble(sigmaMax);
+            if (!(sigmaMaxD > 0) || double.IsNaN(sigmaMaxD))
+            {
+                // Caller falls back to normal-equations ridge solve.
+                return null;
+            }
+
+            // Tikhonov-regularized SVD solve: weights = V · diag(σ / (σ² + λ²)) · Uᵀ · y.
+            // Unlike a hard tolerance-based pseudoinverse this smoothly damps
+            // small singular values instead of zeroing them. Small λ ≈ 1e-6 · σ_max
+            // gives a stable solve while barely biasing the well-conditioned directions.
+            T lambda = NumOps.Multiply(sigmaMax, NumOps.FromDouble(1e-6));
+            T lambdaSq = NumOps.Multiply(lambda, lambda);
+
+            var weights = new Vector<T>(svd.Vt.Columns);
+            for (int i = 0; i < svd.S.Length; i++)
+            {
+                T sigma = svd.S[i];
+                T sigmaSq = NumOps.Multiply(sigma, sigma);
+                T damped = NumOps.Divide(sigma, NumOps.Add(sigmaSq, lambdaSq));
+
+                Vector<T> uCol = svd.U.GetColumn(i);
+                T coeff = NumOps.Multiply(uCol.DotProduct(y), damped);
+                Vector<T> vtRow = svd.Vt.GetRow(i);
+                weights = weights.Add(vtRow.Multiply(coeff));
+            }
+            return weights;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private Vector<T> NormalEquationsRidgeSolve(Matrix<T> x, Vector<T> y)
+    {
+        // Normal-equations ridge OLS: w = (XᵀX + λI)⁻¹ Xᵀy.
+        // Slower-condition path used as fallback when SVD fails — λ chosen
+        // proportional to the trace of XᵀX so it scales sensibly with the
+        // magnitude of the design matrix without manual tuning.
+        var xT = x.Transpose();
+        var xTx = xT.Multiply(x);
+        T trace = NumOps.Zero;
+        for (int i = 0; i < xTx.Rows; i++)
+            trace = NumOps.Add(trace, xTx[i, i]);
+        T lambdaRidge = NumOps.Divide(
+            NumOps.Multiply(trace, NumOps.FromDouble(1e-6)),
+            NumOps.FromDouble(Math.Max(1, xTx.Rows)));
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], lambdaRidge);
+        var xTy = xT.Multiply(y);
+        return xTx.Inverse().Multiply(xTy);
+    }
+
+    private static bool ModelTestHelpers_AllFinite(Vector<T> v)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < v.Length; i++)
+        {
+            double d = ops.ToDouble(v[i]);
+            if (double.IsNaN(d) || double.IsInfinity(d))
+                return false;
+        }
+        return true;
     }
 
     /// <summary>

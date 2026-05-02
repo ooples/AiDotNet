@@ -10,7 +10,9 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks
 {
@@ -142,14 +144,58 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Initializes a new instance with default architecture settings.
         /// </summary>
+        /// <remarks>
+        /// Defaults follow Pennington, Socher, Manning (2014), "GloVe: Global
+        /// Vectors for Word Representation":
+        /// <list type="bullet">
+        ///   <item>Embedding dimension d = 100 (paper Table 2 reports d ∈ {50, 100, 200, 300};
+        ///         d = 100 is one of the four standard reported sizes).</item>
+        ///   <item>Output size = embedding dimension (the paper's final word vector,
+        ///         per Section 4.3 footnote 5: "We sum W and W̃").</item>
+        ///   <item>Vocabulary 10,000 — within the paper's "Symmetric vs asymmetric
+        ///         context" experiments (which used vocabularies of various sizes).
+        ///         Production callers should pass <c>vocabSize</c> = 400K to match the
+        ///         largest paper experiment on Common Crawl 42B.</item>
+        /// </list>
+        /// <para>
+        /// <b>Breaking change vs. earlier in this branch:</b> the parameterless
+        /// constructor previously defaulted <c>inputSize</c>/<c>outputSize</c> to
+        /// <c>768</c> (the BERT-base hidden width, which is unrelated to GloVe).
+        /// It now defaults to <c>100</c> to match the paper. Callers that
+        /// relied on the old 768-dim default must opt in explicitly:
+        /// <c>new GloVe&lt;T&gt;(new NeuralNetworkArchitecture&lt;T&gt;(... inputSize: 768, outputSize: 768))</c>.
+        /// Use <see cref="CreateBertCompatible"/> for that exact configuration.
+        /// </para>
+        /// </remarks>
         public GloVe()
             : this(new NeuralNetworkArchitecture<T>(
                 inputType: Enums.InputType.OneDimensional,
                 taskType: Enums.NeuralNetworkTaskType.Regression,
-                inputSize: 768,
-                outputSize: 768))
+                inputSize: 100,
+                outputSize: 100))
         {
         }
+
+        /// <summary>
+        /// Creates a GloVe instance with the legacy 768-dim default that this
+        /// project's parameterless constructor used before the paper-faithful
+        /// <c>d = 100</c> switch. Provided as an explicit opt-in so consumers
+        /// that depended on the previous 768-dim default can keep building it
+        /// in one line without having to spell out a full
+        /// <see cref="NeuralNetworkArchitecture{T}"/>.
+        /// </summary>
+        /// <remarks>
+        /// 768 is the BERT-base hidden width. It is not a GloVe-paper choice;
+        /// it was an accidental project default. New code targeting the GloVe
+        /// paper should use the parameterless constructor (d = 100) or pass
+        /// d ∈ {50, 100, 200, 300} explicitly.
+        /// </remarks>
+        public static GloVe<T> CreateBertCompatible() =>
+            new GloVe<T>(new NeuralNetworkArchitecture<T>(
+                inputType: Enums.InputType.OneDimensional,
+                taskType: Enums.NeuralNetworkTaskType.Regression,
+                inputSize: 768,
+                outputSize: 768));
 
         /// <summary>
         /// Initializes a new instance of the GloVe model.
@@ -185,7 +231,14 @@ namespace AiDotNet.NeuralNetworks
             _embeddingDimension = embeddingDimension;
             _maxTokens = maxTokens;
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            // Paper-faithful default: Pennington et al. 2014, Section 4.4
+            // ("Model Analysis: Vector Length and Context Size") — "we use
+            // AdaGrad (Duchi et al. 2011) ... initial learning rate of 0.05".
+            // Callers can override via the optimizer parameter to use Adam,
+            // SGD, or any other gradient-based optimizer.
+            _optimizer = optimizer ?? new AdagradOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdagradOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.05 });
 
             InitializeLayersCore(false);
         }
@@ -244,11 +297,33 @@ namespace AiDotNet.NeuralNetworks
         /// <summary>
         /// Performs a forward pass to retrieve embeddings for given token IDs.
         /// </summary>
-        /// <param name="input">A tensor containing token indices.</param>
-        /// <returns>A tensor containing the resulting embeddings.</returns>
+        /// <param name="input">A tensor containing token indices (rank-1 [seqLen]
+        ///     or higher-rank with the sequence dim last).</param>
+        /// <returns>A tensor of summed word + context embeddings shaped
+        ///     <c>[..., embeddingDimension]</c>.</returns>
         /// <remarks>
-        /// <b>For Beginners:</b> This is the lookup process. You give the model word ID numbers, 
-        /// and it returns the coordinates for those words from its internal memory.
+        /// <para>
+        /// Paper-faithful inference per Pennington et al. 2014, "GloVe: Global
+        /// Vectors for Word Representation", Section 4.3 footnote 5: <i>"Since
+        /// X is symmetric, W and W̃ are equivalent, differing only as a result
+        /// of their random initializations; the two sets of vectors should
+        /// perform equivalently. ... we use the sum W + W̃ as our word
+        /// vectors."</i>
+        /// </para>
+        /// <para>
+        /// Layers[0] = W (word matrix) and Layers[1] = W̃ (context matrix);
+        /// Layers[2] = b and Layers[3] = b̃ are the paper's bias vectors that
+        /// participate in the training objective (Eq. 8) but are <b>not</b>
+        /// added at inference per the paper. They are stored so a future
+        /// pair-objective trainer can use them; the inference path here only
+        /// emits W + W̃, which is what every downstream NLP task consumes.
+        /// </para>
+        /// <para>
+        /// <b>For Beginners:</b> GloVe stores two sets of word coordinates
+        /// (W and W̃) and adds them together to form the final word vector
+        /// — the paper found summing the two gives slightly better embeddings
+        /// than picking one. That sum is what this method returns.
+        /// </para>
         /// </remarks>
         public Tensor<T> Forward(Tensor<T> input)
         {
@@ -256,14 +331,28 @@ namespace AiDotNet.NeuralNetworks
             if (TryForwardGpuOptimized(input, out var gpuResult))
                 return gpuResult;
 
-            Tensor<T> output = input;
-            foreach (var layer in Layers)
-            {
-                output = layer.Forward(output);
-            }
-
-            return output;
+            // Paper Eq. (final): w_i^(final) = W[i] + W̃[i]
+            // Engine.TensorAdd is tape-tracked so gradients flow back to both
+            // embedding matrices during Train via the autodiff tape.
+            var w = Layers[0].Forward(input);
+            var wTilde = Layers[1].Forward(input);
+            return Engine.TensorAdd(w, wTilde);
         }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// Override of <see cref="NeuralNetworkBase{T}.ForwardForTraining(Tensor{T})"/>
+        /// so the tape-based training path uses the paper-faithful W + W̃ formula
+        /// rather than the default base behavior of iterating
+        /// <c>Layers</c> sequentially. Iterating would compose all four
+        /// parameter "layers" (W → W̃ → b → b̃) as if they were a feed-forward
+        /// stack, which is meaningless for GloVe — those four are paper
+        /// components consumed in parallel, not in series. Forwarding through
+        /// our overridden <see cref="Forward"/> guarantees gradients flow
+        /// only into W and W̃, which is what the paper's final-vector recipe
+        /// (Section 4.3 footnote 5) trains.
+        /// </remarks>
+        public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
         /// <summary>
         /// Updates the internal weights and biases of the model.
@@ -356,24 +445,19 @@ namespace AiDotNet.NeuralNetworks
             var inputVec = new Vector<T>(tokenIds.Select(id => NumOps.FromDouble(id)).ToArray());
             var inputTensor = Tensor<T>.FromVector(inputVec, [tokenIds.Count]);
 
-            // GloVe uses W (layer 0) and W_tilde (layer 1). Final vectors are often W + W_tilde.
-            var w = Layers[0].Forward(inputTensor);
-            var w_tilde = Layers[1].Forward(inputTensor);
+            // Forward emits paper-faithful W + W̃ per token; sentence embedding
+            // is the mean across the sequence (standard GloVe sentence-vector
+            // pooling, equivalent to "average word vector").
+            var perToken = Forward(inputTensor); // [seqLen, embeddingDimension]
 
-            var sumVector = new Vector<T>(_embeddingDimension);
+            var meanVector = new Vector<T>(_embeddingDimension);
+            T invSeqLen = NumOps.Divide(NumOps.One, NumOps.FromDouble(tokenIds.Count));
             for (int s = 0; s < tokenIds.Count; s++)
             {
                 for (int d = 0; d < _embeddingDimension; d++)
                 {
-                    T val = NumOps.Add(w[s, d], w_tilde[s, d]);
-                    sumVector[d] = NumOps.Add(sumVector[d], val);
+                    meanVector[d] = NumOps.Add(meanVector[d], NumOps.Multiply(perToken[s, d], invSeqLen));
                 }
-            }
-
-            var meanVector = new Vector<T>(_embeddingDimension);
-            for (int d = 0; d < _embeddingDimension; d++)
-            {
-                meanVector[d] = NumOps.Divide(sumVector[d], NumOps.FromDouble(tokenIds.Count));
             }
 
             return meanVector.SafeNormalize();

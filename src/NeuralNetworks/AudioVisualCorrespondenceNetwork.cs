@@ -1197,6 +1197,16 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     {
         get
         {
+            // Pre-resolve every lazy DenseLayer's input shape from the
+            // architecture's input width before reading sublayer parameter
+            // counts. The L3-Net encoder is a chain of lazy DenseLayers
+            // whose InputShape is the -1 sentinel until either a forward
+            // pass or ResolveLazyLayerShapes runs; without this call, the
+            // existence-check invariant Parameters_ShouldBeNonEmpty reads
+            // 0 immediately after construction. Idempotent across repeated
+            // ParameterCount queries.
+            ResolveLazyLayerShapes();
+
             var count = 0;
 
             count += AudioInputProjection.ParameterCount;

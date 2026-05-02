@@ -4,7 +4,9 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -165,12 +167,12 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the generator network.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Generator { get; private set; }
+    public NeuralNetworkBase<T> Generator { get; private set; }
 
     /// <summary>
     /// Gets the discriminator network.
     /// </summary>
-    public ConvolutionalNeuralNetwork<T> Discriminator { get; private set; }
+    public NeuralNetworkBase<T> Discriminator { get; private set; }
 
     /// <summary>
     /// Gets the auxiliary Q network that predicts latent codes from images.
@@ -189,7 +191,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// - This forces generator to use codes meaningfully
     /// </para>
     /// </remarks>
-    public ConvolutionalNeuralNetwork<T> QNetwork { get; private set; }
+    public NeuralNetworkBase<T> QNetwork { get; private set; }
 
     /// <summary>
     /// Gets the total number of trainable parameters in the InfoGAN.
@@ -197,6 +199,15 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount() + QNetwork.GetParameterCount();
 
     private ILossFunction<T> _lossFunction;
+
+    // CNN backbone for image domains (Chen et al. 2016 §4.1/§4.4),
+    // MLP backbone for tabular / mixture-of-categoricals (§4.2).
+    private static NeuralNetworkBase<T> CreateBackboneForArchitecture(NeuralNetworkArchitecture<T> arch)
+    {
+        if (arch.InputType == InputType.TwoDimensional || arch.InputType == InputType.ThreeDimensional)
+            return new ConvolutionalNeuralNetwork<T>(arch);
+        return new FeedForwardNeuralNetwork<T>(arch);
+    }
 
     /// <summary>
     /// Creates the combined InfoGAN architecture with correct dimension handling.
@@ -332,9 +343,9 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         _latentCodeSize = latentCodeSize;
         _mutualInfoCoefficient = NumOps.FromDouble(mutualInfoCoefficient);
 
-        Generator = new ConvolutionalNeuralNetwork<T>(generatorArchitecture);
-        Discriminator = new ConvolutionalNeuralNetwork<T>(discriminatorArchitecture);
-        QNetwork = new ConvolutionalNeuralNetwork<T>(qNetworkArchitecture);
+        Generator = CreateBackboneForArchitecture(generatorArchitecture);
+        Discriminator = CreateBackboneForArchitecture(discriminatorArchitecture);
+        QNetwork = CreateBackboneForArchitecture(qNetworkArchitecture);
 
         // Initialize optimizers - use provided optimizers or create default Adam optimizers
         _generatorOptimizer = generatorOptimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Generator);
@@ -764,6 +775,22 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         _qNetworkOptimizer.Reset();
     }
 
+    /// <summary>
+    /// Forwards weight-lifetime configuration to the generator, discriminator,
+    /// and Q-network sub-networks. Without this override the registry-side
+    /// effect would still happen (it is process-global), but the sub-networks'
+    /// trainable tensors would not be registered, defeating the offload path.
+    /// </summary>
+    public override void ConfigureWeightLifetime(
+        GpuOffloadOptions options,
+        IGpuOffloadAllocator? allocator = null)
+    {
+        base.ConfigureWeightLifetime(options, allocator);
+        Generator.ConfigureWeightLifetime(options, allocator);
+        Discriminator.ConfigureWeightLifetime(options, allocator);
+        QNetwork.ConfigureWeightLifetime(options, allocator);
+    }
+
     protected override void InitializeLayers()
     {
         // InfoGAN doesn't use layers directly
@@ -776,6 +803,23 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             return gpuResult;
 
         return Generator.Predict(input);
+    }
+
+    /// <summary>
+    /// Defines the InfoGAN forward graph for tape-based training. InfoGAN's
+    /// generator / discriminator / Q-network live outside <c>Layers</c>
+    /// (which is intentionally empty), so the default
+    /// <c>ForwardForTraining</c> would walk an empty layer chain and return
+    /// the raw input. Overriding to dispatch through
+    /// <c>Generator.ForwardForTraining</c> matches the inference-side
+    /// <c>Predict</c> contract and lets <c>tape.ComputeGradients</c> flow
+    /// back into the generator's weights. Discriminator + Q-network +
+    /// mutual-information losses are handled by <see cref="TrainStep"/>.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        return Generator.ForwardForTraining(input);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)

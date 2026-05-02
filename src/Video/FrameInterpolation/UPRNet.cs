@@ -305,28 +305,6 @@ public class UPRNet<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Override the base <see cref="FrameInterpolationBase{T}.Predict"/> which
-    /// only accepts rank-4 sequence input <c>[numFrames, C, H, W]</c>. The test
-    /// scaffold for two-frame interpolation models passes the channel-concatenated
-    /// pair <c>[2C, H, W]</c> directly, which the base would reject. Detect this
-    /// shape and run a single Forward pass; fall back to the sequence semantics
-    /// otherwise.
-    /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
-    {
-        if (input is null) throw new ArgumentNullException(nameof(input));
-        // Rank-3 [2C, H, W] OR rank-4 [B, 2C, H, W]: channel-concatenated pair.
-        bool isPairConcat = (input.Rank == 3) ||
-            (input.Rank == 4 && input.Shape[1] == 2 * (Architecture.InputDepth > 0 ? Architecture.InputDepth : 3));
-        if (isPairConcat)
-        {
-            return IsOnnxMode ? RunOnnxInference(input) : Forward(input);
-        }
-        return base.Predict(input);
-    }
-
     /// <summary>Slices a contiguous range of channels from an NCHW tensor.</summary>
     private Tensor<T> SliceChannels(Tensor<T> nchw, int start, int count)
     {

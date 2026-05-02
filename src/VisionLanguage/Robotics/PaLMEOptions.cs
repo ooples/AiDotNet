@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.VisionLanguage.Robotics;
 
 namespace AiDotNet.VisionLanguage.Robotics;
@@ -41,6 +42,7 @@ public class PaLMEOptions : VisionLanguageActionOptions
         PredictionHorizon = other.PredictionHorizon;
         ObservationHistory = other.ObservationHistory;
         TotalParameters = other.TotalParameters;
+        WeightOffloadOptions = other.WeightOffloadOptions;
     }
 
     public PaLMEOptions()
@@ -59,4 +61,16 @@ public class PaLMEOptions : VisionLanguageActionOptions
 
     /// <summary>Gets or sets the total parameter count in billions.</summary>
     public int TotalParameters { get; set; } = 562;
+
+    /// <summary>
+    /// Optional weight-lifetime / GPU-offload configuration applied during
+    /// native-mode construction. PaLM-E is 562B parameters at fp64 ⇒ ~140 GB
+    /// resident, so callers running the model in native mode at full size
+    /// should supply a streaming-offload instance here to avoid OOM. Default
+    /// is <c>null</c>, which means the PaLM-E constructor will NOT call
+    /// <c>ConfigureWeightLifetime</c> automatically — caller is responsible
+    /// for either supplying an instance or invoking
+    /// <c>ConfigureWeightLifetime</c> directly post-construction.
+    /// </summary>
+    public GpuOffloadOptions? WeightOffloadOptions { get; set; }
 }

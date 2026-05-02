@@ -60,7 +60,13 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// </summary>
     protected virtual double MoreDataTolerance => 1e-4;
 
-    protected Tensor<double> CreateRandomTensor(int[] shape, Random rng)
+    /// <summary>
+    /// Creates a random tensor of the given shape. Default implementation fills
+    /// with continuous doubles in [0, 1). Subclasses for paper-faithful index-based
+    /// models (e.g. GloVe, Word2Vec) override this to emit integer token indices
+    /// for input-shape tensors so the model's index-lookup path is exercised.
+    /// </summary>
+    protected virtual Tensor<double> CreateRandomTensor(int[] shape, Random rng)
     {
         var tensor = new Tensor<double>(shape);
         for (int i = 0; i < tensor.Length; i++)
@@ -68,7 +74,13 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         return tensor;
     }
 
-    protected Tensor<double> CreateConstantTensor(int[] shape, double value)
+    /// <summary>
+    /// Creates a constant tensor. Virtual so paper-faithful index-based models can
+    /// translate constant scalars into legal token indices instead of out-of-range
+    /// floats — the latter would collapse to index 0 under <c>(int)</c> truncation
+    /// and defeat invariants like <c>DifferentInputs_ShouldProduceDifferentOutputs</c>.
+    /// </summary>
+    protected virtual Tensor<double> CreateConstantTensor(int[] shape, double value)
     {
         var tensor = new Tensor<double>(shape);
         for (int i = 0; i < tensor.Length; i++)

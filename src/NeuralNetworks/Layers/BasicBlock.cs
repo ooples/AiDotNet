@@ -181,6 +181,19 @@ public class BasicBlock<T> : LayerBase<T>
         RegisterSubLayer(_bn2);
         if (_downsampleConv is not null) RegisterSubLayer(_downsampleConv);
         if (_downsampleBn is not null) RegisterSubLayer(_downsampleBn);
+
+        // Eagerly resolve sub-layer shapes from the known block dims so
+        // ParameterCount reports real weights immediately (lazy ConvolutionalLayer
+        // and BatchNormalizationLayer return 0 until first Forward, which causes
+        // SetParameters dispatch by ParameterCount slice to silently skip them).
+        int outHeightForBn = inputHeight / stride;
+        int outWidthForBn = inputWidth / stride;
+        _conv1.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
+        _bn1.ResolveFromShape(new[] { 1, outChannels, outHeightForBn, outWidthForBn });
+        _conv2.ResolveFromShape(new[] { outChannels, outHeightForBn, outWidthForBn });
+        _bn2.ResolveFromShape(new[] { 1, outChannels, outHeightForBn, outWidthForBn });
+        _downsampleConv?.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
+        _downsampleBn?.ResolveFromShape(new[] { 1, outChannels, outHeightForBn, outWidthForBn });
     }
 
     // Constructor args round-trip for serialization. DeserializationHelper

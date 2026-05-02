@@ -16,6 +16,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
@@ -1962,8 +1963,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // For simple feedforward networks, the first layer might be Dense
         if (layer is DenseLayer<T> denseLayer)
         {
-            // Ensure the dense layer doesn't have any inputs (it's the first layer)
-            return denseLayer.GetInputShape().Length == 1 && denseLayer.GetInputShape()[0] > 0;
+            // Lazy DenseLayer carries InputShape = [-1] until first forward; treat as valid.
+            var shape = denseLayer.GetInputShape();
+            return shape.Length == 1 && (shape[0] > 0 || shape[0] == -1);
         }
 
         // For recurrent networks, the first layer might be LSTM or GRU
@@ -2037,8 +2039,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual bool AreLayersCompatible(ILayer<T> prevLayer, ILayer<T> currentLayer)
     {
-        // Check if the output shape of the previous layer matches the input shape of the current layer
-        if (!Enumerable.SequenceEqual(prevLayer.GetOutputShape(), currentLayer.GetInputShape()))
+        // Lazy layers report InputShape = [-1] (or empty) until first Forward —
+        // skip the strict shape-equality check; resolution happens at first
+        // forward. Empty-shape layers are shape-agnostic by design (e.g.
+        // DropoutLayer, ActivationLayer constructed without an explicit
+        // InputShape) and would have been incorrectly rejected by the
+        // SequenceEqual check otherwise.
+        var currentInputShape = currentLayer.GetInputShape();
+        bool currentIsLazy = currentInputShape.Length == 0
+                             || currentInputShape.Any(d => d <= 0);
+        if (!currentIsLazy && !Enumerable.SequenceEqual(prevLayer.GetOutputShape(), currentInputShape))
             return false;
 
         // Special checks for specific layer combinations
@@ -2054,8 +2064,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return false;
         }
 
-        // Check for dimension compatibility in case of Reshape or Flatten layers
-        if (prevLayer is ReshapeLayer<T> reshapeLayer)
+        // Check for dimension compatibility in case of Reshape or Flatten layers.
+        // Lazy current layers carry -1 placeholders; defer the product check to first forward.
+        if (prevLayer is ReshapeLayer<T> reshapeLayer && !currentIsLazy)
         {
             return reshapeLayer.GetOutputShape().Aggregate((a, b) => a * b) ==
                    currentLayer.GetInputShape().Aggregate((a, b) => a * b);
@@ -2153,7 +2164,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// queries on the parent network. Issue #1136 plan part 3 cleanup.
     /// Idempotent — runs at most once per network instance.
     /// </summary>
-    private void ResolveLazyLayerShapes()
+    protected void ResolveLazyLayerShapes()
     {
         if (_layerShapesResolved) return;
         if (Layers is null || Layers.Count == 0) return;
@@ -2733,6 +2744,128 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Opts the model into the AiDotNet.Tensors weight-lifetime machinery —
+    /// streaming pool, pinned-host, and GPU offload — so models larger than
+    /// RAM can run without OOMing. Requires the version of AiDotNet.Tensors
+    /// pinned in <c>Directory.Packages.props</c>; the underlying
+    /// <see cref="WeightRegistry"/> APIs were introduced in the 0.68 line and
+    /// have remained stable since.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Process-global side effect:</b> this method calls
+    /// <see cref="WeightRegistry.Configure"/>, which mutates a process-wide
+    /// singleton. Calling it on one model instance changes the offload
+    /// configuration seen by every other model in the process. The method is
+    /// instance-scoped only because it also walks <see cref="Layers"/> and
+    /// registers their parameter tensors with the registry.
+    /// </para>
+    /// <para>
+    /// Composite networks that own sub-networks outside <see cref="Layers"/>
+    /// (e.g. <c>InfoGAN</c>, <c>CycleGAN</c>, encoder-decoder VLMs) override
+    /// this method to also forward the call to each sub-network so their
+    /// trainable tensors are registered.
+    /// </para>
+    /// </remarks>
+    public virtual void ConfigureWeightLifetime(
+        GpuOffloadOptions options,
+        IGpuOffloadAllocator? allocator = null)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+
+        // WeightRegistry.Configure's `offloadAllocator` parameter is itself
+        // optional and defaults to null when omitted, so a null forward
+        // here is correct (no need for the null-forgiving `!` operator,
+        // which the project bans). Branching keeps the signature explicit
+        // for callers that did pass an allocator.
+        if (allocator is null)
+            WeightRegistry.Configure(options);
+        else
+            WeightRegistry.Configure(options, allocator);
+        _weightLifetimeConfigured = true;
+        RegisterTrainableTensorsWithWeightRegistry();
+    }
+
+    /// <summary>
+    /// True once <see cref="ConfigureWeightLifetime"/> has been called on this
+    /// network. Used by lazy-aware re-registration paths so newly-allocated
+    /// weights from a first forward pass can join the registry retroactively.
+    /// </summary>
+    private bool _weightLifetimeConfigured;
+
+    /// <summary>
+    /// Re-walks <see cref="Layers"/> and registers any trainable tensor whose
+    /// length is now positive (i.e., the layer's lazy weights resolved during
+    /// a forward pass after <see cref="ConfigureWeightLifetime"/> was called).
+    /// Idempotent: <see cref="WeightRegistry.RegisterWeight"/> is safe to invoke
+    /// on a tensor that's already registered.
+    /// </summary>
+    /// <remarks>
+    /// Call this after a warm-up forward pass on lazy models so layers like
+    /// <c>MultiHeadAttentionLayer</c> (whose Q/K/V/O start as 0×0 placeholders)
+    /// get their real weights into the streaming pool. <see cref="ConfigureWeightLifetime"/>
+    /// alone runs before any forward and can therefore only see the
+    /// already-allocated subset.
+    /// </remarks>
+    public void RefreshWeightRegistry()
+    {
+        if (!_weightLifetimeConfigured) return;
+        RegisterTrainableTensorsWithWeightRegistry();
+    }
+
+    /// <summary>
+    /// Walks <see cref="Layers"/> and registers each layer's trainable tensors
+    /// with the process-wide <see cref="WeightRegistry"/>. Used by
+    /// <see cref="ConfigureWeightLifetime"/> on this network and recursively
+    /// invoked by composite-network overrides on their sub-networks.
+    /// </summary>
+    /// <remarks>
+    /// Tensors with <c>Length == 0</c> are skipped — they are placeholder
+    /// allocations from lazy layers (e.g. <c>MultiHeadAttentionLayer</c>'s
+    /// 0×0 Q/K/V/O before first forward) and have nothing to offload yet.
+    /// Once a real forward pass resolves their shape, callers should invoke
+    /// <see cref="RefreshWeightRegistry"/> to pick up the now-allocated tensors.
+    /// </remarks>
+    protected void RegisterTrainableTensorsWithWeightRegistry()
+    {
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            if (Layers[i] is not LayerBase<T> layer) continue;
+            foreach (var tensor in layer.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Length == 0) continue;
+                WeightRegistry.RegisterWeight(tensor);
+            }
+        }
+
+        // Composite models often own trainable layers outside of the
+        // <see cref="Layers"/> list — e.g. VLMs that lazy-construct a
+        // patch-embedding ConvolutionalLayer in a separate field once an
+        // image input arrives. Subclasses override
+        // <see cref="GetExtraTrainableLayers"/> to surface those so their
+        // weights also land in the offload registry. Default returns an
+        // empty enumerable and is a no-op.
+        foreach (var extra in GetExtraTrainableLayers())
+        {
+            if (extra is null) continue;
+            foreach (var tensor in extra.GetTrainableParameters())
+            {
+                if (tensor is null || tensor.Length == 0) continue;
+                WeightRegistry.RegisterWeight(tensor);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Override-point for subclasses that own trainable layers outside
+    /// <see cref="Layers"/> (e.g. a lazy patch-embedding conv kept in its
+    /// own field) so those layers' tensors also flow through the weight
+    /// registry. Default implementation returns an empty enumerable.
+    /// </summary>
+    protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => System.Linq.Enumerable.Empty<LayerBase<T>?>();
+
+    /// <summary>
     /// Disables memory management and releases associated resources.
     /// </summary>
     public virtual void DisableMemoryManagement()
@@ -2952,15 +3085,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             using var tape = new GradientTape<T>();
             var output = ForwardForTraining(input);
 
-            // Align output shape to target: squeeze leading batch dim when batch=1
-            // (ForwardForTraining may add a batch dim that the target doesn't have).
-            // Must go through Engine so the gradient tape records the reshape —
-            // direct Tensor<T>.Reshape bypasses the tape and breaks backward flow
-            // between ForwardForTraining and the loss. Use the internal _shape
-            // field (zero-alloc) rather than Shape.ToArray().
+            // Align output shape to target: when ranks mismatch, ALWAYS reshape the
+            // target (a leaf tensor not on the tape) rather than the network output
+            // (which IS on the tape). Reshape's tape-backward path does not always
+            // propagate gradients through to its source tensor in the current Tensors
+            // engine, so reshaping `output` would break the gradient chain between
+            // ForwardForTraining's last op and the loss — leaving the optimizer with
+            // no grads for the network's trainable params (issue surfaced by ResNet's
+            // GradientFlow_ShouldBeNonZeroAndFinite). Reshaping `expected` instead
+            // keeps `output` tape-connected end-to-end. Use the internal _shape field
+            // (zero-alloc) rather than Shape.ToArray().
             if (output.Rank > expected.Rank && output.Shape[0] == 1 && output.Length == expected.Length)
             {
-                output = Engine.Reshape(output, expected._shape);
+                expected = Engine.Reshape(expected, output._shape);
             }
             else if (expected.Rank > output.Rank && expected.Shape[0] == 1 && expected.Length == output.Length)
             {
@@ -2988,14 +3125,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Resolve optimizer
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
-            // Re-evaluation callback applies same shape alignment as initial forward.
-            // Engine.Reshape so the tape records the reshape when this is called
-            // inside the optimizer's Step; also zero-alloc via the _shape field.
+            // Re-evaluation callback applies the SAME alignment policy the
+            // initial forward used: reshape the target (a leaf tensor not on
+            // the tape), never the tape-tracked forward output, so the
+            // gradient chain between the tape's last op and the loss stays
+            // intact across the optimizer's per-step recomputation. The
+            // earlier "Engine.Reshape(fwd, tgt._shape)" form snapped the
+            // chain because Reshape's tape-backward path doesn't always
+            // propagate gradients through to its source — the same problem
+            // that the initial-forward fix at line ~3060 was added to avoid,
+            // surfaced again here when the optimizer re-evaluated the loss.
             Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt)
             {
                 var fwd = ForwardForTraining(inp);
                 if (fwd.Rank > tgt.Rank && fwd.Shape[0] == 1 && fwd.Length == tgt.Length)
-                    fwd = Engine.Reshape(fwd, tgt._shape);
+                {
+                    // Caller constructs a fresh re-evaluation context per call
+                    // and discards `tgt` after, so the leaf-side reshape is
+                    // safe — it doesn't clobber the original target tensor
+                    // the trainer holds.
+                    tgt = Engine.Reshape(tgt, fwd._shape);
+                }
+                else if (tgt.Rank > fwd.Rank && tgt.Shape[0] == 1 && tgt.Length == fwd.Length)
+                {
+                    tgt = Engine.Reshape(tgt, fwd._shape);
+                }
+                _ = tgt; // suppress unused warning — the loss callback below sees the aligned tgt
                 return fwd;
             }
 
@@ -3959,6 +4114,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Create the layer.
             var layer = DeserializationHelper.CreateLayerFromType<T>(layerType, inputShape, outputShape, additionalParams);
+
+            // Lazy layers need their shape resolved before SetParameters can size sub-layer
+            // weights. The serialized inputShape is concrete by definition when the source
+            // model had run a forward pass; if a layer's saved shape contains -1 placeholders
+            // and this is the network's first layer, fall back to the architecture's input
+            // shape (the only authoritative concrete shape we have at this point).
+            if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                int[]? candidate = inputShape is { Length: > 0 } && inputShape.All(d => d > 0)
+                    ? inputShape
+                    : null;
+                if (candidate is null && _layers.Count == 0)
+                {
+                    var archShape = Architecture?.GetInputShape();
+                    if (archShape is { Length: > 0 } && archShape.All(d => d > 0))
+                        candidate = archShape;
+                }
+                if (candidate is { Length: > 0 })
+                {
+                    try { lb.ResolveFromShape(candidate); }
+                    catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
+                }
+            }
 
             // Apply parameters if any
             if (parametersVector != null)

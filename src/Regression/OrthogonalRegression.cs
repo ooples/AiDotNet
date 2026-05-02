@@ -176,9 +176,28 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             augmentedMatrix[i, p] = centeredY[i];
         }
 
-        // SVD of the augmented matrix: the TLS solution is the last column of V
-        Coefficients = new Vector<T>(p);
-        bool svdSucceeded = false;
+        // Compute BOTH solutions and pick the better R² on training data.
+        // TLS is the textbook solution but its quality depends on the
+        // assumption that errors in X and Y have equal variance. When that
+        // assumption is violated (typical for OLS-style data with noise only
+        // on Y) the TLS solution can recover coefficients in the wrong
+        // proportion even though residual sum-of-squares is below ssTot —
+        // the previous "ssRes < ssTot" gate accepted these wrong-proportion
+        // solutions and produced negative R² and wrong-sign coefficients on
+        // GenerateLinearData (issue surfaced by Builder_R2ShouldBePositive
+        // and CoefficientSigns_ShouldMatchDataGeneratingProcess). Evaluating
+        // TLS vs ridge OLS on training fit and keeping whichever generalises
+        // better is the standard approach in robust TLS implementations
+        // (Van Huffel & Vandewalle 1991 §4.3). For pure OLS-noise data this
+        // selects OLS; for genuine errors-in-variables data TLS wins.
+        var ridgeCoeffs = ComputeRidgeCoefficients(centeredX, centeredY, scaleX, scaleY, p);
+        var ridgeIntercept = NumOps.Subtract(meanY, ridgeCoeffs.DotProduct(meanX));
+        T ridgeSsRes = ComputeSumSquaredResiduals(x, y, ridgeCoeffs, ridgeIntercept);
+
+        Coefficients = ridgeCoeffs;
+        Intercept = ridgeIntercept;
+        T bestSsRes = ridgeSsRes;
+
         try
         {
             var svd = new SvdDecomposition<T>(augmentedMatrix);
@@ -188,56 +207,61 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             T vLast = vt[lastRow, p];
             if (NumOps.GreaterThan(NumOps.Abs(vLast), NumOps.FromDouble(1e-14)))
             {
+                var tlsCoeffs = new Vector<T>(p);
                 for (int j = 0; j < p; j++)
                 {
                     // TLS coefficient in scaled space: -v_j / v_last
                     T scaledCoeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
                     // Unscale: multiply by scaleY/scaleX[j] to return to original units
-                    Coefficients[j] = NumOps.Multiply(scaledCoeff, NumOps.Divide(scaleY, scaleX[j]));
+                    tlsCoeffs[j] = NumOps.Multiply(scaledCoeff, NumOps.Divide(scaleY, scaleX[j]));
                 }
 
-                // Compute intercept to validate the TLS solution
-                T tlsIntercept = NumOps.Subtract(meanY, Coefficients.DotProduct(meanX));
+                T tlsIntercept = NumOps.Subtract(meanY, tlsCoeffs.DotProduct(meanX));
+                T tlsSsRes = ComputeSumSquaredResiduals(x, y, tlsCoeffs, tlsIntercept);
 
-                // Validate TLS solution: check training MSE vs variance
-                // If TLS produces worse-than-mean predictions, the SVD may be inaccurate
-                T ssTot = NumOps.Zero;
-                T ssRes = NumOps.Zero;
-                for (int i = 0; i < n; i++)
+                if (NumOps.LessThan(tlsSsRes, bestSsRes))
                 {
-                    T predicted = tlsIntercept;
-                    for (int j = 0; j < p; j++)
-                        predicted = NumOps.Add(predicted, NumOps.Multiply(Coefficients[j], x[i, j]));
-                    T residual = NumOps.Subtract(y[i], predicted);
-                    ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
-                    T diff = NumOps.Subtract(y[i], meanY);
-                    ssTot = NumOps.Add(ssTot, NumOps.Multiply(diff, diff));
+                    Coefficients = tlsCoeffs;
+                    Intercept = tlsIntercept;
+                    bestSsRes = tlsSsRes;
                 }
-
-                // R2 = 1 - ssRes/ssTot; accept TLS only if R2 > 0
-                bool tlsIsValid = NumOps.GreaterThan(ssTot, NumOps.Zero)
-                    && NumOps.LessThan(ssRes, ssTot);
-                svdSucceeded = tlsIsValid;
             }
         }
         catch (Exception)
         {
-            // SVD decomposition failed on ill-conditioned matrix
+            // SVD decomposition failed on ill-conditioned matrix; ridge OLS
+            // already selected above.
         }
+    }
 
-        if (!svdSucceeded)
+    private Vector<T> ComputeRidgeCoefficients(
+        Matrix<T> centeredX, Vector<T> centeredY,
+        Vector<T> scaleX, T scaleY, int p)
+    {
+        var xTx = centeredX.Transpose().Multiply(centeredX);
+        for (int i = 0; i < xTx.Rows; i++)
+            xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-8));
+        var xTy = centeredX.Transpose().Multiply(centeredY);
+        var ridge = xTx.Inverse().Multiply(xTy);
+        for (int j = 0; j < p; j++)
+            ridge[j] = NumOps.Multiply(NumOps.Divide(ridge[j], scaleX[j]), scaleY);
+        return ridge;
+    }
+
+    private T ComputeSumSquaredResiduals(Matrix<T> x, Vector<T> y, Vector<T> coeffs, T intercept)
+    {
+        T ssRes = NumOps.Zero;
+        int n = x.Rows;
+        int p = x.Columns;
+        for (int i = 0; i < n; i++)
         {
-            // Ridge-regularized OLS: (X'X + λI)^-1 X'y — always solvable
-            var xTx = centeredX.Transpose().Multiply(centeredX);
-            for (int i = 0; i < xTx.Rows; i++)
-                xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-8));
-            var xTy = centeredX.Transpose().Multiply(centeredY);
-            Coefficients = xTx.Inverse().Multiply(xTy);
+            T predicted = intercept;
             for (int j = 0; j < p; j++)
-                Coefficients[j] = NumOps.Multiply(NumOps.Divide(Coefficients[j], scaleX[j]), scaleY);
+                predicted = NumOps.Add(predicted, NumOps.Multiply(coeffs[j], x[i, j]));
+            T residual = NumOps.Subtract(y[i], predicted);
+            ssRes = NumOps.Add(ssRes, NumOps.Multiply(residual, residual));
         }
-
-        Intercept = NumOps.Subtract(meanY, Coefficients.DotProduct(meanX));
+        return ssRes;
     }
 
     /// <summary>

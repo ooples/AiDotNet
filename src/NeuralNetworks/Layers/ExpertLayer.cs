@@ -164,6 +164,27 @@ public class ExpertLayer<T> : LayerBase<T>
         }
 
         _layers = layers;
+
+        // Register inner layers so the tape autograd CollectParameters walk
+        // discovers their weights via GetSubLayers().
+        foreach (var layer in _layers)
+        {
+            RegisterSubLayer(layer);
+        }
+
+        // Eagerly chain-resolve lazy inner layers so ParameterCount works before first Forward.
+        if (inputShape.Length > 0 && inputShape.All(d => d > 0))
+        {
+            int[] runningShape = inputShape;
+            foreach (var layer in _layers)
+            {
+                if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    lb.ResolveFromShape(runningShape);
+                }
+                runningShape = layer.GetOutputShape();
+            }
+        }
     }
 
     /// <summary>

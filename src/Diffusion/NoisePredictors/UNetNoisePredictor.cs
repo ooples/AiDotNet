@@ -805,12 +805,73 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         return crossAttn.Forward(x);
     }
 
+    // Pooled output buffers for the channel-concat skip merges. Each
+    // entry corresponds to one decoder skip-merge position; sized to the
+    // (B, Ca + Cb, H, W) shape and reused across Predict calls. SD UNet
+    // has up to 11 decoder positions, the largest of which is [1, 1920,
+    // 32, 32] = ~60 MB — without pooling that's a fresh allocation every
+    // step. Eval-mode (no tape) routes through the manual concat-into,
+    // tape-mode keeps the allocating Engine.TensorConcatenate so the
+    // backward op can recover the gradient split.
+    // Pool key is a (batch, totalC, h, w) tuple — using a tuple instead of a
+    // packed int avoids the silent-collision bug the prior 32-bit packing
+    // had at higher resolutions: spatial = H*W can exceed 65 535 once
+    // H ≥ 256, so two distinct shapes (e.g. [1, 320, 256, 256] vs
+    // [1, 320, 1, 65 536]) would have hashed to the same key and the
+    // pool would have served back a wrong-shape buffer.
+    private readonly System.Collections.Generic.Dictionary<(int batch, int totalC, int h, int w), Tensor<T>> _concatPool = new();
+
     /// <summary>
-    /// Concatenates two tensors along the channel dimension.
+    /// Concatenates two tensors along the channel dimension. Eval-mode uses
+    /// a pooled manual-copy buffer keyed by exact shape so repeated decoder
+    /// skip-merges at the same shape don't allocate.
     /// </summary>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
-        return Engine.TensorConcatenate([a, b], axis: 1);
+        bool useInPlace = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+                          || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (!useInPlace || a.Rank != 4 || b.Rank != 4
+            || a._shape[0] != b._shape[0]
+            || a._shape[2] != b._shape[2]
+            || a._shape[3] != b._shape[3])
+        {
+            return Engine.TensorConcatenate(new[] { a, b }, axis: 1);
+        }
+
+        int batch = a._shape[0];
+        int cA = a._shape[1];
+        int cB = b._shape[1];
+        int h = a._shape[2];
+        int w = a._shape[3];
+        int totalC = cA + cB;
+        int spatial = h * w;
+
+        // Tuple key — collision-free (each component is its own field, no
+        // packing into a fixed-width integer that could overflow).
+        var key = (batch, totalC, h, w);
+        if (!_concatPool.TryGetValue(key, out var output))
+        {
+            output = new Tensor<T>(new[] { batch, totalC, h, w });
+            _concatPool[key] = output;
+        }
+
+        // Manual NCHW channel-axis concat. For each batch b, layout is
+        // [cA channels of A, then cB channels of B], all contiguous in the
+        // C × H × W slab. Per-batch stride in the output = totalC * spatial.
+        var aSpan = a.Data.Span;
+        var bSpan = b.Data.Span;
+        var oSpan = output.Data.Span;
+        int outBatchStride = totalC * spatial;
+        int aBatchStride = cA * spatial;
+        int bBatchStride = cB * spatial;
+        for (int bi = 0; bi < batch; bi++)
+        {
+            aSpan.Slice(bi * aBatchStride, aBatchStride)
+                .CopyTo(oSpan.Slice(bi * outBatchStride, aBatchStride));
+            bSpan.Slice(bi * bBatchStride, bBatchStride)
+                .CopyTo(oSpan.Slice(bi * outBatchStride + aBatchStride, bBatchStride));
+        }
+        return output;
     }
 
     #region Layer Factory Methods

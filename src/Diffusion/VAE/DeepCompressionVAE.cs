@@ -149,6 +149,54 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
                 activationFunction: activation));
             channels = outChannels;
         }
+
+        // Eagerly resolve all encoder/decoder layers via a probe forward so
+        // ParameterCount > 0 holds immediately after construction (lazy
+        // ConvolutionalLayer / DeconvolutionalLayer report 0 params until
+        // their first forward; FastGenContractTests.DeepCompressionVAE_*
+        // checks ParameterCount before any real input is fed).
+        ProbeLayersForLazyResolution();
+    }
+
+    private void ProbeLayersForLazyResolution()
+    {
+        // Resolve each Conv/Deconv layer's shape AND allocate its weights
+        // WITHOUT running convolution compute. ResolveFromShape walks the
+        // shape inference path (OnFirstForward) and then EnsureInitialized,
+        // so ParameterCount becomes nonzero immediately but no activations
+        // are computed and no engine kernels are invoked at construction
+        // time. Probe spatial size = max(64, downsampleFactor*2) so the
+        // stride-2 chain never collapses below 1×1.
+        int probeSize = Math.Max(64, _downsampleFactor * 2);
+        int[] shape = new[] { 1, _inputChannels, probeSize, probeSize };
+        try
+        {
+            foreach (var layer in _encoderLayers)
+            {
+                if (layer is LayerBase<T> lb)
+                {
+                    lb.ResolveFromShape(shape);
+                    shape = lb.GetOutputShape();
+                }
+            }
+            foreach (var layer in _decoderLayers)
+            {
+                if (layer is LayerBase<T> lb)
+                {
+                    lb.ResolveFromShape(shape);
+                    shape = lb.GetOutputShape();
+                }
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Best-effort against shape-arithmetic mismatches; ParameterCount > 0
+            // contract tests will surface a degenerate non-default config.
+            // Engine-level failures (DllNotFound, OOM, NullReference, etc.)
+            // fall through so partially-initialized state isn't silently masked.
+            System.Diagnostics.Debug.WriteLine(
+                $"[DeepCompressionVAE.ProbeLayersForLazyResolution] suppressed shape-probe error: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <inheritdoc />

@@ -264,21 +264,16 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(PatchEmbeddingLayer<>))
         {
-            // PatchEmbeddingLayer(int imageHeight, int imageWidth, int channels, int patchSize, int embeddingDim)
-            // Input shape: [channels, imageHeight, imageWidth]
-            // Output shape: [numPatches, embeddingDim]
-            if (inputShape.Length < 3)
-                throw new InvalidOperationException(
-                    $"PatchEmbeddingLayer requires input shape [channels, height, width] but got {inputShape.Length} dimensions.");
+            // PatchEmbeddingLayer(int patchSize, int embeddingDim) — lazy ctor;
+            // image H/W and channels resolve from first Forward input.
             if (outputShape.Length < 2)
                 throw new InvalidOperationException(
                     $"PatchEmbeddingLayer requires output shape [numPatches, embeddingDim] but got {outputShape.Length} dimensions.");
 
-            int channels = inputShape[0];
-            int imageHeight = inputShape[1];
-            int imageWidth = inputShape[2];
             int patchEmbedDim = outputShape[1];
             int numPatches = outputShape[0];
+            int imageHeight = inputShape.Length > 1 ? inputShape[1] : 0;
+            int imageWidth = inputShape.Length > 2 ? inputShape[2] : 0;
 
             int patchSize;
             int? metadataPatchSize = TryGetInt(additionalParams, "PatchSize");
@@ -286,35 +281,42 @@ public static class DeserializationHelper
             {
                 patchSize = metadataPatchSize.Value;
             }
-            else if (numPatches > 0 && imageWidth > 0)
+            else if (numPatches > 0 && imageHeight > 0 && imageWidth > 0)
             {
-                // Derive: numPatches = (H/P) * (W/P) → P = H / sqrt(numPatches * H/W)
                 double sqrtVal = Math.Sqrt((double)numPatches * imageHeight / imageWidth);
                 patchSize = sqrtVal > 0 ? (imageHeight / (int)Math.Round(sqrtVal)) : 16;
             }
             else
             {
+                // Refuse to silently default — without metadata or shape data
+                // we'd reconstruct a PatchEmbeddingLayer at the wrong grid
+                // and SetParameters would fail the parameter-count check (or
+                // worse, succeed and load weights into a wrong-shape kernel).
+                // Surface the missing-info case loudly so the caller knows
+                // the saved model needs the PatchSize entry in additionalParams
+                // or an inputShape with concrete H/W.
                 throw new InvalidOperationException(
-                    $"PatchEmbeddingLayer requires PatchSize metadata or valid shape (numPatches={numPatches}, imageWidth={imageWidth}).");
+                    "Cannot deserialize PatchEmbeddingLayer: PatchSize is missing " +
+                    "from layer metadata AND inputShape does not carry concrete " +
+                    "image dimensions to back-derive it from numPatches. Re-save " +
+                    "the model on a build that emits PatchSize via " +
+                    "PatchEmbeddingLayer.GetMetadata, or pass an inputShape with " +
+                    "positive height/width when constructing the layer manually.");
             }
 
-            // Constructor: PatchEmbeddingLayer(int, int, int, int, int, IActivationFunction?, IInitializationStrategy?)
             var ctor = type.GetConstructors()
-                .FirstOrDefault(c => c.GetParameters().Length >= 5 &&
-                    c.GetParameters().Take(5).All(p => p.ParameterType == typeof(int)));
+                .FirstOrDefault(c => c.GetParameters().Length >= 2 &&
+                    c.GetParameters()[0].ParameterType == typeof(int) &&
+                    c.GetParameters()[1].ParameterType == typeof(int));
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find PatchEmbeddingLayer constructor.");
             }
-            // Build args: 5 required ints + fill optional params with null
             var ctorParams = ctor.GetParameters();
             var args = new object?[ctorParams.Length];
-            args[0] = imageHeight;
-            args[1] = imageWidth;
-            args[2] = channels;
-            args[3] = patchSize;
-            args[4] = patchEmbedDim;
-            for (int i = 5; i < ctorParams.Length; i++)
+            args[0] = patchSize;
+            args[1] = patchEmbedDim;
+            for (int i = 2; i < ctorParams.Length; i++)
                 args[i] = null;
             instance = ctor.Invoke(args);
         }
@@ -397,12 +399,17 @@ public static class DeserializationHelper
             }
             instance = ctor.Invoke(new object[] { numHeads, feedForwardDim });
 
-            // Pre-resolve shapes from the saved inputShape so GetParameters/SetParameters
-            // see fully-allocated sublayer tensors before SetParameters runs.
+            // Pre-resolve and allocate sublayer weights from the saved inputShape so
+            // SetParameters can populate them. We need full ResolveFromShape (not just
+            // ResolveShapesOnly) because TransformerEncoderLayer constructs its
+            // sublayers in EnsureInitialized.
             if (instance is LayerBase<T> layerBase && inputShape.Length > 0)
             {
-                int[] resolvedShape = inputShape.Select(d => d > 0 ? d : 1).ToArray();
-                layerBase.ResolveShapesOnly(resolvedShape);
+                int[] resolvedShape = embeddingSize > 0
+                    ? inputShape.Select(d => d > 0 ? d : 1).ToArray()
+                    : (numHeads > 0 ? new[] { 1, numHeads * 64 } : new[] { 1, 64 });
+                if (resolvedShape[^1] <= 0) resolvedShape[^1] = embeddingSize > 0 ? embeddingSize : 64;
+                layerBase.ResolveFromShape(resolvedShape);
             }
         }
         else if (genericDef == typeof(TransformerDecoderLayer<>))
@@ -1040,19 +1047,17 @@ public static class DeserializationHelper
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.AdaptiveAveragePoolingLayer`1")))
         {
-            // AdaptiveAveragePoolingLayer(int inputChannels, int inputHeight, int inputWidth, int outputHeight = 1, int outputWidth = 1)
-            int inputChannels = inputShape.Length > 1 ? inputShape[1] : inputShape[0];
-            int inputHeight = inputShape.Length > 2 ? inputShape[2] : 1;
-            int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
-            int outputHeight = outputShape.Length > 2 ? outputShape[2] : 1;
-            int outputWidth = outputShape.Length > 3 ? outputShape[3] : 1;
+            // AdaptiveAveragePoolingLayer(int outputHeight = 1, int outputWidth = 1) — lazy ctor;
+            // input C/H/W resolve on first Forward.
+            int outputHeight = outputShape.Length > 1 ? Math.Max(1, outputShape[outputShape.Length - 2]) : 1;
+            int outputWidth = outputShape.Length > 0 ? Math.Max(1, outputShape[outputShape.Length - 1]) : 1;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) });
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
                 throw new InvalidOperationException($"Cannot find AdaptiveAveragePoolingLayer constructor.");
             }
-            instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, outputHeight, outputWidth });
+            instance = ctor.Invoke(new object[] { outputHeight, outputWidth });
         }
         else if (genericDef == typeof(ActivationLayer<>))
         {
@@ -1190,6 +1195,8 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? innerActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             var innerLayer = new DenseLayer<T>(innerOutputSize, innerActivation as IActivationFunction<T>);
+            // Eagerly resolve so ValidateInnerLayer sees concrete matching shapes.
+            innerLayer.ResolveFromShape(new[] { innerInputSize });
 
             // Create ResidualLayer directly to avoid constructor ambiguity
             object? residualActivation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -1236,9 +1243,19 @@ public static class DeserializationHelper
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".ContinuumMemorySystemLayer`1"))
         {
-            // ContinuumMemorySystemLayer(int[] inputShape, int hiddenDim, ...)
-            // All parameters after the first two have default values
-            int hiddenDim = inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : 256;
+            // ContinuumMemorySystemLayer(int[] inputShape, int hiddenDim,
+            //                            int numFrequencyLevels = 3, ...)
+            // numFrequencyLevels controls the count of internal MLP blocks
+            // (Hope passes 5 from inContextLearningLevels per Behrouz et al.
+            // 2025 §3.2). If the saved value isn't restored, the default 3
+            // is used and the deserialized layer's ParameterCount is 3/5 of
+            // the saved vector — SetParameters then rejects with
+            // "Parameter vector length (X) does not match total parameters (Y)"
+            // and Clone fails. Read NumFrequencyLevels from additionalParams
+            // (serialized by the layer alongside its weights).
+            int hiddenDim = TryGetInt(additionalParams, "HiddenDim")
+                ?? (inputShape.Length > 0 ? inputShape[inputShape.Length - 1] : 256);
+            int numFreqLevels = TryGetInt(additionalParams, "NumFrequencyLevels") ?? 3;
             var ctor = type.GetConstructors()
                 .Where(c => c.GetParameters().Length >= 2 &&
                        c.GetParameters()[0].ParameterType == typeof(int[]) &&
@@ -1253,7 +1270,10 @@ public static class DeserializationHelper
                 args[1] = hiddenDim;
                 for (int pi = 2; pi < parameters.Length; pi++)
                 {
-                    args[pi] = parameters[pi].HasDefaultValue ? parameters[pi].DefaultValue : null;
+                    if (parameters[pi].Name == "numFrequencyLevels")
+                        args[pi] = numFreqLevels;
+                    else
+                        args[pi] = parameters[pi].HasDefaultValue ? parameters[pi].DefaultValue : null;
                 }
                 instance = ctor.Invoke(args);
             }
@@ -1682,20 +1702,19 @@ public static class DeserializationHelper
     /// </remarks>
     private static object CreateLSTMLayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
     {
-        // LSTMLayer(int inputSize, int hiddenSize, int[] inputShape, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null, IEngine? engine = null)
-        int inputSize = inputShape.Length >= 2 ? inputShape[^1] : inputShape[0];
+        // LSTMLayer(int hiddenSize, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
+        // Lazy layer — _inputSize is resolved from input shape on first forward.
         int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var engineType = typeof(IEngine);
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int[]), activationFuncType, activationFuncType, engineType });
+        var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType, activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find LSTMLayer constructor with (int, int, int[], IActivationFunction<T>, IActivationFunction<T>, IEngine).");
+            throw new InvalidOperationException("Cannot find LSTMLayer constructor with (int, IActivationFunction<T>, IActivationFunction<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { inputSize, hiddenSize, inputShape, activation, null, null });
+        return ctor.Invoke(new object?[] { hiddenSize, activation, null });
     }
 
     private static bool TryParseLayerTypeIdentifier(

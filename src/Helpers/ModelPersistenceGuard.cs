@@ -104,15 +104,24 @@ internal static class ModelPersistenceGuard
     /// Must be called at the start of every LoadModel()/Deserialize() file-based implementation.
     /// </summary>
     /// <remarks>
-    /// Load is a user-facing entry point and is NOT suppressed by an outer
-    /// <see cref="InternalOperation"/> scope. See
-    /// <see cref="EnforceBeforeSave"/> for the rationale.
+    /// Load is normally a user-facing entry point and counts against the trial,
+    /// but server-side infrastructure (the AiDotNet.Serving controllers, model
+    /// registry loaders, federated coordinator round-trips) explicitly opens an
+    /// <see cref="InternalOperation"/> scope around their internal Load calls
+    /// to declare "this is not a user-driven save/load". When that scope is
+    /// active, suppress trial counting — otherwise serving infrastructure that
+    /// loads many models per process would exhaust the 10-op trial against
+    /// itself even though no actual user persistence happened.
+    ///
+    /// User-facing SaveModel/LoadModel calls do NOT open an internal scope, so
+    /// they still count against the trial via <see cref="EnforceBeforeSave"/>.
     /// </remarks>
     /// <exception cref="LicenseRequiredException">
     /// Thrown when the free trial has expired and no valid license is configured.
     /// </exception>
     internal static void EnforceBeforeLoad()
     {
+        if (_internalOperationDepth.Value > 0) return;
         EnforceCore();
     }
 

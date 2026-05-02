@@ -212,10 +212,69 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// residual block has gamma initialized to zero. This makes the residual blocks
     /// start as identity mappings, which can improve training.
     /// </remarks>
+    private bool _zeroInitGammaPending;
+
     public void ZeroInitGamma()
     {
-        int featureSize = InputShape[0];
-        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+        // ResNet zero-init residual (He et al. 2019). Defer when shape is
+        // still lazy ([-1]); the resolution step picks up _zeroInitGammaPending.
+        if (InputShape.Length == 0 || InputShape[0] <= 0)
+        {
+            _zeroInitGammaPending = true;
+            return;
+        }
+        // Zero out the existing _gamma in place rather than replacing the field
+        // with a fresh tensor. Replacement would orphan any existing trainable-
+        // parameter registration (RegisterTrainableParameter holds the original
+        // ref) and break the parameter buffer's view alignment if a buffer was
+        // already built around the old tensor.
+        if (_gamma is { Length: > 0 })
+        {
+            var span = _gamma.Data.Span;
+            for (int i = 0; i < span.Length; i++) span[i] = NumOps.Zero;
+            return;
+        }
+
+        // Lazy / placeholder _gamma path. Re-run the standard initialization
+        // sequence so we end up with a fully wired layer:
+        //   - all four state tensors (_gamma, _beta, _runningMean,
+        //     _runningVariance) sized to InputShape[0] with their canonical
+        //     defaults
+        //   - _gamma + _beta registered with RegisterTrainableParameter so
+        //     the parameter buffer + weight registry pick them up
+        // Only then zero _gamma in place. Earlier code created a fresh
+        // _gamma tensor and skipped registration / _beta init, so a layer
+        // that hit ZeroInitGamma before its first forward ended up with
+        // _gamma trainable but unregistered, _beta still at the placeholder
+        // length 0, and the running stats absent — which silently produced
+        // identity-like normalization once Forward ran.
+        InitializeNormalizationParameters();
+        if (_gamma.Length > 0)
+        {
+            var span = _gamma.Data.Span;
+            for (int i = 0; i < span.Length; i++) span[i] = NumOps.Zero;
+        }
+    }
+
+    /// <summary>
+    /// Allocates _gamma / _beta / _runningMean / _runningVariance to match
+    /// the resolved InputShape and registers gamma + beta as trainable.
+    /// Idempotent: tensors already at the right length are reused so the
+    /// existing RegisterTrainableParameter registrations stay valid.
+    /// </summary>
+    private void InitializeNormalizationParameters()
+    {
+        int channels = InputShape[0];
+        bool reinit = _gamma is null || _gamma.Length != channels;
+        if (reinit)
+        {
+            _gamma = Tensor<T>.CreateDefault([channels], NumOps.One);
+            _beta = Tensor<T>.CreateDefault([channels], NumOps.Zero);
+            _runningMean = Tensor<T>.CreateDefault([channels], NumOps.Zero);
+            _runningVariance = Tensor<T>.CreateDefault([channels], NumOps.One);
+            RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+            RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+        }
     }
 
     /// <summary>
@@ -331,7 +390,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 nameof(input));
         }
 
-        _gamma = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
+        // Apply deferred ZeroInitGamma if requested before shape resolution.
+        T gammaInit = _zeroInitGammaPending ? NumOps.Zero : NumOps.One;
+        _zeroInitGammaPending = false;
+        _gamma = Tensor<T>.CreateDefault([numFeatures], gammaInit);
         _beta = new Tensor<T>([numFeatures]);
         _runningMean = new Tensor<T>([numFeatures]);
         _runningVariance = Tensor<T>.CreateDefault([numFeatures], NumOps.One);

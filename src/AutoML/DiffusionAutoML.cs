@@ -811,6 +811,37 @@ namespace AiDotNet.AutoML
             _lastTrainingLoss = NumOps.Zero;
         }
 
+        /// <summary>
+        /// Parameterless constructor that wires the AutoML wrapper around a
+        /// default UNet noise predictor, StandardVAE, DDIM scheduler, and
+        /// SimpleConditioner — using <see cref="DiffusionTrialConfig{T}"/>'s
+        /// own defaults (DDIM, 50 inference steps, baseChannels=128,
+        /// numResBlocks=2, latentDim=4). Used by the auto-generated
+        /// DiffusionModelTestBase scaffold which can't synthesise the
+        /// full dependency graph manually. AutoML's actual trial path
+        /// continues to call the explicit constructor with a tuned config.
+        /// </summary>
+        public DiffusionAutoMLModel()
+            : this(
+                noisePredictor: new UNetNoisePredictor<T>(
+                    inputChannels: new DiffusionTrialConfig<T>().LatentDim,
+                    outputChannels: new DiffusionTrialConfig<T>().LatentDim,
+                    baseChannels: new DiffusionTrialConfig<T>().BaseChannels,
+                    numResBlocks: new DiffusionTrialConfig<T>().NumResBlocks,
+                    seed: null),
+                vae: new StandardVAE<T>(
+                    inputChannels: 3,
+                    latentChannels: new DiffusionTrialConfig<T>().LatentDim,
+                    baseChannels: new DiffusionTrialConfig<T>().BaseChannels / 2,
+                    numResBlocksPerLevel: new DiffusionTrialConfig<T>().NumResBlocks,
+                    seed: null),
+                scheduler: new DDIMScheduler<T>(SchedulerConfig<T>.CreateDefault()),
+                conditioner: new SimpleConditioner<T>(embeddingDim: 768),
+                config: new DiffusionTrialConfig<T>(),
+                seed: null)
+        {
+        }
+
         public override Tensor<T> Predict(Tensor<T> input)
         {
             // Encode conditioning

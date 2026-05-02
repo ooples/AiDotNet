@@ -1027,11 +1027,17 @@ public class NeuralNetworkArchitecture<T>
         if (Layers != null && Layers.Count > 0)
         {
             var firstLayer = Layers[0];
-            int firstLayerInputSize = firstLayer.GetInputShape().Aggregate(1, (a, b) => a * b);
-
-            if (firstLayerInputSize != InputSize)
+            var firstShape = firstLayer.GetInputShape();
+            // Lazy layers carry -1 placeholders until first Forward; skip the strict
+            // size check and let runtime shape resolution validate the dimensions.
+            bool firstIsLazy = firstShape.Length == 0 || firstShape.Any(d => d <= 0);
+            if (!firstIsLazy)
             {
-                throw new ArgumentException($"The first layer's input size ({firstLayerInputSize}) must match the input size ({InputSize}).");
+                int firstLayerInputSize = firstShape.Aggregate(1, (a, b) => a * b);
+                if (firstLayerInputSize != InputSize)
+                {
+                    throw new ArgumentException($"The first layer's input size ({firstLayerInputSize}) must match the input size ({InputSize}).");
+                }
             }
         }
     }

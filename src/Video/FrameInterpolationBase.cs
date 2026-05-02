@@ -169,8 +169,70 @@ public abstract class FrameInterpolationBase<T> : VideoNeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Two-frame interpolation models accept either:
+    /// <list type="bullet">
+    ///   <item>A rank-4 frame sequence <c>[N, C, H, W]</c> — calls
+    ///         <see cref="InterpolateSequence"/>. Rank-4 input is always treated
+    ///         as a sequence; previously this routed even-channel sequences
+    ///         (RGBA, 2-channel optical flow, etc.) into the pair-concat path
+    ///         and split them by channel instead of frame.</item>
+    ///   <item>A channel-concatenated frame pair <c>[2C, H, W]</c> emitted by the
+    ///         standard test scaffold — splits and calls <see cref="Interpolate"/>
+    ///         with t = 0.5. Batched channel-concatenated input <c>[B, 2C, H, W]</c>
+    ///         is no longer auto-detected (it is indistinguishable from a frame
+    ///         sequence with even C); callers needing batched pair-concat must
+    ///         iterate the batch dimension and call <see cref="Interpolate"/>
+    ///         directly.</item>
+    /// </list>
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        // Rank-4 always means a frame *sequence* [N, C, H, W]. Treating it as
+        // a channel-concatenated pair purely on "C is even" misclassified
+        // RGBA (C=4), depth-with-confidence (C=2), and any other multi-channel
+        // sequence input. The unambiguous channel-concat shape is rank-3
+        // [2C, H, W] — that's what we keep here.
+        bool isPairConcat = input.Rank == 3 && input.Shape[0] % 2 == 0 && input.Shape[0] > 0;
+        if (isPairConcat) return InterpolatePairConcat(input);
+
+        // Common caller mistake: passing batched pair-concat [1, 2C, H, W]
+        // expecting channel-split semantics. With rank-4 → InterpolateSequence,
+        // that input would die in the sequence path with the unhelpful
+        // "At least 2 frames are required" message. Detect and redirect.
+        if (input.Rank == 4 && input.Shape[0] == 1 && input.Shape[1] % 2 == 0 && input.Shape[1] > 0)
+        {
+            throw new ArgumentException(
+                $"Input shape [{input.Shape[0]}, {input.Shape[1]}, {input.Shape[2]}, {input.Shape[3]}] " +
+                "looks like a batched channel-concatenated frame pair, but rank-4 input is treated " +
+                "as a frame sequence [N, C, H, W] and the leading dim is 1, so InterpolateSequence " +
+                "would reject it. If you intended a pair-concat, drop the batch dim and pass " +
+                $"[{input.Shape[1]}, {input.Shape[2]}, {input.Shape[3]}] (rank-3), or iterate the " +
+                "batch and call Interpolate(frame0, frame1) per pair. If this really is a " +
+                "single-frame sequence, pad to at least 2 frames before calling Predict.",
+                nameof(input));
+        }
+
         return InterpolateSequence(input);
+    }
+
+    private Tensor<T> InterpolatePairConcat(Tensor<T> pair)
+    {
+        // Predict only routes rank-3 [2C, H, W] tensors here (see the rank-4
+        // disambiguation in Predict). Rank-4 batched pair-concat is therefore
+        // unreachable from the public surface; callers that need batched
+        // pair-concat should iterate batches and call Interpolate directly.
+        int channels = pair.Shape[0] / 2;
+        int height = pair.Shape[1];
+        int width = pair.Shape[2];
+        int frameStride = channels * height * width;
+        var src = pair.AsSpan();
+
+        var frame0 = new Tensor<T>([channels, height, width]);
+        var frame1 = new Tensor<T>([channels, height, width]);
+        src.Slice(0, frameStride).CopyTo(frame0.AsWritableSpan());
+        src.Slice(frameStride, frameStride).CopyTo(frame1.AsWritableSpan());
+        return Interpolate(frame0, frame1, t: 0.5);
     }
 }

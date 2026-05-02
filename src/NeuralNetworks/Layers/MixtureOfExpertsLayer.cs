@@ -468,12 +468,30 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         _useAuxiliaryLoss = useLoadBalancing;
         _auxiliaryLossWeight = loadBalancingWeight ?? NumOps.FromDouble(0.01); // Default to 0.01
 
-        // Register router and experts as sublayers so the tape-based autodiff
-        // system can recursively discover their parameters via GetSubLayers().
         RegisterSubLayer(_router);
         foreach (var expert in _experts)
         {
             RegisterSubLayer(expert);
+        }
+
+        // Eagerly resolve lazy sub-layers using the known input shape so
+        // ParameterCount / GetParameters work before the first Forward.
+        bool inputResolved = inputShape.Length > 0 && inputShape.All(d => d > 0);
+        if (inputResolved)
+        {
+            ResolveSubLayer(_router, inputShape);
+            foreach (var expert in _experts)
+            {
+                ResolveSubLayer(expert, inputShape);
+            }
+        }
+    }
+
+    private static void ResolveSubLayer(ILayer<T> layer, int[] inputShape)
+    {
+        if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+        {
+            lb.ResolveFromShape(inputShape);
         }
     }
 

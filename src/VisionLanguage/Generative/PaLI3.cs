@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -68,7 +69,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
 
     public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim;
 
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = TokenizeIfNCHW(p); for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
 
     /// <summary>
     /// Generates text using PaLI-3's efficient SigLIP-based architecture.
@@ -90,7 +91,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
         // Step 1: SigLIP ViT encoder (sigmoid-based contrastive pretraining)
-        var encoderOut = p;
+        var encoderOut = TokenizeIfNCHW(p);
         for (int i = 0; i < _encoderLayerEnd; i++)
             encoderOut = Layers[i].Forward(encoderOut);
 
@@ -123,9 +124,134 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + (_options.VisionDim != _options.DecoderDim ? 1 : 0); }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = TokenizeIfNCHW(input);
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
+
+    private ConvolutionalLayer<T>? _patchEmbed;
+
+    private Tensor<T> TokenizeIfNCHW(Tensor<T> input) =>
+        PatchEmbedHelper.TokenizeImageNCHWToBSC(
+            input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        // Tokenize NCHW image inputs the same way Predict does so the
+        // tape-based training loop sees the patch-embedded BSC sequence
+        // the encoder layer stack expects (otherwise NCHW images would
+        // crash the first encoder layer's shape check or train against
+        // a wrong-shape gradient path).
+        TrainWithTape(TokenizeIfNCHW(input), expected);
+        SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Surfaces _patchEmbed (which lives outside Layers) to the base
+    /// weight-registry walker so its trainable tensors land in the
+    /// streaming pool when ConfigureWeightLifetime is called.
+    /// </summary>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _patchEmbed;
+    }
+
+    /// <summary>
+    /// Lazily creates _patchEmbed when the incoming parameter vector is
+    /// longer than the layer-sum, indicating the saved model was trained
+    /// in vision mode. Builds it by running a probe NCHW tensor through
+    /// the helper, which constructs and weight-allocates the conv. Idempotent.
+    /// </summary>
+    private void EnsurePatchEmbedForParameterVector(int paramVectorLength)
+    {
+        if (_patchEmbed is not null) return;
+        int layerSum = 0;
+        foreach (var l in Layers) layerSum += l.ParameterCount;
+        if (paramVectorLength <= layerSum) return;
+
+        var probe = new Tensor<T>(new[] { 1, 3, _options.ImageSize, _options.ImageSize });
+        TokenizeIfNCHW(probe);
+    }
+
+    // _patchEmbed lives outside Layers but is trainable in native mode. Override
+    // ParameterCount / GetParameters / SetParameters / UpdateParameters together
+    // so all four agree on the layout: _patchEmbed slice first, then Layers in
+    // order. Without this, the optimizer reads N params via GetParameters and
+    // hands back N to UpdateParameters — but UpdateParameters consumes
+    // _patchEmbed.ParameterCount extra slots from the front, shifting every
+    // Layer's slice and corrupting weights.
+    public override int ParameterCount =>
+        (_patchEmbed?.ParameterCount ?? 0) +
+        Layers.Sum(l => l.ParameterCount);
+
+    public override Vector<T> GetParameters()
+    {
+        var perLayer = Layers.Select(l => l.GetParameters()).ToList();
+        int patchLen = _patchEmbed?.ParameterCount ?? 0;
+        int total = patchLen + perLayer.Sum(p => p.Length);
+        var result = new Vector<T>(total);
+        int idx = 0;
+        if (patchLen > 0)
+        {
+            var patchParams = _patchEmbed!.GetParameters();
+            for (int i = 0; i < patchParams.Length; i++) result[idx++] = patchParams[i];
+        }
+        foreach (var p in perLayer)
+        {
+            for (int i = 0; i < p.Length; i++) result[idx++] = p[i];
+        }
+        return result;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // If the saved parameter vector includes patch-embed weights but
+        // this instance hasn't seen an image yet, lazy-create _patchEmbed
+        // so the slice layout matches the saved vector. Otherwise the
+        // patch-embed slice silently drops.
+        EnsurePatchEmbedForParameterVector(parameters.Length);
+
+        int idx = 0;
+        if (_patchEmbed is not null)
+        {
+            int pc = _patchEmbed.ParameterCount;
+            if (pc > 0)
+            {
+                _patchEmbed.SetParameters(parameters.Slice(idx, pc));
+                idx += pc;
+            }
+        }
+        foreach (var l in Layers)
+        {
+            int c = l.ParameterCount;
+            l.SetParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        EnsurePatchEmbedForParameterVector(parameters.Length);
+        int idx = 0;
+        if (_patchEmbed is not null)
+        {
+            int pc = _patchEmbed.ParameterCount;
+            if (pc > 0)
+            {
+                _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
+                idx += pc;
+            }
+        }
+        foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+    }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "PaLI-3-Native" : "PaLI-3-ONNX", Description = "PaLI-3 Vision Language Models: Smaller, Faster, Stronger (Chen et al., 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "PaLI-3"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
@@ -133,5 +259,17 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new PaLI3<T>(Architecture, mp, _options); return new PaLI3<T>(Architecture, _options); }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PaLI3<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing)
+        {
+            // _patchEmbed lives outside Layers; dispose it explicitly so the
+            // conv's weights/buffers get released alongside the rest of the
+            // model rather than leaking until GC.
+            if (_patchEmbed is IDisposable pe) pe.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }

@@ -337,14 +337,48 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <remarks>
     /// This returns the sum of all parameters from sublayers: self-attention, layer norms, and feed-forward layers.
     /// </remarks>
-    public override int ParameterCount =>
-        _isInitialized
-            ? _selfAttention.ParameterCount +
-              _norm1.ParameterCount +
-              _feedForward1.ParameterCount +
-              _feedForward2.ParameterCount +
-              _norm2.ParameterCount
-            : 0;
+    public override int ParameterCount
+    {
+        get
+        {
+            if (_isInitialized)
+            {
+                return _selfAttention.ParameterCount +
+                       _norm1.ParameterCount +
+                       _feedForward1.ParameterCount +
+                       _feedForward2.ParameterCount +
+                       _norm2.ParameterCount;
+            }
+
+            // Pre-forward declarative path: when _embeddingSize is known
+            // (eager constructor), compute the parameter count analytically
+            // from constructor args so existence-check tests
+            // (Parameters_ShouldBeNonEmpty) and weight-registry walks see a
+            // non-zero count without forcing the sublayers to materialize.
+            //
+            // Per-block sublayer counts (matching the EnsureInitialized
+            // construction below):
+            //   MHA self-attention: 4 * d * d + d  (4 dim×dim projections + output bias)
+            //   LayerNorm × 2:      2 * (2 * d)    (gamma + beta per LN)
+            //   FeedForward d→ffd:  d * ffd + ffd  (weights + bias)
+            //   FeedForward ffd→d:  ffd * d + d    (weights + bias)
+            //
+            // When _embeddingSize is -1 (lazy ctor, dim not yet known from
+            // input shape), there is no way to declare an accurate count;
+            // returning 0 there is the safe and historically-compatible
+            // option. Use the eager constructor with embeddingSize to opt
+            // into the non-zero declarative path.
+            if (_embeddingSize <= 0) return 0;
+            long d = _embeddingSize;
+            long ffd = _feedForwardDim;
+            long mha = 4 * d * d + d;
+            long norms = 2 * (2 * d);
+            long ff1 = d * ffd + ffd;
+            long ff2 = ffd * d + d;
+            long total = mha + norms + ff1 + ff2;
+            return total > int.MaxValue ? int.MaxValue : (int)total;
+        }
+    }
 
     /// <summary>
     /// Returns layer-specific metadata for serialization.
@@ -373,14 +407,40 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="feedForwardDim">Hidden dimension of the FFN.</param>
     public TransformerEncoderLayer(int numHeads, int feedForwardDim)
+        : this(numHeads, feedForwardDim, embeddingSize: -1)
+    {
+    }
+
+    /// <summary>
+    /// Eager-dimension ctor: <see cref="_embeddingSize"/> is known at
+    /// construction time, so <see cref="ParameterCount"/> can declare a
+    /// non-zero count immediately (no first-forward required). Use this
+    /// overload from layer factories that already know the model's hidden
+    /// width — it lets <c>Parameters_ShouldBeNonEmpty</c>-style tests and
+    /// the weight-registry walker see the encoder's params without forcing
+    /// sublayer construction. Sublayers themselves still build lazily on
+    /// first <see cref="Forward(Tensor{T})"/>.
+    /// </summary>
+    /// <param name="numHeads">Number of attention heads.</param>
+    /// <param name="feedForwardDim">Hidden dimension of the FFN.</param>
+    /// <param name="embeddingSize">
+    /// Embedding dimension (must be divisible by <paramref name="numHeads"/>),
+    /// or <c>-1</c> to defer resolution to first forward.
+    /// </param>
+    public TransformerEncoderLayer(int numHeads, int feedForwardDim, int embeddingSize)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
         if (numHeads <= 0)
             throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be positive.");
         if (feedForwardDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(feedForwardDim), "feedForwardDim must be positive.");
+        if (embeddingSize > 0 && embeddingSize % numHeads != 0)
+            throw new ArgumentException(
+                $"embeddingSize ({embeddingSize}) must be evenly divisible by " +
+                $"numHeads ({numHeads}); got remainder {embeddingSize % numHeads}.",
+                nameof(embeddingSize));
 
-        _embeddingSize = -1;
+        _embeddingSize = embeddingSize > 0 ? embeddingSize : -1;
         _numHeads = numHeads;
         _feedForwardDim = feedForwardDim;
 
@@ -459,6 +519,19 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             RegisterSubLayer(_feedForward1);
             RegisterSubLayer(_feedForward2);
             RegisterSubLayer(_norm2);
+
+            // Eagerly resolve sub-layers using the known embedding size so their
+            // ParameterCount reflects real weights immediately. Without this,
+            // SetParameters dispatch (which slices by ParameterCount) sees 0 for
+            // lazy FeedForwardLayer (-1 input × outDim + outDim = 0) and silently
+            // skips its serialized weights — fixes the post-deserialize Predict
+            // mismatch in VideoCLIP / VLM Clone tests.
+            int[] subInputShape = new[] { _embeddingSize };
+            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+            _norm1.ResolveFromShape(subInputShape);
+            _feedForward1.ResolveFromShape(subInputShape);
+            _feedForward2.ResolveFromShape(new[] { _feedForwardDim });
+            _norm2.ResolveFromShape(subInputShape);
 
             _isInitialized = true;
         }

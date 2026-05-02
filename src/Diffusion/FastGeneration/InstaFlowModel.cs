@@ -83,7 +83,10 @@ public class InstaFlowModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.0001,
-                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear,
+                // InstaFlow paper (Liu et al. 2023): rectified-flow distillation
+                // generates in a single step by design.
+                DefaultInferenceSteps = 1
             },
             scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
             architecture)

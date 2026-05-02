@@ -83,7 +83,9 @@ public class SANASprintModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.0001,
-                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear,
+                // SANA-Sprint paper (Xie et al. 2025) generates in a single step.
+                DefaultInferenceSteps = 1
             },
             scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
             architecture)

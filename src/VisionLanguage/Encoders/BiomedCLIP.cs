@@ -69,9 +69,138 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     public T ComputeSimilarity(Tensor<T> image, string text) => CosineSimilarity(EncodeImage(image), EncodeText(text));
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, string[] labels) { var ie = EncodeImage(image); var te = EncodeTexts(labels); var logits = new Tensor<T>([labels.Length]); double temp = _options.Temperature; for (int i = 0; i < labels.Length; i++) logits[i] = NumOps.FromDouble(NumOps.ToDouble(CosineSimilarity(ie, te[i])) / temp); var probs = Softmax(logits); var r = new Dictionary<string, T>(); for (int i = 0; i < labels.Length; i++) r[labels[i]] = probs[i]; return r; }
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _visionLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultOpenCLIPLayers(_options.VisionEmbeddingDim, _options.TextEmbeddingDim, _options.ProjectionDim, _options.NumVisionLayers, _options.NumTextLayers, _options.NumVisionHeads, _options.NumTextHeads, _options.DropoutRate)); int lpb = _options.DropoutRate > 0 ? 6 : 5; _visionLayerEnd = 2 + _options.NumVisionLayers * lpb; } }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
+        SetTrainingMode(false);
+        var c = TokenizeIfNCHW(input);
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
+
+    private ConvolutionalLayer<T>? _patchEmbed;
+
+    private Tensor<T> TokenizeIfNCHW(Tensor<T> input) =>
+        PatchEmbedHelper.TokenizeImageNCHWToBSC(
+            input, _options.VisionEmbeddingDim, _options.ImageSize, ref _patchEmbed, Engine);
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        // Tokenize NCHW image inputs the same way Predict does so the
+        // tape-based training loop sees the patch-embedded BSC sequence
+        // the encoder layer stack actually expects. Without this, callers
+        // (and the model-family invariant tests) that pass an NCHW image
+        // would either crash on the first encoder layer's shape check or
+        // train against zero gradients flowing through a wrong-shape path.
+        TrainWithTape(TokenizeIfNCHW(input), expected);
+        SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Surfaces _patchEmbed (which lives outside Layers) to the base
+    /// weight-registry walker so its trainable tensors land in the
+    /// streaming pool when ConfigureWeightLifetime is called.
+    /// </summary>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        yield return _patchEmbed;
+    }
+
+    // _patchEmbed lives outside Layers but is trainable in native mode. Override
+    // ParameterCount / GetParameters / SetParameters / UpdateParameters together
+    // so all four agree on the layout: _patchEmbed slice first, then Layers in
+    // order. Without this, the optimizer reads N params via GetParameters and
+    // hands back N to UpdateParameters — but UpdateParameters consumes
+    // _patchEmbed.ParameterCount extra slots from the front, shifting every
+    // Layer's slice and corrupting weights.
+    public override int ParameterCount =>
+        (_patchEmbed?.ParameterCount ?? 0) +
+        Layers.Sum(l => l.ParameterCount);
+
+    public override Vector<T> GetParameters()
+    {
+        var perLayer = Layers.Select(l => l.GetParameters()).ToList();
+        int patchLen = _patchEmbed?.ParameterCount ?? 0;
+        int total = patchLen + perLayer.Sum(p => p.Length);
+        var result = new Vector<T>(total);
+        int idx = 0;
+        if (patchLen > 0)
+        {
+            var patchParams = _patchEmbed!.GetParameters();
+            for (int i = 0; i < patchParams.Length; i++) result[idx++] = patchParams[i];
+        }
+        foreach (var p in perLayer)
+        {
+            for (int i = 0; i < p.Length; i++) result[idx++] = p[i];
+        }
+        return result;
+    }
+
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // If the saved parameter vector includes patch-embed weights but
+        // this instance hasn't seen an image input yet (so _patchEmbed is
+        // still null), construct it on-demand so the slice layout matches
+        // the saved vector. Without this, deserialize / Clone-from-saved
+        // after a vision-mode train silently drops the patch-embed slice
+        // and leaves _patchEmbed null — the next image forward would then
+        // re-create it with random weights.
+        EnsurePatchEmbedForParameterVector(parameters.Length);
+
+        int idx = 0;
+        if (_patchEmbed is not null)
+        {
+            int pc = _patchEmbed.ParameterCount;
+            if (pc > 0)
+            {
+                _patchEmbed.SetParameters(parameters.Slice(idx, pc));
+                idx += pc;
+            }
+        }
+        foreach (var l in Layers)
+        {
+            int c = l.ParameterCount;
+            l.SetParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        EnsurePatchEmbedForParameterVector(parameters.Length);
+        int idx = 0;
+        if (_patchEmbed is not null)
+        {
+            int pc = _patchEmbed.ParameterCount;
+            if (pc > 0)
+            {
+                _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
+                idx += pc;
+            }
+        }
+        foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+    }
+
+    /// <summary>
+    /// Lazily creates _patchEmbed when the incoming parameter vector is
+    /// longer than the layer-sum, indicating the saved model was trained
+    /// in vision mode. Builds it by running a probe NCHW tensor through
+    /// the helper, which constructs and weight-allocates the conv. Idempotent.
+    /// </summary>
+    private void EnsurePatchEmbedForParameterVector(int paramVectorLength)
+    {
+        if (_patchEmbed is not null) return;
+        int layerSum = 0;
+        foreach (var l in Layers) layerSum += l.ParameterCount;
+        if (paramVectorLength <= layerSum) return;
+
+        var probe = new Tensor<T>(new[] { 1, 3, _options.ImageSize, _options.ImageSize });
+        TokenizeIfNCHW(probe);
+    }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "BiomedCLIP-Native" : "BiomedCLIP-ONNX", Description = "BiomedCLIP: A Multimodal Biomedical Foundation Model (Zhang et al., 2023)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers }; m.AdditionalInfo["Architecture"] = "BiomedCLIP"; m.AdditionalInfo["Domain"] = _options.Domain.ToString(); m.AdditionalInfo["Dataset"] = _options.Dataset.ToString(); m.AdditionalInfo["MedicalTextEncoder"] = _options.MedicalTextEncoder; return m; }
@@ -79,8 +208,23 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string ip = reader.ReadString(); if (!string.IsNullOrEmpty(ip)) _options.ImageEncoderModelPath = ip; string tp = reader.ReadString(); if (!string.IsNullOrEmpty(tp)) _options.TextEncoderModelPath = tp; _options.ImageSize = reader.ReadInt32(); _options.VisionEmbeddingDim = reader.ReadInt32(); _options.TextEmbeddingDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.Temperature = reader.ReadDouble(); _options.Domain = (DomainSpecialization)reader.ReadInt32(); if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions); if (_options.TextEncoderModelPath is { } t2 && !string.IsNullOrEmpty(t2)) OnnxTextEncoder = new OnnxModel<T>(t2, _options.OnnxOptions); }
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new BiomedCLIP<T>(Architecture, mp, _options); return new BiomedCLIP<T>(Architecture, _options); }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var enc = _tokenizer.Encode(text); int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength); var tk = new Tensor<T>([sl]); for (int i = 0; i < sl; i++) tk[i] = NumOps.FromDouble(enc.TokenIds[i]); return tk; }
-    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { var c = input; for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return c; }
+    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { var c = TokenizeIfNCHW(input); for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return c; }
     private Tensor<T> ForwardTextEncoder(Tensor<T> tokens) { var c = tokens; for (int i = _visionLayerEnd; i < Layers.Count; i++) c = Layers[i].Forward(c); return c; }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(BiomedCLIP<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); } base.Dispose(disposing); }
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing)
+        {
+            OnnxImageEncoder?.Dispose();
+            OnnxTextEncoder?.Dispose();
+            // _patchEmbed lives outside Layers (so it doesn't get disposed by the
+            // base class's Layers walker). Dispose it here so the conv weights
+            // and any registered tensors are released alongside the rest of the
+            // encoder when the model is disposed.
+            if (_patchEmbed is IDisposable pe) pe.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 }

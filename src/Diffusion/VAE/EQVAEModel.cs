@@ -157,6 +157,56 @@ public class EQVAEModel<T> : VAEModelBase<T>
             outputDepth: _inputChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activationFunction: new TanhActivation<T>()));
+
+        // Eagerly resolve all encoder/decoder layers via a probe forward so
+        // ParameterCount / GetParameters work before any real training input
+        // is fed. Without this, every Conv/Deconv reports 0 params (lazy
+        // weight allocation deferred to first forward), which breaks the
+        // FastGenContractTests.EQVAEModel_DefaultConstructor_CreatesValidVAE
+        // invariant of "ParameterCount > 0 after construction".
+        ProbeLayersForLazyResolution();
+    }
+
+    private void ProbeLayersForLazyResolution()
+    {
+        // Resolve each Conv/Deconv layer's shape AND allocate its weights
+        // WITHOUT running convolution compute. ResolveFromShape walks the
+        // shape inference path (OnFirstForward) and then EnsureInitialized,
+        // so ParameterCount becomes nonzero immediately but no activations
+        // are computed and no engine kernels are invoked at construction
+        // time. The 64×64 probe matches the 4× stride-2 downsample chain so
+        // each spatial dim stays positive through the encoder.
+        const int probeSize = 64;
+        int[] shape = new[] { 1, _inputChannels, probeSize, probeSize };
+        try
+        {
+            foreach (var layer in _encoderLayers)
+            {
+                if (layer is LayerBase<T> lb)
+                {
+                    lb.ResolveFromShape(shape);
+                    shape = lb.GetOutputShape();
+                }
+            }
+            foreach (var layer in _decoderLayers)
+            {
+                if (layer is LayerBase<T> lb)
+                {
+                    lb.ResolveFromShape(shape);
+                    shape = lb.GetOutputShape();
+                }
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Best-effort against shape-arithmetic mismatches; non-default
+            // base/latent-channel configs may yield a degenerate spatial dim.
+            // Engine/kernel-level failures (DllNotFound, OutOfMemory,
+            // NullReference, etc.) are NOT swallowed — they fall through so
+            // partially-initialized state is never silently masked.
+            System.Diagnostics.Debug.WriteLine(
+                $"[EQVAEModel.ProbeLayersForLazyResolution] suppressed shape-probe error: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     /// <inheritdoc />

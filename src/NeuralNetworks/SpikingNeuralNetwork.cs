@@ -436,10 +436,33 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             if (Layers[i] is not Layers.SpikingLayer<T>) { readoutIdx = i; break; }
         }
 
-        // Accumulate spiking layer outputs over time
+        // Accumulate spiking layer outputs over time. The readout layer may be
+        // lazy (reports input shape as [-1]); fall back to the last spiking
+        // layer's output, then to a single forward pass to discover the size.
         int spikingOutputSize = readoutIdx >= 0
             ? Layers[readoutIdx].GetInputShape()[0]
             : Layers[^1].GetOutputShape()[0];
+        if (spikingOutputSize <= 0)
+        {
+            int lastSpikingIdx = readoutIdx >= 0 ? readoutIdx : Layers.Count;
+            if (lastSpikingIdx > 0)
+                spikingOutputSize = Layers[lastSpikingIdx - 1].GetOutputShape()[0];
+            if (spikingOutputSize <= 0)
+            {
+                Tensor<T> probe = input;
+                for (int i = 0; i < lastSpikingIdx; i++)
+                    probe = Layers[i].Forward(probe);
+                spikingOutputSize = probe.Length;
+                // The probe forward mutated SpikingLayer membrane / refractory state
+                // (each layer accumulates LIF dynamics across calls). If we leave
+                // that state in place, the simulation loop below would start from
+                // a non-zero baseline and produce different spike rates than a
+                // fresh run — which is the whole point of ResetState() above. Reset
+                // again so the simulation loop sees the same clean slate it would
+                // have seen without the probe.
+                ResetState();
+            }
+        }
         var accumSpikes = new T[spikingOutputSize];
 
         for (int step = 0; step < _simulationSteps; step++)
@@ -588,8 +611,16 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             outputError[i] = NumOps.Subtract(expectedOutputVector[i], outputLayerActivity[i]);
         }
 
-        // Calculate and store the loss using the loss function
-        LastLoss = LossFunction.CalculateLoss(outputLayerActivity, expectedOutputVector);
+        // Calculate and store the loss. ValidateVectorLengths in the base class
+        // requires identical lengths; truncate to the overlapping prefix to
+        // match the error-vector logic above.
+        Vector<T> lossPredicted = outputLayerActivity.Length == errorLength
+            ? outputLayerActivity
+            : outputLayerActivity.GetSubVector(0, errorLength);
+        Vector<T> lossExpected = expectedOutputVector.Length == errorLength
+            ? expectedOutputVector
+            : expectedOutputVector.GetSubVector(0, errorLength);
+        LastLoss = LossFunction.CalculateLoss(lossPredicted, lossExpected);
 
         // Backpropagate error and apply STDP learning
         ApplySTDPLearning(layerSpikeHistory, outputError);

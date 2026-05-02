@@ -773,9 +773,39 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         return GeneratorAtoB.Predict(input);
     }
 
+    /// <summary>
+    /// Defines the CycleGAN forward graph for tape-based training. CycleGAN's
+    /// generators/discriminators live outside <c>Layers</c> (the base class
+    /// list is intentionally empty), so the default <c>ForwardForTraining</c>
+    /// would walk an empty layer chain and return the raw input. Overriding
+    /// to dispatch through <c>GeneratorAtoB.ForwardForTraining</c> matches
+    /// the inference-side <c>Predict</c> contract and lets
+    /// <c>tape.ComputeGradients</c> flow back into the generator's weights.
+    /// Discriminator/cycle losses are handled separately by
+    /// <see cref="TrainStep"/>.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        return GeneratorAtoB.ForwardForTraining(input);
+    }
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(input, expectedOutput);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        var fakeB = GeneratorAtoB.Predict(input);
+        activations["GeneratorAtoB"] = fakeB.Clone();
+        var fakeA = GeneratorBtoA.Predict(input);
+        activations["GeneratorBtoA"] = fakeA.Clone();
+        activations["DiscriminatorA"] = DiscriminatorA.Predict(input).Clone();
+        activations["DiscriminatorB"] = DiscriminatorB.Predict(input).Clone();
+        return activations;
     }
 
     public override ModelMetadata<T> GetModelMetadata()

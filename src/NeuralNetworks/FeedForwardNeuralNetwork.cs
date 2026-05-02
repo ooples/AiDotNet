@@ -172,25 +172,38 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         // Ensure the network is in inference mode
         IsTrainingMode = false;
 
-        // Validate input shape — accept batched input [B, ...expectedShape]
-        // by validating trailing dimensions match the architecture's input shape.
-        var expectedShape = Architecture.GetInputShape();
-        if (input.Rank == expectedShape.Length + 1 && input.Length / input.Shape[0] == expectedShape.Aggregate(1, (a, b) => a * b))
-        {
-            // Batched input — trailing dims match, proceed
-        }
-        else
-        {
-            TensorValidator.ValidateShape(input, expectedShape,
-                nameof(FeedForwardNeuralNetwork<T>), "prediction");
-        }
+        ValidateInputShape(input, "prediction");
 
-        // Just perform a forward pass
         var predictions = Forward(input);
 
         IsTrainingMode = true;
 
         return predictions;
+    }
+
+    /// <summary>
+    /// Accepts either an unbatched input matching <c>Architecture.GetInputShape()</c>
+    /// or a batched input <c>[B, ...expectedShape]</c> whose trailing dims match
+    /// each axis exactly. Throws via <see cref="TensorValidator"/> otherwise.
+    /// </summary>
+    private void ValidateInputShape(Tensor<T> input, string operationName)
+    {
+        var expectedShape = Architecture.GetInputShape();
+        if (input.Rank == expectedShape.Length + 1)
+        {
+            bool axisMatch = true;
+            for (int i = 0; i < expectedShape.Length; i++)
+            {
+                if (input.Shape[i + 1] != expectedShape[i])
+                {
+                    axisMatch = false;
+                    break;
+                }
+            }
+            if (axisMatch) return;
+        }
+        TensorValidator.ValidateShape(input, expectedShape,
+            nameof(FeedForwardNeuralNetwork<T>), operationName);
     }
 
     /// <summary>
@@ -213,8 +226,7 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        TensorValidator.ValidateShape(input, Architecture.GetInputShape(),
-            nameof(FeedForwardNeuralNetwork<T>), "forward pass");
+        ValidateInputShape(input, "forward pass");
 
         // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

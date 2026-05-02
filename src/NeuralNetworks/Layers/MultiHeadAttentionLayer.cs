@@ -420,6 +420,19 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         var shape = input.Shape.ToArray();
         ResolveShapes(shape, shape);
+
+        // ResolveShapesOnly (used by InferenceOptimizer.ResolveLazyLayers
+        // and similar shape-walker callers) sets IsResolvingShapesOnly so
+        // we can skip Q/K/V/O allocation — that path explicitly does NOT
+        // call EnsureInitialized and must remain RNG-neutral. Every other
+        // entry point (real Forward, ResolveFromShape, GetParameters) does
+        // expect weights to be allocated by the time OnFirstForward
+        // returns, so the default branch keeps the previous eager
+        // allocation behaviour.
+        if (!IsResolvingShapesOnly)
+        {
+            EnsureWeightsAllocated();
+        }
     }
 
     /// <summary>

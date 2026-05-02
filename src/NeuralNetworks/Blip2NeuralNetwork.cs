@@ -479,6 +479,16 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
                lossFunction ?? new ContrastiveLoss<T>(),
                1.0)
     {
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "patchSize must be positive.");
+        if (imageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageSize), "imageSize must be positive.");
+        if (imageSize % patchSize != 0)
+            throw new ArgumentException(
+                $"imageSize ({imageSize}) must be evenly divisible by patchSize ({patchSize}); " +
+                $"got remainder {imageSize % patchSize}.",
+                nameof(imageSize));
+
         _options = options ?? new Blip2Options();
         Options = _options;
 
