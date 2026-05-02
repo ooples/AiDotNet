@@ -109,12 +109,25 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// </list>
     /// Higher-rank or zero-channel predictors pass through unchanged.
     /// </summary>
-    protected static int[] CanonicalizeGenShape(int[] inputShape, INoisePredictor<T> predictor)
+    protected int[] CanonicalizeGenShape(int[] inputShape, INoisePredictor<T> predictor)
     {
         if (predictor is null)
             return (int[])inputShape.Clone();
 
-        int targetChannels = predictor.InputChannels;
+        // The denoising loop tracks the LATENT (LatentChannels-deep), not the
+        // UNet input. For SD inpainting variants the UNet inputChannels is
+        // LatentChannels + 1 (mask) + LatentChannels (masked_image_latent) = 9
+        // (HF SD-Inpainting) or 12 (mask + 8-channel masked_image when the VAE
+        // is upcast). The denoising sample at every step is still 4-channel —
+        // PredictNoise pads the sample to inputChannels internally and strips
+        // the result back to LatentChannels (see PredictNoise override). If we
+        // canonicalize to predictor.InputChannels here, base.Generate
+        // allocates a 12-channel sample, the PredictNoise override returns a
+        // 4-channel result, and the denoising loop throws
+        // "PredictNoise output length (16384) does not match the latent /
+        // sample length (49152)" after the first step — which is exactly the
+        // CatVTON / IPAdapterPlus / SDXLInpainting test failure.
+        int targetChannels = LatentChannels > 0 ? LatentChannels : predictor.InputChannels;
         if (targetChannels <= 0)
             return (int[])inputShape.Clone();
 
