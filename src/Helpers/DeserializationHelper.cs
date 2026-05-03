@@ -657,37 +657,37 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.MemoryReadLayer<>))
         {
-            // MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IActivationFunction<T>?)
+            // MemoryReadLayer(int memoryDimension, int outputDimension, IActivationFunction<T>?)
             // memoryDimension is a free parameter — the default MemoryNetwork wires
-            // input == memory == output == embeddingSize, so fall back to output size
-            // if the serialized metadata doesn't pin it explicitly.
-            int inputDim = inputShape[0];
+            // memory == output == embeddingSize, so fall back to output size if the
+            // serialized metadata doesn't pin it explicitly. inputDimension is
+            // resolved lazily on the first forward (lazy-shape contract).
             int outputDim = outputShape[0];
             int memoryDim = TryGetInt(additionalParams, "MemoryDimension") ?? outputDim;
-
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
-            if (ctor is null)
-            {
-                throw new InvalidOperationException("Cannot find MemoryReadLayer constructor with (int, int, int, IActivationFunction<T>).");
-            }
-            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke(new object?[] { inputDim, memoryDim, outputDim, activation });
-        }
-        else if (genericDef == typeof(NeuralNetworks.Layers.MemoryWriteLayer<>))
-        {
-            // MemoryWriteLayer(int inputDimension, int memoryDimension, IActivationFunction<T>?)
-            int inputDim = inputShape[0];
-            int memoryDim = TryGetInt(additionalParams, "MemoryDimension") ?? outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find MemoryWriteLayer constructor with (int, int, IActivationFunction<T>).");
+                throw new InvalidOperationException("Cannot find MemoryReadLayer constructor with (int memoryDimension, int outputDimension, IActivationFunction<T>?).");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke(new object?[] { inputDim, memoryDim, activation });
+            instance = ctor.Invoke(new object?[] { memoryDim, outputDim, activation });
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.MemoryWriteLayer<>))
+        {
+            // MemoryWriteLayer(int memoryDimension, IActivationFunction<T>?)
+            // inputDimension is resolved lazily on the first forward (lazy-shape contract).
+            int memoryDim = TryGetInt(additionalParams, "MemoryDimension") ?? outputShape[0];
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find MemoryWriteLayer constructor with (int memoryDimension, IActivationFunction<T>?).");
+            }
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { memoryDim, activation });
         }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
