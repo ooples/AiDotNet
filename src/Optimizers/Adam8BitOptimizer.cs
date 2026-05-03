@@ -343,9 +343,36 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         return CreateOptimizationResult(bestStepData, inputData);
     }
 
-    // Per-parameter state for tape-based training (full precision — quantization is for legacy path)
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    /// <summary>
+    /// Per-parameter quantized Adam state for the tape training path.
+    /// Each registered parameter tensor gets its own block-quantized m and v
+    /// estimates stored as byte[] (signed [-127, 127] mapped to [1, 255] for m,
+    /// unsigned [0, 255] for v) plus per-block scaling factors. When
+    /// <see cref="Adam8BitOptimizerOptions{T,TInput,TOutput}.CompressBothMoments"/>
+    /// is false, m is kept as a full-precision Tensor instead — matching the
+    /// legacy <see cref="UpdateSolution"/> path's contract.
+    /// </summary>
+    /// <remarks>
+    /// Allocated lazily on the first Step() that sees the parameter; the byte[]
+    /// pair plus block scales replaces what would have been
+    /// 2 × (parameter.Length × sizeof(T)) bytes of full-precision Tensor state.
+    /// For a 300 M-parameter foundation model at fp64 this drops the optimizer's
+    /// resident state from ~4.8 GB to ~600 MB (the 8× reduction the class name
+    /// promised but was not delivering before this fix).
+    /// </remarks>
+    private sealed class QuantizedTapeState
+    {
+        public int Length;
+        public int NumBlocks;
+        public byte[]? MQuantized;          // null when CompressBothMoments == false
+        public Tensor<T>? MFullPrecision;   // null when CompressBothMoments == true
+        public byte[] VQuantized = Array.Empty<byte>();
+        public double[]? MScales;           // null when CompressBothMoments == false
+        public double[] VScales = Array.Empty<double>();
+    }
+
+    private readonly Dictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
+        new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
     /// <inheritdoc />
@@ -366,18 +393,211 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (!context.Gradients.TryGetValue(param, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = new Tensor<T>(param._shape); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = new Tensor<T>(param._shape); _tapeV[param] = v; }
+            // Look up or lazily allocate the per-parameter quantized state. The
+            // byte[] storage replaces the full-precision Tensor pair the original
+            // Step path was holding, which is the whole point of Adam8Bit — see
+            // QuantizedTapeState's remarks for the memory math.
+            if (!_tapeStates.TryGetValue(param, out var state))
+            {
+                state = AllocateTapeState(param.Length);
+                _tapeStates[param] = state;
+            }
 
-            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1)), m);
-            Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2)), v);
+            // Dequantize moments into transient Tensors for the math path. These
+            // are scoped to this iteration only — when Step returns, the
+            // engine's TensorArena reclaims them, leaving only the byte[] state
+            // in resident memory.
+            Tensor<T> m;
+            if (_options.CompressBothMoments)
+            {
+                m = DequantizeTensor(state.MQuantized!, state.MScales!, param._shape, state.NumBlocks, isSigned: true);
+            }
+            else
+            {
+                // Lazy-allocate the full-precision m on the first iteration
+                // that sees this parameter. Zero-initialized, matching the
+                // first-call contract of the legacy quantized path.
+                state.MFullPrecision ??= new Tensor<T>(param._shape);
+                m = state.MFullPrecision;
+            }
+            Tensor<T> v = DequantizeTensor(state.VQuantized, state.VScales, param._shape, state.NumBlocks, isSigned: false);
 
-            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
-            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
+            // Update biased first / second moments — same recurrences the legacy
+            // UpdateSolution path uses, expressed against engine Tensor ops:
+            //     m_t = beta1·m_{t-1} + (1-beta1)·g
+            //     v_t = beta2·v_{t-1} + (1-beta2)·g²
+            var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1),
+                                        Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
+            var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2),
+                                        Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2));
+
+            // Re-quantize the updated moments back into the byte[] state. After
+            // this the transient newM / newV Tensors are no longer reachable
+            // and the arena will reclaim their backing memory on Step exit;
+            // only state.MQuantized, state.VQuantized, and (if applicable)
+            // state.MFullPrecision remain resident.
+            if (_options.CompressBothMoments)
+            {
+                QuantizeTensor(newM, state.MQuantized!, state.MScales!, state.NumBlocks, isSigned: true);
+            }
+            else
+            {
+                state.MFullPrecision = newM;
+            }
+            QuantizeTensor(newV, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
+
+            // Apply the bias-corrected Adam update directly to the parameter.
+            //     update = lr · (m_t / (1 - beta1^t)) / (sqrt(v_t / (1 - beta2^t)) + eps)
+            var mHat = Engine.TensorDivideScalar(newM, biasCorrection1);
+            var vHat = Engine.TensorDivideScalar(newV, biasCorrection2);
             var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);
         }
+    }
+
+    /// <summary>
+    /// Allocates a freshly-zeroed <see cref="QuantizedTapeState"/> sized for a
+    /// parameter tensor of the given length. Block count is derived from
+    /// <see cref="Adam8BitOptimizerOptions{T,TInput,TOutput}.BlockSize"/>; each
+    /// block carries its own scale so per-block magnitude variation doesn't get
+    /// crushed into a single global scale.
+    /// </summary>
+    private QuantizedTapeState AllocateTapeState(int paramLength)
+    {
+        int blockSize = _options.BlockSize;
+        int numBlocks = (paramLength + blockSize - 1) / blockSize;
+
+        var state = new QuantizedTapeState
+        {
+            Length = paramLength,
+            NumBlocks = numBlocks,
+            VQuantized = new byte[paramLength],
+            VScales = new double[numBlocks],
+        };
+        // v starts at zero. byte 0 maps to the unsigned-zero quantization
+        // bucket already, so the array's default-init is correct.
+        for (int b = 0; b < numBlocks; b++) state.VScales[b] = 1.0;
+
+        if (_options.CompressBothMoments)
+        {
+            state.MQuantized = new byte[paramLength];
+            state.MScales = new double[numBlocks];
+            // m starts at zero. For signed quantization 0 is encoded as 128
+            // (the [-127, 127] → [1, 255] offset), so initialize to 128.
+            for (int i = 0; i < paramLength; i++) state.MQuantized[i] = 128;
+            for (int b = 0; b < numBlocks; b++) state.MScales[b] = 1.0;
+        }
+        else
+        {
+            // Full-precision m placeholder, zero-initialised. Step's recurrences
+            // assume m is non-null on entry, so this has to exist before the
+            // first iteration runs. The shape is set by Step on first use via
+            // re-assignment when CompressBothMoments == false; we don't know
+            // the shape here, so leave it null and let Step allocate on the
+            // first iteration after the dequantize-or-passthrough fork.
+            state.MFullPrecision = null;
+        }
+
+        return state;
+    }
+
+    /// <summary>
+    /// Block-quantizes a tensor's values into a pre-allocated byte buffer.
+    /// Each block of <see cref="Adam8BitOptimizerOptions{T,TInput,TOutput}.BlockSize"/>
+    /// elements gets its own scale (max-abs or percentile-based) so per-block
+    /// magnitude variation is preserved. Mirrors the legacy
+    /// <see cref="Quantize"/> Vector path but works against a Tensor without
+    /// requiring shared instance state, so it can run from the tape Step where
+    /// many parameters of different sizes coexist.
+    /// </summary>
+    private void QuantizeTensor(Tensor<T> values, byte[] quantized, double[] scales, int numBlocks, bool isSigned)
+    {
+        int blockSize = _options.BlockSize;
+        int totalLength = values.Length;
+        for (int b = 0; b < numBlocks; b++)
+        {
+            int blockStart = b * blockSize;
+            int blockEnd = Math.Min(blockStart + blockSize, totalLength);
+
+            double maxAbs = 0;
+            if (_options.QuantizationPercentile >= 100)
+            {
+                for (int i = blockStart; i < blockEnd; i++)
+                {
+                    double val = Math.Abs(NumOps.ToDouble(values[i]));
+                    if (val > maxAbs) maxAbs = val;
+                }
+            }
+            else
+            {
+                var absValues = new List<double>(blockEnd - blockStart);
+                for (int i = blockStart; i < blockEnd; i++)
+                    absValues.Add(Math.Abs(NumOps.ToDouble(values[i])));
+                absValues.Sort();
+                int percentileIdx = (int)((absValues.Count - 1) * _options.QuantizationPercentile / 100.0);
+                maxAbs = absValues[percentileIdx];
+            }
+
+            double scale = maxAbs / (isSigned ? 127.0 : 255.0);
+            if (scale < 1e-10) scale = 1e-10;
+            scales[b] = scale;
+
+            for (int i = blockStart; i < blockEnd; i++)
+            {
+                double val = NumOps.ToDouble(values[i]);
+                double scaled = val / scale;
+
+                int quantizedVal;
+                if (_options.UseStochasticRounding)
+                {
+                    double floor = Math.Floor(scaled);
+                    double frac = scaled - floor;
+                    quantizedVal = (int)(floor + (_random.NextDouble() < frac ? 1 : 0));
+                }
+                else
+                {
+                    quantizedVal = (int)Math.Round(scaled);
+                }
+
+                if (isSigned)
+                {
+                    quantizedVal = MathHelper.Clamp(quantizedVal, -127, 127);
+                    quantized[i] = (byte)(quantizedVal + 128);
+                }
+                else
+                {
+                    quantizedVal = MathHelper.Clamp(quantizedVal, 0, 255);
+                    quantized[i] = (byte)quantizedVal;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Block-dequantizes an 8-bit byte buffer into a freshly-allocated tensor
+    /// of the supplied shape. The transient tensor is intended to be consumed
+    /// by Adam's compute path within a single Step iteration and then released
+    /// to the engine arena.
+    /// </summary>
+    private Tensor<T> DequantizeTensor(byte[] quantized, double[] scales, int[] paramShape, int numBlocks, bool isSigned)
+    {
+        var result = new Tensor<T>(paramShape);
+        int blockSize = _options.BlockSize;
+        int totalLength = result.Length;
+        for (int b = 0; b < numBlocks; b++)
+        {
+            int blockStart = b * blockSize;
+            int blockEnd = Math.Min(blockStart + blockSize, totalLength);
+            double scale = scales[b];
+
+            for (int i = blockStart; i < blockEnd; i++)
+            {
+                double quantizedVal = isSigned ? (int)quantized[i] - 128 : (int)quantized[i];
+                result[i] = NumOps.FromDouble(quantizedVal * scale);
+            }
+        }
+        return result;
     }
 
     /// <summary>
