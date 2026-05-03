@@ -261,6 +261,27 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     public double Temperature { get; }
 
     /// <summary>
+    /// Strategy for collapsing the encoder's
+    /// <c>[batch, seq, dim]</c> hidden states into a single
+    /// <c>[batch, dim]</c> vector before the classification head, when
+    /// the task is single-label per sequence. Defaults to
+    /// <see cref="SequencePoolingMode.LastToken"/> for token-input
+    /// architectures (<see cref="VocabularySize"/> &gt; 0) and to
+    /// <see cref="SequencePoolingMode.MeanPool"/> for continuous-input
+    /// architectures.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Picking the wrong mode silently destroys position-specific signal.
+    /// MeanPool over a token-LM context maps every prefix to roughly the
+    /// same averaged hidden state, which makes the model converge to
+    /// <c>~uniform / V</c> softmax — the bug tracked in
+    /// <a href="https://github.com/ooples/AiDotNet/issues/1232">AiDotNet#1232</a>.
+    /// </para>
+    /// </remarks>
+    public SequencePoolingMode SequencePooling { get; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="TransformerArchitecture{T}"/> class with the specified parameters.
     /// </summary>
     /// <param name="inputType">The type of input the network will process (e.g., text, image).</param>
@@ -321,6 +342,7 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         int vocabularySize = 0,
         bool usePositionalEncoding = true,
         double temperature = 1.0,
+        SequencePoolingMode? sequencePooling = null,
         List<ILayer<T>>? layers = null)
         : base(
             inputType: inputType,
@@ -340,6 +362,15 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         VocabularySize = vocabularySize;
         UsePositionalEncoding = usePositionalEncoding;
         Temperature = temperature;
+        // Default sequence pooling: token-input architectures (vocabSize > 0)
+        // are autoregressive LMs by convention — use the LAST position's
+        // hidden state, matching GPT / Llama / Mistral output heads.
+        // Continuous-input architectures default to MEAN POOLING which is
+        // the right choice for document-level sequence classification.
+        // Callers can override either default via the explicit parameter.
+        SequencePooling = sequencePooling ?? (vocabularySize > 0
+            ? SequencePoolingMode.LastToken
+            : SequencePoolingMode.MeanPool);
     }
 
     /// <summary>

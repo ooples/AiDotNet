@@ -1701,17 +1701,48 @@ public static class LayerHelper<T>
             }
         }
 
-        // For classification tasks, add global pooling to reduce 3D [batch, seq, dim] to 2D [batch, dim]
-        // This is required because transformer encoder outputs are 3D, but classification heads expect 2D
-        if (taskType == NeuralNetworkTaskType.BinaryClassification ||
+        // For classification tasks, collapse 3D [batch, seq, dim] to 2D
+        // [batch, dim] before the classification head. Pooling strategy
+        // is driven by architecture.SequencePooling — defaults are:
+        //   - LastToken when vocabularySize > 0 (autoregressive LM /
+        //     next-token prediction). MeanPool here destroys the
+        //     position-conditioned signal and makes softmax converge to
+        //     ~uniform / V (issue #1232).
+        //   - MeanPool when vocabularySize == 0 (continuous-input
+        //     document-level classification — the historical default).
+        //   - ClsToken / None as opt-ins for BERT-style or per-position
+        //     loss workflows.
+        bool isSingleLabelTask =
+            taskType == NeuralNetworkTaskType.BinaryClassification ||
             taskType == NeuralNetworkTaskType.MultiClassClassification ||
             taskType == NeuralNetworkTaskType.MultiLabelClassification ||
             taskType == NeuralNetworkTaskType.SequenceClassification ||
-            taskType == NeuralNetworkTaskType.ImageClassification)
+            taskType == NeuralNetworkTaskType.ImageClassification;
+
+        if (isSingleLabelTask)
         {
-            // Global average pooling over sequence dimension
-            // Input: [batch, seq, dim] -> Output: [batch, dim]
-            yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
+            switch (architecture.SequencePooling)
+            {
+                case SequencePoolingMode.LastToken:
+                    yield return new SequenceTokenSliceLayer<T>(
+                        SequenceTokenSliceLayer<T>.Position.Last);
+                    break;
+                case SequencePoolingMode.ClsToken:
+                    yield return new SequenceTokenSliceLayer<T>(
+                        SequenceTokenSliceLayer<T>.Position.First);
+                    break;
+                case SequencePoolingMode.None:
+                    // Caller wants per-position loss — keep the encoder's
+                    // [batch, seq, dim] shape; the dense head below will
+                    // broadcast over the sequence axis to produce
+                    // [batch, seq, V].
+                    break;
+                case SequencePoolingMode.MeanPool:
+                default:
+                    yield return new GlobalPoolingLayer<T>(PoolingType.Average,
+                        (IActivationFunction<T>?)null);
+                    break;
+            }
         }
 
         // Add the final projection layer
