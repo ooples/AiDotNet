@@ -491,24 +491,23 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         //                                                       fixed-point)
         //   Sigmoid / Tanh / Softmax / Identity / linear      → Xavier (LayerBase default,
         //                                                       Glorot & Bengio 2010)
-        // Layers may still override via InitializationStrategy on the ctor;
-        // this only kicks in when no strategy was supplied.
-        if (InitializationStrategy is null)
+        // Caller (EnsureInitialized line 443-446) already gated on
+        // `InitializationStrategy is null`, so the inner null-check that
+        // used to wrap this block was redundant. Activation-driven init
+        // still applies here unconditionally.
+        if (IsSeluActivation())
         {
-            if (IsSeluActivation())
-            {
-                var lecun = new Initialization.LeCunInitializationStrategy<T>();
-                lecun.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
-                lecun.InitializeBiases(_biases);
-                return;
-            }
-            if (IsReluFamilyActivation())
-            {
-                var heInit = new Initialization.HeInitializationStrategy<T>();
-                heInit.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
-                heInit.InitializeBiases(_biases);
-                return;
-            }
+            var lecun = new Initialization.LeCunInitializationStrategy<T>();
+            lecun.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+            lecun.InitializeBiases(_biases);
+            return;
+        }
+        if (IsReluFamilyActivation())
+        {
+            var heInit = new Initialization.HeInitializationStrategy<T>();
+            heInit.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+            heInit.InitializeBiases(_biases);
+            return;
         }
         InitializeLayerWeights(_weights, InputShape[0], OutputShape[0]);
         InitializeLayerBiases(_biases);

@@ -64,9 +64,19 @@ public class PriorGrad<T> : TtsModelBase<T>, IVocoder<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // No-grad scope so Predict doesn't pollute any active GradientTape
+        // (e.g. when the caller invokes Predict mid-training to monitor
+        // loss). Mirrors NeuralNetworkBase.Predict's NoGradScope guard.
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         // Inference mode so Dropout / GaussianNoise / etc. behave deterministically.
         // Restore prior mode so a Predict-during-training-loop call doesn't permanently
         // flip the network out of training mode.
+        // Concurrency note: this state toggle is intentionally NOT
+        // thread-safe — callers running parallel Predict on a single
+        // model instance must serialize externally OR explicitly call
+        // SetTrainingMode(false) once before the parallel batch. Same
+        // contract as NeuralNetworkBase.Predict's mode flip; matches
+        // PyTorch nn.Module's non-thread-safe `.eval()` convention.
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try

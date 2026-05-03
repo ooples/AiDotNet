@@ -56,10 +56,19 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // first test, ~zero on every subsequent one.
         var key = GetType();
         if (s_inferredOutputShapeCache.TryGetValue(key, out var cached))
-            return cached.Shape;
+            return cached;
 
         try
         {
+            // Wrap the warm-up network construction + Predict in its own
+            // TensorArena scope so the multi-MB intermediate activations
+            // don't leak into the managed heap. xUnit doesn't guarantee
+            // the first EffectiveOutputShape access happens inside a
+            // [Fact] that already opened an arena — without this guard,
+            // the very first test for a model family pays a permanent
+            // managed-heap allocation that compounds across the shard
+            // and surfaces as OOM on foundation-scale models.
+            using var _arena = TensorArena.Create();
             using var net = CreateNetwork();
             var rng = ModelTestHelpers.CreateSeededRandom();
             var input = CreateRandomTensor(InputShape, rng);
@@ -72,7 +81,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
             var shape = output.Shape;
             var copy = new int[shape.Length];
             for (int i = 0; i < shape.Length; i++) copy[i] = shape[i];
-            s_inferredOutputShapeCache[key] = (copy, false);
+            s_inferredOutputShapeCache[key] = copy;
             return copy;
         }
         catch (Exception ex) when (
@@ -84,12 +93,15 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
             // implemented failures. Fatal CLR exceptions (OOM / SO / AV)
             // and unexpected exceptions propagate so the surrounding test
             // surfaces them rather than silently falling back.
-            s_inferredOutputShapeCache[key] = (null, true);
+            s_inferredOutputShapeCache[key] = null;
             return null;
         }
     }
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (int[]? Shape, bool Failed)> s_inferredOutputShapeCache = new();
+    // Cache only the inferred Shape (or null on failure). Earlier the
+    // tuple also stored a redundant `bool Failed` flag that no read path
+    // consulted — null on failure is sufficient signal.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]?> s_inferredOutputShapeCache = new();
 
     protected virtual int TrainingIterations => 10;
 

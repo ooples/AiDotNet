@@ -374,12 +374,36 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     }
 
     /// <summary>
-    /// Resolves <c>numFeatures</c> from the input tensor's channel dim on the first forward
-    /// call (input.Shape[1] for rank >= 2 channels-first NCHW; input.Length for rank-1 input),
-    /// allocates gamma/beta + running mean/variance tensors, and registers gamma/beta as
-    /// trainable parameters. Per the BatchNorm paper (Ioffe &amp; Szegedy 2015), normalization
-    /// happens per-feature for [B,F] inputs and per-channel for [B,C,H,W] image inputs.
+    /// Resolves <c>numFeatures</c> on the first forward call by switching on
+    /// the input rank, allocates gamma/beta + running mean/variance tensors,
+    /// and registers gamma/beta as trainable parameters. Per the BatchNorm
+    /// paper (Ioffe &amp; Szegedy 2015 §3), normalization is per-feature for
+    /// rank-1/2 MLP inputs and per-channel for rank-≥4 NCHW image batches.
+    /// Rank-3 is treated as channels-first <c>[C, H, W]</c> (unbatched
+    /// image, the layout that surfaces during pre-resolve walks of CNN
+    /// architectures).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Rank-3 ambiguity:</b> rank-3 input could plausibly mean either
+    /// <c>[C, H, W]</c> (channels-first unbatched image) OR <c>[B, S, F]</c>
+    /// (features-last batched sequence). We resolve to channels-first per
+    /// Ioffe &amp; Szegedy 2015 — paper-faithful BN is per-channel for
+    /// image inputs, and sequence/transformer models use LayerNorm
+    /// (Ba et al. 2016) not BN.
+    /// </para>
+    /// <para>
+    /// The Forward path at line ~502 handles features-last layouts at
+    /// runtime by checking <c>input.Shape[^1] == featureSize</c> and
+    /// flattening to <c>[B*..., F]</c> — but that auto-flatten only works
+    /// once <c>featureSize</c> is already resolved. The very first forward
+    /// call must commit to one interpretation. We pick channels-first to
+    /// match the paper; callers using BN with <c>[B, S, F]</c> sequence
+    /// inputs should either (a) instantiate the layer with an explicit
+    /// known feature count (via <c>ResolveFromShape</c>) before the first
+    /// forward, or (b) use LayerNorm instead.
+    /// </para>
+    /// </remarks>
     protected override void OnFirstForward(Tensor<T> input)
     {
         // Per Ioffe & Szegedy 2015 §3 ("Batch Normalization"), BN normalizes per

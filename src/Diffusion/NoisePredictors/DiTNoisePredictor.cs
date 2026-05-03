@@ -989,12 +989,38 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         if (_adaln_modulation != null) WriteLayerParams(result, ref offset, _adaln_modulation);
         if (_outputProj != null) WriteLayerParams(result, ref offset, _outputProj);
 
+        // Validate the final offset matches the pre-allocated buffer.
+        // A mismatch means some layer's `ParameterCount` disagreed with
+        // its `GetParameters().Length` between the two reads — most
+        // likely caused by a lazy-init layer materializing weights
+        // mid-walk and changing its reported count. Throwing here turns
+        // a silently corrupt parameter dump (random tail garbage or
+        // lost trailing layers) into an actionable exception.
+        if (offset != totalParams)
+        {
+            throw new InvalidOperationException(
+                $"DiTNoisePredictor.GetParameters wrote {offset} elements but " +
+                $"ParameterCount reported {totalParams}. Some layer's " +
+                $"GetParameters().Length doesn't match its ParameterCount — " +
+                $"check for layers whose weight tensors materialized between " +
+                $"the count and the write (lazy init mid-walk).");
+        }
         return result;
     }
 
     private static void WriteLayerParams(Vector<T> dst, ref int offset, ILayer<T> layer)
     {
         var p = layer.GetParameters();
+        // Bounds check: catch the failure here instead of letting
+        // `dst[offset + i]` throw the harder-to-diagnose
+        // ArgumentOutOfRangeException several layers later.
+        if (offset + p.Length > dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"WriteLayerParams overflow at layer {layer.GetType().Name}: " +
+                $"offset={offset}, p.Length={p.Length}, buffer.Length={dst.Length}. " +
+                $"ParameterCount under-counted this layer's actual parameter count.");
+        }
         for (int i = 0; i < p.Length; i++)
         {
             dst[offset + i] = p[i];

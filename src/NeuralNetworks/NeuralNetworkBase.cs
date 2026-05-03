@@ -2346,6 +2346,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // default IsTrainingMode is true on construction), which is a real
         // model-behavior bug — see Generated Layers
         // PriorGradTests.Predict_ShouldBeDeterministic and similar.
+        //
+        // Concurrency contract: this temporary flip is intentionally NOT
+        // thread-safe. Callers running parallel Predict on a single model
+        // instance must serialize externally OR call SetTrainingMode(false)
+        // once before the parallel batch (the second call is a no-op once
+        // already in eval mode, so the inner toggle becomes side-effect-
+        // free). This matches PyTorch nn.Module's non-thread-safe
+        // `model.eval()` / `model.train()` convention — the framework
+        // doesn't synchronize a global model state for concurrent inference.
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try
@@ -2407,12 +2416,30 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (Architecture is null) return 0;
         try
         {
+            // Video / spatiotemporal: InputFrames > 0 means
+            // [Frames, C, H, W] is the unbatched layout (rank 4).
+            // Use this branch BEFORE the spatial check so video
+            // architectures (which also have InputHeight > 0) don't
+            // resolve to rank 3.
+            if (Architecture.InputFrames > 0
+                && Architecture.InputHeight > 0
+                && Architecture.InputWidth > 0)
+                return 4;
             // Vision / spatial: InputHeight > 0 means [C, H, W] is the
             // unbatched layout (rank 3). InputDepth defaults to 1 when not
             // explicitly set on a TwoDimensional arch — paper-faithful CNN
             // models (LeNet on MNIST, etc.) all assume a channel axis.
             if (Architecture.InputHeight > 0 && Architecture.InputWidth > 0)
                 return 3;
+            // Sequence / time-series: when the architecture's
+            // GetInputShape() reports a rank-2 unbatched layout
+            // (e.g. `[seq, F]` for transformer/RNN models), honour it.
+            // Architectures built via NeuralNetworkArchitecture's
+            // sequence-aware ctors expose a 2-element input shape with
+            // both axes positive.
+            var inShape = Architecture.GetInputShape();
+            if (inShape is { Length: 2 } && inShape[0] > 0 && inShape[1] > 0)
+                return 2;
             // Sequence / feature: InputSize is the per-sample feature count;
             // unbatched is rank 1 [F].
             if (Architecture.InputSize > 0)
@@ -3200,24 +3227,40 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bool inputNeedsPromote = input.Rank == expectedUnbatchedRank;
         if (!inputNeedsPromote) return (input, target);
 
+        int origInputRank = input.Rank;
         var processedInput = PromoteToBatchedTensor(input);
 
-        // Promote the target only when it looks truly unbatched.
-        // Mirrors EnsureBatchForCnnTraining's `target.Rank <
-        // processedInput.Rank - 2` rule, which is the same threshold
-        // used for the per-CNN helper this method subsumes:
-        //   • CNN classifier (input rank 3 → 4): promote target when
-        //     rank < 2 (i.e. rank-1 [numClasses] → [1, numClasses]).
-        //   • Already-batched target [1, numClasses] (rank 2): NOT
-        //     promoted — would otherwise become [1, 1, numClasses] and
-        //     break the loss layer's shape match.
-        //   • Sequence (input rank 2 → 3): promote target when rank < 1
-        //     (rare; usually targets are pre-batched in seq models).
-        // The earlier `target.Rank < processedInput.Rank` rule was
-        // overzealous and double-promoted pre-batched targets — caught
-        // by Copilot review on PR #1229.
+        // Promote the target when (and only when) it looks truly
+        // unbatched. Two patterns cover every supported architecture
+        // family without double-promoting pre-batched targets:
+        //
+        //   (1) target.Rank == 1
+        //       Per-sample label / scalar target. Universal across
+        //       classification, regression, multi-class, etc. Examples:
+        //         • CNN classifier: input [C,H,W] + target [numClasses]
+        //         • MLP regression: input [F] + target [O]
+        //         • Sequence-to-vector: input [seq,F] + target [O]
+        //
+        //   (2) target.Rank == origInputRank
+        //       Per-sample target whose dimensionality mirrors the input.
+        //       Examples:
+        //         • Autoencoder: input [F] + target [F]
+        //         • Segmentation: input [C,H,W] + target [C,H,W]
+        //         • Sequence-to-sequence: input [seq,F] + target [seq,O]
+        //
+        // Pre-batched targets fall through unchanged:
+        //   • target.Rank == processedInput.Rank (== origInputRank+1) —
+        //     same number of axes as the now-batched input ⇒ already
+        //     batched, must NOT promote.
+        //   • CNN classifier with pre-batched [1, numClasses]: rank 2,
+        //     origInputRank=3 ⇒ neither rule fires, passes through.
+        //
+        // The earlier `target.Rank < processedInput.Rank` rule promoted
+        // pre-batched targets too, the `< processedInput.Rank - 2` rule
+        // missed every non-CNN case. This unified pattern handles MLP /
+        // sequence / CNN / segmentation / autoencoder shapes uniformly.
         Tensor<T> processedTarget = target;
-        if (target.Rank < processedInput.Rank - 2)
+        if (target.Rank == 1 || target.Rank == origInputRank)
         {
             processedTarget = PromoteToBatchedTensor(target);
         }

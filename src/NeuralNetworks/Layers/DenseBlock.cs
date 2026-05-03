@@ -405,5 +405,18 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
                 offset += count;
             }
         }
+
+        // Reject surplus payload — silently dropping the tail would let
+        // version-mismatched serialized blobs deserialize as if they
+        // succeeded, masking schema drift between writer and reader.
+        if (offset != extraParameters.Length)
+        {
+            throw new ArgumentException(
+                $"DenseBlock extra-parameters payload had {extraParameters.Length} elements " +
+                $"but only {offset} were consumed by sub-layer running stats. " +
+                $"This usually means the serialized model was written with a different " +
+                $"DenseBlock topology (numLayers / sub-layer composition) than the one " +
+                $"being deserialized.");
+        }
     }
 }
