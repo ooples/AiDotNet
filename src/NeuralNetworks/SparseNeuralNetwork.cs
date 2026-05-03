@@ -245,16 +245,13 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // SparseNeuralNetwork uses SparseLinearLayer whose SparseTensor weights
-        // are NOT visible to the tape's ParameterBuffer-based discovery (the
-        // flat dense buffer contract requires dense storage). TrainWithTape
-        // would therefore find zero trainable parameters from the layer chain
-        // and leave every weight unchanged, breaking
-        // Training_ShouldChangeParameters / GradientFlow_ShouldBeNonZeroAndFinite.
-        // Run a manual Forward → ComputeGradients → UpdateParameters loop
-        // instead. ComputeGradients lives on SparseLinearLayer because the
-        // base LayerBase removed Backward in favour of tape-mode autodiff,
-        // and the sparse layer can't currently sit inside the tape.
+        // Manual Forward → ComputeGradients → UpdateParameters loop.
+        // Validates prediction/target shape, throws on layers other than
+        // SparseLinearLayer<T>, and reads the learning rate from the
+        // configured optimizer via the typed
+        // GradientBasedOptimizerBase&lt;...&gt;.GetCurrentLearningRate()
+        // contract. Future work tracking the move to standard tape-based
+        // training lives in the issue tracker, not here.
         SetTrainingMode(true);
         try
         {
@@ -273,6 +270,34 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
             foreach (var layer in Layers)
                 activation = layer.Forward(activation);
 
+            // (1) Validate shapes BEFORE indexing — compare BOTH rank and
+            //     each axis size, not just flattened length. A length-only
+            //     check accepts incompatible layouts like [batch, classes]
+            //     vs [1, batch*classes] and the flat indexing loop below
+            //     would silently train against a wrong target arrangement.
+            bool shapesMatch = activation.Rank == netTarget.Rank
+                && activation.Length == netTarget.Length;
+            if (shapesMatch)
+            {
+                for (int axis = 0; axis < activation.Rank; axis++)
+                {
+                    if (activation.Shape[axis] != netTarget.Shape[axis])
+                    {
+                        shapesMatch = false;
+                        break;
+                    }
+                }
+            }
+            if (!shapesMatch)
+            {
+                throw new ArgumentException(
+                    "Train expects prediction and target shapes to match after rank-1 → " +
+                    "[1, features] normalization. Got prediction [" +
+                    string.Join(", ", activation.Shape) + "] vs target [" +
+                    string.Join(", ", netTarget.Shape) + "].",
+                    nameof(expectedOutput));
+            }
+
             // dL/dy for MSE: 2 · (y_pred − y_true) / N. The configured loss
             // would build a tape and defeat the purpose of this manual path,
             // and the model-family invariants only need non-zero finite
@@ -287,13 +312,31 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
                 grad[i] = NumOps.Multiply(two, NumOps.Multiply(diff, invN));
             }
 
+            // (2) Manual backprop only handles SparseLinearLayer. Throw on
+            //     anything else so a future refactor that mixes layer types
+            //     fails loudly instead of silently truncating gradient flow.
             for (int li = Layers.Count - 1; li >= 0; li--)
             {
                 if (Layers[li] is Layers.SparseLinearLayer<T> sparse)
+                {
                     grad = sparse.ComputeGradients(grad);
+                    continue;
+                }
+
+                throw new NotSupportedException(
+                    $"{GetType().Name}.Train manual backprop currently supports only " +
+                    $"SparseLinearLayer<T>. Unsupported layer at index {li}: " +
+                    $"{Layers[li].GetType().Name}. Either wrap the layer in a sparse " +
+                    "equivalent, or convert this model to use TrainWithTape (requires " +
+                    "sparse-aware ParameterBuffer — separate follow-up).");
             }
 
-            T learningRate = NumOps.FromDouble(0.01);
+            // (3) Use the configured optimizer's learning rate instead of
+            //     hard-coding 0.01. AdamOptimizer / GradientDescent / etc.
+            //     all expose CurrentLearningRate; fall back to a sensible
+            //     default if no optimizer was supplied (matches the prior
+            //     hardcoded value so existing tests don't regress).
+            T learningRate = ResolveLearningRate();
             foreach (var layer in Layers)
                 layer.UpdateParameters(learningRate);
         }
@@ -301,6 +344,58 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Pulls the learning rate from the configured optimizer when available,
+    /// falling back to 1e-2 (the previous hard-coded value) if no optimizer
+    /// was supplied at construction time.
+    /// </summary>
+    private T ResolveLearningRate()
+    {
+        if (_optimizer is null)
+            return NumOps.FromDouble(0.01);
+
+        // Use the typed contract: GradientBasedOptimizerBase<...> exposes
+        // GetCurrentLearningRate() as a public method returning double. The
+        // previous reflection-based "find a CurrentLearningRate property"
+        // path was BROKEN — CurrentLearningRate is a protected FIELD on
+        // OptimizerBase<T>, not a property, so GetProperty(...) returned
+        // null and silently fell through to the hardcoded 0.01. Train was
+        // ignoring every caller-configured learning rate.
+        if (_optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> grad)
+        {
+            return NumOps.FromDouble(grad.GetCurrentLearningRate());
+        }
+
+        // Some optimizers may expose the LR via a public method or
+        // property by reflection — keep this as a typed-contract fallback,
+        // but throw on unsupported optimizers instead of silently using
+        // 0.01. Caller can wrap their optimizer in a thin adapter if they
+        // need a custom contract.
+        var method = _optimizer.GetType().GetMethod("GetCurrentLearningRate", Type.EmptyTypes);
+        if (method is not null && method.ReturnType == typeof(double))
+        {
+            return NumOps.FromDouble((double)method.Invoke(_optimizer, null)!);
+        }
+        var prop = _optimizer.GetType().GetProperty("CurrentLearningRate")
+            ?? _optimizer.GetType().GetProperty("LearningRate");
+        if (prop is not null && prop.CanRead)
+        {
+            var raw = prop.GetValue(_optimizer);
+            if (raw is T tValue) return tValue;
+            if (raw is double dValue) return NumOps.FromDouble(dValue);
+        }
+
+        throw new NotSupportedException(
+            $"{GetType().Name}.Train cannot read the learning rate from " +
+            $"optimizer type {_optimizer.GetType().FullName}. The sparse " +
+            "manual update path requires the optimizer to either derive from " +
+            "GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> (which exposes " +
+            "GetCurrentLearningRate()) or expose a public CurrentLearningRate / " +
+            "LearningRate property of type T or double. SparseNeuralNetwork's " +
+            "tape-based training path (which would honour any optimizer state) " +
+            "is blocked on AiDotNet.Tensors#287 sparse-aware ParameterBuffer.");
     }
 
     /// <summary>

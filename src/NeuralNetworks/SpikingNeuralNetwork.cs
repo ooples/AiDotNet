@@ -439,14 +439,17 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // Accumulate spiking layer outputs over time. The readout layer may be
         // lazy (reports input shape as [-1]); fall back to the last spiking
         // layer's output, then to a single forward pass to discover the size.
-        int spikingOutputSize = readoutIdx >= 0
-            ? Layers[readoutIdx].GetInputShape()[0]
-            : Layers[^1].GetOutputShape()[0];
+        // Each Get*Shape() may legitimately return an empty array for a
+        // freshly-constructed lazy layer — guard the [0] access against that
+        // case before the index throws an unhelpful IndexOutOfRangeException.
+        int spikingOutputSize = ReadFirstShapeAxis(readoutIdx >= 0
+            ? Layers[readoutIdx].GetInputShape()
+            : Layers[^1].GetOutputShape());
         if (spikingOutputSize <= 0)
         {
             int lastSpikingIdx = readoutIdx >= 0 ? readoutIdx : Layers.Count;
             if (lastSpikingIdx > 0)
-                spikingOutputSize = Layers[lastSpikingIdx - 1].GetOutputShape()[0];
+                spikingOutputSize = ReadFirstShapeAxis(Layers[lastSpikingIdx - 1].GetOutputShape());
             if (spikingOutputSize <= 0)
             {
                 Tensor<T> probe = input;
@@ -1312,5 +1315,16 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 _scalarActivation,
                 LossFunction);
         }
+    }
+
+    /// <summary>
+    /// Safe-indexed first-axis read for lazy layers that may return an
+    /// empty shape array before resolution. Returns 0 (so the caller's
+    /// fallback path takes over) instead of throwing IndexOutOfRangeException.
+    /// </summary>
+    private static int ReadFirstShapeAxis(int[] shape)
+    {
+        if (shape is null || shape.Length == 0) return 0;
+        return shape[0];
     }
 }

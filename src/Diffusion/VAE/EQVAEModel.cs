@@ -199,13 +199,20 @@ public class EQVAEModel<T> : VAEModelBase<T>
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            // Best-effort against shape-arithmetic mismatches; non-default
-            // base/latent-channel configs may yield a degenerate spatial dim.
-            // Engine/kernel-level failures (DllNotFound, OutOfMemory,
-            // NullReference, etc.) are NOT swallowed — they fall through so
-            // partially-initialized state is never silently masked.
+            // Surface shape-arithmetic failures explicitly — silently
+            // continuing with partial initialization (the previous behaviour)
+            // left ParameterCount > 0 reporting layers that hadn't actually
+            // resolved, masking misconfigured base/latent-channel combos
+            // until the first real Forward. Wrap with InvalidOperationException
+            // so the construction call site fails fast with the original
+            // ArgumentException as InnerException for diagnostic context.
             System.Diagnostics.Debug.WriteLine(
-                $"[EQVAEModel.ProbeLayersForLazyResolution] suppressed shape-probe error: {ex.GetType().Name}: {ex.Message}");
+                $"[EQVAEModel.ProbeLayersForLazyResolution] shape-probe failed: {ex.GetType().Name}: {ex.Message}");
+            throw new InvalidOperationException(
+                $"{nameof(EQVAEModel<T>)} failed lazy-layer shape probe during construction. " +
+                "The encoder/decoder configuration produces a degenerate spatial dim — " +
+                "verify _baseChannels and _latentChannels against _inputChannels and the probe size.",
+                ex);
         }
     }
 

@@ -201,60 +201,69 @@ public class AdaptiveAveragePoolingLayer<T> : LayerBase<T>
             return reduced;
         }
 
-        // Irregular fallback — not tape-tracked. Documented above.
-        // Calculate total batch size (product of all dims except last 3)
-        int batchSize = 1;
-        for (int d = 0; d < rank - 3; d++)
-            batchSize *= input.Shape[d];
+        // Irregular fallback (input H/W not divisible by output H/W). The
+        // PyTorch adaptive_avg_pool2d contract uses per-cell windows
+        //   h_start = floor(oh * H / outH),  h_end = ceil((oh+1) * H / outH)
+        //   w_start = floor(ow * W / outW),  w_end = ceil((ow+1) * W / outW)
+        // We build the output by tape-tracked TensorSlice + ReduceMean over
+        // each (oh, ow) window so gradients propagate correctly through the
+        // pooling boundary even for non-divisible shapes. The slice/mean pair
+        // is O(outH × outW) per (batch, channel) tape ops; that's a one-time
+        // graph-build cost and the tape can JIT-fuse them, so it's
+        // significantly cheaper than the previous raw-tensor copy that
+        // silently dropped gradients.
+        int hAxis = rank - 2;
+        int wAxis = rank - 1;
 
-        // Create output tensor with same leading dimensions
-        int[] outputShape = new int[rank];
-        for (int d = 0; d < rank - 3; d++)
-            outputShape[d] = input.Shape[d];
-        outputShape[rank - 3] = channels;
-        outputShape[rank - 2] = _outputHeight;
-        outputShape[rank - 1] = _outputWidth;
-
-        int outputSize = outputShape.Aggregate(1, (a, b) => a * b);
-        var outputData = new T[outputSize];
-
-        // Calculate adaptive pooling parameters for each output cell
-        for (int b = 0; b < batchSize; b++)
+        // Per-output-row mean: for each oh, slice the input rows
+        // [hStart:hEnd] along hAxis, mean over hAxis (keepDims=true so the
+        // result has 1 row), then collect rows. Same for the W axis.
+        var rowOutputs = new Tensor<T>[_outputHeight];
+        for (int oh = 0; oh < _outputHeight; oh++)
         {
-            for (int c = 0; c < channels; c++)
+            int hStart = (int)Math.Floor((double)oh * inputHeight / _outputHeight);
+            int hEnd = (int)Math.Ceiling((double)(oh + 1) * inputHeight / _outputHeight);
+            int hLen = hEnd - hStart;
+
+            int[] rowStart = new int[rank];
+            int[] rowLen = new int[rank];
+            for (int d = 0; d < rank; d++)
             {
-                for (int oh = 0; oh < _outputHeight; oh++)
-                {
-                    for (int ow = 0; ow < _outputWidth; ow++)
-                    {
-                        // Calculate input region for this output cell
-                        int hStart = (int)Math.Floor((double)oh * inputHeight / _outputHeight);
-                        int hEnd = (int)Math.Ceiling((double)(oh + 1) * inputHeight / _outputHeight);
-                        int wStart = (int)Math.Floor((double)ow * inputWidth / _outputWidth);
-                        int wEnd = (int)Math.Ceiling((double)(ow + 1) * inputWidth / _outputWidth);
-
-                        // Average the values in the region
-                        T sum = NumOps.Zero;
-                        int count = 0;
-                        for (int h = hStart; h < hEnd; h++)
-                        {
-                            for (int w = wStart; w < wEnd; w++)
-                            {
-                                int inputIndex = b * channels * inputHeight * inputWidth + c * inputHeight * inputWidth + h * inputWidth + w;
-                                sum = NumOps.Add(sum, input.Data.Span[inputIndex]);
-                                count++;
-                            }
-                        }
-
-                        T avg = NumOps.Divide(sum, NumOps.FromDouble(count));
-                        int outputIndex = b * channels * _outputHeight * _outputWidth + c * _outputHeight * _outputWidth + oh * _outputWidth + ow;
-                        outputData[outputIndex] = avg;
-                    }
-                }
+                rowStart[d] = 0;
+                rowLen[d] = input.Shape[d];
             }
+            rowStart[hAxis] = hStart;
+            rowLen[hAxis] = hLen;
+            var rowSlab = Engine.TensorSlice(input, rowStart, rowLen);
+            var rowMean = Engine.ReduceMean(rowSlab, new[] { hAxis }, keepDims: true);
+
+            // Now reduce W axis per-output-column.
+            var colOutputs = new Tensor<T>[_outputWidth];
+            for (int ow = 0; ow < _outputWidth; ow++)
+            {
+                int wStart = (int)Math.Floor((double)ow * inputWidth / _outputWidth);
+                int wEnd = (int)Math.Ceiling((double)(ow + 1) * inputWidth / _outputWidth);
+                int wLen = wEnd - wStart;
+
+                int[] colStart = new int[rank];
+                int[] colLen = new int[rank];
+                for (int d = 0; d < rank; d++)
+                {
+                    colStart[d] = 0;
+                    colLen[d] = rowMean.Shape[d];
+                }
+                colStart[wAxis] = wStart;
+                colLen[wAxis] = wLen;
+                var colSlab = Engine.TensorSlice(rowMean, colStart, colLen);
+                colOutputs[ow] = Engine.ReduceMean(colSlab, new[] { wAxis }, keepDims: true);
+            }
+
+            // Concatenate the per-column means along W to form the row.
+            rowOutputs[oh] = Engine.TensorConcatenate(colOutputs, axis: wAxis);
         }
 
-        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+        // Concatenate the per-row outputs along H to form the final output.
+        return Engine.TensorConcatenate(rowOutputs, axis: hAxis);
     }
 
     /// <summary>

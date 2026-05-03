@@ -87,7 +87,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         InitializeLayers();
 
         // Stream / offload PaLM-E's 562B weights — at double precision the
-        // chain otherwise OOMs at ~140 GB resident. Per PaLMEOptions.WeightOffloadOptions
+        // chain otherwise OOMs at ~4.5 TB resident. Per PaLMEOptions.WeightOffloadOptions
         // contract: non-null is honoured as-is; null skips ConfigureWeightLifetime
         // entirely. Callers running the model at full size should supply a
         // streaming-offload instance via PaLMEOptions.WeightOffloadOptions or
@@ -350,9 +350,24 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         return PoolSequence(bse, wasBatched: input.Rank == 4);
     }
 
-    private Tensor<T> TokenizeImageInput(Tensor<T> input) =>
-        PatchEmbedHelper.TokenizeImageNCHWToBSC(
+    private Tensor<T> TokenizeImageInput(Tensor<T> input)
+    {
+        bool wasNull = _patchEmbed is null;
+        var result = PatchEmbedHelper.TokenizeImageNCHWToBSC(
             input, _options.VisionDim, _options.ImageSize, ref _patchEmbed, Engine);
+        // If the helper just lazy-created _patchEmbed (the field went from
+        // null → non-null in this call), register its trainable tensors with
+        // the weight registry. Without this, ConfigureWeightLifetime ran
+        // before the first image arrived and only registered the existing
+        // Layers chain — _patchEmbed's freshly-allocated weights would never
+        // join the streaming/offload pool, defeating the policy at full-size
+        // PaLM-E (where the patch-embed conv alone is ~150 MB at fp64).
+        if (wasNull && _patchEmbed is not null)
+        {
+            RefreshWeightRegistry();
+        }
+        return result;
+    }
 
     /// <summary>
     /// Surfaces _patchEmbed (which lives outside Layers) to the base

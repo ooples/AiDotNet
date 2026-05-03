@@ -571,8 +571,15 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
             }
             return weights;
         }
-        catch (Exception)
+        catch (Exception ex) when (
+            ex is InvalidOperationException ||
+            ex is ArithmeticException)
         {
+            // Narrow the catch so unrelated bugs (NullReference, argument
+            // mismatch, etc.) bubble up instead of forcing the caller into
+            // the normal-equations fallback under the wrong circumstances.
+            System.Diagnostics.Debug.WriteLine(
+                $"[RadialBasisFunctionRegression] SVD path failed, falling back: {ex.GetType().Name}: {ex.Message}");
             return null;
         }
     }
@@ -591,6 +598,13 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
         T lambdaRidge = NumOps.Divide(
             NumOps.Multiply(trace, NumOps.FromDouble(1e-6)),
             NumOps.FromDouble(Math.Max(1, xTx.Rows)));
+        // Floor lambda at a tiny absolute value so a near-zero design matrix
+        // (trace ≈ 0) doesn't leave xTx singular when we go to invert it.
+        // The minimum is the same threshold normal-equations ridge solvers
+        // pick to keep the diagonal numerically nonzero.
+        T minLambda = NumOps.FromDouble(1e-12);
+        if (NumOps.LessThan(lambdaRidge, minLambda))
+            lambdaRidge = minLambda;
         for (int i = 0; i < xTx.Rows; i++)
             xTx[i, i] = NumOps.Add(xTx[i, i], lambdaRidge);
         var xTy = xT.Multiply(y);

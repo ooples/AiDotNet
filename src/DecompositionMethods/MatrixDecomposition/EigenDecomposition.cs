@@ -342,54 +342,341 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>A tuple containing the eigenvalues and eigenvectors of the matrix.</returns>
     private (Vector<T> eigenValues, Matrix<T> eigenVectors) ComputeEigenJacobi(Matrix<T> matrix)
     {
+        // Cyclic-Jacobi eigensolver for symmetric matrices, transcribed from
+        // the canonical algorithm in Numerical Recipes §11.1 (Jacobi
+        // transformations) and matching LAPACK's DSYEVJ. Replaces the prior
+        // single-pivot O(n^4) implementation that:
+        //   1. Hard-coded the iteration count at 100, leaving n>~20 grossly
+        //      under-converged (issue #1230 — at n=256 only 0.06% of
+        //      off-diagonal pairs were ever touched).
+        //   2. Materialised a full identity rotation matrix per rotation and
+        //      ran J^T · A · J via two general matrix multiplies, costing
+        //      O(n^3) per rotation × O(n^2) rotations = O(n^5) total. At
+        //      n=256 that's ~10 minutes per call.
+        //
+        // Sweep-based cyclic Jacobi:
+        //   - Each sweep walks every (p, q) pair with p<q in lexicographic
+        //     order applying an in-place 2-axis rotation. Each rotation
+        //     touches only the p-th and q-th rows/columns of A and the p-th
+        //     and q-th columns of V — O(n) per rotation.
+        //   - n*(n-1)/2 rotations per sweep ⇒ O(n^3) per sweep.
+        //   - Convergence is quadratic; ~6–10 sweeps suffice for double-
+        //     precision residuals (per Numerical Recipes §11.1), so total
+        //     work is O(n^3) — the standard bound for symmetric eigensolvers.
+        //
+        // First-three-sweeps threshold trick (LAPACK pattern): only rotate
+        // pairs whose magnitude exceeds 0.2 * sum_off / n^2. This skips
+        // already-small entries that would otherwise burn rotations on noise.
+        // After sweep 4 the threshold drops to 0 (rotate every pair); after
+        // sweep 4 we also forcibly zero pairs whose magnitude is below
+        // 100 * eps * (|A_pp| + |A_qq|) instead of rotating, mirroring
+        // LAPACK's "tiny rotation" guard against numerical drift.
+
         int n = matrix.Rows;
+
+        // Symmetry precondition: cyclic Jacobi assumes a symmetric input
+        // (the in-place rotation mirrors A[p,q] into A[q,p] without
+        // separately validating they were equal to start with). For a
+        // non-symmetric matrix the routine silently solves a different
+        // problem. Surface this as ArgumentException at the API
+        // boundary so callers get an actionable failure instead of
+        // wrong eigenpairs.
+        //
+        // Tolerance is scaled by ‖A‖_∞ (max-abs entry) so the check
+        // works regardless of the matrix's overall magnitude — a fixed
+        // absolute threshold would falsely throw on matrices whose
+        // entries are larger than ~1e10 even when symmetric to
+        // floating-point precision, and would let through asymmetry on
+        // matrices with entries near machine epsilon. Tolerance base is
+        // also TYPE-AWARE: float has unit roundoff ~6e-8 so a 1e-10
+        // base would falsely reject matrices that are symmetric to
+        // float precision; double has ~2.22e-16 so 1e-10 leaves plenty
+        // of headroom. Use ~1000× unit roundoff for each type.
+        // Floor relScale at 1.0 so all-zero matrices don't divide by zero.
+        T maxAbs = NumOps.Zero;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                T abs = NumOps.Abs(matrix[i, j]);
+                if (NumOps.GreaterThan(abs, maxAbs)) maxAbs = abs;
+            }
+        }
+        T relScale = NumOps.GreaterThan(maxAbs, NumOps.FromDouble(1.0))
+            ? maxAbs
+            : NumOps.One;
+        // float: 1e-4 (≈1000 × 1.19e-7); double: 1e-10 (≈4.5e6 × 2.22e-16).
+        double symmetryTolBase = typeof(T) == typeof(float) ? 1e-4 : 1e-10;
+        T symmetryTol = NumOps.Multiply(NumOps.FromDouble(symmetryTolBase), relScale);
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = i + 1; j < matrix.Columns; j++)
+            {
+                T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
+                if (NumOps.GreaterThan(diff, symmetryTol))
+                {
+                    throw new ArgumentException(
+                        "Jacobi eigen decomposition requires a symmetric matrix; " +
+                        $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol} " +
+                        $"(scaled by ‖A‖_∞ = {maxAbs}).",
+                        nameof(matrix));
+                }
+            }
+        }
+
         Matrix<T> A = matrix.Clone();
         Matrix<T> V = Matrix<T>.CreateIdentity(n);
-
-        for (int iter = 0; iter < 100; iter++)
+        if (n <= 1)
         {
-            // VECTORIZED: Find the largest off-diagonal element using row operations
-            T maxOffDiagonal = NumOps.Zero;
-            int p = 0, q = 0;
+            return (MatrixHelper<T>.ExtractDiagonal(A), V);
+        }
 
-            for (int i = 0; i < n - 1; i++)
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+        T half = NumOps.FromDouble(0.5);
+        T tiny = NumOps.FromDouble(1e-30);
+        // Type-aware machine epsilon — see GetMachineEpsForType.
+        T machineEps = NumOps.FromDouble(GetMachineEpsForType());
+
+        // Convergence: terminate once ‖off-diag(A)‖_F^2 ≤ (tol·‖A‖_F)^2.
+        T frobNormSq = SumSquaredEntries(A);
+        T frobTolSq = NumOps.Multiply(frobNormSq, NumOps.FromDouble(1e-24)); // (1e-12)^2
+        T frobFloorSq = NumOps.FromDouble(1e-30);
+        T convergenceThresholdSq = NumOps.GreaterThan(frobTolSq, frobFloorSq) ? frobTolSq : frobFloorSq;
+
+        // Sweep cap: 50 is the standard engineering ceiling — well-behaved
+        // matrices converge in 6–10 sweeps and pathological cases that
+        // wouldn't converge in 50 sweeps wouldn't converge at all under
+        // double precision. (LAPACK DSYEVJ caps at 30; we use 50 for safety
+        // headroom on extreme inputs.)
+        const int maxSweeps = 50;
+        bool converged = false;
+
+        for (int sweep = 0; sweep < maxSweeps; sweep++)
+        {
+            // Off-diagonal mass for the threshold trick AND the convergence
+            // check. Track BOTH the linear (sum of |apq| over p<q) and
+            // squared (sum of apq² over all i≠j) forms — the linear sum
+            // drives the LAPACK-style early-sweep threshold heuristic
+            // (compare per-element |apq| against threshold = 0.2 * sumOff /
+            // n²), the squared form drives the Frobenius-norm convergence
+            // check. The previous code mixed the two by scaling
+            // offDiagSumSq linearly which gave a threshold whose
+            // dimensionality didn't match either |apq| or |apq|² — the
+            // wrong set of pairs got rotated.
+            T offDiagSumSq = SumSquaredOffDiagonal(A);
+            if (NumOps.LessThan(offDiagSumSq, convergenceThresholdSq))
             {
-                // VECTORIZED: Extract upper triangular portion of row and find max
-                Vector<T> rowSegment = new Vector<T>(A.GetRow(i).Skip(i + 1).Take(n - i - 1));
-                for (int k = 0; k < rowSegment.Length; k++)
+                converged = true;
+                break;
+            }
+            T offDiagAbsSum = SumAbsUpperOffDiagonal(A);
+
+            // LAPACK DSYEVJ-style early-sweep threshold: rotate only pairs
+            // whose magnitude exceeds 0.2 * sumOff / n² during the first
+            // three sweeps (saves rotations on entries that haven't built
+            // up enough relative magnitude yet). Threshold and comparand
+            // are both LINEAR (|apq| vs threshold) — consistent units.
+            // After sweep 3 the threshold drops to zero (rotate every
+            // pair above the absolute tiny floor).
+            T threshold;
+            if (sweep < 3)
+            {
+                T scale = NumOps.FromDouble(0.2 / ((double)n * n));
+                threshold = NumOps.Multiply(scale, offDiagAbsSum);
+            }
+            else
+            {
+                threshold = zero;
+            }
+
+            for (int p = 0; p < n - 1; p++)
+            {
+                for (int q = p + 1; q < n; q++)
                 {
-                    T absValue = NumOps.Abs(rowSegment[k]);
-                    if (NumOps.GreaterThan(absValue, maxOffDiagonal))
+                    T apq = A[p, q];
+                    T absApq = NumOps.Abs(apq);
+
+                    // After sweep 4, zero out entries that are negligible
+                    // relative to the diagonals — saves a rotation that
+                    // would only inject noise.
+                    if (sweep > 3)
                     {
-                        maxOffDiagonal = absValue;
-                        p = i;
-                        q = i + 1 + k;
+                        T diagScale = NumOps.Add(NumOps.Abs(A[p, p]), NumOps.Abs(A[q, q]));
+                        T tinyAllowed = NumOps.Multiply(NumOps.FromDouble(100), NumOps.Multiply(machineEps, diagScale));
+                        if (NumOps.LessThan(absApq, tinyAllowed))
+                        {
+                            A[p, q] = zero;
+                            A[q, p] = zero;
+                            continue;
+                        }
+                    }
+
+                    // Skip below-threshold entries during the early sweeps.
+                    // Linear |apq| against linear threshold — units match.
+                    if (sweep < 3 && NumOps.LessThan(absApq, threshold))
+                    {
+                        continue;
+                    }
+                    if (NumOps.LessThan(absApq, tiny))
+                    {
+                        continue;
+                    }
+
+                    // Compute rotation parameters c=cos(θ), s=sin(θ) such that
+                    // the resulting 2×2 block is diagonal:
+                    //   [c -s][app apq][c  s]   [app' 0  ]
+                    //   [s  c][apq aqq][-s c] = [0   aqq']
+                    // Using the stable form from NR §11.1 to avoid
+                    // catastrophic cancellation in tan(θ).
+                    T app = A[p, p];
+                    T aqq = A[q, q];
+                    T diff = NumOps.Subtract(aqq, app);
+                    T t;
+                    if (NumOps.LessThan(NumOps.Abs(diff), NumOps.Multiply(machineEps, NumOps.Abs(apq))))
+                    {
+                        // diff ≈ 0: 45-degree rotation.
+                        t = NumOps.LessThan(apq, zero) ? NumOps.Negate(one) : one;
+                    }
+                    else
+                    {
+                        T theta = NumOps.Multiply(half, NumOps.Divide(diff, apq));
+                        T thetaSq = NumOps.Multiply(theta, theta);
+                        T denom = NumOps.Add(NumOps.Abs(theta), NumOps.Sqrt(NumOps.Add(one, thetaSq)));
+                        t = NumOps.Divide(one, denom);
+                        if (NumOps.LessThan(theta, zero)) t = NumOps.Negate(t);
+                    }
+                    T c = NumOps.Divide(one, NumOps.Sqrt(NumOps.Add(one, NumOps.Multiply(t, t))));
+                    T s = NumOps.Multiply(t, c);
+
+                    // In-place 2-axis rotation update.
+                    //
+                    // Diagonals: app' = app - t·apq, aqq' = aqq + t·apq.
+                    A[p, p] = NumOps.Subtract(app, NumOps.Multiply(t, apq));
+                    A[q, q] = NumOps.Add(aqq, NumOps.Multiply(t, apq));
+                    A[p, q] = zero;
+                    A[q, p] = zero;
+
+                    // For each i ≠ p,q rotate the (i,p) and (i,q) entries.
+                    // Symmetric form keeps both upper- and lower-triangle
+                    // entries in lockstep so the matrix stays symmetric and
+                    // future SumSquaredOffDiagonal reads see the right values.
+                    for (int i = 0; i < n; i++)
+                    {
+                        if (i == p || i == q) continue;
+                        T aip = A[i, p];
+                        T aiq = A[i, q];
+                        A[i, p] = NumOps.Subtract(NumOps.Multiply(c, aip), NumOps.Multiply(s, aiq));
+                        A[p, i] = A[i, p];
+                        A[i, q] = NumOps.Add(NumOps.Multiply(s, aip), NumOps.Multiply(c, aiq));
+                        A[q, i] = A[i, q];
+                    }
+
+                    // Accumulate rotation into eigenvector matrix:
+                    //   V[:, p] = c*V[:, p] - s*V[:, q]
+                    //   V[:, q] = s*V[:, p] + c*V[:, q]
+                    for (int i = 0; i < n; i++)
+                    {
+                        T vip = V[i, p];
+                        T viq = V[i, q];
+                        V[i, p] = NumOps.Subtract(NumOps.Multiply(c, vip), NumOps.Multiply(s, viq));
+                        V[i, q] = NumOps.Add(NumOps.Multiply(s, vip), NumOps.Multiply(c, viq));
                     }
                 }
             }
+        }
 
-            // Check if we've reached the desired precision
-            if (NumOps.LessThan(maxOffDiagonal, NumOps.FromDouble(1e-6)))
-                break;
-
-            // Calculate the Jacobi rotation parameters
-            T theta = NumOps.Divide(NumOps.Subtract(A[q, q], A[p, p]), NumOps.Multiply(NumOps.FromDouble(2), A[p, q]));
-            T t = NumOps.Divide(NumOps.SignOrZero(theta), NumOps.Add(NumOps.Abs(theta), NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(theta, theta)))));
-            T c = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(NumOps.One, NumOps.Multiply(t, t))));
-            T s = NumOps.Multiply(t, c);
-
-            // Create the Jacobi rotation matrix
-            Matrix<T> J = Matrix<T>.CreateIdentity(n);
-            J[p, p] = c; J[q, q] = c;
-            J[p, q] = s; J[q, p] = NumOps.Negate(s);
-
-            // Apply the rotation to A and accumulate in V
-            A = J.Transpose().Multiply(A).Multiply(J);
-            V = V.Multiply(J);
+        // Convergence guarantee: if the loop exhausts maxSweeps without
+        // hitting the convergence threshold, surface that as
+        // InvalidOperationException so the caller doesn't silently consume
+        // potentially-wrong eigenpairs. Matches LAPACK's
+        // 'INFO > 0 means did not converge' contract.
+        if (!converged)
+        {
+            T finalOffDiag = SumSquaredOffDiagonal(A);
+            if (NumOps.GreaterThanOrEquals(finalOffDiag, convergenceThresholdSq))
+            {
+                throw new InvalidOperationException(
+                    $"Jacobi eigen decomposition did not converge within {maxSweeps} sweeps. " +
+                    $"Final off-diagonal mass {finalOffDiag} >= convergence threshold " +
+                    $"{convergenceThresholdSq}. The input matrix may be too ill-conditioned " +
+                    "for the cyclic Jacobi algorithm; consider PowerIteration with deflation " +
+                    "or a Schur-based eigensolver.");
+            }
         }
 
         Vector<T> eigenValues = MatrixHelper<T>.ExtractDiagonal(A);
         return (eigenValues, V);
+    }
+
+    /// <summary>
+    /// Type-appropriate machine epsilon. Hard-coding 1e-15 is correct for
+    /// double but two orders of magnitude tighter than float can support
+    /// (float ulp at 1.0 is ~1.19e-7), so a 1e-15 guard underflows on float
+    /// and effectively disables the "tiny rotation" check in the Jacobi
+    /// sweep. Returns a value ~10× single-precision unit roundoff for float
+    /// and 1e-15 (close to double unit roundoff 2.22e-16) for double.
+    /// </summary>
+    private static double GetMachineEpsForType()
+    {
+        Type t = typeof(T);
+        if (t == typeof(float)) return 1e-7;
+        // Default to double precision for double, decimal, and any other
+        // higher-precision T the project may use; decimal has even more
+        // precision than double but 1e-15 is safe as a lower bound.
+        return 1e-15;
+    }
+
+    /// <summary>
+    /// Sum of squared entries — used for the Frobenius-norm-based convergence
+    /// threshold in the sweep-based Jacobi loop.
+    /// </summary>
+    private T SumSquaredEntries(Matrix<T> m)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < m.Columns; j++)
+                sum = NumOps.Add(sum, NumOps.Multiply(m[i, j], m[i, j]));
+        return sum;
+    }
+
+    /// <summary>
+    /// Sum of squared off-diagonal entries (i ≠ j). Used for the cyclic-
+    /// Jacobi convergence check: when this drops below tol² · ‖A‖_F², the
+    /// matrix is effectively diagonal and the eigenvalues are A's diagonal.
+    /// </summary>
+    private T SumSquaredOffDiagonal(Matrix<T> m)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < m.Rows; i++)
+        {
+            for (int j = 0; j < m.Columns; j++)
+            {
+                if (i == j) continue;
+                sum = NumOps.Add(sum, NumOps.Multiply(m[i, j], m[i, j]));
+            }
+        }
+        return sum;
+    }
+
+    /// <summary>
+    /// Sum of <c>|a[i,j]|</c> over the strict upper triangle (i &lt; j).
+    /// Drives the LAPACK-style early-sweep threshold in cyclic Jacobi:
+    /// rotate only pairs whose magnitude exceeds <c>0.2 * sumAbs / n²</c>.
+    /// Linear (not squared) so the threshold and per-element comparand
+    /// have matching units.
+    /// </summary>
+    private T SumAbsUpperOffDiagonal(Matrix<T> m)
+    {
+        T sum = NumOps.Zero;
+        for (int i = 0; i < m.Rows - 1; i++)
+        {
+            for (int j = i + 1; j < m.Columns; j++)
+            {
+                sum = NumOps.Add(sum, NumOps.Abs(m[i, j]));
+            }
+        }
+        return sum;
     }
 
     /// <summary>

@@ -956,15 +956,33 @@ public class SvdDecomposition<T> : MatrixDecompositionBase<T>
 
         Matrix<T> ATA = matrix.Transpose().Multiply(matrix);
 
+        // Power-iteration max steps + relative-change tolerance. The previous
+        // hard-coded 100 iterations had no convergence check at all — well-
+        // conditioned vectors were charged 100 matvecs even after convergence,
+        // and ill-conditioned ones (small spectral gap) silently truncated
+        // before the dominant eigenvector locked in. Cap is generous enough
+        // to converge in the worst-case eigengap regime; the
+        // relative-change check exits as soon as ‖v_{k+1} − v_k‖ falls below
+        // the tolerance.
+        int powerIterMax = System.Math.Max(100, 10 * n);
+        T powerIterTol = NumOps.FromDouble(1e-12);
+
         for (int i = 0; i < k; i++)
         {
             Vector<T> v = Vector<T>.CreateRandom(n);
             v = v.Normalize();
 
-            for (int iter = 0; iter < 100; iter++) // You may need to adjust the number of iterations
+            for (int iter = 0; iter < powerIterMax; iter++)
             {
-                v = ATA.Multiply(v);
-                v = v.Normalize();
+                Vector<T> vNew = ATA.Multiply(v);
+                vNew = vNew.Normalize();
+
+                // Convergence: cosine distance between iterations ≈ 0 when
+                // the iterate has locked onto the dominant eigenvector.
+                T cosineSim = NumOps.Abs(vNew.DotProduct(v));
+                T diff = NumOps.Subtract(NumOps.One, cosineSim);
+                v = vNew;
+                if (NumOps.LessThan(diff, powerIterTol)) break;
             }
 
             T sigma = NumOps.Sqrt(ATA.Multiply(v).DotProduct(v));

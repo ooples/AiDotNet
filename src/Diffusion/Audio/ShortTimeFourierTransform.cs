@@ -175,7 +175,10 @@ public class ShortTimeFourierTransform<T>
         // Default hop must be derived from the caller-requested nFft (librosa's
         // contract). Whisper requests nFft=400 ⇒ hop=100; if we compute hop from
         // the rounded-up 512 we get 128, breaking the 400-sample frame cadence.
-        _hopLength = hopLength ?? requestedNFft / 4;
+        // Floor at 1 so requestedNFft ∈ {1, 2, 3} (which integer-divide to 0)
+        // doesn't trip the "Hop length must be positive" guard below for
+        // otherwise valid small inputs.
+        _hopLength = hopLength ?? Math.Max(1, requestedNFft / 4);
         _windowLength = requestedWindowLength;
         _center = center;
         _padMode = padMode;

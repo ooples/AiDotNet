@@ -781,7 +781,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// effect would still happen (it is process-global), but the sub-networks'
     /// trainable tensors would not be registered, defeating the offload path.
     /// </summary>
-    public override void ConfigureWeightLifetime(
+    internal override void ConfigureWeightLifetime(
         GpuOffloadOptions options,
         IGpuOffloadAllocator? allocator = null)
     {

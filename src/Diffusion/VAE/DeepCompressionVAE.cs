@@ -190,12 +190,17 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            // Best-effort against shape-arithmetic mismatches; ParameterCount > 0
-            // contract tests will surface a degenerate non-default config.
-            // Engine-level failures (DllNotFound, OOM, NullReference, etc.)
-            // fall through so partially-initialized state isn't silently masked.
+            // Surface shape-arithmetic failures explicitly — silently
+            // continuing with partial initialization left ParameterCount > 0
+            // reporting layers that hadn't actually resolved. Fail fast at
+            // construction with the original exception as InnerException.
             System.Diagnostics.Debug.WriteLine(
-                $"[DeepCompressionVAE.ProbeLayersForLazyResolution] suppressed shape-probe error: {ex.GetType().Name}: {ex.Message}");
+                $"[DeepCompressionVAE.ProbeLayersForLazyResolution] shape-probe failed: {ex.GetType().Name}: {ex.Message}");
+            throw new InvalidOperationException(
+                $"{nameof(DeepCompressionVAE<T>)} failed lazy-layer shape probe during construction. " +
+                "The encoder/decoder downsample chain produces a degenerate spatial dim — " +
+                "verify _baseChannels, _latentChannels, and _downsampleFactor against _inputChannels.",
+                ex);
         }
     }
 

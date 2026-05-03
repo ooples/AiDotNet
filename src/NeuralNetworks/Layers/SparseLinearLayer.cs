@@ -296,10 +296,23 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// directly because the tape can't see SparseTensor weights — see
     /// <see cref="SparseNeuralNetwork{T}.Train"/> for the integration.
     /// </summary>
-    public Tensor<T> ComputeGradients(Tensor<T> outputGradient)
+    internal Tensor<T> ComputeGradients(Tensor<T> outputGradient)
     {
         if (_lastInput is null || _lastOutput is null)
             throw new InvalidOperationException("Forward pass must run before ComputeGradients.");
+
+        // Validate outputGradient shape so a mismatched gradient doesn't
+        // silently propagate wrong values via the rank-vs-batch helper
+        // closures below. Rank can legitimately differ when _lastInput was
+        // single-sample (rank-1) — accept either matching rank or the
+        // [features] / [batch, features] equivalence.
+        if (!ShapeMatchesLastOutput(outputGradient))
+        {
+            throw new ArgumentException(
+                $"Output gradient shape [{string.Join(", ", outputGradient.Shape)}] does not match " +
+                $"last output shape [{string.Join(", ", _lastOutput.Shape)}].",
+                nameof(outputGradient));
+        }
 
         var preActGradient = ComputeActivationDerivative(_lastOutput, outputGradient);
 
@@ -524,5 +537,46 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     private Matrix<T> TransposeMatrix(Matrix<T> matrix)
     {
         return matrix.Transpose();
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="grad"/> shape is consistent with
+    /// the last forward's output. <c>_lastOutput</c> can be rank-1
+    /// <c>[features]</c> for single-sample input or rank-2
+    /// <c>[batch, features]</c> for batched input. The check accepts BOTH
+    /// the strict same-rank match AND the rank-1 ↔ rank-2 single-sample
+    /// equivalence: rank-1 <c>[features]</c> matches rank-2
+    /// <c>[1, features]</c> with the same feature count, since both
+    /// represent the same single-sample output and the per-element
+    /// gradient indexing in the manual backprop path treats them the
+    /// same way.
+    /// </summary>
+    private bool ShapeMatchesLastOutput(Tensor<T> grad)
+    {
+        if (_lastOutput is null) return false;
+        if (grad.Length != _lastOutput.Length) return false;
+
+        if (grad.Rank == _lastOutput.Rank)
+        {
+            for (int i = 0; i < grad.Rank; i++)
+            {
+                if (grad.Shape[i] != _lastOutput.Shape[i]) return false;
+            }
+            return true;
+        }
+
+        // Cross-rank single-sample equivalence: rank-1 [features] vs
+        // rank-2 [1, features]. Either side may carry the singleton.
+        // Reject anything else (e.g. rank-3 vs rank-1) — that's a real
+        // mismatch the manual backprop path can't handle.
+        if (grad.Rank == 1 && _lastOutput.Rank == 2 && _lastOutput.Shape[0] == 1)
+        {
+            return grad.Shape[0] == _lastOutput.Shape[1];
+        }
+        if (grad.Rank == 2 && _lastOutput.Rank == 1 && grad.Shape[0] == 1)
+        {
+            return grad.Shape[1] == _lastOutput.Shape[0];
+        }
+        return false;
     }
 }

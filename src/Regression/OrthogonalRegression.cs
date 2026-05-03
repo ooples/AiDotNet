@@ -208,12 +208,24 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             if (NumOps.GreaterThan(NumOps.Abs(vLast), NumOps.FromDouble(1e-14)))
             {
                 var tlsCoeffs = new Vector<T>(p);
+                T zeroVarianceTol = NumOps.FromDouble(1e-14);
                 for (int j = 0; j < p; j++)
                 {
                     // TLS coefficient in scaled space: -v_j / v_last
                     T scaledCoeff = NumOps.Negate(NumOps.Divide(vt[lastRow, j], vLast));
-                    // Unscale: multiply by scaleY/scaleX[j] to return to original units
-                    tlsCoeffs[j] = NumOps.Multiply(scaledCoeff, NumOps.Divide(scaleY, scaleX[j]));
+                    // Unscale: multiply by scaleY/scaleX[j] to return to original units.
+                    // Zero-variance feature: scaleX[j] ≈ 0 ⇒ the column is constant
+                    // and contributes no information; treat the coefficient as 0
+                    // rather than dividing and producing Inf/NaN that flips
+                    // ssRes-based model selection.
+                    if (NumOps.LessThan(NumOps.Abs(scaleX[j]), zeroVarianceTol))
+                    {
+                        tlsCoeffs[j] = NumOps.Zero;
+                    }
+                    else
+                    {
+                        tlsCoeffs[j] = NumOps.Multiply(scaledCoeff, NumOps.Divide(scaleY, scaleX[j]));
+                    }
                 }
 
                 T tlsIntercept = NumOps.Subtract(meanY, tlsCoeffs.DotProduct(meanX));
@@ -227,10 +239,17 @@ public class OrthogonalRegression<T> : RegressionBase<T>
                 }
             }
         }
-        catch (Exception)
+        catch (Exception ex) when (
+            ex is InvalidOperationException ||
+            ex is ArithmeticException)
         {
             // SVD decomposition failed on ill-conditioned matrix; ridge OLS
-            // already selected above.
+            // already selected above. Narrow the catch so unexpected
+            // exceptions (NullReferenceException, ArgumentException for
+            // shape mismatches, etc.) bubble up instead of being swallowed
+            // as 'numerical failure'.
+            System.Diagnostics.Debug.WriteLine(
+                $"[OrthogonalRegression] TLS fallback to ridge OLS: {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -243,8 +262,15 @@ public class OrthogonalRegression<T> : RegressionBase<T>
             xTx[i, i] = NumOps.Add(xTx[i, i], NumOps.FromDouble(1e-8));
         var xTy = centeredX.Transpose().Multiply(centeredY);
         var ridge = xTx.Inverse().Multiply(xTy);
+        T zeroVarianceTol = NumOps.FromDouble(1e-14);
         for (int j = 0; j < p; j++)
-            ridge[j] = NumOps.Multiply(NumOps.Divide(ridge[j], scaleX[j]), scaleY);
+        {
+            // Zero-variance unscale guard: see the matching note in
+            // ComputeTLS for why constant columns must yield zero coefficient.
+            ridge[j] = NumOps.LessThan(NumOps.Abs(scaleX[j]), zeroVarianceTol)
+                ? NumOps.Zero
+                : NumOps.Multiply(NumOps.Divide(ridge[j], scaleX[j]), scaleY);
+        }
         return ridge;
     }
 

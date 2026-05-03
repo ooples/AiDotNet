@@ -137,6 +137,99 @@ public class EigenDecompositionIntegrationTests
         }
     }
 
+    /// <summary>
+    /// Regression test for issue #1230: <c>ComputeEigenJacobi</c> previously
+    /// hard-coded the iteration count at 100, which zeros at most 100 of the
+    /// n*(n-1)/2 off-diagonal pairs. For n &gt; ~50 this produced a grossly
+    /// under-converged decomposition with ~99% wrong off-diagonal entries.
+    /// This test exercises the n=50 / n=128 / n=256 sizes the issue calls out
+    /// (n=256 was the original PPMI byte-LM repro from HarmonicEngine#103);
+    /// without the fix, every assertion below trips.
+    ///
+    /// Asserts:
+    ///   1. Each eigenpair satisfies A·v ≈ λ·v (per-eigenpair residual).
+    ///   2. The full reconstruction V·D·V^T ≈ A (symmetric form).
+    ///   3. Eigenvectors are mutually orthogonal (V^T·V ≈ I).
+    /// All three checks fail simultaneously when the iteration cap is too
+    /// tight, so this test serves as the load-bearing integration check
+    /// proving issue #1230 is fixed.
+    /// </summary>
+    [Theory]
+    [InlineData(50)]
+    [InlineData(128)]
+    [InlineData(256)]
+    public void EigenDecomposition_Jacobi_LargeMatrix_FullyConverges_Issue1230(int size)
+    {
+        // Use a moderate Frobenius scale so the relative-tolerance convergence
+        // criterion in the implementation triggers naturally — overscaled
+        // matrices (entries in the thousands) force absolute residual checks
+        // that aren't representative of typical use.
+        var A = CreateSymmetricMatrix(size, seed: 1230);
+
+        var eigen = new EigenDecomposition<double>(A, EigenAlgorithmType.Jacobi);
+
+        // (1) Per-eigenpair residual: ‖A·v - λ·v‖_∞ relative to ‖A‖_F.
+        // Tolerance scales with size because each Jacobi rotation introduces
+        // a small amount of numerical noise into previously-zeroed positions.
+        double matrixScale = MatrixFrobeniusNorm(A);
+        double perPairTol = 1e-3 * matrixScale;
+        for (int i = 0; i < size; i++)
+        {
+            var v = eigen.EigenVectors.GetColumn(i);
+            var lambda = eigen.EigenValues[i];
+            var Av = A.Multiply(v);
+            var lambdaV = v.Multiply(lambda);
+            double diff = MaxAbsDiff(Av, lambdaV);
+            Assert.True(diff < perPairTol,
+                $"Jacobi n={size}, eigenpair {i}: A·v - λ·v residual {diff:E3} " +
+                $"exceeds tolerance {perPairTol:E3}. Indicates under-converged " +
+                $"decomposition (issue #1230).");
+        }
+
+        // (2) Reconstruction: A ≈ V·D·V^T for the symmetric Jacobi form.
+        // This single check captures the whole-matrix accuracy and is what
+        // the issue describes as "essentially garbage" for the broken impl —
+        // at n=256 with the old 100-iter cap, the per-element diff was on
+        // the order of the matrix scale itself (≈O(1) for matrix entries
+        // also O(1)).
+        var V = eigen.EigenVectors;
+        var D = Matrix<double>.CreateDiagonal(eigen.EigenValues);
+        var Vt = V.Transpose();
+        var Areconstructed = V.Multiply(D).Multiply(Vt);
+        double reconDiff = MaxAbsDiff(A, Areconstructed);
+        double reconTol = 1e-3 * matrixScale;
+        Assert.True(reconDiff < reconTol,
+            $"Jacobi n={size}: V·D·V^T reconstruction residual {reconDiff:E3} " +
+            $"exceeds tolerance {reconTol:E3}. The Jacobi iteration cap is " +
+            $"too tight for this matrix size (issue #1230). Matrix Frobenius " +
+            $"norm: {matrixScale:E3}.");
+
+        // (3) Orthogonality: V^T·V ≈ I for the symmetric Jacobi form.
+        var VtV = Vt.Multiply(V);
+        double orthoDiff = 0;
+        for (int i = 0; i < size; i++)
+        {
+            for (int j = 0; j < size; j++)
+            {
+                double expected = (i == j) ? 1.0 : 0.0;
+                orthoDiff = Math.Max(orthoDiff, Math.Abs(VtV[i, j] - expected));
+            }
+        }
+        Assert.True(orthoDiff < 1e-6,
+            $"Jacobi n={size}: V^T·V deviates from identity by {orthoDiff:E3}. " +
+            $"Eigenvectors should be mutually orthogonal for symmetric input " +
+            $"(issue #1230 indicator).");
+    }
+
+    private static double MatrixFrobeniusNorm(Matrix<double> m)
+    {
+        double sum = 0;
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < m.Columns; j++)
+                sum += m[i, j] * m[i, j];
+        return Math.Sqrt(sum);
+    }
+
     [Theory]
     [InlineData(3)]
     [InlineData(4)]
