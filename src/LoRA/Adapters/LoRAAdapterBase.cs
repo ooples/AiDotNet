@@ -205,44 +205,57 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // Create the LoRA layer - derived classes may override this via CreateLoRALayer
         _loraLayer = CreateLoRALayer(rank, alpha);
 
-        // Initialize parameters. Both ParameterCount and
-        // UpdateParametersFromLayers are virtual: derived adapters that override
-        // ParameterCount commonly add their own state (e.g. delta weight
-        // matrices, accumulated importance scores) and the override
-        // dereferences fields that the derived class's ctor body hasn't yet
-        // initialized — calling virtual methods from a base-class ctor is a
-        // C# antipattern and the derived state observed here is whatever
-        // default(T) the field type uses. Prefer a soft initialization:
-        // attempt the derived-aware path, and fall back to a base-only
-        // computation if it throws. Derived ctors then call
-        // RebuildParametersAfterDerivedInit() once their fields are populated
-        // to land the final layout.
-        try
+        // Initialize Parameters using a NON-VIRTUAL base+LoRA-only sizing.
+        // Calling the virtual ParameterCount from a base ctor is a C#
+        // antipattern: derived adapters that override ParameterCount with
+        // derived state (delta weight matrices, importance scores, bank
+        // indices, etc.) dereference fields that the derived ctor body
+        // hasn't yet initialized — the derived state observed here is
+        // whatever default(T) the field type uses. Sizing against just
+        // _baseLayer + _loraLayer is always safe because both are fully
+        // constructed at this point.
+        //
+        // Derived adapters that override ParameterCount AND need their
+        // packed Parameters vector to round-trip (i.e., they don't
+        // override GetParameters / SetParameters with their own
+        // packing logic) MUST call RebuildParametersAfterDerivedInit()
+        // at the end of their constructor once their extra state is
+        // initialized. Most derived adapters override GetParameters
+        // and don't need this call.
+        int baseAndLoraCount =
+            _baseLayer.GetParameters().Length
+            + _loraLayer.GetParameters().Length;
+        Parameters = new Vector<T>(baseAndLoraCount);
+        // Pack base + LoRA params directly (non-virtual) so the vector
+        // is initialized without invoking the derived
+        // UpdateParametersFromLayers override. Derived classes that
+        // need their own packing call RebuildParametersAfterDerivedInit
+        // which routes through the virtual UpdateParametersFromLayers.
+        PackBaseAndLoraParameters();
+    }
+
+    /// <summary>
+    /// Non-virtual pack of <see cref="_baseLayer"/> + <see cref="_loraLayer"/>
+    /// parameters into <see cref="LayerBase{T}.Parameters"/>. Used by the
+    /// base ctor where the derived <see cref="UpdateParametersFromLayers"/>
+    /// override would dereference uninitialised derived state.
+    /// </summary>
+    private void PackBaseAndLoraParameters()
+    {
+        int idx = 0;
+        if (!_freezeBaseLayer)
         {
-            Parameters = new Vector<T>(ParameterCount);
-            UpdateParametersFromLayers();
+            Vector<T> baseParams = _baseLayer.GetParameters();
+            for (int i = 0; i < baseParams.Length; i++)
+            {
+                Parameters[idx++] = baseParams[i];
+            }
         }
-        catch (Exception ex) when (ex is NullReferenceException or ArgumentOutOfRangeException or IndexOutOfRangeException)
+
+        Vector<T> loraParams = _loraLayer.GetParameters();
+        for (int i = 0; i < loraParams.Length; i++)
         {
-            // Derived class's overridden ParameterCount or the base class's
-            // UpdateParametersFromLayers() tripped on uninitialised derived
-            // state. Common causes:
-            //   - NullReferenceException: derived ParameterCount dereferenced
-            //     a derived field that the derived ctor body hasn't set yet.
-            //   - ArgumentOutOfRangeException / IndexOutOfRangeException:
-            //     derived ctor will re-allocate Parameters to a larger size
-            //     to hold its own state, but UpdateParametersFromLayers ran
-            //     against the derived ParameterCount before that re-allocation,
-            //     producing a Parameters vector smaller than what packing
-            //     needs.
-            // In every case the derived ctor either calls
-            // RebuildParametersAfterDerivedInit() or directly reassigns
-            // Parameters at the end of its body. Use a safe placeholder here
-            // sized only against base layer + LoRA layer state.
-            int baseOnlyCount =
-                BaseLayer.GetParameters().Length
-                + _loraLayer.GetParameters().Length;
-            Parameters = new Vector<T>(baseOnlyCount);
+            Parameters[idx++] = loraParams[i];
         }
     }
 

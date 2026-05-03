@@ -162,7 +162,7 @@ public static class DeserializationHelper
                     c.GetParameters().Take(4).All(p => p.ParameterType == typeof(int)) &&
                     (c.GetParameters().Length < 5 || c.GetParameters()[4].ParameterType == targetActivationType));
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find ReconstructionLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find ReconstructionLayer constructor.");
             var args = new object?[ctor.GetParameters().Length];
             args[0] = inputDim;
             args[1] = hidden1;
@@ -284,19 +284,26 @@ public static class DeserializationHelper
         {
             // EmbeddingLayer(int vocabularySize, int embeddingDimension)
             int embeddingDim = outputShape[0];
-            // Vocabulary size default: 256 — covers byte-level LMs and is
-            // the smallest power-of-2 that satisfies common transformer
-            // configurations. Real Clone() always supplies VocabularySize via
-            // metadata; this default only fires on metadata-less probe paths
-            // where Clone() would never have actually been called.
+            // EmbeddingLayer.GetMetadata persists VocabularySize on every
+            // serialize call, so any properly-saved network has it. Refuse
+            // to deserialize when missing rather than fabricating 256 (the
+            // old "byte-level LM default") — a wrong vocab size produces
+            // a structurally-incorrect embedding matrix that breaks weight
+            // reattachment or silently changes semantics on legacy
+            // metadata-less payloads. Surface the bad payload as an error
+            // instead.
             int vocabSize = TryGetInt(additionalParams, "VocabularySize")
                 ?? TryGetInt(additionalParams, "VocabSize")
-                ?? 256;
+                ?? throw new InvalidOperationException(
+                    "EmbeddingLayer requires 'VocabularySize' (or legacy 'VocabSize') metadata. " +
+                    "Re-serialize the network with the current GetMetadata implementation, " +
+                    "or pass the vocab size via additionalParams when calling " +
+                    "DeserializationHelper.CreateLayerFromType from a probe path.");
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find EmbeddingLayer constructor with (int, int).");
+                throw new MissingLayerCtorException("Cannot find EmbeddingLayer constructor with (int, int).");
             }
             instance = ctor.Invoke(new object[] { vocabSize, embeddingDim });
         }

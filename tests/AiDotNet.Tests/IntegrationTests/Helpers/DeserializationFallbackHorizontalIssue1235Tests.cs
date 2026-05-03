@@ -15,12 +15,15 @@ namespace AiDotNetTests.IntegrationTests.Helpers;
 /// deserialization (no known constructor found).</c>
 ///
 /// <para>
-/// The fallback enumerates each layer type's public constructors, scores
-/// each by how well its parameter list can be filled from
-/// <c>(inputShape, outputShape, additionalParams, default values)</c>, and
-/// invokes the highest-scoring fillable constructor. Tested against a
-/// representative cross-section of layer families that previously had no
-/// dedicated branch:
+/// The fallback enumerates each layer type's public constructors ordered
+/// by descending parameter count, attempts to fill each parameter from
+/// <c>(inputShape, outputShape, additionalParams, default values)</c>,
+/// and invokes the FIRST constructor whose parameter list can all be
+/// resolved. This is a longest-fillable-first heuristic — see the
+/// remarks on <c>DeserializationHelper.TryConstructByMatchingMetadata</c>
+/// for the selection caveat. Tested against a representative
+/// cross-section of layer families that previously had no dedicated
+/// branch:
 /// </para>
 ///
 /// <list type="bullet">
