@@ -384,11 +384,15 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         //
         // Tolerance is scaled by ‖A‖_∞ (max-abs entry) so the check
         // works regardless of the matrix's overall magnitude — a fixed
-        // 1e-10 absolute threshold would falsely throw on matrices
-        // whose entries are larger than ~1e10 even when symmetric to
+        // absolute threshold would falsely throw on matrices whose
+        // entries are larger than ~1e10 even when symmetric to
         // floating-point precision, and would let through asymmetry on
-        // matrices with entries near machine epsilon. Floor at 1e-12
-        // so all-zero matrices don't divide by zero.
+        // matrices with entries near machine epsilon. Tolerance base is
+        // also TYPE-AWARE: float has unit roundoff ~6e-8 so a 1e-10
+        // base would falsely reject matrices that are symmetric to
+        // float precision; double has ~2.22e-16 so 1e-10 leaves plenty
+        // of headroom. Use ~1000× unit roundoff for each type.
+        // Floor relScale at 1.0 so all-zero matrices don't divide by zero.
         T maxAbs = NumOps.Zero;
         for (int i = 0; i < matrix.Rows; i++)
         {
@@ -401,7 +405,9 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         T relScale = NumOps.GreaterThan(maxAbs, NumOps.FromDouble(1.0))
             ? maxAbs
             : NumOps.One;
-        T symmetryTol = NumOps.Multiply(NumOps.FromDouble(1e-10), relScale);
+        // float: 1e-4 (≈1000 × 1.19e-7); double: 1e-10 (≈4.5e6 × 2.22e-16).
+        double symmetryTolBase = typeof(T) == typeof(float) ? 1e-4 : 1e-10;
+        T symmetryTol = NumOps.Multiply(NumOps.FromDouble(symmetryTolBase), relScale);
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = i + 1; j < matrix.Columns; j++)
@@ -429,7 +435,8 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         T one = NumOps.One;
         T half = NumOps.FromDouble(0.5);
         T tiny = NumOps.FromDouble(1e-30);
-        T machineEps = NumOps.FromDouble(1e-15);
+        // Type-aware machine epsilon — see GetMachineEpsForType.
+        T machineEps = NumOps.FromDouble(GetMachineEpsForType());
 
         // Convergence: terminate once ‖off-diag(A)‖_F^2 ≤ (tol·‖A‖_F)^2.
         T frobNormSq = SumSquaredEntries(A);
@@ -600,6 +607,24 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
 
         Vector<T> eigenValues = MatrixHelper<T>.ExtractDiagonal(A);
         return (eigenValues, V);
+    }
+
+    /// <summary>
+    /// Type-appropriate machine epsilon. Hard-coding 1e-15 is correct for
+    /// double but two orders of magnitude tighter than float can support
+    /// (float ulp at 1.0 is ~1.19e-7), so a 1e-15 guard underflows on float
+    /// and effectively disables the "tiny rotation" check in the Jacobi
+    /// sweep. Returns a value ~10× single-precision unit roundoff for float
+    /// and 1e-15 (close to double unit roundoff 2.22e-16) for double.
+    /// </summary>
+    private static double GetMachineEpsForType()
+    {
+        Type t = typeof(T);
+        if (t == typeof(float)) return 1e-7;
+        // Default to double precision for double, decimal, and any other
+        // higher-precision T the project may use; decimal has even more
+        // precision than double but 1e-15 is safe as a lower bound.
+        return 1e-15;
     }
 
     /// <summary>

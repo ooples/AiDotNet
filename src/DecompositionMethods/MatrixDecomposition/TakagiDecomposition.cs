@@ -148,8 +148,10 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         // the in-place rotation mirrors A[p,q] into A[q,p] without
         // separately validating they were equal to start with.
         // Tolerance is scaled by ‖A‖_∞ so the check works regardless
-        // of the matrix's overall magnitude (a fixed 1e-10 absolute
-        // threshold would falsely throw on large-magnitude matrices).
+        // of the matrix's overall magnitude AND uses a TYPE-AWARE base
+        // (1e-4 for float ≈ 1000 × 1.19e-7; 1e-10 for double ≈ huge
+        // headroom over 2.22e-16) so float-precision matrices aren't
+        // wrongly rejected.
         T maxAbs = NumOps.Zero;
         for (int i = 0; i < matrix.Rows; i++)
         {
@@ -162,7 +164,8 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         T relScale = NumOps.GreaterThan(maxAbs, NumOps.FromDouble(1.0))
             ? maxAbs
             : NumOps.One;
-        T symmetryTol = NumOps.Multiply(NumOps.FromDouble(1e-10), relScale);
+        double symmetryTolBase = typeof(T) == typeof(float) ? 1e-4 : 1e-10;
+        T symmetryTol = NumOps.Multiply(NumOps.FromDouble(symmetryTolBase), relScale);
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = i + 1; j < matrix.Columns; j++)
@@ -187,7 +190,8 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         T one = NumOps.One;
         T two = NumOps.FromDouble(2);
         T tiny = NumOps.FromDouble(1e-30);
-        T machineEps = NumOps.FromDouble(1e-15);
+        // Type-aware machine epsilon — see GetMachineEpsForType.
+        T machineEps = NumOps.FromDouble(GetMachineEpsForType());
 
         // Convergence threshold: ‖off-diag(A)‖_F^2 < (1e-12 · ‖A‖_F)^2.
         T frobNormSq = SumSquaredEntries(A);
@@ -789,6 +793,20 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         return xVector;
+    }
+
+    /// <summary>
+    /// Type-appropriate machine epsilon. Hard-coding 1e-15 is correct for
+    /// double but two orders of magnitude tighter than float supports
+    /// (float ulp at 1.0 is ~1.19e-7), so 1e-15 effectively disables the
+    /// tiny-rotation guard on float and slows convergence. Returns ~1e-7
+    /// for float and 1e-15 for double / higher precision.
+    /// </summary>
+    private static double GetMachineEpsForType()
+    {
+        Type t = typeof(T);
+        if (t == typeof(float)) return 1e-7;
+        return 1e-15;
     }
 
     /// <summary>

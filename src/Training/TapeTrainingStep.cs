@@ -86,21 +86,29 @@ public static class TapeTrainingStep<T>
                 continue;
             }
             // Hash the runtime type + parameter count + index. Type
-            // captured by FNV-1a over the UTF-8 bytes of
+            // captured by FNV-1a folded over the chars of
             // AssemblyQualifiedName. We CANNOT use string.GetHashCode
             // here — even with StringComparison.Ordinal it is randomized
             // per-process in .NET 6+ (the runtime salts the hash on
             // startup), so it would break the cross-process cache-key
-            // determinism the cache docs promise. FNV-1a over the UTF-8
-            // bytes IS process- and version-stable, which is what the
-            // tape-graph cache needs to round-trip.
+            // determinism the cache docs promise. Folding the chars
+            // directly is process- and version-stable AND
+            // allocation-free — the previous Encoding.UTF8.GetBytes
+            // form was correct but allocated a fresh byte[] on every
+            // CollectParameters call (including cache-hit paths),
+            // defeating the "O(1) on cache hit" goal.
             hash ^= (ulong)i;
             hash *= FnvPrime;
             string typeName = layer.GetType().AssemblyQualifiedName ?? layer.GetType().FullName ?? "?";
-            byte[] typeNameBytes = System.Text.Encoding.UTF8.GetBytes(typeName);
-            for (int b = 0; b < typeNameBytes.Length; b++)
+            for (int c = 0; c < typeName.Length; c++)
             {
-                hash ^= typeNameBytes[b];
+                ushort ch = typeName[c];
+                // Two-byte fold preserves a deterministic mapping for
+                // any char (typeName is mostly ASCII, but the same loop
+                // also handles non-ASCII identifiers cleanly).
+                hash ^= (byte)(ch & 0xFF);
+                hash *= FnvPrime;
+                hash ^= (byte)((ch >> 8) & 0xFF);
                 hash *= FnvPrime;
             }
             try
