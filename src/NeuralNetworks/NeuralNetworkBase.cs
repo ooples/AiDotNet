@@ -504,6 +504,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return parameters;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Yields each layer's trainable parameter tensors in order. For
+    /// <see cref="ITrainableLayer{T}"/> layers this returns the per-tensor
+    /// weight references registered via <c>RegisterTrainableParameter</c>
+    /// (zero-copy). For non-trainable / parameterless layers this yields
+    /// nothing. Mirrors PyTorch's <c>nn.Module.parameters()</c> generator.
+    /// Use this for foundation-scale models where the flat
+    /// <see cref="GetParameters"/> path overflows <see cref="int"/> in
+    /// either <see cref="Vector{T}"/>.Length or
+    /// <see cref="ParameterCount"/>.
+    /// </remarks>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        ResolveLazyLayerShapes();
+        foreach (var layer in Layers)
+        {
+            if (layer is ITrainableLayer<T> trainable)
+            {
+                foreach (var t in trainable.GetTrainableParameters())
+                {
+                    if (t is null || t.Length == 0) continue;
+                    yield return t;
+                }
+            }
+        }
+        foreach (var t in GetExtraTrainableTensors())
+        {
+            if (t is null || t.Length == 0) continue;
+            yield return t;
+        }
+    }
+
     #region GPU Training Methods
 
     /// <summary>

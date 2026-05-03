@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using AiDotNet.Tensors.LinearAlgebra;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -33,8 +36,43 @@ public interface IParameterizable<T, TInput, TOutput>
     /// <remarks>
     /// This property returns the total count of trainable parameters in the model.
     /// It's useful for understanding model complexity and memory requirements.
+    /// <para>
+    /// <b>Limitation for foundation-scale models:</b> the return type is
+    /// <see cref="int"/>, capped at ~2.1 B. Models like Sora, HiDream, SD3.5
+    /// Large, GPT-3-class etc. exceed this limit. For accurate per-tensor
+    /// counting on those models, iterate <see cref="GetParameterChunks"/>
+    /// and sum lengths into a <see cref="long"/> accumulator. Mirrors
+    /// PyTorch's <c>nn.Module.parameters()</c> generator pattern.
+    /// </para>
     /// </remarks>
     int ParameterCount { get; }
+
+    /// <summary>
+    /// Yields the model's trainable weight tensors as references — zero-copy,
+    /// streaming. Callers iterate per-tensor without ever materializing a
+    /// flat <c>Vector&lt;T&gt;</c> of all parameters. Mirrors PyTorch's
+    /// <c>nn.Module.parameters()</c> generator: foundation-scale models
+    /// (Sora 5 B+, HiDream 8 B+, GPT-3-class 175 B+) cannot fit a single
+    /// flat vector but each individual weight tensor is well below
+    /// <see cref="int"/>.MaxValue elements.
+    /// </summary>
+    /// <returns>An enumerable of trainable weight tensors (no copy).</returns>
+    /// <remarks>
+    /// Default implementation yields nothing — concrete implementations
+    /// should override to yield each layer's <c>GetTrainableParameters</c>
+    /// or equivalent per-tensor weight references. Used by:
+    /// <list type="bullet">
+    /// <item>Foundation-scale parameter counting (sum lengths as
+    /// <see cref="long"/> to count past <see cref="int"/>.MaxValue)</item>
+    /// <item>Streaming serialization without flat-vector allocation</item>
+    /// <item>PyTorch-compatibility shims (state_dict-style export)</item>
+    /// </list>
+    /// </remarks>
+#if NETFRAMEWORK
+    IEnumerable<Tensor<T>> GetParameterChunks();
+#else
+    IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
+#endif
 
     /// <summary>
     /// Gets whether this model supports direct parameter-based initialization.

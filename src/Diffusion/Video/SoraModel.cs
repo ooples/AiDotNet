@@ -344,6 +344,7 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
         return combined;
     }
 
+
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
