@@ -549,6 +549,13 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
+        // Persist the constructor's full parameter set so DeserializationHelper
+        // can reconstruct the layer without fabricating any dimension. Without
+        // SequenceLength + EmbeddingDimension here, the deser path would fall
+        // back to inputShape[0]/[1] (correct for rank-2 [seq, dim] payloads)
+        // or to hardcoded 16/64 if the shape is degenerate — issue #1239.
+        metadata["SequenceLength"] = InputShape[0].ToString();
+        metadata["EmbeddingDimension"] = _embeddingDimension.ToString();
         metadata["NumHeads"] = _numHeads.ToString();
         metadata["NumKVHeads"] = _numKVHeads.ToString();
         metadata["HeadsPerGroup"] = _headsPerGroup.ToString();
