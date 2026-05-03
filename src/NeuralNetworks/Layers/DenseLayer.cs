@@ -480,8 +480,91 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        InitializeLayerWeights(_weights, InputShape[0], OutputShape[0]);
-        InitializeLayerBiases(_biases);
+        // Activation-aware default init.
+        //   ReLU / LeakyReLU / PReLU / ELU / GELU / Swish / SiLU / Mish /
+        //     HardSwish                                       → He init (He et al. 2015 §2.2,
+        //                                                       "Delving Deep into Rectifiers")
+        //   SELU                                              → LeCun init (Klambauer et al. 2017
+        //                                                       §3 "Self-Normalizing Neural
+        //                                                       Networks", paper-prescribed
+        //                                                       variance 1/fan_in for the SNN
+        //                                                       fixed-point)
+        //   Sigmoid / Tanh / Softmax / Identity / linear      → Xavier (LayerBase default,
+        //                                                       Glorot & Bengio 2010)
+        // Caller (EnsureInitialized line 443-446) already gated on
+        // `InitializationStrategy is null`, so the inner null-check that
+        // used to wrap this block was redundant. Activation-driven init
+        // still applies here unconditionally.
+        switch (ResolveDefaultInitKind())
+        {
+            case DefaultInitKind.LeCun:
+            {
+                var lecun = new Initialization.LeCunInitializationStrategy<T>();
+                lecun.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+                lecun.InitializeBiases(_biases);
+                return;
+            }
+            case DefaultInitKind.He:
+            {
+                var heInit = new Initialization.HeInitializationStrategy<T>();
+                heInit.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+                heInit.InitializeBiases(_biases);
+                return;
+            }
+            default:
+                InitializeLayerWeights(_weights, InputShape[0], OutputShape[0]);
+                InitializeLayerBiases(_biases);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// Default-init policy for an activation family.
+    /// </summary>
+    private enum DefaultInitKind
+    {
+        /// <summary>Xavier (Glorot &amp; Bengio 2010) — used for Tanh / Sigmoid / Softmax / Identity / no activation.</summary>
+        Xavier,
+        /// <summary>He (He et al. 2015) — used for ReLU and ReLU-family (LeakyReLU, PReLU, ELU, GELU, Swish/SiLU, HardSwish, Mish).</summary>
+        He,
+        /// <summary>LeCun (Klambauer et al. 2017) — used for SELU's self-normalizing fixed-point variance.</summary>
+        LeCun,
+    }
+
+    /// <summary>
+    /// Single resolver that maps the layer's current activation function to
+    /// the appropriate init strategy family. Centralizes the activation-name
+    /// pattern matching that previously lived split across IsSeluActivation
+    /// / IsReluFamilyActivation, so adding a new ReLU-style activation only
+    /// requires touching one switch arm here.
+    /// </summary>
+    private DefaultInitKind ResolveDefaultInitKind()
+    {
+        var act = ScalarActivation ?? (object?)VectorActivation;
+        if (act is null) return DefaultInitKind.Xavier;
+        var name = act.GetType().Name;
+        if (string.IsNullOrEmpty(name)) return DefaultInitKind.Xavier;
+
+        // Test SELU FIRST — its name starts with "SELU" which contains "ELU"
+        // as a substring; checking ReLU family first would mis-route SELU
+        // to He init. Order matters here.
+        if (name.StartsWith("SELU", StringComparison.Ordinal))
+            return DefaultInitKind.LeCun;
+
+        if (name.StartsWith("ReLU", StringComparison.Ordinal)
+            || name.StartsWith("LeakyReLU", StringComparison.Ordinal)
+            || name.StartsWith("PReLU", StringComparison.Ordinal)
+            || name.StartsWith("ELU", StringComparison.Ordinal)
+            || name.StartsWith("GELU", StringComparison.Ordinal)
+            || name.StartsWith("Swish", StringComparison.Ordinal)
+            || name.StartsWith("SiLU", StringComparison.Ordinal)
+            || name.StartsWith("HardSwish", StringComparison.Ordinal)
+            || name.StartsWith("Mish", StringComparison.Ordinal))
+        {
+            return DefaultInitKind.He;
+        }
+
+        return DefaultInitKind.Xavier;
     }
 
     /// <summary>

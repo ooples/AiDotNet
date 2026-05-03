@@ -49,7 +49,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 2, 8, 8")]
-public class TransitionLayer<T> : LayerBase<T>
+public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
     private readonly ConvolutionalLayer<T> _conv;
@@ -136,6 +136,15 @@ public class TransitionLayer<T> : LayerBase<T>
         RegisterSubLayer(_bn);
         RegisterSubLayer(_conv);
         RegisterSubLayer(_pool);
+
+        // Eagerly resolve sub-layer shapes so ParameterCount reflects real
+        // weights immediately (lazy Conv/BN return 0 otherwise, causing
+        // SetParameters dispatch-by-slice to silently skip them — same
+        // dispatch bug e0c78b820 fixed for ResNet's BottleneckBlock).
+        _bn.ResolveFromShape(new[] { 1, inputChannels, inputHeight, inputWidth });
+        _conv.ResolveFromShape(new[] { inputChannels, inputHeight, inputWidth });
+        // _pool has no trainable parameters but resolve anyway for consistency.
+        _pool.ResolveFromShape(new[] { OutputChannels, inputHeight, inputWidth });
     }
 
     /// <summary>
@@ -436,5 +445,23 @@ public class TransitionLayer<T> : LayerBase<T>
         _pool.ResetState();
     }
 
+    // --- ILayerSerializationExtras: propagate the inner BN's running stats.
+    // Without this, DenseNet's serialize/deserialize round-trip loses each
+    // transition's BN running mean/variance after training.
 
+    int ILayerSerializationExtras<T>.ExtraParameterCount
+        => _bn is ILayerSerializationExtras<T> e ? e.ExtraParameterCount : 0;
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        if (_bn is ILayerSerializationExtras<T> e)
+            return e.GetExtraParameters();
+        return new Vector<T>(0);
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        if (_bn is ILayerSerializationExtras<T> e)
+            e.SetExtraParameters(extraParameters);
+    }
 }

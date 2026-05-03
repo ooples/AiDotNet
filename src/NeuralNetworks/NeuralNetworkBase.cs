@@ -504,6 +504,52 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return parameters;
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Yields each layer's trainable parameter tensors in order. For
+    /// <see cref="ITrainableLayer{T}"/> layers this returns the per-tensor
+    /// weight references registered via <c>RegisterTrainableParameter</c>
+    /// (zero-copy). For non-trainable / parameterless layers this yields
+    /// nothing. Mirrors PyTorch's <c>nn.Module.parameters()</c> generator.
+    /// Use this for foundation-scale models where the flat
+    /// <see cref="GetParameters"/> path overflows <see cref="int"/> in
+    /// either <see cref="Vector{T}"/>.Length or
+    /// <see cref="ParameterCount"/>.
+    /// </remarks>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        ResolveLazyLayerShapes();
+
+        // SCOPE CONTRACT: chunks must match exactly the parameter set
+        // that ParameterCount / GetParameters / SetParameters operate on.
+        // Those flat APIs walk only `Layers`; widening this enumeration
+        // to include GetExtraTrainableLayers / GetExtraTrainableTensors
+        // would make `sum(chunk.Length) > ParameterCount` for models
+        // with network-level extras (ViT cls/pos, Conformer subsamplers),
+        // causing callers that mix the flat and chunked APIs to mis-size
+        // buffers or skip parameters on round-trip.
+        //
+        // Extras still flow through TrainWithTape via the separate extra-
+        // trainable handling path — they're just not surfaced in the
+        // chunked enumeration here. If a future PR widens the flat APIs
+        // to include extras, this enumeration can match in lockstep.
+        //
+        // The recursive CollectTrainableLayers walk DOES descend into
+        // composite-layer sublayers (DenseBlock BN/Conv, MoE experts) —
+        // those are still part of `Layers` from the flat APIs' point of
+        // view because GetParameters walks each top-level layer's
+        // ParameterCount which already aggregates sublayer params.
+        var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
+        foreach (var trainable in trainableLayers)
+        {
+            foreach (var t in trainable.GetTrainableParameters())
+            {
+                if (t is null || t.Length == 0) continue;
+                yield return t;
+            }
+        }
+    }
+
     #region GPU Training Methods
 
     /// <summary>
@@ -1801,6 +1847,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _cachedParameterCount = null;
         _layerStructureVersion++;
         _parameterBuffer = null;
+        // Layer structure changed — re-test the skip-buffer threshold next
+        // training step. Without this, a model that grew from 100M -> 200M
+        // params (e.g., LoRA rank bump, layer addition) would keep trying
+        // to build a buffer until the new threshold check forced skip on
+        // the next param-set sample.
+        _skipParameterBuffer = false;
+        _skipParameterBufferVersion = -1;
         Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
         // Layer structure changed — drop stale compiled inference plans.
@@ -2279,23 +2332,170 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// You provide some input data (like an image or text), and the network processes it through all its
     /// layers to produce an output (like a classification or prediction).
     /// <para>
-    /// The default implementation routes through the compiled inference path
-    /// (<see cref="PredictCompiled"/>), which auto-compiles the forward pass on the first call and replays
-    /// the compiled plan on subsequent calls for near-zero overhead. On compilation failure it falls back
-    /// to eager execution via <see cref="PredictEager"/>. The call is wrapped in a <see cref="NoGradScope{T}"/>
-    /// so inference never records onto the gradient tape (matches PyTorch <c>torch.no_grad()</c> semantics).
+    /// The default implementation routes through the eager forward path
+    /// (<see cref="PredictEager"/>) and is wrapped in a <see cref="NoGradScope{T}"/> so inference never
+    /// records onto the gradient tape (matches PyTorch <c>torch.no_grad()</c> semantics). This was the
+    /// compiled-replay path historically, but the compiled-plan cache in <see cref="PredictCompiled"/>
+    /// binds to the trace-time input tensor reference and replay returns the first call's output for any
+    /// subsequent call with the same shape but different values — the canonical "DifferentInputs /
+    /// ScaledInput produces identical output" failure. Eager forward is correct for any input values at
+    /// the cost of skipping plan-replay reuse.
+    /// </para>
+    /// <para>
+    /// <see cref="PredictCompiled"/> remains available for callers that explicitly opt in via
+    /// <see cref="CompileForward"/> + identical-tensor replay (or by overriding <see cref="Predict"/> in a
+    /// subclass to call <see cref="PredictCompiled"/> directly when their tracing is value-stable).
     /// </para>
     /// <para>
     /// Subclasses that need custom inference behavior (e.g., diffusion models that run a multi-step
     /// denoising loop, GANs that sample from a generator, networks that produce structured outputs) should
-    /// override this method. Subclasses whose inference is just a flat forward pass through Layers should
-    /// leave the default in place to pick up compiled replay automatically.
+    /// override this method.
     /// </para>
     /// </remarks>
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
         using var _ = new NoGradScope<T>();
-        return PredictCompiled(input);
+
+        // Predict means inference. Temporarily flip the network into eval
+        // mode so stateful layers (Dropout, BatchNorm batch-stats vs running-
+        // stats, GaussianNoise, etc.) behave deterministically — and restore
+        // the prior mode in finally so a Predict-mid-training-loop call
+        // doesn't permanently flip the network out of training mode.
+        // Without this, callers who never explicitly called
+        // SetTrainingMode(false) get non-deterministic Predict outputs (the
+        // default IsTrainingMode is true on construction), which is a real
+        // model-behavior bug — see Generated Layers
+        // PriorGradTests.Predict_ShouldBeDeterministic and similar.
+        //
+        // Concurrency contract: this temporary flip is intentionally NOT
+        // thread-safe. Callers running parallel Predict on a single model
+        // instance must serialize externally OR call SetTrainingMode(false)
+        // once before the parallel batch (the second call is a no-op once
+        // already in eval mode, so the inner toggle becomes side-effect-
+        // free). This matches PyTorch nn.Module's non-thread-safe
+        // `model.eval()` / `model.train()` convention — the framework
+        // doesn't synchronize a global model state for concurrent inference.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            // Universal batch-dim auto-promotion (mirrors the Train path).
+            // When the caller passes an unbatched single sample whose rank
+            // exactly matches the architecture's effective unbatched rank,
+            // prepend a unit batch dim before flowing through Layers.
+            // Without this, FlattenLayer (and any other layer that treats
+            // axis 0 as batch) would interpret the channels axis of a rank-3
+            // [C, H, W] image as 32 separate batch samples and emit
+            // [32, H*W] instead of [1, C*H*W] — collapsing the forward path
+            // to one filter's pre-softmax distribution.
+            var promoted = NormalizeInputBatchDim(input);
+
+            // Route through the eager forward instead of PredictCompiled. The
+            // compiled-plan cache in CompiledModelHost binds to the trace-time
+            // input tensor reference and replay reads stale data when called
+            // with a *different* tensor of the same shape (the canonical
+            // DifferentInputs / ScaledInput invariant failure: same shape,
+            // new values, but the cached plan returns the first call's
+            // output).
+            //
+            // Trade-off: this IS a per-call latency regression vs the prior
+            // compiled-by-default behavior. Eager re-runs each forward op
+            // through the engine instead of replaying a baked plan. The
+            // regression is correctness-driven — compiled replay was
+            // returning silently wrong outputs for the very common
+            // "same model, same shape, new values" inference pattern.
+            // A future Tensors-package release that adds value-aware
+            // compiled replay (re-key on a tensor data hash, or
+            // explicit re-trace on input change) can restore the
+            // compiled fast path as the default; until then,
+            // correctness wins. Callers who care about replay latency
+            // can opt back in via CompileForward + identical-tensor
+            // replay (their responsibility to feed the same tensor
+            // reference each call).
+            var output = PredictEager(promoted);
+
+            // If we promoted the input by prepending a unit batch dim,
+            // squeeze the same dim back off the output so callers
+            // passing unbatched inputs get unbatched outputs. Without
+            // this, ResNet/VGG/MobileNet etc. (which used to squeeze
+            // inside Forward when they added their own batch dim) now
+            // return a phantom batch axis on what should be a single-
+            // sample inference.
+            bool wasPromoted = !ReferenceEquals(promoted, input);
+            if (wasPromoted && output.Rank > 1 && output.Shape[0] == 1)
+            {
+                int[] squeezed = new int[output.Rank - 1];
+                for (int i = 0; i < squeezed.Length; i++)
+                    squeezed[i] = output.Shape[i + 1];
+                output = output.Reshape(squeezed);
+            }
+            return output;
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    /// <summary>
+    /// Read-only counterpart to <see cref="NormalizeBatchDim"/> for the
+    /// inference path: only the input is shape-normalized; targets aren't
+    /// involved in Predict. Returns the original tensor if the architecture
+    /// has no usable input shape or if input is already batched.
+    /// </summary>
+    private Tensor<T> NormalizeInputBatchDim(Tensor<T> input)
+    {
+        int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
+        if (expectedUnbatchedRank <= 0) return input;
+        if (input.Rank != expectedUnbatchedRank) return input;
+        return PromoteToBatchedTensor(input);
+    }
+
+    /// <summary>
+    /// Computes the effective unbatched input rank from the architecture's
+    /// input dimensions. <see cref="NeuralNetworkArchitecture{T}.GetInputShape"/>
+    /// is inconsistent across <see cref="InputType"/> variants — TwoDimensional
+    /// returns [H, W] (rank 2) but ConvNN-style consumers internally treat it
+    /// as [1, H, W] (rank 3) when InputDepth ≥ 1. This helper picks the rank
+    /// the model's first layer actually expects so auto-promote can fire on
+    /// the right unbatched signal.
+    /// </summary>
+    private int GetExpectedUnbatchedInputRank()
+    {
+        if (Architecture is null) return 0;
+        try
+        {
+            // Video / spatiotemporal: InputFrames > 0 means
+            // [Frames, C, H, W] is the unbatched layout (rank 4).
+            // Use this branch BEFORE the spatial check so video
+            // architectures (which also have InputHeight > 0) don't
+            // resolve to rank 3.
+            if (Architecture.InputFrames > 0
+                && Architecture.InputHeight > 0
+                && Architecture.InputWidth > 0)
+                return 4;
+            // Vision / spatial: InputHeight > 0 means [C, H, W] is the
+            // unbatched layout (rank 3). InputDepth defaults to 1 when not
+            // explicitly set on a TwoDimensional arch — paper-faithful CNN
+            // models (LeNet on MNIST, etc.) all assume a channel axis.
+            if (Architecture.InputHeight > 0 && Architecture.InputWidth > 0)
+                return 3;
+            // Sequence / time-series: when the architecture's
+            // GetInputShape() reports a rank-2 unbatched layout
+            // (e.g. `[seq, F]` for transformer/RNN models), honour it.
+            // Architectures built via NeuralNetworkArchitecture's
+            // sequence-aware ctors expose a 2-element input shape with
+            // both axes positive.
+            var inShape = Architecture.GetInputShape();
+            if (inShape is { Length: 2 } && inShape[0] > 0 && inShape[1] > 0)
+                return 2;
+            // Sequence / feature: InputSize is the per-sample feature count;
+            // unbatched is rank 1 [F].
+            if (Architecture.InputSize > 0)
+                return 1;
+        }
+        catch { /* fall through */ }
+        return 0;
     }
 
     /// <summary>
@@ -3001,6 +3201,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Universal batch-dim auto-promotion. When the caller passes an
+        // unbatched single sample (matching the architecture's declared rank
+        // exactly), prepend a unit batch dim so downstream Conv/BN/Dense
+        // layers see the canonical [B, …] shape. Same logic for the target
+        // when its rank also matches an unbatched output. This removes the
+        // per-CNN-model EnsureBatchForCnnTraining boilerplate (CNN, VGG,
+        // ResNet, MobileNetV2, EfficientNet) and gives all NN models the
+        // same input-shape contract: pass either single-sample
+        // <c>[C,H,W]</c> / <c>[seq,F]</c> / <c>[F]</c> or batched
+        // <c>[B,C,H,W]</c> / <c>[B,seq,F]</c> / <c>[B,F]</c> — both work.
+        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+
         SetTrainingMode(true);
         try
         {
@@ -3035,6 +3247,74 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Universal rank-N → rank-(N+1) batch-dim promotion. If the caller
+    /// supplied an unbatched single sample (input rank exactly equal to the
+    /// architecture's declared input rank), prepends a unit batch dim so
+    /// downstream layers see <c>[1, …]</c>. The target is promoted on the
+    /// same condition (its rank matches the unbatched output rank). When the
+    /// architecture lacks a usable shape, both tensors pass through
+    /// unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Subsumes the per-CNN <c>EnsureBatchForCnnTraining</c> helper. CNN
+    /// models that already override <c>Train</c> can drop their explicit
+    /// promotion call once they delegate to <c>base.Train</c>; until then the
+    /// double-promote is suppressed because their override is what's invoked
+    /// (this base path runs only for models that don't override <c>Train</c>).
+    /// </remarks>
+    private (Tensor<T> Input, Tensor<T> Target) NormalizeBatchDim(Tensor<T> input, Tensor<T> target)
+    {
+        int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
+        if (expectedUnbatchedRank <= 0) return (input, target);
+
+        // Only promote when input rank matches the unbatched rank exactly —
+        // when input rank is one more, the caller already supplied a batched
+        // tensor and we must NOT promote.
+        bool inputNeedsPromote = input.Rank == expectedUnbatchedRank;
+        if (!inputNeedsPromote) return (input, target);
+
+        int origInputRank = input.Rank;
+        var processedInput = PromoteToBatchedTensor(input);
+
+        // Promote the target when (and only when) it looks truly
+        // unbatched. Two patterns cover every supported architecture
+        // family without double-promoting pre-batched targets:
+        //
+        //   (1) target.Rank == 1
+        //       Per-sample label / scalar target. Universal across
+        //       classification, regression, multi-class, etc. Examples:
+        //         • CNN classifier: input [C,H,W] + target [numClasses]
+        //         • MLP regression: input [F] + target [O]
+        //         • Sequence-to-vector: input [seq,F] + target [O]
+        //
+        //   (2) target.Rank == origInputRank
+        //       Per-sample target whose dimensionality mirrors the input.
+        //       Examples:
+        //         • Autoencoder: input [F] + target [F]
+        //         • Segmentation: input [C,H,W] + target [C,H,W]
+        //         • Sequence-to-sequence: input [seq,F] + target [seq,O]
+        //
+        // Pre-batched targets fall through unchanged:
+        //   • target.Rank == processedInput.Rank (== origInputRank+1) —
+        //     same number of axes as the now-batched input ⇒ already
+        //     batched, must NOT promote.
+        //   • CNN classifier with pre-batched [1, numClasses]: rank 2,
+        //     origInputRank=3 ⇒ neither rule fires, passes through.
+        //
+        // The earlier `target.Rank < processedInput.Rank` rule promoted
+        // pre-batched targets too, the `< processedInput.Rank - 2` rule
+        // missed every non-CNN case. This unified pattern handles MLP /
+        // sequence / CNN / segmentation / autoencoder shapes uniformly.
+        Tensor<T> processedTarget = target;
+        if (target.Rank == 1 || target.Rank == origInputRank)
+        {
+            processedTarget = PromoteToBatchedTensor(target);
+        }
+
+        return (processedInput, processedTarget);
     }
 
     /// <summary>
@@ -3114,11 +3394,59 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // views, so they CANNOT participate in the buffer-aliased
         // optimizer step. We update them through a separate lightweight
         // gradient-descent path against the same tape gradients below.
+        // ParameterBuffer is a contiguous flat copy of all trainable
+        // parameters that replaces each layer's tensor with a view into
+        // one giant array. It enables fused-optimizer paths in the
+        // Tensors-package internals BUT costs an extra ~N×sizeof(T) bytes
+        // resident for the lifetime of the network. For foundation
+        // models (Sundial-Base ~300M params × 8 B = 2.4 GB) this mirror
+        // collides with Adam's m/v state (another 2× weights) on top of
+        // the original weights, blowing past CI's ~7 GB ceiling. Skip
+        // the buffer when total parameter memory exceeds the threshold
+        // so foundation-scale models stay trainable on CPU CI runners.
+        // The optimizers we ship (`AdamOptimizer.Step` line 494,
+        // AdamW, SGD, etc.) all iterate `context.Parameters` directly
+        // and never read `context.ParamBuffer`, so passing null is safe
+        // for the model layer's optimizer path.
         ParameterBuffer<T>? paramBuffer;
-        if (_parameterBuffer is null)
+        // Fast-path: a previous training step on the SAME layer structure
+        // already concluded "skip buffer" — re-applying that decision is
+        // O(1). InvalidateParameterCountCache resets _skipParameterBufferVersion
+        // to -1 (and clears _parameterBuffer) so a layer-structure change
+        // re-tests the threshold from scratch.
+        if (_skipParameterBuffer && _skipParameterBufferVersion == _layerStructureVersion)
+        {
+            paramBuffer = null;
+        }
+        else if (_parameterBuffer is null)
         {
             var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, structureVersion: -1);
-            paramBuffer = GetOrCreateParameterBuffer(initialParams);
+            long totalParamCount = 0L;
+            for (int i = 0; i < initialParams.Count; i++)
+                totalParamCount += (long)initialParams[i].Length;
+            // ~125 M parameter cutoff: small enough that any model
+            // passing this threshold is foundation-class (its weight-
+            // mirror would consume ~1 GB at double precision and collide
+            // with Adam's m/v state on CI hosts); large enough that
+            // every standard CV / NLP / time-series model below ~1 B
+            // params keeps the buffer + fused-path benefit. Use parameter
+            // COUNT rather than byte size so the threshold doesn't shift
+            // when T = float vs double.
+            const long ParameterBufferSkipThresholdParams = 125_000_000L;
+            if (totalParamCount > ParameterBufferSkipThresholdParams)
+            {
+                paramBuffer = null;
+                // Memoize the skip decision so subsequent training steps
+                // don't repeat the CollectParameters + sum-Length scan.
+                // Sundial-Base (~300 M params) takes ~120ms per scan;
+                // caching makes step 2..N effectively free.
+                _skipParameterBuffer = true;
+                _skipParameterBufferVersion = _layerStructureVersion;
+            }
+            else
+            {
+                paramBuffer = GetOrCreateParameterBuffer(initialParams);
+            }
         }
         else
         {
@@ -3594,7 +3922,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Gets or lazily creates the default optimizer for tape-based training.
     /// Used when a network doesn't provide its own optimizer.
     /// </summary>
-    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
         return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
@@ -3610,6 +3938,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Lazily initialized on first training step when trainable parameters are available.
     /// </summary>
     private ParameterBuffer<T>? _parameterBuffer;
+
+    /// <summary>
+    /// Once foundation-scale models cross the parameter-buffer skip
+    /// threshold we want each subsequent training step to take the
+    /// no-buffer path in O(1), not re-scan every parameter tensor with
+    /// CollectParameters + sum-Length on each call. We memoize the
+    /// "skip buffer" decision keyed by <see cref="_layerStructureVersion"/>
+    /// so InvalidateParameterCountCache (which bumps the version) re-tests
+    /// the threshold the first time the parameter set actually changed.
+    /// </summary>
+    private bool _skipParameterBuffer;
+    private int _skipParameterBufferVersion = -1;
 
     /// <summary>
     /// <summary>

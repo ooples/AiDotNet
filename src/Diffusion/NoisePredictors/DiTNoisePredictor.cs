@@ -955,53 +955,77 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     public override Vector<T> GetParameters()
     {
         EnsureLayersInitialized();
-        var allParams = new List<T>();
 
-        // Collect from patch embed
-        if (_patchEmbed != null)
-        {
-            AddLayerParams(allParams, _patchEmbed);
-        }
+        // Pre-allocate with known size so we avoid the List<T> doubling
+        // path AND its ToArray() copy. For a real-scale DiT (Bark uses
+        // 24 blocks × 1024 hidden ≈ 250 M parameters; 8-byte doubles ⇒
+        // 2 GB), the previous List+ToArray pattern peaked at ~3× that
+        // size during the doubling and copy, OOMing CI test hosts.
+        int totalParams = ParameterCount;
+        var result = new Vector<T>(totalParams);
+        int offset = 0;
 
-        // Collect from time embedding
-        if (_timeEmbed1 != null) AddLayerParams(allParams, _timeEmbed1);
-        if (_timeEmbed2 != null) AddLayerParams(allParams, _timeEmbed2);
+        if (_patchEmbed != null) WriteLayerParams(result, ref offset, _patchEmbed);
+        if (_timeEmbed1 != null) WriteLayerParams(result, ref offset, _timeEmbed1);
+        if (_timeEmbed2 != null) WriteLayerParams(result, ref offset, _timeEmbed2);
+        if (_labelEmbed != null) WriteLayerParams(result, ref offset, _labelEmbed);
 
-        // Collect from label embed (optional)
-        if (_labelEmbed != null) AddLayerParams(allParams, _labelEmbed);
-
-        // Collect from transformer blocks
         foreach (var block in _blocks)
         {
-            if (block.Norm1 != null) AddLayerParams(allParams, block.Norm1);
-            if (block.Attention != null) AddLayerParams(allParams, block.Attention);
-            if (block.Norm2 != null) AddLayerParams(allParams, block.Norm2);
-            if (block.MLP1 != null) AddLayerParams(allParams, block.MLP1);
-            if (block.MLP2 != null) AddLayerParams(allParams, block.MLP2);
-            if (block.AdaLNModulation != null) AddLayerParams(allParams, block.AdaLNModulation);
-            // Cross-attention layers
-            if (block.CrossAttnNorm != null) AddLayerParams(allParams, block.CrossAttnNorm);
-            if (block.CrossAttnQ != null) AddLayerParams(allParams, block.CrossAttnQ);
-            if (block.CrossAttnK != null) AddLayerParams(allParams, block.CrossAttnK);
-            if (block.CrossAttnV != null) AddLayerParams(allParams, block.CrossAttnV);
-            if (block.CrossAttnOut != null) AddLayerParams(allParams, block.CrossAttnOut);
+            if (block.Norm1 != null) WriteLayerParams(result, ref offset, block.Norm1);
+            if (block.Attention != null) WriteLayerParams(result, ref offset, block.Attention);
+            if (block.Norm2 != null) WriteLayerParams(result, ref offset, block.Norm2);
+            if (block.MLP1 != null) WriteLayerParams(result, ref offset, block.MLP1);
+            if (block.MLP2 != null) WriteLayerParams(result, ref offset, block.MLP2);
+            if (block.AdaLNModulation != null) WriteLayerParams(result, ref offset, block.AdaLNModulation);
+            if (block.CrossAttnNorm != null) WriteLayerParams(result, ref offset, block.CrossAttnNorm);
+            if (block.CrossAttnQ != null) WriteLayerParams(result, ref offset, block.CrossAttnQ);
+            if (block.CrossAttnK != null) WriteLayerParams(result, ref offset, block.CrossAttnK);
+            if (block.CrossAttnV != null) WriteLayerParams(result, ref offset, block.CrossAttnV);
+            if (block.CrossAttnOut != null) WriteLayerParams(result, ref offset, block.CrossAttnOut);
         }
 
-        // Collect from final layers
-        if (_finalNorm != null) AddLayerParams(allParams, _finalNorm);
-        if (_adaln_modulation != null) AddLayerParams(allParams, _adaln_modulation);
-        if (_outputProj != null) AddLayerParams(allParams, _outputProj);
+        if (_finalNorm != null) WriteLayerParams(result, ref offset, _finalNorm);
+        if (_adaln_modulation != null) WriteLayerParams(result, ref offset, _adaln_modulation);
+        if (_outputProj != null) WriteLayerParams(result, ref offset, _outputProj);
 
-        return new Vector<T>(allParams.ToArray());
+        // Validate the final offset matches the pre-allocated buffer.
+        // A mismatch means some layer's `ParameterCount` disagreed with
+        // its `GetParameters().Length` between the two reads — most
+        // likely caused by a lazy-init layer materializing weights
+        // mid-walk and changing its reported count. Throwing here turns
+        // a silently corrupt parameter dump (random tail garbage or
+        // lost trailing layers) into an actionable exception.
+        if (offset != totalParams)
+        {
+            throw new InvalidOperationException(
+                $"DiTNoisePredictor.GetParameters wrote {offset} elements but " +
+                $"ParameterCount reported {totalParams}. Some layer's " +
+                $"GetParameters().Length doesn't match its ParameterCount — " +
+                $"check for layers whose weight tensors materialized between " +
+                $"the count and the write (lazy init mid-walk).");
+        }
+        return result;
     }
 
-    private void AddLayerParams(List<T> allParams, ILayer<T> layer)
+    private static void WriteLayerParams(Vector<T> dst, ref int offset, ILayer<T> layer)
     {
         var p = layer.GetParameters();
+        // Bounds check: catch the failure here instead of letting
+        // `dst[offset + i]` throw the harder-to-diagnose
+        // ArgumentOutOfRangeException several layers later.
+        if (offset + p.Length > dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"WriteLayerParams overflow at layer {layer.GetType().Name}: " +
+                $"offset={offset}, p.Length={p.Length}, buffer.Length={dst.Length}. " +
+                $"ParameterCount under-counted this layer's actual parameter count.");
+        }
         for (int i = 0; i < p.Length; i++)
         {
-            allParams.Add(p[i]);
+            dst[offset + i] = p[i];
         }
+        offset += p.Length;
     }
 
     /// <inheritdoc />
@@ -1056,6 +1080,75 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         }
         layer.SetParameters(new Vector<T>(p));
         return offset + count;
+    }
+
+    /// <summary>
+    /// Copies parameters layer-by-layer from <paramref name="source"/> into this
+    /// predictor. Avoids the round-trip through a single flat
+    /// <see cref="Vector{T}"/> that <see cref="GetParameters"/> +
+    /// <see cref="SetParameters"/> would otherwise produce — for real-scale
+    /// DiT models (Bark: ~360M parameters; ~3 GB as doubles), the flat
+    /// intermediate triples peak memory and OOMs CI test hosts. Per-layer
+    /// copy keeps peak at ~2× model weights instead of ~3×.
+    /// </summary>
+    /// <remarks>
+    /// Both <paramref name="source"/> and this instance must have been
+    /// initialized with the same architecture (matching layer counts,
+    /// hidden sizes, etc.). The walk order must mirror
+    /// <see cref="GetParameters"/> exactly so corresponding layers line up.
+    /// </remarks>
+    public void CopyParametersFrom(DiTNoisePredictor<T> source)
+    {
+        Guard.NotNull(source);
+        source.EnsureLayersInitialized();
+        EnsureLayersInitialized();
+
+        if (source._blocks.Count != _blocks.Count)
+        {
+            throw new ArgumentException(
+                $"Source has {source._blocks.Count} transformer blocks but " +
+                $"target has {_blocks.Count}; cannot copy parameters across " +
+                "different architectures.",
+                nameof(source));
+        }
+
+        CopyLayerSafely(source._patchEmbed, _patchEmbed);
+        CopyLayerSafely(source._timeEmbed1, _timeEmbed1);
+        CopyLayerSafely(source._timeEmbed2, _timeEmbed2);
+        CopyLayerSafely(source._labelEmbed, _labelEmbed);
+
+        for (int i = 0; i < _blocks.Count; i++)
+        {
+            var src = source._blocks[i];
+            var dst = _blocks[i];
+            CopyLayerSafely(src.Norm1, dst.Norm1);
+            CopyLayerSafely(src.Attention, dst.Attention);
+            CopyLayerSafely(src.Norm2, dst.Norm2);
+            CopyLayerSafely(src.MLP1, dst.MLP1);
+            CopyLayerSafely(src.MLP2, dst.MLP2);
+            CopyLayerSafely(src.AdaLNModulation, dst.AdaLNModulation);
+            CopyLayerSafely(src.CrossAttnNorm, dst.CrossAttnNorm);
+            CopyLayerSafely(src.CrossAttnQ, dst.CrossAttnQ);
+            CopyLayerSafely(src.CrossAttnK, dst.CrossAttnK);
+            CopyLayerSafely(src.CrossAttnV, dst.CrossAttnV);
+            CopyLayerSafely(src.CrossAttnOut, dst.CrossAttnOut);
+        }
+
+        CopyLayerSafely(source._finalNorm, _finalNorm);
+        CopyLayerSafely(source._adaln_modulation, _adaln_modulation);
+        CopyLayerSafely(source._outputProj, _outputProj);
+    }
+
+    private static void CopyLayerSafely(ILayer<T>? source, ILayer<T>? target)
+    {
+        if (source == null && target == null) return;
+        if (source == null || target == null)
+        {
+            throw new InvalidOperationException(
+                "Source and target layer presence mismatch — both must be " +
+                "non-null or both null. Architectures may differ.");
+        }
+        target.SetParameters(source.GetParameters());
     }
 
     /// <inheritdoc />
@@ -1130,40 +1223,74 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     protected override Vector<T> GetParameterGradients()
     {
         EnsureLayersInitialized();
-        var allGrads = new List<T>();
 
-        AddLayerGrads(allGrads, _patchEmbed);
-        AddLayerGrads(allGrads, _timeEmbed1);
-        AddLayerGrads(allGrads, _timeEmbed2);
-        AddLayerGrads(allGrads, _labelEmbed);
+        // Same pre-allocate-and-fill pattern as GetParameters — see
+        // notes there. Avoids List<T> doubling + ToArray() copy on
+        // models with hundreds of millions of parameters.
+        int totalParams = ParameterCount;
+        var result = new Vector<T>(totalParams);
+        int offset = 0;
+
+        WriteLayerGrads(result, ref offset, _patchEmbed);
+        WriteLayerGrads(result, ref offset, _timeEmbed1);
+        WriteLayerGrads(result, ref offset, _timeEmbed2);
+        WriteLayerGrads(result, ref offset, _labelEmbed);
 
         foreach (var block in _blocks)
         {
-            AddLayerGrads(allGrads, block.Norm1);
-            AddLayerGrads(allGrads, block.Attention);
-            AddLayerGrads(allGrads, block.Norm2);
-            AddLayerGrads(allGrads, block.MLP1);
-            AddLayerGrads(allGrads, block.MLP2);
-            AddLayerGrads(allGrads, block.AdaLNModulation);
-            AddLayerGrads(allGrads, block.CrossAttnNorm);
-            AddLayerGrads(allGrads, block.CrossAttnQ);
-            AddLayerGrads(allGrads, block.CrossAttnK);
-            AddLayerGrads(allGrads, block.CrossAttnV);
-            AddLayerGrads(allGrads, block.CrossAttnOut);
+            WriteLayerGrads(result, ref offset, block.Norm1);
+            WriteLayerGrads(result, ref offset, block.Attention);
+            WriteLayerGrads(result, ref offset, block.Norm2);
+            WriteLayerGrads(result, ref offset, block.MLP1);
+            WriteLayerGrads(result, ref offset, block.MLP2);
+            WriteLayerGrads(result, ref offset, block.AdaLNModulation);
+            WriteLayerGrads(result, ref offset, block.CrossAttnNorm);
+            WriteLayerGrads(result, ref offset, block.CrossAttnQ);
+            WriteLayerGrads(result, ref offset, block.CrossAttnK);
+            WriteLayerGrads(result, ref offset, block.CrossAttnV);
+            WriteLayerGrads(result, ref offset, block.CrossAttnOut);
         }
 
-        AddLayerGrads(allGrads, _finalNorm);
-        AddLayerGrads(allGrads, _adaln_modulation);
-        AddLayerGrads(allGrads, _outputProj);
+        WriteLayerGrads(result, ref offset, _finalNorm);
+        WriteLayerGrads(result, ref offset, _adaln_modulation);
+        WriteLayerGrads(result, ref offset, _outputProj);
 
-        return new Vector<T>(allGrads.ToArray());
+        // Mirror the offset validation in GetParameters so a layer whose
+        // GetParameterGradients().Length disagrees with ParameterCount —
+        // common after a lazy-shape resolve that updated the param tensor
+        // shapes but not the cached gradient bookkeeping — surfaces with
+        // an actionable error instead of returning a partially filled
+        // gradient vector that silently corrupts the optimizer step.
+        if (offset != totalParams)
+        {
+            throw new InvalidOperationException(
+                $"DiTNoisePredictor.GetParameterGradients wrote {offset} elements but " +
+                $"ParameterCount reported {totalParams}. A child layer's gradient length " +
+                $"diverged from its parameter count — check for lazy-shape resolves that " +
+                $"updated weights without rebuilding the gradient cache.");
+        }
+
+        return result;
     }
 
-    private static void AddLayerGrads(List<T> list, ILayer<T>? layer)
+    private static void WriteLayerGrads(Vector<T> dst, ref int offset, ILayer<T>? layer)
     {
         if (layer == null) return;
         var g = layer.GetParameterGradients();
-        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+        // Bounds-guard the destination write so a layer whose gradient
+        // length disagrees with its ParameterCount surfaces here with an
+        // actionable error message, instead of throwing an opaque
+        // IndexOutOfRangeException at an unrelated later layer.
+        if (offset + g.Length > dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"DiTNoisePredictor.WriteLayerGrads: layer of type {layer.GetType().Name} " +
+                $"emitted {g.Length} gradients at offset {offset}, but the destination " +
+                $"buffer only has {dst.Length} slots. Likely cause: a lazy-shape resolve " +
+                $"changed this layer's parameter count after ParameterCount was sampled.");
+        }
+        for (int i = 0; i < g.Length; i++) dst[offset + i] = g[i];
+        offset += g.Length;
     }
 
     /// <summary>

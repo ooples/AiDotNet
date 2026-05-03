@@ -706,8 +706,27 @@ public class NEAT<T> : NeuralNetworkBase<T>
         // Get the best genome (the one with highest fitness)
         var bestGenome = GetBestGenome();
 
-        // Check if we're dealing with a batch or a single input
-        bool isBatch = input.Shape.Length > 1 && input.Shape[0] > 1;
+        // Treat ANY rank-2 input as batched, even when the batch size is 1.
+        // Returning rank-1 for single-sample input was a real bug —
+        // NEAT.Train downstream reads `expectedOutput.Shape[1]`, which throws
+        // IndexOutOfRangeException for rank-1 targets, and EffectiveOutputShape
+        // cached the wrong rank for the test's warm-up Predict path. Per the
+        // implicit `(batch, features)` contract used by every other neural
+        // network in the codebase, output rank should match input rank.
+        //
+        // Validate rank explicitly: NEAT genomes activate over a flat feature
+        // vector, so anything beyond rank-2 (e.g., a stray rank-3 image
+        // tensor or rank-4 video) cannot be unambiguously interpreted as
+        // batched-features and would mis-index in the loop below. Fail
+        // fast at the boundary instead of producing garbage outputs.
+        if (input.Shape.Length < 1 || input.Shape.Length > 2)
+        {
+            throw new ArgumentException(
+                $"NEAT.Predict expects rank-1 [features] or rank-2 [batch, features]; " +
+                $"got rank {input.Shape.Length} (shape [{string.Join(",", input.Shape)}]).",
+                nameof(input));
+        }
+        bool isBatch = input.Shape.Length == 2;
 
         if (isBatch)
         {

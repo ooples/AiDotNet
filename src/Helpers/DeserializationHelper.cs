@@ -591,38 +591,65 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(GraphSAGELayer<>))
         {
-            // GraphSAGELayer(int inputFeatures, int outputFeatures, SAGEAggregatorType, bool normalize, IActivationFunction<T>?)
-            int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
+            // GraphSAGELayer(int inputFeatures, int outputFeatures, SAGEAggregatorType,
+            //                bool normalize, IActivationFunction<T>?, IInitializationStrategy<T>?)
+            // — Hamilton et al. 2017 "Inductive Representation Learning on Large Graphs":
+            // GraphSAGE samples and aggregates neighborhood features. Default ctor
+            // exposes the paper's per-layer parameters (input/output dim, aggregator
+            // type, L2-normalize-output flag) plus AiDotNet's standard activation +
+            // init-strategy slots. The init strategy defaults to Eager / Xavier; we
+            // pass null so the layer applies its default at construction time.
+            // Read feature dim from the LAST axis: serialized graph tensors are
+            // [numNodes, features] (rank 2) or [batch, numNodes, features] (rank 3),
+            // so axis 0 would be node count or batch — never the feature width.
+            int inputFeatures = inputShape[inputShape.Length - 1];
+            int outputFeatures = outputShape[outputShape.Length - 1];
             int aggType = TryGetInt(additionalParams, "AggregatorType") ?? 0;
             bool normalize = TryGetBool(additionalParams, "Normalize") ?? true;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(SAGEAggregatorType), typeof(bool), activationFuncType });
+            var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(SAGEAggregatorType), typeof(bool), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find GraphSAGELayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, (SAGEAggregatorType)aggType, normalize, activation });
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, (SAGEAggregatorType)aggType, normalize, activation, null });
         }
         else if (genericDef == typeof(GraphIsomorphismLayer<>))
         {
-            // GraphIsomorphismLayer(int inputFeatures, int outputFeatures, int mlpHiddenDim, bool learnEpsilon, double initialEpsilon, IActivationFunction<T>?)
-            int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
-            int mlpHiddenDim = TryGetInt(additionalParams, "MlpHiddenDim") ?? 64;
+            // GraphIsomorphismLayer(int inputFeatures, int outputFeatures, int mlpHiddenDim,
+            //                       bool learnEpsilon, double epsilon,
+            //                       IActivationFunction<T>?, IInitializationStrategy<T>?)
+            // — Xu et al. 2019, "How Powerful are Graph Neural Networks?" (GIN).
+            // GIN updates h_v <- MLP((1+epsilon) * h_v + sum_u h_u). Default ctor
+            // exposes the paper's MLP hidden dim, the learnable / fixed epsilon
+            // pair, plus the standard activation + init-strategy slots.
+            // Read feature dim from the LAST axis: serialized graph tensors are
+            // [numNodes, features] (rank 2) or [batch, numNodes, features] (rank 3),
+            // so axis 0 would be node count or batch — never the feature width.
+            int inputFeatures = inputShape[inputShape.Length - 1];
+            int outputFeatures = outputShape[outputShape.Length - 1];
+            // Default to -1, matching the constructor default at
+            // GraphIsomorphismLayer.cs:163, which then resolves the MLP
+            // hidden dim to outputFeatures inside the layer ctor (line 174).
+            // Hard-coding 64 here would silently produce a different
+            // MLP shape than the original network for any GIN whose
+            // outputFeatures != 64, breaking weight reattachment.
+            int mlpHiddenDim = TryGetInt(additionalParams, "MlpHiddenDim") ?? -1;
             bool learnEpsilon = TryGetBool(additionalParams, "LearnEpsilon") ?? true;
             double initialEpsilon = TryGetDouble(additionalParams, "InitialEpsilon") ?? 0.0;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(double), activationFuncType });
+            var initStrategyType = typeof(IInitializationStrategy<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(double), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find GraphIsomorphismLayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, mlpHiddenDim, learnEpsilon, initialEpsilon, activation });
+            instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, mlpHiddenDim, learnEpsilon, initialEpsilon, activation, null });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.FlashAttentionLayer<>))
         {
@@ -642,37 +669,49 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.MemoryReadLayer<>))
         {
-            // MemoryReadLayer(int inputDimension, int memoryDimension, int outputDimension, IActivationFunction<T>?)
+            // MemoryReadLayer(int memoryDimension, int outputDimension, IActivationFunction<T>?)
             // memoryDimension is a free parameter — the default MemoryNetwork wires
-            // input == memory == output == embeddingSize, so fall back to output size
-            // if the serialized metadata doesn't pin it explicitly.
-            int inputDim = inputShape[0];
-            int outputDim = outputShape[0];
+            // memory == output == embeddingSize, so fall back to output size if the
+            // serialized metadata doesn't pin it explicitly. inputDimension is
+            // resolved lazily on the first forward (lazy-shape contract).
+            //
+            // Output dim comes from the LAST axis of the serialized output shape,
+            // not Shape[0]. A batched output shape `[batch, features]` would
+            // otherwise reconstruct outputDim = batch (which is wrong, would
+            // make weights `[memoryDim, batch]`). Picking the last axis matches
+            // the MemoryReadLayer Forward contract (output features in the
+            // trailing axis) and the BottleneckBlock width-axis fix shipped
+            // in e0c78b820.
+            int outputDim = outputShape[outputShape.Length - 1];
             int memoryDim = TryGetInt(additionalParams, "MemoryDimension") ?? outputDim;
-
-            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
-            if (ctor is null)
-            {
-                throw new InvalidOperationException("Cannot find MemoryReadLayer constructor with (int, int, int, IActivationFunction<T>).");
-            }
-            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke(new object?[] { inputDim, memoryDim, outputDim, activation });
-        }
-        else if (genericDef == typeof(NeuralNetworks.Layers.MemoryWriteLayer<>))
-        {
-            // MemoryWriteLayer(int inputDimension, int memoryDimension, IActivationFunction<T>?)
-            int inputDim = inputShape[0];
-            int memoryDim = TryGetInt(additionalParams, "MemoryDimension") ?? outputShape[0];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find MemoryWriteLayer constructor with (int, int, IActivationFunction<T>).");
+                throw new InvalidOperationException("Cannot find MemoryReadLayer constructor with (int memoryDimension, int outputDimension, IActivationFunction<T>?).");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-            instance = ctor.Invoke(new object?[] { inputDim, memoryDim, activation });
+            instance = ctor.Invoke(new object?[] { memoryDim, outputDim, activation });
+        }
+        else if (genericDef == typeof(NeuralNetworks.Layers.MemoryWriteLayer<>))
+        {
+            // MemoryWriteLayer(int memoryDimension, IActivationFunction<T>?)
+            // inputDimension is resolved lazily on the first forward (lazy-shape contract).
+            // Use the LAST axis of the serialized output shape so a batched
+            // shape `[batch, memoryDim]` reconstructs the actual feature
+            // dim, not the batch count.
+            int memoryDim = TryGetInt(additionalParams, "MemoryDimension")
+                ?? outputShape[outputShape.Length - 1];
+
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });
+            if (ctor is null)
+            {
+                throw new InvalidOperationException("Cannot find MemoryWriteLayer constructor with (int memoryDimension, IActivationFunction<T>?).");
+            }
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            instance = ctor.Invoke(new object?[] { memoryDim, activation });
         }
         else if (genericDef == typeof(ConvolutionalLayer<>))
         {
@@ -1742,21 +1781,29 @@ public static class DeserializationHelper
     /// </remarks>
     private static object CreateGRULayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
     {
-        // GRULayer(int inputSize, int hiddenSize, bool returnSequences = false, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
-        // inputSize comes from last dimension of inputShape, hiddenSize from outputShape
-        int inputSize = inputShape.Length >= 2 ? inputShape[^1] : inputShape[0];
+        // GRULayer(int hiddenSize, bool returnSequences = false, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
+        // inputSize is now resolved lazily on first forward (lazy-shape contract from #1220).
         int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
-        bool returnSequences = TryGetBool(additionalParams, "ReturnSequences") ?? true;
+        // ReturnSequences serialization contract: when missing from
+        // additionalParams, infer from the persisted output shape rather
+        // than hard-coding `true` (which contradicts the GRULayer ctor
+        // default of `false` and silently changes output rank for any
+        // checkpoint that doesn't pin the value). If the persisted output
+        // has the same rank as the input, the layer was emitting full
+        // [batch, time, hidden] sequences; otherwise it was returning the
+        // last hidden state only.
+        bool returnSequences = TryGetBool(additionalParams, "ReturnSequences")
+            ?? (outputShape.Length == inputShape.Length);
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(bool), activationFuncType, activationFuncType });
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(bool), activationFuncType, activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find GRULayer constructor with (int, int, bool, IActivationFunction<T>, IActivationFunction<T>).");
+            throw new InvalidOperationException("Cannot find GRULayer constructor with (int hiddenSize, bool returnSequences, IActivationFunction<T>?, IActivationFunction<T>?).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { inputSize, hiddenSize, returnSequences, activation, null });
+        return ctor.Invoke(new object?[] { hiddenSize, returnSequences, activation, null });
     }
 
     /// <summary>

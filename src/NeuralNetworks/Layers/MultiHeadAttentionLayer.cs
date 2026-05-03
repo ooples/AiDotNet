@@ -294,23 +294,42 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     /// <summary>
     /// Gets the query projection weights tensor for JIT compilation.
+    /// Forces lazy weight allocation if the layer hasn't seen its first
+    /// forward yet — callers (e.g. <c>QuantizedAttentionLayer</c>) need
+    /// materialized [E, E] tensors, not the [0, 0] lazy placeholders.
     /// </summary>
-    public Tensor<T> GetQueryWeights() => _queryWeights;
+    public Tensor<T> GetQueryWeights()
+    {
+        EnsureWeightsAllocated();
+        return _queryWeights;
+    }
 
     /// <summary>
     /// Gets the key projection weights tensor for JIT compilation.
     /// </summary>
-    public Tensor<T> GetKeyWeights() => _keyWeights;
+    public Tensor<T> GetKeyWeights()
+    {
+        EnsureWeightsAllocated();
+        return _keyWeights;
+    }
 
     /// <summary>
     /// Gets the value projection weights tensor for JIT compilation.
     /// </summary>
-    public Tensor<T> GetValueWeights() => _valueWeights;
+    public Tensor<T> GetValueWeights()
+    {
+        EnsureWeightsAllocated();
+        return _valueWeights;
+    }
 
     /// <summary>
     /// Gets the output projection weights tensor for JIT compilation.
     /// </summary>
-    public Tensor<T> GetOutputWeights() => _outputWeights;
+    public Tensor<T> GetOutputWeights()
+    {
+        EnsureWeightsAllocated();
+        return _outputWeights;
+    }
 
     /// <summary>
     /// Creates a new multi-head attention layer with the specified dimensions and head count.

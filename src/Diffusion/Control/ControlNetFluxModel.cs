@@ -127,12 +127,14 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var allParams = new List<T>();
+        // Pre-allocate to avoid the List<T> doubling + ToArray triple-copy
+        // that OOMs CI on real-scale FLUX (~12B params doubles ⇒ ~96 GB).
         var predParams = _predictor.GetParameters();
-        for (int i = 0; i < predParams.Length; i++) allParams.Add(predParams[i]);
         var ctrlParams = _controlEncoder.GetParameters();
-        for (int i = 0; i < ctrlParams.Length; i++) allParams.Add(ctrlParams[i]);
-        return new Vector<T>(allParams.ToArray());
+        var result = new Vector<T>(predParams.Length + ctrlParams.Length);
+        for (int i = 0; i < predParams.Length; i++) result[i] = predParams[i];
+        for (int i = 0; i < ctrlParams.Length; i++) result[predParams.Length + i] = ctrlParams[i];
+        return result;
     }
 
     /// <inheritdoc />
@@ -161,7 +163,12 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
             controlType: _controlType,
             conditioner: _conditioner,
             seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        // Field-by-field SetParameters avoids the giant single flat
+        // Vector<T> that GetParameters + SetParameters round-trip would
+        // produce — keeps peak memory at ~2× per-component weights
+        // instead of ~3×.
+        clone._predictor.SetParameters(_predictor.GetParameters());
+        clone._controlEncoder.SetParameters(_controlEncoder.GetParameters());
         return clone;
     }
 

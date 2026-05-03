@@ -65,6 +65,14 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             throw new ArgumentException("DenseLoRAAdapter only supports layers with 1D input/output shapes (Dense/FullyConnected layers)", nameof(baseLayer));
         }
+
+        // Force-resolve a lazy base layer using the LoRA decomposition's
+        // already-resolved input size (settled in the base ctor via the
+        // outSize×2 heuristic when the base was lazy). Without this, callers
+        // querying ParameterCount or GetParameters before any forward pass
+        // see only the LoRA contribution — the base reports 0 parameters
+        // because its weight tensors are still [0, ...] placeholders.
+        EnsureBaseLayerShapeResolved();
     }
 
     /// <summary>
@@ -142,6 +150,13 @@ public class DenseLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Get the LoRA weight contribution
         Matrix<T> loraWeights = _loraLayer.MergeWeights();
+
+        // Force-resolve the base layer if it's still in lazy state — without
+        // this, GetParameters() returns an empty Vector and the merge loop
+        // below indexes past the end. The LoRA decomposition's inner layer
+        // already settled on inputSize via the outSize×2 heuristic (see
+        // LoRAAdapterBase.CreateLoRALayer), so we propagate that to the base.
+        EnsureBaseLayerShapeResolved();
 
         // Get base layer parameters (works for both DenseLayer and FullyConnectedLayer)
         Vector<T> baseParams = _baseLayer.GetParameters();

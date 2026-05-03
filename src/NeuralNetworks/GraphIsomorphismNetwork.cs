@@ -277,7 +277,14 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// <param name="labels">Label tensor for supervised learning.</param>
     /// <param name="trainMask">Optional boolean mask indicating which nodes to train on.</param>
     /// <param name="epochs">Number of training epochs (default: 200).</param>
-    /// <param name="learningRate">Learning rate for optimization (default: 0.01).</param>
+    /// <param name="learningRate">
+    /// [Obsolete] Per-call learning rate. Ignored on the tape-based path
+    /// because training always uses the instance's <c>_optimizer</c>
+    /// configuration (set in the constructor). Kept on the signature as
+    /// a non-breaking transition; pass the rate via the optimizer instead
+    /// (e.g. <c>new GraphIsomorphismNetwork&lt;T&gt;(arch, optimizer:
+    /// new AdamOptimizer&lt;T,Tensor&lt;T&gt;,Tensor&lt;T&gt;&gt;(this, new AdamOptions { LearningRate = 0.01 }))</c>).
+    /// </param>
     public void TrainOnGraph(
         Tensor<T> nodeFeatures,
         Tensor<T> adjacencyMatrix,
@@ -286,35 +293,60 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         int epochs = 200,
         double learningRate = 0.01)
     {
-        var lr = NumOps.FromDouble(learningRate);
+        // The pre-#1219 implementation called ComputeLossGradient and then
+        // UpdateParameters(lr) WITHOUT a backward pass — silent no-op. Route
+        // through TrainWithTape via the shared helper so gradients actually
+        // flow. trainMask + per-mask gradient zeroing is a separate concern
+        // that the tape path doesn't yet expose; reject it explicitly so
+        // semi-supervised callers see the limitation instead of a silently
+        // mistrained network.
+        if (trainMask is not null)
+        {
+            throw new NotSupportedException(
+                "TrainOnGraph(trainMask) is not yet supported on the tape-based " +
+                "training path (issue follow-up). For semi-supervised node " +
+                "classification, pre-mask the labels (set masked-out node labels " +
+                "equal to model predictions so their loss contribution is zero) " +
+                "and call TrainOnGraph without a mask.");
+        }
+        // learningRate is kept for non-breaking signature compat but the
+        // tape path always uses _optimizer's configured rate. Discard
+        // explicitly so the analyzer doesn't flag it as dead-with-no-reason.
+        _ = learningRate;
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            // Set all layers to training mode
-            foreach (var layer in Layers)
-            {
-                layer.SetTrainingMode(true);
-            }
-
-            // Forward pass
-            var output = Forward(nodeFeatures, adjacencyMatrix);
-
-            // Compute loss gradient
-            var gradOutput = ComputeLossGradient(output, labels, trainMask);
-
-            // Backward pass
-
-            // Update parameters
-            foreach (var layer in Layers)
-            {
-                layer.UpdateParameters(lr);
-            }
+            TrainStepWithAdjacency(nodeFeatures, adjacencyMatrix, labels);
         }
+    }
 
-        // Set layers back to inference mode
-        foreach (var layer in Layers)
+    /// <summary>
+    /// Shared tape-backed training step that pins the supplied adjacency
+    /// matrix on the network and routes through <see cref="NeuralNetworkBase{T}.TrainWithTape"/>.
+    /// Both <see cref="TrainOnGraph"/> and the per-graph step inside
+    /// <see cref="TrainOnGraphs"/> call this helper so neither has its own
+    /// hand-rolled (and previously broken) backward path.
+    /// </summary>
+    private void TrainStepWithAdjacency(
+        Tensor<T> nodeFeatures,
+        Tensor<T> adjacencyMatrix,
+        Tensor<T> expected)
+    {
+        // Pin adjacency on the network so ForwardForTraining's
+        // EnsureAdjacencyMatrix returns this graph's matrix instead
+        // of generating a fully-connected fallback.
+        SetAdjacencyMatrix(adjacencyMatrix);
+        // ForwardForTraining(input) re-pushes adjacency to every
+        // IGraphConvolutionLayer before the tape-recorded forward, so
+        // the gradient flows through the GIN aggregation correctly.
+        SetTrainingMode(true);
+        try
         {
-            layer.SetTrainingMode(false);
+            TrainWithTape(nodeFeatures, expected, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
         }
     }
 
@@ -325,7 +357,12 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// <param name="adjacencyMatrices">List of adjacency matrices.</param>
     /// <param name="graphLabels">Labels for each graph.</param>
     /// <param name="epochs">Number of training epochs (default: 100).</param>
-    /// <param name="learningRate">Learning rate for optimization (default: 0.01).</param>
+    /// <param name="learningRate">
+    /// [Obsolete] Per-call learning rate. Ignored on the tape-based path
+    /// because training always uses the instance's <c>_optimizer</c>
+    /// configuration. Kept on the signature for non-breaking transition;
+    /// pass the rate via the optimizer instead.
+    /// </param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Graph classification with GIN:
     ///
@@ -347,56 +384,82 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         int epochs = 100,
         double learningRate = 0.01)
     {
-        var lr = NumOps.FromDouble(learningRate);
+        // Graph-level classification = node-level forward + sum readout
+        // + per-graph cross-entropy. The pre-#1219 implementation called
+        // ComputeGraphLossGradient + DistributeGradient + UpdateParameters
+        // with NO backward pass — silent no-op. Routing through TrainWithTape
+        // requires the network's output to ALREADY be at graph level
+        // ([1, numClasses]) before the loss layer sees it, which means the
+        // architecture must contain a SumReadout-style pooling layer at the
+        // end. Reject the call explicitly so users add the readout to their
+        // architecture instead of silently training nothing.
+
+        // Up-front argument validation: catch mismatched-list and shape
+        // bugs at the boundary so callers see a clear error instead of an
+        // IndexOutOfRangeException emitted mid-training.
+        if (graphs is null) throw new ArgumentNullException(nameof(graphs));
+        if (adjacencyMatrices is null) throw new ArgumentNullException(nameof(adjacencyMatrices));
+        if (graphLabels is null) throw new ArgumentNullException(nameof(graphLabels));
+        if (graphs.Count == 0)
+            throw new ArgumentException("graphs list must not be empty.", nameof(graphs));
+        if (adjacencyMatrices.Count != graphs.Count)
+        {
+            throw new ArgumentException(
+                $"adjacencyMatrices.Count ({adjacencyMatrices.Count}) must equal graphs.Count " +
+                $"({graphs.Count}); each graph needs exactly one adjacency matrix.",
+                nameof(adjacencyMatrices));
+        }
+        if (graphLabels.Rank != 2)
+        {
+            throw new ArgumentException(
+                $"graphLabels must be rank-2 [numGraphs, numClasses]; got rank {graphLabels.Rank} " +
+                $"(shape [{string.Join(",", graphLabels.Shape)}]).",
+                nameof(graphLabels));
+        }
+        if (graphLabels.Shape[0] != graphs.Count)
+        {
+            throw new ArgumentException(
+                $"graphLabels.Shape[0] ({graphLabels.Shape[0]}) must equal graphs.Count " +
+                $"({graphs.Count}); one label row per graph.",
+                nameof(graphLabels));
+        }
+        // learningRate is kept for non-breaking signature compat but the
+        // tape path always uses _optimizer's configured rate.
+        _ = learningRate;
+
+        var firstNodeFeatures = graphs[0];
+        var firstAdjacency = adjacencyMatrices[0];
+        SetAdjacencyMatrix(firstAdjacency);
+        var probeOutput = Forward(firstNodeFeatures, firstAdjacency);
+        int graphLabelClasses = graphLabels.Shape[1];
+
+        // Network must end in a graph-level pooling layer producing
+        // [1, numClasses]; otherwise the per-node output ([numNodes, hidden])
+        // can't be matched against a single graph label without manual
+        // pooling outside the tape.
+        if (probeOutput.Rank != 2 || probeOutput.Shape[0] != 1
+            || probeOutput.Shape[1] != graphLabelClasses)
+        {
+            throw new NotSupportedException(
+                $"TrainOnGraphs requires the architecture to end in a graph-level " +
+                $"pooling layer that emits shape [1, numClasses]. Got network output " +
+                $"shape [{string.Join(",", probeOutput.Shape)}] for graphLabels with " +
+                $"{graphLabelClasses} classes. Add a SumReadout / mean-pool layer at " +
+                $"the end of your GIN architecture (or inline pooling into a custom " +
+                $"final layer), then call TrainOnGraphs again.");
+        }
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
-            // Set all layers to training mode
-            foreach (var layer in Layers)
-            {
-                layer.SetTrainingMode(true);
-            }
-
-            // Train on each graph
             for (int g = 0; g < graphs.Count; g++)
             {
-                var nodeFeatures = graphs[g];
-                var adjMatrix = adjacencyMatrices[g];
-
-                // Forward pass
-                var nodeOutput = Forward(nodeFeatures, adjMatrix);
-
-                // Graph-level readout (sum pooling)
-                var graphRepresentation = SumReadout(nodeOutput);
-
-                // Get label for this graph
-                int numClasses = graphLabels.Shape[1];
-                var graphLabel = new Tensor<T>([1, numClasses]);
-                for (int c = 0; c < numClasses; c++)
-                {
+                // Slice this graph's label row out as [1, numClasses].
+                var graphLabel = new Tensor<T>([1, graphLabelClasses]);
+                for (int c = 0; c < graphLabelClasses; c++)
                     graphLabel[0, c] = graphLabels[g, c];
-                }
 
-                // Compute loss gradient
-                var gradOutput = ComputeGraphLossGradient(graphRepresentation, graphLabel);
-
-                // Distribute gradient back to nodes (reverse of sum readout)
-                var nodeGradient = DistributeGradient(gradOutput, nodeOutput.Shape[0]);
-
-                // Backward pass
-
-                // Update parameters
-                foreach (var layer in Layers)
-                {
-                    layer.UpdateParameters(lr);
-                }
+                TrainStepWithAdjacency(graphs[g], adjacencyMatrices[g], graphLabel);
             }
-        }
-
-        // Set layers back to inference mode
-        foreach (var layer in Layers)
-        {
-            layer.SetTrainingMode(false);
         }
     }
 
@@ -902,62 +965,64 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Trains the network on a single batch of data.
+    /// Trains the network on a single batch of data via tape-based autodiff.
     /// </summary>
+    /// <remarks>
+    /// Routes through <see cref="NeuralNetworkBase{T}.TrainWithTape"/> so the
+    /// gradient flows back through the layer stack via GradientTape (the
+    /// unified post-#1060 training path). The previous implementation called
+    /// <c>GetParameterGradients()</c> WITHOUT first running a backward pass —
+    /// since manual <c>Backward()</c> was removed from <c>ILayer&lt;T&gt;</c>
+    /// in #1219, those gradients were always whatever stale value the layer's
+    /// gradient field held (zero on a fresh network), which is why
+    /// <c>Training_ShouldChangeParameters</c> reported "no parameters changed".
+    /// <see cref="ForwardForTraining"/> is overridden below to set the
+    /// adjacency matrix on graph layers before the tape-recorded forward pass.
+    /// Mirrors <c>GraphAttentionNetwork.Train</c> (line 788) which solved the
+    /// identical problem post-#1060.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Ensure 2D input [numNodes, features]
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
-        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
 
-        // Set all layers to training mode
+    /// <inheritdoc />
+    /// <remarks>
+    /// Computes the adjacency matrix and pushes it into every
+    /// <see cref="IGraphConvolutionLayer{T}"/> before the tape-recorded
+    /// forward pass. Without this, graph layers see stale or empty
+    /// adjacency from a previous call (or none at all on a fresh network),
+    /// which makes their aggregation collapse and produces zero loss-
+    /// gradient → zero parameter updates. Mirrors
+    /// <c>GraphAttentionNetwork.ForwardForTraining</c> (line 823).
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (input.Rank == 1)
+            input = input.Reshape([1, input.Shape[0]]);
+
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+        _cachedAdjacencyMatrix = adjacencyMatrix;
         foreach (var layer in Layers)
         {
-            layer.SetTrainingMode(true);
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
         }
-
-        // Forward pass
-        var predictions = Forward(input, adjacencyMatrix);
-
-        // Flatten tensors for loss function (which works on vectors)
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // Compute loss gradient
-        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        // Reshape gradient back to tensor shape if needed
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
-        {
-            gradOutput = gradOutput.Reshape(predictions._shape);
-        }
-
-        // Backward pass through all layers
-
-        // Get parameter gradients for all trainable layers and update
-        Vector<T> parameterGradients = GetParameterGradients();
-
-        // Clip gradients to prevent exploding gradients
-        parameterGradients = ClipGradient(parameterGradients);
-
-
-        // Fresh optimizer per step for stable convergence (no momentum oscillation).
-        var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters using the optimizer
-        Vector<T> updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
-        UpdateParameters(updatedParameters);
+        return base.ForwardForTraining(input);
     }
 
     /// <summary>
