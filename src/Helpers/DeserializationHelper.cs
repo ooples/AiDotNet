@@ -1201,6 +1201,20 @@ public static class DeserializationHelper
             int featureSize = inputShape.Length > 0 ? inputShape[^1] : outputShape[0];
             instance = new SequenceLastLayer<T>(featureSize);
         }
+        else if (genericDef == typeof(SequenceTokenSliceLayer<>))
+        {
+            // SequenceTokenSliceLayer<T>(Position position) — the Position enum is
+            // round-tripped through GetMetadata("Position") as its string name.
+            // Default to Position.Last so legacy networks serialized before the
+            // metadata key existed deserialize to the autoregressive-LM default
+            // (matches LayerHelper.CreateDefaultTransformerLayers).
+            var positionEnumType = typeof(SequenceTokenSliceLayer<T>.Position);
+            var positionStr = additionalParams != null && additionalParams.TryGetValue("Position", out var pVal)
+                ? pVal as string : null;
+            var position = !string.IsNullOrEmpty(positionStr) && Enum.TryParse(positionEnumType, positionStr, out var pe) && pe is SequenceTokenSliceLayer<T>.Position pos
+                ? pos : SequenceTokenSliceLayer<T>.Position.Last;
+            instance = new SequenceTokenSliceLayer<T>(position);
+        }
         else if (genericDef == typeof(RBMLayer<>))
         {
             int visibleUnits = inputShape[0];
