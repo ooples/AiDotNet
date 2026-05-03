@@ -450,7 +450,34 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 // optimizer's tape state is keyed by Tensor reference, not
                 // by an a-priori-known shape). Zero-initialization on first
                 // alloc matches Adam's m_0 = 0 initial condition.
-                state.MFullPrecision ??= new Tensor<T>(param._shape);
+                //
+                // Shape-rebuild guard: the outer Length-mismatch branch only
+                // triggers when element counts differ. A parameter can keep
+                // the same Length but switch its _shape (e.g., reshape from
+                // [B, F] to [F, B], or a lazy-init layer migrating from
+                // placeholder rank to its resolved rank with the same
+                // element count). MFullPrecision is allocated against a
+                // fixed _shape and the math ops below assume shape
+                // compatibility with `param`/`grad`. Reallocate when the
+                // cached tensor's shape no longer matches the parameter's
+                // — preserve numeric content by copying into the
+                // freshly-shaped tensor since Adam's m_t is the running
+                // first moment of gradients and zeroing it on shape change
+                // would produce a transient gradient-flow stall.
+                if (state.MFullPrecision is null)
+                {
+                    state.MFullPrecision = new Tensor<T>(param._shape);
+                }
+                else if (!state.MFullPrecision._shape.SequenceEqual(param._shape))
+                {
+                    var rebuilt = new Tensor<T>(param._shape);
+                    // Element counts match (we're in the Length-equal branch),
+                    // so a flat copy preserves the moment values across the
+                    // shape change. The rank/axes can differ — only the
+                    // element count must match for a valid in-place reshape.
+                    Engine.TensorCopy(state.MFullPrecision, rebuilt);
+                    state.MFullPrecision = rebuilt;
+                }
                 m = state.MFullPrecision;
             }
             Tensor<T> v = DequantizeTensor(state.VQuantized, state.VScales, param._shape, state.NumBlocks, isSigned: false);
@@ -968,6 +995,18 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             string optionsJson = JsonConvert.SerializeObject(_options);
             writer.Write(optionsJson);
 
+            // Format version sentinel. Bumped to 2 in #1240 follow-up when
+            // we added the explicit `compressBothMoments` + `hasMState`
+            // boolean flags before the m payload, plus the trailing
+            // _tapeStep field. Pre-#1240 checkpoints (v1) lacked all three
+            // fields and their byte layout is incompatible — Deserialize
+            // would mis-align starting at the first added field. Rather
+            // than silently corrupt, the v1-detection branch in Deserialize
+            // throws a clear error pointing users at the migration path
+            // (re-checkpoint after upgrading).
+            const int StateFormatVersion = 2;
+            writer.Write(StateFormatVersion);
+
             // Serialize 8-bit Adam-specific state
             writer.Write(_t);
             writer.Write(_parameterLength);
@@ -1066,6 +1105,24 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _options = JsonConvert.DeserializeObject<Adam8BitOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
+            // Read format version (added in #1240 follow-up). v2 includes
+            // explicit `compressBothMoments` + `hasMState` flags before the
+            // m payload and a trailing `_tapeStep` int. v1 payloads (pre-
+            // #1240) lacked all three and the byte layout is incompatible
+            // — fail fast with a clear migration message rather than silently
+            // mis-aligning every field that follows.
+            int stateFormatVersion = reader.ReadInt32();
+            if (stateFormatVersion != 2)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: incompatible checkpoint format version {stateFormatVersion} " +
+                    $"(expected 2). Pre-#1240 checkpoints do not contain the hasMState / " +
+                    $"compressBothMoments / tapeStep fields and cannot be migrated in-place. " +
+                    $"Re-serialize from a v0.166.x or later AiDotNet build to upgrade. " +
+                    $"If you authored a custom serializer, write " +
+                    $"BinaryWriter.Write((int)2) immediately after the options JSON.");
+            }
+
             // Deserialize state
             _t = reader.ReadInt32();
             _parameterLength = reader.ReadInt32();
@@ -1123,6 +1180,18 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 {
                     _vScales[i] = reader.ReadDouble();
                 }
+            }
+            else
+            {
+                // Clear stale v state when deserializing into a reused
+                // optimizer instance. Without this, an instance that
+                // previously held _vQuantized / _vScales from an earlier
+                // load would carry that state forward when a fresh,
+                // never-stepped checkpoint is loaded — silently producing
+                // wrong updates. Symmetric with the m-state else branch
+                // above.
+                _vQuantized = null;
+                _vScales = null;
             }
 
             // Tape-state checkpoint partial (matches Serialize): read the
