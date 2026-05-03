@@ -20,9 +20,12 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// path used the same memory budget as <see cref="AdamOptimizer{T,TInput,TOutput}"/>.
 ///
 /// <para>
-/// Fix: tape Step now allocates byte[] m and v per parameter (plus per-block
-/// double[] scales), dequantizes into transient tensors for the math, runs
-/// the Adam recurrences, then re-quantizes the updates back to the byte
+/// Fix: tape Step now allocates byte-backed <see cref="Vector{T}"/> over
+/// <c>byte</c> for m and v per parameter (plus a per-block
+/// <see cref="Vector{T}"/> over <c>double</c> for scales — the codebase's
+/// span-backed wrapper that AllocateTapeState uses for all optimizer
+/// state). It dequantizes into transient tensors for the math, runs the
+/// Adam recurrences, then re-quantizes the updates back to the byte
 /// buffers. Resident state for a parameter of N elements drops from
 /// <c>2 × N × sizeof(T)</c> bytes to <c>2 × (N + numBlocks × 8)</c> bytes,
 /// roughly the 8× reduction the class name promised.

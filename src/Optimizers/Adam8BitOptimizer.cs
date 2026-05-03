@@ -354,12 +354,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// legacy <see cref="UpdateSolution"/> path's contract.
     /// </summary>
     /// <remarks>
-    /// Allocated lazily on the first Step() that sees the parameter; the byte[]
-    /// pair plus block scales replaces what would have been
-    /// 2 × (parameter.Length × sizeof(T)) bytes of full-precision Tensor state.
-    /// For a 300 M-parameter foundation model at fp64 this drops the optimizer's
-    /// resident state from ~4.8 GB to ~600 MB (the 8× reduction the class name
-    /// promised but was not delivering before this fix).
+    /// Allocated lazily on the first Step() that sees the parameter. The
+    /// moment storage is a <see cref="Vector{T}"/> over <c>byte</c> (the
+    /// span-backed wrapper this codebase uses for all optimizer state)
+    /// plus a per-block <see cref="Vector{T}"/> over <c>double</c> for
+    /// scales. Together these replace what would have been
+    /// 2 × (parameter.Length × sizeof(T)) bytes of full-precision Tensor
+    /// state. For a 300 M-parameter foundation model at fp64 this drops
+    /// the optimizer's resident state from ~4.8 GB to ~600 MB (the 8×
+    /// reduction the class name promised but was not delivering before
+    /// this fix).
     /// </remarks>
     private sealed class QuantizedTapeState
     {
@@ -367,9 +371,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public int NumBlocks;
         public Vector<byte>? MQuantized;        // null when CompressBothMoments == false
         public Tensor<T>? MFullPrecision;       // null when CompressBothMoments == true
-        public Vector<byte> VQuantized = new(0);
+        // Initialized to null! — AllocateTapeState always overwrites these
+        // before the state is reachable from anywhere else, so the
+        // immediate-discard `new(0)` defaults were just GC pressure.
+        public Vector<byte> VQuantized = null!;
         public Vector<double>? MScales;         // null when CompressBothMoments == false
-        public Vector<double> VScales = new(0);
+        public Vector<double> VScales = null!;
     }
 
     private readonly Dictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
@@ -959,23 +966,37 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             writer.Write(_parameterLength);
             writer.Write(_numBlocks);
 
-            // Serialize quantized first moment (if used)
+            // Serialize quantized first moment (if used). Always emit a
+            // hasMState flag BEFORE the conditional payload so Deserialize
+            // doesn't blindly read length+data when the optimizer was never
+            // initialized (legacy UpdateSolution path) or when only the
+            // tape Step has run (no _mQuantized / _mFullPrecision yet).
+            // The previous serialization wrote the data conditionally but
+            // Deserialize unconditionally read it, producing
+            // EndOfStreamException on uninitialized state.
             writer.Write(_options.CompressBothMoments);
-            if (_options.CompressBothMoments && _mQuantized is not null)
+            bool hasMState = _options.CompressBothMoments
+                ? _mQuantized is not null
+                : _mFullPrecision is not null;
+            writer.Write(hasMState);
+            if (hasMState)
             {
-                writer.Write(_mQuantized.Length);
-                for (int i = 0; i < _mQuantized.Length; i++) writer.Write(_mQuantized[i]);
-                foreach (var scale in _mScales!)
+                if (_options.CompressBothMoments)
                 {
-                    writer.Write(scale);
+                    writer.Write(_mQuantized!.Length);
+                    for (int i = 0; i < _mQuantized.Length; i++) writer.Write(_mQuantized[i]);
+                    foreach (var scale in _mScales!)
+                    {
+                        writer.Write(scale);
+                    }
                 }
-            }
-            else if (_mFullPrecision is not null)
-            {
-                writer.Write(_mFullPrecision.Length);
-                foreach (var value in _mFullPrecision)
+                else
                 {
-                    writer.Write(Convert.ToDouble(value));
+                    writer.Write(_mFullPrecision!.Length);
+                    foreach (var value in _mFullPrecision)
+                    {
+                        writer.Write(Convert.ToDouble(value));
+                    }
                 }
             }
 
@@ -1018,28 +1039,43 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _parameterLength = reader.ReadInt32();
             _numBlocks = reader.ReadInt32();
 
-            // Deserialize first moment
+            // Deserialize first moment. The hasMState flag (added in #1240
+            // follow-up) tells us whether m was actually initialized at
+            // serialize time. If false, leave the m fields null so the
+            // first Step / UpdateSolution call after deser allocates them
+            // freshly — matches the contract of an optimizer that was
+            // serialized before any training had run.
             bool compressBothMoments = reader.ReadBoolean();
-            if (compressBothMoments)
+            bool hasMState = reader.ReadBoolean();
+            if (hasMState)
             {
-                int mLength = reader.ReadInt32();
-                var mBytes = reader.ReadBytes(mLength);
-                _mQuantized = new Vector<byte>(mLength);
-                for (int i = 0; i < mLength; i++) _mQuantized[i] = mBytes[i];
-                _mScales = new Vector<double>(_numBlocks);
-                for (int i = 0; i < _numBlocks; i++)
+                if (compressBothMoments)
                 {
-                    _mScales[i] = reader.ReadDouble();
+                    int mLength = reader.ReadInt32();
+                    var mBytes = reader.ReadBytes(mLength);
+                    _mQuantized = new Vector<byte>(mLength);
+                    for (int i = 0; i < mLength; i++) _mQuantized[i] = mBytes[i];
+                    _mScales = new Vector<double>(_numBlocks);
+                    for (int i = 0; i < _numBlocks; i++)
+                    {
+                        _mScales[i] = reader.ReadDouble();
+                    }
+                }
+                else
+                {
+                    int mLength = reader.ReadInt32();
+                    _mFullPrecision = new Vector<T>(mLength);
+                    for (int i = 0; i < mLength; i++)
+                    {
+                        _mFullPrecision[i] = NumOps.FromDouble(reader.ReadDouble());
+                    }
                 }
             }
             else
             {
-                int mLength = reader.ReadInt32();
-                _mFullPrecision = new Vector<T>(mLength);
-                for (int i = 0; i < mLength; i++)
-                {
-                    _mFullPrecision[i] = NumOps.FromDouble(reader.ReadDouble());
-                }
+                _mQuantized = null;
+                _mFullPrecision = null;
+                _mScales = null;
             }
 
             // Deserialize second moment
