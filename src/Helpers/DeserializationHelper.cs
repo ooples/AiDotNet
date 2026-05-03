@@ -1757,21 +1757,20 @@ public static class DeserializationHelper
     /// </remarks>
     private static object CreateGRULayer<T>(Type type, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams)
     {
-        // GRULayer(int inputSize, int hiddenSize, bool returnSequences = false, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
-        // inputSize comes from last dimension of inputShape, hiddenSize from outputShape
-        int inputSize = inputShape.Length >= 2 ? inputShape[^1] : inputShape[0];
+        // GRULayer(int hiddenSize, bool returnSequences = false, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
+        // inputSize is now resolved lazily on first forward (lazy-shape contract from #1220).
         int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
         bool returnSequences = TryGetBool(additionalParams, "ReturnSequences") ?? true;
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(bool), activationFuncType, activationFuncType });
+        var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(bool), activationFuncType, activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find GRULayer constructor with (int, int, bool, IActivationFunction<T>, IActivationFunction<T>).");
+            throw new InvalidOperationException("Cannot find GRULayer constructor with (int hiddenSize, bool returnSequences, IActivationFunction<T>?, IActivationFunction<T>?).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
-        return ctor.Invoke(new object?[] { inputSize, hiddenSize, returnSequences, activation, null });
+        return ctor.Invoke(new object?[] { hiddenSize, returnSequences, activation, null });
     }
 
     /// <summary>
