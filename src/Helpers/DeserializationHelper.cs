@@ -2730,7 +2730,33 @@ public static class DeserializationHelper
             // here. The wrapped types we care about most (DenseLayer,
             // FullyConnectedLayer) don't need such extras since their
             // ctors accept just outputSize. Tracked under #1239.
-            return CreateLayerFromType<T>(innerTypeName, innerInputShape, innerOutputShape, additionalParams: null);
+            var inner = CreateLayerFromType<T>(innerTypeName, innerInputShape, innerOutputShape, additionalParams: null);
+
+            // Force-resolve the inner layer's shape so its weight tensors
+            // are allocated immediately. Without this, lazy layers like
+            // DenseLayer / LSTM stay at ParameterCount==0, which makes the
+            // wrapper's flat-vector SetParameters(208) fail with "Expected
+            // 0 parameters, but got 208" because the wrapper's
+            // ParameterCount delegates to the unresolved inner.
+            if (inner is NeuralNetworks.Layers.LayerBase<T> innerBase
+                && !innerBase.IsShapeResolved
+                && innerInputShape.All(d => d > 0))
+            {
+                try { innerBase.ResolveFromShape(innerInputShape); }
+                catch (Exception resolveEx)
+                {
+                    // ResolveFromShape can throw if the shape rank doesn't
+                    // match what the layer expects. Trace and continue —
+                    // the layer's own first Forward may still resolve it.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"DeserializationHelper.TryConstructInnerLayerFromMetadata: " +
+                        $"ResolveFromShape on reconstructed '{innerTypeName}' " +
+                        $"with shape [{string.Join(",", innerInputShape)}] failed: " +
+                        $"{resolveEx.Message}");
+                }
+            }
+
+            return inner;
         }
         catch (Exception ex)
         {
