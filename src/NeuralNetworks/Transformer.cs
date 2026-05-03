@@ -495,6 +495,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> output = input;
         Tensor<T>? encoderOutput = null;
+        bool seenDecoder = false;
         Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input._shape, NumOps.One); // Default to all ones if no mask is provided
 
         // Process all layers sequentially
@@ -503,6 +504,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             if (Layers[i] is DecoderLayer<T> decoderLayer)
             {
+                seenDecoder = true;
                 // Decoder layer with cross-attention needs encoder output
                 output = decoderLayer.Forward(output, encoderOutput ?? output, mask);
             }
@@ -515,11 +517,20 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 output = Layers[i].Forward(output);
             }
 
-            // Track encoder output for cross-attention in decoders
-            // The last attention layer before any decoder layer is the encoder output
-            if (Layers[i] is MultiHeadAttentionLayer<T> && encoderOutput is null)
+            // Track encoder output for cross-attention in decoders.
+            // The encoder output we want is the LAST MultiHeadAttention
+            // output before any DecoderLayer in the chain — for an
+            // encoder stack with multiple blocks, decoder cross-attention
+            // should consume the fully-encoded representation, not the
+            // first encoder block's output. Keep updating `encoderOutput`
+            // on every encoder-block attention until we hit the first
+            // decoder; after that, freeze it (subsequent decoder blocks
+            // share the same encoder context).
+            if (!seenDecoder && Layers[i] is MultiHeadAttentionLayer<T>)
             {
-                // Check if there are decoder layers ahead
+                // Only capture if there's a decoder downstream — otherwise
+                // there's no consumer for this state and we'd be retaining
+                // a tensor reference unnecessarily.
                 for (int j = i + 1; j < Layers.Count; j++)
                 {
                     if (Layers[j] is DecoderLayer<T>)

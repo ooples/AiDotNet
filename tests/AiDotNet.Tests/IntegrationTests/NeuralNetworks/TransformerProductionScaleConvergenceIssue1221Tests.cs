@@ -66,7 +66,8 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
         int seqLen,
         int numEncoderLayers,
         int numHeads,
-        double learningRate)
+        double learningRate,
+        double dropoutRate = 0.1)
     {
         var arch = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
@@ -78,6 +79,7 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
             feedForwardDimension: feedForwardDim,
             inputSize: seqLen,
             outputSize: vocab,
+            dropoutRate: dropoutRate,
             maxSequenceLength: seqLen,
             vocabularySize: vocab);
 
@@ -389,9 +391,29 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
         await Task.Yield();
         const int vocab = 256;
         const int seqLen = 32;
+        // Pin an explicit non-zero dropout rate. The reviewer flagged that
+        // letting this default through TransformerArchitecture's framework
+        // default (currently 0.1) makes the test silently no-op if that
+        // default ever drops to 0.0. Pinning 0.2 here keeps Dropout's
+        // training-mode branch active regardless of framework defaults
+        // and gives the stochastic-mask divergence a clear signal.
+        const double dropoutRate = 0.2;
         var model = BuildTransformer(
             vocab: vocab, modelDim: 64, feedForwardDim: 256, seqLen: seqLen,
-            numEncoderLayers: 2, numHeads: 4, learningRate: 0.0003);
+            numEncoderLayers: 2, numHeads: 4, learningRate: 0.0003,
+            dropoutRate: dropoutRate);
+
+        // Confirm at least one DropoutLayer exists with a non-zero rate.
+        // Without this precondition, the rest of the test is a tautology:
+        // if Dropout is absent or disabled, two Predict calls would always
+        // be bit-identical even pre-fix and the regression would be useless.
+        bool hasActiveDropout = model.Layers
+            .OfType<DropoutLayer<float>>()
+            .Any(d => d.SupportsTraining);
+        Assert.True(hasActiveDropout,
+            "Test precondition: model must contain at least one DropoutLayer that " +
+            "supports training-mode behavior. Without an active Dropout, this test " +
+            "cannot detect #1221's symptom (Predict failing to disable Dropout).");
 
         // Train so weights aren't zero-init.
         model.SetTrainingMode(true);
