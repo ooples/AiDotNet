@@ -772,10 +772,13 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// <para>
     /// What's persisted:
     /// <list type="bullet">
-    /// <item><b>InnerLayerTypeName</b> — full assembly-qualified-ish name
-    /// of the wrapped layer's runtime type (e.g.,
-    /// <c>AiDotNet.NeuralNetworks.Layers.DenseLayer`1</c>). The deser
-    /// path passes this to <c>CreateLayerFromType</c> recursively.</item>
+    /// <item><b>InnerLayerTypeName</b> — the wrapped layer's short type
+    /// name (<see cref="System.Type.Name"/>, e.g., <c>DenseLayer`1</c>),
+    /// generic-arity suffix included, no namespace prefix. This is the
+    /// form <c>DeserializationHelper.LayerTypes</c> is keyed on, so the
+    /// recursive <c>CreateLayerFromType</c> lookup resolves against
+    /// it. Fully-qualified or assembly-qualified names would break
+    /// that lookup.</item>
     /// <item><b>InnerLayerInputShape</b> / <b>InnerLayerOutputShape</b>
     /// — comma-separated dim lists. Used as the recursive deser call's
     /// inputShape / outputShape parameters.</item>

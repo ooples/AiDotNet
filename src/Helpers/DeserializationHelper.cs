@@ -1289,27 +1289,69 @@ public static class DeserializationHelper
         {
             // Ctors: (int[][] inputShapes, [int axis,] IActivationFunction).
             // Pass two identical inputShape entries so binary concat / add /
-            // multiply have a sane two-operand setup.
+            // multiply have a sane two-operand setup. Pick the constructor
+            // by SHAPE — first ctor whose parameters are all int[][] / int /
+            // activation / defaulted. Falling back to "highest-arity-with-
+            // null-for-everything-else" was unsafe: a future ctor overload
+            // taking a non-defaulted reference parameter (e.g. a custom
+            // schedule object) would receive null and either NRE inside
+            // the ctor or pass validation only to crash on first Forward.
+            var defaultAxis = inputShape.Length > 0 ? inputShape.Length - 1 : 0;
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctorB = type.GetConstructors()
+                .Where(c =>
+                {
+                    var ps = c.GetParameters();
+                    foreach (var p in ps)
+                    {
+                        if (p.ParameterType == typeof(int[][])) continue;
+                        if (p.ParameterType == typeof(int)) continue;
+                        if (p.ParameterType == activationFuncType) continue;
+                        if (p.HasDefaultValue) continue;
+                        // Non-defaulted parameter we can't resolve from
+                        // (inputShape, additionalParams, activation): reject
+                        // this overload.
+                        return false;
+                    }
+                    return ps.Length >= 1; // at minimum needs the inputShapes arg
+                })
                 .OrderByDescending(c => c.GetParameters().Length)
-                .FirstOrDefault()
-                ?? throw new MissingLayerCtorException(
-                    $"Cannot find any public constructor for {layerType} during deserialization.");
-            // Default axis: last axis of inputShape, but clamp to 0 so an
-            // empty inputShape (probe paths or degenerate metadata) doesn't
-            // produce -1 which violates axis validation in the layer ctor.
-            int defaultAxis = inputShape.Length > 0 ? inputShape.Length - 1 : 0;
-            var psB = ctorB.GetParameters();
-            var argsB = new object?[psB.Length];
-            for (int i = 0; i < psB.Length; i++)
+                .FirstOrDefault();
+            if (ctorB is null)
             {
-                var p = psB[i];
-                if (p.ParameterType == typeof(int[][])) argsB[i] = new int[][] { inputShape, inputShape };
-                else if (p.ParameterType == typeof(int)) argsB[i] = TryGetInt(additionalParams, "Axis") ?? defaultAxis;
-                else if (p.HasDefaultValue) argsB[i] = p.DefaultValue;
-                else argsB[i] = null;
+                // No safely-fillable ctor: fall through to the matcher
+                // which has its own activation-restoration + defaulting
+                // path and surfaces a clear error if it can't fill any
+                // ctor either.
+                instance = TryConstructByMatchingMetadata<T>(type, inputShape, outputShape, additionalParams, layerType);
+                if (instance is null)
+                {
+                    throw new MissingLayerCtorException(
+                        $"Cannot find a {layerType} constructor whose non-defaulted parameters " +
+                        $"are all resolvable from (inputShape, additionalParams, activation). " +
+                        $"Public ctors: [{string.Join(" | ", type.GetConstructors().Select(c => "(" + string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) + ")"))}].");
+                }
             }
-            instance = ctorB.Invoke(argsB);
+            else
+            {
+                var psB = ctorB.GetParameters();
+                var argsB = new object?[psB.Length];
+                for (int i = 0; i < psB.Length; i++)
+                {
+                    var p = psB[i];
+                    if (p.ParameterType == typeof(int[][])) argsB[i] = new int[][] { inputShape, inputShape };
+                    else if (p.ParameterType == typeof(int)) argsB[i] = TryGetInt(additionalParams, "Axis") ?? defaultAxis;
+                    else if (p.HasDefaultValue) argsB[i] = p.DefaultValue;
+                    // Activation: TryRestoreActivation if metadata holds it,
+                    // else null is safe — this ctor signature accepts null
+                    // for activation (the layer's IdentityActivation default
+                    // path).
+                    else if (p.ParameterType == activationFuncType)
+                        argsB[i] = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+                    else argsB[i] = null;
+                }
+                instance = ctorB.Invoke(argsB);
+            }
         }
         else if (genericDef.Name == "ConvLSTMLayer`1")
         {
@@ -1587,7 +1629,13 @@ public static class DeserializationHelper
             // edge type ("default" -> "default") so the layer can be allocated.
             // Real Clone() would round-trip the actual metadata via
             // ILayerSerializationExtras.
-            var hgmType = type.Assembly.GetTypes().First(x => x.Name == "HeterogeneousGraphMetadata");
+            var hgmType = type.Assembly.GetTypes().FirstOrDefault(x => x.Name == "HeterogeneousGraphMetadata")
+                ?? throw new InvalidOperationException(
+                    $"HeterogeneousGraphLayer reconstruction needs the `HeterogeneousGraphMetadata` " +
+                    $"type to be present in {type.Assembly.FullName}, but no such type was found. " +
+                    $"This usually means the type was renamed, moved to a different assembly, or " +
+                    $"trimmed away by an aggressive linker / AOT compile. Restore the type or " +
+                    $"adjust the deser branch to look up the new name.");
             object hgm = BuildPlaceholderHeterogeneousGraphMetadata(hgmType);
 
             var ctorHg = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
@@ -2689,7 +2737,9 @@ public static class DeserializationHelper
         if (pNameLower.Contains("banksize") || pNameLower.Contains("modes") || pNameLower.Contains("width")) return 8;
         if (pNameLower.Contains("seed")) return 0;
         if (pNameLower.Contains("historycapacity")) return 100;
-        if (pNameLower == "k" || pNameLower.Contains("topk")) return 4;
+        // (topk matched above; this duplicate Contains-form was partially
+        // unreachable. Single-letter "k" stays here.)
+        if (pNameLower == "k") return 4;
         if (pNameLower.Contains("windowsize") || pNameLower.Contains("shiftsize")) return 4;
         if (pNameLower.Contains("spirallength")) return 4;
         if (pNameLower.Contains("timeembeddim")) return 16;
