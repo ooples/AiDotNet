@@ -51,7 +51,24 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// This number must match the dimensionality of your input data.
     /// </para>
     /// </remarks>
-    private readonly int _visibleUnits;
+    /// <summary>
+    /// Visible-unit count. Non-readonly so the lazy ctor can leave it
+    /// uninitialised (sentinel <c>-1</c>) and the first <c>Forward</c>
+    /// fills it from <c>input.Shape[^1]</c> via <see cref="OnFirstForward"/>.
+    /// Eager ctors set it immediately so the <c>Forward</c> path's
+    /// <see cref="EnsureInitialized"/> call is a no-op.
+    /// </summary>
+    private int _visibleUnits;
+
+    /// <summary>
+    /// Tracks whether weights / biases have been materialized. Lazy ctor
+    /// defers materialization until first <c>Forward</c> resolves the
+    /// visible-unit count from input shape.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <inheritdoc />
+    public override bool IsInitialized => _isInitialized;
 
     /// <summary>
     /// Gets the number of units in the hidden layer.
@@ -288,6 +305,76 @@ public partial class RBMLayer<T> : LayerBase<T>
         _hiddenBiases = new Tensor<T>([_hiddenUnits]);
 
         InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy ctor — visible-unit count is resolved from <c>input.Shape[^1]</c>
+    /// on the first <c>Forward</c> call. Use this for new code that should
+    /// adopt the PyTorch-style lazy shape inference pattern; the eager
+    /// <c>(int visibleUnits, ...)</c> overload remains for callers that
+    /// know the visible dim at construction time.
+    /// </summary>
+    /// <param name="hiddenUnits">Number of hidden units (architectural,
+    /// independent of input shape).</param>
+    /// <param name="scalarActivation">Activation function (defaults to
+    /// <see cref="SigmoidActivation{T}"/>).</param>
+    public RBMLayer(int hiddenUnits, IActivationFunction<T>? scalarActivation = null)
+        : base([-1], [hiddenUnits], scalarActivation ?? new SigmoidActivation<T>())
+    {
+        if (hiddenUnits <= 0)
+            throw new ArgumentOutOfRangeException(nameof(hiddenUnits), "Hidden unit count must be positive.");
+
+        _visibleUnits = -1;
+        _hiddenUnits = hiddenUnits;
+        _weights = new Tensor<T>([0, 0]);
+        _visibleBiases = new Tensor<T>([0]);
+        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads the visible-unit count from <c>input.Shape[^1]</c> and resolves
+    /// the lazy shape so subsequent forward / parameter / serialization
+    /// paths can index against a real <c>InputShape[0]</c>.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"RBMLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int visibleUnits = input.Shape[rank - 1];
+        if (visibleUnits <= 0)
+            throw new ArgumentException(
+                $"RBMLayer's visible-unit count must be positive; got {visibleUnits} from input shape.",
+                nameof(input));
+
+        _visibleUnits = visibleUnits;
+        ResolveShapes(new[] { visibleUnits }, OutputShape);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate weights / biases against the resolved
+    /// visible-unit count and run Xavier initialization. Eager-ctor
+    /// instances bypass this path because <see cref="_isInitialized"/> is
+    /// set to true at construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_visibleUnits <= 0)
+            throw new InvalidOperationException(
+                "RBMLayer cannot initialize until OnFirstForward has resolved the visible-unit count from input shape.");
+
+        _weights = new Tensor<T>([_hiddenUnits, _visibleUnits]);
+        _visibleBiases = new Tensor<T>([_visibleUnits]);
+        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
+        InitializeParameters();
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -324,6 +411,7 @@ public partial class RBMLayer<T> : LayerBase<T>
         _hiddenBiases = new Tensor<T>([_hiddenUnits]);
 
         InitializeParameters();
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -394,6 +482,12 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor uses _visibleUnits = -1 sentinel until first forward.
+        // OnFirstForward + EnsureInitialized run from the base's
+        // IsShapeResolved guard for layers that have lazy state.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
         if (rank < 1)
@@ -443,6 +537,9 @@ public partial class RBMLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+        // Lazy-ctor guard: same as CPU Forward.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
         _originalInputShape = input._shape;
 
         int rank = input.Shape.Length;
@@ -543,6 +640,11 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// </summary>
     private void TrainWithContrastiveDivergenceTensor(Tensor<T> input, T learningRate, int kSteps = 1)
     {
+        // Lazy-ctor guard: ContrastiveDivergence training reads _visibleUnits
+        // and the weight matrices, so they need to be resolved+materialized.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         int rank = input.Shape.Length;
         if (rank < 1)
             throw new ArgumentException("Input must have at least one dimension.", nameof(input));
@@ -944,7 +1046,13 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
     /// </summary>
-    public override int ParameterCount => _visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits;
+    public override int ParameterCount =>
+        _visibleUnits > 0
+            ? _visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits
+            // Lazy-ctor instance hasn't seen its first Forward yet — visible
+            // dim is unknown, so the only parameter we can count is the
+            // hidden-bias vector that the ctor allocates eagerly.
+            : _hiddenUnits;
 
     /// <summary>
     /// Indicates whether this layer supports training.
