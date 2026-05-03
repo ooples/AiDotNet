@@ -519,11 +519,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     public virtual IEnumerable<Tensor<T>> GetParameterChunks()
     {
         ResolveLazyLayerShapes();
-        foreach (var layer in Layers)
+
+        // Use the same recursive collector that ZeroGradAll / fused
+        // training rely on. The previous code only walked top-level
+        // Layers and missed every trainable nested inside a composite
+        // layer (e.g., DenseBlock's BatchNorm + Conv, MoE's experts).
+        // Those would silently be omitted from the chunked enumeration
+        // even though they're real trainable parameters — exactly the
+        // failure mode the chunked API exists to prevent.
+        var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
+        foreach (var trainable in trainableLayers)
         {
-            if (layer is ITrainableLayer<T> trainable)
+            foreach (var t in trainable.GetTrainableParameters())
             {
-                foreach (var t in trainable.GetTrainableParameters())
+                if (t is null || t.Length == 0) continue;
+                yield return t;
+            }
+        }
+
+        // Network-level extras (ViT cls/pos tokens, Conformer subsamplers, etc.)
+        // surfaced through GetExtraTrainableLayers and GetExtraTrainableTensors —
+        // the same overrides TrainWithTape consults so chunk enumeration stays
+        // consistent with what the optimizer actually updates.
+        foreach (var extraLayer in GetExtraTrainableLayers())
+        {
+            if (extraLayer is ITrainableLayer<T> extraTrainable)
+            {
+                foreach (var t in extraTrainable.GetTrainableParameters())
                 {
                     if (t is null || t.Length == 0) continue;
                     yield return t;
@@ -1834,6 +1856,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _cachedParameterCount = null;
         _layerStructureVersion++;
         _parameterBuffer = null;
+        // Layer structure changed — re-test the skip-buffer threshold next
+        // training step. Without this, a model that grew from 100M -> 200M
+        // params (e.g., LoRA rank bump, layer addition) would keep trying
+        // to build a buffer until the new threshold check forced skip on
+        // the next param-set sample.
+        _skipParameterBuffer = false;
+        _skipParameterBufferVersion = -1;
         Training.TapeTrainingStep<T>.InvalidateCache();
         InvalidateLayerInfoCache();
         // Layer structure changed — drop stale compiled inference plans.
@@ -3389,7 +3418,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // and never read `context.ParamBuffer`, so passing null is safe
         // for the model layer's optimizer path.
         ParameterBuffer<T>? paramBuffer;
-        if (_parameterBuffer is null)
+        // Fast-path: a previous training step on the SAME layer structure
+        // already concluded "skip buffer" — re-applying that decision is
+        // O(1). InvalidateParameterCountCache resets _skipParameterBufferVersion
+        // to -1 (and clears _parameterBuffer) so a layer-structure change
+        // re-tests the threshold from scratch.
+        if (_skipParameterBuffer && _skipParameterBufferVersion == _layerStructureVersion)
+        {
+            paramBuffer = null;
+        }
+        else if (_parameterBuffer is null)
         {
             var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, structureVersion: -1);
             long totalParamCount = 0L;
@@ -3407,6 +3445,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (totalParamCount > ParameterBufferSkipThresholdParams)
             {
                 paramBuffer = null;
+                // Memoize the skip decision so subsequent training steps
+                // don't repeat the CollectParameters + sum-Length scan.
+                // Sundial-Base (~300 M params) takes ~120ms per scan;
+                // caching makes step 2..N effectively free.
+                _skipParameterBuffer = true;
+                _skipParameterBufferVersion = _layerStructureVersion;
             }
             else
             {
@@ -3903,6 +3947,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Lazily initialized on first training step when trainable parameters are available.
     /// </summary>
     private ParameterBuffer<T>? _parameterBuffer;
+
+    /// <summary>
+    /// Once foundation-scale models cross the parameter-buffer skip
+    /// threshold we want each subsequent training step to take the
+    /// no-buffer path in O(1), not re-scan every parameter tensor with
+    /// CollectParameters + sum-Length on each call. We memoize the
+    /// "skip buffer" decision keyed by <see cref="_layerStructureVersion"/>
+    /// so InvalidateParameterCountCache (which bumps the version) re-tests
+    /// the threshold the first time the parameter set actually changed.
+    /// </summary>
+    private bool _skipParameterBuffer;
+    private int _skipParameterBufferVersion = -1;
 
     /// <summary>
     /// <summary>

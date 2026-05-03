@@ -1255,6 +1255,21 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         WriteLayerGrads(result, ref offset, _adaln_modulation);
         WriteLayerGrads(result, ref offset, _outputProj);
 
+        // Mirror the offset validation in GetParameters so a layer whose
+        // GetParameterGradients().Length disagrees with ParameterCount —
+        // common after a lazy-shape resolve that updated the param tensor
+        // shapes but not the cached gradient bookkeeping — surfaces with
+        // an actionable error instead of returning a partially filled
+        // gradient vector that silently corrupts the optimizer step.
+        if (offset != totalParams)
+        {
+            throw new InvalidOperationException(
+                $"DiTNoisePredictor.GetParameterGradients wrote {offset} elements but " +
+                $"ParameterCount reported {totalParams}. A child layer's gradient length " +
+                $"diverged from its parameter count — check for lazy-shape resolves that " +
+                $"updated weights without rebuilding the gradient cache.");
+        }
+
         return result;
     }
 
@@ -1262,6 +1277,18 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         if (layer == null) return;
         var g = layer.GetParameterGradients();
+        // Bounds-guard the destination write so a layer whose gradient
+        // length disagrees with its ParameterCount surfaces here with an
+        // actionable error message, instead of throwing an opaque
+        // IndexOutOfRangeException at an unrelated later layer.
+        if (offset + g.Length > dst.Length)
+        {
+            throw new InvalidOperationException(
+                $"DiTNoisePredictor.WriteLayerGrads: layer of type {layer.GetType().Name} " +
+                $"emitted {g.Length} gradients at offset {offset}, but the destination " +
+                $"buffer only has {dst.Length} slots. Likely cause: a lazy-shape resolve " +
+                $"changed this layer's parameter count after ParameterCount was sampled.");
+        }
         for (int i = 0; i < g.Length; i++) dst[offset + i] = g[i];
         offset += g.Length;
     }

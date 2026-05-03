@@ -56,7 +56,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // first test, ~zero on every subsequent one.
         var key = GetType();
         if (s_inferredOutputShapeCache.TryGetValue(key, out var cached))
-            return cached;
+            return ReferenceEquals(cached, s_warmUpFailedSentinel) ? null : cached;
 
         try
         {
@@ -93,15 +93,23 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
             // implemented failures. Fatal CLR exceptions (OOM / SO / AV)
             // and unexpected exceptions propagate so the surrounding test
             // surfaces them rather than silently falling back.
-            s_inferredOutputShapeCache[key] = null;
+            //
+            // Use a static sentinel array (NOT null) for failures because
+            // ConcurrentDictionary<TKey,TValue> rejects null values with
+            // ArgumentNullException — assigning null here would crash the
+            // cache write and bubble out of the catch block. The sentinel
+            // is reference-compared on read so a legitimately empty shape
+            // (rank-0 / scalar) wouldn't be confused with a failure.
+            s_inferredOutputShapeCache[key] = s_warmUpFailedSentinel;
             return null;
         }
     }
 
-    // Cache only the inferred Shape (or null on failure). Earlier the
-    // tuple also stored a redundant `bool Failed` flag that no read path
-    // consulted — null on failure is sufficient signal.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]?> s_inferredOutputShapeCache = new();
+    // Cache the inferred Shape; failures store a static sentinel rather
+    // than null because ConcurrentDictionary doesn't allow null values.
+    // Reference-compare against s_warmUpFailedSentinel on read.
+    private static readonly int[] s_warmUpFailedSentinel = new int[0];
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, int[]> s_inferredOutputShapeCache = new();
 
     protected virtual int TrainingIterations => 10;
 
@@ -533,7 +541,11 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = network.Predict(input);
-        var cloned = network.Clone();
+        // `using` so foundation-scale clones (multi-GB weight tensors)
+        // release their tensors at end-of-test instead of leaning on
+        // the per-test GC.Collect in DisposeAsync — which by then has
+        // to compete with the next test's network instance.
+        using var cloned = network.Clone();
         SetEvalMode(cloned);
         var clonedOutput = cloned.Predict(input);
 
@@ -571,6 +583,13 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
+        // Force eval mode before capturing the trained baseline so layers
+        // like Dropout / GaussianNoise / BatchNorm-with-running-stats
+        // produce deterministic outputs. Without this, the post-clone
+        // comparison can fail due to a different RNG draw on each Predict
+        // call rather than any real serialization drift.
+        SetEvalMode(network);
+
         // Capture predictions on diverse inputs.
         var probeInputs = new Tensor<double>[3];
         var trainedOutputs = new Tensor<double>[3];
@@ -580,8 +599,11 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
             trainedOutputs[k] = network.Predict(probeInputs[k]);
         }
 
-        // Serialize/deserialize via Clone.
-        var cloned = network.Clone();
+        // Serialize/deserialize via Clone. `using` so the cloned model's
+        // weight tensors release at end-of-test (foundation-scale models
+        // would otherwise compound across the shard).
+        using var cloned = network.Clone();
+        SetEvalMode(cloned);
 
         // Cloned model MUST produce IDENTICAL predictions on every input.
         for (int k = 0; k < 3; k++)
