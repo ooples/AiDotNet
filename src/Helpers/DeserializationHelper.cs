@@ -631,7 +631,13 @@ public static class DeserializationHelper
             // so axis 0 would be node count or batch — never the feature width.
             int inputFeatures = inputShape[inputShape.Length - 1];
             int outputFeatures = outputShape[outputShape.Length - 1];
-            int mlpHiddenDim = TryGetInt(additionalParams, "MlpHiddenDim") ?? 64;
+            // Default to -1, matching the constructor default at
+            // GraphIsomorphismLayer.cs:163, which then resolves the MLP
+            // hidden dim to outputFeatures inside the layer ctor (line 174).
+            // Hard-coding 64 here would silently produce a different
+            // MLP shape than the original network for any GIN whose
+            // outputFeatures != 64, breaking weight reattachment.
+            int mlpHiddenDim = TryGetInt(additionalParams, "MlpHiddenDim") ?? -1;
             bool learnEpsilon = TryGetBool(additionalParams, "LearnEpsilon") ?? true;
             double initialEpsilon = TryGetDouble(additionalParams, "InitialEpsilon") ?? 0.0;
 
@@ -1778,7 +1784,16 @@ public static class DeserializationHelper
         // GRULayer(int hiddenSize, bool returnSequences = false, IActivationFunction<T>? activation = null, IActivationFunction<T>? recurrentActivation = null)
         // inputSize is now resolved lazily on first forward (lazy-shape contract from #1220).
         int hiddenSize = outputShape.Length >= 2 ? outputShape[^1] : outputShape[0];
-        bool returnSequences = TryGetBool(additionalParams, "ReturnSequences") ?? true;
+        // ReturnSequences serialization contract: when missing from
+        // additionalParams, infer from the persisted output shape rather
+        // than hard-coding `true` (which contradicts the GRULayer ctor
+        // default of `false` and silently changes output rank for any
+        // checkpoint that doesn't pin the value). If the persisted output
+        // has the same rank as the input, the layer was emitting full
+        // [batch, time, hidden] sequences; otherwise it was returning the
+        // last hidden state only.
+        bool returnSequences = TryGetBool(additionalParams, "ReturnSequences")
+            ?? (outputShape.Length == inputShape.Length);
 
         var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
         var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(bool), activationFuncType, activationFuncType });

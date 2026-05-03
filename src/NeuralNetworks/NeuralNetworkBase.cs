@@ -520,13 +520,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         ResolveLazyLayerShapes();
 
-        // Use the same recursive collector that ZeroGradAll / fused
-        // training rely on. The previous code only walked top-level
-        // Layers and missed every trainable nested inside a composite
-        // layer (e.g., DenseBlock's BatchNorm + Conv, MoE's experts).
-        // Those would silently be omitted from the chunked enumeration
-        // even though they're real trainable parameters — exactly the
-        // failure mode the chunked API exists to prevent.
+        // SCOPE CONTRACT: chunks must match exactly the parameter set
+        // that ParameterCount / GetParameters / SetParameters operate on.
+        // Those flat APIs walk only `Layers`; widening this enumeration
+        // to include GetExtraTrainableLayers / GetExtraTrainableTensors
+        // would make `sum(chunk.Length) > ParameterCount` for models
+        // with network-level extras (ViT cls/pos, Conformer subsamplers),
+        // causing callers that mix the flat and chunked APIs to mis-size
+        // buffers or skip parameters on round-trip.
+        //
+        // Extras still flow through TrainWithTape via the separate extra-
+        // trainable handling path — they're just not surfaced in the
+        // chunked enumeration here. If a future PR widens the flat APIs
+        // to include extras, this enumeration can match in lockstep.
+        //
+        // The recursive CollectTrainableLayers walk DOES descend into
+        // composite-layer sublayers (DenseBlock BN/Conv, MoE experts) —
+        // those are still part of `Layers` from the flat APIs' point of
+        // view because GetParameters walks each top-level layer's
+        // ParameterCount which already aggregates sublayer params.
         var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
         foreach (var trainable in trainableLayers)
         {
@@ -535,27 +547,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (t is null || t.Length == 0) continue;
                 yield return t;
             }
-        }
-
-        // Network-level extras (ViT cls/pos tokens, Conformer subsamplers, etc.)
-        // surfaced through GetExtraTrainableLayers and GetExtraTrainableTensors —
-        // the same overrides TrainWithTape consults so chunk enumeration stays
-        // consistent with what the optimizer actually updates.
-        foreach (var extraLayer in GetExtraTrainableLayers())
-        {
-            if (extraLayer is ITrainableLayer<T> extraTrainable)
-            {
-                foreach (var t in extraTrainable.GetTrainableParameters())
-                {
-                    if (t is null || t.Length == 0) continue;
-                    yield return t;
-                }
-            }
-        }
-        foreach (var t in GetExtraTrainableTensors())
-        {
-            if (t is null || t.Length == 0) continue;
-            yield return t;
         }
     }
 
