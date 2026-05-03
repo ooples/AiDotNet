@@ -710,4 +710,69 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         _baseLayer.ResetState();
         _loraLayer.ResetState();
     }
+
+    /// <summary>
+    /// Persists the inner-layer type name and shape so DeserializationHelper
+    /// can reconstruct the WRAPPED base layer with the right concrete type
+    /// instead of the prior <c>DenseLayer&lt;T&gt;</c> placeholder. This is
+    /// the round-trip path for issue #1239's wrapped-layer concern: every
+    /// LoRA adapter (35 implementations as of this commit, all derived from
+    /// this base) inherits this metadata persistence automatically.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What's persisted:
+    /// <list type="bullet">
+    /// <item><b>InnerLayerTypeName</b> — full assembly-qualified-ish name
+    /// of the wrapped layer's runtime type (e.g.,
+    /// <c>AiDotNet.NeuralNetworks.Layers.DenseLayer`1</c>). The deser
+    /// path passes this to <c>CreateLayerFromType</c> recursively.</item>
+    /// <item><b>InnerLayerInputShape</b> / <b>InnerLayerOutputShape</b>
+    /// — comma-separated dim lists. Used as the recursive deser call's
+    /// inputShape / outputShape parameters.</item>
+    /// <item><b>Rank</b> / <b>Alpha</b> / <b>FreezeBaseLayer</b> — LoRA
+    /// adapter scalar config that doesn't depend on the inner layer.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// What's NOT persisted by this base method (subclasses with extra
+    /// state must override and chain): adapter-specific fields like
+    /// VBLoRA's bank indices, AdaLoRA's importance scores, DyLoRA's
+    /// rank schedule, MoRA's hash table size, etc. Subclass overrides
+    /// should call <c>base.GetMetadata()</c> first then add their own.
+    /// </para>
+    /// <para>
+    /// Frozen-base inner-layer parameter VALUES round-trip via the
+    /// existing <see cref="ILayerSerializationExtras{T}"/> path
+    /// (<see cref="ILayerSerializationExtras{T}.GetExtraParameters"/>);
+    /// non-frozen inner-layer parameters are part of the wrapper's flat
+    /// <see cref="GetParameters"/> output already.
+    /// </para>
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+
+        // Inner layer's runtime type name. Strip any assembly qualification
+        // and namespace prefix so it matches what DeserializationHelper's
+        // LayerTypes dictionary keys on (Type.Name, generic-arity suffix
+        // included).
+        metadata["InnerLayerTypeName"] = _baseLayer.GetType().Name;
+
+        // Shape strings as comma-joined int lists (mirrors the format
+        // used by other layer GetMetadata sites that round-trip arrays).
+        var innerInput = _baseLayer.GetInputShape();
+        var innerOutput = _baseLayer.GetOutputShape();
+        metadata["InnerLayerInputShape"] = string.Join(",", innerInput);
+        metadata["InnerLayerOutputShape"] = string.Join(",", innerOutput);
+
+        // LoRA-specific scalars. Rank reads from the LoRA layer; alpha
+        // is the scaling factor (already exposed publicly); FreezeBaseLayer
+        // controls whether the base's params count toward Parameters.
+        metadata["Rank"] = _loraLayer.Rank.ToString();
+        metadata["Alpha"] = Convert.ToDouble(_loraLayer.Alpha).ToString("G");
+        metadata["FreezeBaseLayer"] = _freezeBaseLayer.ToString();
+
+        return metadata;
+    }
 }

@@ -525,4 +525,17 @@ public class TimeDistributedLayer<T> : LayerBase<T>
         _lastOutput = null;
     }
 
+    /// <summary>
+    /// Persists the inner layer's type name + shape so DeserializationHelper
+    /// can reconstruct the wrapped layer concretely. Issue #1239 wrapped-
+    /// layer round-trip.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InnerLayerTypeName"] = _innerLayer.GetType().Name;
+        metadata["InnerLayerInputShape"] = string.Join(",", _innerLayer.GetInputShape());
+        metadata["InnerLayerOutputShape"] = string.Join(",", _innerLayer.GetOutputShape());
+        return metadata;
+    }
 }

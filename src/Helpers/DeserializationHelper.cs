@@ -2683,6 +2683,70 @@ public static class DeserializationHelper
     }
 
     /// <summary>
+    /// Reads InnerLayerTypeName / InnerLayerInputShape / InnerLayerOutputShape
+    /// from <paramref name="additionalParams"/> (written by
+    /// <see cref="LoRA.Adapters.LoRAAdapterBase{T}.GetMetadata"/>) and
+    /// recursively builds the wrapped layer via
+    /// <see cref="CreateLayerFromType{T}"/>. Falls back to <c>null</c> when
+    /// the metadata is absent so callers can take the legacy placeholder
+    /// path. Issue #1239 wrapped-layer round-trip.
+    /// </summary>
+    private static object? TryConstructInnerLayerFromMetadata<T>(Dictionary<string, object>? additionalParams)
+    {
+        if (additionalParams is null) return null;
+
+        if (!additionalParams.TryGetValue("InnerLayerTypeName", out var typeNameObj)
+            || typeNameObj is not string innerTypeName
+            || string.IsNullOrEmpty(innerTypeName))
+        {
+            return null;
+        }
+
+        // Parse shape strings — comma-joined int lists written by
+        // LoRAAdapterBase.GetMetadata.
+        int[] ParseShape(string key)
+        {
+            if (!additionalParams.TryGetValue(key, out var sObj) || sObj is not string s || string.IsNullOrEmpty(s))
+                return Array.Empty<int>();
+            var parts = s.Split(',');
+            var result = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i], out result[i])) return Array.Empty<int>();
+            }
+            return result;
+        }
+
+        var innerInputShape = ParseShape("InnerLayerInputShape");
+        var innerOutputShape = ParseShape("InnerLayerOutputShape");
+        if (innerInputShape.Length == 0 || innerOutputShape.Length == 0) return null;
+
+        try
+        {
+            // Recursive deser. The inner layer's GetMetadata-extras are NOT
+            // currently nested inside the wrapper's metadata — that's a
+            // limitation: any inner-layer-specific scalar metadata (e.g.,
+            // a wrapped MultiHeadAttention's NumHeads) won't be available
+            // here. The wrapped types we care about most (DenseLayer,
+            // FullyConnectedLayer) don't need such extras since their
+            // ctors accept just outputSize. Tracked under #1239.
+            return CreateLayerFromType<T>(innerTypeName, innerInputShape, innerOutputShape, additionalParams: null);
+        }
+        catch (Exception ex)
+        {
+            // Trace and fall back to placeholder so callers don't crash;
+            // user can inspect the trace to see why the inner-layer round-
+            // trip didn't apply.
+            System.Diagnostics.Trace.TraceWarning(
+                $"DeserializationHelper.TryConstructInnerLayerFromMetadata: " +
+                $"failed to reconstruct inner layer of type '{innerTypeName}' " +
+                $"with shape [{string.Join(",", innerInputShape)}] -> " +
+                $"[{string.Join(",", innerOutputShape)}]: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Construct a LoRA adapter with constraint-aware defaults. Each adapter
     /// has its own validation requirements (rank-vs-bank-size, original-vs-
     /// extended context, etc.) which the generic matcher can't infer; this
@@ -2697,8 +2761,16 @@ public static class DeserializationHelper
         var ps = ctor.GetParameters();
         var args = new object?[ps.Length];
 
-        // Build placeholder DenseLayer for any ILayer<T> baseLayer parameter.
-        if (!TryCreatePlaceholderInnerLayer<T>(typeof(ILayer<T>), out var baseLayer)) return null;
+        // Reconstruct the actual wrapped layer from
+        // LoRAAdapterBase.GetMetadata's InnerLayerTypeName + shape if
+        // present; otherwise fall back to the DenseLayer placeholder for
+        // legacy networks serialized before #1239 added the metadata.
+        // The placeholder path stays for backward-compatibility — newly
+        // serialized networks take the proper round-trip via the
+        // metadata-driven branch.
+        var baseLayer = TryConstructInnerLayerFromMetadata<T>(additionalParams);
+        if (baseLayer is null && !TryCreatePlaceholderInnerLayer<T>(typeof(ILayer<T>), out baseLayer))
+            return null;
 
         for (int i = 0; i < ps.Length; i++)
         {
@@ -3212,15 +3284,28 @@ public static class DeserializationHelper
 
                 // 8. ILayer<T> / LayerBase<T> / single-base-layer references —
                 //    used by LoRA/PEFT adapters, BidirectionalLayer,
-                //    SpectralNormalizationLayer, TimeDistributedLayer. The
-                //    correct round-trip plumbing is for each adapter to embed
-                //    its wrapped base layer through ILayerSerializationExtras
-                //    (tracked in #1235); until that ships, hand the matcher
-                //    a placeholder DenseLayer<T> so construction succeeds and
-                //    Clone() / DeepCopy() doesn't crash. Adapters reconstructed
-                //    via this path are NOT functionally equivalent to the
-                //    original — only the layer's structural metadata
-                //    round-trips, not the wrapped layer's parameters.
+                //    SpectralNormalizationLayer, TimeDistributedLayer.
+                //    Per-adapter round-trip via LoRAAdapterBase.GetMetadata
+                //    (issue #1239): InnerLayerTypeName / InnerLayerInputShape
+                //    / InnerLayerOutputShape lets the deser path reconstruct
+                //    the actual wrapped layer instead of a placeholder. Falls
+                //    back to the DenseLayer<T> placeholder for legacy
+                //    networks serialized before that metadata existed —
+                //    those reconstructions are NOT semantically equivalent
+                //    (only the wrapper's structural metadata round-trips).
+                bool isSingleLayerParam = pType == typeof(NeuralNetworks.Layers.LayerBase<T>)
+                    || (pType.IsGenericType
+                        && pType.GetGenericTypeDefinition() == typeof(ILayer<>)
+                        && pType.GetGenericArguments()[0] == typeof(T));
+                if (isSingleLayerParam)
+                {
+                    var fromMeta = TryConstructInnerLayerFromMetadata<T>(additionalParams);
+                    if (fromMeta is not null)
+                    {
+                        args[pi] = fromMeta;
+                        continue;
+                    }
+                }
                 if (TryCreatePlaceholderInnerLayer<T>(pType, out var placeholderInner))
                 {
                     args[pi] = placeholderInner;

@@ -566,4 +566,19 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
         base.ClearGradients();
         _innerLayer.ClearGradients();
     }
+
+    /// <summary>
+    /// Persists the inner layer's type name + shape and the
+    /// power-iteration count so DeserializationHelper can reconstruct
+    /// the wrapped layer concretely. Issue #1239 wrapped-layer round-trip.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InnerLayerTypeName"] = _innerLayer.GetType().Name;
+        metadata["InnerLayerInputShape"] = string.Join(",", _innerLayer.GetInputShape());
+        metadata["InnerLayerOutputShape"] = string.Join(",", _innerLayer.GetOutputShape());
+        metadata["PowerIterations"] = _powerIterations.ToString();
+        return metadata;
+    }
 }
