@@ -30,7 +30,10 @@ public class EfficientNetTrainShapePromotionTests
         using var net = new EfficientNetNetwork<double>();
 
         var input = new Tensor<double>(new[] { 3, 64, 64 });
-        var rng = new Random(42);
+        // Use the shared seeded-random helper so this test ages alongside
+        // every other deterministic test in the repo (rather than baking
+        // the seeded-Random factory inline twice).
+        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom(42);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 
         // Rank-1 one-hot target ([NumClasses])
@@ -86,7 +89,7 @@ public class EfficientNetTrainShapePromotionTests
         using var net = new EfficientNetNetwork<double>();
 
         var input = new Tensor<double>(new[] { 3, 64, 64 });
-        var rng = new Random(7);
+        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom(7);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
 
         var target = new Tensor<double>(new[] { 1, 1000 });

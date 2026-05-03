@@ -68,9 +68,14 @@ public interface IParameterizable<T, TInput, TOutput>
     /// <item>PyTorch-compatibility shims (state_dict-style export)</item>
     /// </list>
     /// </remarks>
-#if NETFRAMEWORK
-    IEnumerable<Tensor<T>> GetParameterChunks();
-#else
+#if !NETFRAMEWORK
+    // Chunked-API contract is .NET-Standard-2.1+ / .NET 10 only. Default
+    // interface methods need runtime dispatch support that .NET Framework
+    // 4.7.1 doesn't provide, so we omit this from the IParameterizable
+    // contract on net471 entirely. Concrete types (e.g., NeuralNetworkBase,
+    // ModelBase) still expose the same `GetParameterChunks()` method as
+    // a regular virtual on both targets — net471 callers just access it
+    // through the concrete type instead of the interface.
     IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
 #endif
 

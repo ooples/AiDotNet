@@ -30334,6 +30334,40 @@ public static class LayerHelper<T>
         var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
         int numHeads = 8;
 
+        // Validate AVEL config at the boundary so invalid combos surface
+        // here with an actionable error instead of failing deeper inside
+        // MultiHeadAttentionLayer (silent integer truncation if not
+        // divisible by numHeads), DenseLayer (negative-output crashes),
+        // or the parent model's InitializeLayers ([idx++] mis-casts on
+        // an empty sequence). All checks mirror the paper's per-stage
+        // contract — embeddingDimension must split evenly across heads,
+        // encoder depth and class count must be positive.
+        if (embeddingDimension <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(embeddingDimension), embeddingDimension,
+                "embeddingDimension must be positive.");
+        }
+        if (embeddingDimension % numHeads != 0)
+        {
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be divisible by numHeads ({numHeads}); " +
+                $"otherwise the per-head dim truncates and breaks attention output projection.",
+                nameof(embeddingDimension));
+        }
+        if (numEncoderLayers < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numEncoderLayers), numEncoderLayers,
+                "numEncoderLayers must be non-negative.");
+        }
+        if (numCategories <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numCategories), numCategories,
+                "numCategories must be positive (event classification head needs a real output dim).");
+        }
+
         // Audio encoder (input projection + attention stack + output projection)
         yield return new DenseLayer<T>(embeddingDimension, tanhActivation);
         for (int i = 0; i < numEncoderLayers; i++)
