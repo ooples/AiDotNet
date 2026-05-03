@@ -314,8 +314,21 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
-        TrainWithTape(processedInput, processedTarget, _optimizer);
+        // Mirror the SetTrainingMode wrapper that NeuralNetworkBase.Train
+        // applies — without this, BatchNorm / Dropout layers stay in
+        // inference mode during training and either skip running-stat
+        // updates or produce non-stochastic forward output, breaking
+        // training semantics.
+        SetTrainingMode(true);
+        try
+        {
+            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
+            TrainWithTape(processedInput, processedTarget, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />

@@ -2279,17 +2279,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// You provide some input data (like an image or text), and the network processes it through all its
     /// layers to produce an output (like a classification or prediction).
     /// <para>
-    /// The default implementation routes through the compiled inference path
-    /// (<see cref="PredictCompiled"/>), which auto-compiles the forward pass on the first call and replays
-    /// the compiled plan on subsequent calls for near-zero overhead. On compilation failure it falls back
-    /// to eager execution via <see cref="PredictEager"/>. The call is wrapped in a <see cref="NoGradScope{T}"/>
-    /// so inference never records onto the gradient tape (matches PyTorch <c>torch.no_grad()</c> semantics).
+    /// The default implementation routes through the eager forward path
+    /// (<see cref="PredictEager"/>) and is wrapped in a <see cref="NoGradScope{T}"/> so inference never
+    /// records onto the gradient tape (matches PyTorch <c>torch.no_grad()</c> semantics). This was the
+    /// compiled-replay path historically, but the compiled-plan cache in <see cref="PredictCompiled"/>
+    /// binds to the trace-time input tensor reference and replay returns the first call's output for any
+    /// subsequent call with the same shape but different values — the canonical "DifferentInputs /
+    /// ScaledInput produces identical output" failure. Eager forward is correct for any input values at
+    /// the cost of skipping plan-replay reuse.
+    /// </para>
+    /// <para>
+    /// <see cref="PredictCompiled"/> remains available for callers that explicitly opt in via
+    /// <see cref="CompileForward"/> + identical-tensor replay (or by overriding <see cref="Predict"/> in a
+    /// subclass to call <see cref="PredictCompiled"/> directly when their tracing is value-stable).
     /// </para>
     /// <para>
     /// Subclasses that need custom inference behavior (e.g., diffusion models that run a multi-step
     /// denoising loop, GANs that sample from a generator, networks that produce structured outputs) should
-    /// override this method. Subclasses whose inference is just a flat forward pass through Layers should
-    /// leave the default in place to pick up compiled replay automatically.
+    /// override this method.
     /// </para>
     /// </remarks>
     public virtual Tensor<T> Predict(Tensor<T> input)
@@ -3095,9 +3102,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var processedInput = PromoteToBatchedTensor(input);
 
-        // Promote target on the matching condition.
+        // Promote the target whenever its rank looks unbatched. The
+        // canonical CNN training case is input [C, H, W] (rank 3) +
+        // target [numClasses] (rank 1) — the previous "target.Rank ==
+        // input.Rank" check missed this case, leaving the target
+        // unbatched while the promoted input was rank-4 [1, C, H, W],
+        // which broke base.Train's claim of subsuming
+        // EnsureBatchForCnnTraining. Promote whenever target.Rank is
+        // strictly less than the promoted input's rank — the loss
+        // layer's EnsureTargetMatchesPredicted reshape contract handles
+        // any rank-equal-but-shape-different case downstream.
         Tensor<T> processedTarget = target;
-        if (target.Rank == input.Rank)
+        if (target.Rank < processedInput.Rank)
         {
             processedTarget = PromoteToBatchedTensor(target);
         }

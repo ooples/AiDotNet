@@ -480,34 +480,60 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Activation-aware default init. Per He et al. 2015 §2.2 ("Delving
-        // Deep into Rectifiers"), ReLU-family activations require He init
-        // (variance = 2/fan_in) — Xavier init's variance = 1/fan_in halves
-        // signal at every ReLU layer and the network collapses to near-
-        // constant output by the final softmax. Glorot & Bengio 2010 derived
-        // Xavier specifically for saturating activations (tanh/sigmoid),
-        // where it remains the right choice. So:
-        //   ReLU / LeakyReLU / ELU / SELU / GELU / Swish / Mish → He
-        //   Sigmoid / Tanh / Softmax / Identity / linear         → Xavier (LayerBase default)
+        // Activation-aware default init.
+        //   ReLU / LeakyReLU / PReLU / ELU / GELU / Swish / SiLU / Mish /
+        //     HardSwish                                       → He init (He et al. 2015 §2.2,
+        //                                                       "Delving Deep into Rectifiers")
+        //   SELU                                              → LeCun init (Klambauer et al. 2017
+        //                                                       §3 "Self-Normalizing Neural
+        //                                                       Networks", paper-prescribed
+        //                                                       variance 1/fan_in for the SNN
+        //                                                       fixed-point)
+        //   Sigmoid / Tanh / Softmax / Identity / linear      → Xavier (LayerBase default,
+        //                                                       Glorot & Bengio 2010)
         // Layers may still override via InitializationStrategy on the ctor;
         // this only kicks in when no strategy was supplied.
-        if (InitializationStrategy is null && IsReluFamilyActivation())
+        if (InitializationStrategy is null)
         {
-            var heInit = new Initialization.HeInitializationStrategy<T>();
-            heInit.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
-            heInit.InitializeBiases(_biases);
-            return;
+            if (IsSeluActivation())
+            {
+                var lecun = new Initialization.LeCunInitializationStrategy<T>();
+                lecun.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+                lecun.InitializeBiases(_biases);
+                return;
+            }
+            if (IsReluFamilyActivation())
+            {
+                var heInit = new Initialization.HeInitializationStrategy<T>();
+                heInit.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
+                heInit.InitializeBiases(_biases);
+                return;
+            }
         }
         InitializeLayerWeights(_weights, InputShape[0], OutputShape[0]);
         InitializeLayerBiases(_biases);
     }
 
     /// <summary>
+    /// Detects whether this Dense layer's activation function is SELU
+    /// (paper-faithful trigger for LeCun init per Klambauer et al. 2017).
+    /// </summary>
+    private bool IsSeluActivation()
+    {
+        var act = ScalarActivation ?? (object?)VectorActivation;
+        if (act is null) return false;
+        var name = act.GetType().Name;
+        return name.StartsWith("SELU", StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Detects whether this Dense layer's activation function is in the
     /// ReLU family (paper-faithful trigger for He init per He et al. 2015).
-    /// Pattern matches by full type name to avoid taking a hard dependency
-    /// on every ReLU-style class symbol — keeps the check resilient to new
-    /// activation additions without per-activation maintenance here.
+    /// Pattern matches by full type name (and the symmetric SiLU alias
+    /// for Swish, plus HardSwish from MobileNetV3) so new ReLU-style
+    /// activation additions don't need per-activation maintenance here.
+    /// SELU is excluded — it has its own LeCun-init path; see
+    /// <see cref="IsSeluActivation"/>.
     /// </summary>
     private bool IsReluFamilyActivation()
     {
@@ -517,10 +543,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         return name.StartsWith("ReLU", StringComparison.Ordinal)
             || name.StartsWith("LeakyReLU", StringComparison.Ordinal)
             || name.StartsWith("PReLU", StringComparison.Ordinal)
-            || name.StartsWith("ELU", StringComparison.Ordinal)
-            || name.StartsWith("SELU", StringComparison.Ordinal)
+            || (name.StartsWith("ELU", StringComparison.Ordinal) && !name.StartsWith("SELU", StringComparison.Ordinal))
             || name.StartsWith("GELU", StringComparison.Ordinal)
             || name.StartsWith("Swish", StringComparison.Ordinal)
+            || name.StartsWith("SiLU", StringComparison.Ordinal)
+            || name.StartsWith("HardSwish", StringComparison.Ordinal)
             || name.StartsWith("Mish", StringComparison.Ordinal);
     }
 

@@ -47,26 +47,49 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
     private int[]? InferOutputShapeFromWarmUp()
     {
-        if (_inferredOutputShape is not null) return _inferredOutputShape;
-        if (_inferenceFailed) return null;
+        // xUnit constructs a fresh test-class instance per [Fact], so the
+        // warm-up Predict would otherwise pay model-construction +
+        // forward cost on every test method. Cache the inferred shape
+        // STATICALLY keyed by the runtime test class type so the warm-up
+        // runs at most once per derived test class across the entire
+        // shard — same memory budget as one extra Predict call on the
+        // first test, ~zero on every subsequent one.
+        var key = GetType();
+        if (s_inferredOutputShapeCache.TryGetValue(key, out var cached))
+            return cached.Shape;
+
         try
         {
             using var net = CreateNetwork();
             var rng = ModelTestHelpers.CreateSeededRandom();
             var input = CreateRandomTensor(InputShape, rng);
             var output = net.Predict(input);
-            _inferredOutputShape = (int[])output._shape.Clone();
-            return _inferredOutputShape;
+            // Use the public Shape API (rather than the internal _shape
+            // field) so the test base doesn't tightly couple to Tensor's
+            // private layout. Materialize a plain int[] copy so subsequent
+            // shape comparisons don't depend on the runtime tensor's
+            // mutability semantics.
+            var shape = output.Shape;
+            var copy = new int[shape.Length];
+            for (int i = 0; i < shape.Length; i++) copy[i] = shape[i];
+            s_inferredOutputShapeCache[key] = (copy, false);
+            return copy;
         }
-        catch
+        catch (Exception ex) when (
+            ex is ArgumentException or InvalidOperationException
+            or NotSupportedException or NotImplementedException
+            or AiDotNet.Exceptions.TensorShapeMismatchException)
         {
-            _inferenceFailed = true;
+            // Narrow the catch to expected shape-inference / not-yet-
+            // implemented failures. Fatal CLR exceptions (OOM / SO / AV)
+            // and unexpected exceptions propagate so the surrounding test
+            // surfaces them rather than silently falling back.
+            s_inferredOutputShapeCache[key] = (null, true);
             return null;
         }
     }
 
-    private int[]? _inferredOutputShape;
-    private bool _inferenceFailed;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (int[]? Shape, bool Failed)> s_inferredOutputShapeCache = new();
 
     protected virtual int TrainingIterations => 10;
 
