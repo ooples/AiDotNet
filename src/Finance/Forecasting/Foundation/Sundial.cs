@@ -169,6 +169,21 @@ public class Sundial<T> : TimeSeriesFoundationModelBase<T>
 
         CopyOptionsToFields(options);
         InitializeLayers();
+
+        // Stream / offload Sundial's paper-scale weights — at Base
+        // (HiddenDimension=1024, NumLayers=24) the model has ~300M
+        // parameters; with Adam optimizer state (m + v copies) plus the
+        // ParameterBuffer mirror used by TrainWithTape, the resident
+        // memory hits ~7-10 GB and exceeds SharedArrayPool's 2 GB
+        // per-allocation ceiling during a late TensorMultiply,
+        // triggering OutOfMemoryException. Per
+        // SundialOptions.WeightOffloadOptions contract: non-null is
+        // honoured as-is; null leaves the default in-memory path.
+        // Mirrors PaLM-E's pattern at PaLME.cs:95-98.
+        if (_options.WeightOffloadOptions is { } callerOffload)
+        {
+            ConfigureWeightLifetime(callerOffload);
+        }
     }
 
     private void CopyOptionsToFields(SundialOptions<T> options)

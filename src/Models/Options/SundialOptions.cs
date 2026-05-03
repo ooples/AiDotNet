@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Enums;
+using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Models.Options;
 
@@ -65,6 +66,7 @@ public class SundialOptions<T> : TimeSeriesRegressionOptions<T>
         ModelSize = other.ModelSize;
         NumQuantiles = other.NumQuantiles;
         UseFlashAttention = other.UseFlashAttention;
+        WeightOffloadOptions = other.WeightOffloadOptions;
     }
 
     /// <summary>
@@ -132,4 +134,21 @@ public class SundialOptions<T> : TimeSeriesRegressionOptions<T>
     /// </summary>
     /// <value>Defaults to true.</value>
     public bool UseFlashAttention { get; set; } = true;
+
+    /// <summary>
+    /// Optional weight-offload / streaming configuration. When non-null, the
+    /// Sundial constructor calls <c>ConfigureWeightLifetime</c> so the
+    /// <c>WeightRegistry</c> singleton manages this instance's trainable
+    /// tensors per the offload contract — required for paper-scale Sundial
+    /// at <c>Base</c> (~300 M params) or larger to avoid the
+    /// <c>ParameterBuffer</c> × Adam-state explosion that OOMs CI.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <see cref="VisionLanguage.Robotics.PaLMEOptions.WeightOffloadOptions"/>
+    /// — non-null is honoured as-is; null leaves the default in-memory path.
+    /// Users running paper-scale Sundial in resource-constrained environments
+    /// (CI, single-GPU consumer hardware) should provide a streaming-offload
+    /// instance here.
+    /// </remarks>
+    public GpuOffloadOptions? WeightOffloadOptions { get; set; }
 }
