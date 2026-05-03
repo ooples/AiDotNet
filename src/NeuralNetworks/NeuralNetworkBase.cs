@@ -3269,11 +3269,44 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // views, so they CANNOT participate in the buffer-aliased
         // optimizer step. We update them through a separate lightweight
         // gradient-descent path against the same tape gradients below.
+        // ParameterBuffer is a contiguous flat copy of all trainable
+        // parameters that replaces each layer's tensor with a view into
+        // one giant array. It enables fused-optimizer paths in the
+        // Tensors-package internals BUT costs an extra ~N×sizeof(T) bytes
+        // resident for the lifetime of the network. For foundation
+        // models (Sundial-Base ~300M params × 8 B = 2.4 GB) this mirror
+        // collides with Adam's m/v state (another 2× weights) on top of
+        // the original weights, blowing past CI's ~7 GB ceiling. Skip
+        // the buffer when total parameter memory exceeds the threshold
+        // so foundation-scale models stay trainable on CPU CI runners.
+        // The optimizers we ship (`AdamOptimizer.Step` line 494,
+        // AdamW, SGD, etc.) all iterate `context.Parameters` directly
+        // and never read `context.ParamBuffer`, so passing null is safe
+        // for the model layer's optimizer path.
         ParameterBuffer<T>? paramBuffer;
         if (_parameterBuffer is null)
         {
             var initialParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, structureVersion: -1);
-            paramBuffer = GetOrCreateParameterBuffer(initialParams);
+            long totalParamCount = 0L;
+            for (int i = 0; i < initialParams.Count; i++)
+                totalParamCount += (long)initialParams[i].Length;
+            // ~125 M parameter cutoff: small enough that any model
+            // passing this threshold is foundation-class (its weight-
+            // mirror would consume ~1 GB at double precision and collide
+            // with Adam's m/v state on CI hosts); large enough that
+            // every standard CV / NLP / time-series model below ~1 B
+            // params keeps the buffer + fused-path benefit. Use parameter
+            // COUNT rather than byte size so the threshold doesn't shift
+            // when T = float vs double.
+            const long ParameterBufferSkipThresholdParams = 125_000_000L;
+            if (totalParamCount > ParameterBufferSkipThresholdParams)
+            {
+                paramBuffer = null;
+            }
+            else
+            {
+                paramBuffer = GetOrCreateParameterBuffer(initialParams);
+            }
         }
         else
         {
