@@ -50,6 +50,36 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     protected readonly bool _freezeBaseLayer;
 
     /// <summary>
+    /// Force-resolve <see cref="_baseLayer"/>'s lazy shape using the input
+    /// dim that the LoRA layer already settled on. Adapters call this
+    /// before any path that needs the base layer's parameter buffer to
+    /// be allocated (parameter merge, gradient round-trip, weight
+    /// inspection, etc.). Without it, an unresolved LayerBase returns an
+    /// empty parameter Vector and the caller indexes past the end.
+    /// Centralized here so DenseLoRAAdapter / VBLoRAAdapter / future
+    /// adapters share the same guard rather than copy-pasting the
+    /// LayerBase / IsShapeResolved / ResolveShapesOnly dance.
+    /// </summary>
+    /// <returns>
+    /// True when the base layer already had — or now has — a resolved
+    /// shape; false when the LoRA layer's input shape was non-positive
+    /// (lazy itself) and the resolve was skipped.
+    /// </returns>
+    protected bool EnsureBaseLayerShapeResolved()
+    {
+        if (_baseLayer is not LayerBase<T> baseLayerBase)
+            return true;
+        if (baseLayerBase.IsShapeResolved)
+            return true;
+        var loraInputShape = _loraLayer.GetInputShape();
+        if (loraInputShape.Length == 0) return false;
+        int loraInputSize = loraInputShape[0];
+        if (loraInputSize <= 0) return false;
+        baseLayerBase.ResolveShapesOnly(new[] { loraInputSize });
+        return true;
+    }
+
+    /// <summary>
     /// Gets the base layer being adapted with LoRA.
     /// </summary>
     /// <remarks>

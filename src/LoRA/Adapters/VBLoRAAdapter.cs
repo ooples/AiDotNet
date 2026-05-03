@@ -608,15 +608,10 @@ public class VBLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Force-resolve the base layer if it's still in lazy state — without
         // this, GetParameters() returns an empty Vector and the merge loop
-        // below indexes past the end. Same fix as DenseLoRAAdapter.
-        if (_baseLayer is LayerBase<T> baseLayerBase && !baseLayerBase.IsShapeResolved)
-        {
-            int loraInputSize = _loraLayer.GetInputShape()[0];
-            if (loraInputSize > 0)
-            {
-                baseLayerBase.ResolveShapesOnly(new[] { loraInputSize });
-            }
-        }
+        // below indexes past the end. Shared helper on LoRAAdapterBase
+        // applies the same guard across DenseLoRAAdapter / VBLoRAAdapter
+        // / future adapters.
+        EnsureBaseLayerShapeResolved();
 
         Vector<T> baseParams = _baseLayer.GetParameters();
         int inputSize = GetInputShape()[0];
