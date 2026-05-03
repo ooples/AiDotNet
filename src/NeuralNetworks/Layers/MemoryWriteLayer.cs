@@ -791,6 +791,15 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Promote rank-1 [features] to rank-2 [1, features] so the downstream
+        // TensorMatMul (which requires rank >= 2) works for the standalone
+        // single-arg Forward path used by GetNamedLayerActivations and other
+        // generic layer-pipeline callers.
+        bool wasRank1 = input.Rank == 1;
+        if (wasRank1)
+        {
+            input = input.Reshape(new[] { 1, input.Length });
+        }
         EnsureInitializedFromInput(input);
         // For a memory write layer, we need both input and memory
         // When only input is provided, we create a zero-initialized memory tensor
@@ -802,7 +811,13 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         emptyMemory.Fill(NumOps.Zero);
 
         // Call the overloaded Forward method with the empty memory
-        return Forward(input, emptyMemory);
+        var result = Forward(input, emptyMemory);
+        // If we promoted, drop the unit batch dim so callers get rank-1 back.
+        if (wasRank1 && result.Rank == 2 && result.Shape[0] == 1)
+        {
+            result = result.Reshape(new[] { result.Shape[1] });
+        }
+        return result;
     }
 
     /// <summary>
