@@ -599,8 +599,11 @@ public static class DeserializationHelper
             // type, L2-normalize-output flag) plus AiDotNet's standard activation +
             // init-strategy slots. The init strategy defaults to Eager / Xavier; we
             // pass null so the layer applies its default at construction time.
-            int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
+            // Read feature dim from the LAST axis: serialized graph tensors are
+            // [numNodes, features] (rank 2) or [batch, numNodes, features] (rank 3),
+            // so axis 0 would be node count or batch — never the feature width.
+            int inputFeatures = inputShape[inputShape.Length - 1];
+            int outputFeatures = outputShape[outputShape.Length - 1];
             int aggType = TryGetInt(additionalParams, "AggregatorType") ?? 0;
             bool normalize = TryGetBool(additionalParams, "Normalize") ?? true;
 
@@ -623,8 +626,11 @@ public static class DeserializationHelper
             // GIN updates h_v <- MLP((1+epsilon) * h_v + sum_u h_u). Default ctor
             // exposes the paper's MLP hidden dim, the learnable / fixed epsilon
             // pair, plus the standard activation + init-strategy slots.
-            int inputFeatures = inputShape[0];
-            int outputFeatures = outputShape[0];
+            // Read feature dim from the LAST axis: serialized graph tensors are
+            // [numNodes, features] (rank 2) or [batch, numNodes, features] (rank 3),
+            // so axis 0 would be node count or batch — never the feature width.
+            int inputFeatures = inputShape[inputShape.Length - 1];
+            int outputFeatures = outputShape[outputShape.Length - 1];
             int mlpHiddenDim = TryGetInt(additionalParams, "MlpHiddenDim") ?? 64;
             bool learnEpsilon = TryGetBool(additionalParams, "LearnEpsilon") ?? true;
             double initialEpsilon = TryGetDouble(additionalParams, "InitialEpsilon") ?? 0.0;
@@ -662,7 +668,15 @@ public static class DeserializationHelper
             // memory == output == embeddingSize, so fall back to output size if the
             // serialized metadata doesn't pin it explicitly. inputDimension is
             // resolved lazily on the first forward (lazy-shape contract).
-            int outputDim = outputShape[0];
+            //
+            // Output dim comes from the LAST axis of the serialized output shape,
+            // not Shape[0]. A batched output shape `[batch, features]` would
+            // otherwise reconstruct outputDim = batch (which is wrong, would
+            // make weights `[memoryDim, batch]`). Picking the last axis matches
+            // the MemoryReadLayer Forward contract (output features in the
+            // trailing axis) and the BottleneckBlock width-axis fix shipped
+            // in e0c78b820.
+            int outputDim = outputShape[outputShape.Length - 1];
             int memoryDim = TryGetInt(additionalParams, "MemoryDimension") ?? outputDim;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
@@ -678,7 +692,11 @@ public static class DeserializationHelper
         {
             // MemoryWriteLayer(int memoryDimension, IActivationFunction<T>?)
             // inputDimension is resolved lazily on the first forward (lazy-shape contract).
-            int memoryDim = TryGetInt(additionalParams, "MemoryDimension") ?? outputShape[0];
+            // Use the LAST axis of the serialized output shape so a batched
+            // shape `[batch, memoryDim]` reconstructs the actual feature
+            // dim, not the batch count.
+            int memoryDim = TryGetInt(additionalParams, "MemoryDimension")
+                ?? outputShape[outputShape.Length - 1];
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });

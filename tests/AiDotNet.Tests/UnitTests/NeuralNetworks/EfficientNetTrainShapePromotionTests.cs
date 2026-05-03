@@ -43,9 +43,35 @@ public class EfficientNetTrainShapePromotionTests
         //   [1280, 1000]."
         // i.e., the model emits [1280, 1000] instead of [1, 1000] because
         // the channel axis got reinterpreted as batch.
+
+        // Snapshot parameters before training so we can verify training
+        // ACTUALLY executed (not silently no-op'd via shape mismatch).
+        var paramsBefore = net.GetParameters();
+        var snapshot = new double[paramsBefore.Length];
+        for (int i = 0; i < paramsBefore.Length; i++) snapshot[i] = paramsBefore[i];
+
         var ex = Record.Exception(() => net.Train(input, target));
 
         Assert.Null(ex);
+
+        // Stronger postcondition: at least one parameter must have
+        // changed. This catches the failure mode where Train() throws
+        // nothing but quietly skips the actual gradient update due to
+        // shape mismatches the loss layer silently absorbs.
+        var paramsAfter = net.GetParameters();
+        bool anyChanged = false;
+        for (int i = 0; i < snapshot.Length && i < paramsAfter.Length; i++)
+        {
+            if (System.Math.Abs(snapshot[i] - paramsAfter[i]) > 1e-15)
+            {
+                anyChanged = true;
+                break;
+            }
+        }
+        Assert.True(anyChanged,
+            "Train completed without exception but no parameter changed — " +
+            "shape promotion may have succeeded only at the input layer with " +
+            "the loss/gradient path silently no-op'ing.");
     }
 
     [Fact]
@@ -66,8 +92,35 @@ public class EfficientNetTrainShapePromotionTests
         var target = new Tensor<double>(new[] { 1, 1000 });
         target[0, 42] = 1.0;
 
+        // Snapshot output for the same input AFTER training to verify the
+        // pre-batched target path didn't get double-promoted into [1,1,1000]
+        // (which would silently feed a wrong-shape target to the loss
+        // layer and produce identical-to-pre-train outputs).
+        var paramsBefore = net.GetParameters();
+        var snapshot = new double[paramsBefore.Length];
+        for (int i = 0; i < paramsBefore.Length; i++) snapshot[i] = paramsBefore[i];
+
         var ex = Record.Exception(() => net.Train(input, target));
 
         Assert.Null(ex);
+
+        // Stronger postcondition: parameters must have actually been
+        // updated. If the rank-2 target was double-promoted to rank-3
+        // [1,1,1000], the loss layer's reshape contract may silently
+        // align it back without a real gradient.
+        var paramsAfter = net.GetParameters();
+        bool anyChanged = false;
+        for (int i = 0; i < snapshot.Length && i < paramsAfter.Length; i++)
+        {
+            if (System.Math.Abs(snapshot[i] - paramsAfter[i]) > 1e-15)
+            {
+                anyChanged = true;
+                break;
+            }
+        }
+        Assert.True(anyChanged,
+            "Train completed without exception but no parameter changed — " +
+            "pre-batched rank-2 target may have been double-promoted to " +
+            "[1,1,NumClasses] and silently no-op'd the gradient.");
     }
 }

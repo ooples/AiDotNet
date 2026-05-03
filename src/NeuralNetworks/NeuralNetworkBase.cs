@@ -2376,11 +2376,40 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // with a *different* tensor of the same shape (the canonical
             // DifferentInputs / ScaledInput invariant failure: same shape,
             // new values, but the cached plan returns the first call's
-            // output). PredictCompiled stays available for callers who
-            // explicitly opt in via CompileForward + identical-tensor replay;
-            // the default Predict path is eager so identical-shape-different-
-            // values calls return correct, value-dependent outputs.
-            return PredictEager(promoted);
+            // output).
+            //
+            // Trade-off: this IS a per-call latency regression vs the prior
+            // compiled-by-default behavior. Eager re-runs each forward op
+            // through the engine instead of replaying a baked plan. The
+            // regression is correctness-driven — compiled replay was
+            // returning silently wrong outputs for the very common
+            // "same model, same shape, new values" inference pattern.
+            // A future Tensors-package release that adds value-aware
+            // compiled replay (re-key on a tensor data hash, or
+            // explicit re-trace on input change) can restore the
+            // compiled fast path as the default; until then,
+            // correctness wins. Callers who care about replay latency
+            // can opt back in via CompileForward + identical-tensor
+            // replay (their responsibility to feed the same tensor
+            // reference each call).
+            var output = PredictEager(promoted);
+
+            // If we promoted the input by prepending a unit batch dim,
+            // squeeze the same dim back off the output so callers
+            // passing unbatched inputs get unbatched outputs. Without
+            // this, ResNet/VGG/MobileNet etc. (which used to squeeze
+            // inside Forward when they added their own batch dim) now
+            // return a phantom batch axis on what should be a single-
+            // sample inference.
+            bool wasPromoted = !ReferenceEquals(promoted, input);
+            if (wasPromoted && output.Rank > 1 && output.Shape[0] == 1)
+            {
+                int[] squeezed = new int[output.Rank - 1];
+                for (int i = 0; i < squeezed.Length; i++)
+                    squeezed[i] = output.Shape[i + 1];
+                output = output.Reshape(squeezed);
+            }
+            return output;
         }
         finally
         {
