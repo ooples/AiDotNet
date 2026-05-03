@@ -1424,15 +1424,43 @@ public static class DeserializationHelper
         }
         else
         {
-            // Default: pass inputShape as first parameter
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
-            if (ctor is null)
+            // Default fallback path. Prior behavior was a single
+            // type.GetConstructor(new[] { typeof(int[]) }) lookup, which left ~190
+            // LayerBase<T> subclasses (the vast majority of layers in this
+            // codebase: every Mamba/SSM, every graph layer, every conv variant,
+            // every pooling/norm variant, every modern attention layer) crashing
+            // Clone() / DeepCopy() with NotSupportedException because they have
+            // no (int[]) constructor and no explicit branch above. Tracked as
+            // #1235.
+            //
+            // The new fallback implements direction (1) of #1235's three proposed
+            // fixes: a reflection-driven default-ctor matcher. We score each
+            // public constructor by how well its parameters can be filled from
+            // (inputShape, outputShape, additionalParams, default values) and
+            // invoke the highest-scoring fillable one. This handles the
+            // overwhelming majority of leaf layers without per-layer maintenance.
+            //
+            // Layers whose construction genuinely needs a wrapped layer instance
+            // (LoRA / PEFT adapters, composite blocks) still cannot be handled
+            // here — their reconstruction needs the wrapped layer reference,
+            // which the helper API doesn't carry. Those still throw.
+            instance = TryConstructByMatchingMetadata<T>(type, inputShape, outputShape, additionalParams, layerType);
+            if (instance is null)
             {
-                throw new NotSupportedException(
-                    $"Layer type {layerType} is not supported for deserialization (no known constructor found).");
-            }
+                // Last-resort legacy behavior: try the (int[]) catch-all that
+                // existed before this fallback. Preserves working semantics for
+                // any layer that previously hit this path.
+                var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
+                if (ctor is null)
+                {
+                    throw new NotSupportedException(
+                        $"Layer type {layerType} is not supported for deserialization (no known constructor found). " +
+                        $"Public constructors: [{string.Join(" | ", type.GetConstructors().Select(c => "(" + string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) + ")"))}]. " +
+                        $"Either add a dedicated branch in DeserializationHelper.CreateLayerFromType, ensure GetMetadata persists the constructor parameters, or give the layer a (int[] inputShape) constructor.");
+                }
 
-            instance = ctor.Invoke(new object[] { inputShape });
+                instance = ctor.Invoke(new object[] { inputShape });
+            }
         }
         if (instance == null)
         {
@@ -2032,6 +2060,181 @@ public static class DeserializationHelper
             }
         }
         return 1;
+    }
+
+    /// <summary>
+    /// Reflection-driven constructor matcher used as the universal fallback
+    /// when no dedicated branch exists for a layer. Resolves each public
+    /// constructor's parameters from (inputShape, outputShape, additionalParams,
+    /// default values), scores by fill rate, and invokes the highest-scoring
+    /// constructor whose parameters could all be filled. Returns null if no
+    /// constructor can be filled — caller falls back to the legacy (int[])
+    /// path or throws.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Naming conventions used to map parameters from shape arrays:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><c>int</c> parameters whose name contains "input" / "feature" / "in" / "size" / "dim" / "channel" / "vocab" / "embedding" → first try <c>additionalParams</c>; fall back to <c>inputShape[0]</c> or <c>inputShape[^1]</c>.</item>
+    ///   <item><c>int</c> parameters whose name contains "output" / "out" → first try <c>additionalParams</c>; fall back to <c>outputShape[0]</c> or <c>outputShape[^1]</c>.</item>
+    ///   <item><c>int[]</c> parameters named like inputShape / outputShape → use the corresponding array directly; otherwise look up in <c>additionalParams</c>.</item>
+    ///   <item><c>bool</c> / <c>double</c> / <c>float</c> / <c>string</c> / <c>enum</c> — look up in <c>additionalParams</c> by parameter-name (capitalised first letter); fall back to default value if available.</item>
+    ///   <item><c>IActivationFunction&lt;T&gt;</c> / <c>IVectorActivationFunction&lt;T&gt;</c> — restored via <see cref="TryRestoreActivation{T}"/> (already used by the explicit branches).</item>
+    ///   <item>Other reference types — default value if available, otherwise <c>null</c>.</item>
+    /// </list>
+    /// </remarks>
+    private static object? TryConstructByMatchingMetadata<T>(
+        Type type,
+        int[] inputShape,
+        int[] outputShape,
+        Dictionary<string, object>? additionalParams,
+        string layerType)
+    {
+        var ctors = type.GetConstructors()
+            .OrderByDescending(c => c.GetParameters().Length)
+            .ToList();
+
+        foreach (var ctor in ctors)
+        {
+            var parameters = ctor.GetParameters();
+            var args = new object?[parameters.Length];
+            bool allResolved = true;
+
+            for (int pi = 0; pi < parameters.Length; pi++)
+            {
+                var p = parameters[pi];
+                var pType = p.ParameterType;
+                string pName = p.Name ?? string.Empty;
+                string pNameLower = pName.ToLowerInvariant();
+                string capName = pName.Length == 0
+                    ? string.Empty
+                    : char.ToUpperInvariant(pName[0]) + pName.Substring(1);
+
+                // 1. int-array parameters
+                if (pType == typeof(int[]))
+                {
+                    var arr = TryGetIntArray(additionalParams, capName);
+                    if (arr is not null) { args[pi] = arr; continue; }
+                    if (pNameLower.Contains("input") && pNameLower.Contains("shape")) { args[pi] = inputShape; continue; }
+                    if (pNameLower.Contains("output") && pNameLower.Contains("shape")) { args[pi] = outputShape; continue; }
+                    if (pNameLower.Contains("input")) { args[pi] = inputShape; continue; }
+                    if (pNameLower.Contains("output")) { args[pi] = outputShape; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+
+                // 2. int parameters
+                if (pType == typeof(int))
+                {
+                    var v = TryGetInt(additionalParams, capName);
+                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    // Common transformer naming
+                    if (pNameLower == "sequencelength" && inputShape.Length > 0) { args[pi] = inputShape[0]; continue; }
+                    if (pNameLower == "modeldimension" && inputShape.Length > 1) { args[pi] = inputShape[1]; continue; }
+                    bool inputish = pNameLower.Contains("input") || pNameLower.Contains("feature") || pNameLower.Contains("vocab")
+                        || pNameLower.Contains("embedding") || pNameLower == "size" || pNameLower == "indim" || pNameLower == "infeatures"
+                        || pNameLower.Contains("inputchannel") || pNameLower.Contains("inchannel");
+                    bool outputish = pNameLower.Contains("output") || pNameLower == "outdim" || pNameLower == "outfeatures"
+                        || pNameLower.Contains("outputchannel") || pNameLower.Contains("outchannel") || pNameLower == "numclass";
+                    if (inputish && inputShape.Length > 0) { args[pi] = inputShape[^1]; continue; }
+                    if (outputish && outputShape.Length > 0) { args[pi] = outputShape[^1]; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+
+                // 3. bool / double / float / string parameters
+                if (pType == typeof(bool))
+                {
+                    var v = TryGetBool(additionalParams, capName);
+                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+                if (pType == typeof(double))
+                {
+                    var v = TryGetDouble(additionalParams, capName);
+                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+                if (pType == typeof(float))
+                {
+                    var v = TryGetDouble(additionalParams, capName);
+                    if (v.HasValue) { args[pi] = (float)v.Value; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+                if (pType == typeof(string))
+                {
+                    if (additionalParams != null && additionalParams.TryGetValue(capName, out var sv) && sv is string s) { args[pi] = s; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+
+                // 4. enum parameters — look up by name, parse string (GetMetadata persists enum.ToString())
+                if (pType.IsEnum)
+                {
+                    if (additionalParams != null && additionalParams.TryGetValue(capName, out var ev) && ev is string es && Enum.TryParse(pType, es, out var parsed))
+                    {
+                        args[pi] = parsed; continue;
+                    }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+
+                // 5. activation functions — reuse the existing restorer
+                bool isScalarAct = pType.IsGenericType && pType.GetGenericTypeDefinition() == typeof(IActivationFunction<>);
+                bool isVectorAct = pType.IsGenericType && pType.GetGenericTypeDefinition() == typeof(IVectorActivationFunction<>);
+                if (isScalarAct || isVectorAct)
+                {
+                    var act = TryRestoreActivation<T>(additionalParams);
+                    if (act != null && pType.IsAssignableFrom(act.GetType())) { args[pi] = act; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    if (!pType.IsValueType) { args[pi] = null; continue; }  // most activation params are nullable interface refs
+                    allResolved = false; break;
+                }
+
+                // 6. IEngine — use the ambient process engine.
+                if (pType == typeof(AiDotNet.Tensors.Engines.IEngine))
+                {
+                    args[pi] = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+                    continue;
+                }
+
+                // 7. int[][] (jagged arrays for AddLayer, MultiplyLayer,
+                //    ConcatenateLayer "inputShapes") — try metadata, fall back
+                //    to a single-element jagged wrap of inputShape.
+                if (pType == typeof(int[][]))
+                {
+                    if (additionalParams != null
+                        && additionalParams.TryGetValue(capName, out var jv)
+                        && jv is int[][] jarr)
+                    {
+                        args[pi] = jarr;
+                        continue;
+                    }
+                    args[pi] = new int[][] { inputShape };
+                    continue;
+                }
+
+                // 8. other reference types — default value or null. Reject value
+                // types we don't know how to fill (otherwise we'd hand the ctor
+                // a default(T) that probably violates a precondition).
+                if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                if (!pType.IsValueType) { args[pi] = null; continue; }
+                allResolved = false; break;
+            }
+
+            if (allResolved)
+            {
+                try { return ctor.Invoke(args); }
+                catch (TargetInvocationException) { /* try next ctor */ }
+                catch (ArgumentException) { /* try next ctor */ }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
