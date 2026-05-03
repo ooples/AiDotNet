@@ -3102,18 +3102,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var processedInput = PromoteToBatchedTensor(input);
 
-        // Promote the target whenever its rank looks unbatched. The
-        // canonical CNN training case is input [C, H, W] (rank 3) +
-        // target [numClasses] (rank 1) — the previous "target.Rank ==
-        // input.Rank" check missed this case, leaving the target
-        // unbatched while the promoted input was rank-4 [1, C, H, W],
-        // which broke base.Train's claim of subsuming
-        // EnsureBatchForCnnTraining. Promote whenever target.Rank is
-        // strictly less than the promoted input's rank — the loss
-        // layer's EnsureTargetMatchesPredicted reshape contract handles
-        // any rank-equal-but-shape-different case downstream.
+        // Promote the target only when it looks truly unbatched.
+        // Mirrors EnsureBatchForCnnTraining's `target.Rank <
+        // processedInput.Rank - 2` rule, which is the same threshold
+        // used for the per-CNN helper this method subsumes:
+        //   • CNN classifier (input rank 3 → 4): promote target when
+        //     rank < 2 (i.e. rank-1 [numClasses] → [1, numClasses]).
+        //   • Already-batched target [1, numClasses] (rank 2): NOT
+        //     promoted — would otherwise become [1, 1, numClasses] and
+        //     break the loss layer's shape match.
+        //   • Sequence (input rank 2 → 3): promote target when rank < 1
+        //     (rare; usually targets are pre-batched in seq models).
+        // The earlier `target.Rank < processedInput.Rank` rule was
+        // overzealous and double-promoted pre-batched targets — caught
+        // by Copilot review on PR #1229.
         Tensor<T> processedTarget = target;
-        if (target.Rank < processedInput.Rank)
+        if (target.Rank < processedInput.Rank - 2)
         {
             processedTarget = PromoteToBatchedTensor(target);
         }
