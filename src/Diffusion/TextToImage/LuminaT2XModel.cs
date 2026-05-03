@@ -75,7 +75,10 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     public const int DefaultWidth = 1024;
     public const int DefaultHeight = 1024;
 
-    private const int T2X_LATENT_CHANNELS = 16;
+    // Per Lumina-T2X paper (Gao et al. 2024, §3.1): adopts the SDXL VAE for
+    // image compression with a 4-channel latent space. Was 16 (wrong);
+    // 4 is the paper-faithful value used by all Lumina-T2X variants.
+    private const int T2X_LATENT_CHANNELS = 4;
     private const int T2X_HIDDEN_SIZE = 2048;
     private const int T2X_NUM_LAYERS = 32;
     private const int T2X_CONTEXT_DIM = 2048;

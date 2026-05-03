@@ -230,7 +230,10 @@ public class BarkModel<T> : AudioDiffusionModelBase<T>
             inputChannels: LATENT_CHANNELS, hiddenSize: HIDDEN_DIM,
             numLayers: NUM_LAYERS, numHeads: NUM_HEADS,
             patchSize: 1, contextDim: CONTEXT_DIM);
-        clonedTransformer.SetParameters(_transformer.GetParameters());
+        // Layer-by-layer copy avoids the ~3 GB flat-vector intermediate
+        // that GetParameters + SetParameters would produce — real Bark is
+        // ~360 M params (3 GB doubles) and the round-trip OOMs CI hosts.
+        clonedTransformer.CopyParametersFrom(_transformer);
         return new BarkModel<T>(transformer: clonedTransformer,
             audioVAE: (AudioVAE<T>)_audioVAE.Clone(),
             conditioner: _conditioner);

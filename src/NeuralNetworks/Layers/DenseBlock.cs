@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 3, 8, 8")]
-public class DenseBlock<T> : LayerBase<T>
+public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly List<DenseBlockLayer<T>> _layers;
     private readonly int _numLayers;
@@ -357,4 +357,71 @@ public class DenseBlock<T> : LayerBase<T>
 
     #endregion
 
+    // --- ILayerSerializationExtras: propagate nested DenseBlockLayer BN
+    // running stats through the block's serialization. Each child
+    // DenseBlockLayer implements its own ExtraParameters covering its two
+    // BN sub-layers; we just chain them. Without this, post-training Clone
+    // loses every block's running stats and inference diverges by
+    // orders of magnitude (Clone_AfterTraining_ShouldPreserveLearnedWeights).
+
+    int ILayerSerializationExtras<T>.ExtraParameterCount
+    {
+        get
+        {
+            int count = 0;
+            foreach (var layer in _layers)
+            {
+                if (layer is ILayerSerializationExtras<T> ex)
+                    count += ex.ExtraParameterCount;
+            }
+            return count;
+        }
+    }
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        var parts = new List<T>();
+        foreach (var layer in _layers)
+        {
+            if (layer is ILayerSerializationExtras<T> ex)
+                parts.AddRange(ex.GetExtraParameters().ToArray());
+        }
+        return new Vector<T>(parts.ToArray());
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        int offset = 0;
+        // Index loop instead of foreach + IndexOf: the original IndexOf call
+        // inside the error message turned the loop O(n²) for no reason.
+        // The error is only thrown on truncation, so we don't need IndexOf
+        // for the happy path either — just track the index directly.
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            var layer = _layers[i];
+            if (layer is ILayerSerializationExtras<T> ex)
+            {
+                int count = ex.ExtraParameterCount;
+                if (offset + count > extraParameters.Length)
+                    throw new ArgumentException(
+                        $"Truncated extra-parameters at DenseBlockLayer #{i}: " +
+                        $"need {offset + count} but got {extraParameters.Length}.");
+                ex.SetExtraParameters(extraParameters.SubVector(offset, count));
+                offset += count;
+            }
+        }
+
+        // Reject surplus payload — silently dropping the tail would let
+        // version-mismatched serialized blobs deserialize as if they
+        // succeeded, masking schema drift between writer and reader.
+        if (offset != extraParameters.Length)
+        {
+            throw new ArgumentException(
+                $"DenseBlock extra-parameters payload had {extraParameters.Length} elements " +
+                $"but only {offset} were consumed by sub-layer running stats. " +
+                $"This usually means the serialized model was written with a different " +
+                $"DenseBlock topology (numLayers / sub-layer composition) than the one " +
+                $"being deserialized.");
+        }
+    }
 }

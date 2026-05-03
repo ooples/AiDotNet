@@ -5,6 +5,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Models;
 
@@ -64,6 +65,19 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Default implementation yields nothing. Concrete model bases that
+    /// represent a real layer stack (NeuralNetworkBase) override to walk
+    /// trainable parameters per-tensor; classical / sklearn-style models
+    /// (linear regressors, trees, clustering) keep the empty default
+    /// because their flat <see cref="GetParameters"/> path is sufficient
+    /// (parameter counts are well below int.MaxValue). Foundation-scale
+    /// diffusion models override at <c>DiffusionModelBase</c> / per-model
+    /// level — tracked by issue #1237.
+    /// </remarks>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
 
     /// <inheritdoc/>
     public abstract IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters);

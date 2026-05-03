@@ -30320,52 +30320,82 @@ public static class LayerHelper<T>
         int numEncoderLayers = 4,
         int numCategories = 35)
     {
+        // Per Tian et al. 2018, "Audio-Visual Event Localization in
+        // Unconstrained Videos" (ECCV 2018): dual-stream model with separate
+        // audio and visual encoders, temporal modeling, cross-modal fusion,
+        // and task heads. The parent model's InitializeLayers parses this
+        // sequence as a FLAT list (audioInProj, audioEnc×N, audioOutProj,
+        // visualInProj, visualEnc×N, visualOutProj, tempAttn×4, tempProp,
+        // crossAttn×4, eventHead, tempBoundary, spatial, anomaly). Yielding
+        // a ParallelStreamsLayer wrapper would break the model's [idx++]
+        // cast pattern; the parent network owns the parallel-stream
+        // dispatch in its forward method, not this helper.
         IActivationFunction<T>? nullActivation = null;
         var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
         int numHeads = 8;
 
-        // Dual-stream architecture: audio and visual encoders run in parallel via
-        // ParallelStreamsLayer, then fused with cross-modal attention.
-        // Input is [audioFeatures | visualFeatures] concatenated, split in half.
-        int halfInput = inputSize / 2;
-
-        var audioEncoderLayers = new List<ILayer<T>>
+        // Validate AVEL config at the boundary so invalid combos surface
+        // here with an actionable error instead of failing deeper inside
+        // MultiHeadAttentionLayer (silent integer truncation if not
+        // divisible by numHeads), DenseLayer (negative-output crashes),
+        // or the parent model's InitializeLayers ([idx++] mis-casts on
+        // an empty sequence). All checks mirror the paper's per-stage
+        // contract — embeddingDimension must split evenly across heads,
+        // encoder depth and class count must be positive.
+        if (embeddingDimension <= 0)
         {
-            new DenseLayer<T>(embeddingDimension, tanhActivation)
-        };
-        for (int i = 0; i < numEncoderLayers; i++)
-            audioEncoderLayers.Add(new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads)));
-        audioEncoderLayers.Add(new DenseLayer<T>(embeddingDimension, tanhActivation));
-
-        var visualEncoderLayers = new List<ILayer<T>>
+            throw new ArgumentOutOfRangeException(
+                nameof(embeddingDimension), embeddingDimension,
+                "embeddingDimension must be positive.");
+        }
+        if (embeddingDimension % numHeads != 0)
         {
-            new DenseLayer<T>(embeddingDimension, tanhActivation)
-        };
+            throw new ArgumentException(
+                $"embeddingDimension ({embeddingDimension}) must be divisible by numHeads ({numHeads}); " +
+                $"otherwise the per-head dim truncates and breaks attention output projection.",
+                nameof(embeddingDimension));
+        }
+        if (numEncoderLayers < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numEncoderLayers), numEncoderLayers,
+                "numEncoderLayers must be non-negative.");
+        }
+        if (numCategories <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numCategories), numCategories,
+                "numCategories must be positive (event classification head needs a real output dim).");
+        }
+
+        // Audio encoder (input projection + attention stack + output projection)
+        yield return new DenseLayer<T>(embeddingDimension, tanhActivation);
         for (int i = 0; i < numEncoderLayers; i++)
-            visualEncoderLayers.Add(new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads)));
-        visualEncoderLayers.Add(new DenseLayer<T>(embeddingDimension, tanhActivation));
-
-        yield return new ParallelStreamsLayer<T>(
-            inputSize, embeddingDimension, embeddingDimension,
-            audioEncoderLayers, visualEncoderLayers);
-
-        // Fused representation is [audioEmbed | visualEmbed] = 2 * embeddingDimension
-        int fusedDim = embeddingDimension * 2;
-
-        // Project fused features back to embeddingDimension
+            yield return new MultiHeadAttentionLayer<T>(numHeads, embeddingDimension / numHeads);
         yield return new DenseLayer<T>(embeddingDimension, tanhActivation);
 
-        // Temporal modeling: 4 attention layers
+        // Visual encoder (mirrors audio per the paper's symmetric dual-stream design)
+        yield return new DenseLayer<T>(embeddingDimension, tanhActivation);
+        for (int i = 0; i < numEncoderLayers; i++)
+            yield return new MultiHeadAttentionLayer<T>(numHeads, embeddingDimension / numHeads);
+        yield return new DenseLayer<T>(embeddingDimension, tanhActivation);
+
+        // Temporal modeling: 4 attention layers + proposal head
         for (int i = 0; i < 4; i++)
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(numHeads, embeddingDimension / numHeads);
         yield return new DenseLayer<T>(embeddingDimension, tanhActivation);
 
         // Cross-modal fusion: 4 attention layers
         for (int i = 0; i < 4; i++)
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
+            yield return new MultiHeadAttentionLayer<T>(numHeads, embeddingDimension / numHeads);
 
-        // Event classification head
+        // Task-specific heads (event classification, temporal boundary,
+        // spatial localization, anomaly detection — all yielded in the
+        // order the parent model's InitializeLayers expects)
         yield return new DenseLayer<T>(numCategories, nullActivation);
+        yield return new DenseLayer<T>(2, nullActivation);                  // temporal boundary [start, end]
+        yield return new DenseLayer<T>(4, nullActivation);                  // spatial bbox [x, y, w, h]
+        yield return new DenseLayer<T>(1, nullActivation);                  // anomaly score
     }
 
     /// <summary>
