@@ -398,10 +398,31 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // byte[] storage replaces the full-precision Tensor pair the original
             // Step path was holding, which is the whole point of Adam8Bit — see
             // QuantizedTapeState's remarks for the memory math.
-            if (!_tapeStates.TryGetValue(param, out var state))
+            //
+            // Shape-mismatch guard mirrors AdamOptimizer.Step's: if the
+            // parameter was first seen at a lazy-init placeholder shape
+            // (e.g., a MultiHeadAttentionLayer that hadn't yet seen its
+            // first Forward), our cached state's byte[] / scale buffers
+            // were sized for the placeholder. Once the real weights
+            // materialize the parameter length grows; without a re-alloc
+            // here, DequantizeTensor / QuantizeTensor would index past
+            // the end of the stored arrays.
+            if (!_tapeStates.TryGetValue(param, out var state) || state.Length != param.Length)
             {
                 state = AllocateTapeState(param.Length);
                 _tapeStates[param] = state;
+            }
+
+            // Reshape gradient to match parameter shape when element counts
+            // match — same fix as AdamOptimizer.Step. Reshape() adds/removes
+            // batch dimensions in some forward paths, leaving grad and param
+            // with different _shape arrays but identical Length. The math
+            // ops below assume shape compatibility; without this guard,
+            // TensorAdd would throw on a length-equal-but-shape-different
+            // pair.
+            if (!param._shape.SequenceEqual(grad._shape) && param.Length == grad.Length)
+            {
+                grad = Engine.Reshape(grad, param._shape);
             }
 
             // Dequantize moments into transient Tensors for the math path. These
@@ -415,9 +436,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             else
             {
-                // Lazy-allocate the full-precision m on the first iteration
-                // that sees this parameter. Zero-initialized, matching the
-                // first-call contract of the legacy quantized path.
+                // Lazy-allocate the full-precision m on the first Step that
+                // sees this parameter — AllocateTapeState intentionally
+                // leaves state.MFullPrecision null because the parameter's
+                // _shape isn't known until Step actually runs (the
+                // optimizer's tape state is keyed by Tensor reference, not
+                // by an a-priori-known shape). Zero-initialization on first
+                // alloc matches Adam's m_0 = 0 initial condition.
                 state.MFullPrecision ??= new Tensor<T>(param._shape);
                 m = state.MFullPrecision;
             }
@@ -443,7 +468,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             else
             {
-                state.MFullPrecision = newM;
+                // Copy newM's values into the persistent state.MFullPrecision
+                // tensor in place rather than replacing the reference. The
+                // engine's tensor ops (TensorAdd / TensorMultiplyScalar) return
+                // arena-allocated tensors that the arena will reclaim on Step
+                // exit — assigning newM to state.MFullPrecision would either
+                // (a) retain a tensor backed by reclaimed memory, or (b) keep
+                // the arena allocation alive across Step calls and bypass the
+                // arena's per-iteration recycling. TensorCopy keeps the
+                // long-lived state on a stable backing buffer.
+                Engine.TensorCopy(newM, state.MFullPrecision!);
             }
             QuantizeTensor(newV, state.VQuantized, state.VScales, state.NumBlocks, isSigned: false);
 
@@ -512,6 +546,17 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         int blockSize = _options.BlockSize;
         int totalLength = values.Length;
+
+        // Reuse a single rented buffer across all blocks for the percentile
+        // path. Previously each block allocated a fresh List<double> and
+        // fully sorted it — at default QuantizationPercentile=99.9 with a
+        // foundation-scale model (300 M params, blockSize=64 → ~4.7 M
+        // blocks per Step) this was the dominant allocator hotspot. ArrayPool
+        // amortizes the allocation across the whole tensor; we still pay a
+        // sort per block but no GC pressure for the buffer itself.
+        double[]? rentedBuffer = null;
+        try
+        {
         for (int b = 0; b < numBlocks; b++)
         {
             int blockStart = b * blockSize;
@@ -528,12 +573,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             else
             {
-                var absValues = new List<double>(blockEnd - blockStart);
-                for (int i = blockStart; i < blockEnd; i++)
-                    absValues.Add(Math.Abs(NumOps.ToDouble(values[i])));
-                absValues.Sort();
-                int percentileIdx = (int)((absValues.Count - 1) * _options.QuantizationPercentile / 100.0);
-                maxAbs = absValues[percentileIdx];
+                int blockLen = blockEnd - blockStart;
+                rentedBuffer ??= System.Buffers.ArrayPool<double>.Shared.Rent(blockSize);
+                for (int i = 0; i < blockLen; i++)
+                    rentedBuffer[i] = Math.Abs(NumOps.ToDouble(values[blockStart + i]));
+                Array.Sort(rentedBuffer, 0, blockLen);
+                int percentileIdx = (int)((blockLen - 1) * _options.QuantizationPercentile / 100.0);
+                maxAbs = rentedBuffer[percentileIdx];
             }
 
             double scale = maxAbs / (isSigned ? 127.0 : 255.0);
@@ -568,6 +614,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     quantized[i] = (byte)quantizedVal;
                 }
             }
+        }
+        }
+        finally
+        {
+            if (rentedBuffer is not null)
+                System.Buffers.ArrayPool<double>.Shared.Return(rentedBuffer);
         }
     }
 
