@@ -870,6 +870,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     public override void Reset()
     {
         base.Reset();
+        // Legacy flat-state path (Step(IFullModel) / UpdateSolution).
         _mQuantized = null;
         _vQuantized = null;
         _mScales = null;
@@ -878,6 +879,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         _t = 0;
         _parameterLength = 0;
         _numBlocks = 0;
+        // Tape-state path (Step(TapeStepContext)). Without these clears,
+        // a fresh Reset() leaves stale per-parameter moments + bias-
+        // correction step counter in place — the next training run
+        // would resume from old state instead of cold-starting.
+        _tapeStates.Clear();
+        _tapeStep = 0;
     }
 
     /// <summary>
@@ -1012,6 +1019,31 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 }
             }
 
+            // Tape-state checkpoint partial: persist the global step counter
+            // (_tapeStep) so bias-correction terms resume correctly after
+            // load. Per-parameter tape moments (_tapeStates) are NOT
+            // persisted because the dictionary is keyed by Tensor<T>
+            // reference — those references don't survive a process restart,
+            // and there's no stable parameter-id mapping to re-key them on
+            // load. Warn loudly so users know mid-training Adam-state
+            // checkpoint/resume is partial: the bias-correction step
+            // counter resumes (so update magnitudes match), but per-
+            // parameter moments cold-start (first few steps after resume
+            // see a small spike before momentum re-accumulates). Full
+            // tape-state checkpoint is a larger architectural change
+            // tracked separately.
+            if (_tapeStates.Count > 0)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Adam8BitOptimizer.Serialize: {_tapeStates.Count} per-parameter " +
+                    $"tape Adam moments are NOT persisted (dictionary keyed by Tensor " +
+                    $"reference, not stable across serialize/deserialize). The global " +
+                    $"step counter _tapeStep={_tapeStep} IS persisted for bias-correction " +
+                    $"continuity. Mid-training resume will cold-start moments but match " +
+                    $"the bias-correction trajectory.");
+            }
+            writer.Write(_tapeStep);
+
             return ms.ToArray();
         }
     }
@@ -1092,6 +1124,24 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     _vScales[i] = reader.ReadDouble();
                 }
             }
+
+            // Tape-state checkpoint partial (matches Serialize): read the
+            // global step counter so bias-correction continues from the
+            // saved trajectory. Per-parameter tape moments cold-start —
+            // _tapeStates is left empty and the next tape Step lazily
+            // re-allocates entries on first touch. ReadInt32 is wrapped
+            // to handle older payloads written before this field was
+            // added (pre-#1240 follow-up): EndOfStreamException leaves
+            // _tapeStep=0, which is the safe cold-start default.
+            try
+            {
+                _tapeStep = reader.ReadInt32();
+            }
+            catch (EndOfStreamException)
+            {
+                _tapeStep = 0;
+            }
+            _tapeStates.Clear();
 
             InitializeAdaptiveParameters();
         }
