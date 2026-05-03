@@ -1132,15 +1132,16 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         Assert.NotNull(model.VAE);
         Assert.IsType<AiDotNet.Diffusion.VAE.TemporalVAE<double>>(model.VAE);
 
-        // ParameterCount overflows (issue #1237) — assert it overflows in
-        // the documented direction (negative or zero after wrap) rather
-        // than skipping silently. If a future PR lands the long widening,
-        // this test will fail and prompt re-enabling the equality check.
-        int reported = model.ParameterCount;
-        Assert.True(reported <= 0 || reported < int.MaxValue / 2,
-            $"Sora.ParameterCount = {reported}. If this is now positive and large, " +
-            $"long-widening (#1237) likely landed and SoraModel_ParameterCount_MatchesGetParametersLength " +
-            $"can be re-enabled as the standard equality assertion.");
+        // ParameterCount overflow detection (issue #1237) is intentionally
+        // OMITTED here. A wrapped int can land at any value — negative,
+        // zero, or any positive number that happens to be the true count
+        // mod 2^32 — so any range-based assertion is brittle and would
+        // either false-pass on a real overflow or false-fail on a future
+        // long-widening that doesn't actually fix the bug. The component-
+        // type asserts above already cover the regression class this test
+        // exists to catch (silent component swap / missing-component bugs);
+        // ParameterCount validity is a separate invariant tracked by
+        // #1237 once the chunked API is plumbed through DiffusionModelBase.
     }
 
     [Fact(Timeout = 120000)]

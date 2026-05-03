@@ -1,4 +1,5 @@
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -19,6 +20,13 @@ public class EfficientNetTrainShapePromotionTests
     [Fact]
     public void Train_RankThreeInputAndRankOneTarget_PromotesAndDoesNotThrow()
     {
+        // Wrap the body in a TensorArena scope so the multi-MB
+        // forward/backward intermediates allocated during Train don't
+        // leak into the managed heap and compound across the shard —
+        // matches the test convention used everywhere else in this repo
+        // (NeuralNetworkModelTestBase invariants, etc.).
+        using var _arena = TensorArena.Create();
+
         // EfficientNet-B0 default ctor (paper-faithful Tan & Le 2019):
         // NumClasses = 1000, InputType = ThreeDimensional with
         // InputDepth = 3 (RGB), InputHeight = InputWidth = 224.
@@ -80,6 +88,10 @@ public class EfficientNetTrainShapePromotionTests
     [Fact]
     public void Train_RankThreeInputAndRankTwoTarget_PromotesAndDoesNotThrow()
     {
+        // Same TensorArena guard as the rank-1-target test above — keeps
+        // the per-fact intermediate allocations off the managed heap.
+        using var _arena = TensorArena.Create();
+
         // The other common shape-pair: unbatched rank-3 RGB image
         // ([3, H, W]) + already-rank-2 pre-batched target ([1, NumClasses]).
         // EnsureBatchForCnnTraining only promotes the target when its

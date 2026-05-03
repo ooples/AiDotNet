@@ -277,7 +277,14 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// <param name="labels">Label tensor for supervised learning.</param>
     /// <param name="trainMask">Optional boolean mask indicating which nodes to train on.</param>
     /// <param name="epochs">Number of training epochs (default: 200).</param>
-    /// <param name="learningRate">Learning rate for optimization (default: 0.01).</param>
+    /// <param name="learningRate">
+    /// [Obsolete] Per-call learning rate. Ignored on the tape-based path
+    /// because training always uses the instance's <c>_optimizer</c>
+    /// configuration (set in the constructor). Kept on the signature as
+    /// a non-breaking transition; pass the rate via the optimizer instead
+    /// (e.g. <c>new GraphIsomorphismNetwork&lt;T&gt;(arch, optimizer:
+    /// new AdamOptimizer&lt;T,Tensor&lt;T&gt;,Tensor&lt;T&gt;&gt;(this, new AdamOptions { LearningRate = 0.01 }))</c>).
+    /// </param>
     public void TrainOnGraph(
         Tensor<T> nodeFeatures,
         Tensor<T> adjacencyMatrix,
@@ -302,6 +309,10 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
                 "equal to model predictions so their loss contribution is zero) " +
                 "and call TrainOnGraph without a mask.");
         }
+        // learningRate is kept for non-breaking signature compat but the
+        // tape path always uses _optimizer's configured rate. Discard
+        // explicitly so the analyzer doesn't flag it as dead-with-no-reason.
+        _ = learningRate;
 
         for (int epoch = 0; epoch < epochs; epoch++)
         {
@@ -346,7 +357,12 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
     /// <param name="adjacencyMatrices">List of adjacency matrices.</param>
     /// <param name="graphLabels">Labels for each graph.</param>
     /// <param name="epochs">Number of training epochs (default: 100).</param>
-    /// <param name="learningRate">Learning rate for optimization (default: 0.01).</param>
+    /// <param name="learningRate">
+    /// [Obsolete] Per-call learning rate. Ignored on the tape-based path
+    /// because training always uses the instance's <c>_optimizer</c>
+    /// configuration. Kept on the signature for non-breaking transition;
+    /// pass the rate via the optimizer instead.
+    /// </param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Graph classification with GIN:
     ///
@@ -377,8 +393,39 @@ public class GraphIsomorphismNetwork<T> : NeuralNetworkBase<T>
         // architecture must contain a SumReadout-style pooling layer at the
         // end. Reject the call explicitly so users add the readout to their
         // architecture instead of silently training nothing.
+
+        // Up-front argument validation: catch mismatched-list and shape
+        // bugs at the boundary so callers see a clear error instead of an
+        // IndexOutOfRangeException emitted mid-training.
+        if (graphs is null) throw new ArgumentNullException(nameof(graphs));
+        if (adjacencyMatrices is null) throw new ArgumentNullException(nameof(adjacencyMatrices));
+        if (graphLabels is null) throw new ArgumentNullException(nameof(graphLabels));
         if (graphs.Count == 0)
             throw new ArgumentException("graphs list must not be empty.", nameof(graphs));
+        if (adjacencyMatrices.Count != graphs.Count)
+        {
+            throw new ArgumentException(
+                $"adjacencyMatrices.Count ({adjacencyMatrices.Count}) must equal graphs.Count " +
+                $"({graphs.Count}); each graph needs exactly one adjacency matrix.",
+                nameof(adjacencyMatrices));
+        }
+        if (graphLabels.Rank != 2)
+        {
+            throw new ArgumentException(
+                $"graphLabels must be rank-2 [numGraphs, numClasses]; got rank {graphLabels.Rank} " +
+                $"(shape [{string.Join(",", graphLabels.Shape)}]).",
+                nameof(graphLabels));
+        }
+        if (graphLabels.Shape[0] != graphs.Count)
+        {
+            throw new ArgumentException(
+                $"graphLabels.Shape[0] ({graphLabels.Shape[0]}) must equal graphs.Count " +
+                $"({graphs.Count}); one label row per graph.",
+                nameof(graphLabels));
+        }
+        // learningRate is kept for non-breaking signature compat but the
+        // tape path always uses _optimizer's configured rate.
+        _ = learningRate;
 
         var firstNodeFeatures = graphs[0];
         var firstAdjacency = adjacencyMatrices[0];
