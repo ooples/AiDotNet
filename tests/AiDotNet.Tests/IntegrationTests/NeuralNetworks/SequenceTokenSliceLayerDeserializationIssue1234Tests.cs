@@ -134,9 +134,19 @@ public class SequenceTokenSliceLayerDeserializationIssue1234Tests
         // entry of the layer chain. Post-fix the clone succeeds and recovers an
         // independent network instance.
         var clone = net.Clone();
-        Assert.NotNull(clone);
-        Assert.IsType<Transformer<float>>(clone);
-        Assert.NotSame(net, clone);
+        var cloneTransformer = Assert.IsType<Transformer<float>>(clone);
+        Assert.NotSame(net, cloneTransformer);
+
+        // Stronger postcondition (matches the deep-copy test's layer-chain
+        // assertion): the cloned network MUST contain a
+        // SequenceTokenSliceLayer in its layer chain. Bare type / not-same
+        // checks pass even if the slice layer was silently dropped during
+        // deser, which would regress the original #1234 failure mode
+        // (token-input Transformer ends up with no last-token pooling and
+        // emits [batch, seq, dim] instead of [batch, dim]).
+        Assert.True(
+            cloneTransformer.Layers.Any(l => l is SequenceTokenSliceLayer<float>),
+            "Cloned Transformer must contain a SequenceTokenSliceLayer (last-token pooling).");
     }
 
     [Fact]

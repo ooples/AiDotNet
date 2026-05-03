@@ -4,6 +4,33 @@ namespace AiDotNet.Helpers;
 
 public static class DeserializationHelper
 {
+    /// <summary>
+    /// Structured marker exception thrown by an explicit-branch constructor
+    /// lookup when the expected constructor signature is not present on the
+    /// concrete layer type (typically because the layer was refactored away
+    /// from that signature). The outer try/catch in
+    /// <see cref="CreateLayerFromType{T}"/> uses this as the trigger to fall
+    /// through to <see cref="TryConstructByMatchingMetadata{T}"/>. Replaces
+    /// the brittle <c>ex.Message.StartsWith("Cannot find ")</c> convention.
+    /// </summary>
+    private sealed class MissingLayerCtorException : InvalidOperationException
+    {
+        public MissingLayerCtorException(string message) : base(message) { }
+    }
+
+    /// <summary>
+    /// Returns true when an InvalidOperationException's message matches the
+    /// legacy "Cannot find &lt;layer name&gt; constructor" convention used by
+    /// the 50+ explicit-branch throw sites that haven't migrated to
+    /// <see cref="MissingLayerCtorException"/> yet. Kept narrowly scoped to
+    /// avoid swallowing unrelated InvalidOperationExceptions.
+    /// </summary>
+    private static bool IsMissingCtorMessage(string message)
+    {
+        return message.StartsWith("Cannot find ", StringComparison.Ordinal)
+            && message.Contains("constructor", StringComparison.Ordinal);
+    }
+
     private static readonly Dictionary<string, Type> LayerTypes = new Dictionary<string, Type>();
 
     static DeserializationHelper()
@@ -1238,7 +1265,26 @@ public static class DeserializationHelper
             var ctorC = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
             var psC = ctorC.GetParameters();
             var argsC = new object?[psC.Length];
-            int[] convInput = inputShape.Length >= 4 ? inputShape : new[] { 4, 1, 8, 8 };
+            // ConvLSTM requires rank-4 inputShape [time, channels, H, W]. If
+            // the serialized shape is degenerate, fall back to a synthetic
+            // [4, 1, 8, 8] so reconstruction succeeds — but loudly so the
+            // semantic-mismatch is visible in diagnostics. Tracked under
+            // issue #1235; the proper fix is to require the rank-4 shape
+            // metadata be persisted by GetMetadata.
+            int[] convInput;
+            if (inputShape.Length >= 4)
+            {
+                convInput = inputShape;
+            }
+            else
+            {
+                convInput = new[] { 4, 1, 8, 8 };
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DeserializationHelper.ConvLSTMLayer: serialized inputShape has rank " +
+                    $"{inputShape.Length} (need 4 for [time, channels, H, W]); falling back to " +
+                    $"synthetic [4, 1, 8, 8]. Reconstructed layer dimensions will NOT match " +
+                    $"the original. Tracked under #1235.");
+            }
             for (int i = 0; i < psC.Length; i++)
             {
                 var p = psC[i];
@@ -1455,16 +1501,38 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(SequenceTokenSliceLayer<>))
         {
-            // SequenceTokenSliceLayer<T>(Position position) — the Position enum is
-            // round-tripped through GetMetadata("Position") as its string name.
-            // Default to Position.Last so legacy networks serialized before the
-            // metadata key existed deserialize to the autoregressive-LM default
-            // (matches LayerHelper.CreateDefaultTransformerLayers).
-            var positionEnumType = typeof(SequenceTokenSliceLayer<T>.Position);
-            var positionStr = additionalParams != null && additionalParams.TryGetValue("Position", out var pVal)
-                ? pVal as string : null;
-            var position = !string.IsNullOrEmpty(positionStr) && Enum.TryParse(positionEnumType, positionStr, out var pe) && pe is SequenceTokenSliceLayer<T>.Position pos
-                ? pos : SequenceTokenSliceLayer<T>.Position.Last;
+            // SequenceTokenSliceLayer<T>(Position position) — round-tripped
+            // via GetMetadata("Position") as its enum name. Use the shared
+            // TryGetEnum<TEnum> helper so already-typed values pass through
+            // (the inline Enum.TryParse path silently ignored non-string
+            // values), and so the parsing convention stays consistent with
+            // the rest of DeserializationHelper.
+            //
+            // Default to Position.Last only when the key is ABSENT.
+            // GetMetadata always writes the enum name, so a present-but-
+            // unparseable value means corrupt or incompatible serialized
+            // data — surface that as an error rather than silently
+            // collapsing to Last and changing layer semantics.
+            SequenceTokenSliceLayer<T>.Position position;
+            bool positionPresent = additionalParams is not null
+                && additionalParams.TryGetValue("Position", out _);
+            if (!positionPresent)
+            {
+                position = SequenceTokenSliceLayer<T>.Position.Last;
+            }
+            else
+            {
+                var parsed = TryGetEnum<SequenceTokenSliceLayer<T>.Position>(additionalParams, "Position");
+                if (parsed is null)
+                {
+                    var raw = additionalParams!["Position"];
+                    throw new InvalidOperationException(
+                        $"Invalid SequenceTokenSliceLayer Position metadata '{raw}' " +
+                        $"(type {raw?.GetType().Name ?? "null"}). Expected one of: " +
+                        $"{string.Join(", ", Enum.GetNames(typeof(SequenceTokenSliceLayer<T>.Position)))}.");
+                }
+                position = parsed.Value;
+            }
             instance = new SequenceTokenSliceLayer<T>(position);
         }
         else if (genericDef == typeof(RBMLayer<>))
@@ -1686,11 +1754,14 @@ public static class DeserializationHelper
             // #1235.
             //
             // The new fallback implements direction (1) of #1235's three proposed
-            // fixes: a reflection-driven default-ctor matcher. We score each
-            // public constructor by how well its parameters can be filled from
-            // (inputShape, outputShape, additionalParams, default values) and
-            // invoke the highest-scoring fillable one. This handles the
-            // overwhelming majority of leaf layers without per-layer maintenance.
+            // fixes: a reflection-driven default-ctor matcher. It iterates
+            // public constructors by descending arity and invokes the FIRST
+            // overload whose parameters can all be resolved from
+            // (inputShape, outputShape, additionalParams, default values).
+            // This is a longest-fillable-first heuristic, not a true scored
+            // match — see TryConstructByMatchingMetadata's remarks for the
+            // selection caveat. It handles the overwhelming majority of leaf
+            // layers without per-layer maintenance.
             //
             // Layers whose construction genuinely needs a wrapped layer instance
             // (LoRA / PEFT adapters, composite blocks) still cannot be handled
@@ -1715,11 +1786,23 @@ public static class DeserializationHelper
             }
         }
         }
-        catch (InvalidOperationException ex) when (ex.Message.StartsWith("Cannot find ", StringComparison.Ordinal))
+        catch (MissingLayerCtorException ex)
         {
-            // An explicit branch tried to look up a specific constructor that
-            // no longer exists (the layer was refactored). Capture and fall
-            // through to the matcher.
+            // Explicit branch reported a constructor lookup miss via the
+            // structured marker exception. This is the preferred signal
+            // for the matcher fall-through.
+            branchFailure = ex;
+            instance = null;
+        }
+        catch (InvalidOperationException ex) when (IsMissingCtorMessage(ex.Message))
+        {
+            // Legacy fallback for explicit branches that haven't migrated
+            // to MissingLayerCtorException yet. Detection is based on the
+            // canonical "Cannot find ... constructor" message convention
+            // used by the existing 50+ throw sites in this file (see all
+            // GetConstructor null-checks throughout). This path will be
+            // removed once all branches are migrated; for now it keeps
+            // behavior stable while the structured marker rolls out.
             branchFailure = ex;
             instance = null;
         }
@@ -2565,7 +2648,17 @@ public static class DeserializationHelper
         }
 
         try { return ctor.Invoke(args); }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            // Trace the actual failure reason before falling through to the
+            // generic "Could not construct ..." error at the caller. The
+            // ctor.Invoke wrap turns validation errors into TargetInvocation-
+            // Exceptions; unwrap to keep the message actionable.
+            System.Diagnostics.Trace.TraceWarning(
+                $"DeserializationHelper: LoRA adapter {type.Name} construction failed: " +
+                $"{(ex is TargetInvocationException tie ? tie.InnerException?.Message : ex.Message)}");
+            return null;
+        }
     }
 
     /// <summary>
@@ -2609,20 +2702,47 @@ public static class DeserializationHelper
             else if (ps[i].HasDefaultValue) args[i] = ps[i].DefaultValue;
             else args[i] = null;
         }
-        try { init.Invoke(null, args); } catch { /* best-effort */ }
+        try { init.Invoke(null, args); }
+        catch (Exception ex)
+        {
+            // Surface the failure at Trace level instead of swallowing
+            // silently — a failed shared-matrix init would otherwise let
+            // the next adapter ctor fall through and report a confusing
+            // downstream error (e.g., "shared matrices not initialized")
+            // with no breadcrumb back to the actual failure here.
+            System.Diagnostics.Trace.TraceWarning(
+                $"DeserializationHelper.EnsureLoRASharedMatricesInitialized: " +
+                $"InitializeSharedMatrices for {genericDef.Name} failed: " +
+                $"{(ex is TargetInvocationException tie ? tie.InnerException?.Message : ex.Message)}");
+        }
     }
 
     /// <summary>
     /// Builds a placeholder inner-layer instance when a constructor parameter
     /// expects an <c>ILayer&lt;T&gt;</c> / <c>LayerBase&lt;T&gt;</c> /
     /// <c>ILayer&lt;T&gt;[]</c> / <c>List&lt;ILayer&lt;T&gt;&gt;</c> /
-    /// <c>IEnumerable&lt;ILayer&lt;T&gt;&gt;</c> reference. The placeholder is
+    /// <c>IEnumerable&lt;ILayer&lt;T&gt;&gt;</c> reference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Known limitation (issue #1235 follow-up):</b> the placeholder is
     /// a tiny <c>DenseLayer&lt;T&gt;</c> — enough to satisfy null-check
     /// preconditions in LoRA adapters / composite layers so the matcher's
-    /// construction step doesn't fail. Tracked under #1235: the proper
-    /// round-trip path is for each adapter to embed its wrapped base layer
-    /// via <c>ILayerSerializationExtras</c>.
-    /// </summary>
+    /// construction step doesn't crash, but NOT semantically equivalent to
+    /// the original wrapped layer. Adapters reconstructed via this path
+    /// have the WRONG inner layer (a generic DenseLayer instead of e.g.
+    /// the original Conv2D / MultiHeadAttention / etc.). Their structural
+    /// metadata round-trips; their wrapped layer's parameters do not.
+    /// </para>
+    /// <para>
+    /// Each call emits a <c>Trace.TraceWarning</c> so the placeholder
+    /// usage is visible in diagnostics rather than silent. The proper fix
+    /// is for each adapter to embed its wrapped base layer through
+    /// <c>ILayerSerializationExtras</c>; until that ships, this fallback
+    /// keeps Clone()/DeepCopy() functional for the architecture-only
+    /// round-trip cases that don't depend on inner-layer parameter values.
+    /// </para>
+    /// </remarks>
     private static bool TryCreatePlaceholderInnerLayer<T>(Type pType, out object? placeholder)
     {
         placeholder = null;
@@ -2665,6 +2785,15 @@ public static class DeserializationHelper
         if (isLayerBase || isILayer)
         {
             placeholder = CreatePlaceholderDense();
+            // Surface the placeholder usage at Trace level so callers can
+            // detect that the reconstructed adapter doesn't have its
+            // original wrapped layer. Issue #1235 follow-up will replace
+            // this with proper ILayerSerializationExtras round-trip.
+            System.Diagnostics.Trace.TraceWarning(
+                $"DeserializationHelper.TryCreatePlaceholderInnerLayer: " +
+                $"injected DenseLayer<T> placeholder for ctor parameter of type {pType.Name}; " +
+                $"reconstructed layer is NOT semantically equivalent to the original (wrapped " +
+                $"layer parameters were not round-tripped). Tracked under issue #1235.");
             return placeholder is not null;
         }
 
@@ -2753,13 +2882,30 @@ public static class DeserializationHelper
 
     /// <summary>
     /// Reflection-driven constructor matcher used as the universal fallback
-    /// when no dedicated branch exists for a layer. Resolves each public
-    /// constructor's parameters from (inputShape, outputShape, additionalParams,
-    /// default values), scores by fill rate, and invokes the highest-scoring
-    /// constructor whose parameters could all be filled. Returns null if no
-    /// constructor can be filled — caller falls back to the legacy (int[])
-    /// path or throws.
+    /// when no dedicated branch exists for a layer. Iterates public
+    /// constructors ordered by descending parameter count, attempts to
+    /// resolve each parameter from (inputShape, outputShape, additionalParams,
+    /// default values), and invokes the FIRST constructor whose parameters
+    /// can all be filled. Returns null if no constructor can be filled —
+    /// caller falls back to the legacy (int[]) path or throws.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Selection caveat:</b> the longest-fillable-first ordering is a
+    /// heuristic, not a true scored match. A broader overload that accepts
+    /// our heuristic / defaulted arguments will beat a narrower overload
+    /// whose parameters are an exact metadata match purely because it has
+    /// more parameters. This is acceptable for the current 258/258
+    /// reconstruction goal because explicit branches handle the layers
+    /// where exact-vs-broad ordering matters; the matcher fallback only
+    /// runs for layers that don't appear in the explicit-branch list, and
+    /// those layers don't tend to ship with multiple competing-arity
+    /// constructors. A true scored match (rank by exact-name-match count
+    /// before falling through to defaults) is tracked as future work; the
+    /// current behavior is described accurately above so debuggers don't
+    /// mis-interpret the comment as a contract.
+    /// </para>
+    /// </remarks>
     /// <remarks>
     /// <para>
     /// Naming conventions used to map parameters from shape arrays:
@@ -2895,9 +3041,31 @@ public static class DeserializationHelper
                 // 4. enum parameters — look up by name, parse string (GetMetadata persists enum.ToString())
                 if (pType.IsEnum)
                 {
-                    if (additionalParams != null && additionalParams.TryGetValue(capName, out var ev) && ev is string es && Enum.TryParse(pType, es, out var parsed))
+                    // .NET Framework 4.7.1 doesn't expose the non-generic
+                    // Enum.TryParse(Type, ...) overload, so we route through
+                    // Enum.Parse with try/catch to keep both targets happy.
+                    // Already-typed enum values (rare but possible) pass
+                    // through directly; strings get parsed.
+                    if (additionalParams != null && additionalParams.TryGetValue(capName, out var ev) && ev is not null)
                     {
-                        args[pi] = parsed; continue;
+                        if (ev.GetType() == pType)
+                        {
+                            args[pi] = ev; continue;
+                        }
+                        if (ev is string es)
+                        {
+                            try
+                            {
+                                args[pi] = Enum.Parse(pType, es);
+                                continue;
+                            }
+                            catch (ArgumentException)
+                            {
+                                // Fall through to default-value / unresolved
+                                // path so the matcher tries the next ctor
+                                // overload instead of crashing here.
+                            }
+                        }
                     }
                     if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
                     allResolved = false; break;
@@ -2967,10 +3135,18 @@ public static class DeserializationHelper
             if (allResolved)
             {
                 try { return ctor.Invoke(args); }
-                catch
+                catch (Exception ex)
                 {
                     // Best-effort matcher: any failure means this constructor
                     // didn't accept our defaults — try the next overload.
+                    // Trace the rejection so a missing fallback default in
+                    // TryDefaultMlIntHyperparameter / TryDefaultMlDouble-
+                    // Hyperparameter is debuggable when reconstruction
+                    // fails downstream with no breadcrumb back to here.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"DeserializationHelper.TryConstructByMatchingMetadata: " +
+                        $"ctor {ctor} for {type.Name} rejected our resolved args: " +
+                        $"{(ex is TargetInvocationException tie ? tie.InnerException?.Message : ex.Message)}");
                 }
             }
         }

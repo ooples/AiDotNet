@@ -47,16 +47,13 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// Shape: [OutputFeatures, InputFeatures]
     /// </summary>
     /// <remarks>
-    /// Registered as a trainable parameter through
-    /// <see cref="LayerBase{T}.RegisterTrainableParameter"/>. Sparse-weight
-    /// gradients are produced by <see cref="SparseAutograd"/>'s
-    /// <c>SparsePatternPreservingMatMulRecord</c>, which yields a
-    /// <see cref="SparseTensor{T}"/> gradient with the same COO pattern as
-    /// the parameter (no <c>O(rows·columns)</c> dense materialisation).
-    /// AiDotNet.Tensors 0.70.0 makes <see cref="ParameterBuffer{T}"/> aware
-    /// of per-leaf sparsity layouts, so a registered sparse parameter only
-    /// allocates <c>NonZeroCount</c> worth of buffer space rather than the
-    /// full <c>rows × columns</c> dense slab.
+    /// NOT registered as a tape-trainable parameter — see the body of the
+    /// constructor for the rationale. Updates flow through the manual
+    /// <see cref="UpdateParameters(T)"/> path that <see cref="SparseNeuralNetwork{T}.Train"/>
+    /// drives directly. Once <see cref="_biases"/> is promoted to a
+    /// <see cref="Tensor{T}"/> AND a <c>SetTrainableParameters</c> override
+    /// keeps this field in sync with any <see cref="ParameterBuffer{T}"/>
+    /// view swaps, the registration can be re-enabled.
     /// </remarks>
     private SparseTensor<T> _weights;
 
@@ -111,12 +108,20 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
-    /// Gets whether this layer supports training. Returns <c>true</c>: both
-    /// the sparse weight tensor and the dense bias vector are registered as
-    /// trainable parameters and round-trip through the tape's
-    /// <see cref="ParameterBuffer{T}"/>. Tape-mode optimizers update both;
-    /// the legacy <see cref="UpdateParameters"/> path is also kept as a
-    /// fallback for callers that aren't tape-driven.
+    /// Gets whether this layer supports training. Returns <c>true</c>:
+    /// training flows through the manual
+    /// <see cref="LayerBase{T}.UpdateParameters(T)"/> path that
+    /// <see cref="SparseNeuralNetwork{T}.Train"/> drives directly with
+    /// pre-computed gradients. Tape-mode optimizer training is NOT yet
+    /// supported on this layer because (a) <see cref="_biases"/> is a
+    /// <see cref="Vector{T}"/> rather than a <see cref="Tensor{T}"/> so
+    /// it can't be tape-registered, (b) <see cref="UpdateParameters(T)"/>
+    /// replaces <see cref="_weights"/> with a new
+    /// <see cref="SparseTensor{T}"/> instance, which would leave any
+    /// <see cref="ParameterBuffer{T}"/>-aliased view stale, and (c) no
+    /// <c>SetTrainableParameters</c> override is in place to re-sync the
+    /// field on view swap. SparseNeuralNetwork therefore routes around
+    /// the tape and calls the manual gradient/update pair directly.
     /// </summary>
     public override bool SupportsTraining => true;
 
@@ -155,13 +160,27 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         // Biases initialized to zero by default (standard practice for ReLU layers)
         _weights = InitializeSparseWeights();
 
-        // AiDotNet.Tensors 0.70.0 (PR #287) made ParameterBuffer<T> sparse-aware:
-        // a registered SparseTensor leaf gets a NonZeroCount-sized buffer slot
-        // (not a full rows×columns dense slab), and its gradient flows back as
-        // a pattern-matching SparseTensor via SparsePatternPreservingMatMul.
-        // Register both weights and biases so tape-mode training actually sees
-        // the sparse parameter.
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        // Tape-mode trainable-parameter registration is intentionally OMITTED
+        // on this layer until three preconditions are met:
+        //   1. _biases promoted from Vector<T> to Tensor<T> and registered
+        //      with PersistentTensorRole.Bias (the existing dense bias-add in
+        //      Forward must move to an engine op so its gradient flows on
+        //      the tape).
+        //   2. UpdateParameters(T) stops creating a new SparseTensor instance
+        //      on every step (it currently re-allocates the .Values buffer,
+        //      which leaves any ParameterBuffer view aliasing the OLD instance
+        //      stale). Either mutate Values in place, or hand ownership over
+        //      to SetTrainableParameters and let the buffer drive updates.
+        //   3. A SetTrainableParameters override is added that re-syncs the
+        //      _weights field when ParameterBuffer hands back a view-aliased
+        //      replacement (otherwise Forward keeps using the old reference
+        //      while the optimizer updates the view, decoupling them).
+        // Until all three are in place, registering _weights here would
+        // produce a tape path that updates a stale view while bias updates
+        // silently no-op — strictly worse than the manual path that
+        // SparseNeuralNetwork.Train already drives correctly. Tracked as
+        // follow-up work; for now SparseNeuralNetwork bypasses the tape and
+        // calls ComputeGradients + UpdateParameters(learningRate) directly.
     }
 
     /// <summary>
