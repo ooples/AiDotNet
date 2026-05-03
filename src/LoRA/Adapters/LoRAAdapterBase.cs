@@ -222,8 +222,14 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // at the end of their constructor once their extra state is
         // initialized. Most derived adapters override GetParameters
         // and don't need this call.
+        // Match what PackBaseAndLoraParameters actually packs: base params
+        // are skipped when frozen (the optimizer doesn't update them, and
+        // they round-trip via ILayerSerializationExtras instead). Sizing
+        // against the unfrozen total when freezeBaseLayer=true would leave
+        // trailing unused elements in Parameters, breaking GetParameters()
+        // length and (de)serialization round-trip.
         int baseAndLoraCount =
-            _baseLayer.GetParameters().Length
+            (_freezeBaseLayer ? 0 : _baseLayer.GetParameters().Length)
             + _loraLayer.GetParameters().Length;
         Parameters = new Vector<T>(baseAndLoraCount);
         // Pack base + LoRA params directly (non-virtual) so the vector
@@ -782,8 +788,12 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // LoRA-specific scalars. Rank reads from the LoRA layer; alpha
         // is the scaling factor (already exposed publicly); FreezeBaseLayer
         // controls whether the base's params count toward Parameters.
-        metadata["Rank"] = _loraLayer.Rank.ToString();
-        metadata["Alpha"] = Convert.ToDouble(_loraLayer.Alpha).ToString("G");
+        // Use InvariantCulture for numeric serialization so the round-trip
+        // works on locales where ',' is the decimal separator (German,
+        // French, etc.) — the deser side parses with TryGetDouble which
+        // also uses invariant rules.
+        metadata["Rank"] = _loraLayer.Rank.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Alpha"] = Convert.ToDouble(_loraLayer.Alpha).ToString("G", System.Globalization.CultureInfo.InvariantCulture);
         metadata["FreezeBaseLayer"] = _freezeBaseLayer.ToString();
 
         return metadata;

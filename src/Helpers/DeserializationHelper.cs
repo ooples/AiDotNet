@@ -1251,14 +1251,22 @@ public static class DeserializationHelper
             // Ctors: (int[][] inputShapes, [int axis,] IActivationFunction).
             // Pass two identical inputShape entries so binary concat / add /
             // multiply have a sane two-operand setup.
-            var ctorB = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+            var ctorB = type.GetConstructors()
+                .OrderByDescending(c => c.GetParameters().Length)
+                .FirstOrDefault()
+                ?? throw new MissingLayerCtorException(
+                    $"Cannot find any public constructor for {layerType} during deserialization.");
+            // Default axis: last axis of inputShape, but clamp to 0 so an
+            // empty inputShape (probe paths or degenerate metadata) doesn't
+            // produce -1 which violates axis validation in the layer ctor.
+            int defaultAxis = inputShape.Length > 0 ? inputShape.Length - 1 : 0;
             var psB = ctorB.GetParameters();
             var argsB = new object?[psB.Length];
             for (int i = 0; i < psB.Length; i++)
             {
                 var p = psB[i];
                 if (p.ParameterType == typeof(int[][])) argsB[i] = new int[][] { inputShape, inputShape };
-                else if (p.ParameterType == typeof(int)) argsB[i] = TryGetInt(additionalParams, "Axis") ?? (inputShape.Length - 1);
+                else if (p.ParameterType == typeof(int)) argsB[i] = TryGetInt(additionalParams, "Axis") ?? defaultAxis;
                 else if (p.HasDefaultValue) argsB[i] = p.DefaultValue;
                 else argsB[i] = null;
             }
@@ -1295,7 +1303,7 @@ public static class DeserializationHelper
                 ?? throw new InvalidOperationException(
                     "ConvLSTMLayer requires 'Strides' metadata (added in #1239).");
 
-            var ctorC = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+            var ctorC = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psC = ctorC.GetParameters();
             var argsC = new object?[psC.Length];
             for (int i = 0; i < psC.Length; i++)
@@ -1355,7 +1363,7 @@ public static class DeserializationHelper
                     $"{genericDef.Name} divisibility violation: embeddingDimension ({embDim}) " +
                     $"must be a multiple of numHeads ({numHeads}). Serialized metadata is corrupt.");
             }
-            var ctorG = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+            var ctorG = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psG = ctorG.GetParameters();
             var argsG = new object?[psG.Length];
             for (int i = 0; i < psG.Length; i++)
@@ -1403,7 +1411,7 @@ public static class DeserializationHelper
             double reg = TryGetDouble(additionalParams, "Regularization")
                 ?? throw new InvalidOperationException(
                     "MesaNetLayer requires 'Regularization' metadata (added in #1239).");
-            var ctorM = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+            var ctorM = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psM = ctorM.GetParameters();
             var argsM = new object?[psM.Length];
             for (int i = 0; i < psM.Length; i++)
@@ -1446,7 +1454,7 @@ public static class DeserializationHelper
                 ?? throw new InvalidOperationException(
                     "NHiTSStackTensor requires 'PoolingSize' metadata (added in #1239).");
 
-            var ctorN = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+            var ctorN = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psN = ctorN.GetParameters();
             var argsN = new object?[psN.Length];
             for (int i = 0; i < psN.Length; i++)
@@ -1513,7 +1521,7 @@ public static class DeserializationHelper
             // pattern restoration would need a serialized bool[] payload.
             var isAttentionPattern = new bool[numBlocks];
 
-            var ctorH = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+            var ctorH = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psH = ctorH.GetParameters();
             var argsH = new object?[psH.Length];
             for (int i = 0; i < psH.Length; i++)
@@ -1543,7 +1551,7 @@ public static class DeserializationHelper
             var hgmType = type.Assembly.GetTypes().First(x => x.Name == "HeterogeneousGraphMetadata");
             object hgm = BuildPlaceholderHeterogeneousGraphMetadata(hgmType);
 
-            var ctorHg = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
+            var ctorHg = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
             var psHg = ctorHg.GetParameters();
             var argsHg = new object?[psHg.Length];
             for (int i = 0; i < psHg.Length; i++)
@@ -2607,7 +2615,7 @@ public static class DeserializationHelper
         if (pNameLower.Contains("numpatch")) return 4;
         if (pNameLower.Contains("maxsequencelength")) return 16;
         if (pNameLower.Contains("numclasses") || pNameLower == "numclass") return 2;
-        if (pNameLower.Contains("filters")) return 64;
+        // (filters matched above; this duplicate was dead code.)
         if (pNameLower.Contains("numpoint")) return 4;
         if (pNameLower.Contains("numprototype")) return 4;
         if (pNameLower.Contains("numroutingiteration")) return 3;
@@ -2619,9 +2627,11 @@ public static class DeserializationHelper
         if (pNameLower.Contains("autocorrelationfactor") || pNameLower.Contains("sparsityfactor")
             || pNameLower.Contains("distillingfactor")) return 1;
         if (pNameLower.Contains("movingavgkernel")) return 3;
-        if (pNameLower.Contains("originalcontextlength") || pNameLower.Contains("extendedcontextlength")
-            || pNameLower.Contains("attentionshiftsize")) return 16;
-        if (pNameLower.Contains("layerindex")) return 0;
+        // Note: extendedcontextlength is already matched above (returns 32 to
+        // satisfy LongLoRA's "extended > original" validation); originalcontextlength
+        // and attentionshiftsize land here.
+        if (pNameLower.Contains("originalcontextlength") || pNameLower.Contains("attentionshiftsize")) return 16;
+        // (layerindex matched above; this duplicate was dead code.)
         if (pNameLower.Contains("restartinterval")) return 100;
         if (pNameLower.Contains("warmupstep")) return 0;
         if (pNameLower.Contains("resamplinginterval") || pNameLower.Contains("pruninginterval")
