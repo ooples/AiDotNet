@@ -1262,43 +1262,51 @@ public static class DeserializationHelper
             // (int[] inputShape, int kernelSize, int filters, int padding,
             //  int strides, IActivationFunction).
             // ConvLSTM expects inputShape rank 4: [time, channels, H, W].
+            // ConvLSTMLayer.GetMetadata persists KernelSize / Filters /
+            // Padding / Strides — fail fast if any are missing or if the
+            // input shape is degenerate, rather than fabricating values
+            // that produce a structurally-wrong reconstruction (issue #1239).
+            if (inputShape.Length < 4)
+            {
+                throw new InvalidOperationException(
+                    $"ConvLSTMLayer requires serialized inputShape with rank 4 " +
+                    $"[time, channels, height, width]; got rank {inputShape.Length} " +
+                    $"(shape [{string.Join(",", inputShape)}]). Re-serialize with the " +
+                    $"current LayerBase shape persistence to recover.");
+            }
+            int kernelSize = TryGetInt(additionalParams, "KernelSize")
+                ?? throw new InvalidOperationException(
+                    "ConvLSTMLayer requires 'KernelSize' metadata (added in #1239). " +
+                    "Re-serialize the network with the current GetMetadata implementation.");
+            int filters = TryGetInt(additionalParams, "Filters")
+                ?? throw new InvalidOperationException(
+                    "ConvLSTMLayer requires 'Filters' metadata (added in #1239).");
+            int padding = TryGetInt(additionalParams, "Padding")
+                ?? throw new InvalidOperationException(
+                    "ConvLSTMLayer requires 'Padding' metadata (added in #1239).");
+            int strides = TryGetInt(additionalParams, "Strides")
+                ?? throw new InvalidOperationException(
+                    "ConvLSTMLayer requires 'Strides' metadata (added in #1239).");
+
             var ctorC = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
             var psC = ctorC.GetParameters();
             var argsC = new object?[psC.Length];
-            // ConvLSTM requires rank-4 inputShape [time, channels, H, W]. If
-            // the serialized shape is degenerate, fall back to a synthetic
-            // [4, 1, 8, 8] so reconstruction succeeds — but loudly so the
-            // semantic-mismatch is visible in diagnostics. Tracked under
-            // issue #1235; the proper fix is to require the rank-4 shape
-            // metadata be persisted by GetMetadata.
-            int[] convInput;
-            if (inputShape.Length >= 4)
-            {
-                convInput = inputShape;
-            }
-            else
-            {
-                convInput = new[] { 4, 1, 8, 8 };
-                System.Diagnostics.Trace.TraceWarning(
-                    $"DeserializationHelper.ConvLSTMLayer: serialized inputShape has rank " +
-                    $"{inputShape.Length} (need 4 for [time, channels, H, W]); falling back to " +
-                    $"synthetic [4, 1, 8, 8]. Reconstructed layer dimensions will NOT match " +
-                    $"the original. Tracked under #1235.");
-            }
             for (int i = 0; i < psC.Length; i++)
             {
                 var p = psC[i];
                 var n = (p.Name ?? "").ToLowerInvariant();
-                if (p.ParameterType == typeof(int[])) argsC[i] = convInput;
+                if (p.ParameterType == typeof(int[])) argsC[i] = inputShape;
                 else if (p.ParameterType == typeof(int))
                 {
                     argsC[i] = n switch
                     {
-                        "kernelsize" => TryGetInt(additionalParams, "KernelSize") ?? 3,
-                        "filters" => TryGetInt(additionalParams, "Filters") ?? 4,
-                        "padding" => TryGetInt(additionalParams, "Padding") ?? 0,
-                        "strides" => TryGetInt(additionalParams, "Strides") ?? 1,
-                        _ => 1,
+                        "kernelsize" => kernelSize,
+                        "filters" => filters,
+                        "padding" => padding,
+                        "strides" => strides,
+                        _ => p.HasDefaultValue ? (int)p.DefaultValue! : throw new InvalidOperationException(
+                            $"ConvLSTMLayer ctor parameter '{n}' has no metadata mapping " +
+                            $"and no default value."),
                     };
                 }
                 else if (p.HasDefaultValue) argsC[i] = p.DefaultValue;
@@ -1310,13 +1318,36 @@ public static class DeserializationHelper
         {
             // (int sequenceLength, int embeddingDimension, int numHeads, int numKVHeads, ...).
             // numHeads must be a multiple of numKVHeads, embeddingDimension % numHeads == 0.
-            int seqLen = TryGetInt(additionalParams, "SequenceLength") ?? (inputShape.Length > 0 ? inputShape[0] : 16);
-            int embDim = TryGetInt(additionalParams, "EmbeddingDimension") ?? (inputShape.Length > 1 ? inputShape[1] : 64);
-            int numHeads = TryGetInt(additionalParams, "NumHeads") ?? 4;
-            int numKVHeads = TryGetInt(additionalParams, "NumKVHeads") ?? 2;
-            // Enforce divisibility constraints by adjusting if needed.
-            if (numHeads % numKVHeads != 0) numKVHeads = 1;
-            if (embDim % numHeads != 0) embDim = numHeads * (embDim / numHeads + 1);
+            // GroupedQueryAttentionLayer.GetMetadata persists all four
+            // dimensions — fail fast if any are missing rather than
+            // fabricating defaults that may not satisfy the layer's
+            // divisibility constraints (issue #1239).
+            int seqLen = TryGetInt(additionalParams, "SequenceLength")
+                ?? (inputShape.Length > 0 ? inputShape[0] : throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'SequenceLength' metadata or a rank>=1 inputShape."));
+            int embDim = TryGetInt(additionalParams, "EmbeddingDimension")
+                ?? (inputShape.Length > 1 ? inputShape[1] : throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'EmbeddingDimension' metadata or a rank>=2 inputShape."));
+            int numHeads = TryGetInt(additionalParams, "NumHeads")
+                ?? throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'NumHeads' metadata (added in #1239).");
+            int numKVHeads = TryGetInt(additionalParams, "NumKVHeads")
+                ?? throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'NumKVHeads' metadata (added in #1239).");
+            // Enforce divisibility constraints — if violated, the metadata
+            // is corrupt rather than something we should silently adjust.
+            if (numHeads % numKVHeads != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} divisibility violation: numHeads ({numHeads}) must be " +
+                    $"a multiple of numKVHeads ({numKVHeads}). Serialized metadata is corrupt.");
+            }
+            if (embDim % numHeads != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} divisibility violation: embeddingDimension ({embDim}) " +
+                    $"must be a multiple of numHeads ({numHeads}). Serialized metadata is corrupt.");
+            }
             var ctorG = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
             var psG = ctorG.GetParameters();
             var argsG = new object?[psG.Length];
@@ -1341,12 +1372,30 @@ public static class DeserializationHelper
         else if (genericDef.Name == "MesaNetLayer`1")
         {
             // (sequenceLength, modelDimension, numHeads, regularization, IActivation, IInitStrategy)
-            int seqLen = TryGetInt(additionalParams, "SequenceLength") ?? (inputShape.Length > 0 ? inputShape[0] : 16);
-            int modelDim = TryGetInt(additionalParams, "ModelDimension") ?? 64;
-            int numHeads = TryGetInt(additionalParams, "NumHeads") ?? 4;
-            if (modelDim % numHeads != 0) modelDim = numHeads * 16;
-            // MesaNet's ctor validates Regularization > 0.
-            double reg = TryGetDouble(additionalParams, "Regularization") ?? 1e-3;
+            // MesaNetLayer.GetMetadata persists SequenceLength / ModelDimension
+            // / NumHeads / Regularization — fail fast if any are missing
+            // rather than fabricating defaults that may violate the layer's
+            // divisibility / positivity constraints (issue #1239).
+            int seqLen = TryGetInt(additionalParams, "SequenceLength")
+                ?? (inputShape.Length > 0 ? inputShape[0] : throw new InvalidOperationException(
+                    "MesaNetLayer requires 'SequenceLength' metadata or a rank>=1 inputShape."));
+            int modelDim = TryGetInt(additionalParams, "ModelDimension")
+                ?? throw new InvalidOperationException(
+                    "MesaNetLayer requires 'ModelDimension' metadata (added in #1239).");
+            int numHeads = TryGetInt(additionalParams, "NumHeads")
+                ?? throw new InvalidOperationException(
+                    "MesaNetLayer requires 'NumHeads' metadata (added in #1239).");
+            if (modelDim % numHeads != 0)
+            {
+                throw new InvalidOperationException(
+                    $"MesaNetLayer divisibility violation: modelDimension ({modelDim}) must be " +
+                    $"a multiple of numHeads ({numHeads}). Serialized metadata is corrupt.");
+            }
+            // MesaNet's ctor validates Regularization > 0; persist it so we
+            // don't fabricate the default 1e-3 when the original was different.
+            double reg = TryGetDouble(additionalParams, "Regularization")
+                ?? throw new InvalidOperationException(
+                    "MesaNetLayer requires 'Regularization' metadata (added in #1239).");
             var ctorM = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
             var psM = ctorM.GetParameters();
             var argsM = new object?[psM.Length];
@@ -1369,6 +1418,27 @@ public static class DeserializationHelper
         {
             // (inputLength, outputLength, hiddenSize, numLayers, numBlocks,
             //  poolingSize, seed)
+            // NHiTSStackTensor.GetMetadata persists InputLength / OutputLength
+            // / HiddenSize / NumLayers / PoolingSize. numBlocks is vestigial
+            // in this implementation and seed advances _random's state at
+            // construction time — neither is round-trippable, so they fall
+            // back to safe defaults (1, 0). Issue #1239.
+            int inputLength = TryGetInt(additionalParams, "InputLength")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'InputLength' metadata (added in #1239).");
+            int outputLength = TryGetInt(additionalParams, "OutputLength")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'OutputLength' metadata (added in #1239).");
+            int hiddenSize = TryGetInt(additionalParams, "HiddenSize")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'HiddenSize' metadata (added in #1239).");
+            int numLayers = TryGetInt(additionalParams, "NumLayers")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'NumLayers' metadata (added in #1239).");
+            int poolingSize = TryGetInt(additionalParams, "PoolingSize")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'PoolingSize' metadata (added in #1239).");
+
             var ctorN = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
             var psN = ctorN.GetParameters();
             var argsN = new object?[psN.Length];
@@ -1378,15 +1448,23 @@ public static class DeserializationHelper
                 var n = (p.Name ?? "").ToLowerInvariant();
                 argsN[i] = n switch
                 {
-                    "inputlength" => 16,
-                    "outputlength" => 4,
-                    "hiddensize" => 64,
-                    "numlayers" => 1,
+                    "inputlength" => inputLength,
+                    "outputlength" => outputLength,
+                    "hiddensize" => hiddenSize,
+                    "numlayers" => numLayers,
+                    // numBlocks is vestigial in NHiTSStackTensor's current
+                    // impl (ctor param but doesn't influence internal state);
+                    // GetMetadata intentionally doesn't persist it.
                     "numblocks" => 1,
-                    "poolingsize" => 2,
+                    "poolingsize" => poolingSize,
+                    // seed: same — consumed at ctor to seed _random and
+                    // discarded. Post-training the random state has advanced
+                    // past the original seed, so persisting is misleading.
                     "seed" => 0,
                     _ when p.HasDefaultValue => p.DefaultValue,
-                    _ => 1,
+                    _ => throw new InvalidOperationException(
+                        $"NHiTSStackTensor ctor parameter '{n}' has no metadata mapping " +
+                        $"and no default value."),
                 };
             }
             instance = ctorN.Invoke(argsN);
@@ -1395,14 +1473,39 @@ public static class DeserializationHelper
         {
             // (sequenceLength, ILayer<T>[] blocks, bool[] isAttentionBlock,
             //  HybridSchedulePattern, modelDimension, IActivationFunction)
-            // Construct a placeholder array of length 1 with a placeholder block.
-            if (!TryCreatePlaceholderInnerLayer<T>(typeof(ILayer<T>), out var blockLayer) || blockLayer is null)
-            {
-                throw new InvalidOperationException("HybridBlockScheduler placeholder construction failed.");
-            }
+            // HybridBlockScheduler.GetMetadata persists SequenceLength /
+            // ModelDimension / NumBlocks / SchedulePattern. Fail fast if
+            // missing — issue #1239. The inner blocks list still uses the
+            // ILayer<T> placeholder until the proper round-trip via
+            // ILayerSerializationExtras lands (separately tracked).
+            int seqLen = TryGetInt(additionalParams, "SequenceLength")
+                ?? throw new InvalidOperationException(
+                    "HybridBlockScheduler requires 'SequenceLength' metadata (added in #1239).");
+            int modelDim = TryGetInt(additionalParams, "ModelDimension")
+                ?? throw new InvalidOperationException(
+                    "HybridBlockScheduler requires 'ModelDimension' metadata (added in #1239).");
+            int numBlocks = TryGetInt(additionalParams, "NumBlocks")
+                ?? throw new InvalidOperationException(
+                    "HybridBlockScheduler requires 'NumBlocks' metadata (added in #1239).");
+
+            // Construct numBlocks placeholder inner-block instances (still
+            // using the DenseLayer<T> placeholder pattern — the real inner
+            // layers round-trip via ILayerSerializationExtras follow-up).
             var blocksArrayType = typeof(ILayer<T>).MakeArrayType();
-            var blocksArray = Array.CreateInstance(typeof(ILayer<T>), 1);
-            blocksArray.SetValue(blockLayer, 0);
+            var blocksArray = Array.CreateInstance(typeof(ILayer<T>), numBlocks);
+            for (int b = 0; b < numBlocks; b++)
+            {
+                if (!TryCreatePlaceholderInnerLayer<T>(typeof(ILayer<T>), out var blockLayer) || blockLayer is null)
+                {
+                    throw new InvalidOperationException(
+                        $"HybridBlockScheduler placeholder block construction failed at index {b}.");
+                }
+                blocksArray.SetValue(blockLayer, b);
+            }
+            // Default isAttentionBlock pattern: all false (all SSM). Real
+            // pattern restoration would need a serialized bool[] payload.
+            var isAttentionPattern = new bool[numBlocks];
+
             var ctorH = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
             var psH = ctorH.GetParameters();
             var argsH = new object?[psH.Length];
@@ -1411,9 +1514,9 @@ public static class DeserializationHelper
                 var p = psH[i];
                 var n = (p.Name ?? "").ToLowerInvariant();
                 if (p.ParameterType == blocksArrayType) argsH[i] = blocksArray;
-                else if (p.ParameterType == typeof(bool[])) argsH[i] = new bool[] { false };
-                else if (p.ParameterType == typeof(int) && n == "sequencelength") argsH[i] = 16;
-                else if (p.ParameterType == typeof(int) && n == "modeldimension") argsH[i] = 64;
+                else if (p.ParameterType == typeof(bool[])) argsH[i] = isAttentionPattern;
+                else if (p.ParameterType == typeof(int) && n == "sequencelength") argsH[i] = seqLen;
+                else if (p.ParameterType == typeof(int) && n == "modeldimension") argsH[i] = modelDim;
                 else if (p.ParameterType == typeof(int)) argsH[i] = 1;
                 else if (p.ParameterType.IsEnum) argsH[i] = Enum.GetValues(p.ParameterType).GetValue(0);
                 else if (p.HasDefaultValue) argsH[i] = p.DefaultValue;
