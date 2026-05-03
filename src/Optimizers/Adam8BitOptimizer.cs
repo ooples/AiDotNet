@@ -49,23 +49,25 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     /// <summary>
     /// Quantized first moment vector (moving average of gradients).
+    /// Span-optimized <see cref="Vector{T}"/> over <c>byte</c>; backed by
+    /// span-aware memory the engine can address without extra copies.
     /// </summary>
-    private byte[]? _mQuantized;
+    private Vector<byte>? _mQuantized;
 
     /// <summary>
     /// Quantized second moment vector (moving average of squared gradients).
     /// </summary>
-    private byte[]? _vQuantized;
+    private Vector<byte>? _vQuantized;
 
     /// <summary>
     /// Scaling factors for first moment quantization blocks.
     /// </summary>
-    private double[]? _mScales;
+    private Vector<double>? _mScales;
 
     /// <summary>
     /// Scaling factors for second moment quantization blocks.
     /// </summary>
-    private double[]? _vScales;
+    private Vector<double>? _vScales;
 
     /// <summary>
     /// Full-precision first moment vector (used when CompressBothMoments is false).
@@ -144,22 +146,21 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         _parameterLength = length;
         _numBlocks = (length + _options.BlockSize - 1) / _options.BlockSize;
 
-        // Initialize quantized second moment (always quantized, unsigned so 0 represents 0)
-        _vQuantized = new byte[length];
-        _vScales = new double[_numBlocks];
+        // Always-quantized second moment. Vector<byte> is the span-aware
+        // wrapper over the byte buffer the engine kernels can address
+        // without extra copies.
+        _vQuantized = new Vector<byte>(length);
+        _vScales = new Vector<double>(_numBlocks);
 
-        // Initialize first moment (quantized or full precision based on options)
         if (_options.CompressBothMoments)
         {
-            _mQuantized = new byte[length];
-            _mScales = new double[_numBlocks];
+            _mQuantized = new Vector<byte>(length);
+            _mScales = new Vector<double>(_numBlocks);
             _mFullPrecision = null;
 
-            // For signed quantization, 128 represents 0 (since we map [-127,127] to [1,255] with 128=0)
-            for (int i = 0; i < length; i++)
-            {
-                _mQuantized[i] = 128;
-            }
+            // For signed quantization, 128 represents 0 (since we map
+            // [-127, 127] to [1, 255] with 128 = 0).
+            for (int i = 0; i < length; i++) _mQuantized[i] = 128;
         }
         else
         {
@@ -168,10 +169,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _mFullPrecision = new Vector<T>(length);
         }
 
-        // Initialize scales (scale of 1.0 works with the zero-initialized state)
+        // Initialize scales (scale of 1.0 works with the zero-initialized state).
         for (int b = 0; b < _numBlocks; b++)
         {
-            if (_mScales != null) _mScales[b] = 1.0;
+            if (_mScales is not null) _mScales[b] = 1.0;
             _vScales[b] = 1.0;
         }
     }
@@ -180,10 +181,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// Quantizes a full-precision vector to 8-bit representation.
     /// </summary>
     /// <param name="values">The full-precision values to quantize.</param>
-    /// <param name="quantized">The output quantized byte array.</param>
+    /// <param name="quantized">The output quantized byte vector (span-backed).</param>
     /// <param name="scales">The output scaling factors per block.</param>
     /// <param name="isSigned">Whether to use signed quantization (for m) or unsigned (for v).</param>
-    private void Quantize(Vector<T> values, byte[] quantized, double[] scales, bool isSigned)
+    private void Quantize(Vector<T> values, Vector<byte> quantized, Vector<double> scales, bool isSigned)
     {
         for (int b = 0; b < _numBlocks; b++)
         {
@@ -256,11 +257,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <summary>
     /// Dequantizes an 8-bit representation back to full precision.
     /// </summary>
-    /// <param name="quantized">The quantized byte array.</param>
+    /// <param name="quantized">The quantized byte vector.</param>
     /// <param name="scales">The scaling factors per block.</param>
     /// <param name="isSigned">Whether the quantization used signed format.</param>
     /// <returns>The dequantized full-precision vector.</returns>
-    private Vector<T> Dequantize(byte[] quantized, double[] scales, bool isSigned)
+    private Vector<T> Dequantize(Vector<byte> quantized, Vector<double> scales, bool isSigned)
     {
         var result = new Vector<T>(_parameterLength);
 
@@ -364,11 +365,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         public int Length;
         public int NumBlocks;
-        public byte[]? MQuantized;          // null when CompressBothMoments == false
-        public Tensor<T>? MFullPrecision;   // null when CompressBothMoments == true
-        public byte[] VQuantized = Array.Empty<byte>();
-        public double[]? MScales;           // null when CompressBothMoments == false
-        public double[] VScales = Array.Empty<double>();
+        public Vector<byte>? MQuantized;        // null when CompressBothMoments == false
+        public Tensor<T>? MFullPrecision;       // null when CompressBothMoments == true
+        public Vector<byte> VQuantized = new(0);
+        public Vector<double>? MScales;         // null when CompressBothMoments == false
+        public Vector<double> VScales = new(0);
     }
 
     private readonly Dictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
@@ -472,17 +473,17 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         {
             Length = paramLength,
             NumBlocks = numBlocks,
-            VQuantized = new byte[paramLength],
-            VScales = new double[numBlocks],
+            VQuantized = new Vector<byte>(paramLength),
+            VScales = new Vector<double>(numBlocks),
         };
-        // v starts at zero. byte 0 maps to the unsigned-zero quantization
-        // bucket already, so the array's default-init is correct.
+        // v starts at zero. Unsigned byte 0 maps to the zero quantization
+        // bucket, so default-init is correct.
         for (int b = 0; b < numBlocks; b++) state.VScales[b] = 1.0;
 
         if (_options.CompressBothMoments)
         {
-            state.MQuantized = new byte[paramLength];
-            state.MScales = new double[numBlocks];
+            state.MQuantized = new Vector<byte>(paramLength);
+            state.MScales = new Vector<double>(numBlocks);
             // m starts at zero. For signed quantization 0 is encoded as 128
             // (the [-127, 127] → [1, 255] offset), so initialize to 128.
             for (int i = 0; i < paramLength; i++) state.MQuantized[i] = 128;
@@ -490,12 +491,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
         else
         {
-            // Full-precision m placeholder, zero-initialised. Step's recurrences
-            // assume m is non-null on entry, so this has to exist before the
-            // first iteration runs. The shape is set by Step on first use via
-            // re-assignment when CompressBothMoments == false; we don't know
-            // the shape here, so leave it null and let Step allocate on the
-            // first iteration after the dequantize-or-passthrough fork.
+            // Full-precision m allocated on first Step iteration once the
+            // parameter's shape is observed.
             state.MFullPrecision = null;
         }
 
@@ -511,7 +508,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// requiring shared instance state, so it can run from the tape Step where
     /// many parameters of different sizes coexist.
     /// </summary>
-    private void QuantizeTensor(Tensor<T> values, byte[] quantized, double[] scales, int numBlocks, bool isSigned)
+    private void QuantizeTensor(Tensor<T> values, Vector<byte> quantized, Vector<double> scales, int numBlocks, bool isSigned)
     {
         int blockSize = _options.BlockSize;
         int totalLength = values.Length;
@@ -580,7 +577,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// by Adam's compute path within a single Step iteration and then released
     /// to the engine arena.
     /// </summary>
-    private Tensor<T> DequantizeTensor(byte[] quantized, double[] scales, int[] paramShape, int numBlocks, bool isSigned)
+    private Tensor<T> DequantizeTensor(Vector<byte> quantized, Vector<double> scales, int[] paramShape, int numBlocks, bool isSigned)
     {
         var result = new Tensor<T>(paramShape);
         int blockSize = _options.BlockSize;
@@ -912,16 +909,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
             // Serialize quantized first moment (if used)
             writer.Write(_options.CompressBothMoments);
-            if (_options.CompressBothMoments && _mQuantized != null)
+            if (_options.CompressBothMoments && _mQuantized is not null)
             {
                 writer.Write(_mQuantized.Length);
-                writer.Write(_mQuantized);
+                for (int i = 0; i < _mQuantized.Length; i++) writer.Write(_mQuantized[i]);
                 foreach (var scale in _mScales!)
                 {
                     writer.Write(scale);
                 }
             }
-            else if (_mFullPrecision != null)
+            else if (_mFullPrecision is not null)
             {
                 writer.Write(_mFullPrecision.Length);
                 foreach (var value in _mFullPrecision)
@@ -931,11 +928,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
 
             // Serialize quantized second moment
-            writer.Write(_vQuantized != null);
-            if (_vQuantized != null)
+            writer.Write(_vQuantized is not null);
+            if (_vQuantized is not null)
             {
                 writer.Write(_vQuantized.Length);
-                writer.Write(_vQuantized);
+                for (int i = 0; i < _vQuantized.Length; i++) writer.Write(_vQuantized[i]);
                 foreach (var scale in _vScales!)
                 {
                     writer.Write(scale);
@@ -974,8 +971,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (compressBothMoments)
             {
                 int mLength = reader.ReadInt32();
-                _mQuantized = reader.ReadBytes(mLength);
-                _mScales = new double[_numBlocks];
+                var mBytes = reader.ReadBytes(mLength);
+                _mQuantized = new Vector<byte>(mLength);
+                for (int i = 0; i < mLength; i++) _mQuantized[i] = mBytes[i];
+                _mScales = new Vector<double>(_numBlocks);
                 for (int i = 0; i < _numBlocks; i++)
                 {
                     _mScales[i] = reader.ReadDouble();
@@ -996,8 +995,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (hasVQuantized)
             {
                 int vLength = reader.ReadInt32();
-                _vQuantized = reader.ReadBytes(vLength);
-                _vScales = new double[_numBlocks];
+                var vBytes = reader.ReadBytes(vLength);
+                _vQuantized = new Vector<byte>(vLength);
+                for (int i = 0; i < vLength; i++) _vQuantized[i] = vBytes[i];
+                _vScales = new Vector<double>(_numBlocks);
                 for (int i = 0; i < _numBlocks; i++)
                 {
                     _vScales[i] = reader.ReadDouble();

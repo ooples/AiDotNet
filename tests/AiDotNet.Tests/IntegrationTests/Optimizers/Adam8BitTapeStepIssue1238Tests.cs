@@ -31,14 +31,16 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 public class Adam8BitTapeStepIssue1238Tests
 {
     /// <summary>
-    /// Walks the <c>Adam8BitOptimizer</c>'s private tape state via reflection,
+    /// Walks the <c>Adam8BitOptimizer</c>'s private tape state via reflection
     /// and confirms that:
     /// <list type="number">
     /// <item>The state dictionary is keyed by tensor reference (per-parameter).</item>
-    /// <item>Each entry's m and v storage is <c>byte[]</c>, not
-    ///   <c>Tensor&lt;T&gt;</c> — the whole point of #1238.</item>
-    /// <item>byte[] sizes equal the parameter length, and scales arrays size
-    ///   to <c>ceil(length / BlockSize)</c>.</item>
+    /// <item>Each entry's m and v storage is the span-optimized
+    ///   <see cref="Vector{T}"/> over <c>byte</c> (not a raw <c>byte[]</c>
+    ///   nor a full-precision <see cref="Tensor{T}"/>) — the whole point of
+    ///   #1238 plus the project's "no raw arrays" convention.</item>
+    /// <item>Vector sizes equal the parameter length; scale Vectors size to
+    ///   <c>ceil(length / BlockSize)</c>.</item>
     /// </list>
     /// </summary>
     [Fact(Timeout = 60000)]
@@ -67,37 +69,31 @@ public class Adam8BitTapeStepIssue1238Tests
 
         optimizer.Step(ctx);
 
-        // Reach into the optimizer to confirm the allocation shape — the
-        // contract of #1238 is that this is byte-backed, not Tensor-backed.
         var statesField = typeof(Adam8BitOptimizer<double, Matrix<double>, Vector<double>>)
             .GetField("_tapeStates", BindingFlags.NonPublic | BindingFlags.Instance);
         Assert.NotNull(statesField);
         var states = (System.Collections.IDictionary)statesField!.GetValue(optimizer)!;
         Assert.Equal(1, states.Count);
 
-        // The state value's runtime type is the private nested QuantizedTapeState.
-        // Pull its byte[] and double[] fields by name.
         var stateObj = states[param]!;
         var stateType = stateObj.GetType();
 
         var lengthProp = stateType.GetField("Length", BindingFlags.Public | BindingFlags.Instance)!;
         var numBlocksProp = stateType.GetField("NumBlocks", BindingFlags.Public | BindingFlags.Instance)!;
-        var mQuantized = (byte[]?)stateType.GetField("MQuantized", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
-        var vQuantized = (byte[]?)stateType.GetField("VQuantized", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
-        var mScales = (double[]?)stateType.GetField("MScales", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
-        var vScales = (double[]?)stateType.GetField("VScales", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
+        var mQuantized = (Vector<byte>?)stateType.GetField("MQuantized", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
+        var vQuantized = (Vector<byte>)stateType.GetField("VQuantized", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj)!;
+        var mScales = (Vector<double>?)stateType.GetField("MScales", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
+        var vScales = (Vector<double>)stateType.GetField("VScales", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj)!;
 
         Assert.Equal(256, (int)lengthProp.GetValue(stateObj)!);
         Assert.Equal(4, (int)numBlocksProp.GetValue(stateObj)!);
 
         Assert.NotNull(mQuantized);
         Assert.Equal(256, mQuantized!.Length);
-        Assert.NotNull(vQuantized);
         Assert.Equal(256, vQuantized.Length);
 
         Assert.NotNull(mScales);
         Assert.Equal(4, mScales!.Length);
-        Assert.NotNull(vScales);
         Assert.Equal(4, vScales.Length);
     }
 
@@ -137,17 +133,16 @@ public class Adam8BitTapeStepIssue1238Tests
         var stateObj = states[param]!;
         var stateType = stateObj.GetType();
 
-        var mQuantized = (byte[]?)stateType.GetField("MQuantized", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
-        var mScales = (double[]?)stateType.GetField("MScales", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
+        var mQuantized = (Vector<byte>?)stateType.GetField("MQuantized", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
+        var mScales = (Vector<double>?)stateType.GetField("MScales", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
         var mFullPrecision = stateType.GetField("MFullPrecision", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
-        var vQuantized = (byte[]?)stateType.GetField("VQuantized", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj);
+        var vQuantized = (Vector<byte>)stateType.GetField("VQuantized", BindingFlags.Public | BindingFlags.Instance)!.GetValue(stateObj)!;
 
         Assert.Null(mQuantized);
         Assert.Null(mScales);
         Assert.NotNull(mFullPrecision);
         // v stays quantized regardless.
-        Assert.NotNull(vQuantized);
-        Assert.Equal(64, vQuantized!.Length);
+        Assert.Equal(64, vQuantized.Length);
     }
 
     /// <summary>
