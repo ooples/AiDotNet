@@ -15,7 +15,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4, 4, 4, 4")]
-internal partial class DenseBlockLayer<T> : LayerBase<T>
+internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
     private readonly ConvolutionalLayer<T> _conv1x1;
@@ -84,6 +84,15 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>
         RegisterSubLayer(_conv1x1);
         RegisterSubLayer(_bn2);
         RegisterSubLayer(_conv3x3);
+
+        // Eagerly resolve sub-layer shapes so ParameterCount reflects real weights
+        // immediately (lazy Conv/BN return 0 otherwise, causing SetParameters
+        // dispatch-by-slice to silently skip them — same dispatch bug e0c78b820
+        // fixed for ResNet's BottleneckBlock).
+        _bn1.ResolveFromShape(new[] { 1, inputChannels, height, width });
+        _conv1x1.ResolveFromShape(new[] { inputChannels, height, width });
+        _bn2.ResolveFromShape(new[] { 1, bottleneckChannels, height, width });
+        _conv3x3.ResolveFromShape(new[] { bottleneckChannels, height, width });
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
@@ -221,5 +230,55 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>
         _conv3x3.ResetState();
     }
 
+    // --- ILayerSerializationExtras: propagate internal BN running stats ---
+    // Without this, DenseNet's serialize/deserialize round-trip for trained
+    // models loses each block's BN running mean/variance, and the cloned
+    // model uses default zero-mean/unit-variance for inference — producing
+    // outputs that diverge from the original by orders of magnitude. Mirrors
+    // InvertedResidualBlock.cs:463-510 (the precedent for nested BN in a
+    // composite block).
 
+    int ILayerSerializationExtras<T>.ExtraParameterCount
+    {
+        get
+        {
+            int count = 0;
+            if (_bn1 is ILayerSerializationExtras<T> e1) count += e1.ExtraParameterCount;
+            if (_bn2 is ILayerSerializationExtras<T> e2) count += e2.ExtraParameterCount;
+            return count;
+        }
+    }
+
+    Vector<T> ILayerSerializationExtras<T>.GetExtraParameters()
+    {
+        var parts = new List<T>();
+        if (_bn1 is ILayerSerializationExtras<T> e1)
+            parts.AddRange(e1.GetExtraParameters().ToArray());
+        if (_bn2 is ILayerSerializationExtras<T> e2)
+            parts.AddRange(e2.GetExtraParameters().ToArray());
+        return new Vector<T>(parts.ToArray());
+    }
+
+    void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        int offset = 0;
+        if (_bn1 is ILayerSerializationExtras<T> e1)
+        {
+            int count = e1.ExtraParameterCount;
+            if (offset + count > extraParameters.Length)
+                throw new ArgumentException(
+                    $"Truncated extra-parameters for _bn1: need {offset + count} but got {extraParameters.Length}.");
+            e1.SetExtraParameters(extraParameters.SubVector(offset, count));
+            offset += count;
+        }
+        if (_bn2 is ILayerSerializationExtras<T> e2)
+        {
+            int count = e2.ExtraParameterCount;
+            if (offset + count > extraParameters.Length)
+                throw new ArgumentException(
+                    $"Truncated extra-parameters for _bn2: need {offset + count} but got {extraParameters.Length}.");
+            e2.SetExtraParameters(extraParameters.SubVector(offset, count));
+            offset += count;
+        }
+    }
 }
