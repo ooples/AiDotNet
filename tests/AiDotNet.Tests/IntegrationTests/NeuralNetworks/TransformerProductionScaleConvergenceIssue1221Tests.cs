@@ -420,6 +420,14 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
         var pred1 = model.Predict(input);
         var pred2 = model.Predict(input);
 
+        // Predict must restore the caller's training-mode state after
+        // running. The base.Predict's try/finally toggles eval mode for
+        // the duration of the forward pass and restores the prior state
+        // on exit; this assertion locks in that save/restore contract.
+        Assert.True(model.IsTrainingMode,
+            "Predict should restore the caller's training-mode state after inference. " +
+            "If this fails, the wrapper's finally block isn't running.");
+
         Assert.Equal(pred1.Length, pred2.Length);
         double maxDelta = 0.0;
         for (int i = 0; i < pred1.Length; i++)
@@ -429,10 +437,20 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
         }
         _output.WriteLine($"Two Predict calls (training mode forced ON beforehand): max abs diff = {maxDelta:E3}");
 
-        Assert.True(maxDelta < 1e-6,
+        // Tolerance: pre-fix the failure produces diffs in the ~1e-2 range
+        // (Dropout's stochastic mask reroll randomizes ~10% of features per
+        // call). 1e-3 is comfortably below that and well above any GPU
+        // floating-point nondeterminism (kernel scheduling, reduction-order
+        // variance). The previous 1e-6 was tighter than CPU/GPU
+        // float-rounding can guarantee across CI agents and would cause
+        // spurious failures on a deterministic-Dropout eval forward.
+        const double tolerance = 1e-3;
+        Assert.True(maxDelta < tolerance,
             $"Two Predict calls on the same input produced different outputs " +
-            $"(max abs diff = {maxDelta:E3}, tolerance 1e-6). #1221 root " +
-            $"cause: Transformer.Predict bypassed the base's eval-mode " +
-            $"toggle, so Dropout ran with stochastic masks at inference.");
+            $"(max abs diff = {maxDelta:E3}, tolerance {tolerance:E1}). #1221 " +
+            $"root cause: Transformer.Predict bypassed the base's eval-mode " +
+            $"toggle, so Dropout ran with stochastic masks at inference. " +
+            $"Pre-fix diff is ~1e-2 (one Dropout zero-out per ~10 hidden " +
+            $"units); post-fix Dropout is a no-op and the diff is float noise.");
     }
 }

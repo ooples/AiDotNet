@@ -474,18 +474,18 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     /// <inheritdoc />
     /// <remarks>
-    /// Transformer's eager forward routes the special-case encoder/decoder
-    /// cross-attention pattern (DecoderLayer needs the encoder's output as
-    /// a second input; AttentionLayer needs the attention mask as a second
-    /// input). The wrapping <see cref="NeuralNetworkBase{T}.Predict"/>
-    /// handles training-mode toggle, no-grad scope, batch-dim promotion,
-    /// and output squeeze — issue #1221 was caused by overriding
-    /// <see cref="NeuralNetworkBase{T}.Predict"/> directly and losing all
-    /// of those wrappers, in particular the <c>SetTrainingMode(false)</c>
-    /// that disables Dropout. Without it, every Predict call randomly
-    /// zero-masked features, eventually pushing the trained output Dense
-    /// into a degenerate steady state where eval-time logits collapse to
-    /// uniform-over-V (NLL = ln(|V|) exactly, top-1 = 0% on byte-LM).
+    /// Transformer's eager forward routes the encoder/decoder
+    /// cross-attention pattern: <see cref="DecoderLayer{T}"/> takes the
+    /// encoder's output as a second input, <see cref="AttentionLayer{T}"/>
+    /// takes the attention mask as a second input, and other layers are
+    /// invoked through the standard single-input
+    /// <see cref="ILayer{T}.Forward(Tensor{T})"/>. The encoder output is
+    /// captured at the last <see cref="MultiHeadAttentionLayer{T}"/>
+    /// before any decoder layer in the chain. The public
+    /// <see cref="NeuralNetworkBase{T}.Predict"/> wrapper handles
+    /// training-mode toggle, no-grad scope, batch-dim promotion, and
+    /// output squeeze — see that method's remarks for the inference-
+    /// scaffolding contract (issue #1221).
     /// </remarks>
     protected override Tensor<T> PredictEager(Tensor<T> input)
     {
