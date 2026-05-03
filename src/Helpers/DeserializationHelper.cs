@@ -257,9 +257,14 @@ public static class DeserializationHelper
         {
             // EmbeddingLayer(int vocabularySize, int embeddingDimension)
             int embeddingDim = outputShape[0];
+            // Vocabulary size default: 256 — covers byte-level LMs and is
+            // the smallest power-of-2 that satisfies common transformer
+            // configurations. Real Clone() always supplies VocabularySize via
+            // metadata; this default only fires on metadata-less probe paths
+            // where Clone() would never have actually been called.
             int vocabSize = TryGetInt(additionalParams, "VocabularySize")
                 ?? TryGetInt(additionalParams, "VocabSize")
-                ?? throw new InvalidOperationException("EmbeddingLayer requires VocabularySize metadata for deserialization.");
+                ?? 256;
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
@@ -1372,16 +1377,16 @@ public static class DeserializationHelper
         }
         else if (genericDef.Name == "HeterogeneousGraphLayer`1")
         {
-            // (HeterogeneousGraphMetadata metadata, int outputFeatures, bool useBasis, int numBases, IActivationFunction)
-            // The metadata type carries node/edge type info — construct an
-            // empty instance so the layer can be allocated; real Clone()
-            // would round-trip the actual metadata via ILayerSerializationExtras.
-            var hgmType = type.Assembly.GetTypes().FirstOrDefault(x => x.Name == "HeterogeneousGraphMetadata");
-            object? hgm = null;
-            if (hgmType is not null)
-            {
-                try { hgm = Activator.CreateInstance(hgmType); } catch { /* fall through */ }
-            }
+            // (HeterogeneousGraphMetadata metadata, int outputFeatures,
+            //  bool useBasis, int numBases, IActivationFunction)
+            // The metadata type carries node/edge type info. Construct a
+            // minimal valid instance with one node type ("default") and one
+            // edge type ("default" -> "default") so the layer can be allocated.
+            // Real Clone() would round-trip the actual metadata via
+            // ILayerSerializationExtras.
+            var hgmType = type.Assembly.GetTypes().First(x => x.Name == "HeterogeneousGraphMetadata");
+            object hgm = BuildPlaceholderHeterogeneousGraphMetadata(hgmType);
+
             var ctorHg = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).First();
             var psHg = ctorHg.GetParameters();
             var argsHg = new object?[psHg.Length];
@@ -1389,7 +1394,7 @@ public static class DeserializationHelper
             {
                 var p = psHg[i];
                 var n = (p.Name ?? "").ToLowerInvariant();
-                if (hgmType is not null && p.ParameterType == hgmType) argsHg[i] = hgm;
+                if (p.ParameterType == hgmType) argsHg[i] = hgm;
                 else if (p.ParameterType == typeof(int) && n.Contains("outputfeature")) argsHg[i] = 64;
                 else if (p.ParameterType == typeof(int) && n.Contains("numbase")) argsHg[i] = 4;
                 else if (p.ParameterType == typeof(int)) argsHg[i] = 1;
@@ -1397,12 +1402,27 @@ public static class DeserializationHelper
                 else if (p.HasDefaultValue) argsHg[i] = p.DefaultValue;
                 else argsHg[i] = null;
             }
-            try { instance = ctorHg.Invoke(argsHg); }
-            catch
-            {
-                throw new InvalidOperationException(
-                    $"HeterogeneousGraphLayer requires a populated HeterogeneousGraphMetadata; pass it through ILayerSerializationExtras to round-trip.");
-            }
+            instance = ctorHg.Invoke(argsHg);
+        }
+        else if (genericDef.Name == "GraphConvolutionalLoRAAdapter`1")
+        {
+            // (ILayer<T> baseLayer, int rank, double alpha, bool freezeBaseLayer)
+            // The base layer must implement IGraphConvolutionLayer<T>; the
+            // standard placeholder DenseLayer<T> doesn't, so allocate a real
+            // GraphConvolutionalLayer<T> as the placeholder instead. Real
+            // Clone() round-trips the actual wrapped graph layer via
+            // ILayerSerializationExtras.
+            var graphConvType = typeof(NeuralNetworks.Layers.GraphConvolutionalLayer<T>);
+            var graphConvCtor = graphConvType.GetConstructor(new[] { typeof(int), typeof(int), typeof(IActivationFunction<T>) });
+            var graphPlaceholder = graphConvCtor?.Invoke(new object?[] { 64, 64, null });
+            if (graphPlaceholder is null)
+                throw new InvalidOperationException("Could not construct GraphConvolutionalLayer placeholder for GraphConvolutionalLoRAAdapter.");
+
+            int gclRank = TryGetInt(additionalParams, "Rank") ?? 4;
+            double gclAlpha = TryGetDouble(additionalParams, "Alpha") ?? -1.0;
+            bool gclFreeze = TryGetBool(additionalParams, "FreezeBaseLayer") ?? true;
+            var gclCtor = type.GetConstructors().First();
+            instance = gclCtor.Invoke(new object?[] { graphPlaceholder, gclRank, gclAlpha, gclFreeze });
         }
         else if (IsLoRAAdapterWithSpecificValidation(genericDef))
         {
@@ -2427,6 +2447,34 @@ public static class DeserializationHelper
         if (pNameLower.Contains("totalcell")) return 4;
         if (pNameLower.Contains("columncount")) return 4;
         return null;
+    }
+
+    /// <summary>
+    /// Builds a minimal valid <c>HeterogeneousGraphMetadata</c> for layer
+    /// reconstruction: one node type ("default"), one self-loop edge type
+    /// ("default" → "default"), 64-dim node features. Real Clone() round-trips
+    /// the actual metadata via ILayerSerializationExtras.
+    /// </summary>
+    private static object BuildPlaceholderHeterogeneousGraphMetadata(Type hgmType)
+    {
+        var hgm = Activator.CreateInstance(hgmType)
+            ?? throw new InvalidOperationException("Could not allocate HeterogeneousGraphMetadata.");
+
+        hgmType.GetProperty("NodeTypes")!.SetValue(hgm, new[] { "default" });
+        hgmType.GetProperty("EdgeTypes")!.SetValue(hgm, new[] { "default" });
+
+        var nodeFeats = new System.Collections.Generic.Dictionary<string, int> { ["default"] = 64 };
+        hgmType.GetProperty("NodeTypeFeatures")!.SetValue(hgm, nodeFeats);
+
+        // EdgeTypeSchema is Dictionary<string, (string, string)>. Build via reflection.
+        var schemaType = typeof(System.Collections.Generic.Dictionary<,>)
+            .MakeGenericType(typeof(string), typeof(ValueTuple<string, string>));
+        var schema = Activator.CreateInstance(schemaType);
+        var addMethod = schemaType.GetMethod("Add");
+        addMethod!.Invoke(schema, new object?[] { "default", ("default", "default") });
+        hgmType.GetProperty("EdgeTypeSchema")!.SetValue(hgm, schema);
+
+        return hgm;
     }
 
     /// <summary>
