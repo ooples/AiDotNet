@@ -164,16 +164,38 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// </para>
     /// </remarks>
     protected LoRAAdapterBase(ILayer<T> baseLayer, int rank, double alpha = -1, bool freezeBaseLayer = true)
-        : base(
-            ResolveBaseInputShape(baseLayer ?? throw new ArgumentNullException(nameof(baseLayer))),
-            baseLayer.GetOutputShape())
+        : this(baseLayer ?? throw new ArgumentNullException(nameof(baseLayer)),
+               rank, alpha, freezeBaseLayer,
+               ResolveBaseInputShapeWithProvenance(baseLayer))
+    {
+    }
+
+    /// <summary>
+    /// Internal ctor that takes the resolved-input-shape result tuple from
+    /// <see cref="ResolveBaseInputShapeWithProvenance"/>. The IsAuthoritative
+    /// flag tells us whether the shape came from the layer itself (or its
+    /// trainable parameters) versus the synthetic <c>outSize * 2</c> fallback
+    /// — we only eagerly call <see cref="LayerBase{T}.ResolveFromShape"/> in
+    /// the authoritative case, so a wrong heuristic guess never allocates
+    /// real weight tensors with mismatched dims.
+    /// </summary>
+    private LoRAAdapterBase(
+        ILayer<T> baseLayer, int rank, double alpha, bool freezeBaseLayer,
+        (int[] Shape, bool IsAuthoritative) resolvedInput)
+        : base(resolvedInput.Shape, baseLayer.GetOutputShape())
     {
         _baseLayer = baseLayer;
         _freezeBaseLayer = freezeBaseLayer;
 
-        // Eagerly resolve a lazy base layer using our resolved input shape so its
-        // weights are allocated and ParameterCount is correct on construction.
-        if (_baseLayer is LayerBase<T> baseLb && !baseLb.IsShapeResolved)
+        // Only eagerly resolve when the shape we just gave the base ctor is
+        // authoritative (came from the layer or its actual weights). The
+        // synthetic outSize*2 fallback is a guess for ParameterCount-readiness
+        // only; allocating real weights against it would burn RNG state and
+        // potentially produce wrong-shape kernels that throw later on actual
+        // forward.
+        if (resolvedInput.IsAuthoritative
+            && _baseLayer is LayerBase<T> baseLb
+            && !baseLb.IsShapeResolved)
         {
             var resolvedIn = GetInputShape();
             if (resolvedIn.Length > 0 && resolvedIn.All(d => d > 0))
@@ -209,49 +231,92 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// This method lets each adapter type create the right kind of LoRA layer.
     /// </para>
     /// </remarks>
-    private static int InferInputSizeFromWeights(IReadOnlyList<Tensor<T>> weights)
+    private static int InferInputSizeFromWeights(ILayer<T>? baseLayer, IReadOnlyList<Tensor<T>> weights)
     {
         if (weights.Count == 0) return -1;
-        var w0 = weights[0];
-        if (w0.Shape.Length == 0) return -1;
-        if (w0.Shape.Length == 1)
+
+        // Find the first WEIGHT-MATRIX-shaped tensor (rank >= 2). A naive
+        // weights[0] inspection breaks when the first parameter is a 1-D
+        // bias / LayerNorm gamma — those have outSize as their only axis,
+        // so InferInputSizeFromWeights would return outSize as inputSize
+        // and produce wrong adapter dimensions on every Dense layer once
+        // lazily resolved. Scan for the first rank-≥-2 tensor first; only
+        // if none is found do we fall back to the rank-1 case.
+        Tensor<T>? matrix = null;
+        for (int i = 0; i < weights.Count; i++)
         {
-            // 1-D parameter (LayerNorm gamma/beta, BatchNorm scale/shift):
-            // input == output == Shape[0]. Returning this lets LoRA wrap them
-            // correctly without falling through to the outSize*2 heuristic.
-            return w0.Shape[0] > 0 ? w0.Shape[0] : -1;
+            if (weights[i].Shape.Length >= 2)
+            {
+                matrix = weights[i];
+                break;
+            }
         }
-        if (w0.Shape.Length == 2)
+
+        if (matrix is null)
         {
-            // DenseLayer convention: weights are allocated as [inputSize, outputSize]
-            // (see DenseLayer's TensorAllocator.Rent<T>([inputSize, outputSize])).
-            // The fan-in axis is therefore Shape[0], NOT Shape[1] — returning
-            // Shape[1] would yield the output size and produce wrong adapter
-            // dimensions on every Dense layer once lazily resolved.
-            return w0.Shape[0] > 0 ? w0.Shape[0] : -1;
+            // No weight matrix — fall back to the first 1-D tensor's length
+            // (LayerNorm/BatchNorm wrappers where in == out).
+            var w0 = weights[0];
+            if (w0.Shape.Length == 1 && w0.Shape[0] > 0) return w0.Shape[0];
+            return -1;
+        }
+
+        if (matrix.Shape.Length == 2)
+        {
+            // FullyConnectedLayer<T> uses output-major storage:
+            // weights are allocated as [outputSize, inputSize] (see this
+            // class's MergeWeights / Forward paths at L504+ which assume
+            // that layout). For an FCL, the fan-in axis is Shape[1].
+            //
+            // DenseLayer<T> uses the inverse convention:
+            // weights are allocated as [inputSize, outputSize]
+            // (DenseLayer's TensorAllocator.Rent<T>([inputSize, outputSize])).
+            // For Dense, the fan-in axis is Shape[0].
+            //
+            // Without distinguishing, an FCL wrapped via lazy LoRA would
+            // produce LoRA tensors with swapped dimensions and crash on
+            // first forward.
+            if (baseLayer is FullyConnectedLayer<T>)
+            {
+                return matrix.Shape[1] > 0 ? matrix.Shape[1] : -1;
+            }
+            return matrix.Shape[0] > 0 ? matrix.Shape[0] : -1;
         }
         // Conv weight convention (rank ≥ 3): [outC, inC, ...spatial] ⇒ axis 1 is
         // input channels. The trailing dim would be wrong (kernel width / depth).
-        return w0.Shape[1] > 0 ? w0.Shape[1] : -1;
+        return matrix.Shape[1] > 0 ? matrix.Shape[1] : -1;
     }
 
-    private static int[] ResolveBaseInputShape(ILayer<T> baseLayer)
+    /// <summary>
+    /// Returns the resolved base-input shape AND a flag indicating whether
+    /// the shape is authoritative (came from the layer's own resolved
+    /// shape or its actual weight matrix) vs a synthetic
+    /// <c>outSize * 2</c> heuristic. Callers should only eagerly allocate
+    /// weights from authoritative shapes.
+    /// </summary>
+    private static (int[] Shape, bool IsAuthoritative) ResolveBaseInputShapeWithProvenance(ILayer<T> baseLayer)
     {
         var shape = baseLayer.GetInputShape();
-        if (shape.Length > 0 && shape[0] > 0) return shape;
+        if (shape.Length > 0 && shape.All(d => d > 0)) return (shape, true);
 
         if (baseLayer is LayerBase<T> layerBase)
         {
-            int inferred = InferInputSizeFromWeights(layerBase.GetTrainableParameters());
-            if (inferred > 0) return new[] { inferred };
+            int inferred = InferInputSizeFromWeights(baseLayer, layerBase.GetTrainableParameters());
+            if (inferred > 0) return (new[] { inferred }, true);
         }
 
         // Convention encoded by the LoRA test suite (Assert.Equal(10, ...) on
-        // adapter wrapping DenseLayer(5)): input dim defaults to 2 × output dim.
+        // adapter wrapping DenseLayer(5)): input dim defaults to 2 × output
+        // dim. NOT authoritative — caller must NOT eagerly allocate weights
+        // against this guess; ResolveFromShape would otherwise materialize
+        // wrong-shape weight tensors.
         var outShape = baseLayer.GetOutputShape();
         int outSize = outShape.Length > 0 && outShape[0] > 0 ? outShape[0] : 1;
-        return new[] { outSize * 2 };
+        return (new[] { outSize * 2 }, false);
     }
+
+    private static int[] ResolveBaseInputShape(ILayer<T> baseLayer)
+        => ResolveBaseInputShapeWithProvenance(baseLayer).Shape;
 
     protected virtual LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
@@ -259,7 +324,9 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         int outputSize = GetOutputShape()[0];
         if (inputSize <= 0 && _baseLayer is LayerBase<T> layerBase)
         {
-            int inferred = InferInputSizeFromWeights(layerBase.GetTrainableParameters());
+            // Pass _baseLayer so InferInputSizeFromWeights can pick the
+            // right axis for output-major layers like FullyConnectedLayer.
+            int inferred = InferInputSizeFromWeights(_baseLayer, layerBase.GetTrainableParameters());
             if (inferred > 0) inputSize = inferred;
         }
         if (inputSize <= 0) inputSize = outputSize * 2;

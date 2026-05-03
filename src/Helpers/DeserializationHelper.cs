@@ -272,8 +272,13 @@ public static class DeserializationHelper
 
             int patchEmbedDim = outputShape[1];
             int numPatches = outputShape[0];
-            int imageHeight = inputShape.Length > 1 ? inputShape[1] : 0;
-            int imageWidth = inputShape.Length > 2 ? inputShape[2] : 0;
+            // Use the trailing two axes as H/W so both CHW (rank 3) and NCHW
+            // (rank 4) deserialize correctly. Hard-coding inputShape[1]/[2]
+            // mapped to (C,H) for NCHW input and back-derived patchSize from
+            // the wrong axes — broken weight reattachment for any saved
+            // model whose recorded inputShape was rank-4.
+            int imageHeight = inputShape.Length >= 2 ? inputShape[inputShape.Length - 2] : 0;
+            int imageWidth = inputShape.Length >= 1 ? inputShape[inputShape.Length - 1] : 0;
 
             int patchSize;
             int? metadataPatchSize = TryGetInt(additionalParams, "PatchSize");
@@ -304,10 +309,28 @@ public static class DeserializationHelper
                     "positive height/width when constructing the layer manually.");
             }
 
-            var ctor = type.GetConstructors()
-                .FirstOrDefault(c => c.GetParameters().Length >= 2 &&
+            // Prefer the LEGACY 2+activation+init ctor over any newer
+            // overload that adds non-nullable trailing parameters. Older
+            // saved models don't carry metadata for new args, and falling
+            // through to a wider overload would either need that metadata
+            // or trip the "no default for non-nullable value type" guard.
+            // The legacy ctor signature is (int patchSize, int embeddingDim,
+            // IActivationFunction<T>?, IInitializationStrategy<T>?) — both
+            // trailing args are nullable reference types.
+            var allCtors = type.GetConstructors()
+                .Where(c => c.GetParameters().Length >= 2 &&
                     c.GetParameters()[0].ParameterType == typeof(int) &&
-                    c.GetParameters()[1].ParameterType == typeof(int));
+                    c.GetParameters()[1].ParameterType == typeof(int))
+                .ToArray();
+            var ctor = allCtors
+                // Score 0 = ideal: only nullable trailing params. Score 1 =
+                // has trailing value-type params (newer eager-channel ctor).
+                .OrderBy(c => c.GetParameters()
+                    .Skip(2)
+                    .Any(p => p.ParameterType.IsValueType
+                              && Nullable.GetUnderlyingType(p.ParameterType) is null) ? 1 : 0)
+                .ThenBy(c => c.GetParameters().Length)  // prefer fewer args
+                .FirstOrDefault();
             if (ctor is null)
             {
                 throw new InvalidOperationException("Cannot find PatchEmbeddingLayer constructor.");
@@ -317,7 +340,42 @@ public static class DeserializationHelper
             args[0] = patchSize;
             args[1] = patchEmbedDim;
             for (int i = 2; i < ctorParams.Length; i++)
-                args[i] = null;
+            {
+                // Use the constructor's declared default value when
+                // available, normalising sentinel values that
+                // ParameterInfo can return:
+                //   - Type.Missing  → ctor.Invoke fails when this is
+                //                     forwarded as-is for value types.
+                //   - DBNull.Value  → same problem.
+                // Both indicate "no real default" and should be treated
+                // like the no-default case below. For reference-type /
+                // Nullable<T> params we fall back to null; for non-
+                // nullable value types we throw because there's no safe
+                // value to invent.
+                object? defaultValue = ctorParams[i].HasDefaultValue
+                    ? ctorParams[i].DefaultValue
+                    : null;
+                bool isSentinel = ReferenceEquals(defaultValue, Type.Missing)
+                                  || defaultValue is DBNull;
+                if (ctorParams[i].HasDefaultValue && !isSentinel)
+                {
+                    args[i] = defaultValue;
+                }
+                else if (!ctorParams[i].ParameterType.IsValueType ||
+                         Nullable.GetUnderlyingType(ctorParams[i].ParameterType) is not null)
+                {
+                    args[i] = null;
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"PatchEmbeddingLayer constructor parameter '{ctorParams[i].Name}' " +
+                        $"(type {ctorParams[i].ParameterType.Name}) has no default value and " +
+                        "is a non-nullable value type. Cannot deserialize without the explicit " +
+                        "value — re-save the model on a build that emits this parameter via " +
+                        "GetMetadata.");
+                }
+            }
             instance = ctor.Invoke(args);
         }
         else if (genericDef == typeof(PositionalEncodingLayer<>))
@@ -408,7 +466,16 @@ public static class DeserializationHelper
                 int[] resolvedShape = embeddingSize > 0
                     ? inputShape.Select(d => d > 0 ? d : 1).ToArray()
                     : (numHeads > 0 ? new[] { 1, numHeads * 64 } : new[] { 1, 64 });
-                if (resolvedShape[^1] <= 0) resolvedShape[^1] = embeddingSize > 0 ? embeddingSize : 64;
+                // Always pin the trailing axis to the embeddingSize the
+                // saved-shape declared. The previous form only corrected
+                // resolvedShape[^1] when it was <= 0 — a positive-but-stale
+                // last dim (e.g. saved shape carries a placeholder 1) would
+                // resolve the layer to the wrong embedding width and throw at
+                // SetParameters or load weights into a wrong-shape kernel.
+                if (embeddingSize > 0)
+                    resolvedShape[^1] = embeddingSize;
+                else if (resolvedShape[^1] <= 0)
+                    resolvedShape[^1] = numHeads > 0 ? numHeads * 64 : 64;
                 layerBase.ResolveFromShape(resolvedShape);
             }
         }

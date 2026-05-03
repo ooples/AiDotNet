@@ -162,10 +162,17 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         {
-            // Best-effort: shape mismatches under non-default configurations
-            // surface via the actual test paths rather than masking here.
+            // Surface shape-arithmetic failures explicitly so a misconfigured
+            // _hiddenDim / _numCMSLevels combo fails at construction instead
+            // of leaving a partially-initialized network that reports
+            // ParameterCount > 0 but cannot complete a forward.
             System.Diagnostics.Debug.WriteLine(
-                $"HopeNetwork.ProbeLayersForLazyResolution skipped: {ex.Message}");
+                $"HopeNetwork.ProbeLayersForLazyResolution failed: {ex.Message}");
+            throw new InvalidOperationException(
+                $"{nameof(HopeNetwork<T>)} failed lazy-layer shape probe during construction. " +
+                $"Verify _hiddenDim ({_hiddenDim}), _numCMSLevels ({_numCMSLevels}), and " +
+                $"_numRecurrentLayers ({_numRecurrentLayers}) flow through the Layers chain.",
+                ex);
         }
     }
 
@@ -722,6 +729,14 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
     {
+        // Deep-copy options so the clone and source don't share mutable
+        // configuration state. MemberwiseClone is sufficient for the
+        // current HopeNetworkOptions (no reference-typed fields), but
+        // any future option fields of reference type would need
+        // explicit deep copies in a HopeNetworkOptions.Clone override
+        // following the same pattern.
+        var optionsCopy = (HopeNetworkOptions)_options.MemberwiseCloneOptions();
+
         var newHope = new HopeNetwork<T>(
             architecture: Architecture,
             optimizer: null,
@@ -729,7 +744,8 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             hiddenDim: _hiddenDim,
             numCMSLevels: _numCMSLevels,
             numRecurrentLayers: _numRecurrentLayers,
-            inContextLearningLevels: _inContextLearningLevels);
+            inContextLearningLevels: _inContextLearningLevels,
+            options: optionsCopy);
 
         // Copy trainable parameters across all layers.
         var allParams = GetParameters();

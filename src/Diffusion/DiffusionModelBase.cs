@@ -470,6 +470,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+
         // Diffusion Predict semantics: the input IS the noisy starting sample,
         // not a seed source. The denoising loop starts from `input` and runs
         // backward through the scheduler timesteps. Hashing the input to a

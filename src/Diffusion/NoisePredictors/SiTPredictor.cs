@@ -142,6 +142,19 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
         {
             _inputChannels = noisySample.Shape[1];
         }
+        else if (_initialized && noisySample.Rank >= 2 && noisySample.Shape[1] != _inputChannels)
+        {
+            // Channel-consistency guard: once initialized, the patchify /
+            // unpatchify dimensions are baked in. A subsequent call with a
+            // different channel count would silently produce wrong-shape
+            // output later in the layer stack. Fail fast with a clear
+            // exception instead of letting the misconfiguration propagate.
+            throw new ArgumentException(
+                $"SiTPredictor was initialized for {_inputChannels} input channels, " +
+                $"but received {noisySample.Shape[1]}. Construct a new SiTPredictor for " +
+                "the new channel count or pass an input matching the original.",
+                nameof(noisySample));
+        }
 
         var (_, embed, blocks, final_) = EnsureInitialized();
 

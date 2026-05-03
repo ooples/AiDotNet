@@ -822,6 +822,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private readonly System.Collections.Generic.Dictionary<(int batch, int totalC, int h, int w), Tensor<T>> _concatPool = new();
 
     /// <summary>
+    /// Maximum number of distinct concat-shape entries to retain. A typical
+    /// SD UNet decoder has 4 levels × 1–2 skip merges per level = ~8 distinct
+    /// shapes during a single inference run. Cap at 16 so a model that sees
+    /// a few different input resolutions across inference calls (training,
+    /// var-res evaluation) doesn't unboundedly grow memory by retaining
+    /// every shape it ever saw.
+    /// </summary>
+    private const int MaxConcatPoolEntries = 16;
+
+    /// <summary>
     /// Concatenates two tensors along the channel dimension. Eval-mode uses
     /// a pooled manual-copy buffer keyed by exact shape so repeated decoder
     /// skip-merges at the same shape don't allocate.
@@ -851,6 +861,17 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         var key = (batch, totalC, h, w);
         if (!_concatPool.TryGetValue(key, out var output))
         {
+            // Bounded eviction: when the pool reaches MaxConcatPoolEntries,
+            // drop the entire pool before inserting. Selective LRU eviction
+            // is tempting but adds bookkeeping for what is a thin perf
+            // optimization — full clear at the cap is sufficient to bound
+            // memory without complicating the hot path. A pool that varies
+            // shape every call (a degenerate case the user shouldn't hit)
+            // would defeat pooling either way.
+            if (_concatPool.Count >= MaxConcatPoolEntries)
+            {
+                _concatPool.Clear();
+            }
             output = new Tensor<T>(new[] { batch, totalC, h, w });
             _concatPool[key] = output;
         }

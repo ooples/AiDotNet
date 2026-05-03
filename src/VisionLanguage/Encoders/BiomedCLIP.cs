@@ -87,16 +87,25 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
+        ThrowIfDisposed();
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        // Tokenize NCHW image inputs the same way Predict does so the
-        // tape-based training loop sees the patch-embedded BSC sequence
-        // the encoder layer stack actually expects. Without this, callers
-        // (and the model-family invariant tests) that pass an NCHW image
-        // would either crash on the first encoder layer's shape check or
-        // train against zero gradients flowing through a wrong-shape path.
-        TrainWithTape(TokenizeIfNCHW(input), expected);
-        SetTrainingMode(false);
+        try
+        {
+            // Tokenize NCHW image inputs the same way Predict does so the
+            // tape-based training loop sees the patch-embedded BSC sequence
+            // the encoder layer stack actually expects. Without this, callers
+            // (and the model-family invariant tests) that pass an NCHW image
+            // would either crash on the first encoder layer's shape check or
+            // train against zero gradients flowing through a wrong-shape path.
+            TrainWithTape(TokenizeIfNCHW(input), expected);
+        }
+        finally
+        {
+            // try/finally so a TrainWithTape throw doesn't leave the model
+            // stuck in training mode.
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
@@ -166,6 +175,14 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             l.SetParameters(parameters.Slice(idx, c));
             idx += c;
         }
+        // Verify every parameter element was consumed so trailing values
+        // (serialization version drift, mis-saved vectors) fail loudly
+        // instead of silently being ignored.
+        if (idx != parameters.Length)
+            throw new ArgumentException(
+                $"Parameter length mismatch in {nameof(SetParameters)}: consumed {idx}, " +
+                $"got {parameters.Length}. Check for serialization version drift.",
+                nameof(parameters));
     }
 
     public override void UpdateParameters(Vector<T> parameters)
@@ -183,6 +200,11 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             }
         }
         foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        if (idx != parameters.Length)
+            throw new ArgumentException(
+                $"Parameter length mismatch in {nameof(UpdateParameters)}: consumed {idx}, " +
+                $"got {parameters.Length}. Check for serialization version drift.",
+                nameof(parameters));
     }
 
     /// <summary>

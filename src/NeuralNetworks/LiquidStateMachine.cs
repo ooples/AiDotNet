@@ -470,20 +470,44 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Default Train resets reservoir state per-call (Maass 2002 standalone
+        // training contract). TrainOnTimeSeries calls TrainCore directly with
+        // resetStateBeforeTrain=false to preserve cross-step temporal
+        // continuity inside a sequence.
+        TrainCore(input, expectedOutput, resetStateBeforeTrain: true);
+    }
+
+    /// <summary>
+    /// Core training step with explicit reservoir-reset control. Public
+    /// <see cref="Train"/> always resets (the historical Maass 2002 contract);
+    /// <see cref="TrainOnTimeSeries"/> calls this with
+    /// <c>resetStateBeforeTrain=false</c> for every step after the first
+    /// so the reservoir's recurrent state carries forward across the sequence.
+    /// </summary>
+    /// <param name="input">Input tensor for this step.</param>
+    /// <param name="expectedOutput">Target output for this step.</param>
+    /// <param name="resetStateBeforeTrain">
+    /// <c>true</c> to zero the reservoir before TrainWithTape (independent-step
+    /// training, Maass 2002 standalone). <c>false</c> to preserve the
+    /// reservoir state from the previous call (sequence/time-series training).
+    /// </param>
+    private void TrainCore(Tensor<T> input, Tensor<T> expectedOutput, bool resetStateBeforeTrain)
+    {
         SetTrainingMode(true);
         foreach (var layer in Layers)
             layer.SetTrainingMode(true);
         try
         {
-            // Maass 2002 LSM training assumes the reservoir starts from a known
-            // (zero) initial state for each training example. Without this
-            // reset the reservoir's recurrent state evolves across iterations,
-            // so each Train call backprops through a different effective
-            // network — gradient descent then optimizes a moving target and
-            // the readout's loss can drift upward instead of decreasing
-            // (Training_ShouldReduceLoss invariant). ResetState propagates to
-            // ReservoirLayer and zeros _reservoirState before the tape runs.
-            ResetState();
+            if (resetStateBeforeTrain)
+            {
+                // Maass 2002 LSM training assumes the reservoir starts from a
+                // known (zero) initial state for each training example. Without
+                // this reset the reservoir's recurrent state evolves across
+                // iterations, so each Train call backprops through a different
+                // effective network. ResetState propagates to ReservoirLayer
+                // and zeros _reservoirState before the tape runs.
+                ResetState();
+            }
 
             TrainWithTape(input, expectedOutput, _optimizer);
         }
@@ -721,17 +745,34 @@ public class LiquidStateMachine<T> : NeuralNetworkBase<T>
             throw new ArgumentException("Input and expected output sequences must have the same length");
         }
 
-        // Reset state before starting the training
+        // Empty sequence: nothing to train, and we must NOT enable
+        // training mode because the loop won't run to disable it again.
+        if (timeSeriesInput.Count == 0) return;
+
+        // Reset state ONCE before the sequence; thereafter call TrainCore
+        // with resetStateBeforeTrain=false so the reservoir's recurrent state
+        // carries across timesteps. The previous form delegated to public
+        // Train(), which zeroed the reservoir at every step and collapsed
+        // sequence learning into independent-step learning — defeating the
+        // whole point of LSM time-series training.
         ResetState();
         SetTrainingMode(true);
-
-        // Process each time step
-        for (int i = 0; i < timeSeriesInput.Count; i++)
+        try
         {
-            // Forward pass and train on this time step
-            Train(timeSeriesInput[i], timeSeriesExpectedOutput[i]);
-
-            // Note: We don't reset state between time steps to maintain temporal dynamics
+            for (int i = 0; i < timeSeriesInput.Count; i++)
+            {
+                // Preserve reservoir state across timesteps to maintain temporal
+                // dynamics. The reset that already ran above gave us the known
+                // zero initial state for the sequence's first step.
+                TrainCore(timeSeriesInput[i], timeSeriesExpectedOutput[i],
+                    resetStateBeforeTrain: false);
+            }
+        }
+        finally
+        {
+            // try/finally so a TrainCore throw mid-sequence doesn't leave
+            // the model stuck in training mode.
+            SetTrainingMode(false);
         }
     }
 

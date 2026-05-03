@@ -144,13 +144,21 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        // Tokenize NCHW image inputs the same way Predict does so the
-        // tape-based training loop sees the patch-embedded BSC sequence
-        // the encoder layer stack expects (otherwise NCHW images would
-        // crash the first encoder layer's shape check or train against
-        // a wrong-shape gradient path).
-        TrainWithTape(TokenizeIfNCHW(input), expected);
-        SetTrainingMode(false);
+        try
+        {
+            // Tokenize NCHW image inputs the same way Predict does so the
+            // tape-based training loop sees the patch-embedded BSC sequence
+            // the encoder layer stack expects.
+            TrainWithTape(TokenizeIfNCHW(input), expected);
+        }
+        finally
+        {
+            // try/finally so a TrainWithTape throw doesn't leave the model
+            // stuck in training mode (dropout / norm-running-stats remain on
+            // for every subsequent Predict call until something else flips
+            // it back).
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

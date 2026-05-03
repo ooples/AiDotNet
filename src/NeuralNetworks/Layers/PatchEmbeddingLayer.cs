@@ -77,6 +77,15 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     private int _numPatches;
 
     /// <summary>
+    /// Expected input channels (3 for RGB, 1 for grayscale, etc.) when set
+    /// via the eager-channel ctor. -1 means lazy resolution from the first
+    /// forward. Used as a fail-fast guard so a non-RGB input on a model
+    /// constructed for RGB throws an immediate, actionable error instead of
+    /// silently producing wrong embeddings.
+    /// </summary>
+    private int _expectedInputChannels;
+
+    /// <summary>
     /// The projection weights that transform flattened patches to embeddings.
     /// </summary>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -184,6 +193,29 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         int embeddingDim,
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null)
+        : this(patchSize, embeddingDim, expectedInputChannels: -1, activationFunction, initializationStrategy)
+    {
+    }
+
+    /// <summary>
+    /// Eager-channel ctor: when the caller knows the input channel count at
+    /// construction time (e.g. CLIP ViT-L/14 explicitly takes 3-channel RGB),
+    /// pass it via <paramref name="expectedInputChannels"/> so the layer can
+    /// fail fast on the first forward if the real input doesn't match. The
+    /// previous form silently picked up whatever the runtime input declared,
+    /// so a non-RGB configuration would build the conv with wrong channel
+    /// dim and surface the mismatch only as a downstream tensor-shape error.
+    /// </summary>
+    /// <param name="expectedInputChannels">
+    /// Expected channel count, or <c>-1</c> for fully-lazy channel resolution
+    /// from the first forward (the historical behaviour).
+    /// </param>
+    public PatchEmbeddingLayer(
+        int patchSize,
+        int embeddingDim,
+        int expectedInputChannels,
+        IActivationFunction<T>? activationFunction = null,
+        IInitializationStrategy<T>? initializationStrategy = null)
         : base(
             new[] { -1, -1, -1 },
             new[] { -1, embeddingDim },
@@ -191,9 +223,13 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     {
         if (patchSize <= 0) throw new ArgumentOutOfRangeException(nameof(patchSize));
         if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
+        if (expectedInputChannels == 0 || expectedInputChannels < -1)
+            throw new ArgumentOutOfRangeException(nameof(expectedInputChannels),
+                "expectedInputChannels must be > 0 or -1 for lazy resolution.");
 
         _patchSize = patchSize;
         _embeddingDim = embeddingDim;
+        _expectedInputChannels = expectedInputChannels;
 
         // Lazy: image H/W, channels, num patches resolved on first Forward.
         _imageHeight = -1;
@@ -226,6 +262,16 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         _channels = input.Shape[rank - 3];
         _imageHeight = input.Shape[rank - 2];
         _imageWidth = input.Shape[rank - 1];
+
+        // Fail fast on a misconfigured model: the eager-channel ctor recorded
+        // the expected channel count, so a mismatched input means the caller
+        // built a 3-channel ViT but is feeding it grayscale (or vice versa).
+        if (_expectedInputChannels > 0 && _channels != _expectedInputChannels)
+            throw new ArgumentException(
+                $"PatchEmbeddingLayer was constructed for {_expectedInputChannels} input channels " +
+                $"but received {_channels}. Construct a new PatchEmbeddingLayer with the matching " +
+                "channel count or pass an input with the expected channel dim.",
+                nameof(input));
 
         if (_imageHeight % _patchSize != 0 || _imageWidth % _patchSize != 0)
             throw new ArgumentException(
