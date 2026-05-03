@@ -1,4 +1,3 @@
-using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Attributes;
@@ -41,10 +40,8 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// </remarks>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class TripleTextConditioner<T> : IConditioningModule<T>
+public class TripleTextConditioner<T> : CompositeConditioningBase<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// The first CLIP text encoder (ViT-L/14, 768-dim).
     /// </summary>
@@ -63,20 +60,20 @@ public class TripleTextConditioner<T> : IConditioningModule<T>
     /// <summary>
     /// Gets the T5 context dimension for cross-attention (4096 for T5-XXL).
     /// </summary>
-    public int EmbeddingDimension => _t5Encoder.EmbeddingDimension;
+    public override int EmbeddingDimension => _t5Encoder.EmbeddingDimension;
 
     /// <inheritdoc />
-    public ConditioningType ConditioningType => ConditioningType.MultiModal;
+    public override ConditioningType ConditioningType => ConditioningType.MultiModal;
 
     /// <summary>
     /// Gets whether this module produces pooled output (yes, from both CLIP encoders).
     /// </summary>
-    public bool ProducesPooledOutput => true;
+    public override bool ProducesPooledOutput => true;
 
     /// <summary>
     /// Gets the maximum sequence length (uses T5's longer sequence length).
     /// </summary>
-    public int MaxSequenceLength => _t5Encoder.MaxSequenceLength;
+    public override int MaxSequenceLength => _t5Encoder.MaxSequenceLength;
 
     /// <summary>
     /// Gets the first CLIP encoder's embedding dimension (768 for ViT-L/14).
@@ -131,14 +128,14 @@ public class TripleTextConditioner<T> : IConditioningModule<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> Encode(Tensor<T> input)
+    public override Tensor<T> Encode(Tensor<T> input)
     {
         // Default: use T5 for cross-attention embeddings
         return _t5Encoder.Encode(input);
     }
 
     /// <inheritdoc />
-    public Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null)
+    public override Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null)
     {
         // Use T5 for the primary cross-attention embeddings
         return _t5Encoder.EncodeText(tokenIds, attentionMask);
@@ -185,7 +182,7 @@ public class TripleTextConditioner<T> : IConditioningModule<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
+    public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
         // For the standard interface, get pooled from the first CLIP encoder
         // For the full combined pooled, use EncodeTriple() instead
@@ -212,7 +209,7 @@ public class TripleTextConditioner<T> : IConditioningModule<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> GetUnconditionalEmbedding(int batchSize)
+    public override Tensor<T> GetUnconditionalEmbedding(int batchSize)
     {
         // Use T5 unconditional for cross-attention
         return _t5Encoder.GetUnconditionalEmbedding(batchSize);
@@ -244,14 +241,14 @@ public class TripleTextConditioner<T> : IConditioningModule<T>
     }
 
     /// <inheritdoc />
-    public Tensor<T> Tokenize(string text)
+    public override Tensor<T> Tokenize(string text)
     {
         // Default to T5 tokenization (longer sequences)
         return _t5Encoder.Tokenize(text);
     }
 
     /// <inheritdoc />
-    public Tensor<T> TokenizeBatch(string[] texts)
+    public override Tensor<T> TokenizeBatch(string[] texts)
     {
         return _t5Encoder.TokenizeBatch(texts);
     }
@@ -264,10 +261,11 @@ public class TripleTextConditioner<T> : IConditioningModule<T>
     /// <returns>Combined pooled embedding [batchSize, 2048].</returns>
     private Tensor<T> ConcatenatePooledEmbeddings(Tensor<T> clipLPooled, Tensor<T> clipGPooled)
     {
-        // Pooled tensors arrive as [batchSize, embedDim]; the upstream Tensor
-        // implementation rejects negative axis values, so resolve to the explicit
-        // last-dim index here rather than passing axis=-1.
-        int axis = clipLPooled._shape.Length - 1;
-        return AiDotNetEngine.Current.TensorConcatenate<T>(new[] { clipLPooled, clipGPooled }, axis: axis);
+        // SD3 paper: concat CLIP-L and CLIP-G pooled embeddings along the feature axis
+        // (last axis), regardless of input rank. We dispatch through the protected
+        // base-class Engine accessor (CompositeConditioningBase.Engine) so that
+        // future per-instance engine overrides become a single-point change.
+        int axis = clipLPooled.Rank - 1;
+        return Engine.TensorConcatenate<T>(new[] { clipLPooled, clipGPooled }, axis: axis);
     }
 }
