@@ -463,6 +463,20 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // BASIC CONTRACTS: Determinism, Parameters, Clone, Metadata, Architecture
     // =====================================================
 
+    /// <summary>
+    /// Switches the network into eval mode so stateful layers (Dropout,
+    /// GaussianNoise, BatchNorm batch-stats) behave deterministically —
+    /// matches PyTorch's contract that <c>model.eval()</c> precedes inference.
+    /// Per-network Predict overrides bypass NeuralNetworkBase's auto-switch
+    /// (~933 of them in this codebase), so any test that compares Predict
+    /// outputs must call this first.
+    /// </summary>
+    private static void SetEvalMode(object? network)
+    {
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nnBase)
+            nnBase.SetTrainingMode(false);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task Predict_ShouldBeDeterministic()
     {
@@ -470,6 +484,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        SetEvalMode(network);
         var input = CreateRandomTensor(InputShape, rng);
 
         var out1 = network.Predict(input);
@@ -502,10 +517,12 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        SetEvalMode(network);
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = network.Predict(input);
         var cloned = network.Clone();
+        SetEvalMode(cloned);
         var clonedOutput = cloned.Predict(input);
 
         Assert.Equal(original.Length, clonedOutput.Length);
@@ -757,6 +774,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        SetEvalMode(network);
         var input = CreateRandomTensor(InputShape, rng);
 
         // Single prediction

@@ -2303,28 +2303,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         using var _ = new NoGradScope<T>();
 
-        // Universal batch-dim auto-promotion (mirrors the Train path). When
-        // the caller passes an unbatched single sample whose rank exactly
-        // matches the architecture's effective unbatched rank, prepend a
-        // unit batch dim before flowing through Layers. Without this,
-        // FlattenLayer (and any other layer that treats axis 0 as batch)
-        // would interpret the channels axis of a rank-3 [C, H, W] image as
-        // 32 separate batch samples and emit [32, H*W] instead of
-        // [1, C*H*W] — collapsing the forward path to one filter's pre-
-        // softmax distribution.
-        var promoted = NormalizeInputBatchDim(input);
+        // Predict means inference. Temporarily flip the network into eval
+        // mode so stateful layers (Dropout, BatchNorm batch-stats vs running-
+        // stats, GaussianNoise, etc.) behave deterministically — and restore
+        // the prior mode in finally so a Predict-mid-training-loop call
+        // doesn't permanently flip the network out of training mode.
+        // Without this, callers who never explicitly called
+        // SetTrainingMode(false) get non-deterministic Predict outputs (the
+        // default IsTrainingMode is true on construction), which is a real
+        // model-behavior bug — see Generated Layers
+        // PriorGradTests.Predict_ShouldBeDeterministic and similar.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            // Universal batch-dim auto-promotion (mirrors the Train path).
+            // When the caller passes an unbatched single sample whose rank
+            // exactly matches the architecture's effective unbatched rank,
+            // prepend a unit batch dim before flowing through Layers.
+            // Without this, FlattenLayer (and any other layer that treats
+            // axis 0 as batch) would interpret the channels axis of a rank-3
+            // [C, H, W] image as 32 separate batch samples and emit
+            // [32, H*W] instead of [1, C*H*W] — collapsing the forward path
+            // to one filter's pre-softmax distribution.
+            var promoted = NormalizeInputBatchDim(input);
 
-        // Route through the eager forward instead of PredictCompiled. The
-        // compiled-plan cache in CompiledModelHost binds to the trace-time
-        // input tensor reference and replay reads stale data when called
-        // with a *different* tensor of the same shape (the canonical
-        // DifferentInputs / ScaledInput invariant failure: same shape, new
-        // values, but the cached plan returns the first call's output).
-        // PredictCompiled stays available for callers who explicitly opt in
-        // via CompileForward + identical-tensor replay; the default Predict
-        // path is eager so identical-shape-different-values calls return
-        // correct, value-dependent outputs.
-        return PredictEager(promoted);
+            // Route through the eager forward instead of PredictCompiled. The
+            // compiled-plan cache in CompiledModelHost binds to the trace-time
+            // input tensor reference and replay reads stale data when called
+            // with a *different* tensor of the same shape (the canonical
+            // DifferentInputs / ScaledInput invariant failure: same shape,
+            // new values, but the cached plan returns the first call's
+            // output). PredictCompiled stays available for callers who
+            // explicitly opt in via CompileForward + identical-tensor replay;
+            // the default Predict path is eager so identical-shape-different-
+            // values calls return correct, value-dependent outputs.
+            return PredictEager(promoted);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     /// <summary>
