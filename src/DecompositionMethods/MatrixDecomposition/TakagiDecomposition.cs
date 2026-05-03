@@ -147,7 +147,22 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
         // Symmetry precondition: same as EigenDecomposition Jacobi —
         // the in-place rotation mirrors A[p,q] into A[q,p] without
         // separately validating they were equal to start with.
-        T symmetryTol = NumOps.FromDouble(1e-10);
+        // Tolerance is scaled by ‖A‖_∞ so the check works regardless
+        // of the matrix's overall magnitude (a fixed 1e-10 absolute
+        // threshold would falsely throw on large-magnitude matrices).
+        T maxAbs = NumOps.Zero;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                T abs = NumOps.Abs(matrix[i, j]);
+                if (NumOps.GreaterThan(abs, maxAbs)) maxAbs = abs;
+            }
+        }
+        T relScale = NumOps.GreaterThan(maxAbs, NumOps.FromDouble(1.0))
+            ? maxAbs
+            : NumOps.One;
+        T symmetryTol = NumOps.Multiply(NumOps.FromDouble(1e-10), relScale);
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = i + 1; j < matrix.Columns; j++)
@@ -157,7 +172,8 @@ public class TakagiDecomposition<T> : MatrixDecompositionBase<T>
                 {
                     throw new ArgumentException(
                         "Takagi Jacobi decomposition requires a symmetric matrix; " +
-                        $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol}.",
+                        $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol} " +
+                        $"(scaled by ‖A‖_∞ = {maxAbs}).",
                         nameof(matrix));
                 }
             }

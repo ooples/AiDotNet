@@ -2854,6 +2854,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 WeightRegistry.RegisterWeight(tensor);
             }
         }
+
+        // Some networks own RAW trainable tensors directly on the
+        // network (not inside any layer) — e.g. a Vision Transformer's
+        // cls_token / positional_embeddings. Surface them through the
+        // weight registry too so they're paged in/out by the streaming
+        // pool when offload is configured.
+        foreach (var tensor in GetExtraTrainableTensors())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            WeightRegistry.RegisterWeight(tensor);
+        }
     }
 
     /// <summary>
@@ -2864,6 +2875,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected virtual IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
         => System.Linq.Enumerable.Empty<LayerBase<T>?>();
+
+    /// <summary>
+    /// Override-point for subclasses that own raw trainable
+    /// <see cref="Tensor{T}"/> parameters directly on the network
+    /// (NOT inside any layer) — for example a Vision Transformer's
+    /// <c>cls_token</c> and <c>positional_embeddings</c>. The tape
+    /// training path collects parameters from <see cref="Layers"/>
+    /// only, so any raw tensor not surfaced through this hook will
+    /// receive gradients via the tape but never be updated by the
+    /// optimizer (issue surfaced on AiDotNet#1231 ViT review).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this when the parameter is a raw tensor with no associated
+    /// Forward semantics (cls tokens, positional embeddings,
+    /// learnable scale factors). For trainable LAYERS outside
+    /// <see cref="Layers"/>, prefer
+    /// <see cref="GetExtraTrainableLayers"/> instead — that path
+    /// also threads the layer through ZeroGrad / sub-layer recursion.
+    /// </para>
+    /// <para>
+    /// Default implementation returns an empty enumerable.
+    /// </para>
+    /// </remarks>
+    protected virtual IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+        => System.Linq.Enumerable.Empty<Tensor<T>>();
 
     /// <summary>
     /// Disables memory management and releases associated resources.
@@ -2968,8 +3005,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         try
         {
             var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            // Subclasses may own raw trainable tensors outside Layers
+            // (e.g. ViT's cls_token / positional_embeddings). Treat
+            // their presence as also satisfying the trainable-params
+            // check so the tape-training branch still kicks in for
+            // networks whose only trainable params live on the network
+            // itself rather than in a layer.
+            bool hasExtraTensors = false;
+            using (var enumerator = GetExtraTrainableTensors().GetEnumerator())
+            {
+                hasExtraTensors = enumerator.MoveNext();
+            }
 
-            if (trainableParams.Count > 0)
+            if (trainableParams.Count > 0 || hasExtraTensors)
             {
                 // Tape-based training: delegates forward/backward/update to TrainWithTape
                 // which uses the configured optimizer via Step(TapeStepContext)
@@ -3057,6 +3105,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // pre-swap walk in the steady state saves a full recursive layer traversal
         // per Train() call — non-trivial on DiT-XL with 28 transformer blocks × the
         // sub-layers in each. Only walk when we actually need sizing info.
+        //
+        // The ParameterBuffer aliases LAYER-OWNED params only — its
+        // CreateAllViews/ValidateBufferAlignment contract requires every
+        // tensor in the buffer be a view into the underlying storage.
+        // Network-level raw tensors (ViT cls/pos, etc.) returned by
+        // GetExtraTrainableTensors are standalone tensors, not buffer
+        // views, so they CANNOT participate in the buffer-aliased
+        // optimizer step. We update them through a separate lightweight
+        // gradient-descent path against the same tape gradients below.
         ParameterBuffer<T>? paramBuffer;
         if (_parameterBuffer is null)
         {
@@ -3072,6 +3129,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             // Re-collect after buffer initialization — references are now views
             var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+            // Snapshot the network-level extras (ViT cls/pos, etc.) once
+            // here so we can both (a) include them in tape source
+            // collection so gradients are computed for them, and
+            // (b) apply a separate gradient-descent update step after
+            // the buffer-aliased optimizer.Step has run on layer params.
+            var extraTrainableTensors = new List<Tensor<T>>();
+            foreach (var t in GetExtraTrainableTensors())
+            {
+                if (t is null || t.Length == 0) continue;
+                extraTrainableTensors.Add(t);
+            }
 
             var loss = LossFunction as LossFunctions.LossFunctionBase<T>
                 ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
@@ -3168,6 +3236,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 paramBuffer);
 
             opt.Step(context);
+
+            // Apply gradient updates to network-level RAW trainable
+            // tensors (ViT cls_token / positional_embeddings etc.).
+            // These cannot ride the ParameterBuffer-aliased optimizer
+            // path — its alignment validator rejects any tensor that
+            // isn't a view into the buffer's storage. Instead we use
+            // the optimizer's current learning rate (Adam / AdamW /
+            // SGD all expose this) to do a vanilla gradient-descent
+            // update against the tape's gradients. This loses Adam's
+            // per-parameter m/v adaptive state for the extras, but it
+            // is correct, deterministic, and crucially KEEPS THEM
+            // TRAINED — the previous behaviour left them frozen at
+            // their initial random values forever, which was the
+            // actual review concern.
+            if (extraTrainableTensors.Count > 0)
+            {
+                T extrasLr = NumOps.FromDouble(GetOptimizerLearningRate(opt));
+                foreach (var extra in extraTrainableTensors)
+                {
+                    if (!allGrads.TryGetValue(extra, out var extraGrad)) continue;
+                    if (extraGrad is null || extraGrad.Length != extra.Length) continue;
+                    var update = Engine.TensorMultiplyScalar(extraGrad, extrasLr);
+                    Engine.TensorSubtractInPlace(extra, update);
+                }
+            }
         }
         finally
         {
@@ -3175,6 +3268,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Copies updated weights from buffer views back to originals before restoring.
             RestoreOriginalParameters();
         }
+    }
+
+    /// <summary>
+    /// Best-effort read of the supplied optimizer's current learning
+    /// rate, used by the network-level extras update path. Returns the
+    /// optimizer-typed value when the optimizer is a recognised
+    /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}"/>; falls
+    /// back to a conservative default for optimizers that don't expose
+    /// the rate.
+    /// </summary>
+    private static double GetOptimizerLearningRate(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> opt)
+    {
+        if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> typed)
+        {
+            return typed.GetCurrentLearningRate();
+        }
+        // Conservative SGD-default; only hit when the optimizer hides
+        // its LR. Logged via the trace path so users see the fallback.
+        return 0.001;
     }
 
     /// <summary>

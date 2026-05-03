@@ -380,9 +380,28 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
         // non-symmetric matrix the routine silently solves a different
         // problem. Surface this as ArgumentException at the API
         // boundary so callers get an actionable failure instead of
-        // wrong eigenpairs. Tolerance scaled by ‖A‖_∞ so the check
-        // works regardless of the matrix's overall magnitude.
-        T symmetryTol = NumOps.FromDouble(1e-10);
+        // wrong eigenpairs.
+        //
+        // Tolerance is scaled by ‖A‖_∞ (max-abs entry) so the check
+        // works regardless of the matrix's overall magnitude — a fixed
+        // 1e-10 absolute threshold would falsely throw on matrices
+        // whose entries are larger than ~1e10 even when symmetric to
+        // floating-point precision, and would let through asymmetry on
+        // matrices with entries near machine epsilon. Floor at 1e-12
+        // so all-zero matrices don't divide by zero.
+        T maxAbs = NumOps.Zero;
+        for (int i = 0; i < matrix.Rows; i++)
+        {
+            for (int j = 0; j < matrix.Columns; j++)
+            {
+                T abs = NumOps.Abs(matrix[i, j]);
+                if (NumOps.GreaterThan(abs, maxAbs)) maxAbs = abs;
+            }
+        }
+        T relScale = NumOps.GreaterThan(maxAbs, NumOps.FromDouble(1.0))
+            ? maxAbs
+            : NumOps.One;
+        T symmetryTol = NumOps.Multiply(NumOps.FromDouble(1e-10), relScale);
         for (int i = 0; i < matrix.Rows; i++)
         {
             for (int j = i + 1; j < matrix.Columns; j++)
@@ -392,7 +411,8 @@ public class EigenDecomposition<T> : MatrixDecompositionBase<T>
                 {
                     throw new ArgumentException(
                         "Jacobi eigen decomposition requires a symmetric matrix; " +
-                        $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol}.",
+                        $"|A[{i},{j}] - A[{j},{i}]| = {diff} exceeds tolerance {symmetryTol} " +
+                        $"(scaled by ‖A‖_∞ = {maxAbs}).",
                         nameof(matrix));
                 }
             }

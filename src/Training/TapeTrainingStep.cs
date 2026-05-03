@@ -86,18 +86,23 @@ public static class TapeTrainingStep<T>
                 continue;
             }
             // Hash the runtime type + parameter count + index. Type
-            // captured by AssemblyQualifiedName.GetHashCode() — that's
-            // a stable string-derived hash. The bare GetType().GetHashCode()
-            // path is NOT specified to be deterministic across runtime
-            // versions or even processes, so two CycleGAN-shaped graphs
-            // could collide here despite genuinely different layer
-            // identities. Hashing the qualified name is what the
-            // 'deterministic' contract in the cache docs actually requires.
+            // captured by FNV-1a over the UTF-8 bytes of
+            // AssemblyQualifiedName. We CANNOT use string.GetHashCode
+            // here — even with StringComparison.Ordinal it is randomized
+            // per-process in .NET 6+ (the runtime salts the hash on
+            // startup), so it would break the cross-process cache-key
+            // determinism the cache docs promise. FNV-1a over the UTF-8
+            // bytes IS process- and version-stable, which is what the
+            // tape-graph cache needs to round-trip.
             hash ^= (ulong)i;
             hash *= FnvPrime;
             string typeName = layer.GetType().AssemblyQualifiedName ?? layer.GetType().FullName ?? "?";
-            hash ^= (ulong)typeName.GetHashCode(StringComparison.Ordinal);
-            hash *= FnvPrime;
+            byte[] typeNameBytes = System.Text.Encoding.UTF8.GetBytes(typeName);
+            for (int b = 0; b < typeNameBytes.Length; b++)
+            {
+                hash ^= typeNameBytes[b];
+                hash *= FnvPrime;
+            }
             try
             {
                 hash ^= (ulong)layer.ParameterCount;

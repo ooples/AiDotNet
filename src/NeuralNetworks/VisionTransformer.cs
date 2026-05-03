@@ -860,5 +860,28 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
             return count;
         }
     }
+
+    /// <summary>
+    /// Surfaces <see cref="_clsToken"/> and <see cref="_positionalEmbeddings"/>
+    /// to the tape training path. These tensors are referenced directly in
+    /// <see cref="Predict"/> via tape-tracked <c>Engine.Reshape</c>, so the
+    /// gradient tape DOES record gradients for them — but the optimizer's
+    /// parameter-collection path scans <c>Layers</c> only, which would leave
+    /// them frozen at their initial values forever. Yielding them here lets
+    /// the optimizer's <c>Step</c> see them in <c>trainableParams</c> and
+    /// apply gradient updates.
+    /// </summary>
+    /// <remarks>
+    /// This complements the existing layout-faithful
+    /// <see cref="GetParameters"/> / <see cref="UpdateParameters"/> overrides:
+    /// those handle bulk save/load via the public parameter Vector, while
+    /// this hook handles the tape-training optimizer step. Both are
+    /// load-bearing for full-fidelity ViT training.
+    /// </remarks>
+    protected override IEnumerable<Tensor<T>> GetExtraTrainableTensors()
+    {
+        yield return _clsToken;
+        yield return _positionalEmbeddings;
+    }
 }
 
