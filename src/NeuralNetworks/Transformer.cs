@@ -472,7 +472,22 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// This is used when you want to use a trained Transformer to process new data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Transformer's eager forward routes the special-case encoder/decoder
+    /// cross-attention pattern (DecoderLayer needs the encoder's output as
+    /// a second input; AttentionLayer needs the attention mask as a second
+    /// input). The wrapping <see cref="NeuralNetworkBase{T}.Predict"/>
+    /// handles training-mode toggle, no-grad scope, batch-dim promotion,
+    /// and output squeeze — issue #1221 was caused by overriding
+    /// <see cref="NeuralNetworkBase{T}.Predict"/> directly and losing all
+    /// of those wrappers, in particular the <c>SetTrainingMode(false)</c>
+    /// that disables Dropout. Without it, every Predict call randomly
+    /// zero-masked features, eventually pushing the trained output Dense
+    /// into a degenerate steady state where eval-time logits collapse to
+    /// uniform-over-V (NLL = ln(|V|) exactly, top-1 = 0% on byte-LM).
+    /// </remarks>
+    protected override Tensor<T> PredictEager(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))

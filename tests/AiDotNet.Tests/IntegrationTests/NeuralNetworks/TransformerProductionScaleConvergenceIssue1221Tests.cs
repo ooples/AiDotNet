@@ -363,4 +363,76 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
             $"scale despite the V=8 case working) — the user-reported " +
             $"smoking gun for #1221.");
     }
+
+    /// <summary>
+    /// Force training mode ON before Predict and verify the Predict path
+    /// still produces deterministic, non-uniform output. This catches the
+    /// failure mode where <see cref="Transformer{T}.Predict"/> bypasses
+    /// the base's <c>SetTrainingMode(false)</c> wrapper — pre-fix the
+    /// override skipped it; post-fix the override is at <c>PredictEager</c>
+    /// so the base's wrapper applies.
+    ///
+    /// <para>
+    /// Why this catches the bug even when Train's <c>finally</c> already
+    /// flips eval mode off: this test EXPLICITLY restores training mode
+    /// AFTER Train and BEFORE Predict, simulating any caller that
+    /// re-enables training between train/eval (e.g., interleaved
+    /// train-then-monitor-loss loops). With the pre-fix Predict, Dropout
+    /// runs at training rate and outputs are stochastic; with the post-fix
+    /// override at PredictEager, the base's eval-mode toggle disables
+    /// Dropout regardless of caller state.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task Predict_WithExternalTrainingModeOn_StillDeterministic()
+    {
+        await Task.Yield();
+        const int vocab = 256;
+        const int seqLen = 32;
+        var model = BuildTransformer(
+            vocab: vocab, modelDim: 64, feedForwardDim: 256, seqLen: seqLen,
+            numEncoderLayers: 2, numHeads: 4, learningRate: 0.0003);
+
+        // Train so weights aren't zero-init.
+        model.SetTrainingMode(true);
+        for (int k = 0; k < 16; k++)
+        {
+            model.Train(
+                BuildIdentityInput(k, seqLen: seqLen),
+                BuildOneHotTarget(k, vocab: vocab));
+        }
+
+        // EXPLICITLY restore training mode after Train. Train's finally
+        // would have flipped it off; we're simulating the case where the
+        // caller wants training mode on (e.g., for an in-loop train-step
+        // followed by a Predict-based loss check). Predict must internally
+        // override this for stateful layers, otherwise Dropout fires at
+        // inference and outputs become stochastic.
+        model.SetTrainingMode(true);
+        Assert.True(model.IsTrainingMode);
+
+        // Two Predict calls on the same input. With Dropout properly
+        // disabled at inference (via the base Predict's SetTrainingMode
+        // wrapper), the two calls must be bit-identical. Pre-fix the
+        // Transformer.Predict override skipped the wrapper, leaving
+        // Dropout in training mode and producing stochastic outputs.
+        var input = BuildIdentityInput(0, seqLen: seqLen);
+        var pred1 = model.Predict(input);
+        var pred2 = model.Predict(input);
+
+        Assert.Equal(pred1.Length, pred2.Length);
+        double maxDelta = 0.0;
+        for (int i = 0; i < pred1.Length; i++)
+        {
+            double d = Math.Abs(pred1[i] - pred2[i]);
+            if (d > maxDelta) maxDelta = d;
+        }
+        _output.WriteLine($"Two Predict calls (training mode forced ON beforehand): max abs diff = {maxDelta:E3}");
+
+        Assert.True(maxDelta < 1e-6,
+            $"Two Predict calls on the same input produced different outputs " +
+            $"(max abs diff = {maxDelta:E3}, tolerance 1e-6). #1221 root " +
+            $"cause: Transformer.Predict bypassed the base's eval-mode " +
+            $"toggle, so Dropout ran with stochastic masks at inference.");
+    }
 }
