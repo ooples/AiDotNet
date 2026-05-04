@@ -66,9 +66,7 @@ public class MotionDiffuseModel<T> : LatentDiffusionModelBase<T>
     public override IVAEModel<T> VAE => _vae;
     public override IConditioningModule<T>? Conditioner => _conditioner;
     public override int LatentChannels => VAE_LATENT_CHANNELS;
-    public override long ParameterCount =>
-        _predictor.ParameterCount + _vae.ParameterCount +
-        (_conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> p ? p.ParameterCount : 0L);
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public MotionDiffuseModel(
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,

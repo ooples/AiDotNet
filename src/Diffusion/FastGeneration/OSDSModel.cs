@@ -67,9 +67,7 @@ public class OSDSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _predictor.ParameterCount + _vae.ParameterCount +
-        (_conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> p ? p.ParameterCount : 0L);
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new OSDS model with optional configuration.

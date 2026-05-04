@@ -539,11 +539,12 @@ public class AudioLDMModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = checked((int)_unet.ParameterCount);
+        int unetCount = checked((int)_unet.ParameterCount);
         int vaeCount = checked((int)_audioVAE.ParameterCount);
+        long expectedTotal = (long)unetCount + vaeCount;
 
-        if (parameters.Length != unetCount + vaeCount)
-            throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.");
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.");
 
         var unetParams = new Vector<T>(unetCount);
         var vaeParams = new Vector<T>(vaeCount);

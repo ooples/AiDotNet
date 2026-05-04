@@ -135,7 +135,18 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LCM_LATENT_CHANNELS;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Counts the flat-API parameter surface (predictor + VAE). The
+    /// trainable <c>_conditioner</c> is intentionally excluded here
+    /// because <see cref="GetParameters"/> / <see cref="SetParameters"/>
+    /// move only that surface — flat <see cref="Vector{T}"/> is
+    /// int-bounded and a foundation-scale text encoder would push the
+    /// round-trip past <see cref="int.MaxValue"/>. Callers that need
+    /// the full count (including conditioner) walk
+    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>,
+    /// which streams predictor + VAE + conditioner per-tensor and
+    /// accumulates length in <see cref="long"/>.
+    /// </summary>
     public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>

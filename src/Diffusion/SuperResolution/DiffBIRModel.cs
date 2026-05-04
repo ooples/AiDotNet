@@ -200,9 +200,7 @@ public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _unet.ParameterCount + _vae.ParameterCount +
-        (_conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> p ? p.ParameterCount : 0L);
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768, matching CLIP ViT-L/14).

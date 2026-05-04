@@ -118,7 +118,17 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Counts the flat-API parameter surface (predictor + VAE). The
+    /// trainable conditioner is intentionally excluded here because
+    /// <see cref="GetParameters"/> / <see cref="SetParameters"/> move
+    /// only that surface — flat <see cref="Vector{T}"/> is int-bounded
+    /// and a foundation-scale text encoder would push the round-trip
+    /// past <see cref="int.MaxValue"/>. Callers that need the full
+    /// count walk
+    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>
+    /// which streams predictor + VAE + conditioner per-tensor.
+    /// </summary>
     public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     /// <summary>

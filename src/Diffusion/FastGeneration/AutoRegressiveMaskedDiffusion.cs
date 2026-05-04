@@ -65,9 +65,7 @@ public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _predictor.ParameterCount + _vae.ParameterCount +
-        (_conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> p ? p.ParameterCount : 0L);
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public AutoRegressiveMaskedDiffusion(
         NeuralNetworkArchitecture<T>? architecture = null,

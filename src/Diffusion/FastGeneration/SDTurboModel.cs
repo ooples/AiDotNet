@@ -136,9 +136,7 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => TURBO_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount =>
-        _unet.ParameterCount + _vae.ParameterCount +
-        (_conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> p ? p.ParameterCount : 0L);
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this is the SDXL Turbo variant (true) or SD Turbo variant (false).

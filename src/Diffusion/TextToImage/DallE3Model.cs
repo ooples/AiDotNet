@@ -790,7 +790,14 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         _vae.SetParameters(vaeParams);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Counts the flat-API parameter surface (predictor + VAE). The
+    /// trainable conditioner is intentionally excluded here because
+    /// <see cref="GetParameters"/> / <see cref="SetParameters"/> move
+    /// only that surface — flat <see cref="Vector{T}"/> is int-bounded.
+    /// Callers needing the full count walk
+    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>.
+    /// </summary>
     public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
