@@ -180,11 +180,15 @@ public class LazySpatialLayerTests
     [Fact]
     public void Pool_MultiScale_SameInstance_HandlesMultipleSpatialSizes()
     {
+        // State-only IsShapeResolved checks elsewhere can pass even when
+        // the layer infers WRONG output dims. Assert the actual produced
+        // output shape against the pool/stride formula here so a regression
+        // that resolves shape but computes (H/4 instead of H/2) gets caught.
         var pool = new PoolingLayer<double>(poolSize: 2, stride: 2, type: PoolingType.Max);
         var o1 = pool.Forward(Ramp(new[] { 1, 4, 16, 16 }));
         var o2 = pool.Forward(Ramp(new[] { 1, 4, 32, 32 }));
-        Assert.Equal(8, o1.Shape[2]);
-        Assert.Equal(16, o2.Shape[2]);
+        Assert.Equal(new[] { 1, 4, 8, 8 }, o1.Shape);
+        Assert.Equal(new[] { 1, 4, 16, 16 }, o2.Shape);
     }
 
     [Fact]
