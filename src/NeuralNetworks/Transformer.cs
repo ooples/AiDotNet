@@ -744,8 +744,15 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         LossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader)
             ?? LossFunction;
 
+        // Match the constructor's default-optimizer policy (Adam, not vanilla SGD).
+        // Stale-on-disk Transformer state-dicts written before this fix didn't
+        // serialize their optimizer; reading null-optimizer back must produce the
+        // same Adam(β₁=0.9, β₂=0.98 default, lr=1e-3) the ctor would, otherwise
+        // the deserialized model silently regresses to non-converging vanilla SGD.
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader)
-            ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-3 });
     }
 
     /// <summary>
