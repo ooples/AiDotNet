@@ -2465,18 +2465,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     {
         get
         {
-            // Default: count this layer's own [TrainableParameter] fields
-            // (via source-generator-emitted Parameters) PLUS any registered
-            // sub-layers' parameters. Composite layers (MLPMixerBlock,
-            // KairosMultiSizePatch, TimeMoEBlock, UNetDiscriminator, etc.)
-            // store their weights inside sub-layers — without this rollup
-            // they'd report ParameterCount=0 even though GetParameters()
-            // returns a non-empty vector aggregated from sub-layers.
-            // Layers that override Parameters/GetParameters with their own
-            // aggregation can keep overriding ParameterCount too; this
-            // default just removes the manual override boilerplate from
-            // every composite layer.
+            // Default counts three sources of trainable weights so the
+            // base class behaves correctly for layers that haven't
+            // overridden ParameterCount:
+            //
+            //  1. GetTrainableParameters() — both runtime registrations
+            //     via RegisterTrainableParameter (PrototypeAlignmentLayer,
+            //     ConvolutionalLayer's lazy weights, etc.) and source-
+            //     generator-emitted overrides (AttentionLayer's _Wq/_Wk/
+            //     _Wv/_Wo, FeedForwardLayer's _weights/_biases) flow
+            //     through this method. Walking it directly avoids missing
+            //     the generator-emitted parameters that aren't in the
+            //     default _registeredTensors backing list.
+            //  2. Sub-layers — composite layers (MLPMixerBlock,
+            //     TimeMoEBlock, UNetDiscriminator, DecoderLayer, …)
+            //     hold their weights inside RegisterSubLayer-d children.
+            //  3. Parameters field — populated by SetParameters with a
+            //     flat vector. Most layers leave this empty.
+            //
+            // Layers that aggregate their parameters differently (a
+            // GAN reading from frozen modules, a model with shared-weight
+            // tying) can still override.
             long total = Parameters.Length;
+            var trainable = GetTrainableParameters();
+            if (trainable is not null)
+            {
+                for (int i = 0; i < trainable.Count; i++)
+                {
+                    var t = trainable[i];
+                    if (t is not null) total += t.Length;
+                }
+            }
             var subs = GetSubLayers();
             if (subs is not null)
             {
