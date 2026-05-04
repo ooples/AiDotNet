@@ -427,11 +427,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // Shape-mismatch guard mirrors AdamOptimizer.Step's: if the
             // parameter was first seen at a lazy-init placeholder shape
             // (e.g., a MultiHeadAttentionLayer that hadn't yet seen its
-            // first Forward), our cached state's byte[] / scale buffers
-            // were sized for the placeholder. Once the real weights
-            // materialize the parameter length grows; without a re-alloc
-            // here, DequantizeTensor / QuantizeTensor would index past
-            // the end of the stored arrays.
+            // first Forward), our cached state's Vector<byte> /
+            // Vector<double> scale buffers were sized for the placeholder.
+            // Once the real weights materialize the parameter length grows;
+            // without a re-alloc here, DequantizeTensor / QuantizeTensor
+            // would index past the end of the stored vectors.
             if (!_tapeStates.TryGetValue(param, out var state) || state.Length != param.Length)
             {
                 state = AllocateTapeState(param.Length);
@@ -594,6 +594,31 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// requiring shared instance state, so it can run from the tape Step where
     /// many parameters of different sizes coexist.
     /// </summary>
+    /// <summary>
+    /// Serializes a <see cref="Vector{T}"/> of <see cref="byte"/> to a
+    /// <see cref="BinaryWriter"/> in fixed-size chunks rather than allocating
+    /// a full-size scratch <c>byte[]</c>. For a 300 M-parameter checkpoint
+    /// the previous implementation doubled resident quantized state during
+    /// the copy (300 MB live + 300 MB scratch = 600 MB peak); the chunked
+    /// path caps the scratch overhead at <see cref="ChunkBytes"/> regardless
+    /// of vector length.
+    /// </summary>
+    private const int ChunkBytes = 64 * 1024;
+    private static void WriteVectorBytesChunked(BinaryWriter writer, Vector<byte> v)
+    {
+        int total = v.Length;
+        if (total == 0) return;
+        var chunk = new byte[Math.Min(total, ChunkBytes)];
+        int offset = 0;
+        while (offset < total)
+        {
+            int n = Math.Min(chunk.Length, total - offset);
+            for (int i = 0; i < n; i++) chunk[i] = v[offset + i];
+            writer.Write(chunk, 0, n);
+            offset += n;
+        }
+    }
+
     private void QuantizeTensor(Tensor<T> values, Vector<byte> quantized, Vector<double> scales, int numBlocks, bool isSigned)
     {
         int blockSize = _options.BlockSize;
@@ -1063,7 +1088,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </summary>
     internal IReadOnlyDictionary<Tensor<T>, TapeStateInfo> GetTapeStateSnapshotForTests()
     {
-        var snapshot = new Dictionary<Tensor<T>, TapeStateInfo>(_tapeStates.Count);
+        // Use the same reference-identity comparer the live state uses, so a
+        // hypothetical Tensor<T>.Equals override that compares by value
+        // doesn't merge distinct parameter tensors in the snapshot.
+        var snapshot = new Dictionary<Tensor<T>, TapeStateInfo>(
+            _tapeStates.Count,
+            TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var kvp in _tapeStates)
         {
             var s = kvp.Value;
@@ -1155,15 +1185,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 if (_options.CompressBothMoments)
                 {
                     writer.Write(_mQuantized!.Length);
-                    // Bulk write — per-element BinaryWriter.Write(byte) was
-                    // very slow for large models (a 300M-param checkpoint
-                    // touched the writer 300M times for m alone). Vector<byte>
-                    // exposes a span-backed representation; copy to a flat
-                    // byte[] in one go and let BinaryWriter emit a single
-                    // raw block.
-                    byte[] mBuf = new byte[_mQuantized.Length];
-                    for (int i = 0; i < mBuf.Length; i++) mBuf[i] = _mQuantized[i];
-                    writer.Write(mBuf);
+                    WriteVectorBytesChunked(writer, _mQuantized);
                     foreach (var scale in _mScales!)
                     {
                         writer.Write(scale);
@@ -1184,10 +1206,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (_vQuantized is not null)
             {
                 writer.Write(_vQuantized.Length);
-                // Bulk write — see m's branch above for rationale.
-                byte[] vBuf = new byte[_vQuantized.Length];
-                for (int i = 0; i < vBuf.Length; i++) vBuf[i] = _vQuantized[i];
-                writer.Write(vBuf);
+                WriteVectorBytesChunked(writer, _vQuantized);
                 foreach (var scale in _vScales!)
                 {
                     writer.Write(scale);
@@ -1231,8 +1250,25 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         using (MemoryStream ms = new MemoryStream(data))
         using (BinaryReader reader = new BinaryReader(ms))
         {
-            // Deserialize base class data
+            // Deserialize base class data. The first ReadBytes is the only
+            // pre-magic-check allocation in the wire format, so guard it
+            // against malformed/tampered checkpoints that could otherwise
+            // request an arbitrarily large allocation. Cap against the
+            // remaining stream length: a baseDataLength larger than what's
+            // actually present in the buffer is unambiguously invalid.
             int baseDataLength = reader.ReadInt32();
+            if (baseDataLength < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: invalid baseDataLength={baseDataLength} in checkpoint header.");
+            }
+            long remainingBytes = ms.Length - ms.Position;
+            if (baseDataLength > remainingBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: declared baseDataLength={baseDataLength} exceeds remaining " +
+                    $"stream bytes ({remainingBytes}). Checkpoint is truncated or malformed.");
+            }
             byte[] baseData = reader.ReadBytes(baseDataLength);
             base.Deserialize(baseData);
 
@@ -1255,22 +1291,24 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: incompatible checkpoint format. Expected v2 " +
                     $"magic header 0x{Adam8BitV2Magic:X8} ('A8B1' in ASCII LE) immediately " +
-                    $"after the options JSON; got 0x{magic:X8}. Pre-#1240 checkpoints " +
-                    $"wrote the Adam step counter (_t) at that position and the byte " +
-                    $"layout that follows is incompatible with v2. Re-serialize from a " +
-                    $"v0.166.x or later AiDotNet build to upgrade. If you authored a " +
-                    $"custom serializer, write BinaryWriter.Write(0x{Adam8BitV2Magic:X8}) " +
-                    $"followed by BinaryWriter.Write((int)2) immediately after the " +
+                    $"after the options JSON; got 0x{magic:X8}. Older checkpoints " +
+                    $"(format v1) wrote the Adam step counter (_t) at that position and " +
+                    $"the byte layout that follows is incompatible with v2. Re-serialize " +
+                    $"this checkpoint with a build that writes the v2 byte-quantized state " +
+                    $"format. If you authored a custom serializer, write " +
+                    $"BinaryWriter.Write(0x{Adam8BitV2Magic:X8}) followed by " +
+                    $"BinaryWriter.Write((int){StateFormatVersion}) immediately after the " +
                     $"options JSON.");
             }
             int stateFormatVersion = reader.ReadInt32();
-            if (stateFormatVersion != 2)
+            if (stateFormatVersion != StateFormatVersion)
             {
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: unrecognized format version {stateFormatVersion} " +
-                    $"after valid v2 magic. Expected version 2; this build does not yet " +
-                    $"support reading newer formats. Upgrade to a build that recognizes " +
-                    $"version {stateFormatVersion} or re-serialize from this build.");
+                    $"after valid v2 magic. Expected version {StateFormatVersion}; this " +
+                    $"build does not yet support reading newer formats. Upgrade to a build " +
+                    $"that recognizes version {stateFormatVersion} or re-serialize from " +
+                    $"this build.");
             }
 
             // Deserialize state
