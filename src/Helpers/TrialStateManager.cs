@@ -111,9 +111,11 @@ internal sealed class TrialStateManager
             state.OperationCount++;
             state.LastOperationUtc = DateTimeOffset.UtcNow;
 
+            bool savedOk = false;
             try
             {
                 SaveState(state);
+                savedOk = true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -122,6 +124,14 @@ internal sealed class TrialStateManager
                 EmitTrialMessage(
                     $"AiDotNet: Warning — unable to persist trial state: {ex.Message}");
             }
+
+            // Write anti-reset tombstone only after a real persistence
+            // succeeded. Passive code paths (GetStatus / LoadOrCreateState's
+            // first-call init) intentionally do NOT touch the tombstone —
+            // see SaveState's note for rationale. WriteTombstone is itself
+            // best-effort so a tombstone failure cannot mask a successful
+            // SaveState.
+            if (savedOk) WriteTombstone();
 
             // Trial notice via configurable handler (defaults to stderr to avoid polluting stdout)
             int daysRemaining = TrialDurationDays - daysElapsed;
@@ -296,13 +306,26 @@ internal sealed class TrialStateManager
 
         File.WriteAllText(_trialFilePath, envelopeJson, Encoding.UTF8);
 
-        // Write/refresh the tombstone marker. Its mere existence (not
-        // contents) signals that the trial was activated. Subsequent
-        // SaveState calls overwrite the same marker — content doesn't
-        // matter, just presence. Best-effort: tombstone failure shouldn't
-        // block the primary save (the user could still bypass by also
-        // clearing the parent dir, which is acceptable since this is
-        // anti-naive-reset, not anti-determined-attacker).
+        // NOTE: tombstone is written by RecordOperationOrThrow via
+        // WriteTombstone() AFTER a successful save, NOT here. SaveState
+        // is also invoked from LoadOrCreateState's first-call init
+        // (when no trial.json exists) — writing a tombstone there
+        // would mark the install as "previously activated" purely
+        // because a passive GetStatus() probe touched the manager,
+        // which would then flip the user to "expired" if trial.json
+        // later disappeared. Keep this method passive on the anti-
+        // reset signal; only real save/load operations create it.
+    }
+
+    /// <summary>
+    /// Writes (or refreshes) the anti-reset tombstone marker. Called
+    /// from <see cref="RecordOperationOrThrow"/> AFTER a successful
+    /// save, so its existence reliably indicates "a real trial
+    /// operation has happened" rather than "a status probe ran".
+    /// Best-effort: tombstone failure does not block the primary save.
+    /// </summary>
+    private void WriteTombstone()
+    {
         try
         {
             File.WriteAllText(_tombstonePath, "AiDotNet trial active", Encoding.UTF8);
@@ -310,11 +333,10 @@ internal sealed class TrialStateManager
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Tombstone write failed — no fatal consequence; the primary
-            // save above succeeded so the trial state is preserved.
-            // Surface the failure via Trace so we can diagnose the
-            // "anti-naive-reset is silently disabled" case (read-only
-            // filesystem, sandbox/permissions, etc.) without breaking
-            // the user-facing flow.
+            // trial state was already persisted by SaveState. Surface via
+            // Trace so we can diagnose the "anti-naive-reset is silently
+            // disabled" case (read-only filesystem, sandbox/permissions,
+            // etc.) without breaking the user-facing flow.
             System.Diagnostics.Trace.TraceWarning(
                 $"TrialStateManager: tombstone write failed (anti-reset " +
                 $"protection effectively disabled): {ex.GetType().Name}: " +
