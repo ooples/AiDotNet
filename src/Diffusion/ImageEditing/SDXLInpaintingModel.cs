@@ -133,7 +133,13 @@ public class SDXLInpaintingModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new SDXLInpaintingModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        // Field-by-field clone — bypasses the int-bounded flat
+        // Vector<T> that GetParameters/SetParameters round-trip would
+        // require. Each component's parameter vector fits in int by
+        // virtue of being indexable, but the aggregate can exceed
+        // int.MaxValue at foundation scale.
+        clone._predictor.SetParameters(_predictor.GetParameters());
+        clone._vae.SetParameters(_vae.GetParameters());
         return clone;
     }
 
