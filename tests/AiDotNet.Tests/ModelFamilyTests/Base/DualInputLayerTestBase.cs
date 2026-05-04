@@ -178,6 +178,41 @@ public abstract class DualInputLayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
+
+        // Drive lazy-shape resolution + weight allocation by running a
+        // dual-input probe Forward against PrimaryInputShape /
+        // SecondaryInputShape. Without this, lazy layers (TransformerDecoder,
+        // CrossAttention, etc.) report ParameterCount = 0 because their
+        // weights resolve only on the first Forward call. The reflection
+        // probe handles both the params-Tensor[] dispatch and the
+        // (Tensor, Tensor) overload that some dual-input layers expose.
+        try
+        {
+            var primary = CreateRandomTensor(PrimaryInputShape);
+            var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
+            var paramsForward = layer.GetType().GetMethod(
+                "Forward",
+                new[] { typeof(Tensor<double>[]) });
+            if (paramsForward is not null)
+            {
+                paramsForward.Invoke(layer, new object[] { new[] { primary, secondary } });
+            }
+            else
+            {
+                var dualForward = layer.GetType().GetMethod(
+                    "Forward",
+                    new[] { typeof(Tensor<double>), typeof(Tensor<double>) });
+                dualForward?.Invoke(layer, new object[] { primary, secondary });
+            }
+        }
+        catch
+        {
+            // Probe failed; the invariant still validates whatever
+            // state the ctor produced. Layers that can't be probed
+            // this way should override CreateLayer to return a
+            // pre-initialized instance.
+        }
+
         int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 

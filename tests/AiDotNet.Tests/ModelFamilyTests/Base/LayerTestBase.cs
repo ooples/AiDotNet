@@ -477,8 +477,7 @@ public abstract class LayerTestBase
         int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 
-        Assert.True(count >= 0,
-            $"ParameterCount should be non-negative; got {count} for {layer.GetType().Name} with InputShape=[{string.Join(",", InputShape)}], parameters.Length={parameters.Length}.");
+        Assert.True(count >= 0, "ParameterCount should be non-negative.");
         Assert.Equal(count, parameters.Length);
 
         if (ExpectsTrainableParameters)
