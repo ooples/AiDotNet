@@ -124,13 +124,11 @@ public class GpuAccelerationBenchmarks
         }
 
         _poolLayer_CPU = new PoolingLayer<float>(
-            inputDepth: 128, inputHeight: 28, inputWidth: 28,
             poolSize: 2, stride: 2, type: PoolingType.Max);
 
         if (_gpuEngine != null)
         {
             _poolLayer_GPU = new PoolingLayer<float>(
-                inputDepth: 128, inputHeight: 28, inputWidth: 28,
                 poolSize: 2, stride: 2, type: PoolingType.Max);
         }
 

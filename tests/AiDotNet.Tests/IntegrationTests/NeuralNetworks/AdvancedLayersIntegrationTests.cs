@@ -3081,7 +3081,7 @@ public class AdvancedLayersIntegrationTests
         int height = 8;
         int width = 8;
         var layer = new SubpixelConvolutionalLayer<float>(
-            inputDepth, outputDepth, upscaleFactor, kernelSize, height, width,
+            outputDepth, upscaleFactor, kernelSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, channels, height, width]
@@ -3104,7 +3104,7 @@ public class AdvancedLayersIntegrationTests
         int upscaleFactor = 2;
         int kernelSize = 3;
         var original = new SubpixelConvolutionalLayer<float>(
-            inputDepth, outputDepth, upscaleFactor, kernelSize, 8, 8,
+            outputDepth, upscaleFactor, kernelSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, inputDepth, 8, 8]);
 
@@ -3132,7 +3132,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 16;
         int poolSize = 2;
         int stride = 2;
-        var layer = new PoolingLayer<float>(inputDepth, inputHeight, inputWidth, poolSize, stride, PoolingType.Max);
+        var layer = new PoolingLayer<float>(poolSize, stride, PoolingType.Max);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputDepth, inputHeight, inputWidth]);
@@ -3157,7 +3157,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 8;
         int poolSize = 2;
         int stride = 2;
-        var original = new PoolingLayer<float>(inputDepth, inputHeight, inputWidth, poolSize, stride, PoolingType.Average);
+        var original = new PoolingLayer<float>(poolSize, stride, PoolingType.Average);
         var input = Tensor<float>.CreateRandom([1, inputDepth, inputHeight, inputWidth]);
 
         // Act

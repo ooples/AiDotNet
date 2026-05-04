@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 4, 4, 2, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 2")]
 public class PoolingLayer<T> : LayerBase<T>
 {
     /// <summary>

@@ -229,12 +229,12 @@ public class ConvolutionalLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SubpixelConvolutionalLayer_Forward_ProducesValidOutput()
     {
-        // Arrange: upscale by 2x (commonly used for super-resolution)
-        // Constructor: (inputDepth, outputDepth, upscaleFactor, kernelSize, inputHeight, inputWidth, activation)
+        // Arrange: upscale by 2x (commonly used for super-resolution).
+        // Lazy ctor: (outputDepth, upscaleFactor, kernelSize, activation) —
+        // input depth/H/W are resolved from the first Forward call's input.
         IActivationFunction<double> relu = new ReLUActivation<double>();
         var layer = new SubpixelConvolutionalLayer<double>(
-            inputDepth: 3, outputDepth: 3, upscaleFactor: 2, kernelSize: 3,
-            inputHeight: 8, inputWidth: 8, activation: relu);
+            outputDepth: 3, upscaleFactor: 2, kernelSize: 3, activation: relu);
 
         var input = Tensor<double>.CreateRandom(3, 8, 8);
 
