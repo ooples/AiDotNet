@@ -5770,29 +5770,48 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Reverse-mode AD: compute gradients for all trainable parameters
         var grads = tape.ComputeGradients(lossTensor, trainableParams);
 
-        // Flatten into parameter gradient vector (same ordering as GetParameters)
+        // Flatten into parameter gradient vector. Use GetParameterChunks
+        // for the enumeration so the gradient vector aligns with the
+        // parameter vector returned by GetParameters() (issue #1245).
+        //
+        // Pre-fix: this loop walked `Layers` non-recursively and called
+        // `trainable.GetTrainableParameters()` per top-level layer.
+        // Composite layers (TransformerEncoderLayer, MoE, etc.) register
+        // their tensors via sub-layer RegisterSubLayer rather than
+        // RegisterTrainableParameter on themselves — their
+        // GetTrainableParameters returned an empty list and the
+        // gradient assembly emitted ZERO entries for the entire encoder
+        // stack, leaving the gradient vector shorter than the
+        // parameter vector. AdamOptimizer.UpdateSolution then crashed
+        // with "Vector lengths must match" the moment it tried element-
+        // wise math on (parameters, update). At smaller depth the
+        // discrepancy was masked by silent zero-padding in some
+        // optimizers, producing flat-softmax convergence (#1232).
+        //
+        // Post-fix: GetParameterChunks recurses through composite
+        // layers via CollectTrainableLayers, so every nested trainable
+        // tensor gets a corresponding gradient slot in the output
+        // vector. The contract documented in GetParameterChunks
+        // ("chunks must match exactly the parameter set that
+        // ParameterCount / GetParameters / SetParameters operate on")
+        // is what we rely on here.
         var flatGradients = new List<T>();
-        foreach (var layer in Layers)
+        foreach (var paramTensor in GetParameterChunks())
         {
-            if (layer is ITrainableLayer<T> trainable)
+            if (paramTensor is null || paramTensor.Length == 0) continue;
+            if (grads.TryGetValue(paramTensor, out var grad))
             {
-                foreach (var param in trainable.GetTrainableParameters())
-                {
-                    if (grads.TryGetValue(param, out var grad))
-                    {
-                        for (int i = 0; i < grad.Length; i++)
-                            flatGradients.Add(grad[i]);
-                    }
-                    else
-                    {
-                        for (int i = 0; i < param.Length; i++)
-                            flatGradients.Add(NumOps.Zero);
-                    }
-                }
+                for (int i = 0; i < grad.Length; i++)
+                    flatGradients.Add(grad[i]);
             }
             else
             {
-                for (int i = 0; i < layer.ParameterCount; i++)
+                // Tape didn't see this tensor (frozen or detached
+                // upstream) — emit zeros to keep the gradient vector
+                // length-aligned with parameters. Without this padding,
+                // a frozen sub-layer would shorten the gradient vector
+                // and re-introduce the #1245 mismatch.
+                for (int i = 0; i < paramTensor.Length; i++)
                     flatGradients.Add(NumOps.Zero);
             }
         }
