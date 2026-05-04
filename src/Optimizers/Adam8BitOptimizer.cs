@@ -1278,21 +1278,48 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _parameterLength = reader.ReadInt32();
             _numBlocks = reader.ReadInt32();
 
-            // Bounds-check structural fields before allocating anything
-            // sized off them. Untrusted/tampered checkpoints could otherwise
-            // force multi-GB phantom allocations on the ReadBytes calls
-            // below by claiming impossibly large lengths.
+            // Bounds-check ALL structural fields before allocating anything
+            // sized off them. Untrusted/tampered checkpoints could otherwise:
+            //   (a) force multi-GB phantom allocations on the ReadBytes calls
+            //       below by claiming impossibly large lengths,
+            //   (b) trigger DivideByZeroException via BlockSize <= 0,
+            //   (c) overflow (_parameterLength + blockSize - 1) when both
+            //       are near int.MaxValue and the addition wraps to negative,
+            //   (d) skip the consistency check via negative _numBlocks that
+            //       happen to satisfy `_numBlocks != expectedNumBlocks`
+            //       being false (it isn't, but defensive belt-and-suspenders).
+            // All checks happen before any allocation downstream.
             if (_parameterLength < 0)
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: invalid _parameterLength={_parameterLength} in checkpoint.");
             int blockSize = _options.BlockSize;
-            int expectedNumBlocks = _parameterLength == 0 ? 0
-                : (_parameterLength + blockSize - 1) / blockSize;
-            if (_numBlocks != expectedNumBlocks && _parameterLength > 0)
+            if (blockSize <= 0)
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: invalid BlockSize={blockSize} in checkpoint options. " +
+                    $"BlockSize must be positive (typical values: 64, 128, 256, 2048).");
+            if (_numBlocks < 0)
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: invalid _numBlocks={_numBlocks} in checkpoint.");
+            // Compute expected blocks in long arithmetic to avoid int
+            // overflow on hostile _parameterLength near int.MaxValue.
+            long expectedNumBlocksLong = _parameterLength == 0 ? 0L
+                : ((long)_parameterLength + blockSize - 1L) / blockSize;
+            if (expectedNumBlocksLong > int.MaxValue)
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: _parameterLength={_parameterLength} and BlockSize=" +
+                    $"{blockSize} produce {expectedNumBlocksLong} blocks, exceeding int.MaxValue. " +
+                    $"Checkpoint is malformed or out of supported range.");
+            if (_numBlocks != (int)expectedNumBlocksLong)
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: _numBlocks={_numBlocks} inconsistent with " +
                     $"_parameterLength={_parameterLength} and BlockSize={blockSize} " +
-                    $"(expected {expectedNumBlocks}). Checkpoint may be corrupted.");
+                    $"(expected {expectedNumBlocksLong}). Checkpoint may be corrupted.");
+
+            // The m-quantized and v-quantized read branches below each
+            // cap their declared length against the remaining stream
+            // bytes (ms.Length - ms.Position) so a payload claiming
+            // mLength=int.MaxValue can't force a 2 GB ReadBytes
+            // allocation before the truncation check fires.
 
             // Deserialize first moment. The hasMState flag (added in #1240
             // follow-up) tells us whether m was actually initialized at
@@ -1327,12 +1354,23 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                         throw new InvalidOperationException(
                             $"Adam8BitOptimizer: m-quantized length {mLength} does not " +
                             $"match _parameterLength={_parameterLength}.");
+                    // Pre-check: payload can't exceed the remaining stream
+                    // bytes — protects against a malformed payload whose
+                    // declared length passes the _parameterLength check but
+                    // the actual data was truncated upstream. Without this,
+                    // ReadBytes would allocate a full-sized array and only
+                    // then notice the truncation.
+                    long mAfter = ms.Position + mLength;
+                    if (mLength < 0 || mAfter > ms.Length)
+                        throw new InvalidOperationException(
+                            $"Adam8BitOptimizer: m-quantized declared length {mLength} exceeds " +
+                            $"remaining stream bytes ({ms.Length - ms.Position}). Checkpoint truncated.");
                     // Bulk read — per-element copy was O(N) writer touches
                     // and unnecessarily slow for large checkpoints. ReadBytes
                     // returns a single contiguous byte[] which we copy into
                     // the Vector<byte>. The bounds check above caps the
-                    // allocation at _parameterLength so a tampered length
-                    // can't force a multi-GB phantom allocation.
+                    // allocation at remaining stream bytes so a tampered
+                    // length can't force a multi-GB phantom allocation.
                     var mBytes = reader.ReadBytes(mLength);
                     if (mBytes.Length != mLength)
                         throw new InvalidOperationException(
@@ -1386,6 +1424,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     throw new InvalidOperationException(
                         $"Adam8BitOptimizer: v-quantized length {vLength} does not " +
                         $"match _parameterLength={_parameterLength}.");
+                // Pre-check declared length against remaining stream — see
+                // the m-quantized branch for rationale.
+                long vAfter = ms.Position + vLength;
+                if (vLength < 0 || vAfter > ms.Length)
+                    throw new InvalidOperationException(
+                        $"Adam8BitOptimizer: v-quantized declared length {vLength} exceeds " +
+                        $"remaining stream bytes ({ms.Length - ms.Position}). Checkpoint truncated.");
                 var vBytes = reader.ReadBytes(vLength);
                 if (vBytes.Length != vLength)
                     throw new InvalidOperationException(
