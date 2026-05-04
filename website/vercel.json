@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "ignoreCommand": "exit 0"
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = master ] || [ \"$VERCEL_GIT_COMMIT_REF\" = main ]; then exit 1; fi; git -C \"$(git rev-parse --show-toplevel)\" diff --quiet HEAD^ HEAD -- 'website/' && exit 0 || exit 1"
 }
