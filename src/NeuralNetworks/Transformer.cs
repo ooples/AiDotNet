@@ -472,7 +472,22 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// This is used when you want to use a trained Transformer to process new data.
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Transformer's eager forward routes the encoder/decoder
+    /// cross-attention pattern: <see cref="DecoderLayer{T}"/> takes the
+    /// encoder's output as a second input, <see cref="AttentionLayer{T}"/>
+    /// takes the attention mask as a second input, and other layers are
+    /// invoked through the standard single-input
+    /// <see cref="ILayer{T}.Forward(Tensor{T})"/>. The encoder output is
+    /// captured at the last <see cref="MultiHeadAttentionLayer{T}"/>
+    /// before any decoder layer in the chain. The public
+    /// <see cref="NeuralNetworkBase{T}.Predict"/> wrapper handles
+    /// training-mode toggle, no-grad scope, batch-dim promotion, and
+    /// output squeeze — see that method's remarks for the inference-
+    /// scaffolding contract (issue #1221).
+    /// </remarks>
+    protected override Tensor<T> PredictEager(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
@@ -480,6 +495,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
 
         Tensor<T> output = input;
         Tensor<T>? encoderOutput = null;
+        bool seenDecoder = false;
         Tensor<T> mask = AttentionMask ?? Tensor<T>.CreateDefault(input._shape, NumOps.One); // Default to all ones if no mask is provided
 
         // Process all layers sequentially
@@ -488,6 +504,7 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         {
             if (Layers[i] is DecoderLayer<T> decoderLayer)
             {
+                seenDecoder = true;
                 // Decoder layer with cross-attention needs encoder output
                 output = decoderLayer.Forward(output, encoderOutput ?? output, mask);
             }
@@ -500,11 +517,20 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 output = Layers[i].Forward(output);
             }
 
-            // Track encoder output for cross-attention in decoders
-            // The last attention layer before any decoder layer is the encoder output
-            if (Layers[i] is MultiHeadAttentionLayer<T> && encoderOutput is null)
+            // Track encoder output for cross-attention in decoders.
+            // The encoder output we want is the LAST MultiHeadAttention
+            // output before any DecoderLayer in the chain — for an
+            // encoder stack with multiple blocks, decoder cross-attention
+            // should consume the fully-encoded representation, not the
+            // first encoder block's output. Keep updating `encoderOutput`
+            // on every encoder-block attention until we hit the first
+            // decoder; after that, freeze it (subsequent decoder blocks
+            // share the same encoder context).
+            if (!seenDecoder && Layers[i] is MultiHeadAttentionLayer<T>)
             {
-                // Check if there are decoder layers ahead
+                // Only capture if there's a decoder downstream — otherwise
+                // there's no consumer for this state and we'd be retaining
+                // a tensor reference unnecessarily.
                 for (int j = i + 1; j < Layers.Count; j++)
                 {
                     if (Layers[j] is DecoderLayer<T>)

@@ -66,7 +66,8 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
         int seqLen,
         int numEncoderLayers,
         int numHeads,
-        double learningRate)
+        double learningRate,
+        double dropoutRate = 0.1)
     {
         var arch = new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
@@ -78,6 +79,7 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
             feedForwardDimension: feedForwardDim,
             inputSize: seqLen,
             outputSize: vocab,
+            dropoutRate: dropoutRate,
             maxSequenceLength: seqLen,
             vocabularySize: vocab);
 
@@ -362,5 +364,115 @@ public class TransformerProductionScaleConvergenceIssue1221Tests
             $"Pre-fix this is bit-identical (zero movement at production " +
             $"scale despite the V=8 case working) — the user-reported " +
             $"smoking gun for #1221.");
+    }
+
+    /// <summary>
+    /// Force training mode ON before Predict and verify the Predict path
+    /// still produces deterministic, non-uniform output. This catches the
+    /// failure mode where <see cref="Transformer{T}.Predict"/> bypasses
+    /// the base's <c>SetTrainingMode(false)</c> wrapper — pre-fix the
+    /// override skipped it; post-fix the override is at <c>PredictEager</c>
+    /// so the base's wrapper applies.
+    ///
+    /// <para>
+    /// Why this catches the bug even when Train's <c>finally</c> already
+    /// flips eval mode off: this test EXPLICITLY restores training mode
+    /// AFTER Train and BEFORE Predict, simulating any caller that
+    /// re-enables training between train/eval (e.g., interleaved
+    /// train-then-monitor-loss loops). With the pre-fix Predict, Dropout
+    /// runs at training rate and outputs are stochastic; with the post-fix
+    /// override at PredictEager, the base's eval-mode toggle disables
+    /// Dropout regardless of caller state.
+    /// </para>
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task Predict_WithExternalTrainingModeOn_StillDeterministic()
+    {
+        await Task.Yield();
+        const int vocab = 256;
+        const int seqLen = 32;
+        // Pin an explicit non-zero dropout rate. The reviewer flagged that
+        // letting this default through TransformerArchitecture's framework
+        // default (currently 0.1) makes the test silently no-op if that
+        // default ever drops to 0.0. Pinning 0.2 here keeps Dropout's
+        // training-mode branch active regardless of framework defaults
+        // and gives the stochastic-mask divergence a clear signal.
+        const double dropoutRate = 0.2;
+        var model = BuildTransformer(
+            vocab: vocab, modelDim: 64, feedForwardDim: 256, seqLen: seqLen,
+            numEncoderLayers: 2, numHeads: 4, learningRate: 0.0003,
+            dropoutRate: dropoutRate);
+
+        // Confirm at least one DropoutLayer exists with a non-zero rate.
+        // Without this precondition, the rest of the test is a tautology:
+        // if Dropout is absent or disabled, two Predict calls would always
+        // be bit-identical even pre-fix and the regression would be useless.
+        bool hasActiveDropout = model.Layers
+            .OfType<DropoutLayer<float>>()
+            .Any(d => d.SupportsTraining);
+        Assert.True(hasActiveDropout,
+            "Test precondition: model must contain at least one DropoutLayer that " +
+            "supports training-mode behavior. Without an active Dropout, this test " +
+            "cannot detect #1221's symptom (Predict failing to disable Dropout).");
+
+        // Train so weights aren't zero-init.
+        model.SetTrainingMode(true);
+        for (int k = 0; k < 16; k++)
+        {
+            model.Train(
+                BuildIdentityInput(k, seqLen: seqLen),
+                BuildOneHotTarget(k, vocab: vocab));
+        }
+
+        // EXPLICITLY restore training mode after Train. Train's finally
+        // would have flipped it off; we're simulating the case where the
+        // caller wants training mode on (e.g., for an in-loop train-step
+        // followed by a Predict-based loss check). Predict must internally
+        // override this for stateful layers, otherwise Dropout fires at
+        // inference and outputs become stochastic.
+        model.SetTrainingMode(true);
+        Assert.True(model.IsTrainingMode);
+
+        // Two Predict calls on the same input. With Dropout properly
+        // disabled at inference (via the base Predict's SetTrainingMode
+        // wrapper), the two calls must be bit-identical. Pre-fix the
+        // Transformer.Predict override skipped the wrapper, leaving
+        // Dropout in training mode and producing stochastic outputs.
+        var input = BuildIdentityInput(0, seqLen: seqLen);
+        var pred1 = model.Predict(input);
+        var pred2 = model.Predict(input);
+
+        // Predict must restore the caller's training-mode state after
+        // running. The base.Predict's try/finally toggles eval mode for
+        // the duration of the forward pass and restores the prior state
+        // on exit; this assertion locks in that save/restore contract.
+        Assert.True(model.IsTrainingMode,
+            "Predict should restore the caller's training-mode state after inference. " +
+            "If this fails, the wrapper's finally block isn't running.");
+
+        Assert.Equal(pred1.Length, pred2.Length);
+        double maxDelta = 0.0;
+        for (int i = 0; i < pred1.Length; i++)
+        {
+            double d = Math.Abs(pred1[i] - pred2[i]);
+            if (d > maxDelta) maxDelta = d;
+        }
+        _output.WriteLine($"Two Predict calls (training mode forced ON beforehand): max abs diff = {maxDelta:E3}");
+
+        // Tolerance: pre-fix the failure produces diffs in the ~1e-2 range
+        // (Dropout's stochastic mask reroll randomizes ~10% of features per
+        // call). 1e-3 is comfortably below that and well above any GPU
+        // floating-point nondeterminism (kernel scheduling, reduction-order
+        // variance). The previous 1e-6 was tighter than CPU/GPU
+        // float-rounding can guarantee across CI agents and would cause
+        // spurious failures on a deterministic-Dropout eval forward.
+        const double tolerance = 1e-3;
+        Assert.True(maxDelta < tolerance,
+            $"Two Predict calls on the same input produced different outputs " +
+            $"(max abs diff = {maxDelta:E3}, tolerance {tolerance:E1}). #1221 " +
+            $"root cause: Transformer.Predict bypassed the base's eval-mode " +
+            $"toggle, so Dropout ran with stochastic masks at inference. " +
+            $"Pre-fix diff is ~1e-2 (one Dropout zero-out per ~10 hidden " +
+            $"units); post-fix Dropout is a no-op and the diff is float noise.");
     }
 }
