@@ -98,7 +98,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <b>For Beginners:</b> The architecture defines the structure of your neural network - how many layers it has,
     /// how many neurons are in each layer, and how they're connected. Think of it as the blueprint for your network.
     /// </remarks>
+    /// <summary>
+    /// The architecture descriptor. Always non-null — layer-only models
+    /// (backbones composed of lazy layers, sub-modules whose shape is
+    /// derived from a parent network) pass a layer-only stub via
+    /// <see cref="NeuralNetworkArchitecture{T}.CreateLayerOnly"/> so
+    /// the existing 100+ <c>Architecture.X</c> reads keep working.
+    /// Use <see cref="IsLayerOnlyModel"/> to detect the stub case when
+    /// you need to fall back to layer-derived shape resolution.
+    /// </summary>
     public readonly NeuralNetworkArchitecture<T> Architecture;
+
+    /// <summary>
+    /// True when the model was constructed via the layer-only ctor
+    /// (architecture is a stub with no semantic input contract). Use
+    /// this to gate code that would otherwise read meaningful values
+    /// like <c>Architecture.InputHeight</c> — for layer-only models
+    /// those are sentinel <c>-1</c> dims, and the real input shape
+    /// comes from <see cref="Layers"/>[0].GetInputShape().
+    /// </summary>
+    public bool IsLayerOnlyModel => Architecture.IsLayerOnly;
 
     /// <summary>
     /// Set of feature indices that have been explicitly marked as active.
@@ -325,6 +344,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Creates a new neural network with the specified architecture.
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the network.</param>
+    /// <param name="lossFunction">The loss function used for training.</param>
+    /// <param name="maxGradNorm">Optional gradient-clipping max norm.</param>
     protected NeuralNetworkBase(NeuralNetworkArchitecture<T> architecture, ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
     {
         Architecture = architecture;
@@ -339,6 +360,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         _compileHost = new CompiledModelHost<T>(
             shapeMode: SymbolicShapeMode.BatchDynamic,
             modelIdentity: GetType().FullName ?? GetType().Name);
+    }
+
+    /// <summary>
+    /// Creates a layer-only neural network with no semantic architecture.
+    /// The base receives a stub architecture (all-sentinel dims, IsLayerOnly=true)
+    /// so existing <c>Architecture.X</c> consumers keep compiling, and methods
+    /// that need a real input shape consult <see cref="Layers"/>[0] instead.
+    /// Intended for sub-modules (residual blocks used inside ResNet, etc.) and
+    /// detection backbones whose input contract is owned by a parent network.
+    /// </summary>
+    /// <param name="lossFunction">The loss function used for training.</param>
+    /// <param name="maxGradNorm">Optional gradient-clipping max norm.</param>
+    protected NeuralNetworkBase(ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
+        : this(architecture: NeuralNetworkArchitecture<T>.CreateLayerOnly(),
+               lossFunction: lossFunction,
+               maxGradNorm: maxGradNorm)
+    {
     }
 
     /// <summary>
@@ -2167,6 +2205,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected void EnsureArchitectureInitialized()
     {
+        if (Architecture.IsLayerOnly)
+        {
+            // Layer-only model — no semantic architecture to initialize.
+            // Layers were registered directly by the subclass; skip
+            // cached-data hydration but still drive InitializeLayers +
+            // lazy-shape resolution so ParameterCount works pre-Forward.
+            InitializeLayers();
+            ResolveLazyLayerShapes();
+            return;
+        }
+
         if (!Architecture.IsInitialized)
         {
             // Initialize from cached data
@@ -2290,6 +2339,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     private int[]? TryGetArchitectureInputShape()
     {
+        // Layer-only models carry a stub architecture; fall back to the
+        // first layer's input shape so the lazy-resolution chain still
+        // has a starting point. If even that's lazy (-1 dims), we
+        // return null and the caller leaves layers to resolve on first
+        // Forward.
+        if (Architecture.IsLayerOnly)
+        {
+            if (Layers is null || Layers.Count == 0) return null;
+            int[] firstShape;
+            try { firstShape = Layers[0].GetInputShape(); }
+            catch { return null; }
+            if (firstShape is null || firstShape.Length == 0) return null;
+            for (int i = 0; i < firstShape.Length; i++)
+            {
+                if (firstShape[i] <= 0) return null;
+            }
+            int[] withBatchFromLayer = new int[firstShape.Length + 1];
+            withBatchFromLayer[0] = 1;
+            for (int i = 0; i < firstShape.Length; i++) withBatchFromLayer[i + 1] = firstShape[i];
+            return withBatchFromLayer;
+        }
+
         try
         {
             int[] shape = Architecture.GetInputShape();
@@ -5632,6 +5703,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return Layers[0].GetInputShape();
         }
 
+        // Layer-only models with no registered layers can't yield a
+        // shape — return empty rather than throwing, since this is a
+        // query method.
+        if (Architecture.IsLayerOnly) return Array.Empty<int>();
         return new[] { Architecture.InputSize };
     }
 

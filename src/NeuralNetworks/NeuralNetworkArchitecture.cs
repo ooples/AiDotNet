@@ -1094,4 +1094,46 @@ public class NeuralNetworkArchitecture<T>
             inputFrames: frames,
             outputSize: outputSize);
     }
+
+    /// <summary>
+    /// True when this architecture is a <see cref="CreateLayerOnly"/> stub — a
+    /// placeholder used by sub-modules / lazy backbones that don't carry a
+    /// semantic input contract. <see cref="NeuralNetworkBase{T}"/> uses this
+    /// flag to skip cached-data hydration and shape validation that would
+    /// otherwise fire on the all-sentinel dims.
+    /// </summary>
+    public bool IsLayerOnly { get; private set; }
+
+    /// <summary>
+    /// Creates a "layer-only" architecture stub for sub-modules and detection
+    /// backbones whose input contract is owned by a parent network. Every
+    /// dimension is sentinel <c>-1</c>; <see cref="IsLayerOnly"/> returns
+    /// <c>true</c> so the network base falls back to layer-derived shape
+    /// resolution instead of reading <c>InputHeight</c> / <c>InputSize</c>.
+    /// </summary>
+    /// <returns>A stub architecture flagged as layer-only.</returns>
+    /// <remarks>
+    /// This is the API surface that satisfies #1214 — "make
+    /// NeuralNetworkArchitecture optional in NeuralNetworkBase" — without
+    /// disrupting the 100+ existing models that read <c>Architecture.X</c>
+    /// from the base class. New layer-only models pass the stub; old models
+    /// keep passing real architectures.
+    /// </remarks>
+    public static NeuralNetworkArchitecture<T> CreateLayerOnly()
+    {
+        // Build through the dynamic-spatial path with sentinel dims so
+        // ValidateInputDimensions accepts -1 axes; flag IsLayerOnly =
+        // true afterward. We can't construct via the OneDimensional ctor
+        // because it rejects InputSize <= 0; ThreeDimensional with
+        // dynamic spatial dims is the only branch that legally accepts
+        // sentinels.
+        var stub = CreateDynamicSpatial(
+            inputType: InputType.ThreeDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            channels: 1,
+            outputSize: 0,
+            frames: 0);
+        stub.IsLayerOnly = true;
+        return stub;
+    }
 }
