@@ -428,6 +428,28 @@ public abstract class LayerTestBase
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
 
+        // Drive lazy-shape resolution + weight allocation by running a
+        // single Forward against InputShape. Without this, layers that
+        // defer weight allocation to OnFirstForward (#1209) report
+        // ParameterCount = 0 — which is correct lazy semantics, but
+        // the invariant we're testing (count == GetParameters().Length
+        // and >0 for trainable) requires the layer to be in its
+        // "post first forward" state to be meaningful.
+        using (var probeInput = new Tensor<double>(InputShape))
+        {
+            try { layer.Forward(probeInput); }
+            catch
+            {
+                // Some layers reject the default InputShape (e.g. a
+                // RecurrentLayer expecting [batch, seq, features]). The
+                // test will still validate the invariant against whatever
+                // state the ctor produced, which for those layers means
+                // they should report a positive count from ctor args
+                // alone (otherwise the layer needs an InputShape override
+                // in its generated test class).
+            }
+        }
+
         int count = layer.ParameterCount;
         var parameters = layer.GetParameters();
 
