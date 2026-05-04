@@ -320,6 +320,17 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
             _pendingParameters = null;
             ApplyParameters(pending);
         }
+
+        // Replay BN running-state extras buffered by
+        // ILayerSerializationExtras.SetExtraParameters before _expandBn /
+        // _dwBn / _projectBn were allocated. Without this, BN state for
+        // a deserialized checkpoint stays at zero and inference diverges.
+        if (_pendingExtraParameters is not null)
+        {
+            var pendingExtras = _pendingExtraParameters;
+            _pendingExtraParameters = null;
+            ApplyExtraParametersUnsafe(pendingExtras);
+        }
     }
 
     private void ApplyParameters(Vector<T> parameters)
@@ -612,6 +623,30 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     }
 
     void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        // Buffer until OnFirstForward resolves shapes when arriving pre-
+        // resolution: _expandBn/_dwBn/_projectBn are null at construction
+        // (lazy ctor; allocated in OnFirstForward once inChannels is
+        // observed), so the type-checks below all skip and the extras
+        // are silently dropped. Without buffering, BN running mean/var
+        // for a deserialized checkpoint stay at zero and inference
+        // diverges from the trained model.
+        if (!IsShapeResolved)
+        {
+            _pendingExtraParameters = extraParameters;
+            return;
+        }
+        ApplyExtraParametersUnsafe(extraParameters);
+    }
+
+    /// <summary>
+    /// Buffer for ILayerSerializationExtras.SetExtraParameters when
+    /// called pre-OnFirstForward. Replayed inside OnFirstForward once
+    /// _expandBn/_dwBn/_projectBn are allocated.
+    /// </summary>
+    private Vector<T>? _pendingExtraParameters;
+
+    private void ApplyExtraParametersUnsafe(Vector<T> extraParameters)
     {
         int offset = 0;
         if (_expandBn is ILayerSerializationExtras<T> eb)

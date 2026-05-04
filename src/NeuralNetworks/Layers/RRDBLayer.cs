@@ -273,6 +273,15 @@ public class RRDBLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
+
+        // Mirror Forward()'s lazy-resolution gate. OnFirstForward
+        // resolves _rdbBlocks' inner shape and replays buffered
+        // _pendingParameters; without this guard a GPU-first execution
+        // dispatches to inner RDBs whose internal weights are still 0×0,
+        // and the GPU forward reads zero-length buffers (silent wrong
+        // output) or crashes on a kernel arg-check.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         var shape = input._shape;
 
         // Cache input for backward pass

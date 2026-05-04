@@ -142,6 +142,17 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
             _pendingParameters = null;
             ApplyParameters(pending);
         }
+
+        // Replay BN running-state extras buffered by
+        // ILayerSerializationExtras.SetExtraParameters before _bn1/_bn2
+        // were sized. Without this the running mean/var stay at zeros and
+        // inference for the loaded checkpoint diverges from the original.
+        if (_pendingExtraParameters is not null)
+        {
+            var pendingExtras = _pendingExtraParameters;
+            _pendingExtraParameters = null;
+            ApplyExtraParametersUnsafe(pendingExtras);
+        }
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
@@ -192,6 +203,16 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Mirror Forward()'s lazy-resolution gate. Without this, a layer
+        // whose first execution lands on the GPU path runs ForwardGpu
+        // against unresolved sub-layer shapes (and skips the
+        // _pendingParameters / _pendingExtraParameters replay above) —
+        // the BN running stats stay at zero, weights stay random, and
+        // checkpointed inference produces wrong output. OnFirstForward
+        // resolves shapes + replays buffered params before any sub-
+        // layer's first GPU forward runs.
+        if (!IsShapeResolved) OnFirstForward(input);
 
         // BN1 → ReLU → Conv1x1
         var bn1Output = _bn1.ForwardGpu(input);
@@ -330,6 +351,30 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     }
 
     void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        // Buffer until OnFirstForward resolves shapes when arriving pre-
+        // resolution: _bn1 / _bn2 keep 0-length running-mean/var arrays
+        // until their own ResolveFromShape runs, so SetExtraParameters
+        // would either throw on the SubVector cut or silently fail to
+        // populate. The pending-extras buffer mirrors _pendingParameters
+        // (#11 fix) for the BN running stats — without this, DenseNet
+        // serialize→deserialize loses BN state and inference diverges.
+        if (!IsShapeResolved)
+        {
+            _pendingExtraParameters = extraParameters;
+            return;
+        }
+        ApplyExtraParametersUnsafe(extraParameters);
+    }
+
+    /// <summary>
+    /// Buffer for ILayerSerializationExtras.SetExtraParameters when
+    /// called pre-OnFirstForward. Replayed inside OnFirstForward once
+    /// _bn1 / _bn2 have their running-state arrays sized.
+    /// </summary>
+    private Vector<T>? _pendingExtraParameters;
+
+    private void ApplyExtraParametersUnsafe(Vector<T> extraParameters)
     {
         int offset = 0;
         if (_bn1 is ILayerSerializationExtras<T> e1)

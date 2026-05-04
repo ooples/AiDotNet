@@ -385,6 +385,15 @@ public class ResidualDenseBlock<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
+
+        // Mirror Forward()'s lazy-resolution gate. OnFirstForward owns
+        // shape resolution + _pendingParameters replay for inner conv
+        // layers; without this guard a GPU-first execution leaves them
+        // in their unresolved state and the GPU forward reads zero-
+        // length weight buffers. ResolveFromShape is idempotent so the
+        // CPU path is unaffected.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         var originalShape = input._shape;
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
