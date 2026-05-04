@@ -447,6 +447,9 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
+        // Persist the constructor's full parameter set so deser can reconstruct
+        // without fabricating SequenceLength / ModelDimension defaults.
+        metadata["SequenceLength"] = _sequenceLength.ToString();
         metadata["ModelDimension"] = _modelDimension.ToString();
         metadata["NumBlocks"] = _blocks.Length.ToString();
         metadata["SchedulePattern"] = _schedulePattern.ToString();

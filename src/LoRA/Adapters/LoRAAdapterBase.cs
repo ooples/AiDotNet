@@ -235,7 +235,80 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // Create the LoRA layer - derived classes may override this via CreateLoRALayer
         _loraLayer = CreateLoRALayer(rank, alpha);
 
-        // Initialize parameters
+        // Initialize Parameters using a NON-VIRTUAL base+LoRA-only sizing.
+        // Calling the virtual ParameterCount from a base ctor is a C#
+        // antipattern: derived adapters that override ParameterCount with
+        // derived state (delta weight matrices, importance scores, bank
+        // indices, etc.) dereference fields that the derived ctor body
+        // hasn't yet initialized — the derived state observed here is
+        // whatever default(T) the field type uses. Sizing against just
+        // _baseLayer + _loraLayer is always safe because both are fully
+        // constructed at this point.
+        //
+        // Derived adapters that override ParameterCount AND need their
+        // packed Parameters vector to round-trip (i.e., they don't
+        // override GetParameters / SetParameters with their own
+        // packing logic) MUST call RebuildParametersAfterDerivedInit()
+        // at the end of their constructor once their extra state is
+        // initialized. Most derived adapters override GetParameters
+        // and don't need this call.
+        // Match what PackBaseAndLoraParameters actually packs: base params
+        // are skipped when frozen (the optimizer doesn't update them, and
+        // they round-trip via ILayerSerializationExtras instead). Sizing
+        // against the unfrozen total when freezeBaseLayer=true would leave
+        // trailing unused elements in Parameters, breaking GetParameters()
+        // length and (de)serialization round-trip.
+        int baseAndLoraCount =
+            (_freezeBaseLayer ? 0 : _baseLayer.GetParameters().Length)
+            + _loraLayer.GetParameters().Length;
+        Parameters = new Vector<T>(baseAndLoraCount);
+        // Pack base + LoRA params directly (non-virtual) so the vector
+        // is initialized without invoking the derived
+        // UpdateParametersFromLayers override. Derived classes that
+        // need their own packing call RebuildParametersAfterDerivedInit
+        // which routes through the virtual UpdateParametersFromLayers.
+        PackBaseAndLoraParameters();
+    }
+
+    /// <summary>
+    /// Non-virtual pack of <see cref="_baseLayer"/> + <see cref="_loraLayer"/>
+    /// parameters into <see cref="LayerBase{T}.Parameters"/>. Used by the
+    /// base ctor where the derived <see cref="UpdateParametersFromLayers"/>
+    /// override would dereference uninitialised derived state.
+    /// </summary>
+    private void PackBaseAndLoraParameters()
+    {
+        int idx = 0;
+        if (!_freezeBaseLayer)
+        {
+            Vector<T> baseParams = _baseLayer.GetParameters();
+            for (int i = 0; i < baseParams.Length; i++)
+            {
+                Parameters[idx++] = baseParams[i];
+            }
+        }
+
+        Vector<T> loraParams = _loraLayer.GetParameters();
+        for (int i = 0; i < loraParams.Length; i++)
+        {
+            Parameters[idx++] = loraParams[i];
+        }
+    }
+
+    /// <summary>
+    /// Derived adapter classes that override <see cref="LayerBase{T}.ParameterCount"/>
+    /// to include extra state (delta weights, importance scores, etc.) MUST
+    /// call this method at the end of their constructor body so the base
+    /// class's <see cref="LayerBase{T}.Parameters"/> vector is re-allocated
+    /// against the derived total. The base ctor calls
+    /// <c>UpdateParametersFromLayers</c> via this method, which in turn calls
+    /// the now-initialized derived <c>ParameterCount</c> via virtual dispatch.
+    /// Parameter count is cast to int because <c>Vector{T}.Length</c> is int
+    /// per the per-tensor &lt; 2.1 B contract; #1237's long aggregate applies
+    /// only to the model-level <c>ParameterCount</c> property.
+    /// </summary>
+    protected void RebuildParametersAfterDerivedInit()
+    {
         Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromLayers();
     }
@@ -688,5 +761,77 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     {
         _baseLayer.ResetState();
         _loraLayer.ResetState();
+    }
+
+    /// <summary>
+    /// Persists the inner-layer type name and shape so DeserializationHelper
+    /// can reconstruct the WRAPPED base layer with the right concrete type
+    /// instead of the prior <c>DenseLayer&lt;T&gt;</c> placeholder. This is
+    /// the round-trip path for issue #1239's wrapped-layer concern: every
+    /// LoRA adapter (35 implementations as of this commit, all derived from
+    /// this base) inherits this metadata persistence automatically.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What's persisted:
+    /// <list type="bullet">
+    /// <item><b>InnerLayerTypeName</b> — the wrapped layer's short type
+    /// name (<see cref="System.Type.Name"/>, e.g., <c>DenseLayer`1</c>),
+    /// generic-arity suffix included, no namespace prefix. This is the
+    /// form <c>DeserializationHelper.LayerTypes</c> is keyed on, so the
+    /// recursive <c>CreateLayerFromType</c> lookup resolves against
+    /// it. Fully-qualified or assembly-qualified names would break
+    /// that lookup.</item>
+    /// <item><b>InnerLayerInputShape</b> / <b>InnerLayerOutputShape</b>
+    /// — comma-separated dim lists. Used as the recursive deser call's
+    /// inputShape / outputShape parameters.</item>
+    /// <item><b>Rank</b> / <b>Alpha</b> / <b>FreezeBaseLayer</b> — LoRA
+    /// adapter scalar config that doesn't depend on the inner layer.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// What's NOT persisted by this base method (subclasses with extra
+    /// state must override and chain): adapter-specific fields like
+    /// VBLoRA's bank indices, AdaLoRA's importance scores, DyLoRA's
+    /// rank schedule, MoRA's hash table size, etc. Subclass overrides
+    /// should call <c>base.GetMetadata()</c> first then add their own.
+    /// </para>
+    /// <para>
+    /// Frozen-base inner-layer parameter VALUES round-trip via the
+    /// existing <see cref="ILayerSerializationExtras{T}"/> path
+    /// (<see cref="ILayerSerializationExtras{T}.GetExtraParameters"/>);
+    /// non-frozen inner-layer parameters are part of the wrapper's flat
+    /// <see cref="GetParameters"/> output already.
+    /// </para>
+    /// </remarks>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+
+        // Inner layer's runtime type name. Strip any assembly qualification
+        // and namespace prefix so it matches what DeserializationHelper's
+        // LayerTypes dictionary keys on (Type.Name, generic-arity suffix
+        // included).
+        metadata["InnerLayerTypeName"] = _baseLayer.GetType().Name;
+
+        // Shape strings as comma-joined int lists (mirrors the format
+        // used by other layer GetMetadata sites that round-trip arrays).
+        var innerInput = _baseLayer.GetInputShape();
+        var innerOutput = _baseLayer.GetOutputShape();
+        metadata["InnerLayerInputShape"] = string.Join(",", innerInput);
+        metadata["InnerLayerOutputShape"] = string.Join(",", innerOutput);
+
+        // LoRA-specific scalars. Rank reads from the LoRA layer; alpha
+        // is the scaling factor (already exposed publicly); FreezeBaseLayer
+        // controls whether the base's params count toward Parameters.
+        // Use InvariantCulture for numeric serialization so the round-trip
+        // works on locales where ',' is the decimal separator (German,
+        // French, etc.) — the deser side parses with TryGetDouble which
+        // also uses invariant rules.
+        metadata["Rank"] = _loraLayer.Rank.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Alpha"] = Convert.ToDouble(_loraLayer.Alpha).ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+        metadata["FreezeBaseLayer"] = _freezeBaseLayer.ToString();
+
+        return metadata;
     }
 }

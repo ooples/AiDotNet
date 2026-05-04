@@ -744,6 +744,11 @@ public partial class MesaNetLayer<T> : LayerBase<T>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();
+        // Persist the constructor's full parameter set so deser can reconstruct
+        // without fabricating dimensions when the input shape is degenerate.
+        // SequenceLength is the first axis of the layer's input shape (set in
+        // the base ctor at line 217 as [sequenceLength, modelDimension]).
+        metadata["SequenceLength"] = InputShape[0].ToString();
         metadata["ModelDimension"] = _modelDimension.ToString();
         metadata["NumHeads"] = _numHeads.ToString();
         metadata["HeadDimension"] = _headDimension.ToString();

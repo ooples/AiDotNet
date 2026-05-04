@@ -733,4 +733,22 @@ public class BidirectionalLayer<T> : LayerBase<T>
             _backwardLayer.UpdateParametersGpu(config);
         }
     }
+
+    /// <summary>
+    /// Persists the inner layer's type name + shape and the merge-mode flag
+    /// so DeserializationHelper can reconstruct the wrapped layer concretely
+    /// instead of injecting a placeholder DenseLayer<T>. Issue #1239
+    /// wrapped-layer round-trip. The inner layer is shared between the
+    /// forward and backward directions (the backward is a Clone() of the
+    /// forward), so persisting the forward's metadata is sufficient.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InnerLayerTypeName"] = _forwardLayer.GetType().Name;
+        metadata["InnerLayerInputShape"] = string.Join(",", _forwardLayer.GetInputShape());
+        metadata["InnerLayerOutputShape"] = string.Join(",", _forwardLayer.GetOutputShape());
+        metadata["MergeMode"] = _mergeMode.ToString();
+        return metadata;
+    }
 }

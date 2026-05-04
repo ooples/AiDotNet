@@ -392,14 +392,19 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
     {
         int offset = 0;
-        foreach (var layer in _layers)
+        // Index loop instead of foreach + IndexOf: the original IndexOf call
+        // inside the error message turned the loop O(n²) for no reason.
+        // The error is only thrown on truncation, so we don't need IndexOf
+        // for the happy path either — just track the index directly.
+        for (int i = 0; i < _layers.Count; i++)
         {
+            var layer = _layers[i];
             if (layer is ILayerSerializationExtras<T> ex)
             {
                 int count = ex.ExtraParameterCount;
                 if (offset + count > extraParameters.Length)
                     throw new ArgumentException(
-                        $"Truncated extra-parameters at DenseBlockLayer #{_layers.IndexOf(layer)}: " +
+                        $"Truncated extra-parameters at DenseBlockLayer #{i}: " +
                         $"need {offset + count} but got {extraParameters.Length}.");
                 ex.SetExtraParameters(extraParameters.SubVector(offset, count));
                 offset += count;

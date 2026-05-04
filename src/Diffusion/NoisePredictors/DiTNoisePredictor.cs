@@ -1156,32 +1156,36 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         get
         {
+            // #1237: long accumulator. DiT-XL/2 with HiddenDim 3072 × 48
+            // layers (Sora's paper config) sums to ~5.4 B parameters,
+            // overflowing int.MaxValue. Per-layer ParameterCount stays
+            // int (single-tensor < 2.1 B); the cross-layer sum is long.
             EnsureLayersInitialized();
-            int count = 0;
+            long count = 0;
 
-            if (_patchEmbed != null) count += (int)((int)_patchEmbed.ParameterCount);
-            if (_timeEmbed1 != null) count += (int)((int)_timeEmbed1.ParameterCount);
-            if (_timeEmbed2 != null) count += (int)((int)_timeEmbed2.ParameterCount);
-            if (_labelEmbed != null) count += (int)((int)_labelEmbed.ParameterCount);
+            if (_patchEmbed != null) count += _patchEmbed.ParameterCount;
+            if (_timeEmbed1 != null) count += _timeEmbed1.ParameterCount;
+            if (_timeEmbed2 != null) count += _timeEmbed2.ParameterCount;
+            if (_labelEmbed != null) count += _labelEmbed.ParameterCount;
 
             foreach (var block in _blocks)
             {
-                if (block.Norm1 != null) count += (int)(block.Norm1.ParameterCount);
-                if (block.Attention != null) count += (int)(block.Attention.ParameterCount);
-                if (block.Norm2 != null) count += (int)(block.Norm2.ParameterCount);
-                if (block.MLP1 != null) count += (int)(block.MLP1.ParameterCount);
-                if (block.MLP2 != null) count += (int)(block.MLP2.ParameterCount);
-                if (block.AdaLNModulation != null) count += (int)(block.AdaLNModulation.ParameterCount);
-                if (block.CrossAttnNorm != null) count += (int)(block.CrossAttnNorm.ParameterCount);
-                if (block.CrossAttnQ != null) count += (int)(block.CrossAttnQ.ParameterCount);
-                if (block.CrossAttnK != null) count += (int)(block.CrossAttnK.ParameterCount);
-                if (block.CrossAttnV != null) count += (int)(block.CrossAttnV.ParameterCount);
-                if (block.CrossAttnOut != null) count += (int)(block.CrossAttnOut.ParameterCount);
+                if (block.Norm1 != null) count += block.Norm1.ParameterCount;
+                if (block.Attention != null) count += block.Attention.ParameterCount;
+                if (block.Norm2 != null) count += block.Norm2.ParameterCount;
+                if (block.MLP1 != null) count += block.MLP1.ParameterCount;
+                if (block.MLP2 != null) count += block.MLP2.ParameterCount;
+                if (block.AdaLNModulation != null) count += block.AdaLNModulation.ParameterCount;
+                if (block.CrossAttnNorm != null) count += block.CrossAttnNorm.ParameterCount;
+                if (block.CrossAttnQ != null) count += block.CrossAttnQ.ParameterCount;
+                if (block.CrossAttnK != null) count += block.CrossAttnK.ParameterCount;
+                if (block.CrossAttnV != null) count += block.CrossAttnV.ParameterCount;
+                if (block.CrossAttnOut != null) count += block.CrossAttnOut.ParameterCount;
             }
 
-            if (_finalNorm != null) count += (int)((int)_finalNorm.ParameterCount);
-            if (_adaln_modulation != null) count += (int)((int)_adaln_modulation.ParameterCount);
-            if (_outputProj != null) count += (int)((int)_outputProj.ParameterCount);
+            if (_finalNorm != null) count += _finalNorm.ParameterCount;
+            if (_adaln_modulation != null) count += _adaln_modulation.ParameterCount;
+            if (_outputProj != null) count += _outputProj.ParameterCount;
 
             return count;
         }

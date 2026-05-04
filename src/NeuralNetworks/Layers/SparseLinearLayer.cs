@@ -46,14 +46,26 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// The sparse weight matrix.
     /// Shape: [OutputFeatures, InputFeatures]
     /// </summary>
-    // No [TrainableParameter] — SparseTensor is incompatible with dense ParameterBuffer.
-    // Weight updates are handled by SparseLinearLayer.UpdateParameters() directly.
+    /// <remarks>
+    /// Registered as a tape-trainable parameter via
+    /// <see cref="LayerBase{T}.RegisterTrainableParameter"/>. Updates always
+    /// mutate the existing instance's <c>Values</c> array in place (see
+    /// <see cref="UpdateParameters(T)"/> and <see cref="SetParameters"/>) so
+    /// any <see cref="ParameterBuffer{T}"/> view aliasing this field stays
+    /// synchronized. <see cref="SetTrainableParameters"/> handles the case
+    /// where the buffer hands back a replacement instance and re-syncs the
+    /// field reference.
+    /// </remarks>
+    [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private SparseTensor<T> _weights;
 
     /// <summary>
-    /// The bias values (dense, typically small).
+    /// The bias values, registered as a tape-trainable parameter alongside
+    /// <see cref="_weights"/>. 1-D tensor of shape <c>[OutputFeatures]</c>;
+    /// promoted from <c>Vector{T}</c> so the tape can register it directly.
     /// </summary>
-    private Vector<T> _biases;
+    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    private Tensor<T> _biases;
 
     /// <summary>
     /// The sparsity level (fraction of weights that are zero).
@@ -77,9 +89,11 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     private Matrix<T>? _weightsGradient;
 
     /// <summary>
-    /// Gradient for biases, stored during backward pass.
+    /// Gradient for biases, stored during backward pass. 1-D tensor matching
+    /// <see cref="_biases"/>'s shape so gradient layout stays consistent
+    /// across the manual backprop path and tape-mode.
     /// </summary>
-    private Vector<T>? _biasesGradient;
+    private Tensor<T>? _biasesGradient;
 
     /// <summary>
     /// Gets the number of input features.
@@ -101,25 +115,16 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
-    /// Gets whether this layer supports training. Returns <c>true</c>: the layer
-    /// owns a working <see cref="UpdateParameters"/> that updates its sparse
-    /// weight tensor and dense bias vector from gradients computed in
-    /// <see cref="Backward"/>, and the legacy training path
-    /// (<c>if (layer.SupportsTraining) layer.UpdateParameters(lr)</c>) trains
-    /// the layer correctly. Biases are also registered as a tape trainable
-    /// parameter, so tape-mode optimizers update them too.
+    /// Gets whether this layer supports training. Returns <c>true</c>: both
+    /// the sparse weight tensor and the dense bias tensor are registered as
+    /// trainable parameters and round-trip through the tape's
+    /// <see cref="ParameterBuffer{T}"/>. Updates mutate the registered
+    /// instances in place (no per-step re-allocation) so view aliasing
+    /// stays valid across training steps. The legacy
+    /// <see cref="UpdateParameters(T)"/> path is also kept as a fallback
+    /// for callers that aren't tape-driven (e.g.,
+    /// <see cref="SparseNeuralNetwork{T}.Train"/>'s manual loop).
     /// </summary>
-    /// <remarks>
-    /// <para><b>Tape-mode caveat:</b> the sparse <see cref="SparseTensor{T}"/>
-    /// weight tensor is still not visible to the tape's
-    /// <c>ParameterBuffer&lt;T&gt;</c>-based discovery — that contract requires
-    /// dense storage. In tape mode, weight updates flow through the
-    /// layer's own <see cref="Backward"/> + <see cref="UpdateParameters"/>
-    /// when the optimizer falls back to the legacy update path; weight
-    /// gradients do not appear in the tape's flat-buffer view. Closing that
-    /// gap fully (sparse-aware <c>ParameterBuffer&lt;T&gt;</c>) is tracked as
-    /// a follow-up.</para>
-    /// </remarks>
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -153,13 +158,25 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _engine = CpuSparseEngine.Instance;
         _numOps = MathHelper.GetNumericOperations<T>();
 
-        _biases = new Vector<T>(outputFeatures);
+        _biases = new Tensor<T>([outputFeatures]);
         // Biases initialized to zero by default (standard practice for ReLU layers)
         _weights = InitializeSparseWeights();
 
-        // Note: SparseTensor weights are NOT registered as trainable parameters because
-        // ParameterBuffer requires dense tensors for contiguous buffer views.
-        // SparseLinearLayer handles its own weight updates via UpdateParameters().
+        // Tape-mode trainable-parameter registration. Both tensors are
+        // registered so ParameterBuffer-driven optimizers see the full
+        // parameter set.
+        //   - _weights: SparseTensor<T> inherits from Tensor<T>; the
+        //     ParameterBuffer is sparse-aware in AiDotNet.Tensors 0.70.0
+        //     and only allocates NonZeroCount worth of buffer space.
+        //     UpdateParameters and SetParameters mutate _weights.Values in
+        //     place (no per-step new SparseTensor) so view aliasing stays
+        //     valid; SetTrainableParameters re-syncs the field reference
+        //     if the buffer hands back a replacement instance.
+        //   - _biases: dense 1-D tensor [OutputFeatures]; registered with
+        //     the standard Bias role so the tape can update both
+        //     parameters in lockstep.
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
     }
 
     /// <summary>
@@ -320,7 +337,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         int batchSize = wasSingleSample ? 1 : _lastInput.Shape[0];
 
         _weightsGradient = new Matrix<T>(OutputFeatures, InputFeatures);
-        _biasesGradient = new Vector<T>(OutputFeatures);
+        _biasesGradient = new Tensor<T>([OutputFeatures]);
 
         // Read both gradient and input via index helpers so we don't have to
         // materialise reshaped views — single-sample tensors are rank-1
@@ -397,31 +414,28 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
         }
 
-        // Update biases
+        // Update biases in place — preserves the registered tensor reference
+        // so any ParameterBuffer view aliasing _biases stays valid.
         for (int o = 0; o < OutputFeatures; o++)
         {
             var scaledGrad = _numOps.Multiply(learningRate, _biasesGradient[o]);
             _biases[o] = _numOps.Subtract(_biases[o], scaledGrad);
         }
 
-        // Update only the non-zero weight positions (maintain sparsity)
-        var newValues = new T[_weights.NonZeroCount];
+        // Update only the non-zero weight positions (maintain sparsity).
+        // Mutate _weights.Values IN PLACE rather than constructing a new
+        // SparseTensor — same reasoning as biases. A new instance would
+        // leave any ParameterBuffer view aliasing the OLD _weights stale,
+        // and Forward would keep reading the old values while the optimizer
+        // updated the view (silent decoupling that breaks training).
         for (int nz = 0; nz < _weights.NonZeroCount; nz++)
         {
             int row = _weights.RowIndices[nz];
             int col = _weights.ColumnIndices[nz];
             T grad = _weightsGradient[row, col];
             T scaledGrad = _numOps.Multiply(learningRate, grad);
-            newValues[nz] = _numOps.Subtract(_weights.Values[nz], scaledGrad);
+            _weights.Values[nz] = _numOps.Subtract(_weights.Values[nz], scaledGrad);
         }
-
-        // Create new sparse tensor with updated values
-        _weights = new SparseTensor<T>(
-            _weights.Rows,
-            _weights.Columns,
-            _weights.RowIndices,
-            _weights.ColumnIndices,
-            newValues);
     }
 
     /// <summary>
@@ -461,21 +475,15 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
 
         int idx = 0;
 
-        // Restore weights (non-zero values only)
-        var newValues = new T[_weights.NonZeroCount];
+        // Restore weights (non-zero values only) by mutating
+        // _weights.Values in place. Avoids constructing a new SparseTensor
+        // which would invalidate the trainable-parameter registration.
         for (int nz = 0; nz < _weights.NonZeroCount; nz++)
         {
-            newValues[nz] = parameters[idx++];
+            _weights.Values[nz] = parameters[idx++];
         }
 
-        _weights = new SparseTensor<T>(
-            _weights.Rows,
-            _weights.Columns,
-            _weights.RowIndices,
-            _weights.ColumnIndices,
-            newValues);
-
-        // Restore biases
+        // Restore biases in place — same reasoning.
         for (int o = 0; o < OutputFeatures; o++)
         {
             _biases[o] = parameters[idx++];
@@ -530,6 +538,12 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         _weightsGradient = null;
         _biasesGradient = null;
     }
+
+    // SetTrainableParameters override is auto-generated by
+    // TrainableParameterGenerator from the [TrainableParameter] attributes
+    // on _weights and _biases. The generated code re-syncs both field
+    // references when ParameterBuffer hands back view-aliased replacements.
+    // See *.TrainableParameters.g.cs.
 
     /// <summary>
     /// Transposes a matrix using O(1) stride-based view.

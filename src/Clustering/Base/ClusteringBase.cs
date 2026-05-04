@@ -86,7 +86,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// <summary>
     /// Gets the expected parameter count.
     /// </summary>
-    protected virtual int ExpectedParameterCount => NumFeatures * NumClusters;
+    protected virtual long ExpectedParameterCount => (long)NumFeatures * NumClusters;
 
     /// <summary>
     /// Random number generator.

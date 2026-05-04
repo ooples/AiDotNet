@@ -954,41 +954,45 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
+    private long CalculateParameterCount()
     {
-        int count = 0;
+        // #1237: long accumulator. SD3.5 Large (HiddenDim 4096 × 38 layers
+        // joint + single blocks) sums to ~7.6 B parameters, overflowing
+        // int.MaxValue. Per-layer ParameterCount stays int (single-tensor
+        // < 2.1 B); the cross-layer sum is long.
+        long count = 0;
 
-        count += (int)((int)_patchEmbed.ParameterCount);
-        count += (int)((int)_timeEmbed1.ParameterCount);
-        count += (int)((int)_timeEmbed2.ParameterCount);
-        count += (int)((int)_contextProj.ParameterCount);
+        count += _patchEmbed.ParameterCount;
+        count += _timeEmbed1.ParameterCount;
+        count += _timeEmbed2.ParameterCount;
+        count += _contextProj.ParameterCount;
 
         foreach (var block in _jointBlocks)
         {
-            count += (int)(block.ImageNorm1.ParameterCount + block.ImageNorm2.ParameterCount);
-            count += (int)(block.ImageMLP1.ParameterCount + block.ImageMLP2.ParameterCount);
-            count += (int)(block.ImageAdaLN.ParameterCount);
-            count += (int)(block.ImageQProj.ParameterCount + block.ImageKProj.ParameterCount);
-            count += (int)(block.ImageVProj.ParameterCount + block.ImageOutProj.ParameterCount);
-            count += (int)(block.TextNorm1.ParameterCount + block.TextNorm2.ParameterCount);
-            count += (int)(block.TextMLP1.ParameterCount + block.TextMLP2.ParameterCount);
-            count += (int)(block.TextAdaLN.ParameterCount);
-            count += (int)(block.TextQProj.ParameterCount + block.TextKProj.ParameterCount);
-            count += (int)(block.TextVProj.ParameterCount + block.TextOutProj.ParameterCount);
+            count += block.ImageNorm1.ParameterCount + block.ImageNorm2.ParameterCount;
+            count += block.ImageMLP1.ParameterCount + block.ImageMLP2.ParameterCount;
+            count += block.ImageAdaLN.ParameterCount;
+            count += block.ImageQProj.ParameterCount + block.ImageKProj.ParameterCount;
+            count += block.ImageVProj.ParameterCount + block.ImageOutProj.ParameterCount;
+            count += block.TextNorm1.ParameterCount + block.TextNorm2.ParameterCount;
+            count += block.TextMLP1.ParameterCount + block.TextMLP2.ParameterCount;
+            count += block.TextAdaLN.ParameterCount;
+            count += block.TextQProj.ParameterCount + block.TextKProj.ParameterCount;
+            count += block.TextVProj.ParameterCount + block.TextOutProj.ParameterCount;
         }
 
         foreach (var block in _singleBlocks)
         {
-            count += (int)(block.Norm.ParameterCount);
-            count += (int)(block.QProj.ParameterCount + block.KProj.ParameterCount);
-            count += (int)(block.VProj.ParameterCount + block.OutProj.ParameterCount);
-            count += (int)(block.MLP1.ParameterCount + block.MLP2.ParameterCount);
-            count += (int)(block.AdaLN.ParameterCount);
+            count += block.Norm.ParameterCount;
+            count += block.QProj.ParameterCount + block.KProj.ParameterCount;
+            count += block.VProj.ParameterCount + block.OutProj.ParameterCount;
+            count += block.MLP1.ParameterCount + block.MLP2.ParameterCount;
+            count += block.AdaLN.ParameterCount;
         }
 
-        count += (int)((int)_finalNorm.ParameterCount);
-        count += (int)((int)_adalnModulation.ParameterCount);
-        count += (int)((int)_outputProj.ParameterCount);
+        count += _finalNorm.ParameterCount;
+        count += _adalnModulation.ParameterCount;
+        count += _outputProj.ParameterCount;
 
         return count;
     }

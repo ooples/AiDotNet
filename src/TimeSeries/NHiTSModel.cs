@@ -604,6 +604,29 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         }
     }
 
+    /// <summary>
+    /// Persists the constructor's parameters so DeserializationHelper can
+    /// reconstruct the layer with paper-faithful dimensions instead of the
+    /// 16 / 4 / 64 / 1 / 1 / 2 fallback defaults. <c>numBlocks</c> and
+    /// <c>seed</c> are intentionally NOT persisted: numBlocks is a vestigial
+    /// ctor parameter that doesn't influence internal state in this
+    /// implementation, and seed is consumed at construction time to seed
+    /// <c>_random</c> — the random state has advanced past the original
+    /// seed by the time GetMetadata runs, so persisting it would mislead
+    /// callers into thinking the same seed reproduces the same weights
+    /// (it doesn't, post-training).
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["InputLength"] = _inputLength.ToString();
+        metadata["OutputLength"] = _outputLength.ToString();
+        metadata["HiddenSize"] = _hiddenSize.ToString();
+        metadata["NumLayers"] = _numLayers.ToString();
+        metadata["PoolingSize"] = PoolingSize.ToString();
+        return metadata;
+    }
+
     public NHiTSStackTensor(int inputLength, int outputLength, int hiddenSize, int numLayers, int numBlocks, int poolingSize, int seed = 42)
         : base(new[] { inputLength }, new[] { outputLength })
     {

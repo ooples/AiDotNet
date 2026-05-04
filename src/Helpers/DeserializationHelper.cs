@@ -4,6 +4,33 @@ namespace AiDotNet.Helpers;
 
 public static class DeserializationHelper
 {
+    /// <summary>
+    /// Structured marker exception thrown by an explicit-branch constructor
+    /// lookup when the expected constructor signature is not present on the
+    /// concrete layer type (typically because the layer was refactored away
+    /// from that signature). The outer try/catch in
+    /// <see cref="CreateLayerFromType{T}"/> uses this as the trigger to fall
+    /// through to <see cref="TryConstructByMatchingMetadata{T}"/>. Replaces
+    /// the brittle <c>ex.Message.StartsWith("Cannot find ")</c> convention.
+    /// </summary>
+    private sealed class MissingLayerCtorException : InvalidOperationException
+    {
+        public MissingLayerCtorException(string message) : base(message) { }
+    }
+
+    /// <summary>
+    /// Returns true when an InvalidOperationException's message matches the
+    /// legacy "Cannot find &lt;layer name&gt; constructor" convention used by
+    /// the 50+ explicit-branch throw sites that haven't migrated to
+    /// <see cref="MissingLayerCtorException"/> yet. Kept narrowly scoped to
+    /// avoid swallowing unrelated InvalidOperationExceptions.
+    /// </summary>
+    private static bool IsMissingCtorMessage(string message)
+    {
+        return message.StartsWith("Cannot find ", StringComparison.Ordinal)
+            && message.Contains("constructor", StringComparison.Ordinal);
+    }
+
     private static readonly Dictionary<string, Type> LayerTypes = new Dictionary<string, Type>();
 
     static DeserializationHelper()
@@ -101,9 +128,15 @@ public static class DeserializationHelper
             ? openGenericType
             : openGenericType.GetGenericTypeDefinition();
 
-        // Prepare constructor and parameters based on layer type
+        // Prepare constructor and parameters based on layer type. The if-chain
+        // below is wrapped so that any explicit branch's "Cannot find ...
+        // constructor" InvalidOperationException — which signals the layer's
+        // ctor was refactored away — falls through to the reflection-driven
+        // matcher rather than crashing the deserialization. The matcher then
+        // attempts to find any working public constructor.
         object? instance;
-
+        InvalidOperationException? branchFailure = null;
+        try {
         if (genericDef == typeof(DenseLayer<>))
         {
             instance = CreateDenseLayer<T>(type, inputShape, outputShape, additionalParams);
@@ -129,7 +162,7 @@ public static class DeserializationHelper
                     c.GetParameters().Take(4).All(p => p.ParameterType == typeof(int)) &&
                     (c.GetParameters().Length < 5 || c.GetParameters()[4].ParameterType == targetActivationType));
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find ReconstructionLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find ReconstructionLayer constructor.");
             var args = new object?[ctor.GetParameters().Length];
             args[0] = inputDim;
             args[1] = hidden1;
@@ -251,14 +284,26 @@ public static class DeserializationHelper
         {
             // EmbeddingLayer(int vocabularySize, int embeddingDimension)
             int embeddingDim = outputShape[0];
+            // EmbeddingLayer.GetMetadata persists VocabularySize on every
+            // serialize call, so any properly-saved network has it. Refuse
+            // to deserialize when missing rather than fabricating 256 (the
+            // old "byte-level LM default") — a wrong vocab size produces
+            // a structurally-incorrect embedding matrix that breaks weight
+            // reattachment or silently changes semantics on legacy
+            // metadata-less payloads. Surface the bad payload as an error
+            // instead.
             int vocabSize = TryGetInt(additionalParams, "VocabularySize")
                 ?? TryGetInt(additionalParams, "VocabSize")
-                ?? throw new InvalidOperationException("EmbeddingLayer requires VocabularySize metadata for deserialization.");
+                ?? throw new InvalidOperationException(
+                    "EmbeddingLayer requires 'VocabularySize' (or legacy 'VocabSize') metadata. " +
+                    "Re-serialize the network with the current GetMetadata implementation, " +
+                    "or pass the vocab size via additionalParams when calling " +
+                    "DeserializationHelper.CreateLayerFromType from a probe path.");
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find EmbeddingLayer constructor with (int, int).");
+                throw new MissingLayerCtorException("Cannot find EmbeddingLayer constructor with (int, int).");
             }
             instance = ctor.Invoke(new object[] { vocabSize, embeddingDim });
         }
@@ -1240,6 +1285,461 @@ public static class DeserializationHelper
             int featureSize = inputShape.Length > 0 ? inputShape[^1] : outputShape[0];
             instance = new SequenceLastLayer<T>(featureSize);
         }
+        else if (genericDef.Name == "ConcatenateLayer`1" || genericDef.Name == "AddLayer`1" || genericDef.Name == "MultiplyLayer`1")
+        {
+            // Ctors: (int[][] inputShapes, [int axis,] IActivationFunction).
+            // Pass two identical inputShape entries so binary concat / add /
+            // multiply have a sane two-operand setup. Pick the constructor
+            // by SHAPE — first ctor whose parameters are all int[][] / int /
+            // activation / defaulted. Falling back to "highest-arity-with-
+            // null-for-everything-else" was unsafe: a future ctor overload
+            // taking a non-defaulted reference parameter (e.g. a custom
+            // schedule object) would receive null and either NRE inside
+            // the ctor or pass validation only to crash on first Forward.
+            var defaultAxis = inputShape.Length > 0 ? inputShape.Length - 1 : 0;
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            var ctorB = type.GetConstructors()
+                .Where(c =>
+                {
+                    var ps = c.GetParameters();
+                    foreach (var p in ps)
+                    {
+                        if (p.ParameterType == typeof(int[][])) continue;
+                        if (p.ParameterType == typeof(int)) continue;
+                        if (p.ParameterType == activationFuncType) continue;
+                        if (p.HasDefaultValue) continue;
+                        // Non-defaulted parameter we can't resolve from
+                        // (inputShape, additionalParams, activation): reject
+                        // this overload.
+                        return false;
+                    }
+                    return ps.Length >= 1; // at minimum needs the inputShapes arg
+                })
+                .OrderByDescending(c => c.GetParameters().Length)
+                .FirstOrDefault();
+            if (ctorB is null)
+            {
+                // No safely-fillable ctor: fall through to the matcher
+                // which has its own activation-restoration + defaulting
+                // path and surfaces a clear error if it can't fill any
+                // ctor either.
+                instance = TryConstructByMatchingMetadata<T>(type, inputShape, outputShape, additionalParams, layerType);
+                if (instance is null)
+                {
+                    throw new MissingLayerCtorException(
+                        $"Cannot find a {layerType} constructor whose non-defaulted parameters " +
+                        $"are all resolvable from (inputShape, additionalParams, activation). " +
+                        $"Public ctors: [{string.Join(" | ", type.GetConstructors().Select(c => "(" + string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) + ")"))}].");
+                }
+            }
+            else
+            {
+                var psB = ctorB.GetParameters();
+                var argsB = new object?[psB.Length];
+                for (int i = 0; i < psB.Length; i++)
+                {
+                    var p = psB[i];
+                    if (p.ParameterType == typeof(int[][])) argsB[i] = new int[][] { inputShape, inputShape };
+                    else if (p.ParameterType == typeof(int)) argsB[i] = TryGetInt(additionalParams, "Axis") ?? defaultAxis;
+                    else if (p.HasDefaultValue) argsB[i] = p.DefaultValue;
+                    // Activation: TryRestoreActivation if metadata holds it,
+                    // else null is safe — this ctor signature accepts null
+                    // for activation (the layer's IdentityActivation default
+                    // path).
+                    else if (p.ParameterType == activationFuncType)
+                        argsB[i] = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+                    else argsB[i] = null;
+                }
+                instance = ctorB.Invoke(argsB);
+            }
+        }
+        else if (genericDef.Name == "ConvLSTMLayer`1")
+        {
+            // (int[] inputShape, int kernelSize, int filters, int padding,
+            //  int strides, IActivationFunction).
+            // ConvLSTM expects inputShape rank 4: [time, channels, H, W].
+            // ConvLSTMLayer.GetMetadata persists KernelSize / Filters /
+            // Padding / Strides — fail fast if any are missing or if the
+            // input shape is degenerate, rather than fabricating values
+            // that produce a structurally-wrong reconstruction (issue #1239).
+            if (inputShape.Length < 4)
+            {
+                throw new InvalidOperationException(
+                    $"ConvLSTMLayer requires serialized inputShape with rank 4 " +
+                    $"[time, channels, height, width]; got rank {inputShape.Length} " +
+                    $"(shape [{string.Join(",", inputShape)}]). Re-serialize with the " +
+                    $"current LayerBase shape persistence to recover.");
+            }
+            int kernelSize = TryGetInt(additionalParams, "KernelSize")
+                ?? throw new InvalidOperationException(
+                    "ConvLSTMLayer requires 'KernelSize' metadata (added in #1239). " +
+                    "Re-serialize the network with the current GetMetadata implementation.");
+            int filters = TryGetInt(additionalParams, "Filters")
+                ?? throw new InvalidOperationException(
+                    "ConvLSTMLayer requires 'Filters' metadata (added in #1239).");
+            int padding = TryGetInt(additionalParams, "Padding")
+                ?? throw new InvalidOperationException(
+                    "ConvLSTMLayer requires 'Padding' metadata (added in #1239).");
+            int strides = TryGetInt(additionalParams, "Strides")
+                ?? throw new InvalidOperationException(
+                    "ConvLSTMLayer requires 'Strides' metadata (added in #1239).");
+
+            var ctorC = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psC = ctorC.GetParameters();
+            var argsC = new object?[psC.Length];
+            for (int i = 0; i < psC.Length; i++)
+            {
+                var p = psC[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                if (p.ParameterType == typeof(int[])) argsC[i] = inputShape;
+                else if (p.ParameterType == typeof(int))
+                {
+                    argsC[i] = n switch
+                    {
+                        "kernelsize" => kernelSize,
+                        "filters" => filters,
+                        "padding" => padding,
+                        "strides" => strides,
+                        _ => p.HasDefaultValue ? (int)p.DefaultValue! : throw new InvalidOperationException(
+                            $"ConvLSTMLayer ctor parameter '{n}' has no metadata mapping " +
+                            $"and no default value."),
+                    };
+                }
+                else if (p.HasDefaultValue) argsC[i] = p.DefaultValue;
+                else argsC[i] = null;
+            }
+            instance = ctorC.Invoke(argsC);
+        }
+        else if (genericDef.Name == "GroupedQueryAttentionLayer`1" || genericDef.Name == "CachedGroupedQueryAttention`1")
+        {
+            // (int sequenceLength, int embeddingDimension, int numHeads, int numKVHeads, ...).
+            // numHeads must be a multiple of numKVHeads, embeddingDimension % numHeads == 0.
+            // GroupedQueryAttentionLayer.GetMetadata persists all four
+            // dimensions — fail fast if any are missing rather than
+            // fabricating defaults that may not satisfy the layer's
+            // divisibility constraints (issue #1239).
+            int seqLen = TryGetInt(additionalParams, "SequenceLength")
+                ?? (inputShape.Length > 0 ? inputShape[0] : throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'SequenceLength' metadata or a rank>=1 inputShape."));
+            int embDim = TryGetInt(additionalParams, "EmbeddingDimension")
+                ?? (inputShape.Length > 1 ? inputShape[1] : throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'EmbeddingDimension' metadata or a rank>=2 inputShape."));
+            int numHeads = TryGetInt(additionalParams, "NumHeads")
+                ?? throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'NumHeads' metadata (added in #1239).");
+            int numKVHeads = TryGetInt(additionalParams, "NumKVHeads")
+                ?? throw new InvalidOperationException(
+                    $"{genericDef.Name} requires 'NumKVHeads' metadata (added in #1239).");
+            // Enforce divisibility constraints — if violated, the metadata
+            // is corrupt rather than something we should silently adjust.
+            if (numHeads % numKVHeads != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} divisibility violation: numHeads ({numHeads}) must be " +
+                    $"a multiple of numKVHeads ({numKVHeads}). Serialized metadata is corrupt.");
+            }
+            if (embDim % numHeads != 0)
+            {
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} divisibility violation: embeddingDimension ({embDim}) " +
+                    $"must be a multiple of numHeads ({numHeads}). Serialized metadata is corrupt.");
+            }
+            var ctorG = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psG = ctorG.GetParameters();
+            var argsG = new object?[psG.Length];
+            for (int i = 0; i < psG.Length; i++)
+            {
+                var p = psG[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                argsG[i] = (p.ParameterType, n) switch
+                {
+                    (Type t, _) when t == typeof(int) && n == "sequencelength" => seqLen,
+                    (Type t, _) when t == typeof(int) && n == "embeddingdimension" => embDim,
+                    (Type t, _) when t == typeof(int) && n == "numheads" => numHeads,
+                    (Type t, _) when t == typeof(int) && n == "numkvheads" => numKVHeads,
+                    (Type t, _) when t == typeof(int) && n.Contains("layerindex") => 0,
+                    (Type t, _) when t == typeof(int) => 1,
+                    (Type t, _) when t == typeof(bool) => p.HasDefaultValue ? p.DefaultValue : false,
+                    _ => p.HasDefaultValue ? p.DefaultValue : null,
+                };
+            }
+            instance = ctorG.Invoke(argsG);
+        }
+        else if (genericDef.Name == "MesaNetLayer`1")
+        {
+            // (sequenceLength, modelDimension, numHeads, regularization, IActivation, IInitStrategy)
+            // MesaNetLayer.GetMetadata persists SequenceLength / ModelDimension
+            // / NumHeads / Regularization — fail fast if any are missing
+            // rather than fabricating defaults that may violate the layer's
+            // divisibility / positivity constraints (issue #1239).
+            int seqLen = TryGetInt(additionalParams, "SequenceLength")
+                ?? (inputShape.Length > 0 ? inputShape[0] : throw new InvalidOperationException(
+                    "MesaNetLayer requires 'SequenceLength' metadata or a rank>=1 inputShape."));
+            int modelDim = TryGetInt(additionalParams, "ModelDimension")
+                ?? throw new InvalidOperationException(
+                    "MesaNetLayer requires 'ModelDimension' metadata (added in #1239).");
+            int numHeads = TryGetInt(additionalParams, "NumHeads")
+                ?? throw new InvalidOperationException(
+                    "MesaNetLayer requires 'NumHeads' metadata (added in #1239).");
+            if (modelDim % numHeads != 0)
+            {
+                throw new InvalidOperationException(
+                    $"MesaNetLayer divisibility violation: modelDimension ({modelDim}) must be " +
+                    $"a multiple of numHeads ({numHeads}). Serialized metadata is corrupt.");
+            }
+            // MesaNet's ctor validates Regularization > 0; persist it so we
+            // don't fabricate the default 1e-3 when the original was different.
+            double reg = TryGetDouble(additionalParams, "Regularization")
+                ?? throw new InvalidOperationException(
+                    "MesaNetLayer requires 'Regularization' metadata (added in #1239).");
+            var ctorM = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psM = ctorM.GetParameters();
+            var argsM = new object?[psM.Length];
+            for (int i = 0; i < psM.Length; i++)
+            {
+                var p = psM[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                argsM[i] = (p.ParameterType, n) switch
+                {
+                    (Type t, _) when t == typeof(int) && n == "sequencelength" => seqLen,
+                    (Type t, _) when t == typeof(int) && n == "modeldimension" => modelDim,
+                    (Type t, _) when t == typeof(int) && n == "numheads" => numHeads,
+                    (Type t, _) when t == typeof(double) => reg,
+                    _ => p.HasDefaultValue ? p.DefaultValue : null,
+                };
+            }
+            instance = ctorM.Invoke(argsM);
+        }
+        else if (genericDef.Name == "NHiTSStackTensor`1")
+        {
+            // (inputLength, outputLength, hiddenSize, numLayers, numBlocks,
+            //  poolingSize, seed)
+            // NHiTSStackTensor.GetMetadata persists InputLength / OutputLength
+            // / HiddenSize / NumLayers / PoolingSize. numBlocks is vestigial
+            // in this implementation and seed advances _random's state at
+            // construction time — neither is round-trippable, so they fall
+            // back to safe defaults (1, 0). Issue #1239.
+            int inputLength = TryGetInt(additionalParams, "InputLength")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'InputLength' metadata (added in #1239).");
+            int outputLength = TryGetInt(additionalParams, "OutputLength")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'OutputLength' metadata (added in #1239).");
+            int hiddenSize = TryGetInt(additionalParams, "HiddenSize")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'HiddenSize' metadata (added in #1239).");
+            int numLayers = TryGetInt(additionalParams, "NumLayers")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'NumLayers' metadata (added in #1239).");
+            int poolingSize = TryGetInt(additionalParams, "PoolingSize")
+                ?? throw new InvalidOperationException(
+                    "NHiTSStackTensor requires 'PoolingSize' metadata (added in #1239).");
+
+            var ctorN = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psN = ctorN.GetParameters();
+            var argsN = new object?[psN.Length];
+            for (int i = 0; i < psN.Length; i++)
+            {
+                var p = psN[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                argsN[i] = n switch
+                {
+                    "inputlength" => inputLength,
+                    "outputlength" => outputLength,
+                    "hiddensize" => hiddenSize,
+                    "numlayers" => numLayers,
+                    // numBlocks is vestigial in NHiTSStackTensor's current
+                    // impl (ctor param but doesn't influence internal state);
+                    // GetMetadata intentionally doesn't persist it.
+                    "numblocks" => 1,
+                    "poolingsize" => poolingSize,
+                    // seed: same — consumed at ctor to seed _random and
+                    // discarded. Post-training the random state has advanced
+                    // past the original seed, so persisting is misleading.
+                    "seed" => 0,
+                    _ when p.HasDefaultValue => p.DefaultValue,
+                    _ => throw new InvalidOperationException(
+                        $"NHiTSStackTensor ctor parameter '{n}' has no metadata mapping " +
+                        $"and no default value."),
+                };
+            }
+            instance = ctorN.Invoke(argsN);
+        }
+        else if (genericDef.Name == "HybridBlockScheduler`1")
+        {
+            // (sequenceLength, ILayer<T>[] blocks, bool[] isAttentionBlock,
+            //  HybridSchedulePattern, modelDimension, IActivationFunction)
+            // HybridBlockScheduler.GetMetadata persists SequenceLength /
+            // ModelDimension / NumBlocks / SchedulePattern. Fail fast if
+            // missing — issue #1239. The inner blocks list still uses the
+            // ILayer<T> placeholder until the proper round-trip via
+            // ILayerSerializationExtras lands (separately tracked).
+            int seqLen = TryGetInt(additionalParams, "SequenceLength")
+                ?? throw new InvalidOperationException(
+                    "HybridBlockScheduler requires 'SequenceLength' metadata (added in #1239).");
+            int modelDim = TryGetInt(additionalParams, "ModelDimension")
+                ?? throw new InvalidOperationException(
+                    "HybridBlockScheduler requires 'ModelDimension' metadata (added in #1239).");
+            int numBlocks = TryGetInt(additionalParams, "NumBlocks")
+                ?? throw new InvalidOperationException(
+                    "HybridBlockScheduler requires 'NumBlocks' metadata (added in #1239).");
+
+            // Construct numBlocks placeholder inner-block instances (still
+            // using the DenseLayer<T> placeholder pattern — the real inner
+            // layers round-trip via ILayerSerializationExtras follow-up).
+            var blocksArrayType = typeof(ILayer<T>).MakeArrayType();
+            var blocksArray = Array.CreateInstance(typeof(ILayer<T>), numBlocks);
+            for (int b = 0; b < numBlocks; b++)
+            {
+                if (!TryCreatePlaceholderInnerLayer<T>(typeof(ILayer<T>), out var blockLayer) || blockLayer is null)
+                {
+                    throw new InvalidOperationException(
+                        $"HybridBlockScheduler placeholder block construction failed at index {b}.");
+                }
+                blocksArray.SetValue(blockLayer, b);
+            }
+            // Default isAttentionBlock pattern: all false (all SSM). Real
+            // pattern restoration would need a serialized bool[] payload.
+            var isAttentionPattern = new bool[numBlocks];
+
+            var ctorH = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psH = ctorH.GetParameters();
+            var argsH = new object?[psH.Length];
+            for (int i = 0; i < psH.Length; i++)
+            {
+                var p = psH[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                if (p.ParameterType == blocksArrayType) argsH[i] = blocksArray;
+                else if (p.ParameterType == typeof(bool[])) argsH[i] = isAttentionPattern;
+                else if (p.ParameterType == typeof(int) && n == "sequencelength") argsH[i] = seqLen;
+                else if (p.ParameterType == typeof(int) && n == "modeldimension") argsH[i] = modelDim;
+                else if (p.ParameterType == typeof(int)) argsH[i] = 1;
+                else if (p.ParameterType.IsEnum) argsH[i] = Enum.GetValues(p.ParameterType).GetValue(0);
+                else if (p.HasDefaultValue) argsH[i] = p.DefaultValue;
+                else argsH[i] = null;
+            }
+            instance = ctorH.Invoke(argsH);
+        }
+        else if (genericDef.Name == "HeterogeneousGraphLayer`1")
+        {
+            // (HeterogeneousGraphMetadata metadata, int outputFeatures,
+            //  bool useBasis, int numBases, IActivationFunction)
+            // The metadata type carries node/edge type info. Construct a
+            // minimal valid instance with one node type ("default") and one
+            // edge type ("default" -> "default") so the layer can be allocated.
+            // Real Clone() would round-trip the actual metadata via
+            // ILayerSerializationExtras.
+            var hgmType = type.Assembly.GetTypes().FirstOrDefault(x => x.Name == "HeterogeneousGraphMetadata")
+                ?? throw new InvalidOperationException(
+                    $"HeterogeneousGraphLayer reconstruction needs the `HeterogeneousGraphMetadata` " +
+                    $"type to be present in {type.Assembly.FullName}, but no such type was found. " +
+                    $"This usually means the type was renamed, moved to a different assembly, or " +
+                    $"trimmed away by an aggressive linker / AOT compile. Restore the type or " +
+                    $"adjust the deser branch to look up the new name.");
+            object hgm = BuildPlaceholderHeterogeneousGraphMetadata(hgmType);
+
+            var ctorHg = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault() ?? throw new MissingLayerCtorException($"Cannot find any public constructor for {layerType} during deserialization.");
+            var psHg = ctorHg.GetParameters();
+            var argsHg = new object?[psHg.Length];
+            for (int i = 0; i < psHg.Length; i++)
+            {
+                var p = psHg[i];
+                var n = (p.Name ?? "").ToLowerInvariant();
+                if (p.ParameterType == hgmType) argsHg[i] = hgm;
+                else if (p.ParameterType == typeof(int) && n.Contains("outputfeature")) argsHg[i] = 64;
+                else if (p.ParameterType == typeof(int) && n.Contains("numbase")) argsHg[i] = 4;
+                else if (p.ParameterType == typeof(int)) argsHg[i] = 1;
+                else if (p.ParameterType == typeof(bool)) argsHg[i] = p.HasDefaultValue ? p.DefaultValue : false;
+                else if (p.HasDefaultValue) argsHg[i] = p.DefaultValue;
+                else argsHg[i] = null;
+            }
+            instance = ctorHg.Invoke(argsHg);
+        }
+        else if (genericDef.Name == "GraphConvolutionalLoRAAdapter`1")
+        {
+            // (ILayer<T> baseLayer, int rank, double alpha, bool freezeBaseLayer)
+            // The base layer must implement IGraphConvolutionLayer<T>; the
+            // standard placeholder DenseLayer<T> doesn't, so allocate a real
+            // GraphConvolutionalLayer<T> as the placeholder instead. Real
+            // Clone() round-trips the actual wrapped graph layer via
+            // ILayerSerializationExtras.
+            var graphConvType = typeof(NeuralNetworks.Layers.GraphConvolutionalLayer<T>);
+            var graphConvCtor = graphConvType.GetConstructor(new[] { typeof(int), typeof(int), typeof(IActivationFunction<T>) });
+            var graphPlaceholder = graphConvCtor?.Invoke(new object?[] { 64, 64, null });
+            if (graphPlaceholder is null)
+                throw new InvalidOperationException("Could not construct GraphConvolutionalLayer placeholder for GraphConvolutionalLoRAAdapter.");
+
+            int gclRank = TryGetInt(additionalParams, "Rank") ?? 4;
+            double gclAlpha = TryGetDouble(additionalParams, "Alpha") ?? -1.0;
+            bool gclFreeze = TryGetBool(additionalParams, "FreezeBaseLayer") ?? true;
+            var gclCtor = type.GetConstructors().First();
+            instance = gclCtor.Invoke(new object?[] { graphPlaceholder, gclRank, gclAlpha, gclFreeze });
+        }
+        else if (IsLoRAAdapterWithSpecificValidation(genericDef))
+        {
+            // LoRA adapters with extra ctor validation (range checks,
+            // index lookups against bank sizes, etc.). My matcher's generic
+            // defaults sometimes violate the validation, so we hand-pick
+            // safe values for these adapters here.
+            instance = ConstructLoRAAdapterWithValidation<T>(type, genericDef, additionalParams, layerType);
+            if (instance is null)
+            {
+                throw new InvalidOperationException(
+                    $"Could not construct {layerType} (LoRA adapter with constraint failures).");
+            }
+        }
+        else if (IsLoRAAdapterRequiringSharedMatrices(genericDef))
+        {
+            // VeRA / TiedLoRA / DVoRA require their static
+            // InitializeSharedMatrices to be called once before any adapter
+            // instance is constructed. Initialize now using sensible defaults
+            // so reconstruction succeeds. This is correct round-trip: real
+            // Clone() should also call InitializeSharedMatrices once at the
+            // network level, but doing it lazily here is the safer fallback.
+            EnsureLoRASharedMatricesInitialized<T>(genericDef);
+            instance = TryConstructByMatchingMetadata<T>(type, inputShape, outputShape, additionalParams, layerType);
+            if (instance is null)
+            {
+                throw new InvalidOperationException(
+                    $"Could not construct {layerType} via reflection matcher even after initializing shared matrices.");
+            }
+        }
+        else if (genericDef == typeof(SequenceTokenSliceLayer<>))
+        {
+            // SequenceTokenSliceLayer<T>(Position position) — round-tripped
+            // via GetMetadata("Position") as its enum name. Use the shared
+            // TryGetEnum<TEnum> helper so already-typed values pass through
+            // (the inline Enum.TryParse path silently ignored non-string
+            // values), and so the parsing convention stays consistent with
+            // the rest of DeserializationHelper.
+            //
+            // Default to Position.Last only when the key is ABSENT.
+            // GetMetadata always writes the enum name, so a present-but-
+            // unparseable value means corrupt or incompatible serialized
+            // data — surface that as an error rather than silently
+            // collapsing to Last and changing layer semantics.
+            SequenceTokenSliceLayer<T>.Position position;
+            bool positionPresent = additionalParams is not null
+                && additionalParams.TryGetValue("Position", out _);
+            if (!positionPresent)
+            {
+                position = SequenceTokenSliceLayer<T>.Position.Last;
+            }
+            else
+            {
+                var parsed = TryGetEnum<SequenceTokenSliceLayer<T>.Position>(additionalParams, "Position");
+                if (parsed is null)
+                {
+                    var raw = additionalParams!["Position"];
+                    throw new InvalidOperationException(
+                        $"Invalid SequenceTokenSliceLayer Position metadata '{raw}' " +
+                        $"(type {raw?.GetType().Name ?? "null"}). Expected one of: " +
+                        $"{string.Join(", ", Enum.GetNames(typeof(SequenceTokenSliceLayer<T>.Position)))}.");
+                }
+                position = parsed.Value;
+            }
+            instance = new SequenceTokenSliceLayer<T>(position);
+        }
         else if (genericDef == typeof(RBMLayer<>))
         {
             int visibleUnits = inputShape[0];
@@ -1449,15 +1949,82 @@ public static class DeserializationHelper
         }
         else
         {
-            // Default: pass inputShape as first parameter
-            var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
-            if (ctor is null)
+            // Default fallback path. Prior behavior was a single
+            // type.GetConstructor(new[] { typeof(int[]) }) lookup, which left ~190
+            // LayerBase<T> subclasses (the vast majority of layers in this
+            // codebase: every Mamba/SSM, every graph layer, every conv variant,
+            // every pooling/norm variant, every modern attention layer) crashing
+            // Clone() / DeepCopy() with NotSupportedException because they have
+            // no (int[]) constructor and no explicit branch above. Tracked as
+            // #1235.
+            //
+            // The new fallback implements direction (1) of #1235's three proposed
+            // fixes: a reflection-driven default-ctor matcher. It iterates
+            // public constructors by descending arity and invokes the FIRST
+            // overload whose parameters can all be resolved from
+            // (inputShape, outputShape, additionalParams, default values).
+            // This is a longest-fillable-first heuristic, not a true scored
+            // match — see TryConstructByMatchingMetadata's remarks for the
+            // selection caveat. It handles the overwhelming majority of leaf
+            // layers without per-layer maintenance.
+            //
+            // Layers whose construction genuinely needs a wrapped layer instance
+            // (LoRA / PEFT adapters, composite blocks) still cannot be handled
+            // here — their reconstruction needs the wrapped layer reference,
+            // which the helper API doesn't carry. Those still throw.
+            instance = TryConstructByMatchingMetadata<T>(type, inputShape, outputShape, additionalParams, layerType);
+            if (instance is null)
             {
-                throw new NotSupportedException(
-                    $"Layer type {layerType} is not supported for deserialization (no known constructor found).");
-            }
+                // Last-resort legacy behavior: try the (int[]) catch-all that
+                // existed before this fallback. Preserves working semantics for
+                // any layer that previously hit this path.
+                var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
+                if (ctor is null)
+                {
+                    throw new NotSupportedException(
+                        $"Layer type {layerType} is not supported for deserialization (no known constructor found). " +
+                        $"Public constructors: [{string.Join(" | ", type.GetConstructors().Select(c => "(" + string.Join(", ", c.GetParameters().Select(p => p.ParameterType.Name + " " + p.Name)) + ")"))}]. " +
+                        $"Either add a dedicated branch in DeserializationHelper.CreateLayerFromType, ensure GetMetadata persists the constructor parameters, or give the layer a (int[] inputShape) constructor.");
+                }
 
-            instance = ctor.Invoke(new object[] { inputShape });
+                instance = ctor.Invoke(new object[] { inputShape });
+            }
+        }
+        }
+        catch (MissingLayerCtorException ex)
+        {
+            // Explicit branch reported a constructor lookup miss via the
+            // structured marker exception. This is the preferred signal
+            // for the matcher fall-through.
+            branchFailure = ex;
+            instance = null;
+        }
+        catch (InvalidOperationException ex) when (IsMissingCtorMessage(ex.Message))
+        {
+            // Legacy fallback for explicit branches that haven't migrated
+            // to MissingLayerCtorException yet. Detection is based on the
+            // canonical "Cannot find ... constructor" message convention
+            // used by the existing 50+ throw sites in this file (see all
+            // GetConstructor null-checks throughout). This path will be
+            // removed once all branches are migrated; for now it keeps
+            // behavior stable while the structured marker rolls out.
+            branchFailure = ex;
+            instance = null;
+        }
+        if (instance is null && branchFailure is not null)
+        {
+            instance = TryConstructByMatchingMetadata<T>(
+                type,
+                inputShape ?? Array.Empty<int>(),
+                outputShape ?? Array.Empty<int>(),
+                additionalParams,
+                layerType);
+            if (instance is null)
+            {
+                // Re-throw the original "Cannot find" so the caller still
+                // sees the diagnostic if both paths fail.
+                throw branchFailure;
+            }
         }
         if (instance == null)
         {
@@ -2054,6 +2621,567 @@ public static class DeserializationHelper
         }
     }
 
+    /// <summary>
+    /// Sensible-default lookup for int-typed ML hyperparameters whose names
+    /// don't match the input/output-shape naming heuristic. Used by
+    /// <see cref="TryConstructByMatchingMetadata{T}"/> as a final fallback
+    /// before declaring a constructor-parameter unresolvable. These defaults
+    /// only fire when the layer's <c>GetMetadata</c> didn't persist the
+    /// parameter, which on the real Clone() path it should — but lots of
+    /// existing layers don't yet (tracked in #1235). The defaults keep
+    /// Clone() / DeepCopy() functional in that case rather than throwing.
+    /// </summary>
+    private static int? TryDefaultMlIntHyperparameter(string pNameLower)
+    {
+        // Attention head counts.
+        if (pNameLower.Contains("numhead") || pNameLower == "headcount" || pNameLower == "numkvhead") return 4;
+        // Convolution / pooling kernels.
+        if (pNameLower.Contains("kernelsize") || pNameLower == "kernel") return 3;
+        if (pNameLower.Contains("poolsize") || pNameLower == "pool") return 2;
+        if (pNameLower.Contains("stride")) return 1;
+        if (pNameLower.Contains("dilation")) return 1;
+        if (pNameLower.Contains("padding")) return 0;
+        if (pNameLower.Contains("upscalefactor") || pNameLower == "upscale") return 2;
+        // Time-series / video.
+        if (pNameLower.Contains("numframe")) return 1;
+        if (pNameLower.Contains("contextlength")) return 16;
+        if (pNameLower.Contains("inputlength") || pNameLower.Contains("outputlength")) return 16;
+        if (pNameLower.Contains("inputseqlen") || pNameLower.Contains("seqlen")) return 16;
+        // Spatial.
+        if (pNameLower.Contains("spatialsize") || pNameLower == "height" || pNameLower == "width") return 8;
+        if (pNameLower.Contains("inputheight") || pNameLower.Contains("inputwidth")) return 8;
+        if (pNameLower.Contains("outputspatialsize") || pNameLower.Contains("inputspatialsize")) return 8;
+        // Normalisation / blocks.
+        if (pNameLower.Contains("numgroup")) return 1;
+        // Channel/dim defaults are 64 not 4: many layers (attention, group-norm,
+        // SE, mixers) carry divisibility constraints (channels divisible by
+        // numHeads, numChannels divisible by numGroups, etc.) and 64 satisfies
+        // 1/2/4/8/16/32/64 head counts and 1/2/4/8 group counts.
+        if (pNameLower == "numchannel" || pNameLower == "channels" || pNameLower == "numchannels") return 64;
+        if (pNameLower.Contains("inputchannel") || pNameLower.Contains("inchannel")) return 64;
+        if (pNameLower.Contains("outputchannel") || pNameLower.Contains("outchannel")) return 64;
+        if (pNameLower.Contains("skipchannel")) return 64;
+        // numChannels suffix matchers — covers any *Channels naming.
+        if (pNameLower.EndsWith("channels", StringComparison.Ordinal)) return 64;
+        // numMembers (BatchEnsembleLayer ensemble size).
+        if (pNameLower.Contains("nummember")) return 4;
+        // numSplits (SplitLayer).
+        if (pNameLower.Contains("numsplit")) return 2;
+        // chainLength (ChainLoRAAdapter), layerIndex (TiedLoRAAdapter),
+        // numberOfExperts / numBasis / quantizationBits etc.
+        if (pNameLower.Contains("chainlength")) return 2;
+        if (pNameLower.Contains("layerindex")) return 0;
+        if (pNameLower.Contains("numberofexpert")) return 4;
+        if (pNameLower.Contains("filters")) return 64;
+        // model/sequence/intermediate dimensions used by MesaNet etc.
+        if (pNameLower.Contains("modeldimension")) return 64;
+        if (pNameLower.Contains("sequencelength")) return 16;
+        if (pNameLower.Contains("numblock") || pNameLower.Contains("numlayer")) return 1;
+        if (pNameLower.Contains("numresblock")) return 1;
+        if (pNameLower.Contains("growthrate")) return 8;
+        if (pNameLower.Contains("ffnmultiplier") || pNameLower.Contains("expansionfactor") || pNameLower == "mlpratio") return 2;
+        // Rank / capacity.
+        if (pNameLower == "rank" || pNameLower.Contains("maxrank") || pNameLower.Contains("ttrank")
+            || pNameLower.Contains("expertrank") || pNameLower.Contains("weightrank") || pNameLower.Contains("activationrank")) return 4;
+        if (pNameLower.Contains("numcore")) return 2;
+        if (pNameLower.Contains("numexpert") || pNameLower == "topk") return 4;
+        if (pNameLower.Contains("numbasis") || pNameLower.Contains("numbase")) return 4;
+        if (pNameLower.Contains("hiddendim") || pNameLower.Contains("hiddensize") || pNameLower == "latentdim"
+            || pNameLower.Contains("intermediatesize")) return 64;
+        if (pNameLower.Contains("basechannel")) return 64;
+        if (pNameLower.Contains("latentchannel")) return 64;
+        if (pNameLower.Contains("attentionsize") || pNameLower.Contains("feedforwardsize")) return 64;
+        if (pNameLower.Contains("feedforwarddim") || pNameLower.Contains("ffwidth") || pNameLower.Contains("ffdim")
+            || pNameLower.Contains("ffnwidth") || pNameLower.Contains("ffnhidden")) return 64;
+        if (pNameLower.Contains("memorydim") || pNameLower.Contains("memorysize")
+            || pNameLower.Contains("memoryslots") || pNameLower.Contains("controllersize")
+            || pNameLower.Contains("vectordim")) return 16;
+        if (pNameLower.Contains("activerank")) return 4;
+        // Extended context length must be > original context length per
+        // LongLoRAAdapter's validation. Pair with originalContextLength=16
+        // above and return 32 for extended.
+        if (pNameLower.Contains("extendedcontextlength")) return 32;
+        if (pNameLower.Contains("contextdim") || pNameLower.Contains("querydim")) return 64;
+        if (pNameLower.Contains("embeddingdim") || pNameLower.Contains("embedding") || pNameLower == "embeddim"
+            || pNameLower.Contains("modeldim") || pNameLower == "dim") return 64;
+        if (pNameLower.Contains("headdim") || pNameLower.Contains("headdimension")) return 4;
+        if (pNameLower.Contains("transformdim")) return 4;
+        if (pNameLower.Contains("numfeature")) return 64;
+        if (pNameLower.Contains("numpatch")) return 4;
+        if (pNameLower.Contains("maxsequencelength")) return 16;
+        if (pNameLower.Contains("numclasses") || pNameLower == "numclass") return 2;
+        // (filters matched above; this duplicate was dead code.)
+        if (pNameLower.Contains("numpoint")) return 4;
+        if (pNameLower.Contains("numprototype")) return 4;
+        if (pNameLower.Contains("numroutingiteration")) return 3;
+        if (pNameLower.Contains("numcapsule") || pNameLower.Contains("capsuledimension")) return 4;
+        if (pNameLower.Contains("neighborsample")) return 4;
+        if (pNameLower.Contains("numalternatingiteration")) return 1;
+        if (pNameLower.Contains("powerit")) return 1;
+        if (pNameLower.Contains("flashattentionthreshold")) return 256;
+        if (pNameLower.Contains("autocorrelationfactor") || pNameLower.Contains("sparsityfactor")
+            || pNameLower.Contains("distillingfactor")) return 1;
+        if (pNameLower.Contains("movingavgkernel")) return 3;
+        // Note: extendedcontextlength is already matched above (returns 32 to
+        // satisfy LongLoRA's "extended > original" validation); originalcontextlength
+        // and attentionshiftsize land here.
+        if (pNameLower.Contains("originalcontextlength") || pNameLower.Contains("attentionshiftsize")) return 16;
+        // (layerindex matched above; this duplicate was dead code.)
+        if (pNameLower.Contains("restartinterval")) return 100;
+        if (pNameLower.Contains("warmupstep")) return 0;
+        if (pNameLower.Contains("resamplinginterval") || pNameLower.Contains("pruninginterval")
+            || pNameLower.Contains("importanceupdateinterval")) return 100;
+        if (pNameLower.Contains("minrank")) return 1;
+        if (pNameLower.Contains("maxloadedadapter")) return 4;
+        if (pNameLower.Contains("quantizationbit") || pNameLower.Contains("quantizationblocksize") || pNameLower == "groupsize") return 8;
+        if (pNameLower.Contains("banksize") || pNameLower.Contains("modes") || pNameLower.Contains("width")) return 8;
+        if (pNameLower.Contains("seed")) return 0;
+        if (pNameLower.Contains("historycapacity")) return 100;
+        // (topk matched above; this duplicate Contains-form was partially
+        // unreachable. Single-letter "k" stays here.)
+        if (pNameLower == "k") return 4;
+        if (pNameLower.Contains("windowsize") || pNameLower.Contains("shiftsize")) return 4;
+        if (pNameLower.Contains("spirallength")) return 4;
+        if (pNameLower.Contains("timeembeddim")) return 16;
+        if (pNameLower.Contains("reductionratio")) return 2;
+        if (pNameLower.Contains("totalcell")) return 4;
+        if (pNameLower.Contains("columncount")) return 4;
+        return null;
+    }
+
+    /// <summary>
+    /// Builds a minimal valid <c>HeterogeneousGraphMetadata</c> for layer
+    /// reconstruction: one node type ("default"), one self-loop edge type
+    /// ("default" → "default"), 64-dim node features. Real Clone() round-trips
+    /// the actual metadata via ILayerSerializationExtras.
+    /// </summary>
+    private static object BuildPlaceholderHeterogeneousGraphMetadata(Type hgmType)
+    {
+        var hgm = Activator.CreateInstance(hgmType)
+            ?? throw new InvalidOperationException("Could not allocate HeterogeneousGraphMetadata.");
+
+        hgmType.GetProperty("NodeTypes")!.SetValue(hgm, new[] { "default" });
+        hgmType.GetProperty("EdgeTypes")!.SetValue(hgm, new[] { "default" });
+
+        var nodeFeats = new System.Collections.Generic.Dictionary<string, int> { ["default"] = 64 };
+        hgmType.GetProperty("NodeTypeFeatures")!.SetValue(hgm, nodeFeats);
+
+        // EdgeTypeSchema is Dictionary<string, (string, string)>. Build via reflection.
+        var schemaType = typeof(System.Collections.Generic.Dictionary<,>)
+            .MakeGenericType(typeof(string), typeof(ValueTuple<string, string>));
+        var schema = Activator.CreateInstance(schemaType);
+        var addMethod = schemaType.GetMethod("Add");
+        addMethod!.Invoke(schema, new object?[] { "default", ("default", "default") });
+        hgmType.GetProperty("EdgeTypeSchema")!.SetValue(hgm, schema);
+
+        return hgm;
+    }
+
+    /// <summary>
+    /// True when this LoRA adapter's constructor performs validation that the
+    /// generic matcher's HP defaults can't satisfy without targeted tweaks.
+    /// These need a hand-tuned construction path.
+    /// </summary>
+    private static bool IsLoRAAdapterWithSpecificValidation(Type genericDef)
+    {
+        var n = genericDef.Name;
+        return n == "ChainLoRAAdapter`1"
+            || n == "DeltaLoRAAdapter`1"
+            || n == "GLoRAAdapter`1"
+            || n == "GraphConvolutionalLoRAAdapter`1"
+            || n == "LongLoRAAdapter`1"
+            || n == "LoRETTAAdapter`1"
+            || n == "NOLAAdapter`1"
+            || n == "ReLoRAAdapter`1"
+            || n == "XLoRAAdapter`1";
+    }
+
+    /// <summary>
+    /// Reads InnerLayerTypeName / InnerLayerInputShape / InnerLayerOutputShape
+    /// from <paramref name="additionalParams"/> (written by
+    /// <see cref="LoRA.Adapters.LoRAAdapterBase{T}.GetMetadata"/>) and
+    /// recursively builds the wrapped layer via
+    /// <see cref="CreateLayerFromType{T}"/>. Falls back to <c>null</c> when
+    /// the metadata is absent so callers can take the legacy placeholder
+    /// path. Issue #1239 wrapped-layer round-trip.
+    /// </summary>
+    private static object? TryConstructInnerLayerFromMetadata<T>(Dictionary<string, object>? additionalParams)
+    {
+        if (additionalParams is null) return null;
+
+        if (!additionalParams.TryGetValue("InnerLayerTypeName", out var typeNameObj)
+            || typeNameObj is not string innerTypeName
+            || string.IsNullOrEmpty(innerTypeName))
+        {
+            return null;
+        }
+
+        // Parse shape strings — comma-joined int lists written by
+        // LoRAAdapterBase.GetMetadata.
+        int[] ParseShape(string key)
+        {
+            if (!additionalParams.TryGetValue(key, out var sObj) || sObj is not string s || string.IsNullOrEmpty(s))
+                return Array.Empty<int>();
+            var parts = s.Split(',');
+            var result = new int[parts.Length];
+            for (int i = 0; i < parts.Length; i++)
+            {
+                if (!int.TryParse(parts[i], out result[i])) return Array.Empty<int>();
+            }
+            return result;
+        }
+
+        var innerInputShape = ParseShape("InnerLayerInputShape");
+        var innerOutputShape = ParseShape("InnerLayerOutputShape");
+        if (innerInputShape.Length == 0 || innerOutputShape.Length == 0) return null;
+
+        try
+        {
+            // Recursive deser. The inner layer's GetMetadata-extras are NOT
+            // currently nested inside the wrapper's metadata — that's a
+            // limitation: any inner-layer-specific scalar metadata (e.g.,
+            // a wrapped MultiHeadAttention's NumHeads) won't be available
+            // here. The wrapped types we care about most (DenseLayer,
+            // FullyConnectedLayer) don't need such extras since their
+            // ctors accept just outputSize. Tracked under #1239.
+            var inner = CreateLayerFromType<T>(innerTypeName, innerInputShape, innerOutputShape, additionalParams: null);
+
+            // Force-resolve the inner layer's shape so its weight tensors
+            // are allocated immediately. Without this, lazy layers like
+            // DenseLayer / LSTM stay at ParameterCount==0, which makes the
+            // wrapper's flat-vector SetParameters(208) fail with "Expected
+            // 0 parameters, but got 208" because the wrapper's
+            // ParameterCount delegates to the unresolved inner.
+            if (inner is NeuralNetworks.Layers.LayerBase<T> innerBase
+                && !innerBase.IsShapeResolved
+                && innerInputShape.All(d => d > 0))
+            {
+                try { innerBase.ResolveFromShape(innerInputShape); }
+                catch (Exception resolveEx)
+                {
+                    // ResolveFromShape can throw if the shape rank doesn't
+                    // match what the layer expects. Trace and continue —
+                    // the layer's own first Forward may still resolve it.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"DeserializationHelper.TryConstructInnerLayerFromMetadata: " +
+                        $"ResolveFromShape on reconstructed '{innerTypeName}' " +
+                        $"with shape [{string.Join(",", innerInputShape)}] failed: " +
+                        $"{resolveEx.Message}");
+                }
+            }
+
+            return inner;
+        }
+        catch (Exception ex)
+        {
+            // Trace and fall back to placeholder so callers don't crash;
+            // user can inspect the trace to see why the inner-layer round-
+            // trip didn't apply.
+            System.Diagnostics.Trace.TraceWarning(
+                $"DeserializationHelper.TryConstructInnerLayerFromMetadata: " +
+                $"failed to reconstruct inner layer of type '{innerTypeName}' " +
+                $"with shape [{string.Join(",", innerInputShape)}] -> " +
+                $"[{string.Join(",", innerOutputShape)}]: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Construct a LoRA adapter with constraint-aware defaults. Each adapter
+    /// has its own validation requirements (rank-vs-bank-size, original-vs-
+    /// extended context, etc.) which the generic matcher can't infer; this
+    /// path picks values known to satisfy each adapter's preconditions.
+    /// </summary>
+    private static object? ConstructLoRAAdapterWithValidation<T>(
+        Type type, Type genericDef,
+        Dictionary<string, object>? additionalParams, string layerType)
+    {
+        var ctor = type.GetConstructors().OrderByDescending(c => c.GetParameters().Length).FirstOrDefault();
+        if (ctor is null) return null;
+        var ps = ctor.GetParameters();
+        var args = new object?[ps.Length];
+
+        // Reconstruct the actual wrapped layer from
+        // LoRAAdapterBase.GetMetadata's InnerLayerTypeName + shape if
+        // present; otherwise fall back to the DenseLayer placeholder for
+        // legacy networks serialized before #1239 added the metadata.
+        // The placeholder path stays for backward-compatibility — newly
+        // serialized networks take the proper round-trip via the
+        // metadata-driven branch.
+        var baseLayer = TryConstructInnerLayerFromMetadata<T>(additionalParams);
+        if (baseLayer is null && !TryCreatePlaceholderInnerLayer<T>(typeof(ILayer<T>), out baseLayer))
+            return null;
+
+        for (int i = 0; i < ps.Length; i++)
+        {
+            var p = ps[i];
+            var pt = p.ParameterType;
+            string n = (p.Name ?? "").ToLowerInvariant();
+
+            if (pt.IsGenericType && pt.GetGenericTypeDefinition() == typeof(ILayer<>))
+            {
+                args[i] = baseLayer;
+                continue;
+            }
+
+            // Prefer the constructor's compiler-supplied default when one
+            // exists — those are the layer author's chosen safe values and
+            // already satisfy all internal validation. Only hand-pick values
+            // for parameters with no default.
+            if (p.HasDefaultValue)
+            {
+                args[i] = p.DefaultValue;
+                continue;
+            }
+            // Pick a value the layer's constraints will accept.
+            object? value = (pt, n) switch
+            {
+                _ when pt == typeof(int) && n.Contains("rank") => 4,
+                _ when pt == typeof(int) && n.Contains("ttrank") => 4,
+                _ when pt == typeof(int) && n.Contains("expertrank") => 4,
+                _ when pt == typeof(int) && n.Contains("numcore") => 2,
+                _ when pt == typeof(int) && n.Contains("numbasis") => 4,
+                _ when pt == typeof(int) && n.Contains("numbase") => 4,
+                _ when pt == typeof(int) && n.Contains("numberofexpert") => 4,
+                _ when pt == typeof(int) && n.Contains("chainlength") => 2,
+                _ when pt == typeof(int) && n.Contains("originalcontextlength") => 16,
+                _ when pt == typeof(int) && n.Contains("extendedcontextlength") => 32,
+                _ when pt == typeof(int) && n.Contains("attentionshiftsize") => 8,
+                _ when pt == typeof(int) && n.Contains("layerindex") => 0,
+                _ when pt == typeof(int) && n.Contains("seed") => 0,
+                _ when pt == typeof(int) && n.Contains("restartinterval") => 100,
+                _ when pt == typeof(int) && n.Contains("warmupstep") => 0,
+                _ when pt == typeof(int) => 4,
+                _ when pt == typeof(double) && n.Contains("alpha") => 1.0,
+                _ when pt == typeof(double) && n.Contains("deltascaling") => 0.1,
+                _ when pt == typeof(double) => 0.5,
+                _ when pt == typeof(bool) && n.Contains("freeze") => true,
+                _ when pt == typeof(bool) => false,
+                _ => null,
+            };
+            args[i] = value;
+        }
+
+        try { return ctor.Invoke(args); }
+        catch (Exception ex)
+        {
+            // Trace the actual failure reason before falling through to the
+            // generic "Could not construct ..." error at the caller. The
+            // ctor.Invoke wrap turns validation errors into TargetInvocation-
+            // Exceptions; unwrap to keep the message actionable.
+            System.Diagnostics.Trace.TraceWarning(
+                $"DeserializationHelper: LoRA adapter {type.Name} construction failed: " +
+                $"{(ex is TargetInvocationException tie ? tie.InnerException?.Message : ex.Message)}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// True when the adapter type requires
+    /// <c>InitializeSharedMatrices</c> to be called once before any instance
+    /// is constructed. These adapters use static shared low-rank factors
+    /// across all instances and can't be allocated without the shared
+    /// state seeded first.
+    /// </summary>
+    private static bool IsLoRAAdapterRequiringSharedMatrices(Type genericDef)
+    {
+        var n = genericDef.Name;
+        return n == "VeRAAdapter`1"
+            || n == "TiedLoRAAdapter`1"
+            || n == "DVoRAAdapter`1";
+    }
+
+    /// <summary>
+    /// Calls the adapter type's <c>InitializeSharedMatrices(int, int, int)</c>
+    /// static method with sensible defaults so reflection-based reconstruction
+    /// can construct an adapter instance afterwards.
+    /// </summary>
+    private static void EnsureLoRASharedMatricesInitialized<T>(Type genericDef)
+    {
+        var closed = genericDef.MakeGenericType(typeof(T));
+        var init = closed.GetMethod("InitializeSharedMatrices", BindingFlags.Public | BindingFlags.Static);
+        if (init is null) return;
+        var ps = init.GetParameters();
+        var args = new object?[ps.Length];
+        for (int i = 0; i < ps.Length; i++)
+        {
+            if (ps[i].ParameterType == typeof(int))
+            {
+                // (inputSize, outputSize, rank) — the canonical signature.
+                args[i] = ps[i].Name?.ToLowerInvariant() switch
+                {
+                    "rank" => 4,
+                    _ => 64,
+                };
+            }
+            else if (ps[i].HasDefaultValue) args[i] = ps[i].DefaultValue;
+            else args[i] = null;
+        }
+        try { init.Invoke(null, args); }
+        catch (Exception ex)
+        {
+            // Surface the failure at Trace level instead of swallowing
+            // silently — a failed shared-matrix init would otherwise let
+            // the next adapter ctor fall through and report a confusing
+            // downstream error (e.g., "shared matrices not initialized")
+            // with no breadcrumb back to the actual failure here.
+            System.Diagnostics.Trace.TraceWarning(
+                $"DeserializationHelper.EnsureLoRASharedMatricesInitialized: " +
+                $"InitializeSharedMatrices for {genericDef.Name} failed: " +
+                $"{(ex is TargetInvocationException tie ? tie.InnerException?.Message : ex.Message)}");
+        }
+    }
+
+    /// <summary>
+    /// Builds a placeholder inner-layer instance when a constructor parameter
+    /// expects an <c>ILayer&lt;T&gt;</c> / <c>LayerBase&lt;T&gt;</c> /
+    /// <c>ILayer&lt;T&gt;[]</c> / <c>List&lt;ILayer&lt;T&gt;&gt;</c> /
+    /// <c>IEnumerable&lt;ILayer&lt;T&gt;&gt;</c> reference.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Known limitation (issue #1235 follow-up):</b> the placeholder is
+    /// a tiny <c>DenseLayer&lt;T&gt;</c> — enough to satisfy null-check
+    /// preconditions in LoRA adapters / composite layers so the matcher's
+    /// construction step doesn't crash, but NOT semantically equivalent to
+    /// the original wrapped layer. Adapters reconstructed via this path
+    /// have the WRONG inner layer (a generic DenseLayer instead of e.g.
+    /// the original Conv2D / MultiHeadAttention / etc.). Their structural
+    /// metadata round-trips; their wrapped layer's parameters do not.
+    /// </para>
+    /// <para>
+    /// Each call emits a <c>Trace.TraceWarning</c> so the placeholder
+    /// usage is visible in diagnostics rather than silent. The proper fix
+    /// is for each adapter to embed its wrapped base layer through
+    /// <c>ILayerSerializationExtras</c>; until that ships, this fallback
+    /// keeps Clone()/DeepCopy() functional for the architecture-only
+    /// round-trip cases that don't depend on inner-layer parameter values.
+    /// </para>
+    /// </remarks>
+    private static bool TryCreatePlaceholderInnerLayer<T>(Type pType, out object? placeholder)
+    {
+        placeholder = null;
+        Type denseType = typeof(NeuralNetworks.Layers.DenseLayer<T>);
+
+        object? CreatePlaceholderDense()
+        {
+            // DenseLayer<T> has two overloads with the same arity differing in
+            // their activation type (IActivationFunction vs
+            // IVectorActivationFunction); Activator.CreateInstance throws
+            // AmbiguousMatchException when handed null for the activation
+            // slot. Resolve the unambiguous scalar overload by hand.
+            //
+            // Output size is 64 (not 1) so wrappers like LoRA adapters that
+            // read min(inputSize, outputSize) from the wrapped layer's shape
+            // don't reject typical rank defaults (rank=4 etc.). The dense
+            // layer's input shape is resolved lazily on first forward, so
+            // outputSize is the only ctor arg.
+            var ctor = denseType.GetConstructor(new[]
+            {
+                typeof(int),
+                typeof(IActivationFunction<T>),
+                typeof(Initialization.IInitializationStrategy<T>),
+            });
+            var dense = ctor?.Invoke(new object?[] { 64, null, null });
+            // Pre-resolve to a 64-input/64-output shape so wrappers can read
+            // both dims immediately. Use the layer base's ResolveFromShape if
+            // available; otherwise let the layer stay lazy.
+            if (dense is NeuralNetworks.Layers.LayerBase<T> lb)
+            {
+                try { lb.ResolveFromShape(new[] { 64 }); }
+                catch { /* lazy-resolve failure is non-fatal — wrapper may still cope */ }
+            }
+            return dense;
+        }
+
+        // ILayer<T> or LayerBase<T> (single layer).
+        bool isLayerBase = pType == typeof(NeuralNetworks.Layers.LayerBase<T>);
+        bool isILayer = pType.IsGenericType && pType.GetGenericTypeDefinition() == typeof(ILayer<>) && pType.GetGenericArguments()[0] == typeof(T);
+        if (isLayerBase || isILayer)
+        {
+            placeholder = CreatePlaceholderDense();
+            // Surface the placeholder usage at Trace level so callers can
+            // detect that the reconstructed adapter doesn't have its
+            // original wrapped layer. Issue #1235 follow-up will replace
+            // this with proper ILayerSerializationExtras round-trip.
+            System.Diagnostics.Trace.TraceWarning(
+                $"DeserializationHelper.TryCreatePlaceholderInnerLayer: " +
+                $"injected DenseLayer<T> placeholder for ctor parameter of type {pType.Name}; " +
+                $"reconstructed layer is NOT semantically equivalent to the original (wrapped " +
+                $"layer parameters were not round-tripped). Tracked under issue #1235.");
+            return placeholder is not null;
+        }
+
+        // ILayer<T>[] (array of layers).
+        if (pType.IsArray && pType.GetElementType() is Type elem
+            && elem.IsGenericType && elem.GetGenericTypeDefinition() == typeof(ILayer<>)
+            && elem.GetGenericArguments()[0] == typeof(T))
+        {
+            var instance = CreatePlaceholderDense();
+            var arr = Array.CreateInstance(elem, 1);
+            arr.SetValue(instance, 0);
+            placeholder = arr;
+            return true;
+        }
+
+        // List<ILayer<T>> / IEnumerable<ILayer<T>> / IList<ILayer<T>>.
+        if (pType.IsGenericType)
+        {
+            var def = pType.GetGenericTypeDefinition();
+            var ga = pType.GetGenericArguments();
+            if (ga.Length == 1 && ga[0].IsGenericType
+                && ga[0].GetGenericTypeDefinition() == typeof(ILayer<>)
+                && ga[0].GetGenericArguments()[0] == typeof(T))
+            {
+                if (def == typeof(System.Collections.Generic.List<>)
+                    || def == typeof(System.Collections.Generic.IList<>)
+                    || def == typeof(System.Collections.Generic.IEnumerable<>)
+                    || def == typeof(System.Collections.Generic.IReadOnlyList<>)
+                    || def == typeof(System.Collections.Generic.IReadOnlyCollection<>)
+                    || def == typeof(System.Collections.Generic.ICollection<>))
+                {
+                    var listType = typeof(System.Collections.Generic.List<>).MakeGenericType(ga[0]);
+                    var list = Activator.CreateInstance(listType);
+                    var addMethod = listType.GetMethod("Add");
+                    var instance = CreatePlaceholderDense();
+                    addMethod?.Invoke(list, new[] { instance });
+                    placeholder = list;
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Sensible-default lookup for double-typed ML hyperparameters
+    /// — analog of <see cref="TryDefaultMlIntHyperparameter"/>.</summary>
+    private static double? TryDefaultMlDoubleHyperparameter(string pNameLower)
+    {
+        if (pNameLower.Contains("epsilon") || pNameLower == "eps") return 1e-5;
+        if (pNameLower.Contains("dropout") || pNameLower.Contains("dropoutrate")) return 0.0;
+        if (pNameLower == "alpha" || pNameLower.Contains("weightalpha") || pNameLower.Contains("activationalpha")) return 1.0;
+        if (pNameLower.Contains("momentum") || pNameLower.Contains("decay")) return 0.9;
+        if (pNameLower.Contains("threshold") || pNameLower.Contains("anomalythreshold")) return 0.5;
+        if (pNameLower.Contains("smoothingfactor")) return 0.1;
+        if (pNameLower.Contains("temperature")) return 1.0;
+        if (pNameLower.Contains("theta")) return 10000.0;
+        if (pNameLower.Contains("learningrateratio")) return 1.0;
+        if (pNameLower.Contains("rankinitscale") || pNameLower == "scale") return 1.0;
+        if (pNameLower.Contains("sparsethreshold") || pNameLower.Contains("deltascaling")) return 0.0;
+        // [0,1)-range hyperparameters: pruning thresholds, EMA factors,
+        // momentum factors. AdaLoRA / HRA / DeltaLoRA validate these.
+        if (pNameLower.Contains("sparsityratio") || pNameLower.Contains("rankpruningthreshold")
+            || pNameLower.Contains("momentumfactor") || pNameLower.Contains("importancescoreema")
+            || pNameLower.Contains("importanceema")) return 0.5;
+        if (pNameLower.Contains("searchradius") || pNameLower.Contains("radii")) return 1.0;
+        if (pNameLower.Contains("bnmomentum")) return 0.99;
+        if (pNameLower.Contains("density")) return 0.1;
+        if (pNameLower.Contains("regularization")) return 0.0;
+        if (pNameLower.Contains("spectralradius")) return 0.9;
+        return null;
+    }
+
     private static int ResolveDefaultHeadCount(int embeddingDimension)
     {
         // Conservative but practical default: prefer common head counts if divisible, otherwise fall back to 1.
@@ -2065,6 +3193,293 @@ public static class DeserializationHelper
             }
         }
         return 1;
+    }
+
+    /// <summary>
+    /// Reflection-driven constructor matcher used as the universal fallback
+    /// when no dedicated branch exists for a layer. Iterates public
+    /// constructors ordered by descending parameter count, attempts to
+    /// resolve each parameter from (inputShape, outputShape, additionalParams,
+    /// default values), and invokes the FIRST constructor whose parameters
+    /// can all be filled. Returns null if no constructor can be filled —
+    /// caller falls back to the legacy (int[]) path or throws.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Selection caveat:</b> the longest-fillable-first ordering is a
+    /// heuristic, not a true scored match. A broader overload that accepts
+    /// our heuristic / defaulted arguments will beat a narrower overload
+    /// whose parameters are an exact metadata match purely because it has
+    /// more parameters. This is acceptable for the current 258/258
+    /// reconstruction goal because explicit branches handle the layers
+    /// where exact-vs-broad ordering matters; the matcher fallback only
+    /// runs for layers that don't appear in the explicit-branch list, and
+    /// those layers don't tend to ship with multiple competing-arity
+    /// constructors. A true scored match (rank by exact-name-match count
+    /// before falling through to defaults) is tracked as future work; the
+    /// current behavior is described accurately above so debuggers don't
+    /// mis-interpret the comment as a contract.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// Naming conventions used to map parameters from shape arrays:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><c>int</c> parameters whose name contains "input" / "feature" / "in" / "size" / "dim" / "channel" / "vocab" / "embedding" → first try <c>additionalParams</c>; fall back to <c>inputShape[0]</c> or <c>inputShape[^1]</c>.</item>
+    ///   <item><c>int</c> parameters whose name contains "output" / "out" → first try <c>additionalParams</c>; fall back to <c>outputShape[0]</c> or <c>outputShape[^1]</c>.</item>
+    ///   <item><c>int[]</c> parameters named like inputShape / outputShape → use the corresponding array directly; otherwise look up in <c>additionalParams</c>.</item>
+    ///   <item><c>bool</c> / <c>double</c> / <c>float</c> / <c>string</c> / <c>enum</c> — look up in <c>additionalParams</c> by parameter-name (capitalised first letter); fall back to default value if available.</item>
+    ///   <item><c>IActivationFunction&lt;T&gt;</c> / <c>IVectorActivationFunction&lt;T&gt;</c> — restored via <see cref="TryRestoreActivation{T}"/> (already used by the explicit branches).</item>
+    ///   <item>Other reference types — default value if available, otherwise <c>null</c>.</item>
+    /// </list>
+    /// </remarks>
+    private static object? TryConstructByMatchingMetadata<T>(
+        Type type,
+        int[] inputShape,
+        int[] outputShape,
+        Dictionary<string, object>? additionalParams,
+        string layerType)
+    {
+        var ctors = type.GetConstructors()
+            .OrderByDescending(c => c.GetParameters().Length)
+            .ToList();
+
+        foreach (var ctor in ctors)
+        {
+            var parameters = ctor.GetParameters();
+            var args = new object?[parameters.Length];
+            bool allResolved = true;
+
+            for (int pi = 0; pi < parameters.Length; pi++)
+            {
+                var p = parameters[pi];
+                var pType = p.ParameterType;
+                string pName = p.Name ?? string.Empty;
+                string pNameLower = pName.ToLowerInvariant();
+                string capName = pName.Length == 0
+                    ? string.Empty
+                    : char.ToUpperInvariant(pName[0]) + pName.Substring(1);
+
+                // 1. int-array parameters
+                if (pType == typeof(int[]))
+                {
+                    var arr = TryGetIntArray(additionalParams, capName);
+                    if (arr is not null) { args[pi] = arr; continue; }
+                    if (pNameLower.Contains("input") && pNameLower.Contains("shape")) { args[pi] = inputShape; continue; }
+                    if (pNameLower.Contains("output") && pNameLower.Contains("shape")) { args[pi] = outputShape; continue; }
+                    if (pNameLower.Contains("input")) { args[pi] = inputShape; continue; }
+                    if (pNameLower.Contains("output")) { args[pi] = outputShape; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    // Safe fallback: a single-element array. Used by params like
+                    // padding (PaddingLayer), cropTop/Bottom/Left/Right
+                    // (CroppingLayer), spatialDimensions (FourierLayer),
+                    // patchSizes (KairosMultiSizePatchLayer), activeRanks
+                    // (DyLoRAAdapter), mlpDimensions (SetAbstractionLayer).
+                    // Real Clone() always supplies these via metadata; this
+                    // path only fires on metadata-less reconstruction.
+                    args[pi] = new int[] { 1 };
+                    continue;
+                }
+
+                // 2. int parameters
+                if (pType == typeof(int))
+                {
+                    var v = TryGetInt(additionalParams, capName);
+                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    // Common transformer naming
+                    if (pNameLower == "sequencelength" && inputShape.Length > 0) { args[pi] = inputShape[0]; continue; }
+                    if (pNameLower == "modeldimension" && inputShape.Length > 1) { args[pi] = inputShape[1]; continue; }
+                    bool inputish = pNameLower.Contains("input") || pNameLower.Contains("feature") || pNameLower.Contains("vocab")
+                        || pNameLower.Contains("embedding") || pNameLower == "size" || pNameLower == "indim" || pNameLower == "infeatures"
+                        || pNameLower.Contains("inputchannel") || pNameLower.Contains("inchannel");
+                    bool outputish = pNameLower.Contains("output") || pNameLower == "outdim" || pNameLower == "outfeatures"
+                        || pNameLower.Contains("outputchannel") || pNameLower.Contains("outchannel") || pNameLower == "numclass";
+                    if (inputish && inputShape.Length > 0) { args[pi] = inputShape[^1]; continue; }
+                    if (outputish && outputShape.Length > 0) { args[pi] = outputShape[^1]; continue; }
+                    // ML-domain defaults take priority over any compiler-supplied
+                    // default value, because divisibility constraints across
+                    // hyperparameters (channels divisible by numHeads, etc.)
+                    // commonly invalidate the constructor's per-parameter
+                    // defaults when only one of the two is overridden. Defaults
+                    // here are chosen to satisfy common cross-parameter
+                    // constraints (channels=64 divides 1/2/4/8/16/32/64 head
+                    // counts; embeddingDim=64 likewise).
+                    var hpDefault = TryDefaultMlIntHyperparameter(pNameLower);
+                    if (hpDefault.HasValue) { args[pi] = hpDefault.Value; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+
+                // 3. bool / double / float / string parameters
+                if (pType == typeof(bool))
+                {
+                    var v = TryGetBool(additionalParams, capName);
+                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    // Safe default: false. Most ML bool hyperparameters
+                    // (freezeBaseLayer, useBias, useFlashAttention, causal,
+                    // useDoubleQuantization, etc.) default to false in their
+                    // declared constructors, and false is the conservative
+                    // round-trip choice when metadata is absent.
+                    args[pi] = false;
+                    continue;
+                }
+                if (pType == typeof(double))
+                {
+                    var v = TryGetDouble(additionalParams, capName);
+                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    var hpDefault = TryDefaultMlDoubleHyperparameter(pNameLower);
+                    if (hpDefault.HasValue) { args[pi] = hpDefault.Value; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    args[pi] = 0.0;  // safe metadata-less fallback
+                    continue;
+                }
+                if (pType == typeof(float))
+                {
+                    var v = TryGetDouble(additionalParams, capName);
+                    if (v.HasValue) { args[pi] = (float)v.Value; continue; }
+                    var hpDefault = TryDefaultMlDoubleHyperparameter(pNameLower);
+                    if (hpDefault.HasValue) { args[pi] = (float)hpDefault.Value; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    args[pi] = 0.0f;
+                    continue;
+                }
+                if (pType == typeof(string))
+                {
+                    if (additionalParams != null && additionalParams.TryGetValue(capName, out var sv) && sv is string s) { args[pi] = s; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    args[pi] = string.Empty;
+                    continue;
+                }
+
+                // 4. enum parameters — look up by name, parse string (GetMetadata persists enum.ToString())
+                if (pType.IsEnum)
+                {
+                    // .NET Framework 4.7.1 doesn't expose the non-generic
+                    // Enum.TryParse(Type, ...) overload, so we route through
+                    // Enum.Parse with try/catch to keep both targets happy.
+                    // Already-typed enum values (rare but possible) pass
+                    // through directly; strings get parsed.
+                    if (additionalParams != null && additionalParams.TryGetValue(capName, out var ev) && ev is not null)
+                    {
+                        if (ev.GetType() == pType)
+                        {
+                            args[pi] = ev; continue;
+                        }
+                        if (ev is string es)
+                        {
+                            try
+                            {
+                                args[pi] = Enum.Parse(pType, es);
+                                continue;
+                            }
+                            catch (ArgumentException)
+                            {
+                                // Fall through to default-value / unresolved
+                                // path so the matcher tries the next ctor
+                                // overload instead of crashing here.
+                            }
+                        }
+                    }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    allResolved = false; break;
+                }
+
+                // 5. activation functions — reuse the existing restorer
+                bool isScalarAct = pType.IsGenericType && pType.GetGenericTypeDefinition() == typeof(IActivationFunction<>);
+                bool isVectorAct = pType.IsGenericType && pType.GetGenericTypeDefinition() == typeof(IVectorActivationFunction<>);
+                if (isScalarAct || isVectorAct)
+                {
+                    var act = TryRestoreActivation<T>(additionalParams);
+                    if (act != null && pType.IsAssignableFrom(act.GetType())) { args[pi] = act; continue; }
+                    if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                    if (!pType.IsValueType) { args[pi] = null; continue; }  // most activation params are nullable interface refs
+                    allResolved = false; break;
+                }
+
+                // 6. IEngine — use the ambient process engine.
+                if (pType == typeof(AiDotNet.Tensors.Engines.IEngine))
+                {
+                    args[pi] = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+                    continue;
+                }
+
+                // 7. int[][] (jagged arrays for AddLayer, MultiplyLayer,
+                //    ConcatenateLayer "inputShapes") — try metadata, fall back
+                //    to a two-element jagged wrap of inputShape (most binary
+                //    composite layers expect at least two input shapes).
+                if (pType == typeof(int[][]))
+                {
+                    if (additionalParams != null
+                        && additionalParams.TryGetValue(capName, out var jv)
+                        && jv is int[][] jarr)
+                    {
+                        args[pi] = jarr;
+                        continue;
+                    }
+                    args[pi] = new int[][] { inputShape, inputShape };
+                    continue;
+                }
+
+                // 8. ILayer<T> / LayerBase<T> / single-base-layer references —
+                //    used by LoRA/PEFT adapters, BidirectionalLayer,
+                //    SpectralNormalizationLayer, TimeDistributedLayer.
+                //    Per-adapter round-trip via LoRAAdapterBase.GetMetadata
+                //    (issue #1239): InnerLayerTypeName / InnerLayerInputShape
+                //    / InnerLayerOutputShape lets the deser path reconstruct
+                //    the actual wrapped layer instead of a placeholder. Falls
+                //    back to the DenseLayer<T> placeholder for legacy
+                //    networks serialized before that metadata existed —
+                //    those reconstructions are NOT semantically equivalent
+                //    (only the wrapper's structural metadata round-trips).
+                bool isSingleLayerParam = pType == typeof(NeuralNetworks.Layers.LayerBase<T>)
+                    || (pType.IsGenericType
+                        && pType.GetGenericTypeDefinition() == typeof(ILayer<>)
+                        && pType.GetGenericArguments()[0] == typeof(T));
+                if (isSingleLayerParam)
+                {
+                    var fromMeta = TryConstructInnerLayerFromMetadata<T>(additionalParams);
+                    if (fromMeta is not null)
+                    {
+                        args[pi] = fromMeta;
+                        continue;
+                    }
+                }
+                if (TryCreatePlaceholderInnerLayer<T>(pType, out var placeholderInner))
+                {
+                    args[pi] = placeholderInner;
+                    continue;
+                }
+
+                // 8. other reference types — default value or null. Reject value
+                // types we don't know how to fill (otherwise we'd hand the ctor
+                // a default(T) that probably violates a precondition).
+                if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
+                if (!pType.IsValueType) { args[pi] = null; continue; }
+                allResolved = false; break;
+            }
+
+            if (allResolved)
+            {
+                try { return ctor.Invoke(args); }
+                catch (Exception ex)
+                {
+                    // Best-effort matcher: any failure means this constructor
+                    // didn't accept our defaults — try the next overload.
+                    // Trace the rejection so a missing fallback default in
+                    // TryDefaultMlIntHyperparameter / TryDefaultMlDouble-
+                    // Hyperparameter is debuggable when reconstruction
+                    // fails downstream with no breadcrumb back to here.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"DeserializationHelper.TryConstructByMatchingMetadata: " +
+                        $"ctor {ctor} for {type.Name} rejected our resolved args: " +
+                        $"{(ex is TargetInvocationException tie ? tie.InnerException?.Message : ex.Message)}");
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

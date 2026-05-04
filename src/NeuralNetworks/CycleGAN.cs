@@ -942,6 +942,22 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
         DiscriminatorB.GetParameterCount();
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Streams parameters from each of the four sub-networks in sequence:
+    /// <c>GeneratorAtoB</c>, <c>GeneratorBtoA</c>, <c>DiscriminatorA</c>,
+    /// <c>DiscriminatorB</c>. Per #1237, callers walking these chunks
+    /// accumulate length into a <see cref="long"/> when the aggregate
+    /// crosses int.MaxValue.
+    /// </remarks>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var chunk in GeneratorAtoB.GetParameterChunks()) yield return chunk;
+        foreach (var chunk in GeneratorBtoA.GetParameterChunks()) yield return chunk;
+        foreach (var chunk in DiscriminatorA.GetParameterChunks()) yield return chunk;
+        foreach (var chunk in DiscriminatorB.GetParameterChunks()) yield return chunk;
+    }
+
+    /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
         var a2b = GeneratorAtoB.GetParameters();

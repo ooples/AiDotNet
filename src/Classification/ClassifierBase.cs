@@ -130,7 +130,7 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// <value>
     /// The total number of parameters in the model, used for serialization and gradient computation.
     /// </value>
-    protected virtual int ExpectedParameterCount => NumFeatures * NumClasses;
+    protected virtual long ExpectedParameterCount => (long)NumFeatures * NumClasses;
 
     /// <summary>
     /// Initializes a new instance of the ClassifierBase class with the specified options and regularization.

@@ -1552,6 +1552,20 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Streams parameters from <c>Generator</c> followed by
+    /// <c>Discriminator</c>. Per #1237, callers walking these chunks
+    /// accumulate length into a <see cref="long"/> when the aggregate
+    /// crosses int.MaxValue (BigGAN, ProgressiveGAN, SAGAN at full
+    /// scale all overflow).
+    /// </remarks>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var chunk in Generator.GetParameterChunks()) yield return chunk;
+        foreach (var chunk in Discriminator.GetParameterChunks()) yield return chunk;
+    }
+
     /// <summary>
     /// Gets the combined parameters from both the generator and discriminator networks.
     /// </summary>
