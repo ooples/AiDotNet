@@ -182,7 +182,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsScoreDistillation => true;
 
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -408,8 +408,8 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
             Name = "DreamGaussian",
             Version = "1.0",
             Description = "DreamGaussian 3D Gaussian splatting generation with SDS optimization",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "gaussian-splatting-sds");

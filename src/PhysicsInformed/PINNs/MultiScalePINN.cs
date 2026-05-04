@@ -690,7 +690,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
             foreach (var network in _scaleNetworks)
             {
-                int paramCount = network.GetParameterCount();
+                int paramCount = (int)network.GetParameterCount();
                 var subParams = parameters.GetSubVector(offset, paramCount);
                 network.UpdateParameters(subParams);
                 offset += paramCount;
@@ -724,7 +724,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        public override int ParameterCount => _scaleNetworks.Sum(n => n.GetParameterCount());
+        public override long ParameterCount => _scaleNetworks.Sum(n => n.GetParameterCount());
 
         /// <inheritdoc/>
         public override ModelMetadata<T> GetModelMetadata()

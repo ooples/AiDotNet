@@ -72,13 +72,13 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
-            int count = _baseUNet.ParameterCount;
+            int count = (int)((int)_baseUNet.ParameterCount);
             foreach (var enc in _encoderCache.Values)
-                count += enc.ParameterCount;
+                count += (int)((int)enc.ParameterCount);
             return count;
         }
     }
@@ -167,7 +167,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        var baseCount = _baseUNet.ParameterCount;
+        int baseCount = (int)_baseUNet.ParameterCount;
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(baseParams));
@@ -175,7 +175,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
 
         foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
         {
-            var encCount = kvp.Value.ParameterCount;
+            int encCount = (int)kvp.Value.ParameterCount;
             var encParams = new T[encCount];
             for (int i = 0; i < encCount; i++) encParams[i] = parameters[offset + i];
             kvp.Value.SetParameters(new Vector<T>(encParams));
@@ -205,8 +205,8 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
             Name = "ControlNet-Union-Pro",
             Version = "1.0",
             Description = "Unified ControlNet supporting multiple control types in a single model",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "unet-multi-type-controlnet");

@@ -467,7 +467,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
                 freezeBaseLayer: true);
 
             // Assert - Should only count LoRA parameters: (10 * 3) + (3 * 5) = 45
-            Assert.Equal(45, adapter.ParameterCount);
+            Assert.Equal(45, (int)adapter.ParameterCount);
         }
 
     }

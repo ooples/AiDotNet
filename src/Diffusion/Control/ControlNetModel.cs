@@ -170,14 +170,14 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => CN_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
-            var count = _baseUNet.ParameterCount;
+            int count = (int)((int)_baseUNet.ParameterCount);
             foreach (var encoder in _encoderCache.Values)
             {
-                count += encoder.ParameterCount;
+                count += (int)((int)encoder.ParameterCount);
             }
             return count;
         }
@@ -654,7 +654,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         int offset = 0;
 
         // Set base UNet parameters
-        var baseCount = _baseUNet.ParameterCount;
+        int baseCount = (int)_baseUNet.ParameterCount;
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++)
         {
@@ -666,7 +666,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         // Set all cached encoder parameters (in same order as GetParameters)
         foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
         {
-            var encoderCount = kvp.Value.ParameterCount;
+            int encoderCount = (int)kvp.Value.ParameterCount;
             var encoderParams = new T[encoderCount];
             for (int i = 0; i < encoderCount; i++)
             {
@@ -711,7 +711,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet", Version = "1.0",
             Description = "Spatial conditioning for diffusion models via trainable encoder copy",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "unet-controlnet");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
@@ -803,7 +803,7 @@ public class ControlNetEncoder<T>
     /// <summary>
     /// Gets the number of parameters in this encoder.
     /// </summary>
-    public int ParameterCount { get; private set; }
+    public long ParameterCount { get; private set; }
 
     /// <summary>
     /// Initializes a new ControlNetEncoder with convolutional layers per the paper.
@@ -872,9 +872,9 @@ public class ControlNetEncoder<T>
         // Count parameters
         ParameterCount = 0;
         foreach (var block in _downBlocks)
-            ParameterCount += block.ParameterCount;
+            ParameterCount += (int)block.ParameterCount;
         foreach (var zc in _zeroConvs)
-            ParameterCount += zc.ParameterCount;
+            ParameterCount += (int)zc.ParameterCount;
     }
 
     /// <summary>
@@ -887,7 +887,7 @@ public class ControlNetEncoder<T>
         // identity for every numeric type (0 for float/double/int, etc.). This matches the
         // ControlNet paper's "zero convolution" requirement: zc(x) = 0 at initialization so
         // the residual connection passes through the frozen base model unchanged on step 0.
-        var zeroParams = new Vector<T>(layer.ParameterCount);
+        var zeroParams = new Vector<T>((int)layer.ParameterCount);
         layer.SetParameters(zeroParams);
     }
 
@@ -943,7 +943,7 @@ public class ControlNetEncoder<T>
 
         foreach (var block in _downBlocks)
         {
-            var count = block.ParameterCount;
+            int count = (int)((int)block.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
                 p[i] = parameters[offset + i];
@@ -953,7 +953,7 @@ public class ControlNetEncoder<T>
 
         foreach (var zc in _zeroConvs)
         {
-            var count = zc.ParameterCount;
+            int count = (int)((int)zc.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
                 p[i] = parameters[offset + i];

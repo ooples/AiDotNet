@@ -417,14 +417,14 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount => _affine ? _numChannels * 2 : 0;
+    public override long ParameterCount => _affine ? _numChannels * 2 : 0;
 
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     public override Vector<T> GetParameterGradients()
     {
-        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
     }
 

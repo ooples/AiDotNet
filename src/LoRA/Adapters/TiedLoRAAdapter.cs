@@ -137,7 +137,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Tied-LoRA only trains a single scaling factor per layer (plus the base layer if not frozen).
     /// The shared matrices contribute to the parameter count only once across all layers.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -150,7 +150,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 
             // Only the layer scaling factor is unique to this layer
             int tiedLoraParams = 1; // Single scaling factor
-            int baseParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            int baseParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
             return baseParams + tiedLoraParams;
         }
     }
@@ -255,7 +255,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         _isInitialized = true;
 
         // Reallocate Parameters to the reduced size (just scaling factor + base if not frozen)
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
 
         // Update parameter vector with the scaling factor
         UpdateParametersFromScaling();
@@ -611,7 +611,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = (int)_baseLayer.ParameterCount;
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -629,7 +629,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromScaling()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack base layer gradients if not frozen

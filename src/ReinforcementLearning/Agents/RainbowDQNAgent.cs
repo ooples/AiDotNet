@@ -517,7 +517,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int onlineParamCount = _onlineNetwork.ParameterCount;
+        int onlineParamCount = (int)_onlineNetwork.ParameterCount;
         var onlineParams = new Vector<T>(onlineParamCount);
         var targetParams = new Vector<T>(parameters.Length - onlineParamCount);
 

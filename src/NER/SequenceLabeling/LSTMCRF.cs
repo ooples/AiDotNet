@@ -336,7 +336,7 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         int idx = 0;
         foreach (var layer in Layers)
         {
-            int count = layer.ParameterCount;
+            int count = (int)((int)layer.ParameterCount);
             layer.UpdateParameters(parameters.Slice(idx, count));
             idx += count;
         }

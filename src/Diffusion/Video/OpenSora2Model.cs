@@ -71,7 +71,7 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override int ParameterCount { get { EnsureInitialized(); return _predictor.ParameterCount + _temporalVAE.GetParameters().Length; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _predictor.ParameterCount + _temporalVAE.GetParameters().Length; } }
 
     /// <summary>
     /// Initializes a new instance of OpenSora2Model with full customization support.
@@ -160,7 +160,7 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var predCount = _predictor.ParameterCount;
+        int predCount = (int)_predictor.ParameterCount;
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -201,8 +201,8 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
             Name = "OpenSora2",
             Version = "2.0",
             Description = "Open-Sora 2.0 commercial-level video generation model.",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "stdit-v2-commercial");
         metadata.SetProperty("open_source", true);

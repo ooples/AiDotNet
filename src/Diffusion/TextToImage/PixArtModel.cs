@@ -194,7 +194,7 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => PIXART_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount;
+    public override long ParameterCount => _dit.ParameterCount;
 
     /// <summary>
     /// Gets the model variant.
@@ -628,8 +628,8 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             Name = $"PixArt-{sizeName}",
             Version = "1.0",
             Description = $"PixArt-{sizeName} text-to-image diffusion model using DiT architecture",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-xl-2");

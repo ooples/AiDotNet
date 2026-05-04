@@ -141,7 +141,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// If the base layer is frozen, this returns only the LoRA parameter count.
     /// Otherwise, it returns the sum of base and LoRA parameters.
     /// </remarks>
-    public override int ParameterCount => _freezeBaseLayer
+    public override long ParameterCount => _freezeBaseLayer
         ? _loraLayer.ParameterCount
         : (_baseLayer.ParameterCount + _loraLayer.ParameterCount);
 
@@ -236,7 +236,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         _loraLayer = CreateLoRALayer(rank, alpha);
 
         // Initialize parameters
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromLayers();
     }
 
@@ -451,7 +451,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // If base layer is not frozen, unpack its parameters first
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = (int)_baseLayer.ParameterCount;
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -461,7 +461,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         }
 
         // Unpack LoRA parameters
-        int loraParamCount = _loraLayer.ParameterCount;
+        int loraParamCount = (int)_loraLayer.ParameterCount;
         Vector<T> loraParams = new Vector<T>(loraParamCount);
         for (int i = 0; i < loraParamCount; i++)
         {
@@ -484,7 +484,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// </remarks>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

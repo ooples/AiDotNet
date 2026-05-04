@@ -57,7 +57,7 @@ public class CubeDiffModel<T> : LatentDiffusionModelBase<T>
     public override IVAEModel<T> VAE => _vae;
     public override IConditioningModule<T>? Conditioner => _conditioner;
     public override int LatentChannels => LATENT_CHANNELS;
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public CubeDiffModel(
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
@@ -93,8 +93,8 @@ public class CubeDiffModel<T> : LatentDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -117,7 +117,7 @@ public class CubeDiffModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T> { Name = "CubeDiff", Version = "1.0",
             Description = "Cubemap 360x180 panorama with cross-face attention consistency",
-            FeatureCount = ParameterCount, Complexity = ParameterCount };
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount };
         m.SetProperty("architecture", "cubemap-cross-face-panorama");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
         m.SetProperty("text_encoder", "CLIP ViT-L/14");

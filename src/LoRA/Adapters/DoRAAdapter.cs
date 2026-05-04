@@ -99,12 +99,12 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
     /// Total = (base layer parameters if not frozen) + LoRA parameters + magnitude parameters.
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
-            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
-            int loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0;
+            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
+            int loraCount = _loraLayer != null ? (int)_loraLayer.ParameterCount : 0;
             int magnitudeCount = _magnitude != null ? _magnitude.Length : 0;
             return baseCount + loraCount + magnitudeCount;
         }
@@ -152,7 +152,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         DecomposeWeights();
 
         // Update parameters to include magnitude
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromComponents();
     }
 
@@ -524,7 +524,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters (if not frozen)
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = (int)_baseLayer.ParameterCount;
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -534,7 +534,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Unpack LoRA parameters
-        int loraParamCount = _loraLayer.ParameterCount;
+        int loraParamCount = (int)_loraLayer.ParameterCount;
         Vector<T> loraParams = new Vector<T>(loraParamCount);
         for (int i = 0; i < loraParamCount; i++)
         {

@@ -124,7 +124,7 @@ public class LoRALayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters (elements in A and B matrices).
     /// </summary>
-    public override int ParameterCount => (_loraA.Rows * _loraA.Columns) + (_loraB.Rows * _loraB.Columns);
+    public override long ParameterCount => (_loraA.Rows * _loraA.Columns) + (_loraB.Rows * _loraB.Columns);
 
     /// <summary>
     /// Gets whether this layer supports training (always true for LoRA).
@@ -207,7 +207,7 @@ public class LoRALayer<T> : LayerBase<T>
         }
 
         // Initialize parameter vector
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromMatrices();
     }
 
@@ -433,7 +433,7 @@ public class LoRALayer<T> : LayerBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack matrix A gradients

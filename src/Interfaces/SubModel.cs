@@ -45,7 +45,7 @@ public class SubModel<T> : ILayeredModel<T>
     /// <summary>
     /// Gets the total parameter count across all layers in this sub-model.
     /// </summary>
-    public int ParameterCount { get; }
+    public long ParameterCount { get; }
 
     /// <summary>
     /// Gets the total estimated FLOPs across all layers in this sub-model.
@@ -228,14 +228,14 @@ public class SubModel<T> : ILayeredModel<T>
                 Category = original.Category,
                 Layer = original.Layer,
                 ParameterOffset = (int)localOffsetLong,
-                ParameterCount = original.ParameterCount,
+                ParameterCount = (int)original.ParameterCount,
                 InputShape = original.InputShape,
                 OutputShape = original.OutputShape,
                 IsTrainable = original.IsTrainable,
                 EstimatedFlops = original.EstimatedFlops,
                 EstimatedActivationMemory = original.EstimatedActivationMemory
             });
-            localOffsetLong += original.ParameterCount;
+            localOffsetLong += (int)original.ParameterCount;
         }
 
         return new SubModel<T>(subLayers, subInfos,

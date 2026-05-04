@@ -223,7 +223,7 @@ public class StepwiseRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     /// <summary>Stepwise doesn't benefit from optimizer parameter injection.</summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     public override void Train(Matrix<T> x, Vector<T> y)
     {

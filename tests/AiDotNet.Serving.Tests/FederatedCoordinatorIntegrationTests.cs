@@ -167,11 +167,11 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
             $"/api/federated/runs/{createResponse.RunId}/clients/{join0Response.ClientId}/parameters");
         Assert.NotNull(initial);
         Assert.Equal(0, initial.RoundNumber);
-        Assert.Equal(createResponse.ParameterCount, initial.ParameterCount);
+        Assert.Equal(createResponse.ParameterCount, (int)initial.ParameterCount);
         Assert.Equal(createResponse.ParameterCount, initial.Parameters.Length);
 
-        var ones = Enumerable.Repeat(1.0, createResponse.ParameterCount).ToArray();
-        var threes = Enumerable.Repeat(3.0, createResponse.ParameterCount).ToArray();
+        var ones = Enumerable.Repeat(1.0, (int)createResponse.ParameterCount).ToArray();
+        var threes = Enumerable.Repeat(3.0, (int)createResponse.ParameterCount).ToArray();
 
         var update0 = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/updates", new SubmitFederatedUpdateRequest
         {

@@ -365,7 +365,7 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
         }
         return activations;
     }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
     public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "ViLBERT-Native" : "ViLBERT-ONNX", Description = "ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations (Lu et al., NeurIPS 2019)", FeatureCount = _options.FusionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers + _options.NumFusionLayers }; m.AdditionalInfo["Architecture"] = "ViLBERT"; m.AdditionalInfo["FusionType"] = _options.FusionType.ToString(); return m; }

@@ -126,7 +126,7 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for CLIP image encoder).
@@ -367,8 +367,8 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
             Name = "Paint-by-Example",
             Version = "1.0",
             Description = "Paint-by-Example fills masked regions using exemplar images as visual references",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion-inpainting");

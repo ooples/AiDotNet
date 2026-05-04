@@ -139,7 +139,7 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => FLUX2_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant (Dev, Schnell, or Pro).
@@ -302,7 +302,7 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var predictorCount = _predictor.ParameterCount;
+        int predictorCount = (int)_predictor.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -366,8 +366,8 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
             Name = $"FLUX.2 [{_variant}]",
             Version = _variant.ToString(),
             Description = $"FLUX.2 [{_variant}] next-generation hybrid MMDiT with {FLUX2_JOINT_LAYERS} joint + {FLUX2_SINGLE_LAYERS} single blocks and improved rectified flow",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "hybrid-mmdit-rectified-flow-v2");

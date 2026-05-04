@@ -139,7 +139,7 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => DALLE2_PIXEL_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _priorUnet.ParameterCount + _decoderUnet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _priorUnet.ParameterCount + _decoderUnet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the diffusion prior that maps text embeddings to CLIP image embeddings.
@@ -343,8 +343,8 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var priorCount = _priorUnet.ParameterCount;
-        var decoderCount = _decoderUnet.ParameterCount;
+        int priorCount = (int)_priorUnet.ParameterCount;
+        int decoderCount = (int)_decoderUnet.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != priorCount + decoderCount + vaeCount)
@@ -442,8 +442,8 @@ public class DallE2Model<T> : LatentDiffusionModelBase<T>
             Name = "DALL-E 2",
             Version = "2.0",
             Description = "DALL-E 2 (unCLIP) two-stage text-to-image model with diffusion prior and GLIDE decoder",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "unclip-diffusion");

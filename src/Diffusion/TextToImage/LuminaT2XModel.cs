@@ -106,7 +106,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => T2X_LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this model supports multi-modality output.
@@ -194,8 +194,8 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
 
@@ -236,7 +236,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Lumina-T2X", Version = "1.0",
             Description = "Unified text-to-any framework with Flag-DiT for multi-modality generation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "flag-dit-unified-multimodal");
         m.SetProperty("base_model", "Lumina-T2X");

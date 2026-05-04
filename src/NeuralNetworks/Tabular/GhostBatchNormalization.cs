@@ -329,7 +329,7 @@ public class GhostBatchNormalization<T>
     /// <summary>
     /// Gets the number of trainable parameters in this layer.
     /// </summary>
-    public int ParameterCount => _numFeatures * 2;
+    public long ParameterCount => _numFeatures * 2;
 
     /// <summary>
     /// Gets the scale (gamma) parameters.

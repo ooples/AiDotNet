@@ -609,7 +609,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         {
             Name = "DeepAR",
             Description = "Probabilistic forecasting with autoregressive recurrent networks (Production-Ready)",
-            Complexity = ParameterCount,
+            Complexity = (int)ParameterCount,
             FeatureCount = _options.LookbackWindow,
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -627,13 +627,13 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         return new DeepARModel<T>(new DeepAROptions<T>(_options));
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int count = 0;
             foreach (var lstm in _lstmLayers)
-                count += lstm.ParameterCount;
+                count += (int)((int)lstm.ParameterCount);
             count += _meanWeights.Length + _meanBias.Length;
             count += _scaleWeights.Length + _scaleBias.Length;
             return count;
@@ -667,7 +667,7 @@ internal class DeepARLstmCellTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _lastCellCandidate;
     private Tensor<T> _lastPrevCell;
 
-    public override int ParameterCount => _weights.Length + _bias.Length;
+    public override long ParameterCount => _weights.Length + _bias.Length;
 
     public override bool SupportsTraining => true;
 

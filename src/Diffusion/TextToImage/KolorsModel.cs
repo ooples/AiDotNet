@@ -108,7 +108,7 @@ public class KolorsModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -272,8 +272,8 @@ public class KolorsModel<T> : LatentDiffusionModelBase<T>
             Name = "Kolors",
             Version = "1.0",
             Description = "Kolors ChatGLM3-powered bilingual text-to-image model",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "sdxl-unet-chatglm3");

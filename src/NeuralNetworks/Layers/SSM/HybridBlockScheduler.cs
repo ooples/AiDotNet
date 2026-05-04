@@ -143,13 +143,13 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// (both SSM and attention) plus normalization parameters. Shared attention blocks
     /// (Zamba-style) count their parameters only once.</para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int count = 0;
             foreach (var block in _blocks)
-                count += block.ParameterCount;
+                count += (int)((int)block.ParameterCount);
             foreach (var gamma in _normGammas)
                 count += gamma.Length;
             foreach (var beta in _normBetas)
@@ -365,7 +365,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
@@ -388,14 +388,14 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedParams = ParameterCount;
+        int expectedParams = (int)ParameterCount;
         if (parameters.Length != expectedParams)
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
 
         int index = 0;
         for (int i = 0; i < _blocks.Length; i++)
         {
-            int blockParamCount = _blocks[i].ParameterCount;
+            int blockParamCount = (int)_blocks[i].ParameterCount;
             var blockParams = new Vector<T>(blockParamCount);
             for (int j = 0; j < blockParamCount; j++)
                 blockParams[j] = parameters[index++];

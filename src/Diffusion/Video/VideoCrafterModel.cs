@@ -643,7 +643,7 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// Gets the total parameter count.
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

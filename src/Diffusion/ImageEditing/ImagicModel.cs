@@ -119,7 +119,7 @@ public class ImagicModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for CLIP ViT-L/14).
@@ -354,8 +354,8 @@ public class ImagicModel<T> : LatentDiffusionModelBase<T>
             Name = "Imagic",
             Version = "1.0",
             Description = "Imagic edits real images to match target text via text embedding optimization and model fine-tuning",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

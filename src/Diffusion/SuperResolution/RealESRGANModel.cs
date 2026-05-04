@@ -201,7 +201,7 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the upscale factor (4x).
@@ -483,8 +483,8 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
             Name = "Real-ESRGAN",
             Version = "1.0",
             Description = "Real-ESRGAN practical blind super-resolution with second-order degradation model",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "esrgan-diffusion");

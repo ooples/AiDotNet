@@ -230,7 +230,7 @@ public class TNetLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var parameters = new Vector<T>(totalParams);
         int offset = 0;
 
@@ -265,7 +265,7 @@ public class TNetLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var layer in _mlpLayers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = (int)layer.ParameterCount;
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.SubVector(offset, layerParameterCount);
@@ -276,7 +276,7 @@ public class TNetLayer<T> : LayerBase<T>
 
         foreach (var layer in _fcLayers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = (int)layer.ParameterCount;
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.SubVector(offset, layerParameterCount);
@@ -306,18 +306,18 @@ public class TNetLayer<T> : LayerBase<T>
         _maxPooling.ResetState();
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int total = 0;
             foreach (var layer in _mlpLayers)
             {
-                total += layer.ParameterCount;
+                total += (int)layer.ParameterCount;
             }
             foreach (var layer in _fcLayers)
             {
-                total += layer.ParameterCount;
+                total += (int)layer.ParameterCount;
             }
             return total;
         }

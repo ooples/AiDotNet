@@ -107,7 +107,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the number of expert denoisers in the ensemble.
@@ -275,8 +275,8 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
             Name = "eDiff-I",
             Version = "1.0",
             Description = "eDiff-I ensemble-of-experts text-to-image diffusion model",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "ensemble-expert-unet");

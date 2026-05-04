@@ -262,7 +262,7 @@ public class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override int ParameterCount => _qTable1.Count * _options.ActionSize * 2;
+    public override long ParameterCount => _qTable1.Count * _options.ActionSize * 2;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()

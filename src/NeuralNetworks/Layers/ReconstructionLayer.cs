@@ -100,7 +100,7 @@ public class ReconstructionLayer<T> : LayerBase<T>
     /// This property tells you the total number of knobs available to this layer.
     /// </para>
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _fc1.ParameterCount + _fc2.ParameterCount + _fc3.ParameterCount;
 
     /// <summary>
@@ -501,9 +501,9 @@ public class ReconstructionLayer<T> : LayerBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         // Get parameter counts for each sublayer
-        int fc1ParamCount = _fc1.ParameterCount;
-        int fc2ParamCount = _fc2.ParameterCount;
-        int fc3ParamCount = _fc3.ParameterCount;
+        int fc1ParamCount = (int)_fc1.ParameterCount;
+        int fc2ParamCount = (int)_fc2.ParameterCount;
+        int fc3ParamCount = (int)_fc3.ParameterCount;
         int totalParams = fc1ParamCount + fc2ParamCount + fc3ParamCount;
 
         if (parameters.Length != totalParams)

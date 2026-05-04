@@ -415,7 +415,7 @@ namespace AiDotNet.NeuralNetworks
             int index = 0;
             foreach (var layer in Layers)
             {
-                int layerParameterCount = layer.ParameterCount;
+                int layerParameterCount = (int)layer.ParameterCount;
                 if (layerParameterCount > 0)
                 {
                     var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -452,7 +452,7 @@ namespace AiDotNet.NeuralNetworks
             {
                 Name = "TransformerEmbeddingNetwork",
                 Description = "Customizable Transformer-based embedding foundation",
-                Complexity = ParameterCount,
+                Complexity = (int)ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "EmbeddingDimension", _embeddingDimension },

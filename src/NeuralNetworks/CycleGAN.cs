@@ -935,7 +935,7 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
     /// <c>Layers</c>) reports 0 — that's the symptom behind the "GAN has only 0
     /// parameters" invariant test failure. Aggregate the four networks here.
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         GeneratorAtoB.GetParameterCount() +
         GeneratorBtoA.GetParameterCount() +
         DiscriminatorA.GetParameterCount() +
@@ -968,10 +968,10 @@ public class CycleGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
         }
 
-        int genAtoBCount = GeneratorAtoB.GetParameterCount();
-        int genBtoACount = GeneratorBtoA.GetParameterCount();
-        int discACount = DiscriminatorA.GetParameterCount();
-        int discBCount = DiscriminatorB.GetParameterCount();
+        int genAtoBCount = (int)GeneratorAtoB.GetParameterCount();
+        int genBtoACount = (int)GeneratorBtoA.GetParameterCount();
+        int discACount = (int)DiscriminatorA.GetParameterCount();
+        int discBCount = (int)DiscriminatorB.GetParameterCount();
 
         int totalCount = genAtoBCount + genBtoACount + discACount + discBCount;
 

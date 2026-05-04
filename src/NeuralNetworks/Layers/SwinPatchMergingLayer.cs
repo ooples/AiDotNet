@@ -52,7 +52,7 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _reduction.ParameterCount + _norm.ParameterCount;
+    public override long ParameterCount => _reduction.ParameterCount + _norm.ParameterCount;
 
     /// <summary>
     /// Creates a new Swin patch merging layer.
@@ -196,8 +196,8 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        int normCount = _norm.ParameterCount;
-        int reductionCount = _reduction.ParameterCount;
+        int normCount = (int)_norm.ParameterCount;
+        int reductionCount = (int)_reduction.ParameterCount;
 
         var normParams = new T[normCount];
         var reductionParams = new T[reductionCount];

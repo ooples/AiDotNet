@@ -354,7 +354,7 @@ public class TeacherModelFactoryTests
             // Placeholder - do nothing for mock
         }
 
-        public int ParameterCount => _inputDim * _outputDim;
+        public long ParameterCount => _inputDim * _outputDim;
         public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters)

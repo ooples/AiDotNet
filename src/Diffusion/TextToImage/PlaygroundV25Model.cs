@@ -140,7 +140,7 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => PG_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (2048 for dual text encoders).
@@ -389,8 +389,8 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
             Name = "Playground v2.5",
             Version = "2.5",
             Description = "Playground v2.5 aesthetic-optimized text-to-image model with SDXL architecture and EDM training",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "sdxl-edm-latent-diffusion");

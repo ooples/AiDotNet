@@ -51,7 +51,7 @@ public class ContextEncoder<T>
     /// <summary>
     /// Gets the total parameter count.
     /// </summary>
-    public int ParameterCount =>
+    public long ParameterCount =>
         _queryProjection.ParameterCount +
         _keyProjection.ParameterCount +
         _valueProjection.ParameterCount +

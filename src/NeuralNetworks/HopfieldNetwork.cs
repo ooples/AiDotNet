@@ -449,7 +449,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => _size * _size;
+    public override long ParameterCount => _size * _size;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
@@ -619,7 +619,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            Complexity = ParameterCount,
+            Complexity = (int)ParameterCount,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Size", _size },

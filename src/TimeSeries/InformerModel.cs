@@ -712,7 +712,7 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
         };
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -720,11 +720,11 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                        _outputProjection.Length + _outputBias.Length;
 
             foreach (var layer in _encoderLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             foreach (var layer in _distillingLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             foreach (var layer in _decoderLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
 
             return count;
         }
@@ -953,7 +953,7 @@ internal class InformerEncoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     // Cache for backward pass
     private List<Tensor<T>>? _cachedInput;
 
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;
@@ -1302,7 +1302,7 @@ internal class DistillingConvTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     private List<Tensor<T>>? _cachedInput;
 
-    public override int ParameterCount => _convWeights.Length + _convBias.Length;
+    public override long ParameterCount => _convWeights.Length + _convBias.Length;
 
     public override bool SupportsTraining => true;
     public override void ResetState() { }
@@ -1548,7 +1548,7 @@ internal class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T
     private readonly Tensor<T> _layerNorm3Gamma;
     private readonly Tensor<T> _layerNorm3Beta;
 
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _selfQueryProj.Length + _selfKeyProj.Length + _selfValueProj.Length + _selfOutputProj.Length +
         _crossQueryProj.Length + _crossKeyProj.Length + _crossValueProj.Length + _crossOutputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +

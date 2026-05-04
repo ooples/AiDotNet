@@ -1183,7 +1183,7 @@ public class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, I
             throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
         }
 
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (gradients.Length != expectedCount)
         {
             throw new ArgumentException(

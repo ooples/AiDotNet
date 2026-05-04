@@ -67,7 +67,7 @@ public class OSDSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new OSDS model with optional configuration.
@@ -115,8 +115,8 @@ public class OSDSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -142,7 +142,7 @@ public class OSDSModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T> { Name = "OSDS", Version = "1.0",
             Description = "One-step diffusion via shortcut models for instant generation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount };
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount };
         m.SetProperty("architecture", "shortcut-unet");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
         m.SetProperty("text_encoder", "CLIP ViT-L/14");

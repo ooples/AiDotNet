@@ -75,7 +75,7 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// (forward or backward) supports training.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _forwardLayer.ParameterCount + _backwardLayer.ParameterCount;
+    public override long ParameterCount => _forwardLayer.ParameterCount + _backwardLayer.ParameterCount;
     public override bool SupportsTraining => _forwardLayer.SupportsTraining || _backwardLayer.SupportsTraining;
 
     public override Vector<T> GetParameterGradients()

@@ -121,7 +121,7 @@ public class SDEditModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for CLIP ViT-L/14).
@@ -356,8 +356,8 @@ public class SDEditModel<T> : LatentDiffusionModelBase<T>
             Name = "SDEdit",
             Version = "1.0",
             Description = "SDEdit transforms sketches and images through partial noising and guided denoising",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

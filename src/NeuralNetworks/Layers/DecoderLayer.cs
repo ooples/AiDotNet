@@ -115,7 +115,7 @@ public class DecoderLayer<T> : LayerBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int idx = 0;
-        void Set(ILayer<T> layer) { int c = layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
+        void Set(ILayer<T> layer) { int c = (int)layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
         Set(_selfAttention); Set(_crossAttention); Set(_feedForward1); Set(_feedForward2);
         Set(_norm1); Set(_norm2); Set(_norm3);
     }
@@ -555,7 +555,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     private int UpdateComponentParameters(LayerBase<T> component, Vector<T> parameters, int startIndex)
     {
-        int paramCount = component.ParameterCount;
+        int paramCount = (int)component.ParameterCount;
 
         // Use Engine.TensorSlice to extract component parameters without manual loops
         var paramsTensor = new Tensor<T>([parameters.Length], parameters);
@@ -642,7 +642,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// in the decoder layer by summing the parameter counts of all its components. This is useful for
     /// understanding the complexity of the layer and for certain optimization techniques.</para>
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _selfAttention.ParameterCount +
         _crossAttention.ParameterCount +
         _feedForward1.ParameterCount + _feedForward2.ParameterCount +

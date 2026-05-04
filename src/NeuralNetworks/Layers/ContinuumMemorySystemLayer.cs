@@ -34,7 +34,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
     /// <summary>
     /// Indicates whether this layer supports training. CMS always supports training.
     /// </summary>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -140,7 +140,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         _stepCounters = new int[numFrequencyLevels];
         for (int i = 0; i < numFrequencyLevels; i++)
         {
-            int paramCount = _mlpBlocks[i].ParameterCount;
+            int paramCount = (int)_mlpBlocks[i].ParameterCount;
             _accumulatedGradients[i] = new Vector<T>(paramCount);
             _accumulatedGradients[i].Fill(NumOps.Zero);
             _stepCounters[i] = 0;
@@ -462,7 +462,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             if (mlp == null)
                 throw new InvalidOperationException("MLP block is null");
 
-            totalParams += mlp.ParameterCount;
+            totalParams += (int)mlp.ParameterCount;
         }
 
         if (parameters.Length != totalParams)
@@ -476,7 +476,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var mlp in _mlpBlocks)
         {
-            int mlpParamCount = mlp.ParameterCount;
+            int mlpParamCount = (int)mlp.ParameterCount;
             var mlpParams = new Vector<T>(mlpParamCount);
 
             for (int i = 0; i < mlpParamCount; i++)
@@ -517,7 +517,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
             if (mlp == null)
                 throw new InvalidOperationException("MLP block is null");
 
-            totalParams += mlp.ParameterCount;
+            totalParams += (int)mlp.ParameterCount;
         }
 
         // Concatenate all accumulated gradients

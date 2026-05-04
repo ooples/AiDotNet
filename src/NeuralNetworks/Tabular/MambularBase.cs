@@ -59,7 +59,7 @@ public abstract class MambularBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
@@ -72,10 +72,10 @@ public abstract class MambularBase<T>
             }
 
             foreach (var block in _mambaBlocks)
-                count += block.ParameterCount;
+                count += (int)((int)block.ParameterCount);
 
             foreach (var layer in _mlpLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
 
             return count;
         }
@@ -344,7 +344,7 @@ public abstract class MambularBase<T>
         // Delta (discretization)
         private readonly Tensor<T> _deltaProj;
 
-        public int ParameterCount =>
+        public long ParameterCount =>
             _A.Length + _B.Length + _C.Length + _D.Length +
             _inProj.Length + _outProj.Length + _convWeight.Length + _deltaProj.Length;
 

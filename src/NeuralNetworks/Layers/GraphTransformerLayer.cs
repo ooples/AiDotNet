@@ -211,7 +211,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     private readonly IActivationFunction<T> _ffnActivation;
 
     /// <inheritdoc/>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

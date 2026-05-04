@@ -102,7 +102,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters (elements in A and B matrices, plus base layer if not frozen).
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -197,7 +197,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Initialize parameter vector
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromMatrices();
     }
 
@@ -576,7 +576,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         else
         {
             // Include base layer parameters
-            Vector<T> allParams = new Vector<T>(ParameterCount);
+            Vector<T> allParams = new Vector<T>((int)ParameterCount);
             Vector<T> baseParams = _baseLayer.GetParameters();
 
             // Copy base parameters
@@ -614,7 +614,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         else
         {
             // Extract base layer parameters
-            int baseCount = _baseLayer.ParameterCount;
+            int baseCount = (int)_baseLayer.ParameterCount;
             Vector<T> baseParams = new Vector<T>(baseCount);
             for (int i = 0; i < baseCount; i++)
             {
@@ -695,7 +695,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack matrix A gradients

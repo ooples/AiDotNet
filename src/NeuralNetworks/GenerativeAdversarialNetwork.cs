@@ -1544,7 +1544,7 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <summary>
     /// Gets the total parameter count for both generator and discriminator.
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1599,8 +1599,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     public override void UpdateParameters(Vector<T> parameters)
     {
         // Determine the split point between Generator and Discriminator parameters
-        int generatorParameterCount = Generator.GetParameterCount();
-        int discriminatorParameterCount = Discriminator.GetParameterCount();
+        int generatorParameterCount = (int)Generator.GetParameterCount();
+        int discriminatorParameterCount = (int)Discriminator.GetParameterCount();
 
         if (parameters.Length != generatorParameterCount + discriminatorParameterCount)
         {

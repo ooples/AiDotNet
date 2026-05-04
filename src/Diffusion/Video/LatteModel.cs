@@ -193,7 +193,7 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -332,7 +332,7 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var ditCount = _dit.ParameterCount;
+        int ditCount = (int)_dit.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -407,8 +407,8 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
             Name = "Latte",
             Version = "1.0",
             Description = "Latte latent diffusion transformer for video generation with factorized attention",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-factorized-st-attention");

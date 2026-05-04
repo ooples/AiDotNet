@@ -610,7 +610,7 @@ internal class DuelingNetwork<T>
         // Set parameters for shared layers
         foreach (var layer in _sharedLayers)
         {
-            int paramCount = layer.ParameterCount;
+            int paramCount = (int)layer.ParameterCount;
             var layerParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -622,7 +622,7 @@ internal class DuelingNetwork<T>
         // Set parameters for value stream layers
         foreach (var layer in _valueLayers)
         {
-            int paramCount = layer.ParameterCount;
+            int paramCount = (int)layer.ParameterCount;
             var layerParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -634,7 +634,7 @@ internal class DuelingNetwork<T>
         // Set parameters for advantage stream layers
         foreach (var layer in _advantageLayers)
         {
-            int paramCount = layer.ParameterCount;
+            int paramCount = (int)layer.ParameterCount;
             var layerParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {

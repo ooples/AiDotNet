@@ -161,13 +161,13 @@ public class M2M<T> : FrameInterpolationBase<T>
     {
         if (!_useNativeMode) throw new NotSupportedException("Parameter updates are not supported in ONNX mode.");
         int required = 0;
-        foreach (var layer in Layers) required += layer.ParameterCount;
+        foreach (var layer in Layers) required += (int)layer.ParameterCount;
         if (parameters.Length < required)
             throw new ArgumentException($"Parameter vector length {parameters.Length} is less than required {required}.", nameof(parameters));
         int idx = 0;
         foreach (var layer in Layers)
         {
-            int count = layer.ParameterCount;
+            int count = (int)((int)layer.ParameterCount);
             layer.UpdateParameters(parameters.Slice(idx, count));
             idx += count;
         }

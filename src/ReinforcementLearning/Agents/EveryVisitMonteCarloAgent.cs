@@ -241,10 +241,10 @@ public class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
+        return new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = (int)ParameterCount };
     }
 
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         // Match GetParameters which returns at least one entry (zero) when the
         // Q-table is empty.
         _qTable.Count == 0 ? 1 : _qTable.Count * _options.ActionSize;

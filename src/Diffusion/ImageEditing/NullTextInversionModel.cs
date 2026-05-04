@@ -119,7 +119,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for CLIP ViT-L/14).
@@ -366,8 +366,8 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
             Name = "Null-text Inversion",
             Version = "1.0",
             Description = "Null-text Inversion enables editing real images by optimizing the unconditional embedding",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

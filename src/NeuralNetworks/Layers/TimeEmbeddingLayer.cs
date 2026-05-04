@@ -117,12 +117,12 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
-    public override int ParameterCount => _linear1Weights.Length + _linear1Bias.Length + _linear2Weights.Length + _linear2Bias.Length;
+    public override long ParameterCount => _linear1Weights.Length + _linear1Bias.Length + _linear2Weights.Length + _linear2Bias.Length;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_linear1WeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_linear1WeightsGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             _linear1WeightsGradient?.ToVector() ?? new Vector<T>(0), _linear1BiasGradient?.ToVector() ?? new Vector<T>(0),
             _linear2WeightsGradient?.ToVector() ?? new Vector<T>(0), _linear2BiasGradient?.ToVector() ?? new Vector<T>(0));

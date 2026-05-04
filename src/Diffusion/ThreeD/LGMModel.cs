@@ -190,7 +190,7 @@ public class LGMModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsScoreDistillation => false;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -354,8 +354,8 @@ public class LGMModel<T> : ThreeDDiffusionModelBase<T>
             Name = "LGM",
             Version = "1.0",
             Description = "LGM feed-forward 3D Gaussian generation from multi-view images",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "asymmetric-unet-gaussian-predictor");

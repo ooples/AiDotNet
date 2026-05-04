@@ -130,7 +130,7 @@ public class TimeDistributedLayer<T> : LayerBase<T>
     /// - The actual learning happens in the inner layer
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _innerLayer.ParameterCount;
+    public override long ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
     public override void SetParameters(Vector<T> parameters) => _innerLayer.SetParameters(parameters);

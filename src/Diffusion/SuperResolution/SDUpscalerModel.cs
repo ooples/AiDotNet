@@ -193,7 +193,7 @@ public class SDUpscalerModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the upscale factor (4x).
@@ -468,8 +468,8 @@ public class SDUpscalerModel<T> : LatentDiffusionModelBase<T>
             Name = "SD-Upscaler-x4",
             Version = "1.0",
             Description = "Stable Diffusion x4 Upscaler for text-guided latent super-resolution",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "sd-upscaler");

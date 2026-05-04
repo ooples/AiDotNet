@@ -78,22 +78,22 @@ public abstract class TabPFNBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
-            int count = _featureEncoder.ParameterCount;
+            int count = (int)((int)_featureEncoder.ParameterCount);
 
             foreach (var enc in _categoricalEncoders)
-                count += enc.ParameterCount;
+                count += (int)((int)enc.ParameterCount);
 
             foreach (var block in _transformerBlocks)
-                count += block.ParameterCount;
+                count += (int)((int)block.ParameterCount);
 
             foreach (var layer in _outputMLP)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
 
-            count += _finalNorm.ParameterCount;
+            count += (int)((int)_finalNorm.ParameterCount);
 
             if (_positionalEncoding != null)
                 count += _positionalEncoding.Length;
@@ -435,7 +435,7 @@ public abstract class TabPFNBase<T>
         private Tensor<TBlock>? _inputCache;
         private Tensor<TBlock>? _attentionOutputCache;
 
-        public int ParameterCount
+        public long ParameterCount
         {
             get
             {

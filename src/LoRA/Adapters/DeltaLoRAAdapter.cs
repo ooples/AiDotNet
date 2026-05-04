@@ -126,11 +126,11 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// Includes base layer (if not frozen), LoRA layer, and delta weights matrix parameters.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
-            int baseCount = base.ParameterCount; // Base layer + LoRA layer
+            int baseCount = (int)base.ParameterCount; // Base layer + LoRA layer
             int deltaCount = _deltaWeights.Rows * _deltaWeights.Columns;
             return baseCount + deltaCount;
         }
@@ -338,7 +338,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public override Vector<T> GetParameters()
     {
         Vector<T> baseParams = base.GetParameters(); // Base layer + LoRA layer
-        Vector<T> allParams = new Vector<T>(ParameterCount);
+        Vector<T> allParams = new Vector<T>((int)ParameterCount);
 
         int idx = 0;
 
@@ -375,7 +375,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
             throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
         }
 
-        int baseLoraCount = base.ParameterCount;
+        int baseLoraCount = (int)base.ParameterCount;
 
         // Extract base and LoRA parameters
         Vector<T> baseLoraParams = new Vector<T>(baseLoraCount);
@@ -413,7 +413,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public override Vector<T> GetParameterGradients()
     {
         Vector<T> baseGrads = base.GetParameterGradients(); // Base layer + LoRA layer gradients
-        Vector<T> allGrads = new Vector<T>(ParameterCount);
+        Vector<T> allGrads = new Vector<T>((int)ParameterCount);
 
         int idx = 0;
 

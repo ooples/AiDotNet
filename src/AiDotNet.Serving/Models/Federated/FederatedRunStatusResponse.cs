@@ -18,7 +18,7 @@ public class FederatedRunStatusResponse
     /// <summary>
     /// Gets or sets the expected parameter count.
     /// </summary>
-    public int ParameterCount { get; set; }
+    public long ParameterCount { get; set; }
 
     /// <summary>
     /// Gets or sets the number of joined clients.

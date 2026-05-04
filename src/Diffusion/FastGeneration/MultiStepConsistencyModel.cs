@@ -80,7 +80,7 @@ public class MultiStepConsistencyModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => MSCM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -155,8 +155,8 @@ public class MultiStepConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -186,8 +186,8 @@ public class MultiStepConsistencyModel<T> : LatentDiffusionModelBase<T>
             Name = "Multi-Step Consistency Model",
             Version = "1.0",
             Description = "Configurable multi-step consistency model bridging single-step speed and multi-step quality",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "multi-step-consistency-unet");
         m.SetProperty("base_model", "Stable Diffusion 1.5");

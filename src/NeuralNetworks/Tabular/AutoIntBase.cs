@@ -63,7 +63,7 @@ public abstract class AutoIntBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
@@ -76,10 +76,10 @@ public abstract class AutoIntBase<T>
             }
 
             foreach (var layer in _interactingLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
 
             foreach (var layer in _mlpLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
 
             return count;
         }

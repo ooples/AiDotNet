@@ -71,7 +71,7 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _baseUNet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new Reference-Only model.
@@ -126,13 +126,13 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int o = 0;
-        var uc = _baseUNet.ParameterCount;
+        int uc = (int)_baseUNet.ParameterCount;
         var unetArr = new T[uc];
         for (int i = 0; i < uc; i++) unetArr[i] = parameters[o + i];
         _baseUNet.SetParameters(new Vector<T>(unetArr));
         o += uc;
 
-        var vc = _vae.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         var vaeArr = new T[vc];
         for (int i = 0; i < vc; i++) vaeArr[i] = parameters[o + i];
         _vae.SetParameters(new Vector<T>(vaeArr));
@@ -156,7 +156,7 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Reference-Only", Version = "1.0",
             Description = "Reference-only control using self-attention feature injection from a reference image",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "unet-reference-attention");
         metadata.SetProperty("base_model", "Stable Diffusion 1.5");

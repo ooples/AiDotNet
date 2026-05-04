@@ -536,7 +536,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int index = 0;
             foreach (var layer in Layers)
             {
-                int layerParameterCount = layer.ParameterCount;
+                int layerParameterCount = (int)layer.ParameterCount;
                 if (layerParameterCount > 0)
                 {
                     Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);
@@ -551,7 +551,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// </summary>
         public override Vector<T> GetParameters()
         {
-            var parameters = new Vector<T>(ParameterCount);
+            var parameters = new Vector<T>((int)ParameterCount);
             int index = 0;
 
             foreach (var layer in Layers)
@@ -570,7 +570,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         public override Vector<T> GetGradients()
         {
-            var gradients = new Vector<T>(ParameterCount);
+            var gradients = new Vector<T>((int)ParameterCount);
             int index = 0;
 
             foreach (var layer in Layers)
@@ -599,8 +599,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// Gets the total parameter count for lift, Fourier, and projection layers.
         /// Fourier layers are registered in the base Layers collection, so no separate sum needed.
         /// </summary>
-        public override int ParameterCount =>
-            Layers.Sum(layer => layer.ParameterCount);
+        public override long ParameterCount =>
+            (int)Layers.Sum(layer => layer.ParameterCount);
 
         /// <summary>
         /// Performs a basic supervised training step using MSE loss.
@@ -1033,7 +1033,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             // Tape-based training computes gradients through GradientTape<T> on
             // each forward call and applies them immediately — no persistent
             // gradient buffers are maintained here.
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         }
 
         public override void ClearGradients()
@@ -1041,7 +1041,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             // No-op: see GetParameterGradients — no persistent gradient buffers.
         }
 
-        public override int ParameterCount =>
+        public override long ParameterCount =>
             _spectralWeightsReal.Length * 2 + _pointwiseWeights.Length + _pointwiseBias.Length;
 
         public override void ResetState()

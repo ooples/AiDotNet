@@ -122,7 +122,7 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -242,7 +242,7 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Uni-ControlNet", Version = "1.0",
             Description = "Uni-ControlNet multi-condition simultaneous control with learned mixing",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "multi-adapter-controlnet");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

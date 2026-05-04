@@ -216,7 +216,7 @@ public class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInterpretable
     /// - The parameter count equals the number of features
     /// </para>
     /// </remarks>
-    public override int ParameterCount => Coefficients.Length;
+    public override long ParameterCount => Coefficients.Length;
 
     /// <summary>
     /// Determines whether a specific feature is used by the model.

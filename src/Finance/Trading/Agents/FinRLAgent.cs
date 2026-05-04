@@ -65,7 +65,7 @@ public class FinRLAgent<T> : TradingAgentBase<T>
     public override int FeatureCount => TradingOptions.StateSize;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _innerAgent.ParameterCount;
+    public override long ParameterCount => _innerAgent.ParameterCount;
 
     /// <summary>
     /// Gets the RL algorithm being used.

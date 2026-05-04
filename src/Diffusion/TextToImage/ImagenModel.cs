@@ -148,7 +148,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => IMAGEN_PIXEL_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _baseUnet.ParameterCount + _superRes1Unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _baseUnet.ParameterCount + _superRes1Unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the super-resolution Stage 1 noise predictor (64→256).
@@ -362,8 +362,8 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var baseCount = _baseUnet.ParameterCount;
-        var sr1Count = _superRes1Unet.ParameterCount;
+        int baseCount = (int)_baseUnet.ParameterCount;
+        int sr1Count = (int)_superRes1Unet.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != baseCount + sr1Count + vaeCount)
@@ -462,8 +462,8 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
             Name = "Imagen",
             Version = "1.0",
             Description = "Imagen cascaded pixel-space diffusion model with T5-XXL text encoder and dynamic thresholding",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "cascaded-pixel-diffusion");

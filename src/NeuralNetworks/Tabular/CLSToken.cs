@@ -45,7 +45,7 @@ public class CLSToken<T>
     /// <summary>
     /// Gets the number of parameters.
     /// </summary>
-    public int ParameterCount => EmbeddingDimension;
+    public long ParameterCount => EmbeddingDimension;
 
     /// <summary>
     /// Initializes a new CLS token with the specified embedding dimension.

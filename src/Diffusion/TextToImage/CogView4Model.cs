@@ -137,7 +137,7 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => COGVIEW_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this model supports bilingual Chinese-English prompts.
@@ -279,7 +279,7 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var predictorCount = _predictor.ParameterCount;
+        int predictorCount = (int)_predictor.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -342,8 +342,8 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
             Name = "CogView-4",
             Version = "4.0",
             Description = "Bilingual Chinese-English T2I with SiT architecture and relay diffusion",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "sit-relay-diffusion");

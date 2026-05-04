@@ -74,7 +74,7 @@ public abstract class CodeModelBase<T> : NeuralNetworkBase<T>, ICodeModel<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = (int)layer.ParameterCount;
             if (layerParameterCount <= 0)
             {
                 continue;

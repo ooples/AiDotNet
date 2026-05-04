@@ -110,18 +110,18 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <remarks>
     /// This includes parameters from the base layer (if not frozen) plus all task-specific LoRA layers.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
-            int totalParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            int totalParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
             if (_taskAdapters != null)
             {
                 foreach (var adapter in _taskAdapters.Values)
                 {
                     if (adapter != null)
                     {
-                        totalParams += adapter.ParameterCount;
+                        totalParams += (int)adapter.ParameterCount;
                     }
                 }
             }
@@ -384,7 +384,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <returns>Vector containing base parameters (if not frozen) and all task adapters' parameters.</returns>
     public override Vector<T> GetParameters()
     {
-        Vector<T> parameters = new Vector<T>(ParameterCount);
+        Vector<T> parameters = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Base layer parameters (if not frozen)
@@ -430,7 +430,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
         // Base layer parameters (if not frozen)
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = (int)_baseLayer.ParameterCount;
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -445,7 +445,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             foreach (var adapter in _taskAdapters.Values)
             {
-                int taskParamCount = adapter.ParameterCount;
+                int taskParamCount = (int)adapter.ParameterCount;
                 Vector<T> taskParams = new Vector<T>(taskParamCount);
                 for (int i = 0; i < taskParamCount; i++)
                 {
@@ -559,11 +559,11 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
         // Guard against incomplete initialization
         if (_taskAdapters == null)
         {
-            ParameterGradients = new Vector<T>(ParameterCount);
+            ParameterGradients = new Vector<T>((int)ParameterCount);
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Base layer gradients (if not frozen)

@@ -246,7 +246,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     /// that can be updated during training to learn patterns in spatio-temporal data (like videos or weather data).
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _weightsFi.Length + _weightsIi.Length + _weightsCi.Length + _weightsOi.Length + _weightsFh.Length + _weightsIh.Length + _weightsCh.Length + _weightsOh.Length + _biasF.Length + _biasI.Length + _biasC.Length + _biasO.Length;
+    public override long ParameterCount => _weightsFi.Length + _weightsIi.Length + _weightsCi.Length + _weightsOi.Length + _weightsFh.Length + _weightsIh.Length + _weightsCh.Length + _weightsOh.Length + _biasF.Length + _biasI.Length + _biasC.Length + _biasO.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -1577,7 +1577,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_gradients == null || _gradients.Count == 0)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
 
         T[] GetGrad(string key, int length)
         {

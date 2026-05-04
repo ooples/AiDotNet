@@ -67,7 +67,7 @@ public class MixedPrecisionContext : IDisposable
     /// <summary>
     /// Number of parameters managed by this context.
     /// </summary>
-    public int ParameterCount { get; private set; }
+    public long ParameterCount { get; private set; }
 
     /// <summary>
     /// Gets the names of all parameters being managed.

@@ -130,7 +130,7 @@ public interface ISSLMethod<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    int ParameterCount { get; }
+    long ParameterCount { get; }
 
     /// <summary>
     /// Called at the start of each training epoch.

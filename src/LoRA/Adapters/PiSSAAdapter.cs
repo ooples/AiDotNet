@@ -265,7 +265,7 @@ public class PiSSAAdapter<T> : LoRAAdapterBase<T>
 
         // Set the LoRA layer's A and B matrices
         // Note: LoRALayer expects A: [inputSize x rank], B: [rank x outputSize]
-        Vector<T> loraParams = new Vector<T>(_loraLayer.ParameterCount);
+        Vector<T> loraParams = new Vector<T>((int)_loraLayer.ParameterCount);
         int idx = 0;
 
         // Pack matrix A

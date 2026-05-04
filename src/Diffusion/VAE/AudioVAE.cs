@@ -696,7 +696,7 @@ public class AudioVAE<T> : VAEModelBase<T>
 
         if (_muProjection != null)
         {
-            var count = _muProjection.ParameterCount;
+            int count = (int)((int)_muProjection.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
             {
@@ -708,7 +708,7 @@ public class AudioVAE<T> : VAEModelBase<T>
 
         if (_logVarProjection != null)
         {
-            var count = _logVarProjection.ParameterCount;
+            int count = (int)((int)_logVarProjection.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
             {
@@ -720,7 +720,7 @@ public class AudioVAE<T> : VAEModelBase<T>
 
         if (_latentToDecoder != null)
         {
-            var count = _latentToDecoder.ParameterCount;
+            int count = (int)((int)_latentToDecoder.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
             {
@@ -731,14 +731,14 @@ public class AudioVAE<T> : VAEModelBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int count = 0;
-            if (_muProjection != null) count += _muProjection.ParameterCount;
-            if (_logVarProjection != null) count += _logVarProjection.ParameterCount;
-            if (_latentToDecoder != null) count += _latentToDecoder.ParameterCount;
+            if (_muProjection != null) count += (int)((int)_muProjection.ParameterCount);
+            if (_logVarProjection != null) count += (int)((int)_logVarProjection.ParameterCount);
+            if (_latentToDecoder != null) count += (int)((int)_latentToDecoder.ParameterCount);
             return count;
         }
     }

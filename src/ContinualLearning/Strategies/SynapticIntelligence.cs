@@ -245,7 +245,7 @@ public class SynapticIntelligence<T, TInput, TOutput> : ContinualLearningStrateg
     /// <inheritdoc/>
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
-        var paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
 
         // Initialize omega if this is the first task
         if (_omega == null || _omega.Length != paramCount)

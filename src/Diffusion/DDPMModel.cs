@@ -90,7 +90,7 @@ public class DDPMModel<T> : DiffusionModelBase<T>
     #region Properties
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount;
 
     #endregion
 

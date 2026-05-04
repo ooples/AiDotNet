@@ -135,7 +135,7 @@ public class MambaBlockTests
             innerDim +                                       // D param
             innerDim * modelDim + modelDim;                  // output proj weights + bias
 
-        Assert.Equal(expectedParams, block.ParameterCount);
+        Assert.Equal(expectedParams, (int)block.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]

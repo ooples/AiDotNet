@@ -240,7 +240,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = (int)layer.ParameterCount;
             if (layerParamCount > 0)
             {
                 var layerParams = parameters.SubVector(index, layerParamCount);

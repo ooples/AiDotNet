@@ -74,7 +74,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         (_expandConv?.ParameterCount ?? 0) + (_expandBn?.ParameterCount ?? 0) +
         _dwConv.ParameterCount + _dwBn.ParameterCount +
         (_se?.ParameterCount ?? 0) +

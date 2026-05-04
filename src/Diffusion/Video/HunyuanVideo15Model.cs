@@ -71,7 +71,7 @@ public class HunyuanVideo15Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Initializes a new instance of HunyuanVideo15Model with full customization support.
@@ -147,7 +147,7 @@ public class HunyuanVideo15Model<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var predCount = _predictor.ParameterCount;
+        int predCount = (int)_predictor.ParameterCount;
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -190,8 +190,8 @@ public class HunyuanVideo15Model<T> : VideoDiffusionModelBase<T>
             Name = "HunyuanVideo15",
             Version = "1.5",
             Description = "HunyuanVideo 1.5 efficient video generation model for consumer GPUs.",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "dual-stream-dit-causal-3dvae");
         metadata.SetProperty("open_source", true);

@@ -206,7 +206,7 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
 
     #endregion
 
@@ -347,7 +347,7 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var ditCount = _dit.ParameterCount;
+        int ditCount = (int)_dit.ParameterCount;
         var vaeCount = _temporalVAE.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -416,8 +416,8 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "LTX-Video",
             Version = "1.0",
             Description = "LTX-Video lightweight real-time video generation with extreme latent compression",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "lightweight-dit-3d-causal-vae");

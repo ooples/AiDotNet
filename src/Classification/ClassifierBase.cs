@@ -640,7 +640,7 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
     /// Gets the expected number of parameters for this classifier.
     /// Used by subclasses that implement IParameterizable.
     /// </summary>
-    public virtual int ParameterCount => ExpectedParameterCount;
+    public virtual long ParameterCount => ExpectedParameterCount;
 
     /// <summary>
     /// Whether this classifier supports parameter initialization.

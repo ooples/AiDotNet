@@ -125,7 +125,7 @@ public class IPAdapterFaceIDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -245,7 +245,7 @@ public class IPAdapterFaceIDModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "IP-Adapter FaceID", Version = "1.0",
             Description = "IP-Adapter FaceID face-specific identity preservation with ArcFace embeddings",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "ip-adapter-arcface");
         metadata.SetProperty("face_encoder", "ArcFace/InsightFace");

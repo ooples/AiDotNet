@@ -129,7 +129,7 @@ public class StableAudioModel<T> : AudioDiffusionModelBase<T>
     public override bool SupportsAudioToAudio => true;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _audioVAE.ParameterCount;
+    public override long ParameterCount => _dit.ParameterCount + _audioVAE.ParameterCount;
 
     #endregion
 
@@ -228,8 +228,8 @@ public class StableAudioModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int ditCount = _dit.ParameterCount;
-        int vaeCount = _audioVAE.ParameterCount;
+        int ditCount = (int)_dit.ParameterCount;
+        int vaeCount = (int)_audioVAE.ParameterCount;
 
         if (parameters.Length != ditCount + vaeCount)
         {
@@ -295,8 +295,8 @@ public class StableAudioModel<T> : AudioDiffusionModelBase<T>
             Name = "Stable-Audio-Open",
             Version = "1.0",
             Description = "Stable Audio Open DiT-based audio generation with timing conditioning at 44.1 kHz",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-timing-conditioned");

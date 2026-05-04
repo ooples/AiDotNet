@@ -196,7 +196,7 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the InfoGAN.
     /// </summary>
-    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount() + QNetwork.GetParameterCount();
+    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount() + QNetwork.GetParameterCount();
 
     private ILossFunction<T> _lossFunction;
 
@@ -973,9 +973,9 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
         }
 
-        int generatorCount = Generator.GetParameterCount();
-        int discriminatorCount = Discriminator.GetParameterCount();
-        int qNetworkCount = QNetwork.GetParameterCount();
+        int generatorCount = (int)Generator.GetParameterCount();
+        int discriminatorCount = (int)Discriminator.GetParameterCount();
+        int qNetworkCount = (int)QNetwork.GetParameterCount();
 
         int totalCount = generatorCount + discriminatorCount + qNetworkCount;
 

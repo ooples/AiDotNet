@@ -64,7 +64,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _depth * _inputDim +      // feature selection weights
         _depth +                   // thresholds
         _numLeaves * _outputDim;   // leaf values

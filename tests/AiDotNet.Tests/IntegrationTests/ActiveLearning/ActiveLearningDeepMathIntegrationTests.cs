@@ -761,7 +761,7 @@ public class ActiveLearningDeepMathIntegrationTests
         public void LoadState(Stream stream) { }
         public Vector<double> GetParameters() => _parameters;
         public void SetParameters(Vector<double> parameters) { }
-        public int ParameterCount => _parameters.Length;
+        public long ParameterCount => _parameters.Length;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> p) => this;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
@@ -771,7 +771,7 @@ public class ActiveLearningDeepMathIntegrationTests
         public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() => this;
         public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => this;
         public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null)
-            => new(ParameterCount);
+            => new((int)ParameterCount);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;

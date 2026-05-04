@@ -212,7 +212,7 @@ public class VeoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => true;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Gets whether this is a Veo 2 variant with enhanced quality.
@@ -379,7 +379,7 @@ public class VeoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var ditCount = _dit.ParameterCount;
+        int ditCount = (int)_dit.ParameterCount;
         var vaeCount = _temporalVAE.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -449,8 +449,8 @@ public class VeoModel<T> : VideoDiffusionModelBase<T>
             Name = _isVeo2 ? "Veo-2" : "Veo",
             Version = "1.0",
             Description = $"Google {(_isVeo2 ? "Veo 2" : "Veo")} cascaded video generation with temporal super-resolution",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "cascaded-dit");

@@ -67,7 +67,7 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters including the classification head.
     /// </summary>
-    public override int ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
+    public override long ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the FTTransformerClassifier class.
@@ -405,7 +405,7 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        int baseCount = base.ParameterCount - _classificationHead.ParameterCount;
+        int baseCount = (int)(base.ParameterCount - _classificationHead.ParameterCount);
         var baseParams = new Vector<T>(baseCount);
         for (int i = 0; i < baseCount; i++)
         {
@@ -413,7 +413,7 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         }
         base.SetParameters(baseParams);
 
-        int headCount = _classificationHead.ParameterCount;
+        int headCount = (int)_classificationHead.ParameterCount;
         var headParams = new Vector<T>(headCount);
         for (int i = 0; i < headCount; i++)
         {

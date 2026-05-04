@@ -138,7 +138,7 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => SD2_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (1024 for SD 2.x, matching OpenCLIP ViT-H/14).
@@ -399,8 +399,8 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
             Name = "Stable Diffusion 2.1",
             Version = "2.1",
             Description = "Stable Diffusion 2.x latent diffusion model with OpenCLIP ViT-H/14 text conditioning and v-prediction",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

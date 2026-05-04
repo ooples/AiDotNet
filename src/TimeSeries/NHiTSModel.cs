@@ -490,7 +490,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             Name = "N-HiTS",
             Description = "Neural Hierarchical Interpolation for Time Series with multi-rate sampling (Production-Ready)",
-            Complexity = ParameterCount,
+            Complexity = (int)ParameterCount,
             FeatureCount = _options.LookbackWindow,
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -508,13 +508,13 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         return new NHiTSModel<T>(new NHiTSOptions<T>(_options));
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int total = 0;
             foreach (var stack in _stacks)
-                total += stack.ParameterCount;
+                total += (int)stack.ParameterCount;
             return total;
         }
     }
@@ -555,7 +555,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public int PoolingSize { get; }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

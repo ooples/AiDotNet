@@ -328,7 +328,7 @@ public class SelfSupervisedLearningIntegrationTests
         Assert.Equal(64, projector.InputDimension);
         Assert.Equal(128, projector.OutputDimension);
         Assert.Null(projector.HiddenDimension); // Linear projector has no hidden layer
-        Assert.Equal(64 * 128 + 128, projector.ParameterCount); // weights + bias
+        Assert.Equal(64 * 128 + 128, (int)projector.ParameterCount); // weights + bias
     }
 
     [Fact(Timeout = 120000)]
@@ -367,8 +367,8 @@ public class SelfSupervisedLearningIntegrationTests
         var noBias = new LinearProjector<double>(inputDim: 32, outputDim: 64, useBias: false);
 
         // Assert
-        Assert.Equal(32 * 64 + 64, withBias.ParameterCount);
-        Assert.Equal(32 * 64, noBias.ParameterCount);
+        Assert.Equal(32 * 64 + 64, (int)withBias.ParameterCount);
+        Assert.Equal(32 * 64, (int)noBias.ParameterCount);
     }
 
     #endregion

@@ -121,7 +121,7 @@ public class LinearVectorModel : ModelBase<double, Matrix<double>, Vector<double
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => _parameters.Length;
+    public override long ParameterCount => _parameters.Length;
 
     /// <inheritdoc/>
     public override IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)

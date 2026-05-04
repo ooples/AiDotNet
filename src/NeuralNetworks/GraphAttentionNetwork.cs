@@ -253,7 +253,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = (int)layer.ParameterCount;
             if (layerParamCount > 0)
             {
                 var layerParams = parameters.SubVector(index, layerParamCount);
@@ -454,12 +454,12 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the network.
     /// </summary>
-    public new int GetParameterCount()
+    public new long GetParameterCount()
     {
         int count = 0;
         foreach (var layer in Layers)
         {
-            count += layer.ParameterCount;
+            count += (int)((int)layer.ParameterCount);
         }
         return count;
     }
@@ -652,7 +652,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         {
             if (layer is GraphConvolutionalLoRAAdapter<T> loraAdapter)
             {
-                count += loraAdapter.LoRALayer.ParameterCount;
+                count += (int)(loraAdapter.LoRALayer.ParameterCount);
             }
         }
         return count;
@@ -670,7 +670,7 @@ public class GraphAttentionNetwork<T> : NeuralNetworkBase<T>
         }
 
         int loraParams = GetLoRAParameterCount();
-        int totalParams = GetParameterCount();
+        int totalParams = (int)GetParameterCount();
 
         return totalParams > 0 ? (100.0 * loraParams / totalParams) : 0.0;
     }

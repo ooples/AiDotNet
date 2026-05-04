@@ -70,8 +70,8 @@ public class SegFormerIntegrationTests
 
         // B5 has much deeper transformer stages (depths [3,6,40,3] vs [2,2,2,2])
         // so it should have more layers
-        int b0Params = modelB0.ParameterCount;
-        int b5Params = modelB5.ParameterCount;
+        int b0Params = (int)modelB0.ParameterCount;
+        int b5Params = (int)modelB5.ParameterCount;
         Assert.True(b5Params > b0Params,
             $"B5 should have more parameters ({b5Params}) than B0 ({b0Params})");
     }

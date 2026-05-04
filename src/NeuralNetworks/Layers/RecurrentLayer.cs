@@ -110,7 +110,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// - Hidden weights: hiddenSize × hiddenSize
     /// - Biases: hiddenSize
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         // Weight/bias tensors are zero-sized placeholders before first forward, so
         // .Length already returns 0. Result matches GetParameters().Length.
         _inputWeights.Length + _hiddenWeights.Length + _biases.Length;
@@ -790,7 +790,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         // If gradients haven't been computed yet, return zero gradients
         if (_inputWeightsGradient == null || _hiddenWeightsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         }
 
         // VECTORIZED: Concatenate gradient data using Vector.Concatenate

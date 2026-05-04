@@ -43,7 +43,7 @@ public class PointCloudDeepMathIntegrationTests
 
         // Set known weights and biases by getting and setting parameters
         // Parameters: [W11, W12, W21, W22, b1, b2] = [2*2 + 2 = 6 params]
-        var paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
         Assert.Equal(6, paramCount); // 2*2 weights + 2 biases
 
         var params1 = new Vector<double>(6);
@@ -95,10 +95,10 @@ public class PointCloudDeepMathIntegrationTests
     {
         // Parameters = inputChannels * outputChannels + outputChannels (weights + biases)
         var layer = new PointConvolutionLayer<double>(3, 64);
-        Assert.Equal(3 * 64 + 64, layer.ParameterCount); // 256
+        Assert.Equal(3 * 64 + 64, (int)layer.ParameterCount); // 256
 
         var layer2 = new PointConvolutionLayer<double>(64, 128);
-        Assert.Equal(64 * 128 + 128, layer2.ParameterCount); // 8320
+        Assert.Equal(64 * 128 + 128, (int)layer2.ParameterCount); // 8320
     }
 
     // ============================
@@ -233,7 +233,7 @@ public class PointCloudDeepMathIntegrationTests
     public async Task MaxPooling_HasNoTrainableParameters()
     {
         var layer = new MaxPoolingLayer<double>(10);
-        Assert.Equal(0, layer.ParameterCount);
+        Assert.Equal(0, (int)layer.ParameterCount);
         Assert.False(layer.SupportsTraining);
     }
 

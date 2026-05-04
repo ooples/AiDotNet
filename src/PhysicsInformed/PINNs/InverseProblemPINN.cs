@@ -741,7 +741,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             int offset = 0;
             foreach (var layer in Layers)
             {
-                int paramCount = layer.ParameterCount;
+                int paramCount = (int)layer.ParameterCount;
                 if (paramCount > 0)
                 {
                     var subParams = parameters.GetSubVector(offset, paramCount);
@@ -810,8 +810,8 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        public override int ParameterCount =>
-            Layers.Sum(l => l.ParameterCount) + _inverseProblem.NumberOfParameters;
+        public override long ParameterCount =>
+            (int)Layers.Sum(l => l.ParameterCount) + _inverseProblem.NumberOfParameters;
 
         /// <inheritdoc/>
         public override ModelMetadata<T> GetModelMetadata()

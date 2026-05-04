@@ -132,7 +132,7 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -265,7 +265,7 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "Meshy", Version = "4.0",
             Description = "Meshy production-grade 3D generation with PBR texturing",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "multiview-plus-pbr-texturing");
         metadata.SetProperty("pbr_maps", "albedo,normal,roughness,metallic");

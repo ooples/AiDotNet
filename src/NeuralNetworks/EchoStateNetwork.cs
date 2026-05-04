@@ -1096,7 +1096,7 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _reservoirSize * _outputSize;
+    public override long ParameterCount => _reservoirSize * _outputSize;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()

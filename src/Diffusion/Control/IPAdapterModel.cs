@@ -161,7 +161,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => IPA_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _baseUNet.ParameterCount + _vae.ParameterCount + _imageEncoder.ParameterCount + _imageProjector.ParameterCount;
 
     /// <summary>
@@ -519,10 +519,10 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _baseUNet.ParameterCount;
+        int unetCount = (int)_baseUNet.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
-        var encoderCount = _imageEncoder.ParameterCount;
-        var projectorCount = _imageProjector.ParameterCount;
+        int encoderCount = (int)_imageEncoder.ParameterCount;
+        int projectorCount = (int)_imageProjector.ParameterCount;
 
         var offset = 0;
         var unetParams = new T[unetCount];
@@ -580,7 +580,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "IP-Adapter", Version = "1.0",
             Description = "Image prompt adapter for reference image-guided diffusion generation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "unet-decoupled-cross-attention");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
@@ -654,14 +654,14 @@ public class ImageEncoder<T>
     /// Computed live from each sublayer so it reflects current state regardless of
     /// when the layers were resolved.
     /// </summary>
-    public int ParameterCount
+    public long ParameterCount
     {
         get
         {
-            int total = _patchEmbed.ParameterCount;
+            int total = (int)_patchEmbed.ParameterCount;
             foreach (var layer in _transformerLayers)
             {
-                total += layer.ParameterCount;
+                total += (int)layer.ParameterCount;
             }
             return total;
         }
@@ -816,7 +816,7 @@ public class ImageEncoder<T>
     {
         var offset = 0;
 
-        var count = _patchEmbed.ParameterCount;
+        int count = (int)((int)_patchEmbed.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {
@@ -826,7 +826,7 @@ public class ImageEncoder<T>
 
         foreach (var layer in _transformerLayers)
         {
-            count = layer.ParameterCount;
+            count = (int)((int)layer.ParameterCount);
             p = new T[count];
             for (int i = 0; i < count; i++)
             {
@@ -855,7 +855,7 @@ public class ImageProjector<T>
     /// Number of trainable parameters across the projection + token-expansion layers.
     /// Computed live from the underlying lazy layers so it reflects current state.
     /// </summary>
-    public int ParameterCount => _projection.ParameterCount + _tokenExpansion.ParameterCount;
+    public long ParameterCount => _projection.ParameterCount + _tokenExpansion.ParameterCount;
 
     /// <summary>
     /// Initializes a new ImageProjector.
@@ -925,7 +925,7 @@ public class ImageProjector<T>
     {
         var offset = 0;
 
-        var count = _projection.ParameterCount;
+        int count = (int)((int)_projection.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {
@@ -933,7 +933,7 @@ public class ImageProjector<T>
         }
         _projection.SetParameters(new Vector<T>(p));
 
-        count = _tokenExpansion.ParameterCount;
+        count = (int)((int)_tokenExpansion.ParameterCount);
         p = new T[count];
         for (int i = 0; i < count; i++)
         {

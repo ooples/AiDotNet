@@ -136,7 +136,7 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => TURBO_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this is the SDXL Turbo variant (true) or SD Turbo variant (false).
@@ -427,8 +427,8 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
             Name = variant,
             Version = "1.0",
             Description = $"{variant} distilled single/few-step image generation via Adversarial Diffusion Distillation",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "distilled-latent-diffusion");

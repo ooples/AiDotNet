@@ -40,7 +40,7 @@ public sealed class FederatedRunState
     public NumericType NumericType { get; }
     public FederatedLearningOptions Options { get; }
     public int MinClientUpdatesPerRound { get; }
-    public int ParameterCount { get; }
+    public long ParameterCount { get; }
 
     public int CurrentRound { get; set; } = 0;
 

@@ -105,7 +105,7 @@ public abstract class TabTransformerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
@@ -121,15 +121,15 @@ public abstract class TabTransformerBase<T>
 
             // Transformer layers
             foreach (var layer in _encoderLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
 
             // Layer norm
             if (_finalLayerNorm != null)
-                count += _finalLayerNorm.ParameterCount;
+                count += (int)((int)_finalLayerNorm.ParameterCount);
 
             // MLP layers
             foreach (var layer in _mlpLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
 
             return count;
         }

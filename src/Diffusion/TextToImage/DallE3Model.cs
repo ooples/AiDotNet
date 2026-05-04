@@ -791,7 +791,7 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 

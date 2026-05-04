@@ -711,7 +711,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var network in Networks)
         {
-            int paramCount = network.ParameterCount;
+            int paramCount = (int)network.ParameterCount;
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {

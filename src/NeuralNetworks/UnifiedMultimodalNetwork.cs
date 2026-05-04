@@ -1027,7 +1027,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
 
         void SetLayerParams(ILayer<T> layer)
         {
-            var count = layer.ParameterCount;
+            int count = (int)((int)layer.ParameterCount);
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
@@ -1059,28 +1059,28 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             var count = 0;
 
-            count += _textEncoder.ParameterCount;
-            count += _imageEncoder.ParameterCount;
-            count += _audioEncoder.ParameterCount;
-            count += _videoEncoder.ParameterCount;
+            count += (int)((int)_textEncoder.ParameterCount);
+            count += (int)((int)_imageEncoder.ParameterCount);
+            count += (int)((int)_audioEncoder.ParameterCount);
+            count += (int)((int)_videoEncoder.ParameterCount);
 
-            foreach (var layer in _transformerLayers) count += layer.ParameterCount;
-            foreach (var layer in _crossModalAttention) count += layer.ParameterCount;
+            foreach (var layer in _transformerLayers) count += (int)((int)layer.ParameterCount);
+            foreach (var layer in _crossModalAttention) count += (int)((int)layer.ParameterCount);
 
-            count += _textDecoder.ParameterCount;
-            count += _imageDecoder.ParameterCount;
-            count += _audioDecoder.ParameterCount;
-            count += _videoDecoder.ParameterCount;
+            count += (int)((int)_textDecoder.ParameterCount);
+            count += (int)((int)_imageDecoder.ParameterCount);
+            count += (int)((int)_audioDecoder.ParameterCount);
+            count += (int)((int)_videoDecoder.ParameterCount);
 
-            count += _fusionLayer.ParameterCount;
-            count += _classificationHead.ParameterCount;
-            count += _generationHead.ParameterCount;
+            count += (int)((int)_fusionLayer.ParameterCount);
+            count += (int)((int)_classificationHead.ParameterCount);
+            count += (int)((int)_generationHead.ParameterCount);
 
             return count;
         }

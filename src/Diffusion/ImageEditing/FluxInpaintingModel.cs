@@ -81,7 +81,7 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public FluxInpaintingModel(
         NeuralNetworkArchitecture<T>? architecture = null, DiffusionModelOptions<T>? options = null,
@@ -118,8 +118,8 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -148,7 +148,7 @@ public class FluxInpaintingModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "FLUX Fill", Version = "1.0",
             Description = "FLUX rectified flow transformer for high-quality mask-guided inpainting",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "flux-double-stream-inpainting");
         m.SetProperty("hidden_size", FLUX_HIDDEN_SIZE);

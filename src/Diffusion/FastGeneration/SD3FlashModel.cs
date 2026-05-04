@@ -64,7 +64,7 @@ public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public SD3FlashModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -118,8 +118,8 @@ public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -147,7 +147,7 @@ public class SD3FlashModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "SD3 Flash", Version = "1.0",
             Description = "Consistency-distilled SD3 for ultra-fast 1-4 step generation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "distilled-mmdit-consistency");
         m.SetProperty("base_model", "Stable Diffusion 3");

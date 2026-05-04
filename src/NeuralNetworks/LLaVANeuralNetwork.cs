@@ -1107,7 +1107,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1121,40 +1121,40 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             // Vision encoder layers
             foreach (var layer in _visionEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Projection layers
             foreach (var layer in _projectionLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Language model layers
             foreach (var layer in _languageModelLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Single layers
             if (_patchEmbedding is not null)
             {
-                count += _patchEmbedding.ParameterCount;
+                count += (int)((int)_patchEmbedding.ParameterCount);
             }
 
             if (_textTokenEmbedding is not null)
             {
-                count += _textTokenEmbedding.ParameterCount;
+                count += (int)((int)_textTokenEmbedding.ParameterCount);
             }
 
             if (_outputProjection is not null)
             {
-                count += _outputProjection.ParameterCount;
+                count += (int)((int)_outputProjection.ParameterCount);
             }
 
             if (_groundingHead is not null)
             {
-                count += _groundingHead.ParameterCount;
+                count += (int)((int)_groundingHead.ParameterCount);
             }
 
             // Positional embeddings
@@ -1210,7 +1210,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             return;
         }
 
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
@@ -1222,7 +1222,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         void UpdateLayerParameters(ILayer<T> layer)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = (int)layer.ParameterCount;
             if (layerParamCount <= 0)
             {
                 return;

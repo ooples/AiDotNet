@@ -179,7 +179,7 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     private Tensor<T>? _gateBiasGradient;
 
     /// <inheritdoc/>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

@@ -693,7 +693,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         {
             Name = "TemporalFusionTransformer",
             Description = "TFT per Lim et al. (2021) with LSTM encoder, GRN gating, and interpretable attention",
-            Complexity = ParameterCount,
+            Complexity = (int)ParameterCount,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["HiddenSize"] = _options.HiddenSize,
@@ -712,7 +712,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         return new TemporalFusionTransformer<T>(new TemporalFusionTransformerOptions<T>(_options));
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

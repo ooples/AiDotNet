@@ -678,7 +678,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// - Biases: [hiddenSize]
     /// </para>
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         // Before first forward, _inputSize is -1 (lazy sentinel) and the weight/bias
         // tensors are zero-sized placeholders. Reporting a real parameter count from
         // an unresolved input width would (a) yield a negative number from
@@ -2093,7 +2093,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (Gradients == null || Gradients.Count == 0)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
 
         Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
 

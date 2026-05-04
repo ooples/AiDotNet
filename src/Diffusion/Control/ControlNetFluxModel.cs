@@ -73,7 +73,7 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => FLUX_LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _controlEncoder.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _controlEncoder.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet-FLUX model.
@@ -141,13 +141,13 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        var predCount = _predictor.ParameterCount;
+        int predCount = (int)_predictor.ParameterCount;
         var predParams = new T[predCount];
         for (int i = 0; i < predCount; i++) predParams[i] = parameters[offset + i];
         _predictor.SetParameters(new Vector<T>(predParams));
         offset += predCount;
 
-        var ctrlCount = _controlEncoder.ParameterCount;
+        int ctrlCount = (int)_controlEncoder.ParameterCount;
         var ctrlParams = new T[ctrlCount];
         for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
@@ -180,8 +180,8 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
             Name = "ControlNet-FLUX",
             Version = "1.0",
             Description = "ControlNet adapted for FLUX.1 flow-matching architecture",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "flux-double-stream-controlnet");

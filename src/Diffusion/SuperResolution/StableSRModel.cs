@@ -189,7 +189,7 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -482,8 +482,8 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
             Name = "StableSR",
             Version = "1.0",
             Description = "StableSR diffusion-prior-based super-resolution with controllable feature wrapping",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "sd15-controllable-sr");

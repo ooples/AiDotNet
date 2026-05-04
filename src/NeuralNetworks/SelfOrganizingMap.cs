@@ -893,12 +893,12 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _mapWidth * _mapHeight * _inputDimension;
+    public override long ParameterCount => _mapWidth * _mapHeight * _inputDimension;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         int idx = 0;
         for (int i = 0; i < _mapWidth * _mapHeight; i++)
         {
@@ -917,7 +917,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         // SOM uses competitive learning, not gradient descent.
         // Return a non-zero vector to satisfy gradient flow checks.
         // The actual "gradient" is the weight delta from BMU updates.
-        return new Vector<T>(ParameterCount);
+        return new Vector<T>((int)ParameterCount);
     }
 
     /// <inheritdoc/>

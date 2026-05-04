@@ -132,7 +132,7 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => _conditioner != null;
 
     /// <inheritdoc />
-    public override int ParameterCount => _videoUnet.ParameterCount + _temporalVae.ParameterCount;
+    public override long ParameterCount => _videoUnet.ParameterCount + _temporalVae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant ("2B" or "5B").
@@ -253,8 +253,8 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _videoUnet.ParameterCount;
-        var vaeCount = _temporalVae.ParameterCount;
+        int unetCount = (int)_videoUnet.ParameterCount;
+        int vaeCount = (int)_temporalVae.ParameterCount;
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -326,8 +326,8 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
             Name = $"CogVideoX-{_variant}",
             Version = _variant,
             Description = $"CogVideoX-{_variant} text-to-video model with 3D causal VAE and diffusion transformer",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "3d-causal-vae-dit");

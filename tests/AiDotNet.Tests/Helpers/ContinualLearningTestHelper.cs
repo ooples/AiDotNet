@@ -133,14 +133,14 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
                 Category = LayerCategory.Dense,
                 Layer = layer,
                 ParameterOffset = parameterOffset,
-                ParameterCount = layer.ParameterCount,
+                ParameterCount = (int)layer.ParameterCount,
                 InputShape = layer.GetInputShape(),
                 OutputShape = layer.GetOutputShape(),
                 IsTrainable = layer.SupportsTraining,
                 EstimatedFlops = 2L * layer.ParameterCount,
                 EstimatedActivationMemory = layer.GetOutputShape().Aggregate(1L, (a, b) => a * b) * 8
             });
-            parameterOffset += layer.ParameterCount;
+            parameterOffset += (int)layer.ParameterCount;
         }
         return result;
     }
@@ -201,14 +201,14 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
                 Category = LayerCategory.Dense,
                 Layer = layer,
                 ParameterOffset = localOffset,
-                ParameterCount = layer.ParameterCount,
+                ParameterCount = (int)layer.ParameterCount,
                 InputShape = layer.GetInputShape(),
                 OutputShape = layer.GetOutputShape(),
                 IsTrainable = layer.SupportsTraining,
                 EstimatedFlops = 2L * layer.ParameterCount,
                 EstimatedActivationMemory = layer.GetOutputShape().Aggregate(1L, (a, b) => a * b) * 8
             });
-            localOffset += layer.ParameterCount;
+            localOffset += (int)layer.ParameterCount;
         }
 
         return new SubModel<T>(subLayers, subInfos, startLayer, endLayer);
@@ -341,7 +341,7 @@ public class MockNeuralNetwork<T> : INeuralNetwork<T>
         }
     }
 
-    public int ParameterCount => _numParameters;
+    public long ParameterCount => _numParameters;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
@@ -503,7 +503,7 @@ public class MockLayer<T> : ILayer<T>
         }
     }
 
-    public int ParameterCount => _parameterCount;
+    public long ParameterCount => _parameterCount;
 
     public void Serialize(BinaryWriter writer)
     {

@@ -105,7 +105,7 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this is the Imagen 3 variant.
@@ -290,8 +290,8 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
             Name = name,
             Version = _isImagen3 ? "3.0" : "2.0",
             Description = $"{name} cascaded text-to-image generation with T5-XXL text encoding",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "cascaded-latent-diffusion");

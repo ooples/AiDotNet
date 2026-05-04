@@ -62,7 +62,7 @@ public class TabDPTClassifier<T> : TabDPTBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
+    public override long ParameterCount => base.ParameterCount + _classificationHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the TabDPTClassifier class.

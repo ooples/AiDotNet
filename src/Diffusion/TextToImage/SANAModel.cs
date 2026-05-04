@@ -152,7 +152,7 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => SANA_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant.
@@ -305,7 +305,7 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var predictorCount = _predictor.ParameterCount;
+        int predictorCount = (int)_predictor.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -370,8 +370,8 @@ public class SANAModel<T> : LatentDiffusionModelBase<T>
             Name = $"SANA {variantName}",
             Version = variantName,
             Description = $"SANA {variantName} linear DiT with DC-AE (32x compression) and Gemma text encoder for efficient high-resolution generation",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "linear-dit-dc-ae-flow-matching");

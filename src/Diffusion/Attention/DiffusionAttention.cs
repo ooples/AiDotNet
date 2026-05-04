@@ -265,7 +265,7 @@ public class DiffusionAttention<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => _flashAttention.ParameterCount;
+    public override long ParameterCount => _flashAttention.ParameterCount;
 
     /// <summary>
     /// Gets all layer parameters as a single vector.
@@ -496,7 +496,7 @@ public class DiffusionCrossAttention<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => _crossAttention.ParameterCount;
+    public override long ParameterCount => _crossAttention.ParameterCount;
 
     /// <summary>
     /// Gets all layer parameters.

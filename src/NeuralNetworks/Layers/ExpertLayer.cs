@@ -120,7 +120,7 @@ public class ExpertLayer<T> : LayerBase<T>
     /// but also requires more memory and computation.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _layers.Sum(l => l.ParameterCount);
+    public override long ParameterCount => (int)_layers.Sum(l => l.ParameterCount);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ExpertLayer{T}"/> class with the specified layers.
@@ -435,7 +435,7 @@ public class ExpertLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
         {
-            var layerParamCount = layer.ParameterCount;
+            int layerParamCount = (int)layer.ParameterCount;
             var layerParamsVec = parameters.Slice(offset, layerParamCount);
             layer.SetParameters(layerParamsVec);
             offset += layerParamCount;

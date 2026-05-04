@@ -64,15 +64,15 @@ public class GQAInferenceIntegrationTests
 
         // Standard MHA: Q, K, V all [256, 256]
         var mha = new GroupedQueryAttentionLayer<float>(16, embDim, numHeads, numHeads);
-        int mhaParams = mha.ParameterCount;
+        int mhaParams = (int)mha.ParameterCount;
 
         // GQA with 8 KV heads: Q [256, 256], K/V [256, 64]
         var gqa = new GroupedQueryAttentionLayer<float>(16, embDim, numHeads, 8);
-        int gqaParams = gqa.ParameterCount;
+        int gqaParams = (int)gqa.ParameterCount;
 
         // MQA with 1 KV head: Q [256, 256], K/V [256, 8]
         var mqa = new GroupedQueryAttentionLayer<float>(16, embDim, numHeads, 1);
-        int mqaParams = mqa.ParameterCount;
+        int mqaParams = (int)mqa.ParameterCount;
 
         // GQA should be between MQA and MHA
         Assert.True(mqaParams < gqaParams, "MQA should have fewer params than GQA");

@@ -67,7 +67,7 @@ public class MARModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public MARModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -121,8 +121,8 @@ public class MARModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -150,7 +150,7 @@ public class MARModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Masked Autoregressive (MAR)", Version = "1.0",
             Description = "Image generation via continuous-valued masked token prediction without VQ",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "masked-autoregressive-dit");
         m.SetProperty("generation_method", "progressive-unmasking");

@@ -136,7 +136,7 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => IDEOGRAM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this model has specialized text rendering capabilities.
@@ -283,7 +283,7 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var predictorCount = _predictor.ParameterCount;
+        int predictorCount = (int)_predictor.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -344,8 +344,8 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
             Name = "Ideogram 3",
             Version = "3.0",
             Description = "SiT with text layout prediction and OCR-in-the-loop training for superior text rendering",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "sit-text-layout-prediction");

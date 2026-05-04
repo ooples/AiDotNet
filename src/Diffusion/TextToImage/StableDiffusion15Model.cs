@@ -208,7 +208,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => SD15_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for SD 1.5, matching CLIP ViT-L/14).
@@ -619,8 +619,8 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
             Name = "Stable Diffusion 1.5",
             Version = "1.5",
             Description = "Stable Diffusion 1.5 latent diffusion model with CLIP ViT-L/14 text conditioning",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

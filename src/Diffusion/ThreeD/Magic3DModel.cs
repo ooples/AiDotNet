@@ -131,7 +131,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsScoreDistillation => true;
 
     /// <inheritdoc />
-    public override int ParameterCount => _coarseUnet.ParameterCount + _fineUnet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _coarseUnet.ParameterCount + _fineUnet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the coarse-stage noise predictor (pixel-space SDS).
@@ -260,8 +260,8 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var coarseCount = _coarseUnet.ParameterCount;
-        var fineCount = _fineUnet.ParameterCount;
+        int coarseCount = (int)_coarseUnet.ParameterCount;
+        int fineCount = (int)_fineUnet.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != coarseCount + fineCount + vaeCount)
@@ -345,8 +345,8 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
             Name = "Magic3D",
             Version = "1.0",
             Description = "Magic3D two-stage coarse-to-fine text-to-3D generation with score distillation sampling",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "sds-nerf-to-mesh");

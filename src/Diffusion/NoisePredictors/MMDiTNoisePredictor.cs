@@ -165,7 +165,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     public int PatchSize => _patchSize;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     #endregion
 
@@ -958,37 +958,37 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         int count = 0;
 
-        count += _patchEmbed.ParameterCount;
-        count += _timeEmbed1.ParameterCount;
-        count += _timeEmbed2.ParameterCount;
-        count += _contextProj.ParameterCount;
+        count += (int)((int)_patchEmbed.ParameterCount);
+        count += (int)((int)_timeEmbed1.ParameterCount);
+        count += (int)((int)_timeEmbed2.ParameterCount);
+        count += (int)((int)_contextProj.ParameterCount);
 
         foreach (var block in _jointBlocks)
         {
-            count += block.ImageNorm1.ParameterCount + block.ImageNorm2.ParameterCount;
-            count += block.ImageMLP1.ParameterCount + block.ImageMLP2.ParameterCount;
-            count += block.ImageAdaLN.ParameterCount;
-            count += block.ImageQProj.ParameterCount + block.ImageKProj.ParameterCount;
-            count += block.ImageVProj.ParameterCount + block.ImageOutProj.ParameterCount;
-            count += block.TextNorm1.ParameterCount + block.TextNorm2.ParameterCount;
-            count += block.TextMLP1.ParameterCount + block.TextMLP2.ParameterCount;
-            count += block.TextAdaLN.ParameterCount;
-            count += block.TextQProj.ParameterCount + block.TextKProj.ParameterCount;
-            count += block.TextVProj.ParameterCount + block.TextOutProj.ParameterCount;
+            count += (int)(block.ImageNorm1.ParameterCount + block.ImageNorm2.ParameterCount);
+            count += (int)(block.ImageMLP1.ParameterCount + block.ImageMLP2.ParameterCount);
+            count += (int)(block.ImageAdaLN.ParameterCount);
+            count += (int)(block.ImageQProj.ParameterCount + block.ImageKProj.ParameterCount);
+            count += (int)(block.ImageVProj.ParameterCount + block.ImageOutProj.ParameterCount);
+            count += (int)(block.TextNorm1.ParameterCount + block.TextNorm2.ParameterCount);
+            count += (int)(block.TextMLP1.ParameterCount + block.TextMLP2.ParameterCount);
+            count += (int)(block.TextAdaLN.ParameterCount);
+            count += (int)(block.TextQProj.ParameterCount + block.TextKProj.ParameterCount);
+            count += (int)(block.TextVProj.ParameterCount + block.TextOutProj.ParameterCount);
         }
 
         foreach (var block in _singleBlocks)
         {
-            count += block.Norm.ParameterCount;
-            count += block.QProj.ParameterCount + block.KProj.ParameterCount;
-            count += block.VProj.ParameterCount + block.OutProj.ParameterCount;
-            count += block.MLP1.ParameterCount + block.MLP2.ParameterCount;
-            count += block.AdaLN.ParameterCount;
+            count += (int)(block.Norm.ParameterCount);
+            count += (int)(block.QProj.ParameterCount + block.KProj.ParameterCount);
+            count += (int)(block.VProj.ParameterCount + block.OutProj.ParameterCount);
+            count += (int)(block.MLP1.ParameterCount + block.MLP2.ParameterCount);
+            count += (int)(block.AdaLN.ParameterCount);
         }
 
-        count += _finalNorm.ParameterCount;
-        count += _adalnModulation.ParameterCount;
-        count += _outputProj.ParameterCount;
+        count += (int)((int)_finalNorm.ParameterCount);
+        count += (int)((int)_adalnModulation.ParameterCount);
+        count += (int)((int)_outputProj.ParameterCount);
 
         return count;
     }
@@ -1104,7 +1104,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
-        var count = layer.ParameterCount;
+        int count = (int)((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {

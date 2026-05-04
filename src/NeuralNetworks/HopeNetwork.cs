@@ -496,7 +496,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             if (layer == null)
                 throw new InvalidOperationException("Layer is null");
 
-            totalParams += layer.ParameterCount;
+            totalParams += (int)layer.ParameterCount;
         }
 
         if (parameters.Length != totalParams)
@@ -510,7 +510,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         int offset = 0;
         foreach (var layer in Layers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = (int)layer.ParameterCount;
             var layerParams = new Vector<T>(layerParamCount);
 
             for (int i = 0; i < layerParamCount; i++)
@@ -577,7 +577,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             Version = "1.0",
             Description = "Self-modifying recurrent network with Continuum Memory System for continual learning based on Google's Nested Learning paradigm",
             FeatureCount = _hiddenDim,
-            Complexity = ParameterCount,
+            Complexity = (int)ParameterCount,
             TrainingDate = DateTimeOffset.Now
         };
 

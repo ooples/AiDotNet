@@ -52,7 +52,7 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _queryProjection.ParameterCount +
         _keyProjection.ParameterCount +
         _valueProjection.ParameterCount +

@@ -60,7 +60,7 @@ public partial class SequenceTokenSliceLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <inheritdoc />
     public override bool SupportsTraining => false;

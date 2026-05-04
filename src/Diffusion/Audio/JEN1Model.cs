@@ -128,7 +128,7 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
     public override bool SupportsAudioToAudio => true;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _audioVae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _audioVae.ParameterCount;
 
     #endregion
 
@@ -228,7 +228,7 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _audioVae.ParameterCount;
+        int vaeCount = (int)_audioVae.ParameterCount;
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -292,8 +292,8 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
             Name = "JEN-1",
             Version = "1.0",
             Description = "JEN-1 high-fidelity text-to-music generation with 1D latent diffusion at 48kHz",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "1d-latent-diffusion-audio");

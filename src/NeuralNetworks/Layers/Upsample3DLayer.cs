@@ -100,7 +100,7 @@ public class Upsample3DLayer<T> : LayerBase<T>
     /// Gets the total number of trainable parameters in the layer.
     /// </summary>
     /// <value>Always 0 as this layer has no trainable parameters.</value>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     #endregion
 

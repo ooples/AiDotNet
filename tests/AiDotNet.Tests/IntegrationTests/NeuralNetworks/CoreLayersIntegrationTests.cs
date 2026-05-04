@@ -162,7 +162,7 @@ public class CoreLayersIntegrationTests
         var layer = new DenseLayer<float>(outputSize);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         // weights: inputSize * outputSize + biases: outputSize
@@ -314,7 +314,7 @@ public class CoreLayersIntegrationTests
         var layer = new ConvolutionalLayer<float>(outputChannels, kernelSize, 1, 1);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         // kernels: outputChannels * inputChannels * kernelSize * kernelSize + biases: outputChannels

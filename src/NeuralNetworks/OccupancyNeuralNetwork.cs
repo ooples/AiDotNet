@@ -286,7 +286,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = (int)layer.ParameterCount;
             var layerParameters = parameters.Slice(index, layerParameterCount);
             layer.UpdateParameters(layerParameters);
             index += layerParameterCount;

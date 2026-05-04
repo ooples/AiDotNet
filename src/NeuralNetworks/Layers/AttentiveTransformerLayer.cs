@@ -284,8 +284,8 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        var fcCount = _fcLayer.ParameterCount;
-        var bnCount = _bnLayer.ParameterCount;
+        int fcCount = (int)_fcLayer.ParameterCount;
+        int bnCount = (int)_bnLayer.ParameterCount;
 
         var fcParams = new Vector<T>(fcCount);
         var bnParams = new Vector<T>(bnCount);
@@ -324,7 +324,7 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => _fcLayer.ParameterCount + _bnLayer.ParameterCount;
+    public override long ParameterCount => _fcLayer.ParameterCount + _bnLayer.ParameterCount;
 
     /// <summary>
     /// Gets the input shape.

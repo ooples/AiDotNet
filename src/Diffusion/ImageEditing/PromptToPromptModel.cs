@@ -121,7 +121,7 @@ public class PromptToPromptModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -241,7 +241,7 @@ public class PromptToPromptModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Prompt-to-Prompt", Version = "1.0",
             Description = "Prompt-to-Prompt attention-based image editing with cross-attention control",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "sd15-attention-control");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

@@ -279,7 +279,7 @@ public class MemoryNetwork<T> : NeuralNetworkBase<T>
         int startIndex = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = (int)layer.ParameterCount;
             if (layerParameterCount > 0)
             {
                 Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);

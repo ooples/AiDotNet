@@ -143,7 +143,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => KANDINSKY_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _priorUnet.ParameterCount + _decoderUnet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _priorUnet.ParameterCount + _decoderUnet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the prior model that maps text embeddings to image embeddings.
@@ -356,8 +356,8 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var priorCount = _priorUnet.ParameterCount;
-        var decoderCount = _decoderUnet.ParameterCount;
+        int priorCount = (int)_priorUnet.ParameterCount;
+        int decoderCount = (int)_decoderUnet.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != priorCount + decoderCount + vaeCount)
@@ -457,8 +457,8 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
             Name = $"Kandinsky {versionName}",
             Version = versionName,
             Description = $"Kandinsky {versionName} two-stage text-to-image model with CLIP prior and latent diffusion decoder",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "prior-latent-diffusion");

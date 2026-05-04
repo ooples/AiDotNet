@@ -66,7 +66,7 @@ public class SwiftBrushModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new SwiftBrush model.
@@ -122,8 +122,8 @@ public class SwiftBrushModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -151,7 +151,7 @@ public class SwiftBrushModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "SwiftBrush", Version = "1.0",
             Description = "Image-free one-step text-to-image distillation via variational score distillation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "image-free-score-distillation");
         m.SetProperty("base_model", "Stable Diffusion 1.5");

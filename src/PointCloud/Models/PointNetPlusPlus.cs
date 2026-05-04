@@ -540,7 +540,7 @@ public class PointNetPlusPlus<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         int startIndex = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = (int)layer.ParameterCount;
             if (layerParameterCount > 0)
             {
                 Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
@@ -1225,7 +1225,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var parameters = new Vector<T>(totalParams);
         int offset = 0;
 
@@ -1254,7 +1254,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
         {
             foreach (var layer in branch.MlpLayers)
             {
-                int layerParameterCount = layer.ParameterCount;
+                int layerParameterCount = (int)layer.ParameterCount;
                 if (layerParameterCount > 0)
                 {
                     var layerParameters = parameters.SubVector(offset, layerParameterCount);
@@ -1285,7 +1285,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
         }
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1294,7 +1294,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
             {
                 foreach (var layer in branch.MlpLayers)
                 {
-                    total += layer.ParameterCount;
+                    total += (int)layer.ParameterCount;
                 }
             }
             return total;

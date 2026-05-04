@@ -100,7 +100,7 @@ public sealed class FedBNFullModelAggregationStrategy<T, TInput, TOutput> :
         int current = 0;
         foreach (var layer in network.Layers)
         {
-            int count = layer.ParameterCount;
+            int count = (int)((int)layer.ParameterCount);
             if (count <= 0)
             {
                 continue;

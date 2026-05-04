@@ -161,7 +161,7 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -298,8 +298,8 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int ditCount = _dit.ParameterCount;
-        int vaeCount = _vae.ParameterCount;
+        int ditCount = (int)_dit.ParameterCount;
+        int vaeCount = (int)_vae.ParameterCount;
 
         if (parameters.Length != ditCount + vaeCount)
             throw new ArgumentException(
@@ -364,8 +364,8 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
             Name = "OmniGen",
             Version = "1.0",
             Description = "OmniGen unified multi-task image generation model",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "unified-dit");

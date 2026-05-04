@@ -150,7 +150,18 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     public INoiseScheduler<T> Scheduler => _scheduler;
 
     /// <inheritdoc />
-    public abstract int ParameterCount { get; }
+    public abstract long ParameterCount { get; }
+
+    /// <summary>
+    /// Streams the diffusion stack's trainable weight tensors per-tensor.
+    /// Default implementation is empty; concrete subclasses (latent
+    /// diffusion, cascade, dual-encoder) override to yield from their
+    /// noise predictor / VAE / conditioner sub-models. Foundation-scale
+    /// stacks overflow <see cref="int.MaxValue"/> in the aggregate
+    /// <see cref="ParameterCount"/>, so callers walking these chunks
+    /// accumulate length into a <see cref="long"/>.
+    /// </summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks() => System.Linq.Enumerable.Empty<Tensor<T>>();
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
@@ -494,8 +505,8 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount,
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount,
             Description = $"Diffusion model with {ParameterCount} parameters using {_scheduler.GetType().Name} scheduler."
         };
     }
@@ -542,13 +553,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
-        return new[] { ParameterCount };
+        return new[] { (int)ParameterCount };
     }
 
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        return new[] { ParameterCount };
+        return new[] { (int)ParameterCount };
     }
 
     /// <inheritdoc/>

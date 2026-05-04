@@ -69,7 +69,7 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     public override int FeatureCount => TradingOptions.StateSize;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _policyNetwork.ParameterCount;
+    public override long ParameterCount => _policyNetwork.ParameterCount;
 
     #endregion
 

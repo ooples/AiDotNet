@@ -141,7 +141,7 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// RBF solves analytically — no optimizer parameter injection.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Returns all features since RBF uses distance-based kernels across all features.

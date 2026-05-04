@@ -291,7 +291,7 @@ namespace AiDotNet.NeuralNetworks
             int index = 0;
             foreach (var layer in Layers)
             {
-                int layerParameterCount = layer.ParameterCount;
+                int layerParameterCount = (int)layer.ParameterCount;
                 if (layerParameterCount > 0)
                 {
                     var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -374,7 +374,7 @@ namespace AiDotNet.NeuralNetworks
             {
                 Name = "SiameseNeuralNetwork",
                 Description = "Standardized Siamese dual-encoder high-performance network",
-                Complexity = ParameterCount,
+                Complexity = (int)ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "EmbeddingDimension", _embeddingDimension },

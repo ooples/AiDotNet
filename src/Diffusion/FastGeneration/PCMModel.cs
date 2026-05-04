@@ -67,7 +67,7 @@ public class PCMModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new Phased Consistency Model.
@@ -131,8 +131,8 @@ public class PCMModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -161,7 +161,7 @@ public class PCMModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Phased Consistency Model (PCM)", Version = "1.0",
             Description = "Phase-based consistency training for flexible 1-16 step generation without quality degradation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "phased-consistency-unet");
         m.SetProperty("base_model", _isXLVariant ? "Stable Diffusion XL" : "Stable Diffusion 1.5");

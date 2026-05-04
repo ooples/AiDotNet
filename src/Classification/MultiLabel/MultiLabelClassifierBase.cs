@@ -190,7 +190,7 @@ public abstract class MultiLabelClassifierBase<T> : IMultiLabelClassifier<T>, IC
     }
 
     /// <inheritdoc />
-    public virtual int ParameterCount => GetParameters().Length;
+    public virtual long ParameterCount => GetParameters().Length;
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;

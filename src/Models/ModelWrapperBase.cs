@@ -79,7 +79,7 @@ public abstract class ModelWrapperBase<T, TInput, TOutput> : IFullModel<T, TInpu
         => InterfaceGuard.TryParameterizable(BaseModel)?.SetParameters(parameters);
 
     /// <inheritdoc/>
-    public virtual int ParameterCount =>
+    public virtual long ParameterCount =>
         InterfaceGuard.TryParameterizable(BaseModel)?.ParameterCount ?? 0;
 
     /// <inheritdoc/>

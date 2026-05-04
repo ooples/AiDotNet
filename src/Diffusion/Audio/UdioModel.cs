@@ -142,7 +142,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsAudioToAudio => true;
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _audioVAE.ParameterCount; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _audioVAE.ParameterCount; } }
 
     #endregion
 
@@ -216,8 +216,8 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var dCount = _dit.ParameterCount;
-        var vaeCount = _audioVAE.ParameterCount;
+        int dCount = (int)_dit.ParameterCount;
+        int vaeCount = (int)_audioVAE.ParameterCount;
         if (parameters.Length != dCount + vaeCount)
             throw new ArgumentException($"Expected {dCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var dParams = new Vector<T>(dCount);
@@ -260,7 +260,7 @@ public class UdioModel<T> : AudioDiffusionModelBase<T>
         {
             Name = "Udio-Suno", Version = "1.0",
             Description = "Udio/Suno-class full-song music generation with structural awareness",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "dit-structural-conditioning");
         metadata.SetProperty("hidden_dim", HIDDEN_DIM);

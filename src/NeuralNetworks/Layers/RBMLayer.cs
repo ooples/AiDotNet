@@ -914,7 +914,7 @@ public partial class RBMLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_weightsGradient == null || _visibleBiasesGradient == null || _hiddenBiasesGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_weightsGradient.ToArray()),
             new Vector<T>(_visibleBiasesGradient.ToArray()),
@@ -944,7 +944,7 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
     /// </summary>
-    public override int ParameterCount => _visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits;
+    public override long ParameterCount => _visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits;
 
     /// <summary>
     /// Indicates whether this layer supports training.

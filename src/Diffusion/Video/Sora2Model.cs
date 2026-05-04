@@ -71,7 +71,7 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of Sora2Model with full customization support.
@@ -153,8 +153,8 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var predCount = _predictor.ParameterCount;
-        var vaeCount = _temporalVAE.ParameterCount;
+        int predCount = (int)_predictor.ParameterCount;
+        int vaeCount = (int)_temporalVAE.ParameterCount;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var predParams = new Vector<T>(predCount);
@@ -197,8 +197,8 @@ public class Sora2Model<T> : VideoDiffusionModelBase<T>
             Name = "Sora2",
             Version = "1.0",
             Description = "Sora 2 cinematic video generation with physics simulation and synced audio.",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "dit-physics-audio");
         metadata.SetProperty("open_source", false);

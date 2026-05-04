@@ -156,7 +156,7 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override int ParameterCount => _videoUNet.GetParameters().Length + _vae.ParameterCount;
+    public override long ParameterCount => _videoUNet.GetParameters().Length + _vae.ParameterCount;
 
     #endregion
 
@@ -327,8 +327,8 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "Make-A-Video",
             Version = "1.0",
             Description = "Make-A-Video text-to-video generation without paired text-video data by Meta",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "pseudo3d-unet");

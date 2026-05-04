@@ -124,7 +124,7 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _controlNet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _controlNet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>Gets the unified control network.</summary>
     public UNetNoisePredictor<T> ControlNet => _controlNet;
@@ -215,7 +215,7 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var ctrlCount = _controlNet.ParameterCount;
+        int ctrlCount = (int)_controlNet.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != unetCount + ctrlCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + ctrlCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -271,7 +271,7 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet Union", Version = "1.0",
             Description = "ControlNet Union all-in-one multi-condition control model for SDXL",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "controlnet-union-task-routing");
         metadata.SetProperty("supported_conditions", "canny,depth,pose,normal,scribble,lineart,segmentation,tile");

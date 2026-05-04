@@ -1649,7 +1649,7 @@ public abstract class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, IConfigurabl
         return features;
     }
 
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get { return ModelParameters.Length; }
     }

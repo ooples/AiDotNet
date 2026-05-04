@@ -212,7 +212,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = (int)layer.ParameterCount;
             var layerParameters = parameters.Slice(index, layerParameterCount);
             layer.UpdateParameters(layerParameters);
             index += layerParameterCount;
@@ -346,7 +346,7 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     /// filters mean more parameters and thus more computational requirements.
     /// </para>
     /// </remarks>
-    public new int GetParameterCount()
+    public new long GetParameterCount()
     {
         return base.GetParameterCount();
     }

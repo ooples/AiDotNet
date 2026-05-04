@@ -256,7 +256,7 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override int ParameterCount => _qTable.Count * _options.ActionSize;
+    public override long ParameterCount => _qTable.Count * _options.ActionSize;
 
     public override int FeatureCount => _options.StateSize;
 

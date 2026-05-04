@@ -117,7 +117,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// For a layer with outputSize and rank r, this is: outputSize + rank.
     /// This is typically 10x fewer parameters than standard LoRA.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -533,7 +533,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = (int)_baseLayer.ParameterCount;
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -565,7 +565,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack base layer gradients if not frozen

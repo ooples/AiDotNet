@@ -504,7 +504,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             int index = 0;
             foreach (var layer in Layers)
             {
-                int layerParameterCount = layer.ParameterCount;
+                int layerParameterCount = (int)layer.ParameterCount;
                 if (layerParameterCount > 0)
                 {
                     Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);

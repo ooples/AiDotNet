@@ -443,7 +443,7 @@ public class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             FeatureCount = _options.StateSize,
-            Complexity = ParameterCount,
+            Complexity = (int)ParameterCount,
         };
     }
 

@@ -94,7 +94,7 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _outputWeights.Length + _outputBias.Length;
 

@@ -206,7 +206,7 @@ public class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
 
     #endregion
 
@@ -347,7 +347,7 @@ public class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var ditCount = _dit.ParameterCount;
+        int ditCount = (int)_dit.ParameterCount;
         var vaeCount = _temporalVAE.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -416,8 +416,8 @@ public class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "HunyuanVideo",
             Version = "1.0",
             Description = "HunyuanVideo dual-stream DiT video generation with 3D causal VAE",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "ds-dit-3d-causal-vae");

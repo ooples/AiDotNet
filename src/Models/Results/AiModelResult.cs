@@ -1297,7 +1297,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                     : 1;
                 if (info.IsTrainable)
                 {
-                    totalParams += info.ParameterCount;
+                    totalParams += (int)info.ParameterCount;
                 }
                 totalFlops += info.EstimatedFlops;
             }
@@ -2839,7 +2839,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Gets the number of parameters in the underlying model.
     /// </summary>
-    public int ParameterCount
+    public long ParameterCount
     {
         get
         {
@@ -4897,7 +4897,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                             : 1;
 
                         if (info.IsTrainable)
-                            totalParams += info.ParameterCount;
+                            totalParams += (int)info.ParameterCount;
 
                         totalFlops += info.EstimatedFlops;
                     }

@@ -108,7 +108,7 @@ public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -211,7 +211,7 @@ public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var ditCount = _dit.ParameterCount;
+        int ditCount = (int)_dit.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -269,8 +269,8 @@ public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
             Name = "PixArt-Delta",
             Version = "1.0",
             Description = "LCM-distilled PixArt for fast 2-8 step text-to-image generation",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-xl-2-lcm");

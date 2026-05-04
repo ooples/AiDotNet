@@ -95,7 +95,7 @@ public class SynapticIntelligence<T> : IContinualLearningStrategy<T>
     {
         Guard.NotNull(network);
 
-        var paramCount = network.ParameterCount;
+        int paramCount = (int)network.ParameterCount;
 
         // Initialize omega if this is the first task
         if (_omega.Length == 0)

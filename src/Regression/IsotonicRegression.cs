@@ -109,7 +109,7 @@ public class IsotonicRegression<T> : NonLinearRegressionBase<T>
     /// Isotonic regression learns a monotonic step function — no optimizer parameter injection.
     /// Returning 0 makes SupportsParameterInitialization return false.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Trains the Isotonic Regression model using the provided input features and target values.

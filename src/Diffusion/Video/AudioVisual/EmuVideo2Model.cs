@@ -74,7 +74,7 @@ public class EmuVideo2Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Initializes a new instance of EmuVideo2Model with full customization support.
@@ -152,7 +152,7 @@ public class EmuVideo2Model<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var predCount = _predictor.ParameterCount;
+        int predCount = (int)_predictor.ParameterCount;
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -192,8 +192,8 @@ public class EmuVideo2Model<T> : VideoDiffusionModelBase<T>
             Name = "EmuVideo2",
             Version = "1.0",
             Description = "Emu Video 2 with improved generation quality and motion.",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "dit-factorized-t2v-v2");
         metadata.SetProperty("open_source", false);

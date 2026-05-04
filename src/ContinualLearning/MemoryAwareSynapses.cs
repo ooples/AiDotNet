@@ -90,7 +90,7 @@ public class MemoryAwareSynapses<T> : IContinualLearningStrategy<T>
         // Initialize if first task
         if (_omega.Length == 0)
         {
-            var paramCount = network.ParameterCount;
+            int paramCount = (int)network.ParameterCount;
             _omega = new Vector<T>(paramCount);
             _optimalParameters = new Vector<T>(paramCount);
         }

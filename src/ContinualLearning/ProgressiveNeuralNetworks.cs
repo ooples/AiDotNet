@@ -76,7 +76,7 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
     {
         public int TaskId { get; set; }
         public Vector<T>? FrozenParameters { get; set; }
-        public int ParameterCount { get; set; }
+        public long ParameterCount { get; set; }
         public bool IsFrozen { get; set; }
     }
 
@@ -138,7 +138,7 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
         {
             TaskId = taskId,
             FrozenParameters = null,
-            ParameterCount = network.ParameterCount,
+            ParameterCount = (int)network.ParameterCount,
             IsFrozen = false
         });
     }
@@ -204,7 +204,7 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
     {
         return _columns
             .Where(c => c.IsFrozen && c.TaskId != _currentTaskId)
-            .Sum(c => c.ParameterCount);
+            .Sum(c => (int)c.ParameterCount);
     }
 
     /// <summary>
@@ -268,9 +268,9 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
         return new Dictionary<string, object>
         {
             ["ColumnCount"] = _columns.Count,
-            ["TotalParameters"] = _columns.Sum(c => c.ParameterCount),
-            ["FrozenParameters"] = _columns.Where(c => c.IsFrozen).Sum(c => c.ParameterCount),
-            ["ActiveParameters"] = _columns.Where(c => !c.IsFrozen).Sum(c => c.ParameterCount),
+            ["TotalParameters"] = _columns.Sum(c => (int)c.ParameterCount),
+            ["FrozenParameters"] = _columns.Where(c => c.IsFrozen).Sum(c => (int)c.ParameterCount),
+            ["ActiveParameters"] = _columns.Where(c => !c.IsFrozen).Sum(c => (int)c.ParameterCount),
             ["UseLateralConnections"] = _useLateralConnections,
             ["TaskIds"] = _columns.Select(c => c.TaskId).ToList()
         };
@@ -284,7 +284,7 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
     {
         // Each parameter typically takes 4 bytes (float) or 8 bytes (double)
         var bytesPerParam = typeof(T) == typeof(double) ? 8 : 4;
-        var totalParams = _columns.Sum(c => c.ParameterCount);
+        var totalParams = _columns.Sum(c => (int)c.ParameterCount);
         return totalParams * bytesPerParam;
     }
 }

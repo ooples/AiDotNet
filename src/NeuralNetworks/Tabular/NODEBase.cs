@@ -60,14 +60,14 @@ public abstract class NODEBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
             int count = 0;
 
             if (_featurePreprocessing != null)
-                count += _featurePreprocessing.ParameterCount;
+                count += (int)((int)_featurePreprocessing.ParameterCount);
 
             foreach (var weights in _featureSelectionWeights)
                 count += weights.Length;

@@ -118,18 +118,18 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// - All expert LoRA layers
     /// - Gating network
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int expertParams = 0;
             for (int i = 0; i < _experts.Length; i++)
             {
-                expertParams += _experts[i].ParameterCount;
+                expertParams += (int)(_experts[i].ParameterCount);
             }
 
-            int gatingParams = _gatingNetwork.ParameterCount;
-            int baseParams = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
+            int gatingParams = (int)_gatingNetwork.ParameterCount;
+            int baseParams = _freezeBaseLayer ? (int)(0) : (int)_baseLayer.ParameterCount;
 
             return baseParams + expertParams + gatingParams;
         }
@@ -211,7 +211,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         _gatingNetwork = new DenseLayer<T>(numberOfExperts, (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
 
         // Update parameter vector to include all experts and gating network
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromLayers();
     }
 
@@ -399,7 +399,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         // If base layer is not frozen, unpack its parameters first
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = (int)_baseLayer.ParameterCount;
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -411,7 +411,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack expert parameters
         for (int expertIdx = 0; expertIdx < _experts.Length; expertIdx++)
         {
-            int expertParamCount = _experts[expertIdx].ParameterCount;
+            int expertParamCount = (int)_experts[expertIdx].ParameterCount;
             Vector<T> expertParams = new Vector<T>(expertParamCount);
             for (int i = 0; i < expertParamCount; i++)
             {
@@ -421,7 +421,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Unpack gating network parameters
-        int gatingParamCount = _gatingNetwork.ParameterCount;
+        int gatingParamCount = (int)_gatingNetwork.ParameterCount;
         Vector<T> gatingParams = new Vector<T>(gatingParamCount);
         for (int i = 0; i < gatingParamCount; i++)
         {
@@ -435,7 +435,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

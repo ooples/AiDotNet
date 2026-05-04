@@ -716,7 +716,7 @@ public class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int count = layer.ParameterCount;
+            int count = (int)((int)layer.ParameterCount);
             var layerParams = parameters.Slice(index, count);
             layer.UpdateParameters(layerParams);
             index += count;

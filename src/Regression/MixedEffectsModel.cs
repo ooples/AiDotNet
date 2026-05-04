@@ -981,7 +981,7 @@ public class MixedEffectsModel<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// MixedEffects doesn't support optimizer parameter injection.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Returns all features used by the model.

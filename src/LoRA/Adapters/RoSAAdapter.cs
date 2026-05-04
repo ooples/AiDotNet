@@ -159,12 +159,12 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     /// only the non-zero elements need to be stored and updated.
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
-            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
-            int loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0;
+            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
+            int loraCount = _loraLayer != null ? (int)_loraLayer.ParameterCount : 0;
             // CRITICAL: Compute sparse count from layer dimensions when _sparseWeights is null
             // Returning 0 causes base constructor to allocate too-small buffer
             int sparseCount = _sparseWeights != null
@@ -239,7 +239,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         PruneSparseWeights();
 
         // Update parameters to include sparse component
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromComponents();
     }
 
@@ -601,7 +601,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters (if not frozen)
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = (int)_baseLayer.ParameterCount;
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -611,7 +611,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Unpack LoRA parameters
-        int loraParamCount = _loraLayer.ParameterCount;
+        int loraParamCount = (int)_loraLayer.ParameterCount;
         Vector<T> loraParams = new Vector<T>(loraParamCount);
         for (int i = 0; i < loraParamCount; i++)
         {

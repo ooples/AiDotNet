@@ -55,7 +55,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         }
 
         public ILossFunction<double> DefaultLossFunction => null;
-        public int ParameterCount => _weights.Length;
+        public long ParameterCount => _weights.Length;
         public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public Vector<double> Predict(Vector<double> input)

@@ -186,7 +186,7 @@ public class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _videoUNet.GetParameters().Length + _vae.ParameterCount;
 
     #endregion
@@ -397,8 +397,8 @@ public class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
             Name = "ModelScope-T2V",
             Version = "1.0",
             Description = "ModelScope Text-to-Video with temporal U-Net for short clip generation",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "temporal-unet-t2v");

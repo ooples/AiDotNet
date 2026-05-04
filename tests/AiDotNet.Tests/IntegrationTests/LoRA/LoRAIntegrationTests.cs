@@ -37,7 +37,7 @@ public class LoRAIntegrationTests
 
         // Parameter count = A (inputSize * rank) + B (rank * outputSize)
         int expectedParams = (InputSize * Rank) + (Rank * OutputSize);
-        Assert.Equal(expectedParams, layer.ParameterCount);
+        Assert.Equal(expectedParams, (int)layer.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -151,7 +151,7 @@ public class LoRAIntegrationTests
 
         // Only LoRA parameters should be trainable
         int loraParamCount = (InputSize * Rank) + (Rank * OutputSize);
-        Assert.Equal(loraParamCount, adapter.ParameterCount);
+        Assert.Equal(loraParamCount, (int)adapter.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -161,9 +161,9 @@ public class LoRAIntegrationTests
         var adapter = new StandardLoRAAdapter<double>(baseLayer, Rank, Alpha, freezeBaseLayer: false);
 
         // Both base and LoRA parameters should be trainable
-        int baseParamCount = baseLayer.ParameterCount;
+        int baseParamCount = (int)baseLayer.ParameterCount;
         int loraParamCount = (InputSize * Rank) + (Rank * OutputSize);
-        Assert.Equal(baseParamCount + loraParamCount, adapter.ParameterCount);
+        Assert.Equal(baseParamCount + loraParamCount, (int)adapter.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -308,7 +308,7 @@ public class LoRAIntegrationTests
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: true);
 
         int fullParams = largeInputSize * largeOutputSize + largeOutputSize; // weights + bias
-        int loraParams = adapter.ParameterCount;
+        int loraParams = (int)adapter.ParameterCount;
 
         // LoRA should have significantly fewer parameters
         double reductionRatio = (double)loraParams / fullParams;
@@ -326,7 +326,7 @@ public class LoRAIntegrationTests
 
         // Formula: A (inputSize * rank) + B (rank * outputSize)
         int expectedParams = (inputSize * rank) + (rank * outputSize);
-        Assert.Equal(expectedParams, layer.ParameterCount);
+        Assert.Equal(expectedParams, (int)layer.ParameterCount);
     }
 
     #endregion

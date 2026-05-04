@@ -662,7 +662,7 @@ public class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int policyParamCount = _policyNetwork.ParameterCount;
+        int policyParamCount = (int)_policyNetwork.ParameterCount;
         var policyParams = new Vector<T>(policyParamCount);
         var valueParams = new Vector<T>(parameters.Length - policyParamCount);
 

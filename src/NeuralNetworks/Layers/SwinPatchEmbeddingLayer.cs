@@ -49,7 +49,7 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _projection.ParameterCount + _norm.ParameterCount;
+    public override long ParameterCount => _projection.ParameterCount + _norm.ParameterCount;
 
     /// <summary>
     /// Gets the number of patches produced by this layer.
@@ -165,8 +165,8 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        int projCount = _projection.ParameterCount;
-        int normCount = _norm.ParameterCount;
+        int projCount = (int)_projection.ParameterCount;
+        int normCount = (int)_norm.ParameterCount;
 
         var projParams = new T[projCount];
         var normParams = new T[normCount];

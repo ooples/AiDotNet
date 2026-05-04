@@ -535,7 +535,7 @@ public class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// NN uses OLS for standard regression — no optimizer parameter injection.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     public override IEnumerable<int> GetActiveFeatureIndices()
     {

@@ -333,7 +333,7 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         // Update main FFN layers
         foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = (int)layer.ParameterCount;
             if (layerParameterCount > 0)
             {
                 Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
@@ -820,7 +820,7 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     {
         int totalParams = 0;
         foreach (var layer in Layers)
-            totalParams += layer.ParameterCount;
+            totalParams += (int)layer.ParameterCount;
 
         var parameters = new Vector<T>(totalParams);
         int offset = 0;
@@ -829,7 +829,7 @@ public class TabLLMGenGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
             var layerParams = layer.GetParameters();
             for (int i = 0; i < layerParams.Length; i++)
                 parameters[offset + i] = layerParams[i];
-            offset += layer.ParameterCount;
+            offset += (int)layer.ParameterCount;
         }
         return parameters;
     }

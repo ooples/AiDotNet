@@ -82,7 +82,7 @@ public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => TELCM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the LoRA rank used for efficient fine-tuning.
@@ -165,8 +165,8 @@ public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
+        int pc = (int)_predictor.ParameterCount;
+        int vc = (int)_vae.ParameterCount;
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -197,8 +197,8 @@ public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
             Name = "Training-Efficient LCM",
             Version = "1.0",
             Description = "Resource-efficient LCM distillation using LoRA adapters and gradient checkpointing",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
         m.SetProperty("architecture", "lcm-lora-unet");
         m.SetProperty("base_model", "Stable Diffusion 1.5");

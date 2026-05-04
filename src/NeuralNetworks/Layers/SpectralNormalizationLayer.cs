@@ -87,7 +87,7 @@ public class SpectralNormalizationLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
-    public override int ParameterCount => _innerLayer.ParameterCount;
+    public override long ParameterCount => _innerLayer.ParameterCount;
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
     /// <summary>

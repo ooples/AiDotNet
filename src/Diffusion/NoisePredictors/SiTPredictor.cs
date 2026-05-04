@@ -76,7 +76,7 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int ContextDimension => _hiddenSize;
     /// <inheritdoc />
-    public override int ParameterCount => EnsureInitialized().paramCount;
+    public override long ParameterCount => EnsureInitialized().paramCount;
 
     /// <summary>
     /// Initializes a new SiT predictor. Layers are lazily allocated on first use
@@ -113,10 +113,10 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
             _initialized = true;
         }
 
-        int count = _patchEmbed?.ParameterCount ?? 0;
+        int count = (int)(_patchEmbed?.ParameterCount ?? 0);
         if (_blocks is not null)
-            foreach (var block in _blocks) count += block.ParameterCount;
-        count += _finalLayer?.ParameterCount ?? 0;
+            foreach (var block in _blocks) count += (int)((int)block.ParameterCount);
+        count += (int)(_finalLayer?.ParameterCount ?? 0);
 
         return (count, _patchEmbed ?? throw new InvalidOperationException(), _blocks ?? throw new InvalidOperationException(), _finalLayer ?? throw new InvalidOperationException());
     }
@@ -231,7 +231,7 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
 
     private static int SetParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = layer.ParameterCount;
+        int count = (int)((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
         layer.SetParameters(new Vector<T>(p));

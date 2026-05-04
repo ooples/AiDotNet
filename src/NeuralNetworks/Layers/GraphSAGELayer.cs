@@ -143,7 +143,7 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _selfWeights.Length + _neighborWeights.Length + _bias.Length;
+    public override long ParameterCount => _selfWeights.Length + _neighborWeights.Length + _bias.Length;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;

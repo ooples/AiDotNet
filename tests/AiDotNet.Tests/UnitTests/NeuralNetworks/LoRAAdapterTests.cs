@@ -44,7 +44,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
             // Act
-            var paramCount = adapter.ParameterCount;
+            int paramCount = (int)adapter.ParameterCount;
 
             // Assert
             // Should only count LoRA parameters: (10 * 3) + (3 * 5) = 45
@@ -59,7 +59,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var adapter = new DenseLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
             // Act
-            var paramCount = adapter.ParameterCount;
+            int paramCount = (int)adapter.ParameterCount;
 
             // Assert
             // Should count both: base (10*5 + 5 = 55) + LoRA (45) = 100

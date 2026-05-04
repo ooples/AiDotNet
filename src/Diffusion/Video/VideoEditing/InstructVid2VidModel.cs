@@ -70,7 +70,7 @@ public class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => false;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => true;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Initializes a new instance of InstructVid2VidModel with full customization support.
@@ -148,7 +148,7 @@ public class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var predCount = _predictor.ParameterCount;
+        int predCount = (int)_predictor.ParameterCount;
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -188,8 +188,8 @@ public class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
             Name = "InstructVid2Vid",
             Version = "1.0",
             Description = "InstructVid2Vid natural language instruction-based video editing.",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
         metadata.SetProperty("architecture", "instruction-conditioned-v2v");
         metadata.SetProperty("open_source", true);

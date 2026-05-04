@@ -702,7 +702,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         sb.AppendLine($"  CRF: {(_options.UseCRF ? "Enabled" : "Disabled")}");
         sb.AppendLine($"  Dropout: {_options.DropoutRate:P0}");
         sb.AppendLine($"  Learning Rate: {_options.LearningRate}");
-        sb.AppendLine($"  Total Parameters: {Layers.Sum(l => l.ParameterCount)}");
+        sb.AppendLine($"  Total Parameters: {(int)Layers.Sum(l => l.ParameterCount)}");
         return sb.ToString();
     }
 
@@ -849,7 +849,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         int idx = 0;
         foreach (var layer in Layers)
         {
-            int count = layer.ParameterCount;
+            int count = (int)((int)layer.ParameterCount);
             layer.UpdateParameters(parameters.Slice(idx, count));
             idx += count;
         }

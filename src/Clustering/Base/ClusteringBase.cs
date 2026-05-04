@@ -470,7 +470,7 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     }
 
     /// <inheritdoc/>
-    public virtual int ParameterCount => ExpectedParameterCount;
+    public virtual long ParameterCount => ExpectedParameterCount;
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;

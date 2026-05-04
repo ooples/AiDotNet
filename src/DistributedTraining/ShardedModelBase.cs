@@ -109,7 +109,7 @@ public abstract class ShardedModelBase<T, TInput, TOutput> :
     public IShardingConfiguration<T> ShardingConfiguration => Config;
 
     /// <inheritdoc/>
-    public int ParameterCount => InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
+    public long ParameterCount => InterfaceGuard.Parameterizable(WrappedModel).ParameterCount;
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;

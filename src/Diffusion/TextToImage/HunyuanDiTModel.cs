@@ -109,7 +109,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _vae.ParameterCount; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -222,7 +222,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var ditCount = _dit.ParameterCount;
+        int ditCount = (int)_dit.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -281,8 +281,8 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
             Name = "Hunyuan-DiT",
             Version = "1.2",
             Description = "Hunyuan-DiT bilingual Chinese-English DiT text-to-image model",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-xl-dual-encoder");

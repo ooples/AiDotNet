@@ -134,7 +134,7 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => IMAGEN3_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this model uses a cascaded architecture with super-resolution stages.
@@ -273,7 +273,7 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var predictorCount = _predictor.ParameterCount;
+        int predictorCount = (int)_predictor.ParameterCount;
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -334,8 +334,8 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
             Name = "Imagen 3",
             Version = "3.0",
             Description = "Google DeepMind's cascaded SiT with Gemma text encoder and human feedback alignment",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "cascaded-sit-diffusion");

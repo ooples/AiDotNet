@@ -961,7 +961,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // 24 blocks × 1024 hidden ≈ 250 M parameters; 8-byte doubles ⇒
         // 2 GB), the previous List+ToArray pattern peaked at ~3× that
         // size during the doubling and copy, OOMing CI test hosts.
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var result = new Vector<T>(totalParams);
         int offset = 0;
 
@@ -1072,7 +1072,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
-        var count = layer.ParameterCount;
+        int count = (int)((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {
@@ -1152,36 +1152,36 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             EnsureLayersInitialized();
             int count = 0;
 
-            if (_patchEmbed != null) count += _patchEmbed.ParameterCount;
-            if (_timeEmbed1 != null) count += _timeEmbed1.ParameterCount;
-            if (_timeEmbed2 != null) count += _timeEmbed2.ParameterCount;
-            if (_labelEmbed != null) count += _labelEmbed.ParameterCount;
+            if (_patchEmbed != null) count += (int)((int)_patchEmbed.ParameterCount);
+            if (_timeEmbed1 != null) count += (int)((int)_timeEmbed1.ParameterCount);
+            if (_timeEmbed2 != null) count += (int)((int)_timeEmbed2.ParameterCount);
+            if (_labelEmbed != null) count += (int)((int)_labelEmbed.ParameterCount);
 
             foreach (var block in _blocks)
             {
-                if (block.Norm1 != null) count += block.Norm1.ParameterCount;
-                if (block.Attention != null) count += block.Attention.ParameterCount;
-                if (block.Norm2 != null) count += block.Norm2.ParameterCount;
-                if (block.MLP1 != null) count += block.MLP1.ParameterCount;
-                if (block.MLP2 != null) count += block.MLP2.ParameterCount;
-                if (block.AdaLNModulation != null) count += block.AdaLNModulation.ParameterCount;
-                if (block.CrossAttnNorm != null) count += block.CrossAttnNorm.ParameterCount;
-                if (block.CrossAttnQ != null) count += block.CrossAttnQ.ParameterCount;
-                if (block.CrossAttnK != null) count += block.CrossAttnK.ParameterCount;
-                if (block.CrossAttnV != null) count += block.CrossAttnV.ParameterCount;
-                if (block.CrossAttnOut != null) count += block.CrossAttnOut.ParameterCount;
+                if (block.Norm1 != null) count += (int)(block.Norm1.ParameterCount);
+                if (block.Attention != null) count += (int)(block.Attention.ParameterCount);
+                if (block.Norm2 != null) count += (int)(block.Norm2.ParameterCount);
+                if (block.MLP1 != null) count += (int)(block.MLP1.ParameterCount);
+                if (block.MLP2 != null) count += (int)(block.MLP2.ParameterCount);
+                if (block.AdaLNModulation != null) count += (int)(block.AdaLNModulation.ParameterCount);
+                if (block.CrossAttnNorm != null) count += (int)(block.CrossAttnNorm.ParameterCount);
+                if (block.CrossAttnQ != null) count += (int)(block.CrossAttnQ.ParameterCount);
+                if (block.CrossAttnK != null) count += (int)(block.CrossAttnK.ParameterCount);
+                if (block.CrossAttnV != null) count += (int)(block.CrossAttnV.ParameterCount);
+                if (block.CrossAttnOut != null) count += (int)(block.CrossAttnOut.ParameterCount);
             }
 
-            if (_finalNorm != null) count += _finalNorm.ParameterCount;
-            if (_adaln_modulation != null) count += _adaln_modulation.ParameterCount;
-            if (_outputProj != null) count += _outputProj.ParameterCount;
+            if (_finalNorm != null) count += (int)((int)_finalNorm.ParameterCount);
+            if (_adaln_modulation != null) count += (int)((int)_adaln_modulation.ParameterCount);
+            if (_outputProj != null) count += (int)((int)_outputProj.ParameterCount);
 
             return count;
         }
@@ -1214,6 +1214,63 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override bool SupportsCrossAttention => true;
 
+    /// <summary>
+    /// Streams DiT's trainable weights per-layer, yielding from
+    /// <c>_patchEmbed</c>, the time-embedding MLPs, the AdaLN modulation
+    /// projection, every transformer block's sub-layers, and the final
+    /// norm + projection. Per-tensor streaming dodges the foundation-scale
+    /// buffer-allocation path in <see cref="GetParameters"/> that overflows
+    /// when total parameter count gets close to (or above) int.MaxValue —
+    /// each chunk is a single layer's parameter vector, well within the
+    /// per-tensor int contract documented in
+    /// <see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>.
+    /// </summary>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Mirror ParameterCount's enumeration exactly — including
+        // EnsureLayersInitialized() to materialize lazy layers — so
+        // sum-of-chunks always equals ParameterCount.
+        EnsureLayersInitialized();
+
+        IEnumerable<ILayer<T>?> EnumerateAllLayers()
+        {
+            yield return _patchEmbed;
+            yield return _timeEmbed1;
+            yield return _timeEmbed2;
+            yield return _labelEmbed;
+            yield return _adaln_modulation;
+            foreach (var block in _blocks)
+            {
+                yield return block.Norm1;
+                yield return block.Attention;
+                yield return block.Norm2;
+                yield return block.MLP1;
+                yield return block.MLP2;
+                yield return block.AdaLNModulation;
+                yield return block.CrossAttnNorm;
+                yield return block.CrossAttnQ;
+                yield return block.CrossAttnK;
+                yield return block.CrossAttnV;
+                yield return block.CrossAttnOut;
+            }
+            yield return _finalNorm;
+            yield return _outputProj;
+        }
+
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (layer is null) continue;
+            int len = layer.ParameterCount > int.MaxValue
+                ? throw new InvalidOperationException(
+                    $"Layer '{layer.GetType().Name}' has {layer.ParameterCount} parameters, " +
+                    $"exceeding int.MaxValue. Single-layer chunks must fit in int per the " +
+                    $"Vector.Length contract.")
+                : (int)layer.ParameterCount;
+            if (len == 0) continue;
+            yield return new Tensor<T>(new[] { len }, layer.GetParameters());
+        }
+    }
+
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
 
@@ -1227,7 +1284,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // Same pre-allocate-and-fill pattern as GetParameters — see
         // notes there. Avoids List<T> doubling + ToArray() copy on
         // models with hundreds of millions of parameters.
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var result = new Vector<T>(totalParams);
         int offset = 0;
 

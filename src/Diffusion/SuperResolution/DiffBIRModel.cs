@@ -200,7 +200,7 @@ public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768, matching CLIP ViT-L/14).
@@ -530,8 +530,8 @@ public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
             Name = "DiffBIR",
             Version = "1.0",
             Description = "DiffBIR blind image restoration with generative diffusion prior",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "two-stage-diffusion-restoration");

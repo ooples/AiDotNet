@@ -120,7 +120,7 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the cross-attention dimension (768 for CLIP ViT-L/14).
@@ -339,8 +339,8 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
             Name = "Blended Diffusion",
             Version = "1.0",
             Description = "Blended Diffusion enables text-guided local editing by blending denoised results within user-specified masks",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

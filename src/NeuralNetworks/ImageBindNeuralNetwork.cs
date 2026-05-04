@@ -1369,7 +1369,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     #region NeuralNetworkBase Implementation
 
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1383,59 +1383,59 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             // Image encoder layers
             foreach (var layer in _imageEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Text encoder layers
             foreach (var layer in _textEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Audio encoder layers
             foreach (var layer in _audioEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Thermal encoder layers
             foreach (var layer in _thermalEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Depth encoder layers
             foreach (var layer in _depthEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // IMU encoder layers
             foreach (var layer in _imuEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Video temporal layers
             foreach (var layer in _videoTemporalLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
             }
 
             // Single layers
-            if (_imagePatchEmbedding is not null) count += _imagePatchEmbedding.ParameterCount;
-            if (_imageProjection is not null) count += _imageProjection.ParameterCount;
-            if (_textTokenEmbedding is not null) count += _textTokenEmbedding.ParameterCount;
-            if (_textProjection is not null) count += _textProjection.ParameterCount;
-            if (_audioConv is not null) count += _audioConv.ParameterCount;
-            if (_audioProjection is not null) count += _audioProjection.ParameterCount;
-            if (_thermalPatchEmbedding is not null) count += _thermalPatchEmbedding.ParameterCount;
-            if (_thermalProjection is not null) count += _thermalProjection.ParameterCount;
-            if (_depthPatchEmbedding is not null) count += _depthPatchEmbedding.ParameterCount;
-            if (_depthProjection is not null) count += _depthProjection.ParameterCount;
-            if (_imuEmbedding is not null) count += _imuEmbedding.ParameterCount;
-            if (_imuProjection is not null) count += _imuProjection.ParameterCount;
-            if (_videoProjection is not null) count += _videoProjection.ParameterCount;
+            if (_imagePatchEmbedding is not null) count += (int)((int)_imagePatchEmbedding.ParameterCount);
+            if (_imageProjection is not null) count += (int)((int)_imageProjection.ParameterCount);
+            if (_textTokenEmbedding is not null) count += (int)((int)_textTokenEmbedding.ParameterCount);
+            if (_textProjection is not null) count += (int)((int)_textProjection.ParameterCount);
+            if (_audioConv is not null) count += (int)((int)_audioConv.ParameterCount);
+            if (_audioProjection is not null) count += (int)((int)_audioProjection.ParameterCount);
+            if (_thermalPatchEmbedding is not null) count += (int)((int)_thermalPatchEmbedding.ParameterCount);
+            if (_thermalProjection is not null) count += (int)((int)_thermalProjection.ParameterCount);
+            if (_depthPatchEmbedding is not null) count += (int)((int)_depthPatchEmbedding.ParameterCount);
+            if (_depthProjection is not null) count += (int)((int)_depthProjection.ParameterCount);
+            if (_imuEmbedding is not null) count += (int)((int)_imuEmbedding.ParameterCount);
+            if (_imuProjection is not null) count += (int)((int)_imuProjection.ParameterCount);
+            if (_videoProjection is not null) count += (int)((int)_videoProjection.ParameterCount);
 
             // Positional embeddings and CLS tokens
             if (_imageClsToken is not null) count += _imageClsToken.Rows * _imageClsToken.Columns;
@@ -1456,7 +1456,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         if (!_useNativeMode)
         {
             return parameters;
@@ -1535,7 +1535,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
@@ -1587,7 +1587,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     {
         foreach (var layer in layers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = (int)layer.ParameterCount;
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);
@@ -1657,7 +1657,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             return offset;
         }
 
-        int layerParamCount = layer.ParameterCount;
+        int layerParamCount = (int)layer.ParameterCount;
         if (layerParamCount > 0)
         {
             var layerParams = new Vector<T>(layerParamCount);

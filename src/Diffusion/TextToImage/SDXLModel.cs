@@ -659,7 +659,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -718,8 +718,8 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
             Name = "Stable Diffusion XL",
             Version = "1.0",
             Description = "SDXL base model with dual text encoders and 1024px native resolution",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "sdxl-unet-latent-diffusion");

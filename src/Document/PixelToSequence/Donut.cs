@@ -1300,7 +1300,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
             throw new NotSupportedException("Parameter updates are not supported in ONNX inference mode.");
         }
 
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (gradients.Length != expectedCount)
         {
             throw new ArgumentException(

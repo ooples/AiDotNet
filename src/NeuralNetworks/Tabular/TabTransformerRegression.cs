@@ -63,7 +63,7 @@ public class TabTransformerRegression<T> : TabTransformerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
+    public override long ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the TabTransformerRegression class.

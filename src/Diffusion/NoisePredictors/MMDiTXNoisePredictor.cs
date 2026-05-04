@@ -80,7 +80,7 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
     /// <inheritdoc />
-    public override int ParameterCount { get; }
+    public override long ParameterCount { get; }
 
     /// <summary>
     /// Initializes a new MMDiT-X noise predictor for SD3.5.
@@ -132,9 +132,9 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
-        int count = _patchEmbed.ParameterCount;
-        foreach (var block in _jointBlocks) count += block.ParameterCount;
-        count += _finalLayer.ParameterCount;
+        int count = (int)((int)_patchEmbed.ParameterCount);
+        foreach (var block in _jointBlocks) count += (int)((int)block.ParameterCount);
+        count += (int)((int)_finalLayer.ParameterCount);
         count += _posEmbed.Length;
         return count;
     }
@@ -191,7 +191,7 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 
     private static int SetLayerParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = layer.ParameterCount;
+        int count = (int)((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
         layer.SetParameters(new Vector<T>(p));

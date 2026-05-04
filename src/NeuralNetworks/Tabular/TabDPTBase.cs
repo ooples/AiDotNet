@@ -75,25 +75,25 @@ public abstract class TabDPTBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
-            int count = _featureProjection.ParameterCount;
+            int count = (int)((int)_featureProjection.ParameterCount);
 
             foreach (var emb in _categoricalEmbeddings)
-                count += emb.ParameterCount;
+                count += (int)((int)emb.ParameterCount);
 
             foreach (var block in _transformerBlocks)
-                count += block.ParameterCount;
+                count += (int)((int)block.ParameterCount);
 
             if (_featureAttention != null)
-                count += _featureAttention.ParameterCount;
+                count += (int)((int)_featureAttention.ParameterCount);
 
             foreach (var layer in _mlpLayers)
-                count += layer.ParameterCount;
+                count += (int)((int)layer.ParameterCount);
 
-            count += _finalNorm.ParameterCount;
+            count += (int)((int)_finalNorm.ParameterCount);
 
             return count;
         }
@@ -351,7 +351,7 @@ public abstract class TabDPTBase<T>
         private Tensor<TBlock>? _valueCache;
         private Tensor<TBlock>? _attentionScoresCache;
 
-        public int ParameterCount
+        public long ParameterCount
         {
             get
             {
@@ -607,7 +607,7 @@ public abstract class TabDPTBase<T>
 
         private Tensor<TBlock>? _inputCache;
 
-        public int ParameterCount => _embeddingDim * _embeddingDim * 4;
+        public long ParameterCount => _embeddingDim * _embeddingDim * 4;
 
         public FeatureAttentionBlock(int embeddingDim, int numHeads, double dropoutRate, Random random)
         {

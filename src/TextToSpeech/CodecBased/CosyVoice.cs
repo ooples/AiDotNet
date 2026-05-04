@@ -216,7 +216,7 @@ public class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
         int idx = 0;
         foreach (var l in Layers)
         {
-            int c = l.ParameterCount;
+            int c = (int)l.ParameterCount;
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
         }

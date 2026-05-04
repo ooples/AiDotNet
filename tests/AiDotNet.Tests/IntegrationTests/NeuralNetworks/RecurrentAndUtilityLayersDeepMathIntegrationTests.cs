@@ -28,7 +28,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 3*4*3 + 3*3*3 + 3*3 = 36 + 27 + 9 = 72
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
-        Assert.Equal(72, gru.ParameterCount);
+        Assert.Equal(72, (int)gru.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -37,7 +37,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 8*10*3 + 8*8*3 + 8*3 = 240 + 192 + 24 = 456
         var gru = new GRULayer<double>( hiddenSize: 8,
             activation: (IActivationFunction<double>?)null);
-        Assert.Equal(456, gru.ParameterCount);
+        Assert.Equal(456, (int)gru.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -46,7 +46,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 1*1*3 + 1*1*3 + 1*3 = 3 + 3 + 3 = 9
         var gru = new GRULayer<double>( hiddenSize: 1,
             activation: (IActivationFunction<double>?)null);
-        Assert.Equal(9, gru.ParameterCount);
+        Assert.Equal(9, (int)gru.ParameterCount);
     }
 
     // ========================================================================
@@ -207,7 +207,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 4*3*4 + 4*3*3 + 4*3 = 48 + 36 + 12 = 96
         var lstm = new LSTMLayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
-        Assert.Equal(96, lstm.ParameterCount);
+        Assert.Equal(96, (int)lstm.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -216,7 +216,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 4*8*10 + 4*8*8 + 4*8 = 320 + 256 + 32 = 608
         var lstm = new LSTMLayer<double>( hiddenSize: 8,
             activation: (IActivationFunction<double>?)null);
-        Assert.Equal(608, lstm.ParameterCount);
+        Assert.Equal(608, (int)lstm.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -421,7 +421,7 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
     public async Task ReshapeLayer_NoTrainableParameters()
     {
         var reshape = new ReshapeLayer<double>(new[] { 2, 2 });
-        Assert.Equal(0, reshape.ParameterCount);
+        Assert.Equal(0, (int)reshape.ParameterCount);
     }
 
     // ========================================================================
@@ -447,8 +447,8 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         int expectedGRU = 3 * (hiddenSize * inputSize + hiddenSize * hiddenSize + hiddenSize);
         int expectedLSTM = 4 * (hiddenSize * inputSize + hiddenSize * hiddenSize + hiddenSize);
 
-        Assert.Equal(expectedGRU, gru.ParameterCount);
-        Assert.Equal(expectedLSTM, lstm.ParameterCount);
+        Assert.Equal(expectedGRU, (int)gru.ParameterCount);
+        Assert.Equal(expectedLSTM, (int)lstm.ParameterCount);
     }
 
     // ========================================================================

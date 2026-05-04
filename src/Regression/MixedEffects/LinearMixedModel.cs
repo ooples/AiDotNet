@@ -215,7 +215,7 @@ public class LinearMixedModel<T> : RegressionBase<T>
     /// <param name="x">Feature matrix (including grouping variables).</param>
     /// <param name="y">Response vector.</param>
     /// <summary>LMM doesn't benefit from optimizer parameter injection.</summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     private bool _useOLS;
 

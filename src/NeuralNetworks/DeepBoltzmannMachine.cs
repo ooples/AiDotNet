@@ -898,14 +898,14 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// It expects the parameters to be arranged in the same order as they are returned by GetParameters.
     /// </remarks>
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             // When using Layers-based forward/backward (supervised), use Layers parameters.
             // When using CD training (_layerWeights), use internal parameter store.
             if (Layers.Count > 0)
-                return Layers.Sum(l => l.ParameterCount);
+                return (int)Layers.Sum(l => l.ParameterCount);
 
             int count = 0;
             for (int i = 0; i < _layerWeights.Count; i++)
@@ -923,7 +923,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         if (Layers.Count > 0)
             return base.GetParameters();
 
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         int index = 0;
         for (int i = 0; i < _layerWeights.Count; i++)
         {

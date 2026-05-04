@@ -603,7 +603,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// This gives you an idea of the layer's complexity and memory requirements.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _bias.Shape[0];
+    public override long ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _bias.Shape[0];
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training through backpropagation.
@@ -1493,7 +1493,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        var result = new Vector<T>(ParameterCount);
+        var result = new Vector<T>((int)ParameterCount);
         int idx = 0;
         int rows = _weights.Shape[0];
         int cols = _weights.Shape[1];
@@ -1528,7 +1528,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_weightGradients == null || _biasGradients == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
 
         return Vector<T>.Concatenate(
             new Vector<T>(_weightGradients.ToArray()),

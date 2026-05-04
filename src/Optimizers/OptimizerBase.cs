@@ -1714,7 +1714,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
             // For Matrix input: compute min and max of each column (feature)
             int features = matrix.Columns;
-            int paramCount = InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
+            int paramCount = (int)InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
 
             // If the model is untrained (ParameterCount is less than the number of features),
             // infer the correct parameter count from the input dimensions.
@@ -1794,7 +1794,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             }
 
             // Bounds should match parameter count, not input dimensionality
-            int paramCount = InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
+            int paramCount = (int)InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
@@ -1806,7 +1806,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         else
         {
             // Fallback: create reasonable default bounds based on parameter count
-            int paramCount = InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
+            int paramCount = (int)InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
 
@@ -1851,14 +1851,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     public virtual int[] GetInputShape()
     {
         var model = RequireModel();
-        return new[] { InterfaceGuard.Parameterizable(model).ParameterCount };
+        return new[] { (int)InterfaceGuard.Parameterizable(model).ParameterCount };
     }
 
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
         var model = RequireModel();
-        return new[] { InterfaceGuard.Parameterizable(model).ParameterCount };
+        return new[] { (int)InterfaceGuard.Parameterizable(model).ParameterCount };
     }
 
     /// <inheritdoc/>

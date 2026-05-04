@@ -136,7 +136,7 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LCM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the base model identifier ("SD1.5", "SD2.1", or "SDXL").
@@ -404,8 +404,8 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
             Name = "Latent Consistency Model",
             Version = "1.0",
             Description = $"Latent Consistency Model distilled from {_baseModel} for fast 2-8 step generation",
-            FeatureCount = ParameterCount,
-            Complexity = ParameterCount
+            FeatureCount = (int)ParameterCount,
+            Complexity = (int)ParameterCount
         };
 
         metadata.SetProperty("architecture", "consistency-distilled-latent-diffusion");
