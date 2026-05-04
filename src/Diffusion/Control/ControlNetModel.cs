@@ -174,10 +174,10 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     {
         get
         {
-            int count = (int)((int)_baseUNet.ParameterCount);
+            int count = checked((int)_baseUNet.ParameterCount);
             foreach (var encoder in _encoderCache.Values)
             {
-                count += (int)((int)encoder.ParameterCount);
+                count += (int)encoder.ParameterCount;
             }
             return count;
         }
@@ -654,7 +654,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         int offset = 0;
 
         // Set base UNet parameters
-        int baseCount = (int)_baseUNet.ParameterCount;
+        int baseCount = checked((int)_baseUNet.ParameterCount);
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++)
         {
@@ -711,7 +711,7 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet", Version = "1.0",
             Description = "Spatial conditioning for diffusion models via trainable encoder copy",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "unet-controlnet");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
@@ -943,7 +943,7 @@ public class ControlNetEncoder<T>
 
         foreach (var block in _downBlocks)
         {
-            int count = (int)((int)block.ParameterCount);
+            int count = checked((int)block.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
                 p[i] = parameters[offset + i];
@@ -953,7 +953,7 @@ public class ControlNetEncoder<T>
 
         foreach (var zc in _zeroConvs)
         {
-            int count = (int)((int)zc.ParameterCount);
+            int count = checked((int)zc.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
                 p[i] = parameters[offset + i];

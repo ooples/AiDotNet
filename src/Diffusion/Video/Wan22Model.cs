@@ -158,7 +158,7 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        int predCount = (int)_predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -203,7 +203,7 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
             Version = "2.2",
             Description = "Wan 2.2 video model with timestep-specialized MoE experts.",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-moe-timestep-specialized");
         metadata.SetProperty("open_source", true);

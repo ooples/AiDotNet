@@ -148,7 +148,7 @@ public class StreamingT2VModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int predCount = (int)_predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -189,7 +189,7 @@ public class StreamingT2VModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "StreamingT2V autoregressive long video generation up to 1200 frames.",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "autoregressive-streaming");
         metadata.SetProperty("open_source", true);

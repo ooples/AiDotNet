@@ -276,7 +276,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "eDiff-I ensemble-of-experts text-to-image diffusion model",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "ensemble-expert-unet");

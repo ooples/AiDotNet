@@ -147,7 +147,7 @@ public class Mochi1PreviewModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int predCount = (int)_predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -191,7 +191,7 @@ public class Mochi1PreviewModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "Mochi 1 Preview with Asymmetric Diffusion Transformer (AsymmDiT).",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "asymm-dit");
         metadata.SetProperty("open_source", true);

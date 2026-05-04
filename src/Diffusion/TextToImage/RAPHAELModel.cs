@@ -270,7 +270,7 @@ public class RAPHAELModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "RAPHAEL Mixture-of-Experts text-to-image diffusion model",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "unet-moe-crossattn");

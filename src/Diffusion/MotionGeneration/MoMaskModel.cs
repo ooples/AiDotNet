@@ -103,8 +103,8 @@ public class MoMaskModel<T> : LatentDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -127,7 +127,7 @@ public class MoMaskModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T> { Name = "MoMask", Version = "1.0",
             Description = "Masked generative modeling for fast parallel 3D motion generation",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount };
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount };
         m.SetProperty("architecture", "masked-token-motion-generation");
         m.SetProperty("text_encoder", "CLIP ViT-L/14");
         m.SetProperty("motion_dimensions", MOTION_FEATURE_DIM);

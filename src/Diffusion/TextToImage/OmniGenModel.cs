@@ -298,8 +298,8 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int ditCount = (int)_dit.ParameterCount;
-        int vaeCount = (int)_vae.ParameterCount;
+        int ditCount = checked((int)_dit.ParameterCount);
+        int vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != ditCount + vaeCount)
             throw new ArgumentException(
@@ -365,7 +365,7 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "OmniGen unified multi-task image generation model",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "unified-dit");

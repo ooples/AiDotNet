@@ -252,7 +252,7 @@ public class InstructPix2PixModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "InstructPix2Pix", Version = "1.0",
             Description = "InstructPix2Pix instruction-based image editing with dual guidance",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "sd15-8ch-input-dual-guidance");
         metadata.SetProperty("input_channels", INPUT_CHANNELS);

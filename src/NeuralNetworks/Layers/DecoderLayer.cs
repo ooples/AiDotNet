@@ -555,7 +555,7 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     private int UpdateComponentParameters(LayerBase<T> component, Vector<T> parameters, int startIndex)
     {
-        int paramCount = (int)component.ParameterCount;
+        int paramCount = checked((int)component.ParameterCount);
 
         // Use Engine.TensorSlice to extract component parameters without manual loops
         var paramsTensor = new Tensor<T>([parameters.Length], parameters);

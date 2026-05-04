@@ -250,7 +250,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-XS", Version = "1.0",
             Description = "ControlNet-XS lightweight spatial control with ~1% parameters",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "controlnet-xs");
         m.SetProperty("base_model", "Stable Diffusion 1.5");

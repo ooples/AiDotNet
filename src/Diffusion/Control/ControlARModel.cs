@@ -147,7 +147,7 @@ public class ControlARModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlAR", Version = "1.0",
             Description = "Spatial control for autoregressive image generation via token-level conditioning",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "ar-controlnet");
         metadata.SetProperty("base_model", "Autoregressive Image Generator");

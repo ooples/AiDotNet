@@ -5463,7 +5463,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var srcSpan = parameters.AsSpan();
         foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             // Bulk copy via Span instead of element-by-element
             var layerParameters = new Vector<T>((int)(layerParameterCount));
             srcSpan.Slice(currentIndex, layerParameterCount)

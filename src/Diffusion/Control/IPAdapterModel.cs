@@ -519,10 +519,10 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int unetCount = (int)_baseUNet.ParameterCount;
+        int unetCount = checked((int)_baseUNet.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
-        int encoderCount = (int)_imageEncoder.ParameterCount;
-        int projectorCount = (int)_imageProjector.ParameterCount;
+        int encoderCount = checked((int)_imageEncoder.ParameterCount);
+        int projectorCount = checked((int)_imageProjector.ParameterCount);
 
         var offset = 0;
         var unetParams = new T[unetCount];
@@ -580,7 +580,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "IP-Adapter", Version = "1.0",
             Description = "Image prompt adapter for reference image-guided diffusion generation",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "unet-decoupled-cross-attention");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
@@ -658,7 +658,7 @@ public class ImageEncoder<T>
     {
         get
         {
-            int total = (int)_patchEmbed.ParameterCount;
+            int total = checked((int)_patchEmbed.ParameterCount);
             foreach (var layer in _transformerLayers)
             {
                 total += (int)layer.ParameterCount;
@@ -816,7 +816,7 @@ public class ImageEncoder<T>
     {
         var offset = 0;
 
-        int count = (int)((int)_patchEmbed.ParameterCount);
+        int count = checked((int)_patchEmbed.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {
@@ -826,7 +826,7 @@ public class ImageEncoder<T>
 
         foreach (var layer in _transformerLayers)
         {
-            count = (int)((int)layer.ParameterCount);
+            count = (int)layer.ParameterCount;
             p = new T[count];
             for (int i = 0; i < count; i++)
             {
@@ -925,7 +925,7 @@ public class ImageProjector<T>
     {
         var offset = 0;
 
-        int count = (int)((int)_projection.ParameterCount);
+        int count = checked((int)_projection.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {
@@ -933,7 +933,7 @@ public class ImageProjector<T>
         }
         _projection.SetParameters(new Vector<T>(p));
 
-        count = (int)((int)_tokenExpansion.ParameterCount);
+        count = (int)_tokenExpansion.ParameterCount;
         p = new T[count];
         for (int i = 0; i < count; i++)
         {

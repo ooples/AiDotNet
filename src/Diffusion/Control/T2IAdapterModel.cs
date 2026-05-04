@@ -358,9 +358,12 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        int adapterCount = (int)_adapterNetwork.ParameterCount;
-        var vaeCount = _vae.GetParameters().Length;
+        // ParameterCount is the cheap path; GetParameters().Length materialises
+        // a flat aggregate. checked() guards against foundation-scale overflow
+        // (Vector.Length is int — slicing past int.MaxValue isn't expressible).
+        int unetCount = checked((int)_unet.ParameterCount);
+        int adapterCount = checked((int)_adapterNetwork.ParameterCount);
+        int vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + adapterCount + vaeCount)
         {
@@ -459,7 +462,7 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "T2I-Adapter lightweight spatial conditioning adapter for text-to-image diffusion models",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "adapter-latent-diffusion");

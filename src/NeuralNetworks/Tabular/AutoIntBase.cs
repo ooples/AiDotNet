@@ -76,10 +76,10 @@ public abstract class AutoIntBase<T>
             }
 
             foreach (var layer in _interactingLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             foreach (var layer in _mlpLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             return count;
         }

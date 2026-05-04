@@ -147,7 +147,7 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNeXt", Version = "1.0",
             Description = "Parameter-efficient control with cross-normalization for improved generalization",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-controlnext");
         metadata.SetProperty("base_model", "Stable Diffusion 1.5");

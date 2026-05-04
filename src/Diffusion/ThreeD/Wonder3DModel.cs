@@ -268,7 +268,7 @@ public class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "Wonder3D", Version = "1.0",
             Description = "Wonder3D cross-domain multi-view 3D generation with RGB and normal maps",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "cross-domain-multiview-unet");
         metadata.SetProperty("num_views", NUM_VIEWS);

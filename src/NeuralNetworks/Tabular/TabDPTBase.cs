@@ -79,21 +79,21 @@ public abstract class TabDPTBase<T>
     {
         get
         {
-            int count = (int)((int)_featureProjection.ParameterCount);
+            int count = checked((int)_featureProjection.ParameterCount);
 
             foreach (var emb in _categoricalEmbeddings)
-                count += (int)((int)emb.ParameterCount);
+                count += (int)emb.ParameterCount;
 
             foreach (var block in _transformerBlocks)
-                count += (int)((int)block.ParameterCount);
+                count += (int)block.ParameterCount;
 
             if (_featureAttention != null)
-                count += (int)((int)_featureAttention.ParameterCount);
+                count += (int)_featureAttention.ParameterCount;
 
             foreach (var layer in _mlpLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
-            count += (int)((int)_finalNorm.ParameterCount);
+            count += (int)_finalNorm.ParameterCount;
 
             return count;
         }

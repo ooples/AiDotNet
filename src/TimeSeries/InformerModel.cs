@@ -720,11 +720,11 @@ public class InformerModel<T> : TimeSeriesModelBase<T>
                        _outputProjection.Length + _outputBias.Length;
 
             foreach (var layer in _encoderLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             foreach (var layer in _distillingLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             foreach (var layer in _decoderLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             return count;
         }

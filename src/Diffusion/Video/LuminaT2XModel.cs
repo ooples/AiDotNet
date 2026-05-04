@@ -227,7 +227,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Lumina-T2X", Version = "1.0",
             Description = "Lumina-T2X unified text-to-any generation framework",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flag-dit-flow-matching");
         m.SetProperty("modalities", "image,video,3d,audio");

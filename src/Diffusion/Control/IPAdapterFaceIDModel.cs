@@ -245,7 +245,7 @@ public class IPAdapterFaceIDModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "IP-Adapter FaceID", Version = "1.0",
             Description = "IP-Adapter FaceID face-specific identity preservation with ArcFace embeddings",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "ip-adapter-arcface");
         metadata.SetProperty("face_encoder", "ArcFace/InsightFace");

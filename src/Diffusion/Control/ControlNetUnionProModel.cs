@@ -76,9 +76,13 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
     {
         get
         {
-            int count = (int)((int)_baseUNet.ParameterCount);
+            // #1237: long accumulator. ControlNet Union Pro's encoder cache
+            // can grow unbounded (each input modality registers its own
+            // encoder); cumulative parameter count crosses int.MaxValue at
+            // foundation-scale base U-Nets + multi-modality encoders.
+            long count = _baseUNet.ParameterCount;
             foreach (var enc in _encoderCache.Values)
-                count += (int)((int)enc.ParameterCount);
+                count += enc.ParameterCount;
             return count;
         }
     }
@@ -167,7 +171,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        int baseCount = (int)_baseUNet.ParameterCount;
+        int baseCount = checked((int)_baseUNet.ParameterCount);
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(baseParams));
@@ -206,7 +210,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Unified ControlNet supporting multiple control types in a single model",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "unet-multi-type-controlnet");

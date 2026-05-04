@@ -66,7 +66,7 @@ public abstract class SAINTBase<T>
     {
         get
         {
-            int count = (int)((int)_numericalEmbedding.ParameterCount);
+            int count = checked((int)_numericalEmbedding.ParameterCount);
 
             if (_categoricalEmbeddings != null)
             {
@@ -78,19 +78,19 @@ public abstract class SAINTBase<T>
                 count += _columnEmbeddings.Length;
 
             foreach (var layer in _columnAttentionLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             if (_rowAttentionLayers != null)
             {
                 foreach (var layer in _rowAttentionLayers)
-                    count += (int)((int)layer.ParameterCount);
+                    count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _ffnLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             foreach (var layer in _mlpLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             return count;
         }

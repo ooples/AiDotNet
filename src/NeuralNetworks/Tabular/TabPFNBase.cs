@@ -82,18 +82,18 @@ public abstract class TabPFNBase<T>
     {
         get
         {
-            int count = (int)((int)_featureEncoder.ParameterCount);
+            int count = checked((int)_featureEncoder.ParameterCount);
 
             foreach (var enc in _categoricalEncoders)
-                count += (int)((int)enc.ParameterCount);
+                count += (int)enc.ParameterCount;
 
             foreach (var block in _transformerBlocks)
-                count += (int)((int)block.ParameterCount);
+                count += (int)block.ParameterCount;
 
             foreach (var layer in _outputMLP)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
-            count += (int)((int)_finalNorm.ParameterCount);
+            count += (int)_finalNorm.ParameterCount;
 
             if (_positionalEncoding != null)
                 count += _positionalEncoding.Length;

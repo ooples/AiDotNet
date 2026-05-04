@@ -578,7 +578,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
 
         foreach (var layer in Layers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);
@@ -607,7 +607,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
         {
             Name = "VisionTransformer",
             FeatureCount = _imageHeight * _imageWidth * _channels,
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             Description = $"Vision Transformer with {_numLayers} layers, {_numHeads} attention heads, and {_numPatches} patches",
             AdditionalInfo = new Dictionary<string, object>
             {

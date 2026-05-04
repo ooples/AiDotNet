@@ -1383,59 +1383,59 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             // Image encoder layers
             foreach (var layer in _imageEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Text encoder layers
             foreach (var layer in _textEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Audio encoder layers
             foreach (var layer in _audioEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Thermal encoder layers
             foreach (var layer in _thermalEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Depth encoder layers
             foreach (var layer in _depthEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // IMU encoder layers
             foreach (var layer in _imuEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Video temporal layers
             foreach (var layer in _videoTemporalLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Single layers
-            if (_imagePatchEmbedding is not null) count += (int)((int)_imagePatchEmbedding.ParameterCount);
-            if (_imageProjection is not null) count += (int)((int)_imageProjection.ParameterCount);
-            if (_textTokenEmbedding is not null) count += (int)((int)_textTokenEmbedding.ParameterCount);
-            if (_textProjection is not null) count += (int)((int)_textProjection.ParameterCount);
-            if (_audioConv is not null) count += (int)((int)_audioConv.ParameterCount);
-            if (_audioProjection is not null) count += (int)((int)_audioProjection.ParameterCount);
-            if (_thermalPatchEmbedding is not null) count += (int)((int)_thermalPatchEmbedding.ParameterCount);
-            if (_thermalProjection is not null) count += (int)((int)_thermalProjection.ParameterCount);
-            if (_depthPatchEmbedding is not null) count += (int)((int)_depthPatchEmbedding.ParameterCount);
-            if (_depthProjection is not null) count += (int)((int)_depthProjection.ParameterCount);
-            if (_imuEmbedding is not null) count += (int)((int)_imuEmbedding.ParameterCount);
-            if (_imuProjection is not null) count += (int)((int)_imuProjection.ParameterCount);
-            if (_videoProjection is not null) count += (int)((int)_videoProjection.ParameterCount);
+            if (_imagePatchEmbedding is not null) count += (int)_imagePatchEmbedding.ParameterCount;
+            if (_imageProjection is not null) count += (int)_imageProjection.ParameterCount;
+            if (_textTokenEmbedding is not null) count += (int)_textTokenEmbedding.ParameterCount;
+            if (_textProjection is not null) count += (int)_textProjection.ParameterCount;
+            if (_audioConv is not null) count += (int)_audioConv.ParameterCount;
+            if (_audioProjection is not null) count += (int)_audioProjection.ParameterCount;
+            if (_thermalPatchEmbedding is not null) count += (int)_thermalPatchEmbedding.ParameterCount;
+            if (_thermalProjection is not null) count += (int)_thermalProjection.ParameterCount;
+            if (_depthPatchEmbedding is not null) count += (int)_depthPatchEmbedding.ParameterCount;
+            if (_depthProjection is not null) count += (int)_depthProjection.ParameterCount;
+            if (_imuEmbedding is not null) count += (int)_imuEmbedding.ParameterCount;
+            if (_imuProjection is not null) count += (int)_imuProjection.ParameterCount;
+            if (_videoProjection is not null) count += (int)_videoProjection.ParameterCount;
 
             // Positional embeddings and CLS tokens
             if (_imageClsToken is not null) count += _imageClsToken.Rows * _imageClsToken.Columns;
@@ -1587,7 +1587,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     {
         foreach (var layer in layers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);
@@ -1657,7 +1657,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
             return offset;
         }
 
-        int layerParamCount = (int)layer.ParameterCount;
+        int layerParamCount = checked((int)layer.ParameterCount);
         if (layerParamCount > 0)
         {
             var layerParams = new Vector<T>(layerParamCount);

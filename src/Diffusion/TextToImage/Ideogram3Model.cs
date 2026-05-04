@@ -283,7 +283,7 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int predictorCount = (int)_predictor.ParameterCount;
+        int predictorCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -345,7 +345,7 @@ public class Ideogram3Model<T> : LatentDiffusionModelBase<T>
             Version = "3.0",
             Description = "SiT with text layout prediction and OCR-in-the-loop training for superior text rendering",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sit-text-layout-prediction");

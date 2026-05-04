@@ -614,7 +614,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         else
         {
             // Extract base layer parameters
-            int baseCount = (int)_baseLayer.ParameterCount;
+            int baseCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseCount);
             for (int i = 0; i < baseCount; i++)
             {

@@ -524,7 +524,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // If base layer is not frozen, unpack its parameters first
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = (int)_baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -534,7 +534,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         }
 
         // Unpack LoRA parameters
-        int loraParamCount = (int)_loraLayer.ParameterCount;
+        int loraParamCount = checked((int)_loraLayer.ParameterCount);
         Vector<T> loraParams = new Vector<T>(loraParamCount);
         for (int i = 0; i < loraParamCount; i++)
         {

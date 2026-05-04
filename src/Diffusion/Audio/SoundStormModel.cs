@@ -199,8 +199,8 @@ public class SoundStormModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int cCount = (int)_conformer.ParameterCount;
-        int vaeCount = (int)_audioVAE.ParameterCount;
+        int cCount = checked((int)_conformer.ParameterCount);
+        int vaeCount = checked((int)_audioVAE.ParameterCount);
         if (parameters.Length != cCount + vaeCount)
             throw new ArgumentException($"Expected {cCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         // Use Vector.Slice for zero-copy sub-vector extraction instead of element-by-element loops
@@ -241,7 +241,7 @@ public class SoundStormModel<T> : AudioDiffusionModelBase<T>
         {
             Name = "SoundStorm", Version = "1.0",
             Description = "SoundStorm parallel masked audio generation with conformer backbone",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "conformer-maskgit");
         metadata.SetProperty("hidden_dim", HIDDEN_DIM);

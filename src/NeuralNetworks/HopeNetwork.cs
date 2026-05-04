@@ -510,7 +510,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         int offset = 0;
         foreach (var layer in Layers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             var layerParams = new Vector<T>(layerParamCount);
 
             for (int i = 0; i < layerParamCount; i++)
@@ -577,7 +577,7 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             Version = "1.0",
             Description = "Self-modifying recurrent network with Continuum Memory System for continual learning based on Google's Nested Learning paradigm",
             FeatureCount = _hiddenDim,
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             TrainingDate = DateTimeOffset.Now
         };
 

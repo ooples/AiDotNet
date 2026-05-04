@@ -328,7 +328,7 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "Make-A-Video text-to-video generation without paired text-video data by Meta",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "pseudo3d-unet");

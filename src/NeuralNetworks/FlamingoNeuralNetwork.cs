@@ -1031,19 +1031,19 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         {
             int count = 0;
             foreach (var layer in _visionEncoderLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             foreach (var layer in _perceiverLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             foreach (var layer in _gatedCrossAttentionLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             foreach (var layer in _languageModelLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             if (_patchEmbedding is not null)
-                count += (int)((int)_patchEmbedding.ParameterCount);
+                count += (int)_patchEmbedding.ParameterCount;
             if (_textTokenEmbedding is not null)
-                count += (int)((int)_textTokenEmbedding.ParameterCount);
+                count += (int)_textTokenEmbedding.ParameterCount;
             if (_outputProjection is not null)
-                count += (int)((int)_outputProjection.ParameterCount);
+                count += (int)_outputProjection.ParameterCount;
             return count;
         }
     }
@@ -1101,7 +1101,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
         foreach (var layer in _perceiverLayers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);
@@ -1116,7 +1116,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
         foreach (var layer in _gatedCrossAttentionLayers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);

@@ -685,7 +685,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
             Version = "1.0",
             Description = "Point-E text-to-3D point cloud generation using transformer-based diffusion",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-point-cloud");

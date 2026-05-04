@@ -93,7 +93,7 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
             int count = 0;
             foreach (var network in Networks)
             {
-                count += (int)((int)network.ParameterCount);
+                count += (int)network.ParameterCount;
             }
             return count;
         }

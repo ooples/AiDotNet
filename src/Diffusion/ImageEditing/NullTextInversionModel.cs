@@ -367,7 +367,7 @@ public class NullTextInversionModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Null-text Inversion enables editing real images by optimizing the unconditional embedding",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

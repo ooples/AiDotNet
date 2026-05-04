@@ -241,7 +241,7 @@ public class PromptToPromptModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Prompt-to-Prompt", Version = "1.0",
             Description = "Prompt-to-Prompt attention-based image editing with cross-attention control",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "sd15-attention-control");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

@@ -400,7 +400,7 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
             Version = "2.1",
             Description = "Stable Diffusion 2.x latent diffusion model with OpenCLIP ViT-H/14 text conditioning and v-prediction",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

@@ -849,7 +849,7 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         int idx = 0;
         foreach (var layer in Layers)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             layer.UpdateParameters(parameters.Slice(idx, count));
             idx += count;
         }

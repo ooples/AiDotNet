@@ -501,9 +501,9 @@ public class ReconstructionLayer<T> : LayerBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         // Get parameter counts for each sublayer
-        int fc1ParamCount = (int)_fc1.ParameterCount;
-        int fc2ParamCount = (int)_fc2.ParameterCount;
-        int fc3ParamCount = (int)_fc3.ParameterCount;
+        int fc1ParamCount = checked((int)_fc1.ParameterCount);
+        int fc2ParamCount = checked((int)_fc2.ParameterCount);
+        int fc3ParamCount = checked((int)_fc3.ParameterCount);
         int totalParams = fc1ParamCount + fc2ParamCount + fc3ParamCount;
 
         if (parameters.Length != totalParams)

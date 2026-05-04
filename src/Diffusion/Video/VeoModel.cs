@@ -379,7 +379,7 @@ public class VeoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int ditCount = (int)_dit.ParameterCount;
+        int ditCount = checked((int)_dit.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -450,7 +450,7 @@ public class VeoModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = $"Google {(_isVeo2 ? "Veo 2" : "Veo")} cascaded video generation with temporal super-resolution",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "cascaded-dit");

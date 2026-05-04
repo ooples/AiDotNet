@@ -241,7 +241,7 @@ public class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         int idx = 0;
         foreach (var l in Layers)
         {
-            int c = (int)l.ParameterCount;
+            int c = checked((int)l.ParameterCount);
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
         }

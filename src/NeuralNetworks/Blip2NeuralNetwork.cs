@@ -1948,37 +1948,37 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
             foreach (var layer in _qformerSelfAttentionLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _qformerCrossAttentionLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _qformerFeedForwardLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             if (_itmHead is not null)
-                count += (int)((int)_itmHead.ParameterCount);
+                count += (int)_itmHead.ParameterCount;
 
             if (_itcProjection is not null)
-                count += (int)((int)_itcProjection.ParameterCount);
+                count += (int)_itcProjection.ParameterCount;
 
             if (_languageModelProjection is not null)
-                count += (int)((int)_languageModelProjection.ParameterCount);
+                count += (int)_languageModelProjection.ParameterCount;
 
             // LM Decoder layers
             foreach (var layer in _lmDecoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // LM Head
             if (_lmHead is not null)
-                count += (int)((int)_lmHead.ParameterCount);
+                count += (int)_lmHead.ParameterCount;
 
             return count;
         }
@@ -2124,7 +2124,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Set Q-Former layer parameters
         foreach (var layer in _qformerSelfAttentionLayers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             var layerParams = new Vector<T>(layerParamCount);
             for (int i = 0; i < layerParamCount; i++)
             {
@@ -2136,7 +2136,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
         foreach (var layer in _qformerCrossAttentionLayers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             var layerParams = new Vector<T>(layerParamCount);
             for (int i = 0; i < layerParamCount; i++)
             {
@@ -2148,7 +2148,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
         foreach (var layer in _qformerFeedForwardLayers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             var layerParams = new Vector<T>(layerParamCount);
             for (int i = 0; i < layerParamCount; i++)
             {
@@ -2161,7 +2161,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Set projection head parameters
         if (_itmHead is not null)
         {
-            int paramCount = (int)_itmHead.ParameterCount;
+            int paramCount = checked((int)_itmHead.ParameterCount);
             var headParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -2173,7 +2173,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
         if (_itcProjection is not null)
         {
-            int paramCount = (int)_itcProjection.ParameterCount;
+            int paramCount = checked((int)_itcProjection.ParameterCount);
             var projParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -2185,7 +2185,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
 
         if (_languageModelProjection is not null)
         {
-            int paramCount = (int)_languageModelProjection.ParameterCount;
+            int paramCount = checked((int)_languageModelProjection.ParameterCount);
             var lmProjParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -2198,7 +2198,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Set LM decoder layer parameters
         foreach (var layer in _lmDecoderLayers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             var layerParams = new Vector<T>(layerParamCount);
             for (int i = 0; i < layerParamCount; i++)
             {
@@ -2211,7 +2211,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
         // Set LM head parameters
         if (_lmHead is not null)
         {
-            int paramCount = (int)_lmHead.ParameterCount;
+            int paramCount = checked((int)_lmHead.ParameterCount);
             var lmHeadParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {

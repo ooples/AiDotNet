@@ -368,7 +368,7 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Paint-by-Example fills masked regions using exemplar images as visual references",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion-inpainting");

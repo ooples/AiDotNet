@@ -280,7 +280,7 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int predictorCount = (int)_predictor.ParameterCount;
+        int predictorCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -342,7 +342,7 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
             Version = "3.0",
             Description = "Professional-grade MMDiT-X with style presets, color palette control, and text rendering",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "mmdit-x-professional-style-aware");

@@ -115,7 +115,7 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
 
         int count = (int)(_patchEmbed?.ParameterCount ?? 0);
         if (_blocks is not null)
-            foreach (var block in _blocks) count += (int)((int)block.ParameterCount);
+            foreach (var block in _blocks) count += (int)block.ParameterCount;
         count += (int)(_finalLayer?.ParameterCount ?? 0);
 
         return (count, _patchEmbed ?? throw new InvalidOperationException(), _blocks ?? throw new InvalidOperationException(), _finalLayer ?? throw new InvalidOperationException());
@@ -231,7 +231,7 @@ public class SiTPredictor<T> : NoisePredictorBase<T>
 
     private static int SetParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)layer.ParameterCount);
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
         layer.SetParameters(new Vector<T>(p));

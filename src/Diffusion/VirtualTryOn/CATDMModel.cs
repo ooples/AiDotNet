@@ -92,8 +92,8 @@ public class CATDMModel<T> : LatentDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -116,7 +116,7 @@ public class CATDMModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T> { Name = "CATDM", Version = "1.0",
             Description = "Controllable appearance transfer for virtual try-on with fine-grained attributes",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount };
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount };
         m.SetProperty("architecture", "appearance-transfer-attention-tryon");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
         m.SetProperty("text_encoder", "CLIP ViT-L/14");

@@ -242,7 +242,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int index = 0;
             foreach (var layer in _graphLayers)
             {
-                int layerParameterCount = (int)layer.ParameterCount;
+                int layerParameterCount = checked((int)layer.ParameterCount);
                 if (layerParameterCount > 0)
                 {
                     Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);

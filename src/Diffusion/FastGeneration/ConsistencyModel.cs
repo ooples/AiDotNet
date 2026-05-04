@@ -607,13 +607,13 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
                 nameof(parameters));
         }
 
-        int npCount = (int)_noisePredictor.ParameterCount;
+        int npCount = checked((int)_noisePredictor.ParameterCount);
         var noisePredParams = new Vector<T>(npCount);
         for (int i = 0; i < npCount; i++)
             noisePredParams[i] = parameters[i];
         _noisePredictor.SetParameters(noisePredParams);
 
-        int vaeCount = (int)_vae.ParameterCount;
+        int vaeCount = checked((int)_vae.ParameterCount);
         var vaeParams = new Vector<T>(vaeCount);
         for (int i = 0; i < vaeCount; i++)
             vaeParams[i] = parameters[npCount + i];
@@ -660,7 +660,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Consistency Model for single-step or few-step image generation",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("num_train_steps", _numTrainSteps);

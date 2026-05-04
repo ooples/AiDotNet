@@ -390,7 +390,7 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
             Version = "2.5",
             Description = "Playground v2.5 aesthetic-optimized text-to-image model with SDXL architecture and EDM training",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sdxl-edm-latent-diffusion");

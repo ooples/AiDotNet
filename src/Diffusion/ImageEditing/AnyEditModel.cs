@@ -112,8 +112,8 @@ public class AnyEditModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -142,7 +142,7 @@ public class AnyEditModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "AnyEdit", Version = "1.0",
             Description = "Unified instruction-based editing for diverse edit types on SD1.5",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "instructpix2pix-sd15-editing");
         m.SetProperty("base_model", "Stable Diffusion 1.5");

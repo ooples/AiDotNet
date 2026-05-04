@@ -91,7 +91,7 @@ public abstract class TabMBase<T>
             if (_featureEmbeddings != null) count += _featureEmbeddings.Length;
             foreach (var layer in _hiddenLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
             return count;
         }
@@ -328,7 +328,7 @@ public abstract class TabMBase<T>
         // Hidden layers
         foreach (var layer in _hiddenLayers)
         {
-            int layerCount = (int)layer.ParameterCount;
+            int layerCount = checked((int)layer.ParameterCount);
             var layerParams = new Vector<T>(layerCount);
             for (int i = 0; i < layerCount; i++)
             {

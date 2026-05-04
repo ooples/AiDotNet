@@ -575,7 +575,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         {
             Name = GetType().Name,
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             Description = $"Noise predictor with {ParameterCount} parameters, {InputChannels} input channels, {BaseChannels} base channels."
         };
     }

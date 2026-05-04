@@ -124,10 +124,10 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
-        int count = (int)((int)_patchEmbed.ParameterCount);
-        foreach (var block in _doubleBlocks) count += (int)((int)block.ParameterCount);
-        foreach (var block in _singleBlocks) count += (int)((int)block.ParameterCount);
-        count += (int)((int)_finalLayer.ParameterCount);
+        int count = checked((int)_patchEmbed.ParameterCount);
+        foreach (var block in _doubleBlocks) count += (int)block.ParameterCount;
+        foreach (var block in _singleBlocks) count += (int)block.ParameterCount;
+        count += (int)_finalLayer.ParameterCount;
         return count;
     }
 
@@ -205,7 +205,7 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
 
     private static int SetParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)layer.ParameterCount);
+        int count = checked((int)layer.ParameterCount);
         layer.SetParameters(parameters.GetSubVector(offset, count));
         return offset + count;
     }

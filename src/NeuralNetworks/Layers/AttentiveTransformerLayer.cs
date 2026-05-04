@@ -284,8 +284,8 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        int fcCount = (int)_fcLayer.ParameterCount;
-        int bnCount = (int)_bnLayer.ParameterCount;
+        int fcCount = checked((int)_fcLayer.ParameterCount);
+        int bnCount = checked((int)_bnLayer.ParameterCount);
 
         var fcParams = new Vector<T>(fcCount);
         var bnParams = new Vector<T>(bnCount);

@@ -303,7 +303,7 @@ public class StableDiffusion35Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int predictorCount = (int)_predictor.ParameterCount;
+        int predictorCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -368,7 +368,7 @@ public class StableDiffusion35Model<T> : LatentDiffusionModelBase<T>
             Version = "3.5",
             Description = $"SD 3.5 {_variant} with MMDiT-X ({(isLarge ? "8B" : "2.5B")} params), QK-normalization, and triple text encoders",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "mmdit-x-rectified-flow");

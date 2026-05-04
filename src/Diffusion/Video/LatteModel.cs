@@ -332,7 +332,7 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int ditCount = (int)_dit.ParameterCount;
+        int ditCount = checked((int)_dit.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -408,7 +408,7 @@ public class LatteModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "Latte latent diffusion transformer for video generation with factorized attention",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-factorized-st-attention");

@@ -355,7 +355,7 @@ public class LGMModel<T> : ThreeDDiffusionModelBase<T>
             Version = "1.0",
             Description = "LGM feed-forward 3D Gaussian generation from multi-view images",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "asymmetric-unet-gaussian-predictor");

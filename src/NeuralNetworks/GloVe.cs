@@ -391,7 +391,7 @@ namespace AiDotNet.NeuralNetworks
             int index = 0;
             foreach (var layer in Layers)
             {
-                int layerParameterCount = (int)layer.ParameterCount;
+                int layerParameterCount = checked((int)layer.ParameterCount);
                 if (layerParameterCount > 0)
                 {
                     var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -548,7 +548,7 @@ namespace AiDotNet.NeuralNetworks
             {
                 Name = "GloVe",
                 Description = "GloVe (Global Vectors) embedding model",
-                Complexity = (int)ParameterCount,
+                Complexity = ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "EmbeddingDimension", _embeddingDimension },

@@ -273,7 +273,7 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int predictorCount = (int)_predictor.ParameterCount;
+        int predictorCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -335,7 +335,7 @@ public class Imagen3Model<T> : LatentDiffusionModelBase<T>
             Version = "3.0",
             Description = "Google DeepMind's cascaded SiT with Gemma text encoder and human feedback alignment",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "cascaded-sit-diffusion");

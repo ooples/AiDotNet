@@ -228,8 +228,8 @@ public class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int uc = (int)_unet.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int uc = checked((int)_unet.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != uc + vc)
         {
@@ -300,7 +300,7 @@ public class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
             Version = "2.0",
             Description = "PhotoMaker identity-customized photo generation with stacked ID embedding",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         m.SetProperty("architecture", "sdxl-stacked-id-embedding");

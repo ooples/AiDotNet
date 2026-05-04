@@ -1508,55 +1508,55 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             // Vision encoder layers
             foreach (var layer in _visionEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Language model layers
             foreach (var layer in _languageModelLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Cross-attention layers
             foreach (var layer in _crossAttentionLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Single layers
             if (_visionPatchEmbedding is not null)
             {
-                count += (int)((int)_visionPatchEmbedding.ParameterCount);
+                count += (int)_visionPatchEmbedding.ParameterCount;
             }
 
             if (_visionLayerNorm is not null)
             {
-                count += (int)((int)_visionLayerNorm.ParameterCount);
+                count += (int)_visionLayerNorm.ParameterCount;
             }
 
             if (_visionProjector1 is not null)
             {
-                count += (int)((int)_visionProjector1.ParameterCount);
+                count += (int)_visionProjector1.ParameterCount;
             }
 
             if (_visionProjector2 is not null)
             {
-                count += (int)((int)_visionProjector2.ParameterCount);
+                count += (int)_visionProjector2.ParameterCount;
             }
 
             if (_tokenEmbedding is not null)
             {
-                count += (int)((int)_tokenEmbedding.ParameterCount);
+                count += (int)_tokenEmbedding.ParameterCount;
             }
 
             if (_lmHead is not null)
             {
-                count += (int)((int)_lmHead.ParameterCount);
+                count += (int)_lmHead.ParameterCount;
             }
 
             if (_finalLayerNorm is not null)
             {
-                count += (int)((int)_finalLayerNorm.ParameterCount);
+                count += (int)_finalLayerNorm.ParameterCount;
             }
 
             // Positional embeddings

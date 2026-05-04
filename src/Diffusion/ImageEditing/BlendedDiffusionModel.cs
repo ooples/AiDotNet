@@ -340,7 +340,7 @@ public class BlendedDiffusionModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Blended Diffusion enables text-guided local editing by blending denoised results within user-specified masks",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

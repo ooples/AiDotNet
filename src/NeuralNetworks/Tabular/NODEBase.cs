@@ -67,7 +67,7 @@ public abstract class NODEBase<T>
             int count = 0;
 
             if (_featurePreprocessing != null)
-                count += (int)((int)_featurePreprocessing.ParameterCount);
+                count += (int)_featurePreprocessing.ParameterCount;
 
             foreach (var weights in _featureSelectionWeights)
                 count += weights.Length;

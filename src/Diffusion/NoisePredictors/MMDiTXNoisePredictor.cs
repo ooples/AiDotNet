@@ -132,9 +132,9 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 
     private int CalculateParameterCount()
     {
-        int count = (int)((int)_patchEmbed.ParameterCount);
-        foreach (var block in _jointBlocks) count += (int)((int)block.ParameterCount);
-        count += (int)((int)_finalLayer.ParameterCount);
+        int count = checked((int)_patchEmbed.ParameterCount);
+        foreach (var block in _jointBlocks) count += (int)block.ParameterCount;
+        count += (int)_finalLayer.ParameterCount;
         count += _posEmbed.Length;
         return count;
     }
@@ -191,7 +191,7 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
 
     private static int SetLayerParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)layer.ParameterCount);
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
         layer.SetParameters(new Vector<T>(p));

@@ -503,14 +503,14 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         int idx = 0;
         foreach (var l in Layers)
         {
-            int c = (int)l.ParameterCount;
+            int c = checked((int)l.ParameterCount);
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
         }
         // Apply the patch-embed update from the tail of the parameter vector.
         if (_patchEmbed is not null)
         {
-            int pc = (int)_patchEmbed.ParameterCount;
+            int pc = checked((int)_patchEmbed.ParameterCount);
             if (pc > 0 && idx + pc <= parameters.Length)
             {
                 _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));

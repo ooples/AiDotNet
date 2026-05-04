@@ -357,7 +357,7 @@ public class SDEditModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "SDEdit transforms sketches and images through partial noising and guided denoising",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

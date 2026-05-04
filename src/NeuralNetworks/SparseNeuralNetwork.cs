@@ -221,7 +221,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);

@@ -152,13 +152,13 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        int baseCount = (int)_baseUNet.ParameterCount;
+        int baseCount = checked((int)_baseUNet.ParameterCount);
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(baseParams));
         offset += baseCount;
 
-        int projCount = (int)_imageProjection.ParameterCount;
+        int projCount = checked((int)_imageProjection.ParameterCount);
         var projParams = new T[projCount];
         for (int i = 0; i < projCount; i++) projParams[i] = parameters[offset + i];
         _imageProjection.SetParameters(new Vector<T>(projParams));
@@ -187,7 +187,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Image prompt adapter with fine-grained image feature injection",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "unet-decoupled-cross-attention");

@@ -273,7 +273,7 @@ public class KolorsModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Kolors ChatGLM3-powered bilingual text-to-image model",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sdxl-unet-chatglm3");

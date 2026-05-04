@@ -495,7 +495,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         }
         _vae.SetParameters(new Vector<T>(vaeParams));
 
-        int encoderCount = (int)_imageEncoder.ParameterCount;
+        int encoderCount = checked((int)_imageEncoder.ParameterCount);
         var encoderParams = new T[encoderCount];
         for (int i = 0; i < encoderCount; i++)
         {
@@ -503,7 +503,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         }
         _imageEncoder.SetParameters(new Vector<T>(encoderParams));
 
-        int poseCount = (int)_poseEncoder.ParameterCount;
+        int poseCount = checked((int)_poseEncoder.ParameterCount);
         var poseParams = new T[poseCount];
         for (int i = 0; i < poseCount; i++)
         {

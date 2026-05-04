@@ -114,7 +114,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     {
         Guard.NotNull(network);
 
-        int paramCount = (int)network.ParameterCount;
+        int paramCount = checked((int)network.ParameterCount);
 
         if (_priorMean.Length == 0)
         {

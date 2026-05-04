@@ -792,7 +792,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters (if not frozen)
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = (int)_baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -802,7 +802,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Unpack LoRA parameters (required for base class compatibility)
-        int loraParamCount = (int)_loraLayer.ParameterCount;
+        int loraParamCount = checked((int)_loraLayer.ParameterCount);
         Vector<T> loraParams = new Vector<T>(loraParamCount);
         for (int i = 0; i < loraParamCount; i++)
         {

@@ -837,7 +837,7 @@ public class NeuralNetworkARIMAModel<T> : TimeSeriesModelBase<T>
 
         int p = _nnarimaOptions.AROrder;
         int q = _nnarimaOptions.MAOrder;
-        int nnParamCount = (int)_neuralNetwork.ParameterCount;
+        int nnParamCount = checked((int)_neuralNetwork.ParameterCount);
         int expectedLength = p + q + nnParamCount;
 
         if (parameters.Length != expectedLength)

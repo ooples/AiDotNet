@@ -162,7 +162,7 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         int idx = 0;
         if (_patchEmbed is not null)
         {
-            int pc = (int)_patchEmbed.ParameterCount;
+            int pc = checked((int)_patchEmbed.ParameterCount);
             if (pc > 0)
             {
                 _patchEmbed.SetParameters(parameters.Slice(idx, pc));
@@ -171,7 +171,7 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         }
         foreach (var l in Layers)
         {
-            int c = (int)l.ParameterCount;
+            int c = checked((int)l.ParameterCount);
             l.SetParameters(parameters.Slice(idx, c));
             idx += c;
         }
@@ -192,7 +192,7 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         int idx = 0;
         if (_patchEmbed is not null)
         {
-            int pc = (int)_patchEmbed.ParameterCount;
+            int pc = checked((int)_patchEmbed.ParameterCount);
             if (pc > 0)
             {
                 _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));

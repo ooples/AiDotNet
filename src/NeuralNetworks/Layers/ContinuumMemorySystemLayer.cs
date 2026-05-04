@@ -476,7 +476,7 @@ public class ContinuumMemorySystemLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var mlp in _mlpBlocks)
         {
-            int mlpParamCount = (int)mlp.ParameterCount;
+            int mlpParamCount = checked((int)mlp.ParameterCount);
             var mlpParams = new Vector<T>(mlpParamCount);
 
             for (int i = 0; i < mlpParamCount; i++)

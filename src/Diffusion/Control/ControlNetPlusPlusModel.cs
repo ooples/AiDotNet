@@ -152,13 +152,13 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        int baseCount = (int)_baseUNet.ParameterCount;
+        int baseCount = checked((int)_baseUNet.ParameterCount);
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(baseParams));
         offset += baseCount;
 
-        int ctrlCount = (int)_controlEncoder.ParameterCount;
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
         var ctrlParams = new T[ctrlCount];
         for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
@@ -188,7 +188,7 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Improved ControlNet with reward-guided training for better control adherence",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "unet-reward-guided-controlnet");

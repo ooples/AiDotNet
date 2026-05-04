@@ -120,8 +120,8 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(parameters.AsSpan().Slice(0, pc).ToArray());
@@ -147,7 +147,7 @@ public class SenseFlowModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "SenseFlow", Version = "1.0",
             Description = "Accelerated flow-matching generation via progressive distillation and feature alignment",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "distilled-flux-flow-matching");
         m.SetProperty("base_model", "FLUX.1");

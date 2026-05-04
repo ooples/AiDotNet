@@ -149,7 +149,7 @@ public class CogVideoX15Model<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int predCount = (int)_predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -190,7 +190,7 @@ public class CogVideoX15Model<T> : VideoDiffusionModelBase<T>
             Version = "1.5",
             Description = "CogVideoX 1.5 model with 10-second any-resolution video generation.",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "expert-transformer-3d-causal-vae");
         metadata.SetProperty("open_source", true);

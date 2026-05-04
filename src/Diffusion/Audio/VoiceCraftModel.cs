@@ -205,8 +205,8 @@ public class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int tCount = (int)_transformer.ParameterCount;
-        int vaeCount = (int)_audioVAE.ParameterCount;
+        int tCount = checked((int)_transformer.ParameterCount);
+        int vaeCount = checked((int)_audioVAE.ParameterCount);
         if (parameters.Length != tCount + vaeCount)
             throw new ArgumentException($"Expected {tCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var tParams = new Vector<T>(tCount);
@@ -248,7 +248,7 @@ public class VoiceCraftModel<T> : AudioDiffusionModelBase<T>
         {
             Name = "VoiceCraft", Version = "1.0",
             Description = "VoiceCraft zero-shot speech editing and TTS with neural codec language modeling",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "neural-codec-lm-infilling");
         metadata.SetProperty("hidden_dim", HIDDEN_DIM);

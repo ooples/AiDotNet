@@ -458,7 +458,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "Upscale-A-Video temporally consistent video super-resolution with diffusion",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "temporal-sr-diffusion");

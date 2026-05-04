@@ -264,7 +264,7 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "SyncDreamer", Version = "1.0",
             Description = "SyncDreamer synchronized multi-view 3D generation",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "synchronized-multiview-unet");
         metadata.SetProperty("num_views", NUM_VIEWS);

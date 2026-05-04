@@ -524,7 +524,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         {
             Name = "DeepANT",
             Description = "Deep learning for anomaly detection in time series using CNN",
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             FeatureCount = _options.WindowSize,
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -545,7 +545,7 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         {
             int count = 0;
             foreach (var conv in _convLayers)
-                count += (int)((int)conv.ParameterCount);
+                count += (int)conv.ParameterCount;
             count += _fcWeights.Length + _fcBias.Length;
             return count;
         }

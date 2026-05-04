@@ -360,7 +360,7 @@ public class BasicBlock<T> : LayerBase<T>
         int idx = 0;
         void Set(ILayer<T> layer)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             layer.SetParameters(parameters.Slice(idx, count));
             idx += count;
         }

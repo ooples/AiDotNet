@@ -288,7 +288,7 @@ public class TabDDPMGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         int startIndex = 0;
         foreach (var layer in Layers)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             if (count > 0)
             {
                 layer.UpdateParameters(parameters.SubVector(startIndex, count));

@@ -629,7 +629,7 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = $"PixArt-{sizeName} text-to-image diffusion model using DiT architecture",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-xl-2");

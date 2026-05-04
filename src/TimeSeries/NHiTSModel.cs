@@ -490,7 +490,7 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         {
             Name = "N-HiTS",
             Description = "Neural Hierarchical Interpolation for Time Series with multi-rate sampling (Production-Ready)",
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,
             AdditionalInfo = new Dictionary<string, object>
             {

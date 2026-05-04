@@ -299,7 +299,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         {
             Name = "LSTM-VAE",
             Description = "LSTM Variational Autoencoder for time series anomaly detection",
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             FeatureCount = _options.WindowSize,
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -330,12 +330,12 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int encoderLen = (int)_encoder.ParameterCount;
+        int encoderLen = checked((int)_encoder.ParameterCount);
         var encoderParams = new Vector<T>(encoderLen);
         for (int i = 0; i < encoderLen && i < parameters.Length; i++) encoderParams[i] = parameters[i];
         _encoder.SetParameters(encoderParams);
 
-        int decoderLen = (int)_decoder.ParameterCount;
+        int decoderLen = checked((int)_decoder.ParameterCount);
         var decoderParams = new Vector<T>(decoderLen);
         for (int i = 0; i < decoderLen && encoderLen + i < parameters.Length; i++) decoderParams[i] = parameters[encoderLen + i];
         _decoder.SetParameters(decoderParams);

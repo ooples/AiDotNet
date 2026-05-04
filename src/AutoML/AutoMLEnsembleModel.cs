@@ -282,7 +282,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         foreach (var member in Members)
         {
             var paramMember = (IParameterizable<T, Matrix<T>, Vector<T>>)member;
-            int count = (int)((int)paramMember.ParameterCount);
+            int count = checked((int)paramMember.ParameterCount);
             var segment = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
@@ -426,7 +426,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         foreach (var member in Members)
         {
             var paramMember = (IParameterizable<T, Matrix<T>, Vector<T>>)member;
-            int count = (int)((int)paramMember.ParameterCount);
+            int count = checked((int)paramMember.ParameterCount);
             var segment = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {

@@ -129,8 +129,8 @@ public class TSDSRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -158,7 +158,7 @@ public class TSDSRModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "TSD-SR", Version = "1.0",
             Description = "Timestep-shifted diffusion for fast 4-10 step super-resolution",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "timestep-shifted-sd21-sr-unet");
         m.SetProperty("base_model", "Stable Diffusion 2.1");

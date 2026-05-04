@@ -142,7 +142,7 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-Tile", Version = "1.0",
             Description = "ControlNet Tile for upscaling and detail enhancement",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-controlnet-tile");
         metadata.SetProperty("base_model", "Stable Diffusion 1.5");

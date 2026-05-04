@@ -362,8 +362,8 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int baseCount = (int)_baseUnet.ParameterCount;
-        int sr1Count = (int)_superRes1Unet.ParameterCount;
+        int baseCount = checked((int)_baseUnet.ParameterCount);
+        int sr1Count = checked((int)_superRes1Unet.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != baseCount + sr1Count + vaeCount)
@@ -463,7 +463,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Imagen cascaded pixel-space diffusion model with T5-XXL text encoder and dynamic thresholding",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "cascaded-pixel-diffusion");

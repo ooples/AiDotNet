@@ -206,8 +206,8 @@ public class MidJourneyV7Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
 
@@ -248,7 +248,7 @@ public class MidJourneyV7Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "MidJourney V7", Version = "7.0",
             Description = "Multi-scale MMDiT-X with aesthetic-aware training and stylize control",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "multi-scale-mmdit-x-aesthetic");
         m.SetProperty("base_model", "Midjourney V7");

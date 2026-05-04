@@ -271,7 +271,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "One-2-3-45", Version = "1.0",
             Description = "One-2-3-45 single image to 3D mesh in 45 seconds",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "zero123-plus-sparseneus");
         metadata.SetProperty("input_channels", INPUT_CHANNELS);

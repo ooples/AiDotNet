@@ -482,7 +482,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = (int)_baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {

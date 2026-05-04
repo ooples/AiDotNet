@@ -92,8 +92,8 @@ public class CACTIModel<T> : LatentDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -116,7 +116,7 @@ public class CACTIModel<T> : LatentDiffusionModelBase<T>
     {
         var m = new ModelMetadata<T> { Name = "CACTI", Version = "1.0",
             Description = "Content-aware controllable style transfer with semantic region preservation",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount };
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount };
         m.SetProperty("architecture", "content-aware-style-unet");
         m.SetProperty("base_model", "Stable Diffusion 1.5");
         m.SetProperty("text_encoder", "CLIP ViT-L/14");

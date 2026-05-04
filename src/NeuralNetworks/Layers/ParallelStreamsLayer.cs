@@ -286,7 +286,7 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var layer in _streamA)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             if (count > 0)
             {
                 layer.SetParameters(parameters.GetSubVector(offset, count));
@@ -295,7 +295,7 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
         }
         foreach (var layer in _streamB)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             if (count > 0)
             {
                 layer.SetParameters(parameters.GetSubVector(offset, count));

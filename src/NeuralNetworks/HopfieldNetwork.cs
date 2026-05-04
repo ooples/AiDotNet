@@ -619,7 +619,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     {
         return new ModelMetadata<T>
         {
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Size", _size },

@@ -1628,22 +1628,22 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             // Add layer parameters from all native layer lists
             foreach (var layer in _visionEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _textEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _textDecoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _crossAttentionLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             return count;
@@ -1806,7 +1806,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Update layer parameters from all native layer lists
         foreach (var layer in _visionEncoderLayers)
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -1817,7 +1817,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         foreach (var layer in _textEncoderLayers)
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -1828,7 +1828,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         foreach (var layer in _textDecoderLayers)
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -1839,7 +1839,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         foreach (var layer in _crossAttentionLayers)
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);

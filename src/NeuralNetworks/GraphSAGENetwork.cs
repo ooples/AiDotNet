@@ -268,7 +268,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = parameters.SubVector(index, layerParamCount);
@@ -674,7 +674,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         int count = 0;
         foreach (var layer in Layers)
         {
-            count += (int)((int)layer.ParameterCount);
+            count += (int)layer.ParameterCount;
         }
         return count;
     }

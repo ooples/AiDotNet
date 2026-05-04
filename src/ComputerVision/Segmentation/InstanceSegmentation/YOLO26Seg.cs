@@ -295,7 +295,7 @@ public class YOLO26Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
 
         foreach (var l in Layers)
         {
-            int c = (int)l.ParameterCount;
+            int c = checked((int)l.ParameterCount);
 
             if (o + c > parameters.Length)
                 throw new ArgumentException($"Parameter vector too short: need {o + c} but got {parameters.Length}");

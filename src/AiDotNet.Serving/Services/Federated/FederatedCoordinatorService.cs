@@ -195,7 +195,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
             {
                 RunId = state.RunId,
                 RoundNumber = state.CurrentRound,
-                ParameterCount = (int)state.ParameterCount,
+                ParameterCount = state.ParameterCount,
                 Parameters = state.GlobalParameters.ToArray()
             };
         }
@@ -300,7 +300,7 @@ public sealed class FederatedCoordinatorService : IFederatedCoordinatorService
             {
                 RunId = state.RunId,
                 CurrentRound = state.CurrentRound,
-                ParameterCount = (int)state.ParameterCount,
+                ParameterCount = state.ParameterCount,
                 JoinedClients = state.JoinedClients.Count,
                 UpdatesReceivedForCurrentRound = state.PendingClientParameters.Count,
                 MinUpdatesRequired = state.MinClientUpdatesPerRound

@@ -223,7 +223,7 @@ public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int tCount = (int)_transformer.ParameterCount;
+        int tCount = checked((int)_transformer.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
         if (parameters.Length != tCount + vaeCount)
             throw new ArgumentException($"Expected {tCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -268,7 +268,7 @@ public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "TripoSR", Version = "1.0",
             Description = "TripoSR fast single-image 3D reconstruction with LRM transformer",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "lrm-transformer-triplane");
         metadata.SetProperty("hidden_dim", HIDDEN_DIM);

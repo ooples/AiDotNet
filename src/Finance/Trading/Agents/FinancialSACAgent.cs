@@ -316,9 +316,9 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int actorCount = (int)_actor.ParameterCount;
-        int critic1Count = (int)_critic1.ParameterCount;
-        int critic2Count = (int)_critic2.ParameterCount;
+        int actorCount = checked((int)_actor.ParameterCount);
+        int critic1Count = checked((int)_critic1.ParameterCount);
+        int critic2Count = checked((int)_critic2.ParameterCount);
 
         if (parameters.Length != actorCount + critic1Count + critic2Count)
         {

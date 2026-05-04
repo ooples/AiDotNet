@@ -356,7 +356,7 @@ public class DiffEditModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "DiffEdit automatically generates editing masks by comparing noise predictions between source and target prompts",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

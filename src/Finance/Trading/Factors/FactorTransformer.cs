@@ -385,7 +385,7 @@ public class FactorTransformer<T> : FinancialModelBase<T>, IFactorModel<T>
         int offset = 0;
         foreach (var layer in Layers)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             if (count <= 0)
                 continue;
 

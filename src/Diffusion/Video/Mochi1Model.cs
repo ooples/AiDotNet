@@ -354,7 +354,7 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        int ditCount = (int)_dit.ParameterCount;
+        int ditCount = checked((int)_dit.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -425,7 +425,7 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "Mochi 1 asymmetric DiT video generation with joint text-video attention",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "asymm-dit-joint-attention");

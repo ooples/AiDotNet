@@ -428,7 +428,7 @@ public class SDTurboModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = $"{variant} distilled single/few-step image generation via Adversarial Diffusion Distillation",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "distilled-latent-diffusion");

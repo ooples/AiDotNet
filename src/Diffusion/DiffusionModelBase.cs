@@ -506,7 +506,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         {
             Name = GetType().Name,
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             Description = $"Diffusion model with {ParameterCount} parameters using {_scheduler.GetType().Name} scheduler."
         };
     }

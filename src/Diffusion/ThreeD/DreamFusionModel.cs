@@ -622,7 +622,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int nerfCount = (int)_nerf.ParameterCount;
+        int nerfCount = checked((int)_nerf.ParameterCount);
         var unetCount = _unet.GetParameters().Length;
         var vaeCount = _vae.GetParameters().Length;
 
@@ -681,7 +681,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Text-to-3D generation via Score Distillation Sampling",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("NeRF Hidden Dim", _config.NeRFHiddenDim);

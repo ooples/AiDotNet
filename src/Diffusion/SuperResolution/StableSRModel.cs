@@ -483,7 +483,7 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "StableSR diffusion-prior-based super-resolution with controllable feature wrapping",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sd15-controllable-sr");

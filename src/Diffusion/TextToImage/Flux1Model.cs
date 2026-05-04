@@ -318,7 +318,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int mmditCount = (int)_mmdit.ParameterCount;
+        int mmditCount = checked((int)_mmdit.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != mmditCount + vaeCount)
@@ -392,7 +392,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
             Version = _variant.ToString(),
             Description = $"FLUX.1 [{_variant.ToString().ToLowerInvariant()}] hybrid MMDiT with {FLUX_JOINT_LAYERS} joint + {FLUX_SINGLE_LAYERS} single blocks and rectified flow",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "hybrid-mmdit-rectified-flow");

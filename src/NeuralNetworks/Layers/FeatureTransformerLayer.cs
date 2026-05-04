@@ -319,7 +319,7 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         // Set shared layers
         foreach (var fc in _sharedFCLayers)
         {
-            int count = (int)((int)fc.ParameterCount);
+            int count = checked((int)fc.ParameterCount);
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
             fc.SetParameters(p);
@@ -327,7 +327,7 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         }
         foreach (var bn in _sharedBNLayers)
         {
-            int count = (int)((int)bn.ParameterCount);
+            int count = checked((int)bn.ParameterCount);
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
             bn.SetParameters(p);
@@ -337,7 +337,7 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         // Set step-specific layers
         foreach (var fc in _stepFCLayers)
         {
-            int count = (int)((int)fc.ParameterCount);
+            int count = checked((int)fc.ParameterCount);
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
             fc.SetParameters(p);
@@ -345,7 +345,7 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         }
         foreach (var bn in _stepBNLayers)
         {
-            int count = (int)((int)bn.ParameterCount);
+            int count = checked((int)bn.ParameterCount);
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
             bn.SetParameters(p);
@@ -395,10 +395,10 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         get
         {
             int count = 0;
-            foreach (var fc in _sharedFCLayers) count += (int)((int)fc.ParameterCount);
-            foreach (var bn in _sharedBNLayers) count += (int)((int)bn.ParameterCount);
-            foreach (var fc in _stepFCLayers) count += (int)((int)fc.ParameterCount);
-            foreach (var bn in _stepBNLayers) count += (int)((int)bn.ParameterCount);
+            foreach (var fc in _sharedFCLayers) count += (int)fc.ParameterCount;
+            foreach (var bn in _sharedBNLayers) count += (int)bn.ParameterCount;
+            foreach (var fc in _stepFCLayers) count += (int)fc.ParameterCount;
+            foreach (var bn in _stepBNLayers) count += (int)bn.ParameterCount;
             return count;
         }
     }

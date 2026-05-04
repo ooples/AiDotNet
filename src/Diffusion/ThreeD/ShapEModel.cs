@@ -927,7 +927,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
             Version = "1.0",
             Description = "Shap-E text-to-3D generation with implicit neural representations (NeRF/SDF)",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-implicit-neural-rep");

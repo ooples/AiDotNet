@@ -196,8 +196,8 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        int normCount = (int)_norm.ParameterCount;
-        int reductionCount = (int)_reduction.ParameterCount;
+        int normCount = checked((int)_norm.ParameterCount);
+        int reductionCount = checked((int)_reduction.ParameterCount);
 
         var normParams = new T[normCount];
         var reductionParams = new T[reductionCount];

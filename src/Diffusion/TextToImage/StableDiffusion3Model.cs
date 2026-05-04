@@ -299,7 +299,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int mmditCount = (int)_mmdit.ParameterCount;
+        int mmditCount = checked((int)_mmdit.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != mmditCount + vaeCount)
@@ -385,7 +385,7 @@ public class StableDiffusion3Model<T> : LatentDiffusionModelBase<T>
             Version = variantName,
             Description = $"Stable Diffusion {variantName} with MMDiT architecture, rectified flow, and triple text encoders",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "mmdit-rectified-flow");

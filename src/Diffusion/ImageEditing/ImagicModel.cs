@@ -355,7 +355,7 @@ public class ImagicModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Imagic edits real images to match target text via text embedding optimization and model fine-tuning",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

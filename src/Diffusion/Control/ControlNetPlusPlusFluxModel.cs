@@ -125,7 +125,7 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int o = 0;
-        int c1 = (int)_predictor.ParameterCount; var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _predictor.SetParameters(new Vector<T>(a1)); o += c1;
+        int c1 = checked((int)_predictor.ParameterCount); var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _predictor.SetParameters(new Vector<T>(a1)); o += c1;
         int c2 = (int)_controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
     }
 
@@ -148,7 +148,7 @@ public class ControlNetPlusPlusFluxModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet++-FLUX", Version = "1.0",
             Description = "ControlNet++ with reward-guided training for FLUX flow-matching architecture",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "flux-controlnet-plus-plus");
         metadata.SetProperty("base_model", "FLUX.1");

@@ -121,15 +121,15 @@ public abstract class TabTransformerBase<T>
 
             // Transformer layers
             foreach (var layer in _encoderLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             // Layer norm
             if (_finalLayerNorm != null)
-                count += (int)((int)_finalLayerNorm.ParameterCount);
+                count += (int)_finalLayerNorm.ParameterCount;
 
             // MLP layers
             foreach (var layer in _mlpLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             return count;
         }

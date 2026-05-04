@@ -1108,7 +1108,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)layer.ParameterCount);
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {

@@ -324,7 +324,7 @@ public class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>
         return new ModelMetadata<T>
         {
             FeatureCount = _options.StateSize,
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
         };
     }
 

@@ -1152,9 +1152,9 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int unetCount = (int)_multiViewUNet.ParameterCount;
-        int vaeCount = (int)_imageVAE.ParameterCount;
-        int camCount = (int)_cameraEmbedding.ParameterCount;
+        int unetCount = checked((int)_multiViewUNet.ParameterCount);
+        int vaeCount = checked((int)_imageVAE.ParameterCount);
+        int camCount = checked((int)_cameraEmbedding.ParameterCount);
 
         var expected = unetCount + vaeCount + camCount;
         if (parameters.Length != expected)
@@ -1376,8 +1376,8 @@ public class MultiViewUNet<T>
     /// </summary>
     public void SetParameters(Vector<T> parameters)
     {
-        int unetCount = (int)_baseUNet.ParameterCount;
-        int mvCount = (int)_mvAttention.ParameterCount;
+        int unetCount = checked((int)_baseUNet.ParameterCount);
+        int mvCount = checked((int)_mvAttention.ParameterCount);
 
         var unetParams = new Vector<T>(unetCount);
         for (int i = 0; i < unetCount; i++)

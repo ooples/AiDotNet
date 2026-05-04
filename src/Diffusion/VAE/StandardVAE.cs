@@ -506,7 +506,7 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {
-        if (layer != null) count += (int)((int)layer.ParameterCount);
+        if (layer != null) count += (int)layer.ParameterCount;
     }
 
     /// <inheritdoc />

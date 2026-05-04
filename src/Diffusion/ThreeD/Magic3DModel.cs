@@ -260,8 +260,8 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int coarseCount = (int)_coarseUnet.ParameterCount;
-        int fineCount = (int)_fineUnet.ParameterCount;
+        int coarseCount = checked((int)_coarseUnet.ParameterCount);
+        int fineCount = checked((int)_fineUnet.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != coarseCount + fineCount + vaeCount)
@@ -346,7 +346,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
             Version = "1.0",
             Description = "Magic3D two-stage coarse-to-fine text-to-3D generation with score distillation sampling",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sds-nerf-to-mesh");

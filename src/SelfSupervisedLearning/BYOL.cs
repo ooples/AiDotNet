@@ -176,7 +176,7 @@ public class BYOL<T> : SSLMethodBase<T>
     {
         // Copy only the projector parameters (target doesn't have predictor)
         var onlineParams = online.GetParameters();
-        int targetParamCount = (int)target.ParameterCount;
+        int targetParamCount = checked((int)target.ParameterCount);
 
         var targetParams = new T[targetParamCount];
         for (int i = 0; i < targetParamCount; i++)

@@ -285,7 +285,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         // If base layer is not frozen, unpack its parameters first
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = (int)_baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -295,7 +295,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Unpack weight adaptation LoRA parameters
-        int weightLoraParamCount = (int)_loraLayer.ParameterCount;
+        int weightLoraParamCount = checked((int)_loraLayer.ParameterCount);
         Vector<T> weightLoraParams = new Vector<T>(weightLoraParamCount);
         for (int i = 0; i < weightLoraParamCount; i++)
         {
@@ -304,7 +304,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         _loraLayer.SetParameters(weightLoraParams);
 
         // Unpack activation adaptation LoRA parameters
-        int activationLoraParamCount = (int)_activationAdaptation.ParameterCount;
+        int activationLoraParamCount = checked((int)_activationAdaptation.ParameterCount);
         Vector<T> activationLoraParams = new Vector<T>(activationLoraParamCount);
         for (int i = 0; i < activationLoraParamCount; i++)
         {

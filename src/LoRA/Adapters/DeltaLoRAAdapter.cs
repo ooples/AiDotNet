@@ -375,7 +375,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
             throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}", nameof(parameters));
         }
 
-        int baseLoraCount = (int)base.ParameterCount;
+        int baseLoraCount = checked((int)base.ParameterCount);
 
         // Extract base and LoRA parameters
         Vector<T> baseLoraParams = new Vector<T>(baseLoraCount);

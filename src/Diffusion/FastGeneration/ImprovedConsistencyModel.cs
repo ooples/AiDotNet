@@ -154,8 +154,8 @@ public class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -186,7 +186,7 @@ public class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Single-step image generation via improved consistency training with lognormal schedule and pseudo-Huber loss",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
         m.SetProperty("architecture", "consistency-model-unet");
         m.SetProperty("training_method", "improved-consistency-training");

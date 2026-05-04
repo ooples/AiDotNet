@@ -609,7 +609,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         {
             Name = "DeepAR",
             Description = "Probabilistic forecasting with autoregressive recurrent networks (Production-Ready)",
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -633,7 +633,7 @@ public class DeepARModel<T> : TimeSeriesModelBase<T>
         {
             int count = 0;
             foreach (var lstm in _lstmLayers)
-                count += (int)((int)lstm.ParameterCount);
+                count += (int)lstm.ParameterCount;
             count += _meanWeights.Length + _meanBias.Length;
             count += _scaleWeights.Length + _scaleBias.Length;
             return count;

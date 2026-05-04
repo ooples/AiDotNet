@@ -931,7 +931,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         {
             Name = "Chronos Foundation Model",
             Description = "Foundation model for zero-shot time series forecasting with mean-scaling tokenization and causal transformer",
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             FeatureCount = _options.ContextLength,
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -958,7 +958,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             count += _outputProjection.Length + _outputBias.Length;
             count += _finalLayerNormGamma.Length + _finalLayerNormBeta.Length;
             foreach (var layer in _transformerLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             return count;
         }
     }

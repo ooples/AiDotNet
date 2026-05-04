@@ -219,7 +219,7 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "AuraFlow", Version = "0.3",
             Description = "AuraFlow open-source flow-matching text-to-image model",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "dit-flow-matching");
         m.SetProperty("text_encoder", "T5-XXL");

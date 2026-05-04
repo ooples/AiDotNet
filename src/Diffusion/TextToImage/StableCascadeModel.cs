@@ -348,8 +348,8 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int priorCount = (int)_priorUnet.ParameterCount;
-        int decoderCount = (int)_decoderUnet.ParameterCount;
+        int priorCount = checked((int)_priorUnet.ParameterCount);
+        int decoderCount = checked((int)_decoderUnet.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != priorCount + decoderCount + vaeCount)
@@ -448,7 +448,7 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Stable Cascade (Würstchen v3) three-stage cascaded latent diffusion model with extreme 42:1 compression",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "cascaded-latent-diffusion");

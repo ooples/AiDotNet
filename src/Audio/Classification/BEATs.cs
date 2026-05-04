@@ -1118,7 +1118,7 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             var layerParams = parameters.Slice(index, count);
             layer.UpdateParameters(layerParams);
             index += count;

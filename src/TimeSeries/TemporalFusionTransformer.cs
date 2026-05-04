@@ -693,7 +693,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         {
             Name = "TemporalFusionTransformer",
             Description = "TFT per Lim et al. (2021) with LSTM encoder, GRN gating, and interpretable attention",
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             AdditionalInfo = new Dictionary<string, object>
             {
                 ["HiddenSize"] = _options.HiddenSize,

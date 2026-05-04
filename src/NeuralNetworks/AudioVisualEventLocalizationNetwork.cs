@@ -1497,7 +1497,7 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
 
         void SetLayerParams(ILayer<T> layer)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
@@ -1535,22 +1535,22 @@ public class AudioVisualEventLocalizationNetwork<T> : NeuralNetworkBase<T>, IAud
         {
             var count = 0;
 
-            count += (int)((int)_audioInputProjection.ParameterCount);
-            foreach (var layer in _audioEncoderLayers) count += (int)((int)layer.ParameterCount);
-            count += (int)((int)_audioOutputProjection.ParameterCount);
+            count += (int)_audioInputProjection.ParameterCount;
+            foreach (var layer in _audioEncoderLayers) count += (int)layer.ParameterCount;
+            count += (int)_audioOutputProjection.ParameterCount;
 
-            count += (int)((int)_visualInputProjection.ParameterCount);
-            foreach (var layer in _visualEncoderLayers) count += (int)((int)layer.ParameterCount);
-            count += (int)((int)_visualOutputProjection.ParameterCount);
+            count += (int)_visualInputProjection.ParameterCount;
+            foreach (var layer in _visualEncoderLayers) count += (int)layer.ParameterCount;
+            count += (int)_visualOutputProjection.ParameterCount;
 
-            foreach (var layer in _temporalAttentionLayers) count += (int)((int)layer.ParameterCount);
-            count += (int)((int)_temporalProposalHead.ParameterCount);
+            foreach (var layer in _temporalAttentionLayers) count += (int)layer.ParameterCount;
+            count += (int)_temporalProposalHead.ParameterCount;
 
-            foreach (var layer in _crossModalAttentionLayers) count += (int)((int)layer.ParameterCount);
-            count += (int)((int)_eventClassificationHead.ParameterCount);
-            count += (int)((int)_temporalBoundaryHead.ParameterCount);
-            count += (int)((int)_spatialLocalizationHead.ParameterCount);
-            count += (int)((int)_anomalyDetectionHead.ParameterCount);
+            foreach (var layer in _crossModalAttentionLayers) count += (int)layer.ParameterCount;
+            count += (int)_eventClassificationHead.ParameterCount;
+            count += (int)_temporalBoundaryHead.ParameterCount;
+            count += (int)_spatialLocalizationHead.ParameterCount;
+            count += (int)_anomalyDetectionHead.ParameterCount;
 
             return count;
         }

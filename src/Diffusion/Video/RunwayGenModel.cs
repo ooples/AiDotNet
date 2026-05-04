@@ -439,7 +439,7 @@ public class RunwayGenModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = $"Runway {(_isGen3 ? "Gen-3" : "Gen-2")} multi-modal video generation with structure-content disentanglement",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "temporal-unet-multimodal");

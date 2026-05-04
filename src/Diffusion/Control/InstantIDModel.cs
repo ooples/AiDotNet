@@ -232,7 +232,7 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "InstantID", Version = "1.0",
             Description = "InstantID zero-shot identity-preserving image generation",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "sdxl-ipadapter-identitynet");
         m.SetProperty("base_model", "Stable Diffusion XL");

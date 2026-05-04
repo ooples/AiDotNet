@@ -119,8 +119,8 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -148,7 +148,7 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "FLUX.2 Schnell", Version = "2.0",
             Description = "Next-gen ultra-fast FLUX generation in 1-4 steps with improved quality",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flux2-double-stream-distilled");
         m.SetProperty("base_model", "FLUX.2");

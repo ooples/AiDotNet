@@ -218,7 +218,7 @@ public class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = (int)ParameterCount };
+        return new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     }
 
     public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;

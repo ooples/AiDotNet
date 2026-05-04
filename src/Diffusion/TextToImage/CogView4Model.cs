@@ -279,7 +279,7 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int predictorCount = (int)_predictor.ParameterCount;
+        int predictorCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -343,7 +343,7 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
             Version = "4.0",
             Description = "Bilingual Chinese-English T2I with SiT architecture and relay diffusion",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sit-relay-diffusion");

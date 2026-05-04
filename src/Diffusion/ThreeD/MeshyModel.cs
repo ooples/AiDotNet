@@ -265,7 +265,7 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "Meshy", Version = "4.0",
             Description = "Meshy production-grade 3D generation with PBR texturing",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "multiview-plus-pbr-texturing");
         metadata.SetProperty("pbr_maps", "albedo,normal,roughness,metallic");

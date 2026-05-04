@@ -141,13 +141,13 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        int predCount = (int)_predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var predParams = new T[predCount];
         for (int i = 0; i < predCount; i++) predParams[i] = parameters[offset + i];
         _predictor.SetParameters(new Vector<T>(predParams));
         offset += predCount;
 
-        int ctrlCount = (int)_controlEncoder.ParameterCount;
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
         var ctrlParams = new T[ctrlCount];
         for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
@@ -181,7 +181,7 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "ControlNet adapted for FLUX.1 flow-matching architecture",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "flux-double-stream-controlnet");

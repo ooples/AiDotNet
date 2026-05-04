@@ -414,7 +414,7 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         }
         base.SetParameters(baseParams);
 
-        int headCount = (int)_regressionHead.ParameterCount;
+        int headCount = checked((int)_regressionHead.ParameterCount);
         var headParams = new Vector<T>(headCount);
         for (int i = 0; i < headCount; i++)
         {

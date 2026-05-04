@@ -731,7 +731,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         {
             Name = "N-BEATS",
             Description = "Neural Basis Expansion Analysis for Interpretable Time Series Forecasting",
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             FeatureCount = _options.LookbackWindow,
             AdditionalInfo = new Dictionary<string, object>
             {
@@ -814,7 +814,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         int idx = 0;
         foreach (var block in _blocks)
         {
-            int blockParamCount = (int)block.ParameterCount;
+            int blockParamCount = checked((int)block.ParameterCount);
             Vector<T> blockParams = new Vector<T>(blockParamCount);
 
             for (int i = 0; i < blockParamCount; i++)

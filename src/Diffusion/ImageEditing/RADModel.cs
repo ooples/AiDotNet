@@ -110,8 +110,8 @@ public class RADModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -140,7 +140,7 @@ public class RADModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "RAD", Version = "1.0",
             Description = "Region-aware diffusion for multi-region spatially controlled editing",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "region-aware-sd15-inpainting");
         m.SetProperty("base_model", "Stable Diffusion 1.5");

@@ -83,7 +83,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
 
             if (_projector is not null)
             {
-                count += (int)((int)_projector.ParameterCount);
+                count += (int)_projector.ParameterCount;
             }
 
             count += (int)GetAdditionalParameterCount();
@@ -259,7 +259,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
         // Set projector parameters
         if (_projector is not null)
         {
-            int projectorLength = (int)_projector.ParameterCount;
+            int projectorLength = checked((int)_projector.ParameterCount);
             var projectorParamArray = new T[projectorLength];
             for (int i = 0; i < projectorLength; i++)
             {

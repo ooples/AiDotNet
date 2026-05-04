@@ -762,7 +762,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         foreach (var network in _agentNetworks)
         {
-            int paramCount = (int)network.ParameterCount;
+            int paramCount = checked((int)network.ParameterCount);
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -772,7 +772,7 @@ public class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>
             offset += paramCount;
         }
 
-        int mixingParamCount = (int)_mixingNetwork.ParameterCount;
+        int mixingParamCount = checked((int)_mixingNetwork.ParameterCount);
         var mixingParams = new Vector<T>(mixingParamCount);
         for (int i = 0; i < mixingParamCount; i++)
         {

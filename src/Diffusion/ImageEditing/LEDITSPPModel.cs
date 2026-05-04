@@ -356,7 +356,7 @@ public class LEDITSPPModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "LEDITS++ enables precise multi-concept editing of real images with automatic masking",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

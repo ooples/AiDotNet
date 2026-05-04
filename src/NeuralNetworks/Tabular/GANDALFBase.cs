@@ -94,8 +94,8 @@ public abstract class GANDALFBase<T>
 
             // Gating layers
             foreach (var layer in _gatingLayers)
-                count += (int)((int)layer.ParameterCount);
-            count += (int)((int)_gatingOutput.ParameterCount);
+                count += (int)layer.ParameterCount;
+            count += (int)_gatingOutput.ParameterCount;
 
             // Tree parameters
             for (int t = 0; t < Options.NumTrees; t++)

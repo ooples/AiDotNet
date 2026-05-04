@@ -484,7 +484,7 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Real-ESRGAN practical blind super-resolution with second-order degradation model",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "esrgan-diffusion");

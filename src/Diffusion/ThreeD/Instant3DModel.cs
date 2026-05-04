@@ -223,8 +223,8 @@ public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int uc = (int)_unet.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int uc = checked((int)_unet.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != uc + vc)
         {
@@ -296,7 +296,7 @@ public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
             Version = "1.0",
             Description = "Instant3D feed-forward text-to-3D generation",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         m.SetProperty("architecture", "multiview-diffusion-plus-lrm");

@@ -265,7 +265,7 @@ public class TNetLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var layer in _mlpLayers)
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.SubVector(offset, layerParameterCount);
@@ -276,7 +276,7 @@ public class TNetLayer<T> : LayerBase<T>
 
         foreach (var layer in _fcLayers)
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.SubVector(offset, layerParameterCount);

@@ -116,8 +116,8 @@ public class PowerPaintModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
@@ -146,7 +146,7 @@ public class PowerPaintModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "PowerPaint", Version = "2.0",
             Description = "Versatile task-aware inpainting with learnable task prompts on SD2.1",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "task-prompt-sd21-inpainting");
         m.SetProperty("base_model", "Stable Diffusion 2.1");

@@ -242,7 +242,7 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Uni-ControlNet", Version = "1.0",
             Description = "Uni-ControlNet multi-condition simultaneous control with learned mixing",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "multi-adapter-controlnet");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

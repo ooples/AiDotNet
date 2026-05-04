@@ -348,7 +348,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expected = (int)_network.ParameterCount;
+        int expected = checked((int)_network.ParameterCount);
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
@@ -393,7 +393,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
             Version = "1.0.0",
             Description = "DiffWave model for audio waveform synthesis using diffusion",
             FeatureCount = SampleRate,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("ResidualChannels", _residualChannels);
@@ -614,7 +614,7 @@ public class DiffWaveNetwork<T>
 
         foreach (var block in _residualBlocks)
         {
-            int count = (int)((int)block.ParameterCount);
+            int count = checked((int)block.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
             {
@@ -629,7 +629,7 @@ public class DiffWaveNetwork<T>
 
     private int SetLayerParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)layer.ParameterCount);
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {
@@ -844,7 +844,7 @@ public class DiffWaveResidualBlock<T>
 
     private int SetLayerParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)layer.ParameterCount);
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {

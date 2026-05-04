@@ -938,7 +938,7 @@ namespace AiDotNet.AutoML
 
         public override void SetParameters(Vector<T> parameters)
         {
-            int noisePredLen = (int)_noisePredictor.ParameterCount;
+            int noisePredLen = checked((int)_noisePredictor.ParameterCount);
             var noisePredParams = new T[noisePredLen];
             var vaeParams = new T[_vae.ParameterCount];
 
@@ -1018,7 +1018,7 @@ namespace AiDotNet.AutoML
                 Name = "DiffusionAutoMLModel",
                 Description = "Diffusion model created by AutoML search",
                 Version = "1.0",
-                Complexity = (int)ParameterCount
+                Complexity = ParameterCount
             };
 
             metadata.SetProperty("NoisePredictorType", _config.NoisePredictorType.ToString());

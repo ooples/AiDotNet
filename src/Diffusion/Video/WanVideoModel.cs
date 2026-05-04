@@ -399,7 +399,7 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int ditCount = (int)_dit.ParameterCount;
+        int ditCount = checked((int)_dit.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -474,7 +474,7 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
             Version = "2.1",
             Description = $"Wan {_variant} video generation with full 3D attention and WanVAE",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-full-3d-attention");

@@ -144,19 +144,19 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
     {
         int offset = 0;
 
-        int c1 = (int)_baseUNet.ParameterCount;
+        int c1 = checked((int)_baseUNet.ParameterCount);
         var a1 = new T[c1];
         for (int i = 0; i < c1; i++) a1[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(a1));
         offset += c1;
 
-        int c2 = (int)_faceProjection.ParameterCount;
+        int c2 = checked((int)_faceProjection.ParameterCount);
         var a2 = new T[c2];
         for (int i = 0; i < c2; i++) a2[i] = parameters[offset + i];
         _faceProjection.SetParameters(new Vector<T>(a2));
         offset += c2;
 
-        int c3 = (int)_imageProjection.ParameterCount;
+        int c3 = checked((int)_imageProjection.ParameterCount);
         var a3 = new T[c3];
         for (int i = 0; i < c3; i++) a3[i] = parameters[offset + i];
         _imageProjection.SetParameters(new Vector<T>(a3));
@@ -185,7 +185,7 @@ public class IPAdapterFaceIDPlusModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "IP-Adapter-FaceID-Plus", Version = "1.0",
             Description = "Face-identity-preserving image prompt adapter combining FaceID + CLIP embeddings",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-faceid-ip-adapter");
         metadata.SetProperty("base_model", "Stable Diffusion 1.5");

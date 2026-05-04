@@ -144,7 +144,7 @@ public class ControlNetInpaintingModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-Inpainting", Version = "1.0",
             Description = "Mask-aware ControlNet inpainting with control signal guidance",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-controlnet-inpainting");
         metadata.SetProperty("base_model", "Stable Diffusion 1.5");

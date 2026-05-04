@@ -194,8 +194,8 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int pc = (int)_predictor.ParameterCount;
-        int vc = (int)_vae.ParameterCount;
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != pc + vc)
             throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
 
@@ -236,7 +236,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Lumina-T2X", Version = "1.0",
             Description = "Unified text-to-any framework with Flag-DiT for multi-modality generation",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flag-dit-unified-multimodal");
         m.SetProperty("base_model", "Lumina-T2X");

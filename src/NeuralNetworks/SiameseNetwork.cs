@@ -379,7 +379,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int subnetworkParameterCount = (int)_subnetwork.ParameterCount;
+        int subnetworkParameterCount = checked((int)_subnetwork.ParameterCount);
         Vector<T> subnetworkParameters = parameters.SubVector(0, subnetworkParameterCount);
         _subnetwork.UpdateParameters(subnetworkParameters);
 

@@ -111,17 +111,17 @@ public abstract class TabRBase<T>
         {
             int count = 0;
             foreach (var layer in _encoderLayers)
-                count += (int)((int)layer.ParameterCount);
-            if (_encoderNorm != null) count += (int)((int)_encoderNorm.ParameterCount);
+                count += (int)layer.ParameterCount;
+            if (_encoderNorm != null) count += (int)_encoderNorm.ParameterCount;
 
             foreach (var layer in _contextLayers)
-                count += (int)((int)layer.ParameterCount);
-            if (_contextNorm != null) count += (int)((int)_contextNorm.ParameterCount);
+                count += (int)layer.ParameterCount;
+            if (_contextNorm != null) count += (int)_contextNorm.ParameterCount;
 
-            count += (int)((int)_queryProjection.ParameterCount);
-            count += (int)((int)_keyProjection.ParameterCount);
-            count += (int)((int)_valueProjection.ParameterCount);
-            count += (int)((int)_outputProjection.ParameterCount);
+            count += (int)_queryProjection.ParameterCount;
+            count += (int)_keyProjection.ParameterCount;
+            count += (int)_valueProjection.ParameterCount;
+            count += (int)_outputProjection.ParameterCount;
 
             return count;
         }

@@ -165,8 +165,8 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        int projCount = (int)_projection.ParameterCount;
-        int normCount = (int)_norm.ParameterCount;
+        int projCount = checked((int)_projection.ParameterCount);
+        int normCount = checked((int)_norm.ParameterCount);
 
         var projParams = new T[projCount];
         var normParams = new T[normCount];

@@ -146,7 +146,7 @@ public class StepVideoModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int predCount = (int)_predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -190,7 +190,7 @@ public class StepVideoModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "StepVideo text-to-video model with benchmark-leading quality.",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-scalable-text");
         metadata.SetProperty("open_source", true);

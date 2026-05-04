@@ -741,7 +741,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             int offset = 0;
             foreach (var layer in Layers)
             {
-                int paramCount = (int)layer.ParameterCount;
+                int paramCount = checked((int)layer.ParameterCount);
                 if (paramCount > 0)
                 {
                     var subParams = parameters.GetSubVector(offset, paramCount);

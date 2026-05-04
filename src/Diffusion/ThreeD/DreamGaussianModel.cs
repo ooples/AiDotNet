@@ -409,7 +409,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
             Version = "1.0",
             Description = "DreamGaussian 3D Gaussian splatting generation with SDS optimization",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "gaussian-splatting-sds");

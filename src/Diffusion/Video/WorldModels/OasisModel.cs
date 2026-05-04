@@ -149,7 +149,7 @@ public class OasisModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int predCount = (int)_predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -190,7 +190,7 @@ public class OasisModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "Oasis playable AI game via next-frame prediction.",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-next-frame-prediction");
         metadata.SetProperty("open_source", true);

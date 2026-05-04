@@ -603,7 +603,7 @@ public abstract class TabNetBase<T>
 
     private int SetComponentParameters(ILayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)layer.ParameterCount);
+        int count = checked((int)layer.ParameterCount);
         var componentParams = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
@@ -615,7 +615,7 @@ public abstract class TabNetBase<T>
 
     private int SetComponentParameters(GhostBatchNormalization<T> bn, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)bn.ParameterCount);
+        int count = checked((int)bn.ParameterCount);
         var componentParams = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
@@ -627,7 +627,7 @@ public abstract class TabNetBase<T>
 
     private int SetComponentParameters(FeatureTransformerLayer<T> ft, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)ft.ParameterCount);
+        int count = checked((int)ft.ParameterCount);
         var componentParams = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
@@ -639,7 +639,7 @@ public abstract class TabNetBase<T>
 
     private int SetComponentParameters(AttentiveTransformerLayer<T> at, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)at.ParameterCount);
+        int count = checked((int)at.ParameterCount);
         var componentParams = new Vector<T>(count);
         for (int i = 0; i < count; i++)
         {
@@ -656,10 +656,10 @@ public abstract class TabNetBase<T>
     {
         get
         {
-            int count = (int)((int)_initialBN.ParameterCount);
+            int count = checked((int)_initialBN.ParameterCount);
             count += (int)_featureTransformers.Sum(ft => ft.ParameterCount);
             count += (int)_attentiveTransformers.Sum(at => at.ParameterCount);
-            count += (int)((int)_outputLayer.ParameterCount);
+            count += (int)_outputLayer.ParameterCount;
             return count;
         }
     }

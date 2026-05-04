@@ -112,12 +112,12 @@ public abstract class FTTransformerBase<T>
     {
         get
         {
-            int count = (int)((int)Tokenizer.ParameterCount);
+            int count = checked((int)Tokenizer.ParameterCount);
             foreach (var layer in EncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
-            count += (int)((int)FinalLayerNorm.ParameterCount);
+            count += (int)FinalLayerNorm.ParameterCount;
             return count;
         }
     }
@@ -293,7 +293,7 @@ public abstract class FTTransformerBase<T>
         int offset = 0;
 
         // Tokenizer parameters
-        int tokenizerCount = (int)Tokenizer.ParameterCount;
+        int tokenizerCount = checked((int)Tokenizer.ParameterCount);
         var tokenizerParams = new Vector<T>(tokenizerCount);
         for (int i = 0; i < tokenizerCount; i++)
         {
@@ -305,7 +305,7 @@ public abstract class FTTransformerBase<T>
         // Encoder layer parameters
         foreach (var layer in EncoderLayers)
         {
-            int layerCount = (int)layer.ParameterCount;
+            int layerCount = checked((int)layer.ParameterCount);
             var layerParams = new Vector<T>(layerCount);
             for (int i = 0; i < layerCount; i++)
             {
@@ -316,7 +316,7 @@ public abstract class FTTransformerBase<T>
         }
 
         // Final layer norm parameters
-        int normCount = (int)FinalLayerNorm.ParameterCount;
+        int normCount = checked((int)FinalLayerNorm.ParameterCount);
         var normParams = new Vector<T>(normCount);
         for (int i = 0; i < normCount; i++)
         {

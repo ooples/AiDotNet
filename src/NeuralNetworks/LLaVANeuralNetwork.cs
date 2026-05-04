@@ -1121,40 +1121,40 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             // Vision encoder layers
             foreach (var layer in _visionEncoderLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Projection layers
             foreach (var layer in _projectionLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Language model layers
             foreach (var layer in _languageModelLayers)
             {
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
             }
 
             // Single layers
             if (_patchEmbedding is not null)
             {
-                count += (int)((int)_patchEmbedding.ParameterCount);
+                count += (int)_patchEmbedding.ParameterCount;
             }
 
             if (_textTokenEmbedding is not null)
             {
-                count += (int)((int)_textTokenEmbedding.ParameterCount);
+                count += (int)_textTokenEmbedding.ParameterCount;
             }
 
             if (_outputProjection is not null)
             {
-                count += (int)((int)_outputProjection.ParameterCount);
+                count += (int)_outputProjection.ParameterCount;
             }
 
             if (_groundingHead is not null)
             {
-                count += (int)((int)_groundingHead.ParameterCount);
+                count += (int)_groundingHead.ParameterCount;
             }
 
             // Positional embeddings
@@ -1222,7 +1222,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
 
         void UpdateLayerParameters(ILayer<T> layer)
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount <= 0)
             {
                 return;

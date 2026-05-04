@@ -149,7 +149,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
         {
             int count = 0;
             foreach (var block in _blocks)
-                count += (int)((int)block.ParameterCount);
+                count += (int)block.ParameterCount;
             foreach (var gamma in _normGammas)
                 count += gamma.Length;
             foreach (var beta in _normBetas)

@@ -219,7 +219,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         {
             Name = GetType().Name,
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount,
+            Complexity = ParameterCount,
             Description = $"VAE with {ParameterCount} parameters, {InputChannels} input channels, " +
                           $"{LatentChannels} latent channels, {DownsampleFactor}x downsampling."
         };

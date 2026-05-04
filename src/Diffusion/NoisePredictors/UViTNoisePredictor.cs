@@ -484,7 +484,9 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     {
         get
         {
-            int count = (int)((int)_patchEmbed.ParameterCount + _timeEmbed1.ParameterCount + _timeEmbed2.ParameterCount);
+            // #1237: long accumulator. UViT at full hidden / depth scale
+            // can sum past int.MaxValue across encoder + decoder blocks.
+            long count = _patchEmbed.ParameterCount + _timeEmbed1.ParameterCount + _timeEmbed2.ParameterCount;
 
             foreach (var block in _encoderBlocks)
                 count += GetBlockParamCount(block);
@@ -494,22 +496,22 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
             for (int i = 0; i < _decoderBlocks.Count; i++)
             {
                 count += GetBlockParamCount(_decoderBlocks[i]);
-                count += (int)(_skipProjections[i].ParameterCount);
+                count += _skipProjections[i].ParameterCount;
             }
 
-            count += (int)(_finalNorm.ParameterCount + _outputProj.ParameterCount);
+            count += _finalNorm.ParameterCount + _outputProj.ParameterCount;
             return count;
         }
     }
 
-    private static int GetBlockParamCount(UViTBlock block)
+    private static long GetBlockParamCount(UViTBlock block)
     {
-        int c = 0;
-        if (block.Norm1 != null) c += (int)(block.Norm1.ParameterCount);
-        if (block.Attention != null) c += (int)(block.Attention.ParameterCount);
-        if (block.Norm2 != null) c += (int)(block.Norm2.ParameterCount);
-        if (block.MLP1 != null) c += (int)(block.MLP1.ParameterCount);
-        if (block.MLP2 != null) c += (int)(block.MLP2.ParameterCount);
+        long c = 0;
+        if (block.Norm1 != null) c += block.Norm1.ParameterCount;
+        if (block.Attention != null) c += block.Attention.ParameterCount;
+        if (block.Norm2 != null) c += block.Norm2.ParameterCount;
+        if (block.MLP1 != null) c += block.MLP1.ParameterCount;
+        if (block.MLP2 != null) c += block.MLP2.ParameterCount;
         return c;
     }
 
@@ -564,7 +566,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private static int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = (int)((int)layer.ParameterCount);
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count && offset + i < parameters.Length; i++)
             p[i] = parameters[offset + i];

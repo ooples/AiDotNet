@@ -347,7 +347,7 @@ public class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int count = (int)((int)layer.ParameterCount);
+            int count = checked((int)layer.ParameterCount);
             layer.UpdateParameters(parameters.Slice(index, count));
             index += count;
         }

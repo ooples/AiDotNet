@@ -217,7 +217,7 @@ public class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int ditCount = (int)_dit.ParameterCount;
+        int ditCount = checked((int)_dit.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -276,7 +276,7 @@ public class PixArtSigmaModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "PixArt-Sigma DiT-based text-to-image model with 4K resolution support",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "dit-xl-2");

@@ -473,7 +473,7 @@ public class SUPIRModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "SUPIR SDXL-based photo-realistic image restoration with GPT-guided conditioning",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sdxl-restoration");

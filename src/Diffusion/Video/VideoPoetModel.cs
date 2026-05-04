@@ -147,7 +147,7 @@ public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        int predCount = (int)_predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -191,7 +191,7 @@ public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "VideoPoet LLM-based zero-shot video generation.",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "llm-video-tokenizer");
         metadata.SetProperty("open_source", false);

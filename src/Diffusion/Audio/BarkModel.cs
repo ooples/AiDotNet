@@ -204,8 +204,8 @@ public class BarkModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int tCount = (int)_transformer.ParameterCount;
-        int vaeCount = (int)_audioVAE.ParameterCount;
+        int tCount = checked((int)_transformer.ParameterCount);
+        int vaeCount = checked((int)_audioVAE.ParameterCount);
         if (parameters.Length != tCount + vaeCount)
             throw new ArgumentException($"Expected {tCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var tParams = new Vector<T>(tCount);
@@ -250,7 +250,7 @@ public class BarkModel<T> : AudioDiffusionModelBase<T>
         {
             Name = "Bark", Version = "1.0",
             Description = "Bark GPT-based text-to-audio generation with multi-lingual speech and sound effects",
-            FeatureCount = (int)ParameterCount, Complexity = (int)ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "gpt-encodec-three-stage");
         metadata.SetProperty("hidden_dim", HIDDEN_DIM);

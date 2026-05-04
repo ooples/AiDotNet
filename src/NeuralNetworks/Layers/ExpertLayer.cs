@@ -435,7 +435,7 @@ public class ExpertLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
         {
-            int layerParamCount = (int)layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             var layerParamsVec = parameters.Slice(offset, layerParamCount);
             layer.SetParameters(layerParamsVec);
             offset += layerParamCount;

@@ -413,7 +413,7 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         }
         base.SetParameters(baseParams);
 
-        int headCount = (int)_classificationHead.ParameterCount;
+        int headCount = checked((int)_classificationHead.ParameterCount);
         var headParams = new Vector<T>(headCount);
         for (int i = 0; i < headCount; i++)
         {

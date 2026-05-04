@@ -405,7 +405,7 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = $"Latent Consistency Model distilled from {_baseModel} for fast 2-8 step generation",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "consistency-distilled-latent-diffusion");

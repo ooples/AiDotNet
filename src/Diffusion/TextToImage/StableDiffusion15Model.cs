@@ -620,7 +620,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
             Version = "1.5",
             Description = "Stable Diffusion 1.5 latent diffusion model with CLIP ViT-L/14 text conditioning",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "latent-diffusion");

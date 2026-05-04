@@ -72,10 +72,10 @@ public abstract class MambularBase<T>
             }
 
             foreach (var block in _mambaBlocks)
-                count += (int)((int)block.ParameterCount);
+                count += (int)block.ParameterCount;
 
             foreach (var layer in _mlpLayers)
-                count += (int)((int)layer.ParameterCount);
+                count += (int)layer.ParameterCount;
 
             return count;
         }

@@ -531,7 +531,7 @@ public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "DiffBIR blind image restoration with generative diffusion prior",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "two-stage-diffusion-restoration");

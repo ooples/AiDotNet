@@ -603,7 +603,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Load actor network parameters
         foreach (var network in _actorNetworks)
         {
-            int paramCount = (int)network.ParameterCount;
+            int paramCount = checked((int)network.ParameterCount);
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -616,7 +616,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Load critic network parameters
         foreach (var network in _criticNetworks)
         {
-            int paramCount = (int)network.ParameterCount;
+            int paramCount = checked((int)network.ParameterCount);
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -629,7 +629,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Load target actor network parameters
         foreach (var network in _targetActorNetworks)
         {
-            int paramCount = (int)network.ParameterCount;
+            int paramCount = checked((int)network.ParameterCount);
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {
@@ -642,7 +642,7 @@ public class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Load target critic network parameters
         foreach (var network in _targetCriticNetworks)
         {
-            int paramCount = (int)network.ParameterCount;
+            int paramCount = checked((int)network.ParameterCount);
             var netParams = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
             {

@@ -398,7 +398,7 @@ public class ModelScopeT2VModel<T> : VideoDiffusionModelBase<T>
             Version = "1.0",
             Description = "ModelScope Text-to-Video with temporal U-Net for short clip generation",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "temporal-unet-t2v");

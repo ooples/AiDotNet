@@ -978,7 +978,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {
-        if (layer != null) count += (int)((int)layer.ParameterCount);
+        if (layer != null) count += (int)layer.ParameterCount;
     }
 
     private static void AddBlockCount(ref long count, UNetBlock block)

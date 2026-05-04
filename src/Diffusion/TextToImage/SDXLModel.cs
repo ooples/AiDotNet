@@ -719,7 +719,7 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "SDXL base model with dual text encoders and 1024px native resolution",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sdxl-unet-latent-diffusion");

@@ -300,7 +300,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int predictorCount = (int)_predictor.ParameterCount;
+        int predictorCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _vae.GetParameters().Length;
 
         if (parameters.Length != predictorCount + vaeCount)
@@ -371,7 +371,7 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
             Version = _variant.ToString(),
             Description = $"HiDream-I1 [{_variant.ToString().ToLowerInvariant()}] MMDiT-X with Llama-3.1 text encoder for imaginative generation",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "mmdit-x-llama-conditioning");

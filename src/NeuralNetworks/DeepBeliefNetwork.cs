@@ -438,7 +438,7 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         int startIndex = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = (int)layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 Vector<T> layerParameters = parameters.GetSubVector(startIndex, layerParameterCount);

@@ -469,7 +469,7 @@ public class SDUpscalerModel<T> : LatentDiffusionModelBase<T>
             Version = "1.0",
             Description = "Stable Diffusion x4 Upscaler for text-guided latent super-resolution",
             FeatureCount = (int)ParameterCount,
-            Complexity = (int)ParameterCount
+            Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "sd-upscaler");
