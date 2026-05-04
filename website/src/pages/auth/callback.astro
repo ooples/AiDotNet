@@ -15,7 +15,20 @@ const base = import.meta.env.BASE_URL;
       <h1 id="auth-heading" class="text-xl font-semibold text-slate-900 dark:text-white mb-2">Signing you in...</h1>
       <p id="auth-subtext" class="text-sm text-slate-500 dark:text-slate-400">Please wait while we complete authentication.</p>
 
-      <div id="auth-error" class="hidden mt-6 p-4 text-sm text-left text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl max-w-xl mx-auto">
+      <!--
+        role="alert" + aria-live="assertive" + aria-atomic="true" make the
+        error container accessible to screen readers — without these the
+        dynamically-injected error message would be announced silently to
+        AT users (the container is a hidden div until showFatalError fills
+        it). aria-atomic ensures the entire block re-announces on update
+        instead of just the diff.
+      -->
+      <div
+        id="auth-error"
+        role="alert"
+        aria-live="assertive"
+        aria-atomic="true"
+        class="hidden mt-6 p-4 text-sm text-left text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl max-w-xl mx-auto">
       </div>
     </div>
   </div>
@@ -190,6 +203,11 @@ const base = import.meta.env.BASE_URL;
         // third-party cookies, and the user needs an explicit message.
         timeoutId = setTimeout(() => {
           subscription.unsubscribe();
+          // The PR description says every failure path is logged to
+          // console so devtools captures it for support / debugging;
+          // the timeout path was the one exception. Log explicitly here
+          // so the symptom ("sign-in just stalls") leaves a stack trace.
+          console.error('[auth/callback] timed out waiting for SIGNED_IN event after 10s');
           showFatalError(
             'Sign-in did not complete in time.',
             'Supabase did not surface a SIGNED_IN event within 10 seconds.',
@@ -199,7 +217,18 @@ const base = import.meta.env.BASE_URL;
         }, 10000);
       } catch (err) {
         console.error('[auth/callback] unexpected exception:', err);
-        showFatalError('An unexpected error occurred.', String(err));
+        // Don't render Object's "[object Object]" toString — surface the
+        // useful fields instead. Error.message is the readable text;
+        // a fallback JSON.stringify catches non-Error throws (some
+        // Supabase SDK paths reject with a plain object).
+        let detail: string;
+        if (err instanceof Error) {
+          detail = err.message || err.toString();
+        } else {
+          try { detail = JSON.stringify(err); }
+          catch { detail = String(err); }
+        }
+        showFatalError('An unexpected error occurred.', detail);
       }
     }
 
