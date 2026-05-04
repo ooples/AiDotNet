@@ -372,8 +372,22 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets feature importance based on selection weights.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the layer was constructed with the lazy ctor and has not yet
+    /// seen a Forward call — feature importance can't be computed without a
+    /// resolved <c>_inputDim</c> and allocated <c>_featureSelectionWeights</c>.
+    /// </exception>
     public Vector<T> GetFeatureImportance()
     {
+        if (_inputDim <= 0)
+        {
+            throw new InvalidOperationException(
+                "ObliviousDecisionTreeLayer.GetFeatureImportance(): the layer was " +
+                "constructed via the lazy ctor (no inputDim arg) and has not yet seen " +
+                "a Forward call, so the input dimension and parameter tensors are not " +
+                "yet resolved. Run at least one Forward(input) before querying feature " +
+                "importance, or construct via the eager ctor with an explicit inputDim.");
+        }
         var importance = new Vector<T>(_inputDim);
 
         if (_featureSelectionsCache != null)

@@ -170,6 +170,15 @@ public partial class RBFLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy-ctor RBFLayer that takes the GPU path on first use would
+        // send the [0,0] / [0] zero-sized centers / widths placeholders
+        // into RbfKernelGpu. OnFirstForward resolves _inputSize from
+        // input.Shape and EnsureInitialized allocates the parameter
+        // tensors at the right size.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         // Input: [batch, inputSize] (ensure 2D)
         int batch = input.Shape[0];
         var input2D = input.Shape.Length == 1 ? gpuEngine.ReshapeGpu(input, [1, input.Shape[0]]) : input;
@@ -492,6 +501,22 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy-state guard: the lazy ctor leaves _inputSize = -1 until
+        // OnFirstForward fires. Without this check, a caller passing an
+        // empty Vector that matches the lazy-state ParameterCount==0
+        // would still hit `_numCenters * -1` below and trip a negative-
+        // length slice. Surface a clear contract violation instead so
+        // users know to run a Forward first.
+        if (_inputSize <= 0)
+        {
+            throw new InvalidOperationException(
+                "RBFLayer.SetParameters(): the layer was constructed via the lazy ctor " +
+                "(no inputSize arg) and has not yet seen a Forward call, so its parameter " +
+                "tensors are not yet allocated. Run at least one Forward(input) to resolve " +
+                "the input dimension before loading parameters, or construct via the " +
+                "eager ctor with an explicit inputSize.");
+        }
+
         int centersSize = _numCenters * _inputSize;
         int totalParams = centersSize + _numCenters;
 

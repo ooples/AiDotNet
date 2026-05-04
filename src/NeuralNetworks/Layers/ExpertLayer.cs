@@ -310,6 +310,14 @@ public class ExpertLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
+        // Mirror the CPU Forward's lazy-init dispatch — without this, an
+        // ExpertLayer constructed with [-1] inputShape that takes the GPU
+        // path on first use would chain into unresolved child layers and
+        // either throw or silently produce wrong output. OnFirstForward
+        // chain-resolves inner sub-layers from input.Shape; subsequent
+        // calls short-circuit via IsShapeResolved.
+        if (!IsShapeResolved) OnFirstForward(inputs[0]);
+
         var output = inputs[0];
 
         // Chain through each layer's ForwardGpu

@@ -334,18 +334,55 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// Reads input capsule structure from <c>input.Shape[^2..]</c>:
-    /// the last two axes are [inputCapsules, inputCapsuleDimension].
+    /// Resolves <c>_inputCapsules</c> and <c>_inputCapsuleDimension</c>
+    /// from input shape using the same rank-aware contract that
+    /// <see cref="Forward"/>'s reshape path uses:
+    /// <list type="bullet">
+    /// <item><b>rank-2 [I, D_in]</b>: no batch — capsules from axis 0,
+    /// dimension from axis 1.</item>
+    /// <item><b>rank-3 [B, I, D_in]</b>: batched — capsules from axis 1,
+    /// dimension from axis 2.</item>
+    /// <item><b>rank-4+ [B, H, W, ..., C, D_in]</b> (e.g. PrimaryCapsule
+    /// output [B, H, W, C, D]): the last axis is dimension, all middle
+    /// axes (excluding batch) collapse into the capsule count. So for
+    /// [B, H, W, C, D], <c>_inputCapsules = H*W*C</c>, matching how
+    /// Forward's higher-rank branch reshapes the tensor.</item>
+    /// </list>
+    /// Pre-fix this method just read <c>input.Shape[^2]</c> regardless of
+    /// rank, which would mis-resolve a [B, H, W, C, D] input as
+    /// <c>_inputCapsules = C</c> and trip the reshape on Line 513
+    /// (see DigitCapsuleLayer Forward, rank&gt;3 branch).
     /// </remarks>
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
         if (rank < 2)
             throw new ArgumentException(
-                $"DigitCapsuleLayer requires rank>=2 input [...,inputCapsules,inputDimension]; got rank {rank}.", nameof(input));
+                $"DigitCapsuleLayer requires rank>=2 input; got rank {rank}.", nameof(input));
 
-        int inputCapsules = input.Shape[rank - 2];
         int inputCapsuleDimension = input.Shape[rank - 1];
+        int inputCapsules;
+        if (rank == 2)
+        {
+            // [inputCapsules, inputCapsuleDimension] — no batch axis.
+            inputCapsules = input.Shape[0];
+        }
+        else if (rank == 3)
+        {
+            // [batch, inputCapsules, inputCapsuleDimension].
+            inputCapsules = input.Shape[1];
+        }
+        else
+        {
+            // Rank >= 4 (e.g., [B, H, W, C, D] from PrimaryCapsule). The
+            // capsule count is the product of every axis except the
+            // leading batch and trailing dimension. Forward's reshape
+            // does the same collapse via totalElements/batch arithmetic,
+            // so this stays consistent.
+            inputCapsules = 1;
+            for (int d = 1; d < rank - 1; d++) inputCapsules *= input.Shape[d];
+        }
+
         if (inputCapsules <= 0)
             throw new ArgumentException(
                 $"DigitCapsuleLayer's inputCapsules must be positive; got {inputCapsules} from input shape.", nameof(input));
@@ -606,6 +643,14 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy-ctor DigitCapsuleLayer that takes the GPU path on first
+        // use would reshape with -1 input dims and reach
+        // CapsulePredictionsGpu with a [0,0,0,0] weight tensor.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         var inputShape = input._shape;
         int rank = inputShape.Length;
 

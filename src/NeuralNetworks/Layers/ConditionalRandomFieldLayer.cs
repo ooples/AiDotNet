@@ -600,6 +600,31 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (!IsShapeResolved) OnFirstForward(input);
         EnsureInitialized();
 
+        // Validate input shape on every call, not just the first.
+        // OnFirstForward only fires once; later inputs with different
+        // sequence-length or class-count would otherwise reach the
+        // Viterbi loops below and silently truncate or index out of
+        // range. Numbers-of-classes is architectural (fixed at
+        // construction), sequence-length is shape-dependent (varies
+        // between inputs), but both must match what the layer was
+        // constructed for.
+        int seenRank = input.Shape.Length;
+        if (seenRank < 2)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer requires rank>=2 input [seqLen, numClasses] " +
+                $"or [batch, seqLen, numClasses]; got rank {seenRank}.", nameof(input));
+        int seenClasses = input.Shape[seenRank - 1];
+        if (seenClasses != _numClasses)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer's numClasses mismatch: layer was constructed " +
+                $"with {_numClasses} classes, but input shape's last axis is {seenClasses}. " +
+                $"numClasses is architectural and cannot vary across inputs.", nameof(input));
+        int seenSeqLen = input.Shape[seenRank - 2];
+        if (seenSeqLen <= 0)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer's sequence length must be positive; got " +
+                $"{seenSeqLen} from input shape.", nameof(input));
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

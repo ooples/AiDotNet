@@ -353,19 +353,61 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// Reads the input channel count from <c>input.Shape[1]</c> (NCHW
-    /// convention: [batch, channels, height, width]). Capsule conv geometry
-    /// (kernel × kernel × inputChannels) is what we need to materialize the
-    /// weight tensor.
+    /// Resolves <c>_inputChannels</c> from input shape using the same
+    /// rank-aware reshape contract that <see cref="Forward"/> uses, so
+    /// the lazy contract matches the eager behavior:
+    /// <list type="bullet">
+    /// <item><b>rank-1 [C]</b>: channels = shape[0] (Forward expands to
+    /// [1,1,1,C], NHWC).</item>
+    /// <item><b>rank-2 [W, C]</b>: channels = shape[1] (Forward expands
+    /// to [1,1,W,C], NHWC).</item>
+    /// <item><b>rank-3 [H, W, C]</b>: channels = shape[2] (Forward expands
+    /// to [1,H,W,C], NHWC). Note: Forward's NCHW [C,H,W] disambiguation
+    /// requires <c>_inputChannels</c> to already be known, so it can't
+    /// be detected lazily — rank-3 inputs are always treated as NHWC
+    /// in the lazy path. Callers needing rank-3 NCHW must use the
+    /// eager ctor.</item>
+    /// <item><b>rank-4 [B, C, H, W]</b>: channels = shape[1] (NCHW —
+    /// Forward's primary 4D path; matches the
+    /// <c>[LayerProperty(TestInputShape="1, 1, 8, 8")]</c> contract).</item>
+    /// <item><b>rank-5+ [B1, ..., H, W, C]</b>: channels = last axis
+    /// (Forward's higher-rank branch reshapes to [flatBatch, H, W, C],
+    /// NHWC).</item>
+    /// </list>
+    /// Pre-fix this method hard-required rank-4 and always read
+    /// shape[1], which both rejected valid rank-1/2/3 inputs that
+    /// Forward already handled, AND mis-resolved NHWC [B,H,W,C] inputs
+    /// by treating height as channels.
     /// </remarks>
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
-        if (rank < 4)
+        if (rank < 1)
             throw new ArgumentException(
-                $"PrimaryCapsuleLayer requires rank-4 NCHW input [batch, channels, h, w]; got rank {rank}.", nameof(input));
+                $"PrimaryCapsuleLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
-        int inputChannels = input.Shape[1];
+        int inputChannels;
+        if (rank <= 3)
+        {
+            // rank-1/2/3: channels is the last axis (NHWC convention,
+            // matches Forward's shape4D expansion path).
+            inputChannels = input.Shape[rank - 1];
+        }
+        else if (rank == 4)
+        {
+            // Standard NCHW [B, C, H, W] — channel axis is at index 1.
+            // This is the primary 4D path Forward uses when shape[1]
+            // matches _inputChannels (which is what the lazy ctor will
+            // see by definition once _inputChannels is set here).
+            inputChannels = input.Shape[1];
+        }
+        else
+        {
+            // rank-5+: Forward's higher-rank branch reshapes to
+            // [flatBatch, H, W, C] (NHWC). Channels is the last axis.
+            inputChannels = input.Shape[rank - 1];
+        }
+
         if (inputChannels <= 0)
             throw new ArgumentException(
                 $"PrimaryCapsuleLayer's input channel count must be positive; got {inputChannels} from input shape.",
@@ -646,6 +688,15 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy-ctor PrimaryCapsuleLayer that takes the GPU path on first
+        // use would dereference the [0,0] / [0] zero-sized convWeights
+        // / convBias tensors. OnFirstForward resolves _inputChannels
+        // from input.Shape and EnsureInitialized allocates the conv
+        // tensors at the right size.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
 
         // Detect input format: NCHW [B, C, H, W] vs NHWC [B, H, W, C]
         // NCHW has channels in dim 1, NHWC has channels in dim 3

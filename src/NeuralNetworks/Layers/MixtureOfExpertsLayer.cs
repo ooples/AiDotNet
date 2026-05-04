@@ -503,29 +503,50 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// and <c>IsShapeResolved</c> is true at construction time.
     /// (2) <b>Lazy:</b> caller passed <c>[-1]</c> or any shape containing
     /// a negative dim; sub-layers stayed unresolved. On first forward we
-    /// read <c>input.Shape[^1]</c> as the feature dimension (router and
-    /// experts share the same input shape for vanilla MoE) and propagate
-    /// it to every sub-layer.
+    /// derive the per-sample shape (input shape minus the leading batch
+    /// axis) and propagate it to every sub-layer.
+    ///
+    /// <para>The full per-sample shape is preserved — vanilla MoE may use
+    /// a feature-vector input but the layer's existing <see cref="Forward"/>
+    /// path explicitly supports any-rank tensors, so a Switch
+    /// Transformer / per-token MoE / multi-axis use case must see the
+    /// same shape resolution that the eager constructor delivered. Pre-
+    /// fix this method collapsed every input to <c>[featureDim]</c>,
+    /// which silently broke any expert / router that expected
+    /// multi-axis per-sample inputs.</para>
     /// </remarks>
     protected override void OnFirstForward(Tensor<T> input)
     {
-        int rank = input.Shape.Length;
+        int rank = input._shape.Length;
         if (rank < 1)
             throw new ArgumentException(
                 $"MixtureOfExpertsLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
-        int featureDim = input.Shape[rank - 1];
-        if (featureDim <= 0)
-            throw new ArgumentException(
-                $"MixtureOfExpertsLayer's input feature dimension must be positive; got {featureDim} from input shape.",
-                nameof(input));
+        // Strip the leading batch axis when present — sub-layers are
+        // configured against per-sample shapes (matching the ctor's
+        // ResolveSubLayer contract where the caller passed inputShape
+        // without batch).
+        int[] resolvedInputShape;
+        if (rank == 1)
+        {
+            // [features] — no batch axis; whole shape is per-sample.
+            resolvedInputShape = new int[] { input._shape[0] };
+        }
+        else
+        {
+            resolvedInputShape = new int[rank - 1];
+            for (int i = 0; i < resolvedInputShape.Length; i++)
+                resolvedInputShape[i] = input._shape[i + 1];
+        }
 
-        // Feature-dim-only resolved shape; sub-layers receive a 1-D
-        // shape because vanilla MoE treats input as a per-sample feature
-        // vector. Switch Transformer / per-token MoE variants would
-        // pass the full multi-axis input here, but those are out of
-        // scope for this base class — they should subclass and override.
-        var resolvedInputShape = new[] { featureDim };
+        for (int i = 0; i < resolvedInputShape.Length; i++)
+        {
+            if (resolvedInputShape[i] <= 0)
+                throw new ArgumentException(
+                    $"MixtureOfExpertsLayer's per-sample shape axis {i} must be positive; " +
+                    $"got {resolvedInputShape[i]} from input shape.", nameof(input));
+        }
+
         ResolveSubLayer(_router, resolvedInputShape);
         foreach (var expert in _experts)
         {
@@ -533,21 +554,14 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
 
         // Output shape inherits from the first expert's resolved output
-        // (all experts share the same output shape by MoE contract).
-        int[] resolvedOutputShape;
-        if (_experts[0] is LayerBase<T> firstExpert && firstExpert.IsShapeResolved)
-        {
-            resolvedOutputShape = firstExpert.GetOutputShape();
-        }
-        else
-        {
-            // Sub-layer didn't expose a resolved output — fall back to
-            // the OutputShape provided at construction (may still
-            // contain -1 sentinels which would break downstream tape
-            // accounting; surfaced as a runtime error rather than
-            // silent corruption).
-            resolvedOutputShape = OutputShape;
-        }
+        // (all experts share the same output shape by MoE contract). Use
+        // the ILayer<T> contract directly — GetOutputShape is on the
+        // interface, so any ILayer<T> impl can report its resolved
+        // output shape, not just LayerBase<T> subclasses. Falling back
+        // to the constructor's OutputShape was unnecessary since
+        // ILayer<T> mandates GetOutputShape; the previous LayerBase
+        // typecheck rejected legitimate ILayer<T> impls.
+        int[] resolvedOutputShape = _experts[0].GetOutputShape();
 
         ResolveShapes(resolvedInputShape, resolvedOutputShape);
     }
@@ -1848,6 +1862,14 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy MoE that takes the GPU path on first use would reach
+        // _router and _experts with unresolved shapes / zero-sized
+        // parameter tensors. OnFirstForward propagates resolved feature
+        // dim into router + experts.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         int batchSize = input.Shape[0];
         int numExperts = _experts.Count;
 

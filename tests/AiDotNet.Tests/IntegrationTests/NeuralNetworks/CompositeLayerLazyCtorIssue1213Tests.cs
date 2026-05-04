@@ -59,6 +59,11 @@ public class CompositeLayerLazyCtorIssue1213Tests
         Assert.False(layer.IsShapeResolved);
         Assert.Equal(-1, layer.GetInputShape()[0]);
         Assert.Equal(4, layer.GetOutputShape()[0]);
+        // Pre-Forward: parameters not yet allocated. ParameterCount must
+        // equal GetParameters().Length so the optimizer doesn't size its
+        // bookkeeping for state that doesn't yet exist.
+        Assert.Equal(0, layer.ParameterCount);
+        Assert.Equal(0, layer.GetParameters().Length);
 
         var input = new Tensor<float>(new[] { 2, 6 });
         for (int i = 0; i < input.Length; i++) input[i] = (float)(i * 0.05);
@@ -80,6 +85,12 @@ public class CompositeLayerLazyCtorIssue1213Tests
         Assert.False(layer.IsShapeResolved);
         Assert.Equal(-1, layer.GetInputShape()[0]);
         Assert.Equal(5, layer.GetInputShape()[1]);
+        // CRF's parameters depend only on numClasses (architectural), so
+        // they ARE allocated eagerly in the lazy ctor — only InputShape /
+        // OutputShape are deferred. ParameterCount is the full numClasses-
+        // based total before first forward.
+        Assert.Equal(5 * 5 + 5 + 5, layer.ParameterCount);
+        Assert.Equal(layer.ParameterCount, layer.GetParameters().Length);
 
         // CRF expects [seqLen, numClasses] per-batch input.
         var input = new Tensor<float>(new[] { 7, 5 });
@@ -106,6 +117,9 @@ public class CompositeLayerLazyCtorIssue1213Tests
         Assert.False(layer.IsShapeResolved);
         Assert.Equal(-1, layer.GetInputShape()[0]);
         Assert.Equal(4 * 2, layer.GetOutputShape()[0]);
+        // Pre-Forward: conv weights / bias not yet allocated.
+        Assert.Equal(0, layer.ParameterCount);
+        Assert.Equal(0, layer.GetParameters().Length);
 
         // NCHW input: [batch, channels, h, w]
         var input = new Tensor<float>(new[] { 1, 3, 5, 5 });
@@ -130,6 +144,9 @@ public class CompositeLayerLazyCtorIssue1213Tests
         Assert.False(layer.IsShapeResolved);
         Assert.Equal(-1, layer.GetInputShape()[0]);
         Assert.Equal(-1, layer.GetInputShape()[1]);
+        // Pre-Forward: routing weights not yet allocated.
+        Assert.Equal(0, layer.ParameterCount);
+        Assert.Equal(0, layer.GetParameters().Length);
 
         // Input: [batch, inputCapsules, inputCapsuleDimension]
         var input = new Tensor<float>(new[] { 1, 6, 8 });
@@ -158,6 +175,9 @@ public class CompositeLayerLazyCtorIssue1213Tests
             outputShape: new[] { 8 });
 
         Assert.False(expert.IsShapeResolved);
+        // Pre-Forward: inner Dense layers are unresolved, so each
+        // reports ParameterCount=0; the outer Expert sums to 0.
+        Assert.Equal(0, expert.ParameterCount);
 
         var input = new Tensor<float>(new[] { 2, 32 });
         for (int i = 0; i < input.Length; i++) input[i] = (float)(i * 0.01);
@@ -188,6 +208,8 @@ public class CompositeLayerLazyCtorIssue1213Tests
             outputShape: new[] { 8 });
 
         Assert.False(moe.IsShapeResolved);
+        // Pre-Forward: router and experts unresolved; outer MoE sums to 0.
+        Assert.Equal(0, moe.ParameterCount);
 
         // Vanilla MoE input: [batch, features].
         var input = new Tensor<float>(new[] { 1, 12 });
