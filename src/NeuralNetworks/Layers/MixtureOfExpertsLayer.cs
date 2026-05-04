@@ -1870,7 +1870,38 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // dim into router + experts.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        int batchSize = input.Shape[0];
+        // Mirror the CPU Forward's any-rank → 2D collapse contract.
+        // _router and each _expert are configured against [B, features]
+        // — feeding them a rank-1 or rank>2 tensor diverges from the
+        // CPU path (different routing batch granularity) and trips
+        // shape mismatches inside expert sub-layers. Collapse leading
+        // dims into a flat batch, run on 2D, then restore the original
+        // leading dims at the end like the CPU path does on lines
+        // 754–768.
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+        Tensor<T> input2D;
+        int batchSize;
+        if (rank == 1)
+        {
+            batchSize = 1;
+            input2D = gpuEngine.ReshapeGpu(input, new[] { 1, input.Shape[0] });
+        }
+        else if (rank == 2)
+        {
+            batchSize = input.Shape[0];
+            input2D = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++) flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            input2D = gpuEngine.ReshapeGpu(input, new[] { flatBatch, input.Shape[rank - 1] });
+        }
+        // From here on, treat input2D as the canonical [batch, features]
+        // tensor for routing and expert dispatch.
+        input = input2D;
         int numExperts = _experts.Count;
 
         // Step 1: Route input through router to get logits (GPU-resident)
@@ -2013,6 +2044,24 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             _lastRoutingWeights = routingWeightsGpu;
             _lastPreActivation = combinedGpu;
             _lastExpertOutputs = expertOutputsGpu.Select(e => e).ToList();
+        }
+
+        // Restore the original leading dims to match the CPU path's
+        // contract on lines 754–768. The 2D output is [flatBatch,
+        // outputFeatures]; for rank>2 input we re-expand the batch
+        // axes, for rank-1 input we drop the synthetic batch dim.
+        if (_originalInputShape != null && _originalInputShape.Length > 2)
+        {
+            int outputFeatures = resultGpu.Shape[1];
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = outputFeatures;
+            resultGpu = gpuEngine.ReshapeGpu(resultGpu, newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            resultGpu = gpuEngine.ReshapeGpu(resultGpu, new[] { resultGpu.Shape[1] });
         }
 
         return resultGpu;

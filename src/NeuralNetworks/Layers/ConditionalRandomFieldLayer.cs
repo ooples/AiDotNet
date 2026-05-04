@@ -109,11 +109,47 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (inputs.Length == 0) throw new ArgumentException("CRF requires an input tensor.");
         var input = inputs[0];
 
+        // Lazy ctors leave IsShapeResolved == false until OnFirstForward
+        // / EnsureInitialized run. The CPU Forward path drives that
+        // resolution; if a layer's first execution is on the GPU it must
+        // do the same here, otherwise InputShape/OutputShape stay null
+        // and ParameterCount/serialization break for GPU-only callers.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
-        // Input normalization [Batch, Seq, Class]
+        // Input normalization [Batch, Seq, Class]. Mirror the CPU Forward
+        // contract: validate rank, numClasses, sequence length BEFORE
+        // touching the Viterbi loops below — the GPU kernels assume the
+        // tensor is already in [B, S, C] with S == _sequenceLength and
+        // C == _numClasses.
         int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer.ForwardGpu requires rank>=2 input " +
+                $"[seqLen, numClasses] or [batch, seqLen, numClasses]; got rank " +
+                $"{rank}.", nameof(inputs));
+        int gpuSeenClasses = input.Shape[rank - 1];
+        if (gpuSeenClasses != _numClasses)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer.ForwardGpu numClasses mismatch: layer " +
+                $"was constructed with {_numClasses} classes, but input shape's last " +
+                $"axis is {gpuSeenClasses}.", nameof(inputs));
+        int gpuSeenSeqLen = input.Shape[rank - 2];
+        if (gpuSeenSeqLen <= 0)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer.ForwardGpu sequence length must be " +
+                $"positive; got {gpuSeenSeqLen}.", nameof(inputs));
+        if (gpuSeenSeqLen != _sequenceLength)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer.ForwardGpu sequence length mismatch: " +
+                $"layer was resolved with sequenceLength={_sequenceLength}, but " +
+                $"this input's sequence dimension is {gpuSeenSeqLen}. CRF transition " +
+                $"buffer and Viterbi backpointers are sized to _sequenceLength.",
+                nameof(inputs));
+
         int batchSize, seqLen, numClasses;
         Tensor<T> input3D;
 
@@ -624,6 +660,16 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             throw new ArgumentException(
                 $"ConditionalRandomFieldLayer's sequence length must be positive; got " +
                 $"{seenSeqLen} from input shape.", nameof(input));
+        if (seenSeqLen != _sequenceLength)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer's sequence length mismatch: layer was " +
+                $"resolved with sequenceLength={_sequenceLength} (from constructor or " +
+                $"first forward pass), but this input's sequence dimension is " +
+                $"{seenSeqLen}. Viterbi decoding, transitions buffer, and gradient " +
+                $"reshape are all sized to _sequenceLength; a different value would " +
+                $"silently truncate or run out of bounds. If you need variable-length " +
+                $"sequences, pad to a fixed length and mask, or construct one CRF per " +
+                $"length bucket.", nameof(input));
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;

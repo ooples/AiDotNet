@@ -189,6 +189,14 @@ public class CompositeLayerLazyCtorIssue1213Tests
         Assert.Equal(8, expert.GetOutputShape()[0]);
         Assert.Equal(2, output.Shape[0]);
         Assert.Equal(8, output.Shape[1]);
+
+        // Verify parameters were materialized post-forward, complementing
+        // the pre-forward `ParameterCount == 0` assertion above. Without
+        // this check the test would still pass even if lazy resolution
+        // silently failed to allocate weights.
+        // dense1: 32→16 (32*16 + 16 bias = 528). dense2: 16→8 (16*8 + 8 bias = 136).
+        int expectedParams = (32 * 16 + 16) + (16 * 8 + 8);
+        Assert.Equal(expectedParams, expert.ParameterCount);
     }
 
     [Fact]
@@ -220,5 +228,17 @@ public class CompositeLayerLazyCtorIssue1213Tests
         Assert.True(moe.IsShapeResolved);
         Assert.Equal(12, moe.GetInputShape()[0]);
         Assert.Equal(1, output.Shape[0]);
+        // Confirm the output's feature dim matches what the resolved
+        // experts produce (8), not just any rank-2 tensor — the layer's
+        // shape contract guarantees [batch, outputFeatures].
+        Assert.Equal(8, output.Shape[1]);
+
+        // Verify parameters were materialized post-forward. Pre-forward
+        // ParameterCount==0 only confirms lazy resolution was deferred;
+        // a positive count after the first Forward proves the chained
+        // resolution actually allocated weights for router + experts.
+        // expert1/2: 12→8 (12*8 + 8 bias = 104 each). router: 12→2 (12*2 + 2 = 26).
+        int expectedParams = 2 * (12 * 8 + 8) + (12 * 2 + 2);
+        Assert.Equal(expectedParams, moe.ParameterCount);
     }
 }

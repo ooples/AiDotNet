@@ -157,9 +157,18 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
-        if (rank < 1)
+        // ODT Forward indexes the tensor as a flat [batch, _inputDim]
+        // matrix (see ComputeSplitDecisions); rank-1 input would alias
+        // batch onto the feature axis and silently produce garbage. Lock
+        // the contract here so lazy first forward fails fast instead of
+        // resolving _inputDim from the wrong axis.
+        if (rank != 2)
             throw new ArgumentException(
-                $"ObliviousDecisionTreeLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+                $"ObliviousDecisionTreeLayer requires rank-2 input [batch, features]; " +
+                $"got rank {rank} with shape [{string.Join(", ", input.Shape)}]. If your " +
+                $"data is unbatched, add a leading batch axis (e.g. tensor.Reshape([1, " +
+                $"features])); higher-rank inputs must be flattened to [batch, features] " +
+                $"upstream.", nameof(input));
 
         int inputDim = input.Shape[rank - 1];
         if (inputDim <= 0)
@@ -229,6 +238,20 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
         // _isInitialized=true) so both calls are no-ops.
         if (!IsShapeResolved) OnFirstForward(input);
         EnsureInitialized();
+
+        // Re-validate the shape contract on every call, not just the
+        // lazy-first one. OnFirstForward only fires once; subsequent
+        // inputs with a different rank or feature count would otherwise
+        // index past _featureSelectionWeights[level*_inputDim+f].
+        if (input.Shape.Length != 2)
+            throw new ArgumentException(
+                $"ObliviousDecisionTreeLayer requires rank-2 input [batch, features]; " +
+                $"got rank {input.Shape.Length}.", nameof(input));
+        if (input.Shape[1] != _inputDim)
+            throw new ArgumentException(
+                $"ObliviousDecisionTreeLayer's input feature dimension mismatch: layer " +
+                $"was resolved with _inputDim={_inputDim}, but input has " +
+                $"{input.Shape[1]} features.", nameof(input));
 
         _inputCache = input;
         int batchSize = input.Shape[0];

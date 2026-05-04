@@ -364,8 +364,23 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         int inputCapsules;
         if (rank == 2)
         {
-            // [inputCapsules, inputCapsuleDimension] — no batch axis.
-            inputCapsules = input.Shape[0];
+            // Rank-2 is genuinely ambiguous for lazy shape resolution:
+            // Forward accepts both [inputCapsules, inputCapsuleDimension]
+            // (unbatched) and [batch, inputCapsules*inputCapsuleDimension]
+            // (batched/flat). With no other signal we cannot tell which
+            // interpretation the caller intended, and picking one
+            // silently misroutes the other. Force the caller to disambiguate
+            // by constructing the layer eagerly with known dimensions, or
+            // by passing rank>=3 input on the lazy first forward.
+            throw new ArgumentException(
+                $"DigitCapsuleLayer cannot lazy-resolve a rank-2 input of shape " +
+                $"[{input.Shape[0]}, {input.Shape[1]}]: this is ambiguous between " +
+                $"[inputCapsules, inputCapsuleDimension] and [batch, " +
+                $"inputCapsules*inputCapsuleDimension]. Either construct the layer " +
+                $"eagerly with explicit (inputCapsules, inputCapsuleDimension), or " +
+                $"reshape the first forward input to rank>=3 so OnFirstForward can " +
+                $"resolve unambiguously. Subsequent calls may use rank-2 once the " +
+                $"layer is resolved.", nameof(input));
         }
         else if (rank == 3)
         {
@@ -735,9 +750,16 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             _lastCouplings = couplings;
         }
 
-        // Dispose intermediate tensors
+        // Dispose intermediate tensors. Critical: only dispose `couplings`
+        // when we did NOT cache it on _lastCouplings — otherwise the
+        // backward pass reads a disposed tensor and reports a use-after-
+        // free (or a zeroed-out buffer if the pool reused it). predictions
+        // is never cached so it's always safe to drop.
         predictions.Dispose();
-        couplings.Dispose();
+        if (!IsTrainingMode)
+        {
+            couplings.Dispose();
+        }
 
         // Flatten output for compatibility with downstream layers
         // [B, C, D_out] -> [B, C*D_out]

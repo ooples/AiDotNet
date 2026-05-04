@@ -251,18 +251,72 @@ public class ExpertLayer<T> : LayerBase<T>
         if (input._shape.Length == 0)
             throw new ArgumentException("ExpertLayer requires non-empty input shape.", nameof(input));
 
-        // Strip leading batch dim — sub-layers are configured against
-        // per-sample feature shapes, matching the eager path's contract
-        // where the caller passes inputShape without a batch axis.
-        int[] runningShape;
-        if (input._shape.Length > 1)
+        // Determine whether axis 0 is a batch dimension. The eager
+        // constructor receives a per-sample feature shape (no batch),
+        // so sub-layers are configured against that. The lazy path has
+        // to disambiguate at first forward:
+        //
+        //  * If any inner layer is already shape-resolved, its
+        //    expected InputShape tells us the per-sample rank; axis 0
+        //    is batch iff the actual input has exactly one extra
+        //    leading dim.
+        //  * Otherwise, default to the convention that axis 0 is
+        //    batch (rank>=2). For rank-1 unbatched, treat the whole
+        //    shape as features. We can't reliably distinguish a
+        //    truly unbatched [H, W, C] from a batched [B=H, W, C]
+        //    without a hint, so we document the contract: lazy
+        //    ExpertLayers expect a batch axis on first forward, OR
+        //    at least one eagerly-constructed inner layer to anchor
+        //    the per-sample rank.
+        int inputRank = input._shape.Length;
+        int? perSampleRank = null;
+        foreach (var layer in _layers)
         {
-            runningShape = new int[input._shape.Length - 1];
+            if (layer is LayerBase<T> lb && lb.IsShapeResolved)
+            {
+                var resolved = lb.GetInputShape();
+                if (resolved != null && resolved.Length > 0 && resolved.All(d => d > 0))
+                {
+                    perSampleRank = resolved.Length;
+                    break;
+                }
+            }
+        }
+
+        bool stripBatch;
+        if (perSampleRank.HasValue)
+        {
+            if (inputRank == perSampleRank.Value)
+            {
+                stripBatch = false;
+            }
+            else if (inputRank == perSampleRank.Value + 1)
+            {
+                stripBatch = true;
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"ExpertLayer's first inner layer expects rank-{perSampleRank.Value} " +
+                    $"per-sample input, but the runtime input has rank {inputRank}. " +
+                    $"Expected rank {perSampleRank.Value} (unbatched) or rank " +
+                    $"{perSampleRank.Value + 1} (batched).", nameof(input));
+            }
+        }
+        else
+        {
+            stripBatch = inputRank > 1;
+        }
+
+        int[] runningShape;
+        if (stripBatch)
+        {
+            runningShape = new int[inputRank - 1];
             for (int i = 0; i < runningShape.Length; i++) runningShape[i] = input._shape[i + 1];
         }
         else
         {
-            runningShape = new int[input._shape.Length];
+            runningShape = new int[inputRank];
             for (int i = 0; i < runningShape.Length; i++) runningShape[i] = input._shape[i];
         }
 
@@ -275,18 +329,18 @@ public class ExpertLayer<T> : LayerBase<T>
             runningShape = layer.GetOutputShape();
         }
 
-        // Outer-layer shapes: input from the actual tensor (per-sample,
-        // no batch axis), output from the last sub-layer's resolved
-        // output.
+        // Outer-layer shapes: input is the per-sample shape we just
+        // resolved (regardless of whether axis 0 was batch), output is
+        // the last sub-layer's resolved output.
         int[] outerInput;
-        if (input._shape.Length > 1)
+        if (stripBatch)
         {
-            outerInput = new int[input._shape.Length - 1];
+            outerInput = new int[inputRank - 1];
             for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i + 1];
         }
         else
         {
-            outerInput = new int[input._shape.Length];
+            outerInput = new int[inputRank];
             for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i];
         }
         ResolveShapes(outerInput, runningShape);
