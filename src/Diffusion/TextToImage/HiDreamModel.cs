@@ -149,7 +149,9 @@ public class HiDreamModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => HIDREAM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount =>
+        _predictor.ParameterCount + _vae.ParameterCount +
+        (_conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> p ? p.ParameterCount : 0L);
 
     /// <summary>
     /// Gets the model variant.

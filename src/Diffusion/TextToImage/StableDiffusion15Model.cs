@@ -557,7 +557,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         // Use actual parameter counts from GetParameters to match what was returned
-        var unetCount = _unet.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
         var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)

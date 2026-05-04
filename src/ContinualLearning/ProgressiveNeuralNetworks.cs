@@ -265,12 +265,15 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
     /// <returns>Dictionary with network statistics.</returns>
     public Dictionary<string, object> GetNetworkStats()
     {
+        // Sum into long to preserve aggregate counts beyond int.MaxValue
+        // (each column already fits in int by Vector<T> indexability,
+        // but the sum across columns doesn't).
         return new Dictionary<string, object>
         {
             ["ColumnCount"] = _columns.Count,
-            ["TotalParameters"] = _columns.Sum(c => (int)c.ParameterCount),
-            ["FrozenParameters"] = _columns.Where(c => c.IsFrozen).Sum(c => (int)c.ParameterCount),
-            ["ActiveParameters"] = _columns.Where(c => !c.IsFrozen).Sum(c => (int)c.ParameterCount),
+            ["TotalParameters"] = _columns.Sum(c => (long)c.ParameterCount),
+            ["FrozenParameters"] = _columns.Where(c => c.IsFrozen).Sum(c => (long)c.ParameterCount),
+            ["ActiveParameters"] = _columns.Where(c => !c.IsFrozen).Sum(c => (long)c.ParameterCount),
             ["UseLateralConnections"] = _useLateralConnections,
             ["TaskIds"] = _columns.Select(c => c.TaskId).ToList()
         };

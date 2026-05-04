@@ -179,7 +179,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
 
         foreach (var kvp in _encoderCache.OrderBy(kv => kv.Key))
         {
-            int encCount = (int)kvp.Value.ParameterCount;
+            int encCount = checked((int)kvp.Value.ParameterCount);
             var encParams = new T[encCount];
             for (int i = 0; i < encCount; i++) encParams[i] = parameters[offset + i];
             kvp.Value.SetParameters(new Vector<T>(encParams));

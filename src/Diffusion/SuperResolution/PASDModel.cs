@@ -119,7 +119,13 @@ public class PASDModel<T> : LatentDiffusionModelBase<T>
     {
         var pp = _predictor.GetParameters();
         var vp = _vae.GetParameters();
-        var combined = new Vector<T>(pp.Length + vp.Length);
+        // Widen the size arithmetic to long. Per-component lengths fit
+        // in int (Vector<T> is int-indexable), but their sum can cross
+        // int.MaxValue. checked() narrows back to int at the Vector<T>
+        // ctor boundary so foundation-scale checkpoints fail fast
+        // instead of silently wrapping the size.
+        long total = (long)pp.Length + vp.Length;
+        var combined = new Vector<T>(checked((int)total));
         for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
         for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
         return combined;

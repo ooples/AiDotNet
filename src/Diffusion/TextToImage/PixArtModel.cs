@@ -194,7 +194,7 @@ public class PixArtModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => PIXART_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override long ParameterCount => _dit.ParameterCount;
+    public override long ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant.

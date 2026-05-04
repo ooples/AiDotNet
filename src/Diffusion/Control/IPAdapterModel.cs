@@ -826,7 +826,7 @@ public class ImageEncoder<T>
 
         foreach (var layer in _transformerLayers)
         {
-            count = (int)layer.ParameterCount;
+            count = checked((int)layer.ParameterCount);
             p = new T[count];
             for (int i = 0; i < count; i++)
             {
@@ -933,7 +933,7 @@ public class ImageProjector<T>
         }
         _projection.SetParameters(new Vector<T>(p));
 
-        count = (int)_tokenExpansion.ParameterCount;
+        count = checked((int)_tokenExpansion.ParameterCount);
         p = new T[count];
         for (int i = 0; i < count; i++)
         {

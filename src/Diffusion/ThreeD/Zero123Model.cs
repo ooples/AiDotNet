@@ -479,7 +479,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
 
         var offset = 0;
 
-        var unetCount = _unet.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
         var unetParams = new T[unetCount];
         for (int i = 0; i < unetCount; i++)
         {

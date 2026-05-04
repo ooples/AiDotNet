@@ -969,7 +969,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
         int vaeCount = checked((int)_musicVAE.ParameterCount);
         int melodyCount = checked((int)_melodyEncoder.ParameterCount);
         int rhythmCount = checked((int)_rhythmEncoder.ParameterCount);
