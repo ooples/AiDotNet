@@ -193,6 +193,31 @@ public class DecoderLayer<T> : LayerBase<T>
 
         var inputShape = input.Shape.ToArray();
         ResolveShapes(inputShape, inputShape);
+
+        // Propagate the resolved per-sample feature shape to lazy
+        // sub-layers so ParameterCount reflects the real total before
+        // their own first Forward fires. Without this, sub-attention /
+        // FFN / norm layers keep their -1 sentinels and report 0 even
+        // after the parent's OnFirstForward — and the
+        // ParameterCount-vs-GetParameters invariant fails for
+        // architectures that query counts before training (the typical
+        // "report model size at construction" path).
+        var perSampleShape = new[] { inputSize };
+        var perSampleSeqShape = rank >= 2
+            ? new[] { input.Shape[rank - 2], inputSize }
+            : perSampleShape;
+        foreach (var sub in GetSubLayers())
+        {
+            if (sub is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                try { lb.ResolveShapesOnly(perSampleSeqShape); }
+                catch
+                {
+                    try { lb.ResolveShapesOnly(perSampleShape); }
+                    catch { /* skip — sub-layer needs richer shape */ }
+                }
+            }
+        }
     }
 
     /// <summary>

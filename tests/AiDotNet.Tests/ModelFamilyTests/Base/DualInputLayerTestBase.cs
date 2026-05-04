@@ -191,6 +191,9 @@ public abstract class DualInputLayerTestBase
         bool probed = false;
 
         // Try the params-Tensor[] overload (DecoderLayer style) first.
+        // Only set `probed = true` when Invoke RETURNS (so a thrown
+        // exception during the underlying Forward doesn't lock out the
+        // remaining fallbacks).
         try
         {
             var paramsForward = layer.GetType().GetMethod(
@@ -202,7 +205,7 @@ public abstract class DualInputLayerTestBase
                 probed = true;
             }
         }
-        catch { /* fall through */ }
+        catch { /* fall through to next probe */ }
 
         // Try the (Tensor, Tensor) overload (TransformerDecoderLayer style).
         if (!probed)
@@ -224,13 +227,13 @@ public abstract class DualInputLayerTestBase
         // Last resort: the single-input Forward declared by ILayer<T>.
         // Many dual-input layers expose a single-input Forward that
         // delegates to (input, input), which still drives the lazy
-        // resolution chain. Suppress any exception so the invariant
-        // still validates whatever state the ctor produced.
-        if (!probed)
-        {
-            try { layer.Forward(primary); }
-            catch { /* fall through */ }
-        }
+        // resolution chain. Always run this even if a previous probe
+        // returned, because the layer's internal computation may have
+        // thrown after EnsureInitialized but before sub-layers reached
+        // their own first Forward — and the ParameterCount-vs-
+        // GetParameters invariant requires the full chain to be live.
+        try { layer.Forward(primary); }
+        catch { /* fall through */ }
 
         int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
