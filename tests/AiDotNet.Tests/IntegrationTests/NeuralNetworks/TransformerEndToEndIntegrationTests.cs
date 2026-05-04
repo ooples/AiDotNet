@@ -321,3 +321,108 @@ public class TransformerEndToEndIntegrationTests
         return best;
     }
 }
+
+// =====================================================
+// FACADE / DIRECT-MODEL PARITY INVARIANT (closes #1267 gap)
+// =====================================================
+
+public class AiModelBuilderFacadePredictParityTests
+{
+    private readonly Xunit.Abstractions.ITestOutputHelper _output;
+    public AiModelBuilderFacadePredictParityTests(Xunit.Abstractions.ITestOutputHelper output) { _output = output; }
+
+    /// <summary>
+    /// After training a Transformer through AiModelBuilder.BuildAsync,
+    /// the facade-wrapping AiModelResult.Predict MUST produce identical
+    /// (or near-identical, allowing for FP rounding) output to the
+    /// underlying Transformer's own Predict. Issue #1267: the facade
+    /// returned uniform-zero on byte-LM inference even though the
+    /// underlying model produced trained logits.
+    /// </summary>
+    [Xunit.Fact]
+    public void Facade_Predict_MatchesDirectModelPredict_AfterBuildAsync()
+    {
+        const int vocab = 4;
+        const int ctxLen = 4;
+        const int batchSize = 8;
+
+        var arch = new AiDotNet.NeuralNetworks.TransformerArchitecture<float>(
+            inputType: AiDotNet.Enums.InputType.TwoDimensional,
+            taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 1, numDecoderLayers: 0, numHeads: 2,
+            modelDimension: 16, feedForwardDimension: 32,
+            inputSize: ctxLen, outputSize: vocab,
+            maxSequenceLength: ctxLen, vocabularySize: vocab);
+        var model = new AiDotNet.NeuralNetworks.Transformer<float>(
+            arch,
+            lossFunction: new AiDotNet.LossFunctions.CategoricalCrossEntropyLoss<float>());
+
+        // Build a tiny training set.
+        var features = new Tensor<float>([batchSize, ctxLen]);
+        var labels = new Tensor<float>([batchSize, vocab]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            for (int s = 0; s < ctxLen; s++) features[b, s] = (float)((b + s) % vocab);
+            labels[b, b % vocab] = 1.0f;
+        }
+
+        var loader = AiDotNet.Data.Loaders.DataLoaders.FromTensors<float>(features, labels);
+        var optimizer = new AiDotNet.Optimizers.AdamOptimizer<float, Tensor<float>, Tensor<float>>(
+            null,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-3,
+                MaxIterations = 5,
+                UseAdaptiveLearningRate = false,
+            });
+
+        var builder = new AiDotNet.AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureDataLoader(loader);
+        var result = builder.BuildAsync().GetAwaiter().GetResult();
+
+        // Pick one sample for parity check.
+        var probe = new Tensor<float>([1, ctxLen]);
+        for (int s = 0; s < ctxLen; s++) probe[0, s] = features[0, s];
+
+        // Direct model prediction (post-training).
+        model.SetTrainingMode(false);
+        var directPred = model.Predict(probe);
+
+        // Facade prediction.
+        var facadePred = result.Predict(probe);
+
+        // Compute max abs diff and L2 of each.
+        double maxDiff = 0, l2Direct = 0, l2Facade = 0;
+        int n = directPred.Length;
+        Xunit.Assert.Equal(n, facadePred.Length);
+        for (int i = 0; i < n; i++)
+        {
+            double d = Math.Abs(directPred[i] - facadePred[i]);
+            if (d > maxDiff) maxDiff = d;
+            l2Direct += directPred[i] * directPred[i];
+            l2Facade += facadePred[i] * facadePred[i];
+        }
+        l2Direct = Math.Sqrt(l2Direct);
+        l2Facade = Math.Sqrt(l2Facade);
+
+        _output.WriteLine($"L2 direct={l2Direct:F6} facade={l2Facade:F6} maxDiff={maxDiff:F6}");
+
+        // Bound: max-abs-diff between facade and direct must be tiny
+        // (numerics only). If facade returns uniform-zero while direct
+        // returns trained logits, maxDiff = max(direct logit) which is
+        // typically O(1) — much larger than this 1e-3 bound.
+        Xunit.Assert.True(maxDiff < 1e-3,
+            $"AiModelBuilder facade Predict diverged from direct Model.Predict: "
+            + $"maxDiff={maxDiff:F6} (bound 1e-3). Direct L2={l2Direct:F4}, facade L2={l2Facade:F4}. "
+            + "Catches #1267-class bugs where AiModelResult wraps the model in a way that "
+            + "loses post-training state (JIT capture timing, stale preprocessing, etc.).");
+
+        // Also a sanity check: direct prediction must NOT be all-zero.
+        // If both directs were zero, maxDiff would still be 0 and the
+        // assertion above would pass — but the model would be untrained.
+        Xunit.Assert.True(l2Direct > 1e-6,
+            $"Direct Model.Predict returned all-zero (L2={l2Direct:F6}). Training itself is broken.");
+    }
+}
