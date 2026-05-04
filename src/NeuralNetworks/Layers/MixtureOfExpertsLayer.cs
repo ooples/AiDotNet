@@ -495,6 +495,63 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// MoE supports two construction patterns:
+    /// (1) <b>Eager:</b> caller passed positive <c>inputShape</c>; ctor
+    /// already eagerly resolved router and experts via <c>ResolveSubLayer</c>
+    /// and <c>IsShapeResolved</c> is true at construction time.
+    /// (2) <b>Lazy:</b> caller passed <c>[-1]</c> or any shape containing
+    /// a negative dim; sub-layers stayed unresolved. On first forward we
+    /// read <c>input.Shape[^1]</c> as the feature dimension (router and
+    /// experts share the same input shape for vanilla MoE) and propagate
+    /// it to every sub-layer.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"MixtureOfExpertsLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int featureDim = input.Shape[rank - 1];
+        if (featureDim <= 0)
+            throw new ArgumentException(
+                $"MixtureOfExpertsLayer's input feature dimension must be positive; got {featureDim} from input shape.",
+                nameof(input));
+
+        // Feature-dim-only resolved shape; sub-layers receive a 1-D
+        // shape because vanilla MoE treats input as a per-sample feature
+        // vector. Switch Transformer / per-token MoE variants would
+        // pass the full multi-axis input here, but those are out of
+        // scope for this base class — they should subclass and override.
+        var resolvedInputShape = new[] { featureDim };
+        ResolveSubLayer(_router, resolvedInputShape);
+        foreach (var expert in _experts)
+        {
+            ResolveSubLayer(expert, resolvedInputShape);
+        }
+
+        // Output shape inherits from the first expert's resolved output
+        // (all experts share the same output shape by MoE contract).
+        int[] resolvedOutputShape;
+        if (_experts[0] is LayerBase<T> firstExpert && firstExpert.IsShapeResolved)
+        {
+            resolvedOutputShape = firstExpert.GetOutputShape();
+        }
+        else
+        {
+            // Sub-layer didn't expose a resolved output — fall back to
+            // the OutputShape provided at construction (may still
+            // contain -1 sentinels which would break downstream tape
+            // accounting; surfaced as a runtime error rather than
+            // silent corruption).
+            resolvedOutputShape = OutputShape;
+        }
+
+        ResolveShapes(resolvedInputShape, resolvedOutputShape);
+    }
+
     /// <summary>
     /// Performs the forward pass through the MoE layer.
     /// </summary>
@@ -544,6 +601,14 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-shape support: if the layer (or its sub-layers) wasn't
+        // eagerly resolved at construction (caller passed [-1] or
+        // shape with negative dims), resolve from input.Shape now.
+        // OnFirstForward propagates the resolved shape into router +
+        // experts, then ResolveShapes flips IsShapeResolved on the
+        // outer layer.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

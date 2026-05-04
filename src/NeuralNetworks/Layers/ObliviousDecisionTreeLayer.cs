@@ -27,9 +27,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 {
-    private readonly int _inputDim;
+    // Non-readonly: lazy ctor leaves _inputDim = -1 until OnFirstForward
+    // resolves it from input.Shape[^1]. Eager ctor sets it at construction.
+    private int _inputDim;
     private readonly int _depth;
     private readonly int _outputDim;
+    private readonly double _initScale;
+    private bool _isInitialized;
 
     // Each level has one feature selection and one threshold
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -65,9 +69,11 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override int ParameterCount =>
-        _depth * _inputDim +      // feature selection weights
-        _depth +                   // thresholds
-        _numLeaves * _outputDim;   // leaf values
+        _inputDim > 0
+            ? _depth * _inputDim +      // feature selection weights
+              _depth +                   // thresholds
+              _numLeaves * _outputDim    // leaf values
+            : 0;                         // lazy: no params allocated yet
 
     /// <summary>
     /// Initializes an oblivious decision tree.
@@ -89,6 +95,7 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
         _inputDim = inputDim;
         _depth = depth;
         _outputDim = outputDim;
+        _initScale = initScale;
         _numLeaves = 1 << depth;  // 2^depth
 
         // Initialize parameters
@@ -102,6 +109,90 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
         _leafValuesGrad = new Tensor<T>([_numLeaves, outputDim]);
 
         InitializeParameters(initScale);
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor: resolves <c>inputDim</c> from <c>input.Shape[^1]</c>
+    /// on first <see cref="Forward"/>. <paramref name="depth"/> and
+    /// <paramref name="outputDim"/> are architectural and stay required;
+    /// only the input feature dimension is shape-dependent.
+    /// </summary>
+    /// <param name="depth">Tree depth (number of split levels).</param>
+    /// <param name="outputDim">Output dimension per leaf.</param>
+    /// <param name="initScale">Initialization scale.</param>
+    public ObliviousDecisionTreeLayer(int depth = 6, int outputDim = 1, double initScale = 0.01)
+        : base([-1], [outputDim])
+    {
+        if (depth <= 0 || depth > 30)
+            throw new ArgumentOutOfRangeException(nameof(depth), "Depth must be between 1 and 30.");
+        if (outputDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputDim), "Output dimension must be positive.");
+
+        _inputDim = -1;
+        _depth = depth;
+        _outputDim = outputDim;
+        _initScale = initScale;
+        _numLeaves = 1 << depth;
+
+        // Empty placeholders — EnsureInitialized will re-allocate against
+        // the resolved inputDim once OnFirstForward fires. Keeping the
+        // not-null reference contract intact for code paths that walk
+        // these fields unconditionally (GetParameters, ClearGradients).
+        _featureSelectionWeights = new Tensor<T>([0, 0]);
+        _thresholds = new Tensor<T>([0]);
+        _leafValues = new Tensor<T>([0, 0]);
+        _featureSelectionGrad = new Tensor<T>([0, 0]);
+        _thresholdsGrad = new Tensor<T>([0]);
+        _leafValuesGrad = new Tensor<T>([0, 0]);
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads the input feature count from <c>input.Shape[^1]</c> and
+    /// resolves the lazy shape so the rest of the forward pass + parameter
+    /// access can index against a real <c>InputShape[0]</c>.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"ObliviousDecisionTreeLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputDim = input.Shape[rank - 1];
+        if (inputDim <= 0)
+            throw new ArgumentException(
+                $"ObliviousDecisionTreeLayer's input feature dimension must be positive; got {inputDim} from input shape.",
+                nameof(input));
+
+        _inputDim = inputDim;
+        ResolveShapes(new[] { inputDim }, OutputShape);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate parameter and gradient tensors against
+    /// the resolved <c>_inputDim</c> and run the standard ODT initialization.
+    /// Eager-ctor instances bypass this path because <see cref="_isInitialized"/>
+    /// is set to true at construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_inputDim <= 0)
+            throw new InvalidOperationException(
+                "ObliviousDecisionTreeLayer cannot initialize until OnFirstForward has resolved the input dimension from input shape.");
+
+        _featureSelectionWeights = new Tensor<T>([_depth, _inputDim]);
+        _thresholds = new Tensor<T>([_depth]);
+        _leafValues = new Tensor<T>([_numLeaves, _outputDim]);
+        _featureSelectionGrad = new Tensor<T>([_depth, _inputDim]);
+        _thresholdsGrad = new Tensor<T>([_depth]);
+        _leafValuesGrad = new Tensor<T>([_numLeaves, _outputDim]);
+        InitializeParameters(_initScale);
+        _isInitialized = true;
     }
 
     private void InitializeParameters(double scale)
@@ -132,6 +223,13 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     /// <returns>Tree output [batchSize, outputDim].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-ctor instances start with _inputDim = -1; resolve from
+        // input.Shape on first call, then materialize parameter tensors.
+        // Eager-ctor instances are already initialized (IsShapeResolved=true,
+        // _isInitialized=true) so both calls are no-ops.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         _inputCache = input;
         int batchSize = input.Shape[0];
 

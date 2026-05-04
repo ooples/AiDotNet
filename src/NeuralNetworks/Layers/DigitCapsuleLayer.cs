@@ -153,7 +153,11 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// - These features are combined to recognize more complex patterns
     /// </para>
     /// </remarks>
-    private readonly int _inputCapsules;
+    // Non-readonly: lazy ctor leaves _inputCapsules = -1 until
+    // OnFirstForward resolves it from input.Shape[^2]. Eager ctor
+    // sets it at construction.
+    private int _inputCapsules;
+    private bool _isInitialized;
 
     /// <summary>
     /// The dimension (number of values) of each input capsule vector.
@@ -171,7 +175,9 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// - More dimensions allow for more detailed feature representation
     /// </para>
     /// </remarks>
-    private readonly int _inputCapsuleDimension;
+    // Non-readonly: lazy ctor leaves _inputCapsuleDimension = -1 until
+    // OnFirstForward resolves it from input.Shape[^1].
+    private int _inputCapsuleDimension;
 
     /// <summary>
     /// The number of classes (output capsules) that this layer can identify.
@@ -294,6 +300,82 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         _weights = new Tensor<T>([inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension]);
 
         InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor: resolves <c>inputCapsules</c> and
+    /// <c>inputCapsuleDimension</c> from <c>input.Shape[^2..]</c> on
+    /// first <see cref="Forward"/>. Output structure (numClasses ×
+    /// outputCapsuleDimension) and routing iterations are architectural
+    /// and stay required.
+    /// </summary>
+    /// <param name="numClasses">Number of output classes (output capsules).</param>
+    /// <param name="outputCapsuleDimension">Dimension of each output capsule's vector.</param>
+    /// <param name="routingIterations">Number of dynamic-routing iterations.</param>
+    public DigitCapsuleLayer(int numClasses, int outputCapsuleDimension, int routingIterations)
+        : base([-1, -1], [numClasses, outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
+    {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be positive.");
+        if (outputCapsuleDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputCapsuleDimension), "outputCapsuleDimension must be positive.");
+        if (routingIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(routingIterations), "routingIterations must be at least 1.");
+
+        _inputCapsules = -1;
+        _inputCapsuleDimension = -1;
+        _numClasses = numClasses;
+        _outputCapsuleDimension = outputCapsuleDimension;
+        _routingIterations = routingIterations;
+        _weights = new Tensor<T>([0, 0, 0, 0]);
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads input capsule structure from <c>input.Shape[^2..]</c>:
+    /// the last two axes are [inputCapsules, inputCapsuleDimension].
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer requires rank>=2 input [...,inputCapsules,inputDimension]; got rank {rank}.", nameof(input));
+
+        int inputCapsules = input.Shape[rank - 2];
+        int inputCapsuleDimension = input.Shape[rank - 1];
+        if (inputCapsules <= 0)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer's inputCapsules must be positive; got {inputCapsules} from input shape.", nameof(input));
+        if (inputCapsuleDimension <= 0)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer's inputCapsuleDimension must be positive; got {inputCapsuleDimension} from input shape.", nameof(input));
+
+        _inputCapsules = inputCapsules;
+        _inputCapsuleDimension = inputCapsuleDimension;
+        ResolveShapes(new[] { inputCapsules, inputCapsuleDimension }, new[] { _numClasses, _outputCapsuleDimension });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate the routing weight tensor against
+    /// the resolved <c>[inputCapsules, numClasses, inputCapsuleDimension,
+    /// outputCapsuleDimension]</c> shape and run the standard parameter
+    /// initialization. Eager-ctor instances bypass this path because
+    /// <see cref="_isInitialized"/> is set to true at construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_inputCapsules <= 0 || _inputCapsuleDimension <= 0)
+            throw new InvalidOperationException(
+                "DigitCapsuleLayer cannot initialize until OnFirstForward has resolved the input capsule structure from input shape.");
+
+        _weights = new Tensor<T>([_inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+        InitializeParameters();
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -363,6 +445,13 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-ctor instances start with _inputCapsules =
+        // _inputCapsuleDimension = -1; resolve from input.Shape on first
+        // call. Eager-ctor instances are already initialized so both
+        // calls are no-ops.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

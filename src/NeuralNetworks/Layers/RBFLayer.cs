@@ -119,9 +119,18 @@ public partial class RBFLayer<T> : LayerBase<T>
     private readonly int _numCenters;
 
     /// <summary>
+    /// Lazy-init flag. False after the lazy ctor until OnFirstForward
+    /// resolves _inputSize and EnsureInitialized allocates parameter
+    /// tensors. True after construction for the eager ctor path.
+    /// </summary>
+    private bool _isInitialized;
+
+    /// <summary>
     /// Number of input features.
     /// </summary>
-    private readonly int _inputSize;
+    // Non-readonly: the lazy ctor leaves this as -1 until OnFirstForward
+    // resolves it from input.Shape[^1]. Eager ctor sets it at construction.
+    private int _inputSize;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -216,6 +225,78 @@ public partial class RBFLayer<T> : LayerBase<T>
         _rbf = rbf;
 
         InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor: resolves <c>inputSize</c> from <c>input.Shape[^1]</c>
+    /// on first <see cref="Forward"/>. <paramref name="outputSize"/> (the
+    /// number of RBF centers / output neurons) is architectural and stays
+    /// required; only the input feature dimension is shape-dependent.
+    /// </summary>
+    /// <param name="outputSize">Number of RBF neurons (centers).</param>
+    /// <param name="rbf">Radial basis function implementation.</param>
+    /// <param name="initializationStrategy">Optional weight init strategy.</param>
+    public RBFLayer(int outputSize, IRadialBasisFunction<T> rbf,
+        IInitializationStrategy<T>? initializationStrategy = null)
+        : base([-1], [outputSize])
+    {
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size (number of RBF centers) must be positive.");
+
+        InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
+        _inputSize = -1;
+        _numCenters = outputSize;
+        // Empty placeholders — EnsureInitialized re-allocates against
+        // resolved _inputSize. Keeping the not-null reference contract
+        // intact for code paths that walk these fields unconditionally.
+        _centers = new Tensor<T>([0, 0]);
+        _widths = new Tensor<T>([0]);
+        _rbf = rbf;
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads the input feature count from <c>input.Shape[^1]</c> and
+    /// resolves the lazy shape so the rest of the forward pass + parameter
+    /// access can index against a real <c>InputShape[0]</c>.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"RBFLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        int inputSize = input.Shape[rank - 1];
+        if (inputSize <= 0)
+            throw new ArgumentException(
+                $"RBFLayer's input feature dimension must be positive; got {inputSize} from input shape.",
+                nameof(input));
+
+        _inputSize = inputSize;
+        ResolveShapes(new[] { inputSize }, OutputShape);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate centers and widths against the resolved
+    /// <c>_inputSize</c> and run RBF parameter initialization. Eager-ctor
+    /// instances bypass this path because <see cref="_isInitialized"/> is
+    /// set to true at construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_inputSize <= 0)
+            throw new InvalidOperationException(
+                "RBFLayer cannot initialize until OnFirstForward has resolved the input feature dimension from input shape.");
+
+        _centers = new Tensor<T>([_numCenters, _inputSize]);
+        _widths = new Tensor<T>([_numCenters]);
+        InitializeParameters();
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -246,6 +327,12 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-ctor instances start with _inputSize = -1; resolve from
+        // input.Shape on first call, then materialize parameter tensors.
+        // Eager-ctor instances are already initialized so both calls no-op.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         // Handle unbatched input (1D) by adding batch dimension
         bool wasUnbatched = input.Rank == 1;
         var processedInput = wasUnbatched

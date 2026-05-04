@@ -115,7 +115,11 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// <remarks>
     /// This field stores the number of channels in the input tensor.
     /// </remarks>
-    private readonly int _inputChannels;
+    // Non-readonly: lazy ctor leaves _inputChannels = -1 until
+    // OnFirstForward resolves it from input.Shape[1] (NCHW). Eager
+    // ctor sets it at construction.
+    private int _inputChannels;
+    private bool _isInitialized;
 
     /// <summary>
     /// The number of capsule channels.
@@ -231,6 +235,43 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         _convBias = new Tensor<T>([outputChannels]);
 
         InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor (scalar activation): resolves <c>inputChannels</c>
+    /// from <c>input.Shape[1]</c> (NCHW) on first <see cref="Forward"/>.
+    /// Capsule architecture (channels × dimension) and conv geometry
+    /// (kernelSize, stride) are architectural and stay required.
+    /// </summary>
+    /// <param name="capsuleChannels">Number of capsule channels.</param>
+    /// <param name="capsuleDimension">Dimension of each capsule's output vector.</param>
+    /// <param name="kernelSize">Convolution kernel size (square).</param>
+    /// <param name="stride">Convolution stride.</param>
+    /// <param name="scalarActivation">Optional scalar activation (defaults to Squash).</param>
+    public PrimaryCapsuleLayer(int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IActivationFunction<T>? scalarActivation = null)
+        : base([-1], [capsuleChannels * capsuleDimension], scalarActivation ?? new SquashActivation<T>())
+    {
+        if (capsuleChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capsuleChannels), "capsuleChannels must be positive.");
+        if (capsuleDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capsuleDimension), "capsuleDimension must be positive.");
+        if (kernelSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+        if (stride <= 0)
+            throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
+
+        _inputChannels = -1;
+        _capsuleChannels = capsuleChannels;
+        _capsuleDimension = capsuleDimension;
+        _kernelSize = kernelSize;
+        _stride = stride;
+
+        // Empty placeholders — EnsureInitialized re-allocates against
+        // resolved _inputChannels.
+        _convWeights = new Tensor<T>([0, 0]);
+        _convBias = new Tensor<T>([0]);
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -275,6 +316,86 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         _convBias = new Tensor<T>([outputChannels]);
 
         InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor (vector activation): resolves <c>inputChannels</c>
+    /// from <c>input.Shape[1]</c> (NCHW) on first <see cref="Forward"/>.
+    /// See the scalar-activation lazy ctor for design notes.
+    /// </summary>
+    /// <param name="capsuleChannels">Number of capsule channels.</param>
+    /// <param name="capsuleDimension">Dimension of each capsule's output vector.</param>
+    /// <param name="kernelSize">Convolution kernel size (square).</param>
+    /// <param name="stride">Convolution stride.</param>
+    /// <param name="vectorActivation">Optional vector activation (defaults to Squash).</param>
+    public PrimaryCapsuleLayer(int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IVectorActivationFunction<T>? vectorActivation)
+        : base([-1], [capsuleChannels * capsuleDimension], vectorActivation ?? new SquashActivation<T>())
+    {
+        if (capsuleChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capsuleChannels), "capsuleChannels must be positive.");
+        if (capsuleDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(capsuleDimension), "capsuleDimension must be positive.");
+        if (kernelSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+        if (stride <= 0)
+            throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
+
+        _inputChannels = -1;
+        _capsuleChannels = capsuleChannels;
+        _capsuleDimension = capsuleDimension;
+        _kernelSize = kernelSize;
+        _stride = stride;
+        _convWeights = new Tensor<T>([0, 0]);
+        _convBias = new Tensor<T>([0]);
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads the input channel count from <c>input.Shape[1]</c> (NCHW
+    /// convention: [batch, channels, height, width]). Capsule conv geometry
+    /// (kernel × kernel × inputChannels) is what we need to materialize the
+    /// weight tensor.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 4)
+            throw new ArgumentException(
+                $"PrimaryCapsuleLayer requires rank-4 NCHW input [batch, channels, h, w]; got rank {rank}.", nameof(input));
+
+        int inputChannels = input.Shape[1];
+        if (inputChannels <= 0)
+            throw new ArgumentException(
+                $"PrimaryCapsuleLayer's input channel count must be positive; got {inputChannels} from input shape.",
+                nameof(input));
+
+        _inputChannels = inputChannels;
+        ResolveShapes(new[] { inputChannels }, OutputShape);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate conv weights against the resolved
+    /// <c>_inputChannels × kernelSize × kernelSize</c> input dim and run
+    /// the standard parameter initialization. Eager-ctor instances bypass
+    /// this path because <see cref="_isInitialized"/> is set to true at
+    /// construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_inputChannels <= 0)
+            throw new InvalidOperationException(
+                "PrimaryCapsuleLayer cannot initialize until OnFirstForward has resolved the input channel count from input shape.");
+
+        int outputChannels = _capsuleChannels * _capsuleDimension;
+        int inputSize = _inputChannels * _kernelSize * _kernelSize;
+        _convWeights = new Tensor<T>([outputChannels, inputSize]);
+        _convBias = new Tensor<T>([outputChannels]);
+        InitializeParameters();
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -354,6 +475,12 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-ctor instances start with _inputChannels = -1; resolve from
+        // input.Shape on first call. Eager-ctor instances are already
+        // initialized so both calls are no-ops.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

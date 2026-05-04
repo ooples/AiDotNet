@@ -214,6 +214,16 @@ public class ExpertLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-shape support: if construction-time inputShape contained
+        // sentinel -1 dims, the chain-resolve in the ctor was skipped
+        // and inner lazy layers (Dense / Conv / Attention) are still
+        // unresolved. Walk the chain now using the actual input.Shape
+        // so each lazy sub-layer's OnFirstForward fires with a real
+        // shape on its own first Forward — and propagate the resolved
+        // input/output to the outer ExpertLayer so IsShapeResolved
+        // flips to true.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         var output = input;
 
         // Pass through each layer sequentially
@@ -227,6 +237,59 @@ public class ExpertLayer<T> : LayerBase<T>
 
         // Apply the expert's activation function if specified
         return ApplyActivation(output);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Chain-resolves each inner layer's input shape from the actual
+    /// runtime input. This is the lazy counterpart to the ctor's eager
+    /// resolution path — it runs only when at least one inner layer is
+    /// still unresolved (ie ctor was passed a -1 sentinel input shape).
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (input._shape.Length == 0)
+            throw new ArgumentException("ExpertLayer requires non-empty input shape.", nameof(input));
+
+        // Strip leading batch dim — sub-layers are configured against
+        // per-sample feature shapes, matching the eager path's contract
+        // where the caller passes inputShape without a batch axis.
+        int[] runningShape;
+        if (input._shape.Length > 1)
+        {
+            runningShape = new int[input._shape.Length - 1];
+            for (int i = 0; i < runningShape.Length; i++) runningShape[i] = input._shape[i + 1];
+        }
+        else
+        {
+            runningShape = new int[input._shape.Length];
+            for (int i = 0; i < runningShape.Length; i++) runningShape[i] = input._shape[i];
+        }
+
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                lb.ResolveFromShape(runningShape);
+            }
+            runningShape = layer.GetOutputShape();
+        }
+
+        // Outer-layer shapes: input from the actual tensor (per-sample,
+        // no batch axis), output from the last sub-layer's resolved
+        // output.
+        int[] outerInput;
+        if (input._shape.Length > 1)
+        {
+            outerInput = new int[input._shape.Length - 1];
+            for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i + 1];
+        }
+        else
+        {
+            outerInput = new int[input._shape.Length];
+            for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i];
+        }
+        ResolveShapes(outerInput, runningShape);
     }
 
     /// <summary>
