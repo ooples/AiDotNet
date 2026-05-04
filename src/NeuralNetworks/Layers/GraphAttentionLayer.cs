@@ -1598,4 +1598,11 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// Gets the dropout rate applied to attention coefficients during training.
     /// </summary>
     public double DropoutRate => _dropoutRate;
+
+    /// <summary>
+    /// Gets the LeakyReLU negative-slope used inside the attention
+    /// score computation. Exposed for deserialization round-trip
+    /// verification.
+    /// </summary>
+    public double Alpha => NumOps.ToDouble(_alpha);
 }

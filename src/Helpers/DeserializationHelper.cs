@@ -19,11 +19,16 @@ public static class DeserializationHelper
     }
 
     /// <summary>
-    /// Returns true when an InvalidOperationException's message matches the
-    /// legacy "Cannot find &lt;layer name&gt; constructor" convention used by
-    /// the 50+ explicit-branch throw sites that haven't migrated to
-    /// <see cref="MissingLayerCtorException"/> yet. Kept narrowly scoped to
-    /// avoid swallowing unrelated InvalidOperationExceptions.
+    /// Defensive fallback: returns true when an InvalidOperationException's
+    /// message matches the legacy "Cannot find &lt;layer name&gt; constructor"
+    /// convention. As of #1239 every in-tree "Cannot find ... constructor"
+    /// throw site in this file has migrated to
+    /// <see cref="MissingLayerCtorException"/> (which inherits from
+    /// InvalidOperationException, so existing catch blocks keep working),
+    /// but this helper stays in place to handle third-party serialization
+    /// paths or test-only layer types that might still surface the legacy
+    /// form. Kept narrowly scoped to avoid swallowing unrelated
+    /// InvalidOperationExceptions.
     /// </summary>
     private static bool IsMissingCtorMessage(string message)
     {
@@ -187,7 +192,7 @@ public static class DeserializationHelper
                 .FirstOrDefault(c => c.GetParameters().Length >= 1 &&
                     c.GetParameters()[0].ParameterType == typeof(Enums.PoolingType));
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find GlobalPoolingLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find GlobalPoolingLayer constructor.");
             var args = new object?[ctor.GetParameters().Length];
             args[0] = poolingType;
             if (args.Length > 1) args[1] = activation;
@@ -199,7 +204,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find InputLayer constructor with (int).");
+                throw new MissingLayerCtorException("Cannot find InputLayer constructor with (int).");
             }
 
             instance = ctor.Invoke(new object[] { inputShape[0] });
@@ -210,7 +215,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find ReshapeLayer constructor with (int[]).");
+                throw new MissingLayerCtorException("Cannot find ReshapeLayer constructor with (int[]).");
             }
 
             instance = ctor.Invoke(new object[] { outputShape });
@@ -221,7 +226,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(Type.EmptyTypes);
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find FlattenLayer parameterless constructor.");
+                throw new MissingLayerCtorException("Cannot find FlattenLayer parameterless constructor.");
             }
 
             instance = ctor.Invoke(new object[0]);
@@ -275,7 +280,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int[]) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find TransposeLayer constructor with (int[]).");
+                throw new MissingLayerCtorException("Cannot find TransposeLayer constructor with (int[]).");
             }
 
             instance = ctor.Invoke(new object[] { permutation });
@@ -378,7 +383,7 @@ public static class DeserializationHelper
                 .FirstOrDefault();
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find PatchEmbeddingLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find PatchEmbeddingLayer constructor.");
             }
             var ctorParams = ctor.GetParameters();
             var args = new object?[ctorParams.Length];
@@ -437,7 +442,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find PositionalEncodingLayer constructor with (int, int).");
+                throw new MissingLayerCtorException("Cannot find PositionalEncodingLayer constructor with (int, int).");
             }
             instance = ctor.Invoke(new object[] { maxSeqLen, embDim });
         }
@@ -448,7 +453,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(double) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find DropoutLayer constructor with (double).");
+                throw new MissingLayerCtorException("Cannot find DropoutLayer constructor with (double).");
             }
             instance = ctor.Invoke(new object[] { rate });
         }
@@ -462,7 +467,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(double) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find LayerNormalizationLayer constructor with (double).");
+                throw new MissingLayerCtorException("Cannot find LayerNormalizationLayer constructor with (double).");
             }
             instance = ctor.Invoke(new object[] { epsilon });
         }
@@ -475,7 +480,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor([typeof(double), typeof(double)]);
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find BatchNormalizationLayer constructor with (double, double).");
+                throw new MissingLayerCtorException("Cannot find BatchNormalizationLayer constructor with (double, double).");
             }
             instance = ctor.Invoke([epsilon, momentum]);
         }
@@ -498,7 +503,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find TransformerEncoderLayer constructor with (int, int).");
+                throw new MissingLayerCtorException("Cannot find TransformerEncoderLayer constructor with (int, int).");
             }
             instance = ctor.Invoke(new object[] { numHeads, feedForwardDim });
 
@@ -543,7 +548,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, engineType });
             if (ctor is null)
             {
-                throw new InvalidOperationException(
+                throw new MissingLayerCtorException(
                     "Cannot find TransformerDecoderLayer constructor with (int, int, int, int, IActivationFunction<T>, IEngine).");
             }
             instance = ctor.Invoke(new object?[] { embeddingSize, numHeads, feedForwardDim, sequenceLength, null, null });
@@ -564,7 +569,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find SelfAttentionLayer constructor with (int, int, int, IActivationFunction<T>).");
+                throw new MissingLayerCtorException("Cannot find SelfAttentionLayer constructor with (int, int, int, IActivationFunction<T>).");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { seqLen, embDim, headCount, activation });
@@ -579,7 +584,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find AttentionLayer constructor with (int, int, IActivationFunction<T>).");
+                throw new MissingLayerCtorException("Cannot find AttentionLayer constructor with (int, int, IActivationFunction<T>).");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputSize, attentionSize, activation });
@@ -600,7 +605,7 @@ public static class DeserializationHelper
                     ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double), typeof(double), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find GraphAttentionLayer constructor with expected signature.");
+                throw new MissingLayerCtorException("Cannot find GraphAttentionLayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
 
@@ -629,7 +634,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
+                throw new MissingLayerCtorException("Cannot find GraphConvolutionalLayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, activation });
@@ -657,7 +662,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(SAGEAggregatorType), typeof(bool), activationFuncType, initStrategyType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find GraphSAGELayer constructor with expected signature.");
+                throw new MissingLayerCtorException("Cannot find GraphSAGELayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, (SAGEAggregatorType)aggType, normalize, activation, null });
@@ -691,7 +696,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(double), activationFuncType, initStrategyType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find GraphIsomorphismLayer constructor with expected signature.");
+                throw new MissingLayerCtorException("Cannot find GraphIsomorphismLayer constructor with expected signature.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inputFeatures, outputFeatures, mlpHiddenDim, learnEpsilon, initialEpsilon, activation, null });
@@ -734,7 +739,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find MemoryReadLayer constructor with (int memoryDimension, int outputDimension, IActivationFunction<T>?).");
+                throw new MissingLayerCtorException("Cannot find MemoryReadLayer constructor with (int memoryDimension, int outputDimension, IActivationFunction<T>?).");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { memoryDim, outputDim, activation });
@@ -753,7 +758,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find MemoryWriteLayer constructor with (int memoryDimension, IActivationFunction<T>?).");
+                throw new MissingLayerCtorException("Cannot find MemoryWriteLayer constructor with (int memoryDimension, IActivationFunction<T>?).");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { memoryDim, activation });
@@ -785,7 +790,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
-                throw new InvalidOperationException($"Cannot find ConvolutionalLayer constructor.");
+                throw new MissingLayerCtorException($"Cannot find ConvolutionalLayer constructor.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
@@ -841,7 +846,7 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find Conv3DLayer constructor with expected signature.");
+                throw new MissingLayerCtorException("Cannot find Conv3DLayer constructor with expected signature.");
             var activation = TryRestoreActivation<T>(additionalParams);
             instance = ctor.Invoke(new object?[] { outputChannels, kernelSize, stride, padding, activation });
 
@@ -887,7 +892,7 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find DeconvolutionalLayer constructor with expected signature.");
+                throw new MissingLayerCtorException("Cannot find DeconvolutionalLayer constructor with expected signature.");
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation });
 
@@ -924,7 +929,7 @@ public static class DeserializationHelper
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find FullyConnectedLayer constructor with (int, IActivationFunction<T>).");
+                throw new MissingLayerCtorException("Cannot find FullyConnectedLayer constructor with (int, IActivationFunction<T>).");
             instance = ctor.Invoke(new object?[] { outputSize, activation });
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.Upsample3DLayer<>))
@@ -940,7 +945,7 @@ public static class DeserializationHelper
             {
                 var ctor3 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int) });
                 if (ctor3 is null)
-                    throw new InvalidOperationException("Cannot find Upsample3DLayer constructor with (int, int, int).");
+                    throw new MissingLayerCtorException("Cannot find Upsample3DLayer constructor with (int, int, int).");
                 instance = ctor3.Invoke(new object[] { scaleD.Value, scaleH.Value, scaleW.Value });
             }
             else
@@ -948,7 +953,7 @@ public static class DeserializationHelper
                 int sf = scaleF ?? 2;
                 var ctor1 = type.GetConstructor(new Type[] { typeof(int) });
                 if (ctor1 is null)
-                    throw new InvalidOperationException("Cannot find Upsample3DLayer constructor with (int).");
+                    throw new MissingLayerCtorException("Cannot find Upsample3DLayer constructor with (int).");
                 instance = ctor1.Invoke(new object[] { sf });
             }
         }
@@ -961,7 +966,7 @@ public static class DeserializationHelper
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int) });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find MeshPoolLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find MeshPoolLayer constructor.");
             instance = ctor.Invoke(new object[] { inputChannels, targetEdges, numNeighbors });
         }
         else if (genericDef == typeof(NeuralNetworks.Layers.MeshEdgeConvLayer<>))
@@ -975,7 +980,7 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find MeshEdgeConvLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find MeshEdgeConvLayer constructor.");
             instance = ctor.Invoke(new object?[] { inputChannels, outputChannels, numNeighbors, activation });
         }
         else if (genericDef == typeof(PrimaryCapsuleLayer<>))
@@ -990,7 +995,7 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find PrimaryCapsuleLayer constructor with expected signature.");
+                throw new MissingLayerCtorException("Cannot find PrimaryCapsuleLayer constructor with expected signature.");
             instance = ctor.Invoke(new object?[] { inputChannels, capsuleChannels, capsuleDimension, kernelSize, stride, null });
         }
         else if (genericDef == typeof(DigitCapsuleLayer<>))
@@ -1004,7 +1009,7 @@ public static class DeserializationHelper
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int) });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find DigitCapsuleLayer constructor with expected signature.");
+                throw new MissingLayerCtorException("Cannot find DigitCapsuleLayer constructor with expected signature.");
             instance = ctor.Invoke(new object[] { inputCapsules, inputCapsuleDim, numClasses, outputCapsuleDim, routingIter });
         }
         else if (genericDef == typeof(ReconstructionLayer<>))
@@ -1018,7 +1023,7 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, activationFuncType });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find ReconstructionLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find ReconstructionLayer constructor.");
             instance = ctor.Invoke(new object?[] { inputDim, hidden1, hidden2, outputDim, null, null });
         }
         else if (genericDef == typeof(MaxPool3DLayer<>))
@@ -1033,7 +1038,7 @@ public static class DeserializationHelper
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find MaxPool3DLayer constructor with (int, int).");
+                throw new MissingLayerCtorException("Cannot find MaxPool3DLayer constructor with (int, int).");
             instance = ctor.Invoke(new object[] { poolSize, stride });
         }
         else if (genericDef == typeof(PoolingLayer<>))
@@ -1050,7 +1055,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(PoolingType) });
             if (ctor is null)
             {
-                throw new InvalidOperationException($"Cannot find PoolingLayer constructor.");
+                throw new MissingLayerCtorException($"Cannot find PoolingLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { inputDepth, inputHeight, inputWidth, poolSize, stride, poolingType });
         }
@@ -1071,7 +1076,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find UpsamplingLayer constructor.");
+                throw new MissingLayerCtorException("Cannot find UpsamplingLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { scaleFactor });
         }
@@ -1085,7 +1090,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException($"Cannot find MaxPoolingLayer constructor.");
+                throw new MissingLayerCtorException($"Cannot find MaxPoolingLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { poolSize, strides });
         }
@@ -1103,7 +1108,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) });
             if (ctor is null)
             {
-                throw new InvalidOperationException($"Cannot find DenseBlock constructor.");
+                throw new MissingLayerCtorException($"Cannot find DenseBlock constructor.");
             }
             instance = ctor.Invoke(new object[] { inputChannels, numLayers, growthRate, inputHeight, inputWidth, bnMomentum });
         }
@@ -1124,7 +1129,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool), typeof(int), activationFuncType });
             if (ctor is null)
             {
-                throw new InvalidOperationException($"Cannot find InvertedResidualBlock constructor.");
+                throw new MissingLayerCtorException($"Cannot find InvertedResidualBlock constructor.");
             }
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             instance = ctor.Invoke(new object?[] { inChannels, outChannels, inputHeight, inputWidth, expansionRatio, stride, useSE, seRatio, activation });
@@ -1158,7 +1163,7 @@ public static class DeserializationHelper
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool) });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find BottleneckBlock constructor.");
+                throw new MissingLayerCtorException("Cannot find BottleneckBlock constructor.");
             instance = ctor.Invoke(new object[] { inChannels, baseChannels, stride, inputHeight, inputWidth, zeroInitResidual });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.BasicBlock<>) ||
@@ -1174,7 +1179,7 @@ public static class DeserializationHelper
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(bool) });
             if (ctor is null)
-                throw new InvalidOperationException("Cannot find BasicBlock constructor.");
+                throw new MissingLayerCtorException("Cannot find BasicBlock constructor.");
             instance = ctor.Invoke(new object[] { inChannels, outChannels, stride, inputHeight, inputWidth, zeroInitResidual });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.TransitionLayer<>) ||
@@ -1191,7 +1196,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double) });
             if (ctor is null)
             {
-                throw new InvalidOperationException($"Cannot find TransitionLayer constructor.");
+                throw new MissingLayerCtorException($"Cannot find TransitionLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, compressionFactor });
         }
@@ -1206,7 +1211,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int) });
             if (ctor is null)
             {
-                throw new InvalidOperationException($"Cannot find AdaptiveAveragePoolingLayer constructor.");
+                throw new MissingLayerCtorException($"Cannot find AdaptiveAveragePoolingLayer constructor.");
             }
             instance = ctor.Invoke(new object[] { outputHeight, outputWidth });
         }
@@ -1844,7 +1849,16 @@ public static class DeserializationHelper
             }
             else
             {
-                throw new NotSupportedException($"Cannot find MambaBlock constructor for deserialization.");
+                // Keep NotSupportedException here (rather than the
+                // MissingLayerCtorException used by other branches) so
+                // we preserve the original observable behavior: the
+                // outer catch in CreateLayerFromType only re-routes
+                // MissingLayerCtorException to the metadata matcher;
+                // NotSupportedException propagates to the caller, which
+                // is the right signal when MambaBlock's expected named-
+                // parameter ctor isn't present (a specifically-shaped
+                // layer that the generic matcher cannot reconstruct).
+                throw new NotSupportedException("Cannot find MambaBlock constructor for deserialization.");
             }
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".ContinuumMemorySystemLayer`1"))
@@ -1885,7 +1899,10 @@ public static class DeserializationHelper
             }
             else
             {
-                throw new NotSupportedException($"Cannot find ContinuumMemorySystemLayer constructor for deserialization.");
+                // Keep NotSupportedException to preserve original
+                // observable behavior — see MambaBlock branch above
+                // for rationale.
+                throw new NotSupportedException("Cannot find ContinuumMemorySystemLayer constructor for deserialization.");
             }
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".FeedForwardLayer`1"))
@@ -1903,7 +1920,7 @@ public static class DeserializationHelper
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });
             if (ctor is null)
-                throw new InvalidOperationException(
+                throw new MissingLayerCtorException(
                     "Cannot find FeedForwardLayer constructor with (int, IActivationFunction<T>).");
             instance = ctor.Invoke(new object?[] { outputSize, activation });
         }
@@ -1929,7 +1946,7 @@ public static class DeserializationHelper
                 .OrderByDescending(c => c.GetParameters().Length)
                 .FirstOrDefault();
             if (ctor is null)
-                throw new InvalidOperationException(
+                throw new MissingLayerCtorException(
                     $"Cannot find {layerType} constructor for deserialization.");
 
             var parameters = ctor.GetParameters();
@@ -2001,13 +2018,14 @@ public static class DeserializationHelper
         }
         catch (InvalidOperationException ex) when (IsMissingCtorMessage(ex.Message))
         {
-            // Legacy fallback for explicit branches that haven't migrated
-            // to MissingLayerCtorException yet. Detection is based on the
-            // canonical "Cannot find ... constructor" message convention
-            // used by the existing 50+ throw sites in this file (see all
-            // GetConstructor null-checks throughout). This path will be
-            // removed once all branches are migrated; for now it keeps
-            // behavior stable while the structured marker rolls out.
+            // Defensive fallback: as of #1239 all 44 in-tree throw sites
+            // have been migrated to MissingLayerCtorException, so the
+            // catch above handles them via the structured marker. This
+            // legacy-convention catch stays in place to handle third-
+            // party serialization paths or test-only layer types that
+            // might still surface "Cannot find ... constructor" via a
+            // plain InvalidOperationException — keeps the matcher
+            // fall-through behavior stable for those edge cases.
             branchFailure = ex;
             instance = null;
         }
@@ -2076,7 +2094,7 @@ public static class DeserializationHelper
         var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType, initStrategyType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find DenseLayer constructor with (int, IActivationFunction<T>, IInitializationStrategy<T>).");
+            throw new MissingLayerCtorException("Cannot find DenseLayer constructor with (int, IActivationFunction<T>, IInitializationStrategy<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -2121,7 +2139,7 @@ public static class DeserializationHelper
         var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), activationFuncType, initStrategyType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find MultiHeadAttentionLayer constructor with (int, int, IActivationFunction<T>, IInitializationStrategy<T>).");
+            throw new MissingLayerCtorException("Cannot find MultiHeadAttentionLayer constructor with (int, int, IActivationFunction<T>, IInitializationStrategy<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -2148,7 +2166,7 @@ public static class DeserializationHelper
         var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig), activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find FlashAttentionLayer constructor with expected signature.");
+            throw new MissingLayerCtorException("Cannot find FlashAttentionLayer constructor with expected signature.");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -2173,7 +2191,7 @@ public static class DeserializationHelper
         var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), typeof(int), typeof(bool), activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find CachedMultiHeadAttention constructor with expected signature.");
+            throw new MissingLayerCtorException("Cannot find CachedMultiHeadAttention constructor with expected signature.");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -2197,7 +2215,7 @@ public static class DeserializationHelper
         var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(bool), activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find PagedCachedMultiHeadAttention constructor with expected signature.");
+            throw new MissingLayerCtorException("Cannot find PagedCachedMultiHeadAttention constructor with expected signature.");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -2262,7 +2280,7 @@ public static class DeserializationHelper
         var ctor = type.GetConstructor(new Type[] { iLayerType, typeof(string), typeof(int), typeof(double), typeof(bool) });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find MultiLoRAAdapter constructor with expected signature.");
+            throw new MissingLayerCtorException("Cannot find MultiLoRAAdapter constructor with expected signature.");
         }
 
         var instance = ctor.Invoke(new object[] { baseLayer, tasks[0], defaultRank, defaultAlpha, freezeBaseLayer });
@@ -2309,7 +2327,7 @@ public static class DeserializationHelper
             var createMethod = factoryType.GetMethod("CreateActivationFunction", BindingFlags.Public | BindingFlags.Static);
             if (createMethod is null)
             {
-                throw new InvalidOperationException("Cannot find ActivationFunctionFactory.CreateActivationFunction method.");
+                throw new MissingLayerCtorException("Cannot find ActivationFunctionFactory.CreateActivationFunction method.");
             }
 
             activationFunction = createMethod.Invoke(null, new object[] { activationFunctionEnum });
@@ -2325,7 +2343,7 @@ public static class DeserializationHelper
             var ctor = type.GetConstructor(new Type[] { vectorActivationType });
             if (ctor is null)
             {
-                throw new InvalidOperationException("Cannot find ActivationLayer constructor with (IVectorActivationFunction<T>).");
+                throw new MissingLayerCtorException("Cannot find ActivationLayer constructor with (IVectorActivationFunction<T>).");
             }
             return ctor.Invoke(new object[] { activationFunction });
         }
@@ -2333,7 +2351,7 @@ public static class DeserializationHelper
         var scalarCtor = type.GetConstructor(new Type[] { scalarActivationType });
         if (scalarCtor is null)
         {
-            throw new InvalidOperationException("Cannot find ActivationLayer constructor with (IActivationFunction<T>).");
+            throw new MissingLayerCtorException("Cannot find ActivationLayer constructor with (IActivationFunction<T>).");
         }
         return scalarCtor.Invoke(new object[] { activationFunction });
     }
@@ -2366,7 +2384,7 @@ public static class DeserializationHelper
         var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(bool), activationFuncType, activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find GRULayer constructor with (int hiddenSize, bool returnSequences, IActivationFunction<T>?, IActivationFunction<T>?).");
+            throw new MissingLayerCtorException("Cannot find GRULayer constructor with (int hiddenSize, bool returnSequences, IActivationFunction<T>?, IActivationFunction<T>?).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -2391,7 +2409,7 @@ public static class DeserializationHelper
         var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType, activationFuncType });
         if (ctor is null)
         {
-            throw new InvalidOperationException("Cannot find LSTMLayer constructor with (int, IActivationFunction<T>, IActivationFunction<T>).");
+            throw new MissingLayerCtorException("Cannot find LSTMLayer constructor with (int, IActivationFunction<T>, IActivationFunction<T>).");
         }
 
         object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -3197,28 +3215,46 @@ public static class DeserializationHelper
 
     /// <summary>
     /// Reflection-driven constructor matcher used as the universal fallback
-    /// when no dedicated branch exists for a layer. Iterates public
-    /// constructors ordered by descending parameter count, attempts to
-    /// resolve each parameter from (inputShape, outputShape, additionalParams,
-    /// default values), and invokes the FIRST constructor whose parameters
-    /// can all be filled. Returns null if no constructor can be filled —
+    /// when no dedicated branch exists for a layer. Walks every public
+    /// constructor, classifies how each parameter would be resolved from
+    /// (inputShape, outputShape, additionalParams, default values),
+    /// computes a per-ctor score weighted toward exact-metadata matches,
+    /// and invokes the highest-scoring constructor whose parameters can
+    /// all be filled. Returns null if no constructor can be filled —
     /// caller falls back to the legacy (int[]) path or throws.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>Selection caveat:</b> the longest-fillable-first ordering is a
-    /// heuristic, not a true scored match. A broader overload that accepts
-    /// our heuristic / defaulted arguments will beat a narrower overload
-    /// whose parameters are an exact metadata match purely because it has
-    /// more parameters. This is acceptable for the current 258/258
-    /// reconstruction goal because explicit branches handle the layers
-    /// where exact-vs-broad ordering matters; the matcher fallback only
-    /// runs for layers that don't appear in the explicit-branch list, and
-    /// those layers don't tend to ship with multiple competing-arity
-    /// constructors. A true scored match (rank by exact-name-match count
-    /// before falling through to defaults) is tracked as future work; the
-    /// current behavior is described accurately above so debuggers don't
-    /// mis-interpret the comment as a contract.
+    /// <b>Scoring (#1239):</b> previously this matcher ordered constructors
+    /// by descending arity and picked the first one that fully resolved.
+    /// That heuristic let a broad overload accepting our heuristic /
+    /// defaulted arguments beat a narrower overload whose parameters
+    /// would have been an exact metadata match — purely because it had
+    /// more parameters. The new score ranks candidates by:
+    /// </para>
+    /// <list type="number">
+    ///   <item><b>Metadata matches × 1000</b> — the parameter's name was
+    ///     a direct hit in <c>additionalParams</c>. Highest weight because
+    ///     the user explicitly persisted that exact value at serialize time.</item>
+    ///   <item><b>Shape-derived matches × 100</b> — the parameter's name
+    ///     pattern (<c>input*</c> / <c>output*</c> / <c>sequenceLength</c> /
+    ///     <c>modelDimension</c> / etc.) let us derive its value from
+    ///     <c>inputShape</c> or <c>outputShape</c>. Less authoritative
+    ///     than metadata but still informed by the layer's runtime shape.</item>
+    ///   <item><b>Default fallback × 0</b> — framework default value, ML-
+    ///     domain hyperparameter default, or hardcoded safe fallback.
+    ///     These contribute nothing to the score so a ctor with all-defaults
+    ///     never beats a ctor with even a single metadata hit.</item>
+    ///   <item><b>Arity tie-break</b> — parameter count adds 1 per param,
+    ///     so when two ctors are otherwise tied the longer one wins
+    ///     (preserves the prior heuristic for layers without metadata).</item>
+    /// </list>
+    /// <para>
+    /// Constructors are scored without invoking, sorted by descending score,
+    /// then attempted in order. First successful invoke wins. Failed invokes
+    /// are logged via <c>Trace.TraceWarning</c> and don't count against the
+    /// score (any ctor whose resolved args don't satisfy a runtime
+    /// precondition gets skipped, and the next-best score is tried).
     /// </para>
     /// </remarks>
     /// <remarks>
@@ -3241,14 +3277,23 @@ public static class DeserializationHelper
         Dictionary<string, object>? additionalParams,
         string layerType)
     {
-        var ctors = type.GetConstructors()
-            .OrderByDescending(c => c.GetParameters().Length)
-            .ToList();
+        var ctors = type.GetConstructors();
+
+        // Score each ctor without invoking. We accumulate a candidate list
+        // of (score, ctor, args) for every constructor whose parameters
+        // are all resolvable, then sort by descending score and try
+        // invokes in order. Pre-#1239 this loop just returned the first
+        // fully-resolvable ctor in descending-arity order, which let
+        // a 6-param all-defaults ctor beat a 4-param all-metadata-matched
+        // ctor purely on arity.
+        var candidates = new List<(int score, ConstructorInfo ctor, object?[] args, int arity, string sig)>();
 
         foreach (var ctor in ctors)
         {
             var parameters = ctor.GetParameters();
             var args = new object?[parameters.Length];
+            int metadataMatches = 0;
+            int shapeMatches = 0;
             bool allResolved = true;
 
             for (int pi = 0; pi < parameters.Length; pi++)
@@ -3265,11 +3310,11 @@ public static class DeserializationHelper
                 if (pType == typeof(int[]))
                 {
                     var arr = TryGetIntArray(additionalParams, capName);
-                    if (arr is not null) { args[pi] = arr; continue; }
-                    if (pNameLower.Contains("input") && pNameLower.Contains("shape")) { args[pi] = inputShape; continue; }
-                    if (pNameLower.Contains("output") && pNameLower.Contains("shape")) { args[pi] = outputShape; continue; }
-                    if (pNameLower.Contains("input")) { args[pi] = inputShape; continue; }
-                    if (pNameLower.Contains("output")) { args[pi] = outputShape; continue; }
+                    if (arr is not null) { args[pi] = arr; metadataMatches++; continue; }
+                    if (pNameLower.Contains("input") && pNameLower.Contains("shape")) { args[pi] = inputShape; shapeMatches++; continue; }
+                    if (pNameLower.Contains("output") && pNameLower.Contains("shape")) { args[pi] = outputShape; shapeMatches++; continue; }
+                    if (pNameLower.Contains("input")) { args[pi] = inputShape; shapeMatches++; continue; }
+                    if (pNameLower.Contains("output")) { args[pi] = outputShape; shapeMatches++; continue; }
                     if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
                     // Safe fallback: a single-element array. Used by params like
                     // padding (PaddingLayer), cropTop/Bottom/Left/Right
@@ -3286,17 +3331,17 @@ public static class DeserializationHelper
                 if (pType == typeof(int))
                 {
                     var v = TryGetInt(additionalParams, capName);
-                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    if (v.HasValue) { args[pi] = v.Value; metadataMatches++; continue; }
                     // Common transformer naming
-                    if (pNameLower == "sequencelength" && inputShape.Length > 0) { args[pi] = inputShape[0]; continue; }
-                    if (pNameLower == "modeldimension" && inputShape.Length > 1) { args[pi] = inputShape[1]; continue; }
+                    if (pNameLower == "sequencelength" && inputShape.Length > 0) { args[pi] = inputShape[0]; shapeMatches++; continue; }
+                    if (pNameLower == "modeldimension" && inputShape.Length > 1) { args[pi] = inputShape[1]; shapeMatches++; continue; }
                     bool inputish = pNameLower.Contains("input") || pNameLower.Contains("feature") || pNameLower.Contains("vocab")
                         || pNameLower.Contains("embedding") || pNameLower == "size" || pNameLower == "indim" || pNameLower == "infeatures"
                         || pNameLower.Contains("inputchannel") || pNameLower.Contains("inchannel");
                     bool outputish = pNameLower.Contains("output") || pNameLower == "outdim" || pNameLower == "outfeatures"
                         || pNameLower.Contains("outputchannel") || pNameLower.Contains("outchannel") || pNameLower == "numclass";
-                    if (inputish && inputShape.Length > 0) { args[pi] = inputShape[^1]; continue; }
-                    if (outputish && outputShape.Length > 0) { args[pi] = outputShape[^1]; continue; }
+                    if (inputish && inputShape.Length > 0) { args[pi] = inputShape[^1]; shapeMatches++; continue; }
+                    if (outputish && outputShape.Length > 0) { args[pi] = outputShape[^1]; shapeMatches++; continue; }
                     // ML-domain defaults take priority over any compiler-supplied
                     // default value, because divisibility constraints across
                     // hyperparameters (channels divisible by numHeads, etc.)
@@ -3315,7 +3360,7 @@ public static class DeserializationHelper
                 if (pType == typeof(bool))
                 {
                     var v = TryGetBool(additionalParams, capName);
-                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    if (v.HasValue) { args[pi] = v.Value; metadataMatches++; continue; }
                     if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
                     // Safe default: false. Most ML bool hyperparameters
                     // (freezeBaseLayer, useBias, useFlashAttention, causal,
@@ -3328,7 +3373,7 @@ public static class DeserializationHelper
                 if (pType == typeof(double))
                 {
                     var v = TryGetDouble(additionalParams, capName);
-                    if (v.HasValue) { args[pi] = v.Value; continue; }
+                    if (v.HasValue) { args[pi] = v.Value; metadataMatches++; continue; }
                     var hpDefault = TryDefaultMlDoubleHyperparameter(pNameLower);
                     if (hpDefault.HasValue) { args[pi] = hpDefault.Value; continue; }
                     if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
@@ -3338,7 +3383,7 @@ public static class DeserializationHelper
                 if (pType == typeof(float))
                 {
                     var v = TryGetDouble(additionalParams, capName);
-                    if (v.HasValue) { args[pi] = (float)v.Value; continue; }
+                    if (v.HasValue) { args[pi] = (float)v.Value; metadataMatches++; continue; }
                     var hpDefault = TryDefaultMlDoubleHyperparameter(pNameLower);
                     if (hpDefault.HasValue) { args[pi] = (float)hpDefault.Value; continue; }
                     if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
@@ -3347,7 +3392,7 @@ public static class DeserializationHelper
                 }
                 if (pType == typeof(string))
                 {
-                    if (additionalParams != null && additionalParams.TryGetValue(capName, out var sv) && sv is string s) { args[pi] = s; continue; }
+                    if (additionalParams != null && additionalParams.TryGetValue(capName, out var sv) && sv is string s) { args[pi] = s; metadataMatches++; continue; }
                     if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
                     args[pi] = string.Empty;
                     continue;
@@ -3365,13 +3410,14 @@ public static class DeserializationHelper
                     {
                         if (ev.GetType() == pType)
                         {
-                            args[pi] = ev; continue;
+                            args[pi] = ev; metadataMatches++; continue;
                         }
                         if (ev is string es)
                         {
                             try
                             {
                                 args[pi] = Enum.Parse(pType, es);
+                                metadataMatches++;
                                 continue;
                             }
                             catch (ArgumentException)
@@ -3392,7 +3438,7 @@ public static class DeserializationHelper
                 if (isScalarAct || isVectorAct)
                 {
                     var act = TryRestoreActivation<T>(additionalParams);
-                    if (act != null && pType.IsAssignableFrom(act.GetType())) { args[pi] = act; continue; }
+                    if (act != null && pType.IsAssignableFrom(act.GetType())) { args[pi] = act; metadataMatches++; continue; }
                     if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
                     if (!pType.IsValueType) { args[pi] = null; continue; }  // most activation params are nullable interface refs
                     allResolved = false; break;
@@ -3416,6 +3462,7 @@ public static class DeserializationHelper
                         && jv is int[][] jarr)
                     {
                         args[pi] = jarr;
+                        metadataMatches++;
                         continue;
                     }
                     args[pi] = new int[][] { inputShape, inputShape };
@@ -3443,6 +3490,7 @@ public static class DeserializationHelper
                     if (fromMeta is not null)
                     {
                         args[pi] = fromMeta;
+                        metadataMatches++;
                         continue;
                     }
                 }
@@ -3452,7 +3500,7 @@ public static class DeserializationHelper
                     continue;
                 }
 
-                // 8. other reference types — default value or null. Reject value
+                // 9. other reference types — default value or null. Reject value
                 // types we don't know how to fill (otherwise we'd hand the ctor
                 // a default(T) that probably violates a precondition).
                 if (p.HasDefaultValue) { args[pi] = p.DefaultValue; continue; }
@@ -3462,20 +3510,67 @@ public static class DeserializationHelper
 
             if (allResolved)
             {
-                try { return ctor.Invoke(args); }
-                catch (Exception ex)
-                {
-                    // Best-effort matcher: any failure means this constructor
-                    // didn't accept our defaults — try the next overload.
-                    // Trace the rejection so a missing fallback default in
-                    // TryDefaultMlIntHyperparameter / TryDefaultMlDouble-
-                    // Hyperparameter is debuggable when reconstruction
-                    // fails downstream with no breadcrumb back to here.
-                    System.Diagnostics.Trace.TraceWarning(
-                        $"DeserializationHelper.TryConstructByMatchingMetadata: " +
-                        $"ctor {ctor} for {type.Name} rejected our resolved args: " +
-                        $"{(ex is TargetInvocationException tie ? tie.InnerException?.Message : ex.Message)}");
-                }
+                // Score formula (#1239 — see method docstring): metadata
+                // hits dominate (×1000), shape-derived hits secondary
+                // (×100), arity tie-breaks (+1 per param). Defaults
+                // contribute 0 so a ctor with all-defaults can never beat
+                // a ctor with even a single metadata hit.
+                int score = (metadataMatches * 1000) + (shapeMatches * 100) + parameters.Length;
+                // Capture parameter-type FullName signature as the final
+                // tie-break key. List<T>.Sort is not guaranteed stable, so
+                // when (score, arity) collide (e.g., two overloads of the
+                // same arity differing only by IActivationFunction<T> vs
+                // IInitializationStrategy<T>) we need a deterministic key
+                // to make ctor selection reproducible across runs. Sorting
+                // signatures lexicographically gives us cross-process /
+                // cross-machine determinism that depends only on the
+                // type's metadata, not on reflection iteration order.
+                // Use AssemblyQualifiedName when available so two types
+                // sharing a simple name in different assemblies (e.g. an
+                // internal `MyLayer` in two assemblies linked together)
+                // can't collide on the tie-break and silently switch
+                // ctor selection. FullName drops the assembly identity
+                // and Name additionally drops the namespace — both
+                // weaker. ToString() is the deterministic fallback for
+                // open generic parameters / dynamic types where AQN
+                // returns null.
+                string sig = string.Join(",",
+                    parameters.Select(p => p.ParameterType.AssemblyQualifiedName ?? p.ParameterType.ToString()));
+                candidates.Add((score, ctor, args, parameters.Length, sig));
+            }
+        }
+
+        // Sort by descending score, then by parameter-type signature
+        // ascending. Score already incorporates arity (+1 per parameter
+        // in the score formula), so a separate arity tie-break would be
+        // redundant — when scores tie, arities tie too. The signature
+        // key turns an unstable tie-break into a deterministic one for
+        // the case of two same-arity overloads differing only by
+        // parameter type (e.g. IActivationFunction<T> vs
+        // IInitializationStrategy<T>) — see the candidates.Add call
+        // above for the rationale.
+        candidates.Sort((a, b) =>
+        {
+            int byScore = b.score.CompareTo(a.score);
+            if (byScore != 0) return byScore;
+            return string.CompareOrdinal(a.sig, b.sig);
+        });
+
+        foreach (var (_, ctor, args, _, _) in candidates)
+        {
+            try { return ctor.Invoke(args); }
+            catch (Exception ex)
+            {
+                // Best-effort matcher: any failure means this constructor
+                // didn't accept our resolved args — try the next-best score.
+                // Trace the rejection so a missing fallback default in
+                // TryDefaultMlIntHyperparameter / TryDefaultMlDouble-
+                // Hyperparameter is debuggable when reconstruction fails
+                // downstream with no breadcrumb back to here.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DeserializationHelper.TryConstructByMatchingMetadata: " +
+                    $"ctor {ctor} for {type.Name} rejected our resolved args: " +
+                    $"{(ex is TargetInvocationException tie ? tie.InnerException?.Message : ex.Message)}");
             }
         }
 

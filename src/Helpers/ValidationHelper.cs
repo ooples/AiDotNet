@@ -142,16 +142,37 @@ public static class ValidationHelper<T>
     /// </remarks>
     public static void ValidatePoissonData(Vector<T> y)
     {
-        // Coerce continuous values to non-negative integers (count data)
-        // rather than throwing, to handle cases where data comes from
-        // preprocessing pipelines that produce continuous values.
+        // Fail fast on null with a clear message instead of letting
+        // y.Length throw NullReferenceException — the latter strips
+        // the parameter name and gives no hint about what was wrong.
+        if (y is null)
+        {
+            throw new ArgumentNullException(nameof(y),
+                "Poisson target vector cannot be null.");
+        }
+
+        // Poisson regression requires non-negative integer count data.
+        // Throw on bad input rather than silently coercing — coercion
+        // would mask upstream data-quality bugs (e.g., a regression
+        // pipeline accidentally feeding continuous values). Callers
+        // who genuinely need preprocessing should round/clip the data
+        // explicitly before calling this validator, not depend on the
+        // validator to do it for them. Method name "Validate" implies
+        // a fail-fast throw contract; coercion would be a separate
+        // method (CoercePoissonData) if/when we need that path.
         for (int i = 0; i < y.Length; i++)
         {
-            double yi = _numOps.ToDouble(y[i]);
-            double rounded = Math.Max(0.0, Math.Round(yi));
-            if (yi != rounded)
+            if (_numOps.LessThan(y[i], _numOps.Zero))
             {
-                y[i] = _numOps.FromDouble(rounded);
+                throw new ArgumentException(
+                    $"Poisson regression requires non-negative count data; got {_numOps.ToDouble(y[i])} at index {i}.",
+                    nameof(y));
+            }
+            if (!MathHelper.IsInteger(y[i]))
+            {
+                throw new ArgumentException(
+                    $"Poisson regression requires integer count data; got {_numOps.ToDouble(y[i])} at index {i}.",
+                    nameof(y));
             }
         }
     }

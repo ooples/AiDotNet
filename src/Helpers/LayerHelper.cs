@@ -435,17 +435,83 @@ public static class LayerHelper<T>
 
         int inputSize = architecture.CalculatedInputSize;
 
-        // Input layer
-        yield return new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        // Hidden layers
+        // Build the layer chain, then chain-resolve shapes from the
+        // architecture's known input dim. Layers constructed via the
+        // post-#1209 lazy ctors stay unresolved (ParameterCount = 0)
+        // until first Forward; chain-resolving here lets callers
+        // observe ParameterCount > 0 immediately and matches the
+        // pre-lazy contract this helper used to deliver.
+        var layers = new List<ILayer<T>>(hiddenLayerCount + 1)
+        {
+            new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>)
+        };
         for (int i = 0; i < hiddenLayerCount - 1; i++)
         {
-            yield return new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+            layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
         }
+        layers.Add(new DenseLayer<T>(outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>));
 
-        // Output layer (assuming classification task with softmax)
-        yield return new DenseLayer<T>(outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
+    }
+
+    /// <summary>
+    /// Convenience: chain-resolve lazy shapes and yield each layer in
+    /// order. Many builder methods repeat the
+    /// <c>ChainResolveLazyLayers(layers, [inputSize]); foreach (var l in
+    /// layers) yield return l;</c> pattern at the end; this helper keeps
+    /// the contract consistent across them and reduces drift if the
+    /// resolution policy ever changes.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> ResolveAndYield(IList<ILayer<T>> layers, int[] rootInputShape)
+    {
+        ChainResolveLazyLayers(layers, rootInputShape);
+        foreach (var layer in layers) yield return layer;
+    }
+
+    /// <summary>
+    /// Walks a sequential layer list and resolves each lazy layer's input
+    /// shape from the previous layer's output (or <paramref name="rootInputShape"/>
+    /// for the first layer). Layers already resolved are skipped via
+    /// <see cref="LayerBase{T}.IsShapeResolved"/>.
+    /// </summary>
+    private static void ChainResolveLazyLayers(IList<ILayer<T>> layers, int[] rootInputShape)
+    {
+        if (rootInputShape == null || rootInputShape.Length == 0) return;
+        // Skip if any axis is non-positive — chain resolution requires
+        // concrete dims, and a -1 sentinel anywhere means the caller
+        // intends fully-deferred resolution at first Forward.
+        foreach (var d in rootInputShape) if (d <= 0) return;
+
+        int[] running = rootInputShape;
+        foreach (var layer in layers)
+        {
+            if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                try { lb.ResolveFromShape(running); }
+                catch (Exception ex)
+                {
+                    // ResolveFromShape can throw if the shape doesn't
+                    // satisfy the layer's runtime preconditions (e.g.,
+                    // a Conv layer expecting rank-3 input but the
+                    // helper passed a rank-1 vector). Stop chaining
+                    // here — downstream layers may still be resolved
+                    // by their own Forward calls. We do not re-throw
+                    // because helpers historically returned working
+                    // layer collections even when chain-resolution
+                    // wasn't possible. Surface the failure via Trace
+                    // so debugging a "ParameterCount = 0 after build"
+                    // surprise has a breadcrumb back to the actual
+                    // shape-mismatch cause instead of an empty pipeline.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"LayerHelper.ChainResolveLazyShapes: stopped at " +
+                        $"{layer.GetType().Name} (running shape " +
+                        $"[{string.Join(", ", running)}]): {ex.Message}");
+                    return;
+                }
+            }
+            running = layer.GetOutputShape();
+        }
     }
 
     /// <summary>
@@ -754,12 +820,18 @@ public static class LayerHelper<T>
         int hidden1 = Math.Min(DefaultDbmHiddenCap, inputSize * DefaultDbmHiddenMultiplier);
         int hidden2 = hidden1;
 
-        // RBM layers per Salakhutdinov & Hinton 2009 (no BatchNorm — DBMs use CD pretraining, not BN)
-        yield return new RBMLayer<T>(inputSize, hidden1, new SigmoidActivation<T>() as IActivationFunction<T>);
-        yield return new RBMLayer<T>(hidden1, hidden2, new SigmoidActivation<T>() as IActivationFunction<T>);
-
-        // Output projection: maps from last hidden to output size
-        yield return new DenseLayer<T>(architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+        // RBM layers per Salakhutdinov & Hinton 2009 (no BatchNorm — DBMs use CD pretraining, not BN).
+        // Build into a list and chain-resolve so callers see ParameterCount > 0
+        // immediately (the eager RBM ctors actually allocate, so this is mostly
+        // for the trailing DenseLayer, but keeping the helper consistent).
+        var layers = new List<ILayer<T>>
+        {
+            new RBMLayer<T>(inputSize, hidden1, new SigmoidActivation<T>() as IActivationFunction<T>),
+            new RBMLayer<T>(hidden1, hidden2, new SigmoidActivation<T>() as IActivationFunction<T>),
+            new DenseLayer<T>(architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>),
+        };
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>
@@ -1316,18 +1388,25 @@ public static class LayerHelper<T>
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
 
-        // Initialize layers — RBMLayer applies sigmoid internally,
-        // no extra ActivationLayer needed (double sigmoid compresses output to [0.5, 0.73])
+        // Build the DBN stack, then chain-resolve so callers see
+        // ParameterCount > 0 on every layer. RBMs use the eager ctor
+        // here (they allocate at construction); the trailing DenseLayer
+        // is lazy and benefits from chain-resolution. Without it the
+        // Dense's input dim wouldn't be known until first Forward.
+        var layers = new List<ILayer<T>>(layerSizes.Length);
+
+        // RBMLayer applies sigmoid internally — no extra ActivationLayer
+        // needed (double sigmoid would compress output to [0.5, 0.73]).
         for (int i = 0; i < layerSizes.Length - 1; i++)
         {
             int visibleUnits = layerSizes[i];
             int hiddenUnits = layerSizes[i + 1];
 
-            yield return new RBMLayer<T>(
+            layers.Add(new RBMLayer<T>(
                 visibleUnits: visibleUnits,
                 hiddenUnits: hiddenUnits,
                 scalarActivation: sigmoidActivation
-            );
+            ));
         }
 
         // Add the final output layer — use softmax for classification, identity for regression
@@ -1335,7 +1414,10 @@ public static class LayerHelper<T>
         IActivationFunction<T> finalActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
             ? softmaxActivation
             : new IdentityActivation<T>();
-        yield return new DenseLayer<T>(outputSize, finalActivation);
+        layers.Add(new DenseLayer<T>(outputSize, finalActivation));
+
+        ChainResolveLazyLayers(layers, new[] { layerSizes[0] });
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>
@@ -1439,20 +1521,28 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultESNLayers(int inputSize, int outputSize, int reservoirSize, double spectralRadius = 0.9, double sparsity = 0.1)
     {
-        // Input to Reservoir connections (fixed random weights)
-        yield return new DenseLayer<T>(reservoirSize, new IdentityActivation<T>() as IActivationFunction<T>);
+        // Build the ESN stack into a list and chain-resolve from
+        // inputSize so every Dense reports ParameterCount > 0
+        // immediately. ReservoirLayer's recurrent weights are fixed
+        // random (not trained), but they're still allocated by
+        // chain-resolution.
+        var layers = new List<ILayer<T>>
+        {
+            // Input to Reservoir connections (fixed random weights)
+            new DenseLayer<T>(reservoirSize, new IdentityActivation<T>() as IActivationFunction<T>),
+            // Reservoir (recurrent connections, fixed random weights).
+            // Already applies tanh internally per Jaeger (2001) — no
+            // extra ActivationLayer needed here (double-tanh compresses
+            // the output).
+            new ReservoirLayer<T>(reservoirSize, reservoirSize, spectralRadius: spectralRadius, connectionProbability: sparsity),
+            // Output layer (Reservoir → output, trainable)
+            new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>),
+            // Output activation (problem-dependent — identity by default)
+            new ActivationLayer<T>(new IdentityActivation<T>() as IActivationFunction<T>),
+        };
 
-        // Reservoir (recurrent connections, fixed random weights)
-        yield return new ReservoirLayer<T>(reservoirSize, reservoirSize, spectralRadius: spectralRadius, connectionProbability: sparsity);
-
-        // ReservoirLayer already applies tanh internally per Jaeger (2001).
-        // No extra ActivationLayer needed — double tanh compresses output.
-
-        // Output layer (Reservoir to output, trainable)
-        yield return new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-
-        // Output activation (optional, depends on the problem)
-        yield return new ActivationLayer<T>(new IdentityActivation<T>() as IActivationFunction<T>);
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>
@@ -2620,29 +2710,37 @@ public static class LayerHelper<T>
         // Use default Gaussian RBF if not provided
         IRadialBasisFunction<T> rbf = rbfFunction ?? new GaussianRBF<T>();
 
-        // Input layer defines the expected input shape for the network.
-        yield return new InputLayer<T>(inputSize);
+        // Build the RBF network into a list, chain-resolve so the
+        // trailing ActivationLayer reports a concrete output shape
+        // (its lazy ctor leaves OutputShape with a -1 sentinel until
+        // first Forward).
+        var layers = new List<ILayer<T>>
+        {
+            // Input layer defines the expected input shape for the network.
+            new InputLayer<T>(inputSize),
+            // RBF Layer
+            new RBFLayer<T>(inputSize, hiddenSize, rbf),
+            // Output Layer (Dense)
+            new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>),
+        };
 
-        // RBF Layer
-        yield return new RBFLayer<T>(inputSize, hiddenSize, rbf);
-
-        // Output Layer (Dense)
-        yield return new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
-
-        // Add the final Activation Layer based on task type
+        // Final activation based on task type
         if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
         {
-            yield return new ActivationLayer<T>(new SigmoidActivation<T>() as IVectorActivationFunction<T>);
+            layers.Add(new ActivationLayer<T>(new SigmoidActivation<T>() as IVectorActivationFunction<T>));
         }
         else if (architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification)
         {
-            yield return new ActivationLayer<T>(new SoftmaxActivation<T>() as IVectorActivationFunction<T>);
+            layers.Add(new ActivationLayer<T>(new SoftmaxActivation<T>() as IVectorActivationFunction<T>));
         }
         else
         {
             // For regression tasks
-            yield return new ActivationLayer<T>(new IdentityActivation<T>() as IVectorActivationFunction<T>);
+            layers.Add(new ActivationLayer<T>(new IdentityActivation<T>() as IVectorActivationFunction<T>));
         }
+
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>
@@ -2881,37 +2979,33 @@ public static class LayerHelper<T>
             _ => null // Regression and other task types default to linear outputs
         };
 
-        // Create input layer to first hidden layer
-        int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
-        yield return new DenseLayer<T>(firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+        // Build the layer chain into a list, then chain-resolve from
+        // the architecture's known input size before yielding. Lazy
+        // DenseLayers constructed below have ParameterCount=0 until
+        // shape resolution; chain-resolving here lets callers observe
+        // ParameterCount > 0 immediately (matches the pre-#1209 eager
+        // contract this helper used to deliver).
+        var layers = new List<ILayer<T>>();
 
-        // Create hidden layers
-        for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
+        // Only emit a hidden block when the caller actually requested
+        // hidden layers; an empty list means "linear / single-layer
+        // network", and forcing a ReLU head before the output Dense
+        // changes the requested architecture.
+        for (int i = 0; i < hiddenLayerSizes.Count; i++)
         {
-            int currentLayerSize = hiddenLayerSizes[i];
-            int nextLayerSize = hiddenLayerSizes[i + 1];
-
-            yield return new DenseLayer<T>(nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+            int hiddenSize = hiddenLayerSizes[i];
+            layers.Add(new DenseLayer<T>(hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>));
+            layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
         }
 
-        // Create last hidden layer to output layer
-        if (hiddenLayerSizes.Count > 0)
-        {
-            int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
-            yield return new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>());
-        }
-        else
-        {
-            // If no hidden layers, connect input directly to output
-            yield return new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>());
-        }
-
+        layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
         if (outputActivation != null)
         {
-            yield return new ActivationLayer<T>(outputActivation);
+            layers.Add(new ActivationLayer<T>(outputActivation));
         }
+
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>
@@ -2961,30 +3055,54 @@ public static class LayerHelper<T>
                 break;
         }
 
-        int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
-        yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+        // Build the Bayesian network into a list and chain-resolve so
+        // the trailing ActivationLayers report concrete output shapes
+        // (their lazy ctor leaves OutputShape with -1 sentinel until
+        // first Forward; without chain-resolution, GetOutputShape
+        // returns -1 and breaks downstream shape-validation tests).
+        //
+        // Activation contract: BayesianDenseLayer.Forward applies its
+        // configured activation internally. Passing a non-null
+        // activation here AND adding a sibling ActivationLayer would
+        // double-apply (e.g., ReLU∘ReLU is harmless but wasted compute;
+        // softmax∘softmax collapses outputs toward uniform — the same
+        // bug that previously affected the output layer). Construct
+        // every BayesianDenseLayer with Identity (null) and use the
+        // separate ActivationLayer as the sole activation step.
+        var layers = new List<ILayer<T>>();
+        IActivationFunction<T>? noOp = null;
 
-        for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
-        {
-            int currentLayerSize = hiddenLayerSizes[i];
-            int nextLayerSize = hiddenLayerSizes[i + 1];
-
-            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(currentLayerSize, nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
-        }
-
+        // Only emit the hidden block when hidden layers were requested;
+        // for the zero-hidden case (linear Bayesian classifier) we skip
+        // straight to the inputSize → outputSize Bayesian layer + softmax.
+        // Previously the code added a redundant inputSize → outputSize
+        // hidden block plus a second inputSize → outputSize output block,
+        // silently changing the requested architecture.
         if (hiddenLayerSizes.Count > 0)
         {
+            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, hiddenLayerSizes[0], noOp));
+            layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
+
+            for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
+            {
+                int currentLayerSize = hiddenLayerSizes[i];
+                int nextLayerSize = hiddenLayerSizes[i + 1];
+                layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(currentLayerSize, nextLayerSize, noOp));
+                layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
+            }
+
             int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
-            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(lastHiddenLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(lastHiddenLayerSize, outputSize, noOp));
         }
         else
         {
-            yield return new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
+            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, outputSize, noOp));
         }
 
-        yield return new ActivationLayer<T>(new SoftmaxActivation<T>() as IActivationFunction<T>);
+        layers.Add(new ActivationLayer<T>(new SoftmaxActivation<T>() as IActivationFunction<T>));
+
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>
@@ -3264,25 +3382,26 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputSize = inputShape.Aggregate((a, b) => a * b);  // Flatten multi-dimensional input
 
-        // Input layer (flattening if necessary)
+        // Build the layer chain into a list, chain-resolve from the
+        // architecture's input shape, then yield. Lazy DenseLayers
+        // built below would otherwise have ParameterCount=0 until
+        // first Forward; chain-resolving lets callers observe
+        // ParameterCount > 0 immediately.
+        var layers = new List<ILayer<T>>();
         if (inputShape.Length > 1)
         {
-            yield return new FlattenLayer<T>();
+            layers.Add(new FlattenLayer<T>());
         }
-
-        // First hidden layer
-        yield return new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        // Additional hidden layers
+        layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
         for (int i = 1; i < hiddenLayerCount; i++)
         {
-            yield return new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>);
+            layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
         }
-
-        // Output layer
         var outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
+        layers.Add(new DenseLayer<T>(architecture.OutputSize, outputActivation));
 
-        yield return new DenseLayer<T>(architecture.OutputSize, outputActivation);
+        ChainResolveLazyLayers(layers, inputShape);
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>
@@ -3526,17 +3645,20 @@ public static class LayerHelper<T>
         // Hamiltonian networks use Tanh for smooth gradients
         var hiddenActivation = new TanhActivation<T>() as IActivationFunction<T>;
 
-        // First hidden layer
-        yield return new DenseLayer<T>(hiddenLayerSize, hiddenActivation);
-
-        // Additional hidden layers
+        // Build the Hamiltonian net into a list, chain-resolve from the
+        // architecture's known input dim so every layer reports
+        // ParameterCount > 0 immediately (callers compute Hamiltonian
+        // gradients which need materialized weights).
+        var layers = new List<ILayer<T>>(hiddenLayerCount + 1);
+        layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation));
         for (int i = 1; i < hiddenLayerCount; i++)
         {
-            yield return new DenseLayer<T>(hiddenLayerSize, hiddenActivation);
+            layers.Add(new DenseLayer<T>(hiddenLayerSize, hiddenActivation));
         }
+        layers.Add(new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>));
 
-        // Output layer - linear activation for unbounded energy output
-        yield return new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>);
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
     }
 
     /// <summary>

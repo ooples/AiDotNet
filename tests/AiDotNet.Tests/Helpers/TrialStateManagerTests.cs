@@ -10,6 +10,16 @@ namespace AiDotNet.Tests.Helpers;
 /// Tests for <see cref="TrialStateManager"/> covering all trial state transitions,
 /// tamper detection, and edge cases.
 /// </summary>
+/// <remarks>
+/// Several tests mutate <c>TrialStateManager.TrialMessageHandler</c>, a
+/// process-global static. xUnit runs test classes in parallel by default,
+/// so two classes both touching that handler concurrently would clobber
+/// each other's captured-message lists. The xUnit
+/// <see cref="CollectionAttribute"/> disables parallel execution within
+/// this class's collection — pinning the static-handler tests to a
+/// single execution context.
+/// </remarks>
+[Collection("TrialStateManager-static-handler")]
 public class TrialStateManagerTests : IDisposable
 {
     private readonly string _tempDir;
@@ -351,17 +361,22 @@ public class TrialStateManagerTests : IDisposable
     [Fact(Timeout = 60000)]
     public async Task ConsoleMessage_MatchesExpectedFormat()
     {
+        // TrialStateManager.EmitTrialMessage routes to stderr by default
+        // (to avoid polluting stdout) and offers an internal
+        // TrialMessageHandler hook for tests. Using the hook is more
+        // reliable than redirecting Console.Error since the impl can
+        // bypass Console.Error in environments without a TTY.
         var manager = new TrialStateManager(_trialFilePath);
 
-        var originalOut = Console.Out;
+        var captured = new List<string>();
+        var previousHandler = TrialStateManager.TrialMessageHandler;
+        TrialStateManager.TrialMessageHandler = msg => captured.Add(msg);
         try
         {
-            using var sw = new StringWriter();
-            Console.SetOut(sw);
-
             manager.RecordOperationOrThrow();
 
-            string output = sw.ToString().Trim();
+            Assert.Single(captured);
+            string output = captured[0].Trim();
 
             // Verify format: "AiDotNet Community — X day(s) and Y operation(s) remaining in free trial. Register for a free license at https://aidotnet.dev"
             Assert.Matches(
@@ -374,7 +389,7 @@ public class TrialStateManagerTests : IDisposable
         }
         finally
         {
-            Console.SetOut(originalOut);
+            TrialStateManager.TrialMessageHandler = previousHandler;
         }
     }
 
@@ -383,29 +398,28 @@ public class TrialStateManagerTests : IDisposable
     {
         var manager = new TrialStateManager(_trialFilePath);
 
-        var originalOut = Console.Out;
+        var captured = new List<string>();
+        var previousHandler = TrialStateManager.TrialMessageHandler;
+        TrialStateManager.TrialMessageHandler = msg => captured.Add(msg);
         try
         {
-            var messages = new List<string>();
-
             for (int i = 0; i < 3; i++)
             {
-                using var sw = new StringWriter();
-                Console.SetOut(sw);
                 manager.RecordOperationOrThrow();
-                messages.Add(sw.ToString().Trim());
             }
 
-            // After 1st op: 9 remaining
-            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 1} operation(s)", messages[0]);
-            // After 2nd op: 8 remaining
-            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 2} operation(s)", messages[1]);
-            // After 3rd op: 7 remaining
-            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 3} operation(s)", messages[2]);
+            Assert.Equal(3, captured.Count);
+
+            // After 1st op: TrialOperationLimit-1 remaining
+            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 1} operation(s)", captured[0]);
+            // After 2nd op: TrialOperationLimit-2 remaining
+            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 2} operation(s)", captured[1]);
+            // After 3rd op: TrialOperationLimit-3 remaining
+            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 3} operation(s)", captured[2]);
         }
         finally
         {
-            Console.SetOut(originalOut);
+            TrialStateManager.TrialMessageHandler = previousHandler;
         }
     }
 
@@ -414,19 +428,100 @@ public class TrialStateManagerTests : IDisposable
     {
         var manager = new TrialStateManager(_trialFilePath);
 
-        var originalOut = Console.Out;
+        var captured = new List<string>();
+        var previousHandler = TrialStateManager.TrialMessageHandler;
+        TrialStateManager.TrialMessageHandler = msg => captured.Add(msg);
         try
         {
-            using var sw = new StringWriter();
-            Console.SetOut(sw);
             manager.RecordOperationOrThrow();
-
-            string output = sw.ToString();
-            Assert.Contains("https://aidotnet.dev", output);
+            Assert.Single(captured);
+            Assert.Contains("https://aidotnet.dev", captured[0]);
         }
         finally
         {
-            Console.SetOut(originalOut);
+            TrialStateManager.TrialMessageHandler = previousHandler;
         }
+    }
+
+    // Tombstone path mirrors src/Helpers/TrialStateManager.cs:75 —
+    // {trialFilePath}.tombstone. Exposed here as a constant so the
+    // tombstone-regression tests stay in lock-step with the production
+    // path naming if it ever changes.
+    private string TombstonePath => _trialFilePath + ".tombstone";
+
+    [Fact(Timeout = 60000)]
+    public async Task Tombstone_NotCreatedBefore_FirstSuccessfulOperation()
+    {
+        // Audit PR-#1246 #5 (1 of 3): tombstone must only appear AFTER
+        // a successful RecordOperationOrThrow persists. GetStatus alone
+        // (and the implicit LoadOrCreateState during construction)
+        // should not create the tombstone — otherwise a passive
+        // status-check would commit the user to "trial started" without
+        // them ever performing a real op.
+        var manager = new TrialStateManager(_trialFilePath);
+
+        // Construction alone — no tombstone yet.
+        Assert.False(File.Exists(TombstonePath));
+
+        // GetStatus is a passive read — still no tombstone.
+        _ = manager.GetStatus();
+        Assert.False(File.Exists(TombstonePath));
+
+        // The first real op writes both trial file AND tombstone.
+        manager.RecordOperationOrThrow();
+        Assert.True(File.Exists(_trialFilePath));
+        Assert.True(File.Exists(TombstonePath));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Tombstone_BlocksTrialResetByDeletion()
+    {
+        // Audit PR-#1246 #5 (2 of 3): if a user manually deletes the
+        // trial file to bypass the trial limit, the tombstone (left
+        // behind by a previous SaveState) makes LoadOrCreateState
+        // return CreateExpiredState, so subsequent RecordOperationOrThrow
+        // throws the trial-expired exception instead of starting fresh.
+        var manager1 = new TrialStateManager(_trialFilePath);
+        manager1.RecordOperationOrThrow();
+        Assert.True(File.Exists(_trialFilePath));
+        Assert.True(File.Exists(TombstonePath));
+
+        // Simulate user-driven trial bypass: delete the trial file
+        // without going through Reset() (which would also delete the
+        // tombstone).
+        File.Delete(_trialFilePath);
+        Assert.False(File.Exists(_trialFilePath));
+        Assert.True(File.Exists(TombstonePath));
+
+        // New manager instance — LoadOrCreateState sees missing trial
+        // file + present tombstone → returns expired state.
+        var manager2 = new TrialStateManager(_trialFilePath);
+        var status = manager2.GetStatus();
+        Assert.True(status.IsExpired);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Reset_DeletesBothTrialFileAndTombstone()
+    {
+        // Audit PR-#1246 #5 (3 of 3): the internal Reset() path (used
+        // by tests and license-key activation) must clear BOTH files
+        // so a legitimate post-reset RecordOperationOrThrow starts a
+        // fresh trial — not an expired one (which would happen if the
+        // tombstone lingered).
+        var manager = new TrialStateManager(_trialFilePath);
+        manager.RecordOperationOrThrow();
+        Assert.True(File.Exists(_trialFilePath));
+        Assert.True(File.Exists(TombstonePath));
+
+        // Reset is internal — accessible to test via InternalsVisibleTo.
+        manager.Reset();
+        Assert.False(File.Exists(_trialFilePath));
+        Assert.False(File.Exists(TombstonePath));
+
+        // Post-reset op succeeds — trial is fresh, not expired.
+        manager.RecordOperationOrThrow();
+        var status = manager.GetStatus();
+        Assert.False(status.IsExpired);
+        Assert.Equal(1, status.OperationsUsed);
     }
 }

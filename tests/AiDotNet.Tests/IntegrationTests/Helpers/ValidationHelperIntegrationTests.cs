@@ -96,14 +96,35 @@ public class ValidationHelperIntegrationTests
     public async Task ValidatePoissonData_NegativeValue_Throws()
     {
         var y = new Vector<double>(new double[] { 1.0, -1.0, 3.0 });
-        Assert.Throws<ArgumentException>(() => ValidationHelper<double>.ValidatePoissonData(y));
+        var ex = Assert.Throws<ArgumentException>(() => ValidationHelper<double>.ValidatePoissonData(y));
+        // Pin the message contract — silent coercion would not throw at
+        // all, and a different exception type / message would suggest a
+        // behavior change that downstream pipelines depend on.
+        Assert.Contains("non-negative", ex.Message);
+        Assert.Contains("-1", ex.Message);
+        Assert.Equal("y", ex.ParamName);
     }
 
     [Fact(Timeout = 120000)]
     public async Task ValidatePoissonData_NonInteger_Throws()
     {
         var y = new Vector<double>(new double[] { 1.0, 2.5, 3.0 });
-        Assert.Throws<ArgumentException>(() => ValidationHelper<double>.ValidatePoissonData(y));
+        var ex = Assert.Throws<ArgumentException>(() => ValidationHelper<double>.ValidatePoissonData(y));
+        Assert.Contains("integer", ex.Message);
+        Assert.Contains("2.5", ex.Message);
+        Assert.Equal("y", ex.ParamName);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ValidatePoissonData_NullVector_ThrowsArgumentNull()
+    {
+        // Pin the null-input contract so a regression that silently
+        // returned (or that let y.Length throw a contextless
+        // NullReferenceException) doesn't slip through.
+        var ex = Assert.Throws<ArgumentNullException>(() =>
+            ValidationHelper<double>.ValidatePoissonData(null!));
+        Assert.Equal("y", ex.ParamName);
+        Assert.Contains("Poisson target vector cannot be null", ex.Message);
     }
 
     #endregion

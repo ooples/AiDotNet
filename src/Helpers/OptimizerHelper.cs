@@ -191,13 +191,24 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// </remarks>
     private static Matrix<T> SelectFeaturesMatrix(Matrix<T> X, List<int> selectedFeatures)
     {
+        // Empty selection returns an empty matrix with the same row
+        // count — pre-fix this branch silently expanded an empty list
+        // to "all columns", which masked upstream bugs where a feature
+        // selector returned an empty list (the model would then train
+        // on all features without any error). Match the test contract:
+        // empty in, empty out.
+        if (selectedFeatures.Count == 0)
+        {
+            return new Matrix<T>(X.Rows, 0);
+        }
+
         // Filter out-of-bounds indices to prevent crashes from models
         // with coefficient vectors larger than the input feature count.
+        // Note: this preserves the original "filter invalid silently"
+        // behavior for non-empty lists; only fully-empty lists short-
+        // circuit above. An entirely-invalid non-empty list still
+        // results in an empty matrix.
         var validFeatures = selectedFeatures.Where(f => f >= 0 && f < X.Columns).ToList();
-        if (validFeatures.Count == 0)
-        {
-            validFeatures = Enumerable.Range(0, X.Columns).ToList();
-        }
 
         // Short-circuit: when all columns are selected in order, return the original
         // matrix to avoid O(rows × cols) copy on every epoch.
@@ -238,15 +249,20 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// </remarks>
     private static Tensor<T> SelectFeaturesTensor(Tensor<T> X, List<int> selectedFeatures)
     {
-        // Handle 1D tensors: select elements at the specified indices
-        if (X.Shape.Length == 1)
+        // Reject 1D tensors: SelectFeatures' contract is "select feature
+        // columns from a [batch, features, ...] tensor". A 1D tensor has
+        // no separate batch axis — calling this on a 1D tensor likely
+        // means the caller passed a per-sample feature vector instead of
+        // a batched dataset. Throw instead of silently treating axis 0
+        // as the feature dim, which would produce a vector that looks
+        // valid but represents the wrong slice semantics.
+        if (X.Shape.Length < 2)
         {
-            var selected = new Tensor<T>(new[] { selectedFeatures.Count });
-            for (int j = 0; j < selectedFeatures.Count; j++)
-            {
-                selected[j] = X[selectedFeatures[j]];
-            }
-            return selected;
+            throw new ArgumentException(
+                $"SelectFeatures requires a tensor with rank>=2 (batch axis + feature axis); " +
+                $"got rank {X.Shape.Length}. If your data is a single feature vector, wrap it " +
+                $"as a [1, features] tensor first.",
+                nameof(X));
         }
 
         // Create a new shape with the updated feature dimension

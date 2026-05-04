@@ -143,9 +143,47 @@ public class OptimizerHelperIntegrationTests
     {
         var tensor = new Tensor<double>(new[] { 5 }); // 1D tensor
 
-        Assert.Throws<ArgumentException>(() =>
+        // Pin the exception contract — message must explain the rank
+        // requirement and the workaround (wrap as [1, features]) so a
+        // regression that silently coerces 1D back to "select axis 0"
+        // doesn't slip through. Param name pinned so callers using
+        // ArgumentException.ParamName for diagnostics keep working.
+        var ex = Assert.Throws<ArgumentException>(() =>
             OptimizerHelper<double, Tensor<double>, Tensor<double>>.SelectFeatures(
                 tensor, new List<int> { 0 }));
+        Assert.Contains("rank>=2", ex.Message);
+        Assert.Contains("got rank 1", ex.Message);
+        Assert.Contains("[1, features]", ex.Message);
+        Assert.Equal("X", ex.ParamName);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task SelectFeatures_Tensor3D_PreservesTrailingAxes()
+    {
+        // Pin that the rank-2+ path keeps working — a rank-3 tensor
+        // [batch, features, channels] should reduce only the feature
+        // axis and preserve the trailing channel axis. Catches
+        // regressions where the rank-check tightening (#1239 work)
+        // accidentally narrows the rank-2+ acceptance band.
+        var tensor = new Tensor<double>(new[] { 2, 3, 2 }); // [batch=2, features=3, channels=2]
+        // Fill with sentinel values so column-selection is verifiable.
+        for (int b = 0; b < 2; b++)
+            for (int f = 0; f < 3; f++)
+                for (int c = 0; c < 2; c++)
+                    tensor[b, f, c] = b * 100 + f * 10 + c;
+
+        var result = OptimizerHelper<double, Tensor<double>, Tensor<double>>.SelectFeatures(
+            tensor, new List<int> { 0, 2 });
+
+        // Shape: batch and channels preserved; features reduced 3 -> 2.
+        Assert.Equal(2, result.Shape[0]);
+        Assert.Equal(2, result.Shape[1]);
+        Assert.Equal(2, result.Shape[2]);
+        // Feature 0 and 2 selected; channel axis preserved.
+        Assert.Equal(0, result[0, 0, 0]);    // batch=0, feature=0, channel=0
+        Assert.Equal(20, result[0, 1, 0]);   // batch=0, feature=2, channel=0
+        Assert.Equal(101, result[1, 0, 1]);  // batch=1, feature=0, channel=1
+        Assert.Equal(121, result[1, 1, 1]);  // batch=1, feature=2, channel=1
     }
 
     #endregion

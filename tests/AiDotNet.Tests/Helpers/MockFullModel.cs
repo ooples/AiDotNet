@@ -15,7 +15,8 @@ namespace AiDotNet.Tests.Helpers;
 /// Shared mock model for testing IFullModel implementations.
 /// Can be used across all test classes that need a predictable model.
 /// </summary>
-public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>
+public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>,
+    IParameterizable<double, Matrix<double>, Vector<double>>
 {
     private Vector<double> _parameters;
     private readonly Func<Matrix<double>, Vector<double>> _predictFunc;

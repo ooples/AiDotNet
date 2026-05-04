@@ -286,9 +286,13 @@ public class LayerHelperIntegrationTests
 
         var layers = LayerHelper<double>.CreateDefaultDeepBeliefNetworkLayers(architecture).ToList();
 
-        // layerSizes = [784, 500, 500, 2000, 10] -> 4 transitions
-        // Each: RBMLayer + ActivationLayer = 8, plus output DenseLayer + ActivationLayer = 10
-        Assert.True(layers.Count >= 8, $"Expected at least 8 DBN layers, got {layers.Count}");
+        // layerSizes = [784, 500, 500, 2000, 10] -> 4 transitions.
+        // Each transition is one RBMLayer (applies sigmoid internally,
+        // no separate ActivationLayer needed — see the source comment
+        // about avoiding double-sigmoid compression). Output layer is
+        // one DenseLayer with softmax (or identity for regression).
+        // Total: 4 RBM + 1 Dense = 5 layers.
+        Assert.Equal(5, layers.Count);
 
         // Should contain RBM layers (core of DBN)
         Assert.Contains(layers, l => l is RBMLayer<double>);
@@ -296,6 +300,9 @@ public class LayerHelperIntegrationTests
         // Count RBM layers (one per transition in layerSizes)
         int rbmCount = layers.Count(l => l is RBMLayer<double>);
         Assert.Equal(4, rbmCount);
+
+        // Final layer must be the dense classifier head.
+        Assert.IsType<DenseLayer<double>>(layers[^1]);
     }
 
     #endregion
@@ -339,8 +346,12 @@ public class LayerHelperIntegrationTests
             outputSize: 5,
             reservoirSize: 100).ToList();
 
-        // Dense(10->100) + ReservoirLayer(100->100) + Activation + Dense(100->5) + Activation = 5
-        Assert.Equal(5, layers.Count);
+        // Per Jaeger (2001), ReservoirLayer applies tanh internally —
+        // no extra ActivationLayer between it and the output Dense
+        // (double-tanh would compress the output range). Total:
+        // Dense(10→100) + ReservoirLayer(100→100) + Dense(100→5) +
+        // ActivationLayer(identity output) = 4 layers.
+        Assert.Equal(4, layers.Count);
 
         // Should contain a ReservoirLayer
         Assert.Contains(layers, l => l is ReservoirLayer<double>);
@@ -359,7 +370,8 @@ public class LayerHelperIntegrationTests
             spectralRadius: 0.8,
             sparsity: 0.2).ToList();
 
-        Assert.Equal(5, layers.Count);
+        // See StandardParams test for the 4-layer rationale.
+        Assert.Equal(4, layers.Count);
         Assert.Contains(layers, l => l is ReservoirLayer<double>);
 
         // ReservoirLayer should have parameters
@@ -1086,17 +1098,21 @@ public class LayerHelperIntegrationTests
 
         var layers = LayerHelper<double>.CreateDefaultDeepBoltzmannMachineLayers(architecture).ToList();
 
-        // layerSizes = [784, 500, 500, 2000, 10] -> 4 RBM layers + 3 BatchNorm + 1 Dense = 8
-        Assert.True(layers.Count >= 7, $"Expected at least 7 DBM layers, got {layers.Count}");
+        // Per Salakhutdinov & Hinton 2009, a DBM uses 2 hidden layers
+        // — RBM(visible→hidden1) + RBM(hidden1→hidden2) + Dense(hidden2→
+        // output). DBMs use contrastive-divergence pretraining (not
+        // BatchNorm), so no BatchNormalizationLayer is interleaved.
+        // Total: 2 RBM + 1 Dense = 3 layers.
+        Assert.Equal(3, layers.Count);
 
-        // Should contain RBM layers
+        // Should contain RBM layers (the core DBM hidden representations)
         Assert.Contains(layers, l => l is RBMLayer<double>);
 
-        // Should contain BatchNormalizationLayer (between RBM layers)
-        Assert.Contains(layers, l => l is BatchNormalizationLayer<double>);
-
         int rbmCount = layers.Count(l => l is RBMLayer<double>);
-        Assert.Equal(4, rbmCount);
+        Assert.Equal(2, rbmCount);
+
+        // Final layer is the projection head from hidden2 to output dim.
+        Assert.IsType<DenseLayer<double>>(layers[^1]);
     }
 
     [Fact(Timeout = 120000)]

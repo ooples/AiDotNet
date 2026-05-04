@@ -290,8 +290,16 @@ public static class FeatureSelectorHelper<T, TInput>
         }
         else if (originalData is Tensor<T> tensor)
         {
-            // For tensor inputs, create a new tensor with selected features
-            int[] newShape = (int[])tensor._shape;
+            // For tensor inputs, create a new tensor with selected features.
+            // Pre-fix this took `(int[])tensor._shape` which on TensorShape's
+            // operator-cast returns a reference to the underlying array, then
+            // `newShape[1] = ...` mutated the SOURCE tensor's shape — every
+            // subsequent `tensor[i, j]` indexing failed because the tensor's
+            // declared columns had shrunk to the subset count. Allocate a
+            // fresh array and copy the dims to keep source untouched.
+            int rank = tensor._shape.Length;
+            int[] newShape = new int[rank];
+            for (int d = 0; d < rank; d++) newShape[d] = tensor._shape[d];
             newShape[1] = featureIndices.Count; // Adjust feature dimension
 
             var resultTensor = new Tensor<T>(newShape);
@@ -346,8 +354,14 @@ public static class FeatureSelectorHelper<T, TInput>
         }
         else if (originalData is Tensor<T> tensor)
         {
-            // Create a new tensor with only the selected features
-            int[] newShape = (int[])tensor._shape;
+            // Create a new tensor with only the selected features.
+            // See CreateFeatureSubset for the rationale on copying the
+            // shape array instead of casting (cast returns a reference
+            // to the source tensor's array, mutation would corrupt the
+            // source's declared dimensions).
+            int rank = tensor._shape.Length;
+            int[] newShape = new int[rank];
+            for (int d = 0; d < rank; d++) newShape[d] = tensor._shape[d];
             newShape[1] = selectedFeatureIndices.Count;
 
             var resultTensor = new Tensor<T>(newShape);
