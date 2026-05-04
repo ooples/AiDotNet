@@ -43,6 +43,22 @@ namespace AiDotNet.Optimizers;
 public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
 {
     /// <summary>
+    /// Magic header for the v2 checkpoint format ("A8B1" in ASCII LE).
+    /// Written immediately after the options JSON in <see cref="Serialize"/>
+    /// and validated as the first read in <see cref="Deserialize"/> so v1
+    /// payloads (which wrote <c>_t</c> at this position) can't be silently
+    /// mis-detected as v2. See Serialize/Deserialize for design notes.
+    /// </summary>
+    private const int Adam8BitV2Magic = unchecked((int)0x31423841);
+
+    /// <summary>
+    /// Current checkpoint format version. Bumped whenever the byte layout
+    /// after the magic header changes in a non-backward-compatible way;
+    /// readers reject mismatched versions with a clear migration message.
+    /// </summary>
+    private const int StateFormatVersion = 2;
+
+    /// <summary>
     /// The options specific to the 8-bit Adam optimizer.
     /// </summary>
     private Adam8BitOptimizerOptions<T, TInput, TOutput> _options;
@@ -1052,8 +1068,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // training run length. Independent of probability, the
             // semantic check is unambiguous: v1 wrote a step counter,
             // not this magic, so a match here is a deliberate v2 marker.
-            const int Adam8BitV2Magic = unchecked((int)0x31423841);
-            const int StateFormatVersion = 2;
+            // Constants are class-level (Adam8BitV2Magic / StateFormatVersion)
+            // so Serialize/Deserialize can't drift out of sync.
             writer.Write(Adam8BitV2Magic);
             writer.Write(StateFormatVersion);
 
@@ -1160,9 +1176,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // options JSON; using a bare version int as the discriminator
             // would mis-detect any v1 checkpoint whose _t happens to equal
             // the version number. Read the magic first — the magic value
-            // is a fixed marker that v1 never wrote at this position, so a
-            // match here is unambiguous evidence of v2 format.
-            const int Adam8BitV2Magic = unchecked((int)0x31423841);
+            // is a fixed marker (class-level constant Adam8BitV2Magic)
+            // that v1 never wrote at this position, so a match here is
+            // unambiguous evidence of v2 format.
             int magic = reader.ReadInt32();
             if (magic != Adam8BitV2Magic)
             {
