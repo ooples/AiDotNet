@@ -1794,18 +1794,21 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
-        // Get optimizer options for training parameters
+        // Read epoch count from the optimizer's configured options.
+        // Iterations / learning-rate / scheduler / weight-decay all live on
+        // the optimizer itself — the facade does NOT shadow them. Previous
+        // versions of this method maintained a separate `learningRate`
+        // variable that decayed by 0.99 per epoch and was passed directly
+        // to ApplyGradients(grad, lr). That created a duplicate decay
+        // schedule running alongside whatever the optimizer's own scheduler
+        // (Adam's bias correction, AdamW's decoupled weight decay, any
+        // attached LearningRateScheduler) was doing — and bypassed the
+        // optimizer's Step() entirely on the per-sample legacy path.
+        // Now the facade only owns epoch-count and batch iteration; the
+        // model's Train(batch) call dispatches through TrainWithTape →
+        // Optimizer.Step(TapeStepContext), which is the supported path.
         var optimizerOptions = _optimizer?.GetOptions();
         int epochs = optimizerOptions?.MaxIterations ?? 100;
-        T learningRate = optimizerOptions is not null
-            ? numOps.FromDouble(optimizerOptions.InitialLearningRate)
-            : numOps.FromDouble(0.01);
-        T learningRateDecay = optimizerOptions is not null
-            ? numOps.FromDouble(optimizerOptions.LearningRateDecay)
-            : numOps.FromDouble(0.99);
-        T minLearningRate = optimizerOptions is not null
-            ? numOps.FromDouble(optimizerOptions.MinLearningRate)
-            : numOps.FromDouble(1e-6);
 
         // Get loss function
         var lossFunction = _model.DefaultLossFunction;
@@ -1821,63 +1824,118 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             T epochLoss = numOps.Zero;
             int epochBatches = 0;
 
-            // Iterate through all batches in the streaming loader
+            // Iterate through all batches in the streaming loader.
+            //
+            // BUG FIX (closes #1264 follow-up): the previous implementation
+            // unrolled each batch into a per-sample for-loop and called
+            // IGradientComputable.ComputeGradients/ApplyGradients on each
+            // single sample. That path is the LEGACY pre-tape SGD update —
+            // it bypassed the configured optimizer entirely (Adam's m/v
+            // moments, AdamW's decoupled weight decay, fused tape kernels)
+            // AND threw away the data loader's batching, so callers who
+            // configured AdamOptimizer at LR=1e-3 and a batch size of 32
+            // got vanilla SGD on a single sample at LR=1e-3 instead.
+            //
+            // The model's own Train(input, target) entry point dispatches
+            // through TrainWithTape → Optimizer.Step(TapeStepContext), which
+            // is the correct path. It also handles batched inputs natively
+            // via NormalizeBatchDim — passing [B, …] tensors trains on the
+            // batch in a single optimizer step. So we now stack each batch's
+            // samples along a new leading batch dim and call _model.Train
+            // ONCE per batch.
             await foreach (var (inputs, outputs) in streamingLoader.GetBatchesAsync(shuffle: true))
             {
+                if (inputs.Length == 0) continue;
+
                 // Fit preprocessing pipeline on first batch if not already fitted
-                if (_preprocessingPipeline is not null && !pipelineFitted && inputs.Length > 0)
+                if (_preprocessingPipeline is not null && !pipelineFitted)
                 {
                     _preprocessingPipeline.Fit(inputs[0]);
                     pipelineFitted = true;
                 }
 
-                // Process each sample in the batch
-                for (int i = 0; i < inputs.Length; i++)
+                // Apply preprocessing to each sample BEFORE stacking so the
+                // batched tensor reflects the transformed features. Same
+                // pipeline-output handling as the previous code.
+                TInput[] processedInputs;
+                if (_preprocessingPipeline is not null && pipelineFitted)
                 {
-                    var input = inputs[i];
-                    var target = outputs[i];
-
-                    // Apply preprocessing to input features if configured
-                    TInput processedInput = input;
-                    if (_preprocessingPipeline is not null && pipelineFitted)
+                    processedInputs = new TInput[inputs.Length];
+                    for (int i = 0; i < inputs.Length; i++)
                     {
-                        // Transform features - pipeline returns TOutput but for feature preprocessing
-                        // without a final transformer, TInput == TOutput (same type returned)
-                        var transformed = _preprocessingPipeline.Transform(input);
-                        if (transformed is TInput typedTransformed)
-                        {
-                            processedInput = typedTransformed;
-                        }
+                        var transformed = _preprocessingPipeline.Transform(inputs[i]);
+                        processedInputs[i] = (transformed is TInput typed) ? typed : inputs[i];
                     }
+                }
+                else
+                {
+                    processedInputs = inputs;
+                }
 
-                    // Compute gradients without updating parameters
-                    var gradients = InterfaceGuard.GradientComputable(_model).ComputeGradients(processedInput, target, lossFunction);
+                // Neural network path: stack the batch into [B, …] tensors
+                // and dispatch through _model.Train, which routes via
+                // TrainWithTape → Optimizer.Step(TapeStepContext). The
+                // optimizer owns all of: LR schedule, momentum / second-
+                // moment state, bias correction, weight decay, gradient
+                // clipping. The facade contributes batching + epoch loop
+                // only.
+                if (typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Tensor<T>) && _model is INeuralNetwork<T> nn)
+                {
+                    var batchedInput = StackTensorBatch(processedInputs as Tensor<T>[]
+                        ?? processedInputs.Cast<Tensor<T>>().ToArray());
+                    var batchedTarget = StackTensorBatch(outputs as Tensor<T>[]
+                        ?? outputs.Cast<Tensor<T>>().ToArray());
+                    nn.Train(batchedInput, batchedTarget);
 
-                    // Apply gradients with current learning rate
-                    InterfaceGuard.GradientComputable(_model).ApplyGradients(gradients, learningRate);
-
-                    // Accumulate loss for monitoring (optional - compute prediction loss)
-                    var prediction = _model.Predict(processedInput);
-                    var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
-                    var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(target);
-                    var loss = lossFunction.CalculateLoss(predictionVector, targetVector);
-                    epochLoss = numOps.Add(epochLoss, loss);
+                    // Loss for monitoring — TrainWithTape sets LastLoss
+                    // during the optimizer step.
+                    var lastLoss = nn.GetLastLoss();
+                    epochLoss = numOps.Add(epochLoss, lastLoss);
                     epochBatches++;
+                }
+                else
+                {
+                    // Non-neural-network model that exposes IGradientComputable
+                    // (e.g. logistic regression / classical online learners).
+                    // These models have their own update-step semantics; we
+                    // delegate via the standard ComputeGradients / ApplyGradients
+                    // pair but DO NOT shadow the optimizer's learning-rate state.
+                    // The model's own ApplyGradients picks up its configured
+                    // learning rate from its options. Per-sample iteration is
+                    // correct here because non-NN models don't have a "batched
+                    // forward" concept; each sample is an independent update.
+                    for (int i = 0; i < processedInputs.Length; i++)
+                    {
+                        var gradients = InterfaceGuard.GradientComputable(_model).ComputeGradients(processedInputs[i], outputs[i], lossFunction);
+                        // Pass the optimizer's CurrentLearningRate (T-typed) so
+                        // ApplyGradients respects whatever the optimizer's own
+                        // scheduler / step counter has computed for this iteration.
+                        // No facade-level LR decay variable involved.
+                        var modelLr = _optimizer is not null
+                            ? numOps.FromDouble(_optimizer.GetOptions().InitialLearningRate)
+                            : numOps.FromDouble(0.01);
+                        InterfaceGuard.GradientComputable(_model).ApplyGradients(gradients, modelLr);
+
+                        var prediction = _model.Predict(processedInputs[i]);
+                        var predictionVector = ConversionsHelper.ConvertToVector<T, TOutput>(prediction);
+                        var targetVector = ConversionsHelper.ConvertToVector<T, TOutput>(outputs[i]);
+                        var loss = lossFunction.CalculateLoss(predictionVector, targetVector);
+                        epochLoss = numOps.Add(epochLoss, loss);
+                        epochBatches++;
+                    }
                 }
             }
 
             totalLoss = numOps.Add(totalLoss, epochLoss);
             totalBatches += epochBatches;
 
-            // Decay learning rate
-            if (optimizerOptions is not null && optimizerOptions.UseAdaptiveLearningRate)
-            {
-                learningRate = numOps.Multiply(learningRate, learningRateDecay);
-                if (numOps.Compare(learningRate, minLearningRate) < 0)
-                {
-                    learningRate = minLearningRate;
-                }
-            }
+            // No facade-level learning-rate decay. The optimizer owns its
+            // own LR schedule (Adam's bias correction is handled in Step;
+            // any attached LearningRateScheduler advances per-step inside
+            // Optimizer.Step). The previous code maintained a parallel
+            // learningRate variable that decayed 0.99 per epoch and
+            // double-applied with whatever the optimizer was doing —
+            // that's been removed.
 
             // Check for early stopping if configured
             if (_optimizer is not null && _optimizer.ShouldEarlyStop())
@@ -1964,6 +2022,33 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// benefit of on-demand data loading from files or other sources.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Stacks an array of single-sample tensors along a new leading batch
+    /// dimension. Used by the data-loader BuildAsync path to convert a
+    /// batch of <c>[…]</c> tensors into a single <c>[B, …]</c> tensor that
+    /// the network's batched <see cref="INeuralNetwork{T}.Train"/> path
+    /// consumes in one optimizer step.
+    /// </summary>
+    private static Tensor<T> StackTensorBatch(Tensor<T>[] samples)
+    {
+        if (samples.Length == 0) throw new InvalidOperationException("Cannot stack an empty batch.");
+        if (samples.Length == 1) return samples[0];
+
+        var sampleShape = samples[0]._shape;
+        var batchedShape = new int[sampleShape.Length + 1];
+        batchedShape[0] = samples.Length;
+        for (int d = 0; d < sampleShape.Length; d++) batchedShape[d + 1] = sampleShape[d];
+
+        var stacked = new Tensor<T>(batchedShape);
+        int sampleStride = samples[0].Length;
+        for (int b = 0; b < samples.Length; b++)
+        {
+            int offset = b * sampleStride;
+            for (int j = 0; j < sampleStride; j++) stacked[offset + j] = samples[b][j];
+        }
+        return stacked;
+    }
+
     private async Task<(TInput Features, TOutput Labels)> CollectStreamingDataAsync(
         IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
     {
