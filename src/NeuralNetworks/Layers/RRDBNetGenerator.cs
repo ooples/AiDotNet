@@ -342,6 +342,17 @@ public class RRDBNetGenerator<T> : LayerBase<T>
         ResolveShapes(
             new[] { _inputChannels, inH, inW },
             new[] { _outputChannels, currentH, currentW });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before any sub-layer's shape was resolved. With every sub-
+        // layer now reporting a real GetParameters().Length, the
+        // SubVector cuts in ApplyParameters land on the right data.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
     }
 
     #endregion
@@ -488,6 +499,31 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
+    {
+        // Buffer until OnFirstForward resolves shapes when arriving pre-
+        // resolution: every sub-layer (_convFirst, _rrdbBlocks[i],
+        // _trunkConv, _upsampleConvs[i], _hrConv, _convLast) reports
+        // GetParameters().Length == 0 before OnFirstForward, so the
+        // SubVector cuts below all consume zero bytes and the parameters
+        // get silently dropped — a deserialized RRDBNet checkpoint
+        // would inference with random weights instead of the loaded
+        // values. Replay in OnFirstForward once shapes are resolved.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+        ApplyParameters(parameters);
+    }
+
+    /// <summary>
+    /// Buffer for SetParameters when called pre-OnFirstForward. Replayed
+    /// in OnFirstForward once every sub-layer reports a real
+    /// GetParameters().Length.
+    /// </summary>
+    private Vector<T>? _pendingParameters;
+
+    private void ApplyParameters(Vector<T> parameters)
     {
         int offset = 0;
 

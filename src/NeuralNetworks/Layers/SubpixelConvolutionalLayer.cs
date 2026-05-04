@@ -734,6 +734,14 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Mirror Forward()'s lazy-init gate. OnFirstForward owns
+        // _kernels / _biases allocation (lazy ctor leaves _inputDepth=-1
+        // and the weight tensors as 0-length placeholders); GPU-first
+        // execution would otherwise dispatch the depth-to-space kernel
+        // with zero-initialized weights and produce a black output.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         var shape = input._shape;
 
         // Ensure 4D [B, C, H, W] format

@@ -77,6 +77,17 @@ public class SpyNetLayer<T> : LayerBase<T>
         IEngine? engine = null)
         : base([-1, -1, -1], [2, -1, -1])
     {
+        // Reject numLevels <= 0 at construction. The pyramid loop below
+        // would silently produce a zero-module SPyNet (no flow estimation
+        // capacity), and Forward downstream would either crash on the
+        // empty-pyramid case or return a default-zero flow without any
+        // signal. Reject loud here so callers see the configuration bug
+        // immediately.
+        if (numLevels <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(numLevels),
+                $"SpyNetLayer requires numLevels >= 1; got {numLevels}.");
+
         _engine = engine ?? new CpuEngine();
         _inputHeight = -1; // resolved in OnFirstForward
         _inputWidth = -1;  // resolved in OnFirstForward
@@ -126,6 +137,23 @@ public class SpyNetLayer<T> : LayerBase<T>
         _inputChannels = totalChannels / 2;
         _inputHeight = inH;
         _inputWidth = inW;
+
+        // Reject inputs that collapse below the coarsest pyramid level.
+        // BuildPyramid / EstimateFlow downstream assume each level has
+        // at least 1×1 spatial resolution AFTER the level-i halving;
+        // when inH/inW is too small for _numLevels halvings, the
+        // coarsest level becomes degenerate (all-ones tensor) and the
+        // 7×7 conv inside _basicModules[level] either silently produces
+        // zero-flow or trips a shape-mismatch deeper in the dispatch.
+        // Reject loud here so the caller can either reduce numLevels or
+        // upsample the input.
+        int minSpatial = 1 << (_numLevels - 1);
+        if (inH < minSpatial || inW < minSpatial)
+            throw new ArgumentException(
+                $"SpyNetLayer with numLevels={_numLevels} requires input H, W >= {minSpatial} " +
+                $"(so the coarsest level retains >=1×1 spatial); got [{inH},{inW}]. " +
+                $"Reduce numLevels or upsample the input first.",
+                nameof(input));
 
         // Each pyramid level's conv consumes (frame1 + frame2 + flow) =
         // 2C + 2 channels at level-i resolution (level 0 is full-res).
@@ -1026,6 +1054,12 @@ public class SpyNetLayer<T> : LayerBase<T>
 
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        // Mirror Forward()'s lazy-resolution gate. OnFirstForward owns
+        // _basicModules shape resolution + _pendingParameters replay
+        // (per the CPU path); without this, GPU-first execution
+        // dispatches against unresolved sub-conv weights.
+        if (!IsShapeResolved) OnFirstForward(input);
 
         // Input: [B, 2*C, H, W]
         int batch = input.Shape[0];
