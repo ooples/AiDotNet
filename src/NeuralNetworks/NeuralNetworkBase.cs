@@ -5848,7 +5848,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Use GetParameterChunks to keep gradient/parameter ordering
         // aligned (fixes #1245 / #1232). Frozen-or-detached tensors that
         // tape didn't see are zero-padded to preserve length-alignment.
-        var flatGradients = new List<T>(checked((int)ParameterCount));
+        // ParameterCount is long (#1244 widening) but List<T> ctor takes
+        // int. Cap the capacity hint at int.MaxValue — flattening
+        // gradients into a single managed list isn't viable past that
+        // limit anyway (would need TB of RAM), so this matches the
+        // implicit single-host inference contract. Saturating instead
+        // of `checked((int)...)` keeps very-large models running with a
+        // suboptimal capacity hint rather than crashing on construction.
+        var flatGradients = new List<T>((int)Math.Min(ParameterCount, int.MaxValue));
         foreach (var paramTensor in GetParameterChunks())
         {
             if (paramTensor is null || paramTensor.Length == 0) continue;

@@ -212,14 +212,18 @@ public static class ModelHelper<T, TInput, TOutput>
     {
         if (input is Matrix<T> matrix)
         {
+            // Empty indices returns an empty list — pre-fix this branch
+            // silently expanded an empty array to "all columns", which
+            // masked upstream bugs where a feature selector returned an
+            // empty result. Match the test contract: empty in, empty out.
+            if (indices.Length == 0)
+            {
+                return new List<Vector<T>>();
+            }
+
             // Filter out-of-bounds indices rather than throwing, since models
             // like SymbolicRegression may produce coefficients beyond input features.
             var validIndices = indices.Where(i => i >= 0 && i < matrix.Columns).ToArray();
-            if (validIndices.Length == 0)
-            {
-                // Return all columns if no valid indices remain
-                validIndices = Enumerable.Range(0, matrix.Columns).ToArray();
-            }
             return [.. validIndices.Select(i => matrix.GetColumn(i))];
         }
         else if (input is Tensor<T> tensor)

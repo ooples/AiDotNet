@@ -42,6 +42,7 @@ internal sealed class TrialStateManager
     private static readonly object FileLock = new();
 
     private readonly string _trialFilePath;
+    private readonly string _tombstonePath;
 
     /// <summary>
     /// Creates a new <see cref="TrialStateManager"/> using the default trial file location.
@@ -59,6 +60,19 @@ internal sealed class TrialStateManager
     internal TrialStateManager(string trialFilePath)
     {
         _trialFilePath = trialFilePath ?? throw new ArgumentNullException(nameof(trialFilePath));
+        // Tombstone marker — written by RecordOperationOrThrow AFTER a
+        // successful SaveState (i.e., on the first persisted real
+        // save/load operation). NOT written by passive code paths
+        // (LoadOrCreateState first-call init, GetStatus probes) so a
+        // status query alone never marks the install as activated. If
+        // the trial file is later deleted (user attempts to bypass
+        // trial limits) but the tombstone remains, LoadOrCreateState
+        // treats it as expired. This isn't tamper-proof (the user can
+        // also delete the tombstone), but it raises the bar from
+        // "delete one file" to "delete two files by name", which is
+        // enough to defeat naive trial-reset attempts and matches
+        // the contract pinned by DeletedFile_RestartsTrialFromScratch.
+        _tombstonePath = _trialFilePath + ".tombstone";
     }
 
     /// <summary>
@@ -99,9 +113,11 @@ internal sealed class TrialStateManager
             state.OperationCount++;
             state.LastOperationUtc = DateTimeOffset.UtcNow;
 
+            bool savedOk = false;
             try
             {
                 SaveState(state);
+                savedOk = true;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -110,6 +126,14 @@ internal sealed class TrialStateManager
                 EmitTrialMessage(
                     $"AiDotNet: Warning — unable to persist trial state: {ex.Message}");
             }
+
+            // Write anti-reset tombstone only after a real persistence
+            // succeeded. Passive code paths (GetStatus / LoadOrCreateState's
+            // first-call init) intentionally do NOT touch the tombstone —
+            // see SaveState's note for rationale. WriteTombstone is itself
+            // best-effort so a tombstone failure cannot mask a successful
+            // SaveState.
+            if (savedOk) WriteTombstone();
 
             // Trial notice via configurable handler (defaults to stderr to avoid polluting stdout)
             int daysRemaining = TrialDurationDays - daysElapsed;
@@ -155,6 +179,15 @@ internal sealed class TrialStateManager
             {
                 File.Delete(_trialFilePath);
             }
+            // Also clear the anti-tamper tombstone so a Reset() during
+            // license-key activation or test cleanup yields a clean
+            // pre-trial state. User-driven trial-bypass attempts (manual
+            // file deletion outside of Reset) leave the tombstone behind
+            // — that's the anti-reset signal LoadOrCreateState reads.
+            if (File.Exists(_tombstonePath))
+            {
+                File.Delete(_tombstonePath);
+            }
         }
     }
 
@@ -162,6 +195,19 @@ internal sealed class TrialStateManager
     {
         if (!File.Exists(_trialFilePath))
         {
+            // Anti-tamper: if the primary trial file is missing but the
+            // tombstone is present, the trial was previously active and
+            // the user has attempted to reset it by deletion. Treat as
+            // expired so the trial can't be bypassed by simple file
+            // removal. The Reset() method (which is internal-only and
+            // intended for test cleanup or license-key activation)
+            // explicitly clears both files; legitimate first-time use
+            // sees no tombstone and proceeds normally.
+            if (File.Exists(_tombstonePath))
+            {
+                return CreateExpiredState();
+            }
+
             var newState = new TrialState
             {
                 FirstUseUtc = DateTimeOffset.UtcNow,
@@ -261,6 +307,43 @@ internal sealed class TrialStateManager
         }
 
         File.WriteAllText(_trialFilePath, envelopeJson, Encoding.UTF8);
+
+        // NOTE: tombstone is written by RecordOperationOrThrow via
+        // WriteTombstone() AFTER a successful save, NOT here. SaveState
+        // is also invoked from LoadOrCreateState's first-call init
+        // (when no trial.json exists) — writing a tombstone there
+        // would mark the install as "previously activated" purely
+        // because a passive GetStatus() probe touched the manager,
+        // which would then flip the user to "expired" if trial.json
+        // later disappeared. Keep this method passive on the anti-
+        // reset signal; only real save/load operations create it.
+    }
+
+    /// <summary>
+    /// Writes (or refreshes) the anti-reset tombstone marker. Called
+    /// from <see cref="RecordOperationOrThrow"/> AFTER a successful
+    /// save, so its existence reliably indicates "a real trial
+    /// operation has happened" rather than "a status probe ran".
+    /// Best-effort: tombstone failure does not block the primary save.
+    /// </summary>
+    private void WriteTombstone()
+    {
+        try
+        {
+            File.WriteAllText(_tombstonePath, "AiDotNet trial active", Encoding.UTF8);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Tombstone write failed — no fatal consequence; the primary
+            // trial state was already persisted by SaveState. Surface via
+            // Trace so we can diagnose the "anti-naive-reset is silently
+            // disabled" case (read-only filesystem, sandbox/permissions,
+            // etc.) without breaking the user-facing flow.
+            System.Diagnostics.Trace.TraceWarning(
+                $"TrialStateManager: tombstone write failed (anti-reset " +
+                $"protection effectively disabled): {ex.GetType().Name}: " +
+                $"{ex.Message}");
+        }
     }
 
     private static void EmitTrialMessage(string message)
