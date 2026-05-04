@@ -965,13 +965,48 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             fullPrecisionMemory += _mFullPrecision.Length * bytesPerElement;
         }
 
+        // Tape-mode state memory: Step(TapeStepContext<T>) writes its
+        // per-parameter Adam moments into _tapeStates rather than the
+        // legacy flat _m*/_v* fields. After a tape-only run those legacy
+        // fields are still null and the dictionary holds the actual byte/
+        // scale buffers — which is the resident optimizer memory the
+        // 8× saving claim is measured against. Walk the dictionary and
+        // attribute each QuantizedTapeState's contribution to the same
+        // category (quantized / scales / full-precision) so the
+        // saving math stays apples-to-apples regardless of which Step
+        // path the optimizer drove.
+        long tapeStateCount = 0;
+        long tapeParameterLength = 0;
+        foreach (var kvp in _tapeStates)
+        {
+            var tapeState = kvp.Value;
+            tapeStateCount++;
+            tapeParameterLength += tapeState.Length;
+            if (tapeState.MQuantized != null) quantizedStateMemory += tapeState.MQuantized.Length;
+            quantizedStateMemory += tapeState.VQuantized.Length;
+            if (tapeState.MScales != null) scalesMemory += tapeState.MScales.Length * 8;
+            scalesMemory += tapeState.VScales.Length * 8;
+            if (tapeState.MFullPrecision != null)
+            {
+                fullPrecisionMemory += tapeState.MFullPrecision.Length * bytesPerElement;
+            }
+        }
+
         stats["QuantizedStateBytes"] = quantizedStateMemory;
         stats["ScalingFactorBytes"] = scalesMemory;
         stats["FullPrecisionStateBytes"] = fullPrecisionMemory;
         stats["TotalBytes"] = quantizedStateMemory + scalesMemory + fullPrecisionMemory;
+        stats["TapeStateCount"] = tapeStateCount;
 
-        // Calculate savings compared to standard Adam
-        long standardAdamMemory = _parameterLength * 2 * bytesPerElement; // m and v at full precision
+        // Calculate savings compared to standard Adam. Standard Adam's m
+        // and v are both at full precision, so its baseline is
+        // 2 × paramLength × bytesPerElement. For a legacy-Step run that's
+        // _parameterLength; for a tape-Step run it's the sum of every
+        // tape state's Length (each tape entry corresponds to a distinct
+        // model parameter the tape touched). For a mixed run, both add
+        // — the optimizer is bookkeeping for both populations.
+        long totalParamLength = _parameterLength + tapeParameterLength;
+        long standardAdamMemory = totalParamLength * 2 * bytesPerElement;
         stats["StandardAdamBytes"] = standardAdamMemory;
         stats["MemorySavingsBytes"] = standardAdamMemory - stats["TotalBytes"];
 
