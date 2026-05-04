@@ -21,11 +21,14 @@ public static class DeserializationHelper
     /// <summary>
     /// Defensive fallback: returns true when an InvalidOperationException's
     /// message matches the legacy "Cannot find &lt;layer name&gt; constructor"
-    /// convention. As of #1239 all 44 in-tree throw sites have migrated to
-    /// <see cref="MissingLayerCtorException"/>, but this helper stays in
-    /// place to handle third-party serialization paths or test-only layer
-    /// types that might still surface the legacy form. Kept narrowly scoped
-    /// to avoid swallowing unrelated InvalidOperationExceptions.
+    /// convention. As of #1239 every in-tree "Cannot find ... constructor"
+    /// throw site in this file has migrated to
+    /// <see cref="MissingLayerCtorException"/> (which inherits from
+    /// InvalidOperationException, so existing catch blocks keep working),
+    /// but this helper stays in place to handle third-party serialization
+    /// paths or test-only layer types that might still surface the legacy
+    /// form. Kept narrowly scoped to avoid swallowing unrelated
+    /// InvalidOperationExceptions.
     /// </summary>
     private static bool IsMissingCtorMessage(string message)
     {
@@ -1846,7 +1849,7 @@ public static class DeserializationHelper
             }
             else
             {
-                throw new NotSupportedException($"Cannot find MambaBlock constructor for deserialization.");
+                throw new MissingLayerCtorException("Cannot find MambaBlock constructor for deserialization.");
             }
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".ContinuumMemorySystemLayer`1"))
@@ -1887,7 +1890,7 @@ public static class DeserializationHelper
             }
             else
             {
-                throw new NotSupportedException($"Cannot find ContinuumMemorySystemLayer constructor for deserialization.");
+                throw new MissingLayerCtorException("Cannot find ContinuumMemorySystemLayer constructor for deserialization.");
             }
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".FeedForwardLayer`1"))
@@ -1905,7 +1908,7 @@ public static class DeserializationHelper
 
             var ctor = type.GetConstructor(new Type[] { typeof(int), activationFuncType });
             if (ctor is null)
-                throw new InvalidOperationException(
+                throw new MissingLayerCtorException(
                     "Cannot find FeedForwardLayer constructor with (int, IActivationFunction<T>).");
             instance = ctor.Invoke(new object?[] { outputSize, activation });
         }
@@ -1931,7 +1934,7 @@ public static class DeserializationHelper
                 .OrderByDescending(c => c.GetParameters().Length)
                 .FirstOrDefault();
             if (ctor is null)
-                throw new InvalidOperationException(
+                throw new MissingLayerCtorException(
                     $"Cannot find {layerType} constructor for deserialization.");
 
             var parameters = ctor.GetParameters();
@@ -3271,7 +3274,7 @@ public static class DeserializationHelper
         // fully-resolvable ctor in descending-arity order, which let
         // a 6-param all-defaults ctor beat a 4-param all-metadata-matched
         // ctor purely on arity.
-        var candidates = new List<(int score, ConstructorInfo ctor, object?[] args, int arity)>();
+        var candidates = new List<(int score, ConstructorInfo ctor, object?[] args, int arity, string sig)>();
 
         foreach (var ctor in ctors)
         {
@@ -3501,22 +3504,35 @@ public static class DeserializationHelper
                 // contribute 0 so a ctor with all-defaults can never beat
                 // a ctor with even a single metadata hit.
                 int score = (metadataMatches * 1000) + (shapeMatches * 100) + parameters.Length;
-                candidates.Add((score, ctor, args, parameters.Length));
+                // Capture parameter-type FullName signature as the final
+                // tie-break key. List<T>.Sort is not guaranteed stable, so
+                // when (score, arity) collide (e.g., two overloads of the
+                // same arity differing only by IActivationFunction<T> vs
+                // IInitializationStrategy<T>) we need a deterministic key
+                // to make ctor selection reproducible across runs. Sorting
+                // signatures lexicographically gives us cross-process /
+                // cross-machine determinism that depends only on the
+                // type's metadata, not on reflection iteration order.
+                string sig = string.Join(",",
+                    parameters.Select(p => p.ParameterType.FullName ?? p.ParameterType.Name));
+                candidates.Add((score, ctor, args, parameters.Length, sig));
             }
         }
 
-        // Sort by descending score; the arity field embedded in the tuple
-        // already stabilizes ties via the +arity term in the score, but
-        // we sort with arity as an explicit secondary key for clarity
-        // (and to absorb any future score-formula change).
+        // Sort by descending score, then descending arity, then by
+        // parameter-type signature ascending. The signature key turns
+        // an unstable tie-break into a deterministic one — see the
+        // candidates.Add call above for the rationale.
         candidates.Sort((a, b) =>
         {
             int byScore = b.score.CompareTo(a.score);
             if (byScore != 0) return byScore;
-            return b.arity.CompareTo(a.arity);
+            int byArity = b.arity.CompareTo(a.arity);
+            if (byArity != 0) return byArity;
+            return string.CompareOrdinal(a.sig, b.sig);
         });
 
-        foreach (var (_, ctor, args, _) in candidates)
+        foreach (var (_, ctor, args, _, _) in candidates)
         {
             try { return ctor.Invoke(args); }
             catch (Exception ex)

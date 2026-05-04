@@ -60,16 +60,31 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
             additionalParams: metadata);
 
         Assert.NotNull(layer);
-        Assert.IsType<SeparableConvolutionalLayer<float>>(layer);
+        var sepConv = Assert.IsType<SeparableConvolutionalLayer<float>>(layer);
+
+        // Verify the scored matcher selected a ctor that honored the
+        // metadata. Parameter count is the cleanest observable: it
+        // depends solely on the metadata-supplied OutputDepth (16),
+        // KernelSize (3), and inputDepth (8 from inputShape[0]).
+        // SeparableConv parameter count = depthwise kernels (kernelSize²
+        // × inputDepth) + pointwise kernels (inputDepth × outputDepth) +
+        // biases (outputDepth). With our metadata: 3·3·8 + 8·16 + 16 = 216.
+        // A wrong-ctor pick (e.g. one that resolved kernelSize from
+        // defaults) would land on a different parameter count.
+        Assert.Equal(3 * 3 * 8 + 8 * 16 + 16, sepConv.ParameterCount);
     }
 
     /// <summary>
     /// Same layer, metadata-less. Scored matcher gracefully falls back
     /// to shape-derived matches and ML-domain defaults (the
-    /// <c>TryDefaultMlIntHyperparameter</c> path). The legacy longest-
-    /// fillable-first behavior is preserved as the floor — if no
-    /// metadata is present, every ctor scores 0 for matches and arity
-    /// alone breaks ties, matching pre-fix behavior.
+    /// <c>TryDefaultMlIntHyperparameter</c> path). With metadata absent
+    /// each ctor still earns shape-derived hits (×100) where the
+    /// inputShape / outputShape supply parameters by name (e.g.
+    /// outputDepth from outputShape[0]); only the metadata-hit term
+    /// (×1000) goes to zero. Ranking can therefore differ from pure
+    /// arity ordering, but the matcher still produces a valid layer
+    /// because shape-derived defaults plus
+    /// <c>TryDefaultMlIntHyperparameter</c> backfill the rest.
     /// </summary>
     [Fact]
     public void ScoredMatcher_SeparableConv_NoMetadata_StillResolves()
@@ -111,34 +126,59 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
             additionalParams: metadata);
 
         Assert.NotNull(layer);
-        Assert.IsType<DilatedConvolutionalLayer<float>>(layer);
+        var dilConv = Assert.IsType<DilatedConvolutionalLayer<float>>(layer);
+
+        // Verify the scored matcher honored the metadata-driven
+        // hyperparameters via parameter count, which depends solely on
+        // metadata values: kernelSize² × inputDepth × outputDepth +
+        // outputDepth biases. With KernelSize=3, inputDepth=16,
+        // OutputDepth=32: 3·3·16·32 + 32 = 4640. A wrong ctor pick
+        // (e.g., a different overload that resolved kernelSize from
+        // defaults) would land on a different parameter count. We
+        // intentionally don't assert spatial output dims because the
+        // layer recomputes them from input + dilation + padding rather
+        // than echoing back the supplied outputShape.
+        Assert.Equal(3 * 3 * 16 * 32 + 32, dilConv.ParameterCount);
     }
 
     /// <summary>
-    /// Verifies the matcher still handles multi-int-array parameters
-    /// (e.g., layers that take <c>int[]</c> for spatialDimensions /
-    /// patchSizes / mlpDimensions). The scored path counts these as
-    /// metadata matches when keys are present, shape-matches when
-    /// derivable, defaults otherwise.
+    /// Verifies the matcher honors metadata keyed by the *actual* ctor
+    /// parameter names. GraphAttentionLayer's ctor takes
+    /// (<c>inputFeatures</c>, <c>outputFeatures</c>, <c>numHeads</c>,
+    /// <c>alpha</c>, <c>dropoutRate</c>, …). The matcher pascal-cases
+    /// parameter names when looking up <c>additionalParams</c>, so
+    /// <c>InputFeatures</c> / <c>OutputFeatures</c> / <c>NumHeads</c>
+    /// hit the metadata path (×1000 each), exercising the scored
+    /// matcher's positive branch.
     /// </summary>
     [Fact]
     public void ScoredMatcher_GraphAttention_FullMetadata_ProducesValidLayer()
     {
         var metadata = new Dictionary<string, object>
         {
-            ["NumNodes"] = 32,
-            ["InputDim"] = 16,
-            ["OutputDim"] = 8,
+            ["InputFeatures"] = 16,
+            ["OutputFeatures"] = 8,
             ["NumHeads"] = 2,
+            ["Alpha"] = 0.2,
+            ["DropoutRate"] = 0.0,
         };
 
         var layer = DeserializationHelper.CreateLayerFromType<float>(
             layerType: typeof(GraphAttentionLayer<>).Name,
-            inputShape: new[] { 32, 16 },
-            outputShape: new[] { 32, 8 },
+            inputShape: new[] { 16 },
+            outputShape: new[] { 8 },
             additionalParams: metadata);
 
         Assert.NotNull(layer);
-        Assert.IsType<GraphAttentionLayer<float>>(layer);
+        var gat = Assert.IsType<GraphAttentionLayer<float>>(layer);
+
+        // Verify the scored matcher actually piped the metadata
+        // through: a wrong-ctor pick (e.g., one that resolved numHeads
+        // from defaults instead of metadata) would land on
+        // gat.NumHeads != 2. These three properties are the public
+        // observables for the ctor parameters that came from metadata.
+        Assert.Equal(16, gat.InputFeatures);
+        Assert.Equal(8, gat.OutputFeatures);
+        Assert.Equal(2, gat.NumHeads);
     }
 }
