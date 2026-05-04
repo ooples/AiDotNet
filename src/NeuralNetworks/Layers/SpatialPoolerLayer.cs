@@ -206,7 +206,7 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// - It participates in the learning process of the neural network
     /// </para>
     /// </remarks>
-    public override int ParameterCount => Connections.Length;
+    public override long ParameterCount => Connections.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

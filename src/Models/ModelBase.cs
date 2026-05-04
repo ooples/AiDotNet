@@ -61,7 +61,7 @@ public abstract class ModelBase<T, TInput, TOutput> : IFullModel<T, TInput, TOut
     public abstract void SetParameters(Vector<T> parameters);
 
     /// <inheritdoc/>
-    public virtual int ParameterCount => GetParameters().Length;
+    public virtual long ParameterCount => GetParameters().Length;
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;

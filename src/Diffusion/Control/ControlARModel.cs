@@ -74,7 +74,8 @@ public class ControlARModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
+    public override long ParameterCount =>
+        _baseUNet.ParameterCount + _vae.ParameterCount + _controlEncoder.ParameterCount;
 
     public ControlARModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -115,18 +116,37 @@ public class ControlARModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var all = new List<T>();
-        var p1 = _baseUNet.GetParameters(); for (int i = 0; i < p1.Length; i++) all.Add(p1[i]);
-        var p2 = _controlEncoder.GetParameters(); for (int i = 0; i < p2.Length; i++) all.Add(p2[i]);
-        return new Vector<T>(all.ToArray());
+        int c1 = checked((int)_baseUNet.ParameterCount);
+        int c2 = checked((int)_vae.ParameterCount);
+        int c3 = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)c1 + c2 + c3;
+        var result = new Vector<T>(checked((int)expectedTotal));
+        var p1 = _baseUNet.GetParameters();
+        for (int i = 0; i < p1.Length; i++) result[i] = p1[i];
+        var p2 = _vae.GetParameters();
+        for (int i = 0; i < p2.Length; i++) result[c1 + i] = p2[i];
+        var p3 = _controlEncoder.GetParameters();
+        for (int i = 0; i < p3.Length; i++) result[c1 + c2 + i] = p3[i];
+        return result;
     }
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        int c1 = checked((int)_baseUNet.ParameterCount);
+        int c2 = checked((int)_vae.ParameterCount);
+        int c3 = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)c1 + c2 + c3;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
         int o = 0;
-        var c1 = _baseUNet.ParameterCount; var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
-        var c2 = _controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
+        var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
+        var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _vae.SetParameters(new Vector<T>(a2)); o += c2;
+        var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a3));
     }
 
     /// <inheritdoc />
@@ -147,7 +167,7 @@ public class ControlARModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlAR", Version = "1.0",
             Description = "Spatial control for autoregressive image generation via token-level conditioning",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "ar-controlnet");
         metadata.SetProperty("base_model", "Autoregressive Image Generator");

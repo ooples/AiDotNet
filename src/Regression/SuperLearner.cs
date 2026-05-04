@@ -927,7 +927,7 @@ public class SuperLearner<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// SuperLearner is an ensemble that doesn't support optimizer parameter injection.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Returns all features since the ensemble uses sub-models on all features.

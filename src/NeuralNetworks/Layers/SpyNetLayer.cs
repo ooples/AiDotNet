@@ -1232,7 +1232,7 @@ public class SpyNetLayer<T> : LayerBase<T>
     #region Parameter Management
 
     /// <inheritdoc/>
-    public override int ParameterCount => _basicModules.Sum(m => m.ParameterCount);
+    public override long ParameterCount => (int)_basicModules.Sum(m => m.ParameterCount);
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()

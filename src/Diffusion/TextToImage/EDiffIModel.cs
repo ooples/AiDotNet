@@ -107,7 +107,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the number of expert denoisers in the ensemble.
@@ -216,8 +216,8 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException(
@@ -275,7 +275,7 @@ public class EDiffIModel<T> : LatentDiffusionModelBase<T>
             Name = "eDiff-I",
             Version = "1.0",
             Description = "eDiff-I ensemble-of-experts text-to-image diffusion model",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -165,7 +165,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     public int PatchSize => _patchSize;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     #endregion
 
@@ -954,9 +954,13 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Parameter Management
 
-    private int CalculateParameterCount()
+    private long CalculateParameterCount()
     {
-        int count = 0;
+        // #1237: long accumulator. SD3.5 Large (HiddenDim 4096 × 38 layers
+        // joint + single blocks) sums to ~7.6 B parameters, overflowing
+        // int.MaxValue. Per-layer ParameterCount stays int (single-tensor
+        // < 2.1 B); the cross-layer sum is long.
+        long count = 0;
 
         count += _patchEmbed.ParameterCount;
         count += _timeEmbed1.ParameterCount;
@@ -1104,7 +1108,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
-        var count = layer.ParameterCount;
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {

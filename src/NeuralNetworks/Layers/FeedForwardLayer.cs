@@ -268,7 +268,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     /// <remarks>
     /// This includes all weights (inputSize × outputSize) and all biases (outputSize).
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -841,7 +841,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_weightsGradient == null || _biasesGradient == null || _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         // Bulk copy from contiguous tensor storage — replaces per-element scalar loops
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weightsGradient.Data),

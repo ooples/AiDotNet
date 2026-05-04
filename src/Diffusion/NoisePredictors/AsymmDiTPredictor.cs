@@ -73,7 +73,7 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
     /// <inheritdoc />
-    public override int ParameterCount { get; }
+    public override long ParameterCount { get; }
 
     /// <summary>
     /// Initializes a new AsymmDiT predictor.
@@ -117,9 +117,9 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
         _finalLayer = LazyDense(_hiddenSize, patchDim);
     }
 
-    private int CalculateParameterCount()
+    private long CalculateParameterCount()
     {
-        int count = _patchEmbed.ParameterCount;
+        long count = _patchEmbed.ParameterCount;
         foreach (var block in _blocks) count += block.ParameterCount;
         count += _finalLayer.ParameterCount;
         return count;
@@ -171,7 +171,7 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
 
     private static int SetParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = layer.ParameterCount;
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
         layer.SetParameters(new Vector<T>(p));

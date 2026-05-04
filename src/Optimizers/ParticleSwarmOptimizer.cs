@@ -102,7 +102,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         }
 
         // Use model's parameter count instead of input size for velocity dimensions
-        int dimensions = swarm.Count > 0 ? InterfaceGuard.Parameterizable(swarm[0]).ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        int dimensions = (int)swarm.Count > 0 ? (int)InterfaceGuard.Parameterizable(swarm[0]).ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
 
         // Initialize velocities for each particle
         var velocities = new List<Vector<T>>();

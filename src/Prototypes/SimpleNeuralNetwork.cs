@@ -36,7 +36,7 @@ public class SimpleNeuralNetwork<T>
     /// <summary>
     /// Gets the total number of parameters in the network.
     /// </summary>
-    public int ParameterCount => _inputSize * _hiddenSize + _hiddenSize + _hiddenSize * _outputSize + _outputSize;
+    public long ParameterCount => _inputSize * _hiddenSize + _hiddenSize + _hiddenSize * _outputSize + _outputSize;
 
     /// <summary>
     /// Initializes a new instance of the SimpleNeuralNetwork.

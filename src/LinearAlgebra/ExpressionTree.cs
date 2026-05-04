@@ -1468,7 +1468,7 @@ public class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, TOutput>
     /// For example, if your formula is "2x + 3y + 5", there are 3 parameters: 2, 3, and 5.
     /// This value is obtained from the Coefficients property, which returns a vector of all constant values.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

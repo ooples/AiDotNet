@@ -136,7 +136,7 @@ public abstract class GraphLayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateAndSetup();
-        int count = layer.ParameterCount;
+        int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 
         Assert.True(count >= 0, "ParameterCount should be non-negative.");

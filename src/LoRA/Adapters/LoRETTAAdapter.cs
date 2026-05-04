@@ -123,7 +123,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// This is typically much smaller than standard LoRA for the same expressiveness.
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -215,7 +215,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         InitializeTTCores();
 
         // Update parameter vector
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromCores();
     }
 
@@ -717,7 +717,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         // If base layer is not frozen, unpack its parameters first
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -741,7 +741,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromCores()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first
@@ -1017,7 +1017,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         int outputSize = GetOutputShape()[0];
 
         int fullParams = inputSize * outputSize;
-        int ttParams = ParameterCount - (_freezeBaseLayer ? 0 : _baseLayer.ParameterCount);
+        int ttParams = (int)(ParameterCount - (_freezeBaseLayer ? 0 : _baseLayer.ParameterCount));
         int equivalentLoRAParams = (inputSize + outputSize) * TTRank;
 
         double reductionVsFull = 100.0 * (1.0 - (double)ttParams / fullParams);

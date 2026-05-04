@@ -105,7 +105,7 @@ public class RobustRegression<T> : RegressionBase<T>
     /// <summary>
     /// Robust regression uses IRLS internally — random parameter injection is not helpful.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Trains the robust regression model using the provided input data and target values.

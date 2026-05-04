@@ -301,7 +301,7 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// Deep RL agents return parameter counts from neural networks.
     /// Classical RL agents (tabular, linear) may have different implementations.
     /// </remarks>
-    public abstract int ParameterCount { get; }
+    public abstract long ParameterCount { get; }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;

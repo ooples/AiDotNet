@@ -564,7 +564,7 @@ public partial class ReservoirLayer<T> : LayerBase<T>
     /// Although these parameters are fixed during training, the reservoir still has them.
     /// </remarks>
     // Both reservoir weights and input weights are serialized for Clone fidelity
-    public override int ParameterCount => _reservoirWeights.Length + _inputWeights.Length;
+    public override long ParameterCount => _reservoirWeights.Length + _inputWeights.Length;
 
     public override void UpdateParameters(T learningRate)
     {

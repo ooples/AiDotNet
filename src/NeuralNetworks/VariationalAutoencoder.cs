@@ -550,7 +550,7 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         int startIndex = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
@@ -562,11 +562,11 @@ public class VariationalAutoencoder<T> : NeuralNetworkBase<T>, IAuxiliaryLossLay
         // Update mean and log variance layers
         if (_meanLayer != null && _logVarianceLayer != null)
         {
-            int meanParameterCount = _meanLayer.ParameterCount;
+            int meanParameterCount = checked((int)_meanLayer.ParameterCount);
             _meanLayer.UpdateParameters(parameters.SubVector(startIndex, meanParameterCount));
             startIndex += meanParameterCount;
 
-            int logVarianceParameterCount = _logVarianceLayer.ParameterCount;
+            int logVarianceParameterCount = checked((int)_logVarianceLayer.ParameterCount);
             _logVarianceLayer.UpdateParameters(parameters.SubVector(startIndex, logVarianceParameterCount));
         }
         else

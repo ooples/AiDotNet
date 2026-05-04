@@ -97,7 +97,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _vae.ParameterCount; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -183,7 +183,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        int dc = _dit.ParameterCount, vc = _vae.ParameterCount;
+        int dc = (int)_dit.ParameterCount, vc = (int)_vae.ParameterCount;
         if (parameters.Length != dc + vc)
             throw new ArgumentException($"Expected {dc + vc}, got {parameters.Length}.", nameof(parameters));
         var dp = new Vector<T>(dc); var vp = new Vector<T>(vc);
@@ -227,7 +227,7 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Lumina-T2X", Version = "1.0",
             Description = "Lumina-T2X unified text-to-any generation framework",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flag-dit-flow-matching");
         m.SetProperty("modalities", "image,video,3d,audio");

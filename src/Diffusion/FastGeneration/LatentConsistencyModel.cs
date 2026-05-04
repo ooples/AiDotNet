@@ -135,8 +135,19 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LCM_LATENT_CHANNELS;
 
-    /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    /// <summary>
+    /// Counts the flat-API parameter surface (predictor + VAE). The
+    /// trainable <c>_conditioner</c> is intentionally excluded here
+    /// because <see cref="GetParameters"/> / <see cref="SetParameters"/>
+    /// move only that surface — flat <see cref="Vector{T}"/> is
+    /// int-bounded and a foundation-scale text encoder would push the
+    /// round-trip past <see cref="int.MaxValue"/>. Callers that need
+    /// the full count (including conditioner) walk
+    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>,
+    /// which streams predictor + VAE + conditioner per-tensor and
+    /// accumulates length in <see cref="long"/>.
+    /// </summary>
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the base model identifier ("SD1.5", "SD2.1", or "SDXL").
@@ -319,8 +330,8 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -404,7 +415,7 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
             Name = "Latent Consistency Model",
             Version = "1.0",
             Description = $"Latent Consistency Model distilled from {_baseModel} for fast 2-8 step generation",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

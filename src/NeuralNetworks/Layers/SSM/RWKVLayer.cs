@@ -175,7 +175,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _timeMixR.Length + _timeMixK.Length + _timeMixV.Length +
         _receptanceWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length +
         _decayWeights.Length + _decayBias.Length + _bonus.Length +
@@ -621,7 +621,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
@@ -637,7 +637,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedParams = ParameterCount;
+        int expectedParams = (int)ParameterCount;
         if (parameters.Length != expectedParams)
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
 
@@ -661,7 +661,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_timeMixRGradient == null) return new Vector<T>(ParameterCount);
+        if (_timeMixRGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_timeMixRGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_timeMixKGradient?.ToArray() ?? Array.Empty<T>()),

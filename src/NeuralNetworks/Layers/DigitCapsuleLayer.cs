@@ -153,7 +153,11 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// - These features are combined to recognize more complex patterns
     /// </para>
     /// </remarks>
-    private readonly int _inputCapsules;
+    // Non-readonly: lazy ctor leaves _inputCapsules = -1 until
+    // OnFirstForward resolves it from input.Shape[^2]. Eager ctor
+    // sets it at construction.
+    private int _inputCapsules;
+    private bool _isInitialized;
 
     /// <summary>
     /// The dimension (number of values) of each input capsule vector.
@@ -171,7 +175,9 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// - More dimensions allow for more detailed feature representation
     /// </para>
     /// </remarks>
-    private readonly int _inputCapsuleDimension;
+    // Non-readonly: lazy ctor leaves _inputCapsuleDimension = -1 until
+    // OnFirstForward resolves it from input.Shape[^1].
+    private int _inputCapsuleDimension;
 
     /// <summary>
     /// The number of classes (output capsules) that this layer can identify.
@@ -246,7 +252,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// - It has weights that are updated to make better predictions over time
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _weights.Length;
+    public override long ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -294,6 +300,134 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         _weights = new Tensor<T>([inputCapsules, numClasses, inputCapsuleDimension, outputCapsuleDimension]);
 
         InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor: resolves <c>inputCapsules</c> and
+    /// <c>inputCapsuleDimension</c> from <c>input.Shape[^2..]</c> on
+    /// first <see cref="Forward"/>. Output structure (numClasses ×
+    /// outputCapsuleDimension) and routing iterations are architectural
+    /// and stay required.
+    /// </summary>
+    /// <param name="numClasses">Number of output classes (output capsules).</param>
+    /// <param name="outputCapsuleDimension">Dimension of each output capsule's vector.</param>
+    /// <param name="routingIterations">Number of dynamic-routing iterations.</param>
+    public DigitCapsuleLayer(int numClasses, int outputCapsuleDimension, int routingIterations)
+        : base([-1, -1], [numClasses, outputCapsuleDimension], (IVectorActivationFunction<T>)new SquashActivation<T>())
+    {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be positive.");
+        if (outputCapsuleDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputCapsuleDimension), "outputCapsuleDimension must be positive.");
+        if (routingIterations < 1)
+            throw new ArgumentOutOfRangeException(nameof(routingIterations), "routingIterations must be at least 1.");
+
+        _inputCapsules = -1;
+        _inputCapsuleDimension = -1;
+        _numClasses = numClasses;
+        _outputCapsuleDimension = outputCapsuleDimension;
+        _routingIterations = routingIterations;
+        _weights = new Tensor<T>([0, 0, 0, 0]);
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Resolves <c>_inputCapsules</c> and <c>_inputCapsuleDimension</c>
+    /// from input shape using the same rank-aware contract that
+    /// <see cref="Forward"/>'s reshape path uses:
+    /// <list type="bullet">
+    /// <item><b>rank-2 [I, D_in]</b>: no batch — capsules from axis 0,
+    /// dimension from axis 1.</item>
+    /// <item><b>rank-3 [B, I, D_in]</b>: batched — capsules from axis 1,
+    /// dimension from axis 2.</item>
+    /// <item><b>rank-4+ [B, H, W, ..., C, D_in]</b> (e.g. PrimaryCapsule
+    /// output [B, H, W, C, D]): the last axis is dimension, all middle
+    /// axes (excluding batch) collapse into the capsule count. So for
+    /// [B, H, W, C, D], <c>_inputCapsules = H*W*C</c>, matching how
+    /// Forward's higher-rank branch reshapes the tensor.</item>
+    /// </list>
+    /// Pre-fix this method just read <c>input.Shape[^2]</c> regardless of
+    /// rank, which would mis-resolve a [B, H, W, C, D] input as
+    /// <c>_inputCapsules = C</c> and trip the reshape on Line 513
+    /// (see DigitCapsuleLayer Forward, rank&gt;3 branch).
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer requires rank>=2 input; got rank {rank}.", nameof(input));
+
+        int inputCapsuleDimension = input.Shape[rank - 1];
+        int inputCapsules;
+        if (rank == 2)
+        {
+            // Rank-2 is genuinely ambiguous for lazy shape resolution:
+            // Forward accepts both [inputCapsules, inputCapsuleDimension]
+            // (unbatched) and [batch, inputCapsules*inputCapsuleDimension]
+            // (batched/flat). With no other signal we cannot tell which
+            // interpretation the caller intended, and picking one
+            // silently misroutes the other. Force the caller to disambiguate
+            // by constructing the layer eagerly with known dimensions, or
+            // by passing rank>=3 input on the lazy first forward.
+            throw new ArgumentException(
+                $"DigitCapsuleLayer cannot lazy-resolve a rank-2 input of shape " +
+                $"[{input.Shape[0]}, {input.Shape[1]}]: this is ambiguous between " +
+                $"[inputCapsules, inputCapsuleDimension] and [batch, " +
+                $"inputCapsules*inputCapsuleDimension]. Either construct the layer " +
+                $"eagerly with explicit (inputCapsules, inputCapsuleDimension), or " +
+                $"reshape the first forward input to rank>=3 so OnFirstForward can " +
+                $"resolve unambiguously. Subsequent calls may use rank-2 once the " +
+                $"layer is resolved.", nameof(input));
+        }
+        else if (rank == 3)
+        {
+            // [batch, inputCapsules, inputCapsuleDimension].
+            inputCapsules = input.Shape[1];
+        }
+        else
+        {
+            // Rank >= 4 (e.g., [B, H, W, C, D] from PrimaryCapsule). The
+            // capsule count is the product of every axis except the
+            // leading batch and trailing dimension. Forward's reshape
+            // does the same collapse via totalElements/batch arithmetic,
+            // so this stays consistent.
+            inputCapsules = 1;
+            for (int d = 1; d < rank - 1; d++) inputCapsules *= input.Shape[d];
+        }
+
+        if (inputCapsules <= 0)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer's inputCapsules must be positive; got {inputCapsules} from input shape.", nameof(input));
+        if (inputCapsuleDimension <= 0)
+            throw new ArgumentException(
+                $"DigitCapsuleLayer's inputCapsuleDimension must be positive; got {inputCapsuleDimension} from input shape.", nameof(input));
+
+        _inputCapsules = inputCapsules;
+        _inputCapsuleDimension = inputCapsuleDimension;
+        ResolveShapes(new[] { inputCapsules, inputCapsuleDimension }, new[] { _numClasses, _outputCapsuleDimension });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Lazy initialization: allocate the routing weight tensor against
+    /// the resolved <c>[inputCapsules, numClasses, inputCapsuleDimension,
+    /// outputCapsuleDimension]</c> shape and run the standard parameter
+    /// initialization. Eager-ctor instances bypass this path because
+    /// <see cref="_isInitialized"/> is set to true at construction.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_inputCapsules <= 0 || _inputCapsuleDimension <= 0)
+            throw new InvalidOperationException(
+                "DigitCapsuleLayer cannot initialize until OnFirstForward has resolved the input capsule structure from input shape.");
+
+        _weights = new Tensor<T>([_inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+        InitializeParameters();
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -363,6 +497,13 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-ctor instances start with _inputCapsules =
+        // _inputCapsuleDimension = -1; resolve from input.Shape on first
+        // call. Eager-ctor instances are already initialized so both
+        // calls are no-ops.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
@@ -517,6 +658,14 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy-ctor DigitCapsuleLayer that takes the GPU path on first
+        // use would reshape with -1 input dims and reach
+        // CapsulePredictionsGpu with a [0,0,0,0] weight tensor.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         var inputShape = input._shape;
         int rank = inputShape.Length;
 
@@ -601,9 +750,16 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             _lastCouplings = couplings;
         }
 
-        // Dispose intermediate tensors
+        // Dispose intermediate tensors. Critical: only dispose `couplings`
+        // when we did NOT cache it on _lastCouplings — otherwise the
+        // backward pass reads a disposed tensor and reports a use-after-
+        // free (or a zeroed-out buffer if the pool reused it). predictions
+        // is never cached so it's always safe to drop.
         predictions.Dispose();
-        couplings.Dispose();
+        if (!IsTrainingMode)
+        {
+            couplings.Dispose();
+        }
 
         // Flatten output for compatibility with downstream layers
         // [B, C, D_out] -> [B, C*D_out]

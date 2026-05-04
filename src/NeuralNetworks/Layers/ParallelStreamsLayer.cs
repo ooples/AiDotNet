@@ -167,8 +167,8 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
     /// returns 3000.
     /// </para>
     /// </remarks>
-    public override int ParameterCount =>
-        _streamA.Sum(l => l.ParameterCount) + _streamB.Sum(l => l.ParameterCount);
+    public override long ParameterCount =>
+        (int)_streamA.Sum(l => l.ParameterCount) + (int)_streamB.Sum(l => l.ParameterCount);
 
     /// <summary>
     /// Performs the forward pass: splits input, runs both streams, and concatenates outputs.
@@ -286,7 +286,7 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var layer in _streamA)
         {
-            int count = layer.ParameterCount;
+            int count = checked((int)layer.ParameterCount);
             if (count > 0)
             {
                 layer.SetParameters(parameters.GetSubVector(offset, count));
@@ -295,7 +295,7 @@ public class ParallelStreamsLayer<T> : LayerBase<T>
         }
         foreach (var layer in _streamB)
         {
-            int count = layer.ParameterCount;
+            int count = checked((int)layer.ParameterCount);
             if (count > 0)
             {
                 layer.SetParameters(parameters.GetSubVector(offset, count));

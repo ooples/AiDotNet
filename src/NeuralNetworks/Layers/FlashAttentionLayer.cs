@@ -396,7 +396,7 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => _queryWeights.Length * 4 + _outputBias.Length;
+    public override long ParameterCount => _queryWeights.Length * 4 + _outputBias.Length;
 
     /// <summary>
     /// Gets all layer parameters as a single vector.

@@ -76,7 +76,7 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
+    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet++ model.
@@ -151,14 +151,22 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        int baseCount = checked((int)_baseUNet.ParameterCount);
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)baseCount + ctrlCount;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
-        var baseCount = _baseUNet.ParameterCount;
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(baseParams));
         offset += baseCount;
 
-        var ctrlCount = _controlEncoder.ParameterCount;
         var ctrlParams = new T[ctrlCount];
         for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
@@ -187,7 +195,7 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
             Name = "ControlNet++",
             Version = "1.0",
             Description = "Improved ControlNet with reward-guided training for better control adherence",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

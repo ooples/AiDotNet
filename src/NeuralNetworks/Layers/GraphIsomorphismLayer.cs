@@ -145,7 +145,7 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _mlpWeights1.Length + _mlpWeights2.Length + _mlpBias1.Length + _mlpBias2.Length + (_learnEpsilon ? 1 : 0);
 
     /// <inheritdoc/>

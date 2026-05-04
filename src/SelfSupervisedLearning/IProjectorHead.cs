@@ -90,9 +90,10 @@ public interface IProjectorHead<T>
     void ClearGradients();
 
     /// <summary>
-    /// Gets the total number of trainable parameters.
+    /// Gets the total number of trainable parameters. Long for foundation-scale
+    /// models per #1237.
     /// </summary>
-    int ParameterCount { get; }
+    long ParameterCount { get; }
 
     /// <summary>
     /// Sets training or evaluation mode.

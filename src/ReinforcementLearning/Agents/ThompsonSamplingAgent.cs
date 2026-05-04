@@ -180,7 +180,7 @@ public class ThompsonSamplingAgent<T> : ReinforcementLearningAgentBase<T>
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
-    public override int ParameterCount => _options.NumArms * 2;
+    public override long ParameterCount => _options.NumArms * 2;
     public override int FeatureCount => 1;
     public override byte[] Serialize()
     {

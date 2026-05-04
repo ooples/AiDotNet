@@ -77,7 +77,7 @@ public class StandardGeneticAlgorithm<T, TInput, TOutput> :
                     // (0 for VectorModel/no intercept, 1 for RegressionBase with intercept)
                     int interceptCount = parameters.Length;
                     int expectedParameterCount = inputDimensions + interceptCount;
-                    parameters = new Vector<T>(expectedParameterCount);
+                    parameters = new Vector<T>((int)(expectedParameterCount));
                 }
             }
             else if (parameters.Length == 0)

@@ -32,7 +32,7 @@ public class AdvancedAlgebraLayerTests
         var layer = new OctonionLinearLayer<double>(4, 2);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         // (4 * 2 + 2) * 8 = (8 + 2) * 8 = 80
@@ -175,7 +175,7 @@ public class AdvancedAlgebraLayerTests
         var layer = new HyperbolicLinearLayer<double>(10, 5);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         // Weights: 5 * 10 = 50, Scalar biases: 5, Total: 55
@@ -277,7 +277,7 @@ public class AdvancedAlgebraLayerTests
         var layer = new SparseLinearLayer<double>(100, 50, sparsity: 0.9);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         // Approximate check - should be much less than 5050 (dense case)
@@ -412,8 +412,8 @@ public class AdvancedAlgebraLayerTests
         var layerNonAffine = new InstanceNormalizationLayer<double>(64, affine: false);
 
         // Assert
-        Assert.Equal(128, layerAffine.ParameterCount); // 64 gamma + 64 beta
-        Assert.Equal(0, layerNonAffine.ParameterCount); // no learnable params
+        Assert.Equal(128, (int)layerAffine.ParameterCount); // 64 gamma + 64 beta
+        Assert.Equal(0, (int)layerNonAffine.ParameterCount); // no learnable params
     }
 
     [Fact(Timeout = 60000)]

@@ -103,7 +103,7 @@ public class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => _outputSize * _inputSize * 2 + _outputSize * 2;
+    public override long ParameterCount => _outputSize * _inputSize * 2 + _outputSize * 2;
 
     private void InitializeParameters()
     {

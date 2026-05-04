@@ -70,7 +70,7 @@ internal class LinearVectorModel : IFullModel<double, Matrix<double>, Vector<dou
         _parameters = parameters.Clone();
     }
 
-    public int ParameterCount => _parameters.Length;
+    public long ParameterCount => _parameters.Length;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
@@ -249,7 +249,7 @@ internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientC
         ILossFunction<double> lossFunction,
         double innerLearningRate)
     {
-        var gradients = new Vector<double>(ParameterCount);
+        var gradients = new Vector<double>((int)ParameterCount);
         for (int i = 0; i < gradients.Length; i++)
         {
             gradients[i] = 0.05 * (i + 1);
@@ -259,7 +259,7 @@ internal class SecondOrderMatrixModel : LinearVectorModel, ISecondOrderGradientC
 
     public override IFullModel<double, Matrix<double>, Vector<double>> DeepCopy()
     {
-        var copy = new SecondOrderMatrixModel(ParameterCount - 1);
+        var copy = new SecondOrderMatrixModel((int)ParameterCount - 1);
         copy.SetParameters(GetParameters());
         return copy;
     }
@@ -333,7 +333,7 @@ internal class TensorEmbeddingModel : IFullModel<double, Matrix<double>, Tensor<
         _parameters = parameters.Clone();
     }
 
-    public int ParameterCount => _parameters.Length;
+    public long ParameterCount => _parameters.Length;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Matrix<double>, Tensor<double>> WithParameters(Vector<double> parameters)

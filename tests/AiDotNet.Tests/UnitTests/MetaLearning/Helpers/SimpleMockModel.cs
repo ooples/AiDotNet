@@ -44,7 +44,7 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
         _parameters = parameters.Clone();
     }
 
-    public int ParameterCount => _parameters.Length;
+    public long ParameterCount => _parameters.Length;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> parameters)
@@ -124,7 +124,7 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null)
     {
         // Return non-zero gradients so that meta-learning parameter updates work
-        var gradients = new Vector<double>(ParameterCount);
+        var gradients = new Vector<double>((int)ParameterCount);
         for (int i = 0; i < ParameterCount; i++)
         {
             gradients[i] = 0.1 * (i + 1);  // Non-zero values for testing
@@ -151,7 +151,7 @@ public class SimpleMockModel : IFullModel<double, Tensor<double>, Tensor<double>
     {
         // Return non-zero gradients to allow meta-learning parameter updates
         // In a real implementation this would compute gradients through the adaptation steps
-        var gradients = new Vector<double>(ParameterCount);
+        var gradients = new Vector<double>((int)ParameterCount);
         for (int i = 0; i < ParameterCount; i++)
         {
             gradients[i] = 0.05 * (i + 1);  // Non-zero values for testing

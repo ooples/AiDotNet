@@ -186,7 +186,7 @@ public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
     /// <inheritdoc />
     public override void UpdateParameters(Vector<T> gradients)
     {
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (gradients.Length != expectedCount)
         {
             throw new ArgumentException(

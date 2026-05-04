@@ -183,7 +183,7 @@ public class ProgressiveNeuralNetworks<T, TInput, TOutput> : ContinualLearningSt
         if (_columns.Count == 0)
         {
             // First task: store base parameter count
-            _baseParameterCount = InterfaceGuard.Parameterizable(model).ParameterCount;
+            _baseParameterCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
         }
         else
         {

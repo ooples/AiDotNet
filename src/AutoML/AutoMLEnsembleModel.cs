@@ -272,7 +272,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
             throw new InvalidOperationException("Ensemble has no members.");
         }
 
-        int expected = ParameterCount;
+        int expected = (int)ParameterCount;
         if (parameters.Length != expected)
         {
             throw new ArgumentException($"Parameter vector length {parameters.Length} does not match expected {expected}.", nameof(parameters));
@@ -282,7 +282,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         foreach (var member in Members)
         {
             var paramMember = (IParameterizable<T, Matrix<T>, Vector<T>>)member;
-            int count = paramMember.ParameterCount;
+            int count = checked((int)paramMember.ParameterCount);
             var segment = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
@@ -294,7 +294,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         }
     }
 
-    public override int ParameterCount => Members.Sum(m => ((IParameterizable<T, Matrix<T>, Vector<T>>)m).ParameterCount);
+    public override long ParameterCount => Members.Sum(m => ((IParameterizable<T, Matrix<T>, Vector<T>>)m).ParameterCount);
 
     public override IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
@@ -416,7 +416,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
             throw new InvalidOperationException("Ensemble has no members.");
         }
 
-        int expected = ParameterCount;
+        int expected = (int)ParameterCount;
         if (gradients.Length != expected)
         {
             throw new ArgumentException($"Gradient vector length {gradients.Length} does not match expected {expected}.", nameof(gradients));
@@ -426,7 +426,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
         foreach (var member in Members)
         {
             var paramMember = (IParameterizable<T, Matrix<T>, Vector<T>>)member;
-            int count = paramMember.ParameterCount;
+            int count = checked((int)paramMember.ParameterCount);
             var segment = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {

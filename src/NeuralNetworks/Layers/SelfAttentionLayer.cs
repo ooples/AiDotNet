@@ -331,7 +331,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     /// plus an output bias of size [embeddingDimension].
     /// Total = 3 × E² + E = E × (3E + 1) where E is the embedding dimension.
     /// </value>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         3 * (_embeddingDimension * _embeddingDimension) + _embeddingDimension;
 
     /// <summary>
@@ -1130,7 +1130,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     public override Vector<T> GetParameterGradients()
     {
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_queryWeightsGradient.ToArray()),
             new Vector<T>(_keyWeightsGradient.ToArray()),

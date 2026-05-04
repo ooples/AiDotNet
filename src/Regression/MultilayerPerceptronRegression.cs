@@ -253,7 +253,7 @@ public class MultilayerPerceptronRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     /// <summary>MLP uses OLS — no optimizer parameter injection.</summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     public override IEnumerable<int> GetActiveFeatureIndices()
     {

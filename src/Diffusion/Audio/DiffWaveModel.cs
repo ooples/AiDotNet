@@ -123,7 +123,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     #region Properties
 
     /// <inheritdoc />
-    public override int ParameterCount => _network.ParameterCount;
+    public override long ParameterCount => _network.ParameterCount;
 
     /// <summary>
     /// Gets the sample rate in Hz.
@@ -348,7 +348,7 @@ public class DiffWaveModel<T> : DiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var expected = _network.ParameterCount;
+        int expected = checked((int)_network.ParameterCount);
         if (parameters.Length != expected)
             throw new ArgumentException($"Expected {expected} parameters, got {parameters.Length}.");
 
@@ -430,7 +430,7 @@ public class DiffWaveNetwork<T>
     /// <summary>
     /// Gets the number of parameters.
     /// </summary>
-    public int ParameterCount { get; private set; }
+    public long ParameterCount { get; private set; }
 
     /// <summary>
     /// Initializes a new DiffWaveNetwork.
@@ -481,6 +481,10 @@ public class DiffWaveNetwork<T>
 
         foreach (var block in _residualBlocks)
         {
+            // No per-block narrowing — ParameterCount is long, and a
+            // truncate-then-add would silently wrap the running sum once
+            // an individual block crosses int.MaxValue. Accumulate in
+            // the property's native long width.
             ParameterCount += block.ParameterCount;
         }
     }
@@ -614,7 +618,7 @@ public class DiffWaveNetwork<T>
 
         foreach (var block in _residualBlocks)
         {
-            var count = block.ParameterCount;
+            int count = checked((int)block.ParameterCount);
             var p = new T[count];
             for (int i = 0; i < count; i++)
             {
@@ -629,7 +633,7 @@ public class DiffWaveNetwork<T>
 
     private int SetLayerParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        var count = layer.ParameterCount;
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {
@@ -659,7 +663,7 @@ public class DiffWaveResidualBlock<T>
     /// <summary>
     /// Gets the number of parameters.
     /// </summary>
-    public int ParameterCount { get; }
+    public long ParameterCount { get; }
 
     /// <summary>
     /// Initializes a new residual block.
@@ -844,7 +848,7 @@ public class DiffWaveResidualBlock<T>
 
     private int SetLayerParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        var count = layer.ParameterCount;
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {

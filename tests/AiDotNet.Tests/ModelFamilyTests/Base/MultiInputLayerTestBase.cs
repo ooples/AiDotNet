@@ -155,7 +155,7 @@ public abstract class MultiInputLayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        int count = layer.ParameterCount;
+        int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 
         Assert.True(count >= 0, "ParameterCount should be non-negative.");

@@ -280,7 +280,33 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     public abstract int TimeEmbeddingDim { get; }
 
     /// <inheritdoc />
-    public abstract int ParameterCount { get; }
+    public abstract long ParameterCount { get; }
+
+    /// <summary>
+    /// Streams the predictor's trainable weight tensors per-tensor without
+    /// materialising a flat aggregate, mirroring PyTorch's
+    /// <c>nn.Module.parameters()</c> generator pattern. Default
+    /// implementation walks <see cref="Layers"/> and yields each layer's
+    /// own chunks; subclasses with non-Layer-based weight storage
+    /// (registered tensors, embedded sub-models) override to surface
+    /// those too. Foundation-scale predictors (DiT-XL/2 with HiddenDim
+    /// 3072 and 48 layers) overflow <see cref="int.MaxValue"/> in the
+    /// aggregate; callers walking these chunks accumulate length into a
+    /// <see cref="long"/>.
+    /// </summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Default: single chunk wrapping GetParameters(). Concrete predictors
+        // with tractable per-block weight stores SHOULD override to yield
+        // per-tensor chunks so foundation-scale models avoid materialising a
+        // flat aggregate that overflows Vector.Length's int contract. The
+        // single-chunk default keeps ParameterCount == sum-of-chunk-lengths
+        // exact, which is the contract test (#1237's acceptance criterion)
+        // depends on.
+        var p = GetParameters();
+        if (p.Length == 0) yield break;
+        yield return new Tensor<T>(new[] { p.Length }, p);
+    }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
@@ -548,7 +574,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount,
             Description = $"Noise predictor with {ParameterCount} parameters, {InputChannels} input channels, {BaseChannels} base channels."
         };

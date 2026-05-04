@@ -150,7 +150,7 @@ public static class SSMQuantizationHelper<T>
     {
         if (layer == null) throw new ArgumentNullException(nameof(layer));
 
-        int paramCount = layer.ParameterCount;
+        int paramCount = checked((int)layer.ParameterCount);
         long originalBytes = paramCount * (long)Unsafe.SizeOf<T>();
         long quantizedBytes = (long)Math.Ceiling(paramCount * targetBitWidth / 8.0);
 

@@ -181,7 +181,7 @@ public class PartialLeastSquaresRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     /// <summary>PLS doesn't benefit from optimizer parameter injection.</summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     public override IFullModel<T, Matrix<T>, Vector<T>> Clone()
     {

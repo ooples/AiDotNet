@@ -99,7 +99,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// Each octonion has 8 real components, so the parameter count is:
     /// (InputFeatures * OutputFeatures + OutputFeatures) * 8
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         (InputFeatures * OutputFeatures + OutputFeatures) * 8;
 
     /// <summary>
@@ -312,7 +312,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gradients = new Vector<T>(ParameterCount);
+        var gradients = new Vector<T>((int)ParameterCount);
         int weightSize = OutputFeatures * InputFeatures * 8;
 
         if (_weightsGradient is not null)

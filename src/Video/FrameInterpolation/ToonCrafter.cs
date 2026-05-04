@@ -169,7 +169,7 @@ public class ToonCrafter<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int required = Layers.Sum(l => l.ParameterCount);
+        int required = (int)(int)Layers.Sum(l => l.ParameterCount);
         if (parameters.Length < required)
             throw new ArgumentException(
                 $"Parameter vector length {parameters.Length} is less than required {required}.",

@@ -181,7 +181,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     {
         if (_patchEmbed is not null) return;
         int layerSum = 0;
-        foreach (var l in Layers) layerSum += l.ParameterCount;
+        foreach (var l in Layers) layerSum += (int)l.ParameterCount;
         if (paramVectorLength <= layerSum) return;
 
         var probe = new Tensor<T>(new[] { 1, 3, _options.ImageSize, _options.ImageSize });
@@ -195,14 +195,14 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     // hands back N to UpdateParameters — but UpdateParameters consumes
     // _patchEmbed.ParameterCount extra slots from the front, shifting every
     // Layer's slice and corrupting weights.
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         (_patchEmbed?.ParameterCount ?? 0) +
-        Layers.Sum(l => l.ParameterCount);
+        (int)Layers.Sum(l => l.ParameterCount);
 
     public override Vector<T> GetParameters()
     {
         var perLayer = Layers.Select(l => l.GetParameters()).ToList();
-        int patchLen = _patchEmbed?.ParameterCount ?? 0;
+        int patchLen = (int)(_patchEmbed?.ParameterCount ?? 0);
         int total = patchLen + perLayer.Sum(p => p.Length);
         var result = new Vector<T>(total);
         int idx = 0;
@@ -229,7 +229,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         int idx = 0;
         if (_patchEmbed is not null)
         {
-            int pc = _patchEmbed.ParameterCount;
+            int pc = checked((int)_patchEmbed.ParameterCount);
             if (pc > 0)
             {
                 _patchEmbed.SetParameters(parameters.Slice(idx, pc));
@@ -238,7 +238,7 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         }
         foreach (var l in Layers)
         {
-            int c = l.ParameterCount;
+            int c = checked((int)l.ParameterCount);
             l.SetParameters(parameters.Slice(idx, c));
             idx += c;
         }
@@ -251,14 +251,14 @@ public class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
         int idx = 0;
         if (_patchEmbed is not null)
         {
-            int pc = _patchEmbed.ParameterCount;
+            int pc = checked((int)_patchEmbed.ParameterCount);
             if (pc > 0)
             {
                 _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
                 idx += pc;
             }
         }
-        foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
     }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;

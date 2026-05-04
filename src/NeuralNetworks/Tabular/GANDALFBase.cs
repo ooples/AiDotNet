@@ -86,7 +86,7 @@ public abstract class GANDALFBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
@@ -94,8 +94,8 @@ public abstract class GANDALFBase<T>
 
             // Gating layers
             foreach (var layer in _gatingLayers)
-                count += layer.ParameterCount;
-            count += _gatingOutput.ParameterCount;
+                count += (int)layer.ParameterCount;
+            count += (int)_gatingOutput.ParameterCount;
 
             // Tree parameters
             for (int t = 0; t < Options.NumTrees; t++)

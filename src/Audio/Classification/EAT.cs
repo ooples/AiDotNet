@@ -226,7 +226,7 @@ public class EAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
         if (!_useNativeMode) throw new NotSupportedException("UpdateParameters is not supported in ONNX mode.");
         int idx = 0;
-        foreach (var layer in Layers) { int c = layer.ParameterCount; layer.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        foreach (var layer in Layers) { int c = (int)layer.ParameterCount; layer.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
     }
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => _melSpectrogram?.Forward(rawAudio) ?? throw new InvalidOperationException("MelSpectrogram not initialized.");

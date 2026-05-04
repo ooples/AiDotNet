@@ -339,7 +339,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// - Total: 10,100 parameters
     /// </para>
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _linearWeights.Length + _gateWeights.Length + _linearBias.Length + _gateBias.Length;
 
     /// <summary>
@@ -786,7 +786,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     {
         if (_linearWeightsGradient == null || _gateWeightsGradient == null ||
             _linearBiasGradient == null || _gateBiasGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_linearWeightsGradient.ToArray()),
             new Vector<T>(_gateWeightsGradient.ToArray()),

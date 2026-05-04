@@ -532,7 +532,7 @@ public class ExpressionTreeIntegrationTests
         var add = new ExpressionTree<double, Matrix<double>, Vector<double>>(
             ExpressionNodeType.Add, 0.0, multiply, five);
 
-        Assert.Equal(2, add.ParameterCount);
+        Assert.Equal(2, (int)add.ParameterCount);
     }
 
     #endregion

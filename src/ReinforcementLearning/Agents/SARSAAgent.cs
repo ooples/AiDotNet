@@ -240,7 +240,7 @@ public class SARSAAgent<T> : ReinforcementLearningAgentBase<T>
     // constructed agent — callers (the IParameterizable contract and the
     // generated Parameters_ShouldBeNonEmpty invariant test) expect a positive
     // count even before any state has been visited.
-    public override int ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
+    public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
 
     public override int FeatureCount => _options.StateSize;
 

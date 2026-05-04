@@ -176,7 +176,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => CM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _noisePredictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
@@ -598,7 +598,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedCount = _noisePredictor.ParameterCount + _vae.ParameterCount;
+        int expectedCount = (int)(_noisePredictor.ParameterCount + _vae.ParameterCount);
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
@@ -607,13 +607,13 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
                 nameof(parameters));
         }
 
-        int npCount = _noisePredictor.ParameterCount;
+        int npCount = checked((int)_noisePredictor.ParameterCount);
         var noisePredParams = new Vector<T>(npCount);
         for (int i = 0; i < npCount; i++)
             noisePredParams[i] = parameters[i];
         _noisePredictor.SetParameters(noisePredParams);
 
-        int vaeCount = _vae.ParameterCount;
+        int vaeCount = checked((int)_vae.ParameterCount);
         var vaeParams = new Vector<T>(vaeCount);
         for (int i = 0; i < vaeCount; i++)
             vaeParams[i] = parameters[npCount + i];
@@ -659,7 +659,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             Name = "ConsistencyModel",
             Version = "1.0",
             Description = "Consistency Model for single-step or few-step image generation",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

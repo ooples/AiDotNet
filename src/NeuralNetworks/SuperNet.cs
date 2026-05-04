@@ -78,7 +78,7 @@ namespace AiDotNet.NeuralNetworks
 
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
-        public override int ParameterCount => _weights.Values.Sum(w => w.Length) +
+        public override long ParameterCount => _weights.Values.Sum(w => w.Length) +
                                       _architectureParams.Sum(a => a.Rows * a.Columns);
 
         /// <summary>
@@ -1203,7 +1203,7 @@ namespace AiDotNet.NeuralNetworks
                 ["ModelType"] = "SuperNet (Differentiable Architecture Search)",
                 ["NumNodes"] = _numNodes,
                 ["NumOperations"] = _numOperations,
-                ["ParameterCount"] = ParameterCount,
+                ["ParameterCount"] = (int)ParameterCount,
                 ["ArchitectureParameterCount"] = _architectureParams.Sum(a => a.Rows * a.Columns),
                 ["WeightParameterCount"] = _weights.Values.Sum(w => w.Length),
                 ["InputSize"] = _inputSize,

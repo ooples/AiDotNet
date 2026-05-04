@@ -496,7 +496,7 @@ public class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int count = layer.ParameterCount;
+            int count = checked((int)layer.ParameterCount);
             var layerParams = parameters.Slice(index, count);
             layer.UpdateParameters(layerParams);
             index += count;

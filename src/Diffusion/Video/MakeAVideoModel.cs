@@ -156,7 +156,7 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override int ParameterCount => _videoUNet.GetParameters().Length + _vae.ParameterCount;
+    public override long ParameterCount => _videoUNet.GetParameters().Length + _vae.ParameterCount;
 
     #endregion
 
@@ -272,7 +272,7 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _videoUNet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException(
@@ -327,7 +327,7 @@ public class MakeAVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "Make-A-Video",
             Version = "1.0",
             Description = "Make-A-Video text-to-video generation without paired text-video data by Meta",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

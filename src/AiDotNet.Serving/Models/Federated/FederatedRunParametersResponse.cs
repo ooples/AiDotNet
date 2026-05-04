@@ -18,7 +18,7 @@ public sealed class FederatedRunParametersResponse
     /// <summary>
     /// Gets or sets the number of parameters in the vector.
     /// </summary>
-    public int ParameterCount { get; set; }
+    public long ParameterCount { get; set; }
 
     /// <summary>
     /// Gets or sets the global parameter vector (double precision transport format).

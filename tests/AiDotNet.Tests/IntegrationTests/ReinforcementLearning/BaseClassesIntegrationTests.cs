@@ -74,7 +74,7 @@ public class BaseClassesIntegrationTests
     {
         var agent = new TestDeepAgent(CreateOptions());
 
-        Assert.Equal(agent.NetworkParameterCount, agent.ParameterCount);
+        Assert.Equal(agent.NetworkParameterCount, (int)agent.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -197,7 +197,7 @@ public class BaseClassesIntegrationTests
             _parameters[0] = 0.1;
         }
 
-        public int NetworkParameterCount => Networks.Sum(network => network.ParameterCount);
+        public int NetworkParameterCount => (int)Networks.Sum(network => network.ParameterCount);
 
         public override int FeatureCount => 2;
 
@@ -346,7 +346,7 @@ public class BaseClassesIntegrationTests
             }
         }
 
-        public override int ParameterCount => _parameters.Length;
+        public override long ParameterCount => _parameters.Length;
 
         public override int FeatureCount => 2;
 
@@ -362,7 +362,7 @@ public class BaseClassesIntegrationTests
             Vector<double> target,
             ILossFunction<double>? lossFunction = null)
         {
-            return new Vector<double>(ParameterCount);
+            return new Vector<double>((int)ParameterCount);
         }
 
         public override void ApplyGradients(Vector<double> gradients, double learningRate)

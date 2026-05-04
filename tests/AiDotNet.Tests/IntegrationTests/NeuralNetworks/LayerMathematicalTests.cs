@@ -44,7 +44,7 @@ public class LayerMathematicalTests
     public async Task DenseLayer_ParameterCount()
     {
         var layer = new DenseLayer<double>(5);
-        Assert.Equal(55, layer.ParameterCount); // 10*5 + 5
+        Assert.Equal(55, (int)layer.ParameterCount); // 10*5 + 5
     }
 
     /// <summary>

@@ -69,7 +69,7 @@ public class VideoP2PModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => false;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => true;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Initializes a new instance of VideoP2PModel with full customization support.
@@ -147,7 +147,7 @@ public class VideoP2PModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var predCount = _predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -187,7 +187,7 @@ public class VideoP2PModel<T> : VideoDiffusionModelBase<T>
             Name = "VideoP2P",
             Version = "1.0",
             Description = "VideoP2P prompt-to-prompt cross-attention control for video editing.",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "cross-attention-p2p");

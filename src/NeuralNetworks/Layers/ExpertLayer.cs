@@ -120,7 +120,7 @@ public class ExpertLayer<T> : LayerBase<T>
     /// but also requires more memory and computation.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _layers.Sum(l => l.ParameterCount);
+    public override long ParameterCount => (int)_layers.Sum(l => l.ParameterCount);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ExpertLayer{T}"/> class with the specified layers.
@@ -214,6 +214,16 @@ public class ExpertLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-shape support: if construction-time inputShape contained
+        // sentinel -1 dims, the chain-resolve in the ctor was skipped
+        // and inner lazy layers (Dense / Conv / Attention) are still
+        // unresolved. Walk the chain now using the actual input.Shape
+        // so each lazy sub-layer's OnFirstForward fires with a real
+        // shape on its own first Forward — and propagate the resolved
+        // input/output to the outer ExpertLayer so IsShapeResolved
+        // flips to true.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         var output = input;
 
         // Pass through each layer sequentially
@@ -227,6 +237,113 @@ public class ExpertLayer<T> : LayerBase<T>
 
         // Apply the expert's activation function if specified
         return ApplyActivation(output);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Chain-resolves each inner layer's input shape from the actual
+    /// runtime input. This is the lazy counterpart to the ctor's eager
+    /// resolution path — it runs only when at least one inner layer is
+    /// still unresolved (ie ctor was passed a -1 sentinel input shape).
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        if (input._shape.Length == 0)
+            throw new ArgumentException("ExpertLayer requires non-empty input shape.", nameof(input));
+
+        // Determine whether axis 0 is a batch dimension. The eager
+        // constructor receives a per-sample feature shape (no batch),
+        // so sub-layers are configured against that. The lazy path has
+        // to disambiguate at first forward:
+        //
+        //  * If any inner layer is already shape-resolved, its
+        //    expected InputShape tells us the per-sample rank; axis 0
+        //    is batch iff the actual input has exactly one extra
+        //    leading dim.
+        //  * Otherwise, default to the convention that axis 0 is
+        //    batch (rank>=2). For rank-1 unbatched, treat the whole
+        //    shape as features. We can't reliably distinguish a
+        //    truly unbatched [H, W, C] from a batched [B=H, W, C]
+        //    without a hint, so we document the contract: lazy
+        //    ExpertLayers expect a batch axis on first forward, OR
+        //    at least one eagerly-constructed inner layer to anchor
+        //    the per-sample rank.
+        int inputRank = input._shape.Length;
+        int? perSampleRank = null;
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> lb && lb.IsShapeResolved)
+            {
+                var resolved = lb.GetInputShape();
+                if (resolved != null && resolved.Length > 0 && resolved.All(d => d > 0))
+                {
+                    perSampleRank = resolved.Length;
+                    break;
+                }
+            }
+        }
+
+        bool stripBatch;
+        if (perSampleRank.HasValue)
+        {
+            if (inputRank == perSampleRank.Value)
+            {
+                stripBatch = false;
+            }
+            else if (inputRank == perSampleRank.Value + 1)
+            {
+                stripBatch = true;
+            }
+            else
+            {
+                throw new ArgumentException(
+                    $"ExpertLayer's first inner layer expects rank-{perSampleRank.Value} " +
+                    $"per-sample input, but the runtime input has rank {inputRank}. " +
+                    $"Expected rank {perSampleRank.Value} (unbatched) or rank " +
+                    $"{perSampleRank.Value + 1} (batched).", nameof(input));
+            }
+        }
+        else
+        {
+            stripBatch = inputRank > 1;
+        }
+
+        int[] runningShape;
+        if (stripBatch)
+        {
+            runningShape = new int[inputRank - 1];
+            for (int i = 0; i < runningShape.Length; i++) runningShape[i] = input._shape[i + 1];
+        }
+        else
+        {
+            runningShape = new int[inputRank];
+            for (int i = 0; i < runningShape.Length; i++) runningShape[i] = input._shape[i];
+        }
+
+        foreach (var layer in _layers)
+        {
+            if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                lb.ResolveFromShape(runningShape);
+            }
+            runningShape = layer.GetOutputShape();
+        }
+
+        // Outer-layer shapes: input is the per-sample shape we just
+        // resolved (regardless of whether axis 0 was batch), output is
+        // the last sub-layer's resolved output.
+        int[] outerInput;
+        if (stripBatch)
+        {
+            outerInput = new int[inputRank - 1];
+            for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i + 1];
+        }
+        else
+        {
+            outerInput = new int[inputRank];
+            for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i];
+        }
+        ResolveShapes(outerInput, runningShape);
     }
 
     /// <summary>
@@ -246,6 +363,14 @@ public class ExpertLayer<T> : LayerBase<T>
             throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, an
+        // ExpertLayer constructed with [-1] inputShape that takes the GPU
+        // path on first use would chain into unresolved child layers and
+        // either throw or silently produce wrong output. OnFirstForward
+        // chain-resolves inner sub-layers from input.Shape; subsequent
+        // calls short-circuit via IsShapeResolved.
+        if (!IsShapeResolved) OnFirstForward(inputs[0]);
 
         var output = inputs[0];
 
@@ -435,7 +560,7 @@ public class ExpertLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var layer in _layers.Where(l => l.ParameterCount > 0))
         {
-            var layerParamCount = layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             var layerParamsVec = parameters.Slice(offset, layerParamCount);
             layer.SetParameters(layerParamsVec);
             offset += layerParamCount;

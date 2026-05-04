@@ -126,7 +126,7 @@ public class MultinomialLogisticRegression<T> : RegressionBase<T>
     /// <summary>
     /// Multinomial logistic is a classification model — no optimizer parameter injection.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultinomialLogisticRegression{T}"/> class with optional custom options and regularization.

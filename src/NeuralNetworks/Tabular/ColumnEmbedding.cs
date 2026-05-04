@@ -53,7 +53,7 @@ public class ColumnEmbedding<T>
     /// <summary>
     /// Gets the number of parameters (0 if using sinusoidal).
     /// </summary>
-    public int ParameterCount => _learnable ? _numColumns * _embeddingDim : 0;
+    public long ParameterCount => _learnable ? _numColumns * _embeddingDim : 0;
 
     /// <summary>
     /// Initializes column embeddings.

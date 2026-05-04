@@ -79,7 +79,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
                 }
             }
 
-            public int ParameterCount
+            public long ParameterCount
             {
                 get { return _parameters.Length; }
             }
@@ -171,7 +171,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
 
             public Vector<double> ComputeGradients(double[] input, double[] target, ILossFunction<double>? lossFunction = null)
             {
-                return new Vector<double>(ParameterCount);
+                return new Vector<double>((int)ParameterCount);
             }
 
             public void ApplyGradients(Vector<double> gradients, double learningRate)
@@ -448,7 +448,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             var individual = new ModelIndividual<double, double[], double[], ModelParameterGene>(model, genes, CreateMockModel);
 
             // Act
-            var count = individual.ParameterCount;
+            int count = (int)individual.ParameterCount;
 
             // Assert
             Assert.Equal(5, count);
@@ -463,8 +463,8 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             var individual = new ModelIndividual<double, double[], double[], ModelParameterGene>(model, genes, CreateMockModel);
 
             // Act
-            var count1 = individual.ParameterCount;
-            var count2 = individual.ParameterCount;
+            int count1 = (int)individual.ParameterCount;
+            int count2 = (int)individual.ParameterCount;
 
             // Assert
             Assert.Equal(count1, count2);
@@ -478,7 +478,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
             var model = new MockModel(5);
             var genes = new List<ModelParameterGene> { new ModelParameterGene(0.1) };
             var individual = new ModelIndividual<double, double[], double[], ModelParameterGene>(model, genes, CreateMockModel);
-            var initialCount = individual.ParameterCount;
+            int initialCount = (int)individual.ParameterCount;
 
             // Act
             var newParams = new Vector<double>(3);
@@ -487,7 +487,7 @@ namespace AiDotNet.Tests.UnitTests.Genetics
                 newParams[i] = i * 1.5;
             }
             individual.SetParameters(newParams);
-            var newCount = individual.ParameterCount;
+            int newCount = (int)individual.ParameterCount;
 
             // Assert
             Assert.Equal(5, initialCount);

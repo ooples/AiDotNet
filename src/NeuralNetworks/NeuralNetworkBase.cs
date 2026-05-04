@@ -487,7 +487,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             totalParameterCount += layer.GetParameters().Length;
         }
 
-        var parameters = new Vector<T>(totalParameterCount);
+        var parameters = new Vector<T>((int)(totalParameterCount));
         var destSpan = parameters.AsWritableSpan();
 
         int currentIndex = 0;
@@ -1762,7 +1762,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// The cache is invalidated when layers are modified.
     /// </para>
     /// </remarks>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
@@ -1833,7 +1833,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// but also requires more training data and computational resources.
     /// </para>
     /// </remarks>
-    public int GetParameterCount()
+    public long GetParameterCount()
     {
         return ParameterCount;
     }
@@ -5453,7 +5453,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(parameters));
         }
 
-        int totalParameterCount = ParameterCount;
+        int totalParameterCount = (int)ParameterCount;
         if (parameters.Length != totalParameterCount)
         {
             throw new ArgumentException($"Expected {totalParameterCount} parameters, got {parameters.Length}");
@@ -5463,9 +5463,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var srcSpan = parameters.AsSpan();
         foreach (var layer in Layers.Where(l => l.ParameterCount > 0))
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             // Bulk copy via Span instead of element-by-element
-            var layerParameters = new Vector<T>(layerParameterCount);
+            var layerParameters = new Vector<T>((int)(layerParameterCount));
             srcSpan.Slice(currentIndex, layerParameterCount)
                 .CopyTo(layerParameters.AsWritableSpan());
             layer.SetParameters(layerParameters);
@@ -5770,29 +5770,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Reverse-mode AD: compute gradients for all trainable parameters
         var grads = tape.ComputeGradients(lossTensor, trainableParams);
 
-        // Flatten into parameter gradient vector (same ordering as GetParameters)
-        var flatGradients = new List<T>();
-        foreach (var layer in Layers)
+        // Use GetParameterChunks to keep gradient/parameter ordering
+        // aligned (fixes #1245 / #1232). Frozen-or-detached tensors that
+        // tape didn't see are zero-padded to preserve length-alignment.
+        var flatGradients = new List<T>(ParameterCount);
+        foreach (var paramTensor in GetParameterChunks())
         {
-            if (layer is ITrainableLayer<T> trainable)
+            if (paramTensor is null || paramTensor.Length == 0) continue;
+            if (grads.TryGetValue(paramTensor, out var grad))
             {
-                foreach (var param in trainable.GetTrainableParameters())
-                {
-                    if (grads.TryGetValue(param, out var grad))
-                    {
-                        for (int i = 0; i < grad.Length; i++)
-                            flatGradients.Add(grad[i]);
-                    }
-                    else
-                    {
-                        for (int i = 0; i < param.Length; i++)
-                            flatGradients.Add(NumOps.Zero);
-                    }
-                }
+                for (int i = 0; i < grad.Length; i++)
+                    flatGradients.Add(grad[i]);
             }
             else
             {
-                for (int i = 0; i < layer.ParameterCount; i++)
+                for (int i = 0; i < paramTensor.Length; i++)
                     flatGradients.Add(NumOps.Zero);
             }
         }
@@ -6017,7 +6009,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
                 Layer = layer,
                 ParameterOffset = parameterOffset,
-                ParameterCount = layer.ParameterCount,
+                ParameterCount = (int)layer.ParameterCount,
                 InputShape = layer.GetInputShape(),
                 OutputShape = layer.GetOutputShape(),
                 IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
@@ -6025,7 +6017,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
             });
 
-            parameterOffset += layer.ParameterCount;
+            parameterOffset += (int)layer.ParameterCount;
         }
 
         _cachedLayerInfo = result.AsReadOnly();
@@ -6124,7 +6116,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 Category = layerBase?.GetLayerCategory() ?? LayerCategory.Other,
                 Layer = layer,
                 ParameterOffset = localOffset,
-                ParameterCount = layer.ParameterCount,
+                ParameterCount = (int)layer.ParameterCount,
                 InputShape = layer.GetInputShape(),
                 OutputShape = layer.GetOutputShape(),
                 IsTrainable = layer.SupportsTraining && layer.ParameterCount > 0,
@@ -6132,7 +6124,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 EstimatedActivationMemory = layerBase?.EstimateActivationMemory() ?? 0L,
             });
 
-            localOffset += layer.ParameterCount;
+            localOffset += (int)layer.ParameterCount;
         }
 
         return new SubModel<T>(subLayers, subInfos, startLayer, endLayer);

@@ -1022,7 +1022,7 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// This includes all parameters from both the Generator and Discriminator networks.
     /// </remarks>
-    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
+    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
@@ -1057,8 +1057,8 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
         }
 
-        int generatorCount = Generator.GetParameterCount();
-        int discriminatorCount = Discriminator.GetParameterCount();
+        int generatorCount = (int)Generator.GetParameterCount();
+        int discriminatorCount = (int)Discriminator.GetParameterCount();
 
         if (parameters.Length != generatorCount + discriminatorCount)
         {
@@ -1135,8 +1135,8 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        var genParamCount = Generator.GetParameterCount();
-        var discParamCount = Discriminator.GetParameterCount();
+        int genParamCount = (int)Generator.GetParameterCount();
+        int discParamCount = (int)Discriminator.GetParameterCount();
 
         // Initialize Generator optimizer state with vectorized Fill
         _genMomentum = new Vector<T>(genParamCount);

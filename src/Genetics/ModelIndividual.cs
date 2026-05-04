@@ -319,7 +319,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     }
 
     private int? _parameterCountCache;
-    public virtual int ParameterCount
+    public virtual long ParameterCount
         => _parameterCountCache ??= InterfaceGuard.Parameterizable(_innerModel).GetParameters()?.Length ?? 0;
 
     /// <inheritdoc/>

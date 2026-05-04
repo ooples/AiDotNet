@@ -395,9 +395,9 @@ public class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         int idx = 0;
         foreach (var l in Layers)
         {
-            int c = l.ParameterCount;
+            int c = checked((int)l.ParameterCount);
             l.UpdateParameters(parameters.Slice(idx, c));
-            idx += c;
+            idx = checked(idx + c);
         }
     }
 

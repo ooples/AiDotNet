@@ -134,7 +134,7 @@ internal partial class GroupedQueryAttentionLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _outputWeights.Length + _outputBias.Length;
 

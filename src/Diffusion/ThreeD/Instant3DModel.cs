@@ -100,7 +100,7 @@ public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsScoreDistillation => false;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -223,8 +223,8 @@ public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int uc = _unet.ParameterCount;
-        int vc = _vae.ParameterCount;
+        int uc = checked((int)_unet.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != uc + vc)
         {
@@ -295,7 +295,7 @@ public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
             Name = "Instant3D",
             Version = "1.0",
             Description = "Instant3D feed-forward text-to-3D generation",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

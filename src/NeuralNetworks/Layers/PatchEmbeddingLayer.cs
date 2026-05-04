@@ -162,7 +162,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <value>
     /// The total number of trainable parameters (projection weights + projection bias).
     /// </value>
-    public override int ParameterCount => _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Length;
+    public override long ParameterCount => _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Length;
 
     /// <summary>
     /// Creates a new patch embedding layer with the specified dimensions.
@@ -541,7 +541,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_projectionWeightsGradient == null || _projectionBiasGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_projectionWeightsGradient.ToArray()),
             new Vector<T>(_projectionBiasGradient.ToArray()));

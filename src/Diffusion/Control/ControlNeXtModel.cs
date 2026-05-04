@@ -73,7 +73,7 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
+    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
 
     public ControlNeXtModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -125,8 +125,8 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int o = 0;
-        var c1 = _baseUNet.ParameterCount; var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
-        var c2 = _controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
+        int c1 = checked((int)_baseUNet.ParameterCount); var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
+        int c2 = checked((int)_controlEncoder.ParameterCount); var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2));
     }
 
     /// <inheritdoc />
@@ -147,7 +147,7 @@ public class ControlNeXtModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNeXt", Version = "1.0",
             Description = "Parameter-efficient control with cross-normalization for improved generalization",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-controlnext");
         metadata.SetProperty("base_model", "Stable Diffusion 1.5");

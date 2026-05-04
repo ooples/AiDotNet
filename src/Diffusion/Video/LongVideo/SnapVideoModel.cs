@@ -70,7 +70,7 @@ public class SnapVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Initializes a new instance of SnapVideoModel with full customization support.
@@ -148,7 +148,7 @@ public class SnapVideoModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var predCount = _predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -188,7 +188,7 @@ public class SnapVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "SnapVideo",
             Version = "1.0",
             Description = "Snap Video scaled spatiotemporal transformer for text-to-video.",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "scaled-spatiotemporal-transformer");

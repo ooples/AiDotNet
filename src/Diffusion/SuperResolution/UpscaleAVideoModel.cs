@@ -232,7 +232,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => true;
 
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _videoUNet.GetParameters().Length + _temporalVAE.GetParameters().Length; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _videoUNet.GetParameters().Length + _temporalVAE.GetParameters().Length; } }
 
     /// <summary>
     /// Gets the video upscale factor (4x).
@@ -457,7 +457,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "Upscale-A-Video",
             Version = "1.0",
             Description = "Upscale-A-Video temporally consistent video super-resolution with diffusion",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

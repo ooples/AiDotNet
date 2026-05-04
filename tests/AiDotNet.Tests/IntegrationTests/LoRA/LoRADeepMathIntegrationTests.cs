@@ -23,7 +23,7 @@ public class LoRADeepMathIntegrationTests
         double[,] matrixA, double[,] matrixB)
     {
         var layer = new LoRALayer<double>(inputSize, outputSize, rank, alpha);
-        var parameters = new Vector<double>(layer.ParameterCount);
+        var parameters = new Vector<double>((int)layer.ParameterCount);
         int idx = 0;
         for (int i = 0; i < inputSize; i++)
             for (int j = 0; j < rank; j++)
@@ -349,21 +349,21 @@ public class LoRADeepMathIntegrationTests
     {
         // paramCount = inputSize*rank + rank*outputSize
         var layer = new LoRALayer<double>(64, 32, 8, 16.0);
-        Assert.Equal(64 * 8 + 8 * 32, layer.ParameterCount);
+        Assert.Equal(64 * 8 + 8 * 32, (int)layer.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task ParameterCount_Asymmetric()
     {
         var layer = new LoRALayer<double>(100, 10, 4, 4.0);
-        Assert.Equal(100 * 4 + 4 * 10, layer.ParameterCount);
+        Assert.Equal(100 * 4 + 4 * 10, (int)layer.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task ParameterCount_Rank1_Minimal()
     {
         var layer = new LoRALayer<double>(50, 30, 1, 1.0);
-        Assert.Equal(50 + 30, layer.ParameterCount);
+        Assert.Equal(50 + 30, (int)layer.ParameterCount);
     }
 
     #endregion
@@ -430,7 +430,7 @@ public class LoRADeepMathIntegrationTests
         var adapter = new DoRAAdapter<double>(baseLayer, rank: 2, alpha: 2.0);
 
         // frozen: loraParams + magnitude = (10*2 + 2*5) + 5 = 35
-        Assert.Equal(10 * 2 + 2 * 5 + 5, adapter.ParameterCount);
+        Assert.Equal(10 * 2 + 2 * 5 + 5, (int)adapter.ParameterCount);
     }
 
     #endregion
@@ -500,18 +500,18 @@ public class LoRADeepMathIntegrationTests
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: true);
 
         int loraOnly = 10 * 3 + 3 * 5;
-        Assert.Equal(loraOnly, adapter.ParameterCount);
+        Assert.Equal(loraOnly, (int)adapter.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task StandardAdapter_UnfrozenParamCount_BaseAndLoRA()
     {
         var baseLayer = new DenseLayer<double>(5);
-        int baseParams = baseLayer.ParameterCount;
+        int baseParams = (int)baseLayer.ParameterCount;
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank: 3, freezeBaseLayer: false);
 
         int loraParams = 10 * 3 + 3 * 5;
-        Assert.Equal(baseParams + loraParams, adapter.ParameterCount);
+        Assert.Equal(baseParams + loraParams, (int)adapter.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -561,7 +561,7 @@ public class LoRADeepMathIntegrationTests
         var adapter = new StandardLoRAAdapter<double>(baseLayer, rank, freezeBaseLayer: true);
 
         int fullWeights = size * size;
-        int loraParams = adapter.ParameterCount;
+        int loraParams = (int)adapter.ParameterCount;
         double ratio = (double)loraParams / fullWeights;
 
         Assert.True(ratio < 0.02, $"LoRA should use < 2% of parameters, got {ratio:P2}");
@@ -579,7 +579,7 @@ public class LoRADeepMathIntegrationTests
         var baseLayer = new DenseLayer<double>(5);
         var adapter = new LoHaAdapter<double>(baseLayer, rank: 3, alpha: 3.0);
 
-        Assert.Equal(2 * 3 * 10 * 5, adapter.ParameterCount);
+        Assert.Equal(2 * 3 * 10 * 5, (int)adapter.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]

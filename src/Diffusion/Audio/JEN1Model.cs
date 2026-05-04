@@ -128,7 +128,7 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
     public override bool SupportsAudioToAudio => true;
 
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _audioVae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _audioVae.ParameterCount;
 
     #endregion
 
@@ -227,8 +227,12 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _audioVae.ParameterCount;
+        // Use ParameterCount (cheap property) over GetParameters().Length
+        // (materialises a flat copy). checked() throws if a foundation-scale
+        // sub-model overflows int — Vector.Length is int and the slicing
+        // below cannot safely proceed past int.MaxValue anyway.
+        int unetCount = checked((int)_unet.ParameterCount);
+        int vaeCount = checked((int)_audioVae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -292,7 +296,7 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
             Name = "JEN-1",
             Version = "1.0",
             Description = "JEN-1 high-fidelity text-to-music generation with 1D latent diffusion at 48kHz",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

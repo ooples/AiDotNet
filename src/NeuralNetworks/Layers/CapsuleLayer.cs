@@ -142,7 +142,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// and bias values that need to be learned from data.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _transformationMatrix.Length + _bias.Length;
+    public override long ParameterCount => _transformationMatrix.Length + _bias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

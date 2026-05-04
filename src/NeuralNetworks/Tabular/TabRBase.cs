@@ -105,23 +105,23 @@ public abstract class TabRBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get
         {
             int count = 0;
             foreach (var layer in _encoderLayers)
-                count += layer.ParameterCount;
-            if (_encoderNorm != null) count += _encoderNorm.ParameterCount;
+                count += (int)layer.ParameterCount;
+            if (_encoderNorm != null) count += (int)_encoderNorm.ParameterCount;
 
             foreach (var layer in _contextLayers)
-                count += layer.ParameterCount;
-            if (_contextNorm != null) count += _contextNorm.ParameterCount;
+                count += (int)layer.ParameterCount;
+            if (_contextNorm != null) count += (int)_contextNorm.ParameterCount;
 
-            count += _queryProjection.ParameterCount;
-            count += _keyProjection.ParameterCount;
-            count += _valueProjection.ParameterCount;
-            count += _outputProjection.ParameterCount;
+            count += (int)_queryProjection.ParameterCount;
+            count += (int)_keyProjection.ParameterCount;
+            count += (int)_valueProjection.ParameterCount;
+            count += (int)_outputProjection.ParameterCount;
 
             return count;
         }

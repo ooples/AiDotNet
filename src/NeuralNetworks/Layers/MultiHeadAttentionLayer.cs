@@ -284,7 +284,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <remarks>
     /// Multi-head attention parameters are stored in multiple internal tensors (Q/K/V/O projections + output bias).
     /// </remarks>
-    public override int ParameterCount => _isInitialized
+    public override long ParameterCount => _isInitialized
         // After EnsureInitialized has run the live tensor lengths are authoritative.
         ? _queryWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length
         // Lazy path: four dim×dim projection matrices + one bias vector of size dim.
@@ -1431,7 +1431,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     public override Vector<T> GetParameterGradients()
     {
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_queryWeightsGradient.Data),

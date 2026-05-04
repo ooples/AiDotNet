@@ -166,7 +166,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _nu.Length + _theta.Length +
         _bReal.Length + _bImag.Length +
         _cReal.Length + _cImag.Length +
@@ -690,7 +690,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -721,7 +721,7 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_nuGradient == null) return new Vector<T>(ParameterCount);
+        if (_nuGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_nuGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_thetaGradient?.ToArray() ?? Array.Empty<T>()),

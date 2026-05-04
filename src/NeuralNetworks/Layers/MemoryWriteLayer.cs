@@ -261,7 +261,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - How to selectively update memory instead of overwriting everything
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _queryWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
+    public override long ParameterCount => _queryWeights.Length + _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -964,7 +964,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null ||
             _outputWeightsGradient == null || _outputBiasGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_queryWeightsGradient.ToArray()),
             new Vector<T>(_keyWeightsGradient.ToArray()),

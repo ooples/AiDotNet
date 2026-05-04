@@ -70,7 +70,7 @@ public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
+    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet Lite model.
@@ -129,12 +129,12 @@ public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        var baseCount = _baseUNet.ParameterCount;
+        int baseCount = checked((int)_baseUNet.ParameterCount);
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(baseParams));
         offset += baseCount;
-        var ctrlCount = _controlEncoder.ParameterCount;
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
         var ctrlParams = new T[ctrlCount];
         for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
@@ -158,7 +158,7 @@ public class ControlNetLiteModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-Lite", Version = "1.0",
             Description = "Lightweight ControlNet with ~25% parameters for faster inference",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-controlnet-lite");
         metadata.SetProperty("base_model", "Stable Diffusion 1.5");

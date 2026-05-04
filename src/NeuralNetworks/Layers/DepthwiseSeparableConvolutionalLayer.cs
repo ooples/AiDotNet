@@ -421,13 +421,13 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     /// Some other layer types might not have trainable parameters and would return false here.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
+    public override long ParameterCount => _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
     {
         if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(

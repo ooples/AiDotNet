@@ -230,7 +230,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void RebuildParameterSnapshot()
     {
-        int paramCount = ParameterCount;
+        int paramCount = (int)ParameterCount;
         Parameters = new Vector<T>(paramCount);
         ParameterGradients = new Vector<T>(paramCount);
 
@@ -478,7 +478,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -497,7 +497,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
         }
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -506,11 +506,11 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
             // which includes the base layer's parameters and the placeholder LoRA layer's parameters.
             if (_squareRank == 0)
             {
-                int baseLayerParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+                int baseLayerParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
                 // The _loraLayer is created in CreateLoRALayer, so it should be available.
                 // Its parameter count is needed for the base class's internal parameter management.
                 // CreateLoRALayer uses rank=1 for the placeholder LoRA layer.
-                int loraLayerParams = _loraLayer?.ParameterCount ?? (GetInputShape()[0] * 1 + GetOutputShape()[0] * 1);
+                int loraLayerParams = (int)(_loraLayer?.ParameterCount ?? (GetInputShape()[0] * 1 + GetOutputShape()[0] * 1));
                 return baseLayerParams + loraLayerParams;
             }
             else
@@ -518,7 +518,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
                 // After MoRAAdapter's constructor has run and _squareRank is initialized,
                 // the actual trainable parameters are from _matrixM and the base layer (if not frozen).
                 int moraParams = _squareRank * _squareRank;
-                int baseParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+                int baseParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
                 return baseParams + moraParams;
             }
         }

@@ -880,7 +880,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => _latentPredictor.ParameterCount;
+    public override long ParameterCount => _latentPredictor.ParameterCount;
 
     #endregion
 
@@ -926,7 +926,7 @@ public class ShapEModel<T> : ThreeDDiffusionModelBase<T>
             Name = "Shap-E",
             Version = "1.0",
             Description = "Shap-E text-to-3D generation with implicit neural representations (NeRF/SDF)",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

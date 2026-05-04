@@ -1025,25 +1025,25 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
     #region NeuralNetworkBase Overrides
 
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int count = 0;
             foreach (var layer in _visionEncoderLayers)
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             foreach (var layer in _perceiverLayers)
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             foreach (var layer in _gatedCrossAttentionLayers)
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             foreach (var layer in _languageModelLayers)
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             if (_patchEmbedding is not null)
-                count += _patchEmbedding.ParameterCount;
+                count += (int)_patchEmbedding.ParameterCount;
             if (_textTokenEmbedding is not null)
-                count += _textTokenEmbedding.ParameterCount;
+                count += (int)_textTokenEmbedding.ParameterCount;
             if (_outputProjection is not null)
-                count += _outputProjection.ParameterCount;
+                count += (int)_outputProjection.ParameterCount;
             return count;
         }
     }
@@ -1101,7 +1101,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
         foreach (var layer in _perceiverLayers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);
@@ -1116,7 +1116,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
 
         foreach (var layer in _gatedCrossAttentionLayers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);

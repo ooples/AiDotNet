@@ -21,7 +21,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             Assert.Equal(5, layer.GetOutputShape()[0]);
             Assert.Equal(3, layer.Rank);
             Assert.True(layer.SupportsTraining);
-            Assert.Equal((10 * 3) + (3 * 5), layer.ParameterCount);
+            Assert.Equal((10 * 3) + (3 * 5), (int)layer.ParameterCount);
         }
 
         [Fact(Timeout = 120000)]
@@ -268,7 +268,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
 
             // Assert
             // Parameters = (inputSize * rank) + (rank * outputSize)
-            Assert.Equal((100 * 8) + (8 * 50), layer.ParameterCount);
+            Assert.Equal((100 * 8) + (8 * 50), (int)layer.ParameterCount);
         }
 
         [Theory]
@@ -281,7 +281,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks
             var layer = new LoRALayer<double>(inputSize, outputSize, rank);
 
             // Assert
-            Assert.Equal((inputSize * rank) + (rank * outputSize), layer.ParameterCount);
+            Assert.Equal((inputSize * rank) + (rank * outputSize), (int)layer.ParameterCount);
         }
 
 

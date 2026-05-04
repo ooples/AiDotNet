@@ -31,21 +31,20 @@ public interface IParameterizable<T, TInput, TOutput>
     void SetParameters(Vector<T> parameters);
 
     /// <summary>
-    /// Gets the number of parameters in the model.
+    /// Gets the total number of trainable parameters in the model. Return
+    /// type is <see cref="long"/> (int64), matching PyTorch's
+    /// <c>c10::TensorImpl::numel()</c> int64_t convention so foundation-scale
+    /// models like Sora, HiDream Full, SD3.5 Large, HunyuanVideo, Flux 2,
+    /// etc. (all &gt;2.1 B parameters) report accurately without overflow.
     /// </summary>
     /// <remarks>
-    /// This property returns the total count of trainable parameters in the model.
-    /// It's useful for understanding model complexity and memory requirements.
-    /// <para>
-    /// <b>Limitation for foundation-scale models:</b> the return type is
-    /// <see cref="int"/>, capped at ~2.1 B. Models like Sora, HiDream, SD3.5
-    /// Large, GPT-3-class etc. exceed this limit. For accurate per-tensor
-    /// counting on those models, iterate <see cref="GetParameterChunks"/>
-    /// and sum lengths into a <see cref="long"/> accumulator. Mirrors
-    /// PyTorch's <c>nn.Module.parameters()</c> generator pattern.
-    /// </para>
+    /// Per-tensor weights still fit in <see cref="int"/> (Vector{T}.Length
+    /// is int and a single tensor doesn't exceed int.MaxValue elements in
+    /// any current architecture). The aggregate uses a long accumulator,
+    /// computed by summing each chunk's <c>Length</c> from
+    /// <see cref="GetParameterChunks"/>.
     /// </remarks>
-    int ParameterCount { get; }
+    long ParameterCount { get; }
 
     /// <summary>
     /// Yields the model's trainable weight tensors as references — zero-copy,

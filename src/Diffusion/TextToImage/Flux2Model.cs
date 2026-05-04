@@ -139,7 +139,7 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => FLUX2_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant (Dev, Schnell, or Pro).
@@ -302,13 +302,14 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.GetParameters().Length;
+        int predictorCount = checked((int)_predictor.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
-        if (parameters.Length != predictorCount + vaeCount)
+        long expectedTotal = (long)predictorCount + vaeCount;
+        if (parameters.Length != expectedTotal)
         {
             throw new ArgumentException(
-                $"Expected {predictorCount + vaeCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -366,7 +367,7 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
             Name = $"FLUX.2 [{_variant}]",
             Version = _variant.ToString(),
             Description = $"FLUX.2 [{_variant}] next-generation hybrid MMDiT with {FLUX2_JOINT_LAYERS} joint + {FLUX2_SINGLE_LAYERS} single blocks and improved rectified flow",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

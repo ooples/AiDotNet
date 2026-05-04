@@ -1494,7 +1494,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     #region NeuralNetworkBase Overrides
 
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1508,55 +1508,55 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             // Vision encoder layers
             foreach (var layer in _visionEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             }
 
             // Language model layers
             foreach (var layer in _languageModelLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             }
 
             // Cross-attention layers
             foreach (var layer in _crossAttentionLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             }
 
             // Single layers
             if (_visionPatchEmbedding is not null)
             {
-                count += _visionPatchEmbedding.ParameterCount;
+                count += (int)_visionPatchEmbedding.ParameterCount;
             }
 
             if (_visionLayerNorm is not null)
             {
-                count += _visionLayerNorm.ParameterCount;
+                count += (int)_visionLayerNorm.ParameterCount;
             }
 
             if (_visionProjector1 is not null)
             {
-                count += _visionProjector1.ParameterCount;
+                count += (int)_visionProjector1.ParameterCount;
             }
 
             if (_visionProjector2 is not null)
             {
-                count += _visionProjector2.ParameterCount;
+                count += (int)_visionProjector2.ParameterCount;
             }
 
             if (_tokenEmbedding is not null)
             {
-                count += _tokenEmbedding.ParameterCount;
+                count += (int)_tokenEmbedding.ParameterCount;
             }
 
             if (_lmHead is not null)
             {
-                count += _lmHead.ParameterCount;
+                count += (int)_lmHead.ParameterCount;
             }
 
             if (_finalLayerNorm is not null)
             {
-                count += _finalLayerNorm.ParameterCount;
+                count += (int)_finalLayerNorm.ParameterCount;
             }
 
             // Positional embeddings
@@ -1677,7 +1677,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (gradients.Length != expectedCount)
         {
             throw new ArgumentException($"Expected {expectedCount} gradients but got {gradients.Length}");
@@ -1707,7 +1707,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             Description = "GPT-4V style vision-language model combining vision encoding with language generation",
             AdditionalInfo = new Dictionary<string, object>
             {
-                ["parameter_count"] = ParameterCount,
+                ["parameter_count"] = (int)ParameterCount,
                 ["layer_count"] = _visionEncoderLayers.Count + _languageModelLayers.Count + _crossAttentionLayers.Count,
                 ["input_shape"] = new int[] { 3, _imageSize, _imageSize },
                 ["output_shape"] = new int[] { _embeddingDimension },

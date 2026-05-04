@@ -226,7 +226,7 @@ public class TabularQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     // Min one row × actionSize so a freshly-constructed agent reports a positive
     // ParameterCount before any state has been visited (Parameters_ShouldBeNonEmpty
     // contract).
-    public override int ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
+    public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
 
     public override int FeatureCount => _options.StateSize;
 

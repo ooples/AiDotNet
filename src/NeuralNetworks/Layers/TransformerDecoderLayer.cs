@@ -507,7 +507,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 "first so _embeddingSize is resolved and the sublayers exist.");
         }
         int idx = 0;
-        void Set(ILayer<T> layer) { int c = layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
+        void Set(ILayer<T> layer) { int c = (int)layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
         Set(_selfAttention); Set(_norm1); Set(_crossAttention); Set(_norm2);
         Set(_feedForward); Set(_feedForwardProjection); Set(_norm3);
     }
@@ -544,7 +544,7 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// This returns the sum of all parameters from sublayers: self-attention, cross-attention,
     /// layer norms, feed-forward layer, and feed-forward projection layer.
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _isInitialized
             ? _selfAttention.ParameterCount +
               _norm1.ParameterCount +

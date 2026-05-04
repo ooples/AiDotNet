@@ -84,7 +84,7 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// <summary>
     /// Gets the total number of parameters in the model.
     /// </summary>
-    public virtual int ParameterCount => NumFeatures;
+    public virtual long ParameterCount => NumFeatures;
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
@@ -418,7 +418,7 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </summary>
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return new Vector<T>(ParameterCount);
+        return new Vector<T>((int)ParameterCount);
     }
 
     /// <summary>

@@ -214,7 +214,7 @@ public class CompileForwardTests
                 Name = "SimpleTestNetwork",
                 Version = "1.0",
                 FeatureCount = Architecture.InputSize,
-                Complexity = ParameterCount
+                Complexity = (int)ParameterCount
             };
 
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }

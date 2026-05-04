@@ -43,7 +43,7 @@ public class GatedFeatureLearningUnitLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _featureTransform.ParameterCount + _gateTransform.ParameterCount;
+    public override long ParameterCount => _featureTransform.ParameterCount + _gateTransform.ParameterCount;
 
     /// <summary>
     /// Initializes a Gated Feature Learning Unit.

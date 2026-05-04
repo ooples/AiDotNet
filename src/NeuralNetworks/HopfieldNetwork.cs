@@ -449,7 +449,7 @@ public class HopfieldNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => _size * _size;
+    public override long ParameterCount => _size * _size;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()

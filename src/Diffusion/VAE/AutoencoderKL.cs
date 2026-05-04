@@ -137,7 +137,7 @@ public class AutoencoderKL<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override int ParameterCount => _encoder.GetParameters().Length + _decoder.GetParameters().Length;
+    public override long ParameterCount => _encoder.GetParameters().Length + _decoder.GetParameters().Length;
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;

@@ -1654,7 +1654,7 @@ public class InstantNGP<T> : NeuralNetworkBase<T>, IRadianceField<T>
             throw new ArgumentNullException(nameof(parameters));
         }
 
-        int layerParameterCount = ParameterCount;
+        int layerParameterCount = (int)ParameterCount;
         int hashParameterCount = _numLevels * _hashTableSize * _featuresPerLevel;
         if (parameters.Length != layerParameterCount &&
             parameters.Length != layerParameterCount + hashParameterCount)

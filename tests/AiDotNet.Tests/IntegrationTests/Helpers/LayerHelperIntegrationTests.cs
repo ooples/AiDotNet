@@ -501,7 +501,7 @@ public class LayerHelperIntegrationTests
         Assert.All(layers, layer => Assert.IsType<DenseLayer<double>>(layer));
 
         // Total parameters should be non-zero
-        int totalParams = layers.Sum(l => l.ParameterCount);
+        int totalParams = (int)layers.Sum(l => l.ParameterCount);
         Assert.True(totalParams > 0, $"Total parameter count should be positive, got {totalParams}");
     }
 
@@ -882,8 +882,8 @@ public class LayerHelperIntegrationTests
             $"Simple ({simpleLayers.Count} layers) should have fewer layers than Deep ({deepLayers.Count} layers)");
 
         // Deep should have more parameters
-        int simpleParams = simpleLayers.Sum(l => l.ParameterCount);
-        int deepParams = deepLayers.Sum(l => l.ParameterCount);
+        int simpleParams = (int)simpleLayers.Sum(l => l.ParameterCount);
+        int deepParams = (int)deepLayers.Sum(l => l.ParameterCount);
         Assert.True(deepParams > simpleParams,
             $"Deep ({deepParams} params) should have more parameters than Simple ({simpleParams} params)");
     }
@@ -909,7 +909,7 @@ public class LayerHelperIntegrationTests
         Assert.Contains(layers, l => l.SupportsTraining);
 
         // Total parameters should be positive
-        int totalParams = layers.Sum(l => l.ParameterCount);
+        int totalParams = (int)layers.Sum(l => l.ParameterCount);
         Assert.True(totalParams > 0, $"Total parameters should be positive, got {totalParams}");
     }
 
@@ -1008,8 +1008,8 @@ public class LayerHelperIntegrationTests
         var largeLayers = LayerHelper<double>.CreateDefaultLayers(largeArch).ToList();
 
         // Large input should have more parameters
-        int smallParams = smallLayers.Sum(l => l.ParameterCount);
-        int largeParams = largeLayers.Sum(l => l.ParameterCount);
+        int smallParams = (int)smallLayers.Sum(l => l.ParameterCount);
+        int largeParams = (int)largeLayers.Sum(l => l.ParameterCount);
         Assert.True(largeParams > smallParams,
             $"Large input ({largeParams} params) should have more parameters than small ({smallParams} params)");
     }
@@ -1162,7 +1162,7 @@ public class LayerHelperIntegrationTests
         Assert.Contains(layers, l => l is DenseLayer<double>);
 
         // Should have substantial parameter count for physics modeling
-        int totalParams = layers.Sum(l => l.ParameterCount);
+        int totalParams = (int)layers.Sum(l => l.ParameterCount);
         Assert.True(totalParams > 0, $"Should have parameters, got {totalParams}");
     }
 

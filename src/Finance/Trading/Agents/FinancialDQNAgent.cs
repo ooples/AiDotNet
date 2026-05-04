@@ -70,7 +70,7 @@ public class FinancialDQNAgent<T> : TradingAgentBase<T>
     public override int FeatureCount => TradingOptions.StateSize;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _qNetwork.ParameterCount;
+    public override long ParameterCount => _qNetwork.ParameterCount;
 
     #endregion
 

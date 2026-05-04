@@ -110,7 +110,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>(ParameterCount);
+        if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(new Vector<T>(_kernelsGradient.ToArray()), new Vector<T>(_biasesGradient.ToArray()));
     }
 
@@ -809,7 +809,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
     /// This equals: OutputChannels * InputChannels * KernelSize^3 + OutputChannels
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _kernels.Length + _biases.Length;
+    public override long ParameterCount => _kernels.Length + _biases.Length;
 
     /// <summary>
     /// Creates a deep copy of the layer with the same configuration and parameters.

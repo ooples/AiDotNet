@@ -195,7 +195,7 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
                 embeddingDim: 64);
 
             // Act
-            int count1 = layer.ParameterCount;
+            int count1 = (int)layer.ParameterCount;
             int count2 = layer.GetParameters().Length;
 
             // Assert

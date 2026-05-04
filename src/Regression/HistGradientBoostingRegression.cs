@@ -553,7 +553,7 @@ public class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>, Vector<
     /// Returns 0 to prevent optimizer random parameter injection.
     /// Histogram gradient boosting builds trees internally.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Saves the model to a file.

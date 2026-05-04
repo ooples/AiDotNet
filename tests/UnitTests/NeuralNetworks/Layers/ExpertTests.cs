@@ -212,8 +212,8 @@ public class ExpertTests
         var expert = new Expert<float>(layers, new[] { 10 }, new[] { 3 });
 
         // Act
-        int paramCount = expert.ParameterCount;
-        int expectedCount = layer1.ParameterCount + layer2.ParameterCount;
+        int paramCount = (int)expert.ParameterCount;
+        int expectedCount = (int)layer1.ParameterCount + layer2.ParameterCount;
 
         // Assert
         Assert.Equal(expectedCount, paramCount);

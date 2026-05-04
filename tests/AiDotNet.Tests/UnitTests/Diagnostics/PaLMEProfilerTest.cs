@@ -75,7 +75,7 @@ public class PaLMEProfilerTest
         // Phase 3: ParameterCount probe — exposes whether ParameterCount itself
         // walks lazy layers and triggers weight allocation.
         var swPC = Stopwatch.StartNew();
-        int pc = model.ParameterCount;
+        int pc = (int)model.ParameterCount;
         swPC.Stop();
         long allocAfterPC = GetTotalAllocated();
         _out.WriteLine($"ParameterCount: {swPC.ElapsedMilliseconds} ms (count={pc:N0})");

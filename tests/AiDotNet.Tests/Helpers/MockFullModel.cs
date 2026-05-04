@@ -60,7 +60,7 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>,
         _parameters = parameters.Clone();
     }
 
-    public int ParameterCount => _parameters.Length;
+    public long ParameterCount => _parameters.Length;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Matrix<double>, Vector<double>> WithParameters(Vector<double> parameters)
@@ -117,7 +117,7 @@ public class MockFullModel : IFullModel<double, Matrix<double>, Vector<double>>,
 
     public Vector<double> ComputeGradients(Matrix<double> input, Vector<double> target, ILossFunction<double>? lossFunction = null)
     {
-        return new Vector<double>(ParameterCount);
+        return new Vector<double>((int)ParameterCount);
     }
 
     public void ApplyGradients(Vector<double> gradients, double learningRate)
