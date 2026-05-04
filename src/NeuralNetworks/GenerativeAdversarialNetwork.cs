@@ -1544,12 +1544,26 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <summary>
     /// Gets the total parameter count for both generator and discriminator.
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             return Generator.GetParameterCount() + Discriminator.GetParameterCount();
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Streams parameters from <c>Generator</c> followed by
+    /// <c>Discriminator</c>. Per #1237, callers walking these chunks
+    /// accumulate length into a <see cref="long"/> when the aggregate
+    /// crosses int.MaxValue (BigGAN, ProgressiveGAN, SAGAN at full
+    /// scale all overflow).
+    /// </remarks>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var chunk in Generator.GetParameterChunks()) yield return chunk;
+        foreach (var chunk in Discriminator.GetParameterChunks()) yield return chunk;
     }
 
     /// <summary>
@@ -1599,8 +1613,8 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     public override void UpdateParameters(Vector<T> parameters)
     {
         // Determine the split point between Generator and Discriminator parameters
-        int generatorParameterCount = Generator.GetParameterCount();
-        int discriminatorParameterCount = Discriminator.GetParameterCount();
+        int generatorParameterCount = (int)Generator.GetParameterCount();
+        int discriminatorParameterCount = (int)Discriminator.GetParameterCount();
 
         if (parameters.Length != generatorParameterCount + discriminatorParameterCount)
         {

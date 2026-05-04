@@ -199,7 +199,7 @@ public class PackNet<T, TInput, TOutput> : ContinualLearningStrategyBase<T, TInp
     /// <inheritdoc/>
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
-        int numParams = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int numParams = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
 
         if (_parameterOwnership == null)
         {

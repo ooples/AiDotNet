@@ -122,7 +122,7 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -196,10 +196,13 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
-        if (parameters.Length != unetCount + vaeCount)
-            throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
+        // Use ParameterCount directly to avoid materializing the U-Net
+        // weight buffer just for sizing.
+        int unetCount = checked((int)_unet.ParameterCount);
+        int vaeCount = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)unetCount + vaeCount;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
         var vaeParams = new Vector<T>(vaeCount);
         for (int i = 0; i < unetCount; i++) unetParams[i] = parameters[i];
@@ -242,7 +245,7 @@ public class UniControlNetModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Uni-ControlNet", Version = "1.0",
             Description = "Uni-ControlNet multi-condition simultaneous control with learned mixing",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "multi-adapter-controlnet");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);

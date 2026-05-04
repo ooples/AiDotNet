@@ -19,7 +19,7 @@ public class FourierLayerTests
         var spectral = new Tensor<Complex<double>>(new[] { 1, 1, 1 });
         spectral[0, 0, 0] = new Complex<double>(1.0, 0.0);
 
-        var parameters = new Vector<double>(layer.ParameterCount);
+        var parameters = new Vector<double>((int)layer.ParameterCount);
         int index = 0;
         for (int i = 0; i < spectral.Length; i++)
         {
@@ -59,7 +59,7 @@ public class FourierLayerTests
         spectral[0, 1, 0] = new Complex<double>(1.0, 0.0);
         spectral[1, 0, 0] = new Complex<double>(1.0, 0.0);
 
-        var parameters = new Vector<double>(layer.ParameterCount);
+        var parameters = new Vector<double>((int)layer.ParameterCount);
         int index = 0;
         for (int i = 0; i < spectral.Length; i++)
         {

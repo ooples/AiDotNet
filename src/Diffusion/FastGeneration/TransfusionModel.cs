@@ -68,7 +68,7 @@ public class TransfusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public TransfusionModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -122,10 +122,11 @@ public class TransfusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
-        if (parameters.Length != pc + vc)
-            throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
         var vp = new Vector<T>(vc);
         for (int i = 0; i < pc; i++) pp[i] = parameters[i];
@@ -151,7 +152,7 @@ public class TransfusionModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "Transfusion", Version = "1.0",
             Description = "Unified autoregressive + diffusion transformer for native multimodal generation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "transfusion-unified-transformer");
         m.SetProperty("modality", "text+image");

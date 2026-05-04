@@ -75,7 +75,7 @@ public class PASDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public PASDModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -119,7 +119,13 @@ public class PASDModel<T> : LatentDiffusionModelBase<T>
     {
         var pp = _predictor.GetParameters();
         var vp = _vae.GetParameters();
-        var combined = new Vector<T>(pp.Length + vp.Length);
+        // Widen the size arithmetic to long. Per-component lengths fit
+        // in int (Vector<T> is int-indexable), but their sum can cross
+        // int.MaxValue. checked() narrows back to int at the Vector<T>
+        // ctor boundary so foundation-scale checkpoints fail fast
+        // instead of silently wrapping the size.
+        long total = (long)pp.Length + vp.Length;
+        var combined = new Vector<T>(checked((int)total));
         for (int i = 0; i < pp.Length; i++) combined[i] = pp[i];
         for (int i = 0; i < vp.Length; i++) combined[pp.Length + i] = vp[i];
         return combined;
@@ -128,10 +134,11 @@ public class PASDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
-        if (parameters.Length != pc + vc)
-            throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
         var vp = new Vector<T>(vc);
         for (int i = 0; i < pc; i++) pp[i] = parameters[i];
@@ -157,7 +164,7 @@ public class PASDModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "PASD", Version = "1.0",
             Description = "Pixel-aware stable diffusion for structure-preserving real-world super-resolution",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "pixel-aware-sd21-sr-unet");
         m.SetProperty("base_model", "Stable Diffusion 2.1");

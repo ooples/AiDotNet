@@ -194,7 +194,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// but also requires more data and time to train effectively.
     /// </para>
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _attentionSize * _inputSize * 3 + _inputSize * _attentionSize; // Wq, Wk, Wv, Wo
 
     public override void SetParameters(Vector<T> parameters)

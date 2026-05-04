@@ -155,7 +155,7 @@ public partial class RBFLayer<T> : LayerBase<T>
     /// automatically adjust to better match the patterns in your specific data.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

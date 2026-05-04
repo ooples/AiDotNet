@@ -253,7 +253,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private IGpuBuffer? _gpuResetBiasGradient;
 
     /// <inheritdoc/>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

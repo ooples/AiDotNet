@@ -1557,7 +1557,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         if (!_useNativeMode)
         {
             return parameters;
@@ -1597,7 +1597,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
@@ -1632,7 +1632,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     {
         foreach (var layer in layers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);
@@ -1702,7 +1702,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             return offset;
         }
 
-        int layerParamCount = layer.ParameterCount;
+        int layerParamCount = checked((int)layer.ParameterCount);
         if (layerParamCount > 0)
         {
             var layerParams = new Vector<T>(layerParamCount);
@@ -1735,7 +1735,7 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1747,17 +1747,17 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
             int count = 0;
 
             // Layer lists
-            foreach (var layer in _frameEncoderLayers) count += layer.ParameterCount;
-            foreach (var layer in _temporalEncoderLayers) count += layer.ParameterCount;
-            foreach (var layer in _textEncoderLayers) count += layer.ParameterCount;
-            foreach (var layer in _projectionLayers) count += layer.ParameterCount;
+            foreach (var layer in _frameEncoderLayers) count += (int)layer.ParameterCount;
+            foreach (var layer in _temporalEncoderLayers) count += (int)layer.ParameterCount;
+            foreach (var layer in _textEncoderLayers) count += (int)layer.ParameterCount;
+            foreach (var layer in _projectionLayers) count += (int)layer.ParameterCount;
 
             // Single layers
-            if (_patchEmbedding is not null) count += _patchEmbedding.ParameterCount;
-            if (_textTokenEmbedding is not null) count += _textTokenEmbedding.ParameterCount;
-            if (_videoProjection is not null) count += _videoProjection.ParameterCount;
-            if (_textProjection is not null) count += _textProjection.ParameterCount;
-            if (_captionHead is not null) count += _captionHead.ParameterCount;
+            if (_patchEmbedding is not null) count += (int)_patchEmbedding.ParameterCount;
+            if (_textTokenEmbedding is not null) count += (int)_textTokenEmbedding.ParameterCount;
+            if (_videoProjection is not null) count += (int)_videoProjection.ParameterCount;
+            if (_textProjection is not null) count += (int)_textProjection.ParameterCount;
+            if (_captionHead is not null) count += (int)_captionHead.ParameterCount;
 
             // Positional embeddings and CLS tokens (these are also parameters)
             if (_visionClsToken is not null) count += _visionClsToken.Rows * _visionClsToken.Columns;

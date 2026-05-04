@@ -125,7 +125,7 @@ public class LogisticRegression<T> : RegressionBase<T>
     /// <summary>
     /// Logistic regression is a classification model — no optimizer parameter injection.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     private bool _useOLS;
 

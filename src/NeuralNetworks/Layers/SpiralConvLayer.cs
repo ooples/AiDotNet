@@ -967,7 +967,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount => _weights.Length + _biases.Length;
+    public override long ParameterCount => _weights.Length + _biases.Length;
 
     /// <summary>
     /// Creates a deep copy of this layer.

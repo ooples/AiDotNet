@@ -95,7 +95,7 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _dit.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -174,7 +174,7 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int dc = _dit.ParameterCount, vc = _vae.ParameterCount;
+        int dc = (int)_dit.ParameterCount, vc = (int)_vae.ParameterCount;
         if (parameters.Length != dc + vc)
             throw new ArgumentException($"Expected {dc + vc} parameters, got {parameters.Length}.", nameof(parameters));
         var dp = new Vector<T>(dc);
@@ -219,7 +219,7 @@ public class AuraFlowModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "AuraFlow", Version = "0.3",
             Description = "AuraFlow open-source flow-matching text-to-image model",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "dit-flow-matching");
         m.SetProperty("text_encoder", "T5-XXL");

@@ -1152,9 +1152,9 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _multiViewUNet.ParameterCount;
-        var vaeCount = _imageVAE.ParameterCount;
-        var camCount = _cameraEmbedding.ParameterCount;
+        int unetCount = checked((int)_multiViewUNet.ParameterCount);
+        int vaeCount = checked((int)_imageVAE.ParameterCount);
+        int camCount = checked((int)_cameraEmbedding.ParameterCount);
 
         var expected = unetCount + vaeCount + camCount;
         if (parameters.Length != expected)
@@ -1182,7 +1182,7 @@ public class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _multiViewUNet.ParameterCount + _imageVAE.ParameterCount + _cameraEmbedding.ParameterCount;
 
     #endregion
@@ -1376,8 +1376,8 @@ public class MultiViewUNet<T>
     /// </summary>
     public void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _baseUNet.ParameterCount;
-        var mvCount = _mvAttention.ParameterCount;
+        int unetCount = checked((int)_baseUNet.ParameterCount);
+        int mvCount = checked((int)_mvAttention.ParameterCount);
 
         var unetParams = new Vector<T>(unetCount);
         for (int i = 0; i < unetCount; i++)
@@ -1394,7 +1394,7 @@ public class MultiViewUNet<T>
     /// <summary>
     /// Gets parameter count.
     /// </summary>
-    public int ParameterCount => _baseUNet.ParameterCount + _mvAttention.ParameterCount;
+    public long ParameterCount => _baseUNet.ParameterCount + _mvAttention.ParameterCount;
 }
 
 /// <summary>
@@ -1542,7 +1542,7 @@ public class MultiViewAttention<T>
     /// <summary>
     /// Gets parameter count.
     /// </summary>
-    public int ParameterCount => _channels * _channels * 4;
+    public long ParameterCount => _channels * _channels * 4;
 }
 
 /// <summary>
@@ -1661,5 +1661,5 @@ public class CameraEmbedding<T>
     /// <summary>
     /// Gets parameter count.
     /// </summary>
-    public int ParameterCount => _embeddingDim * _inputDim + _embeddingDim;
+    public long ParameterCount => _embeddingDim * _inputDim + _embeddingDim;
 }

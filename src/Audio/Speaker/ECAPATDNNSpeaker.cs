@@ -262,7 +262,7 @@ public class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("ONNX mode.");
-        int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
     }
 
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)

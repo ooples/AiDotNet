@@ -176,7 +176,7 @@ public partial class BASEDLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _linearQueryWeights.Length + _linearKeyWeights.Length + _linearValueWeights.Length +
         _windowQueryWeights.Length + _windowKeyWeights.Length + _windowValueWeights.Length +
         _featureMapScale.Length +
@@ -699,7 +699,7 @@ public partial class BASEDLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -729,7 +729,7 @@ public partial class BASEDLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_linearQueryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_linearQueryWeightsGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_linearQueryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_linearKeyWeightsGradient?.ToArray() ?? Array.Empty<T>()),

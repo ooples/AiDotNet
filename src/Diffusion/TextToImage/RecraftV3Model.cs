@@ -136,7 +136,7 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => RECRAFT_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this model supports style presets.
@@ -280,13 +280,14 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.GetParameters().Length;
+        int predictorCount = checked((int)_predictor.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
-        if (parameters.Length != predictorCount + vaeCount)
+        long expectedTotal = (long)predictorCount + vaeCount;
+        if (parameters.Length != expectedTotal)
         {
             throw new ArgumentException(
-                $"Expected {predictorCount + vaeCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -341,7 +342,7 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
             Name = "Recraft V3",
             Version = "3.0",
             Description = "Professional-grade MMDiT-X with style presets, color palette control, and text rendering",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

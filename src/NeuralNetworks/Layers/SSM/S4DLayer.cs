@@ -157,7 +157,7 @@ public partial class S4DLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _aReal.Length + _aImag.Length +
         _bReal.Length + _bImag.Length +
         _cReal.Length + _cImag.Length +
@@ -1141,7 +1141,7 @@ public partial class S4DLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
@@ -1163,7 +1163,7 @@ public partial class S4DLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedParams = ParameterCount;
+        int expectedParams = (int)ParameterCount;
         if (parameters.Length != expectedParams)
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
 
@@ -1183,7 +1183,7 @@ public partial class S4DLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_aRealGradient == null) return new Vector<T>(ParameterCount);
+        if (_aRealGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_aRealGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_aImagGradient?.ToArray() ?? Array.Empty<T>()),

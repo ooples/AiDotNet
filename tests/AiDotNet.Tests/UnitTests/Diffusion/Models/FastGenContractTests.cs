@@ -557,7 +557,7 @@ public class FastGenContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -568,7 +568,7 @@ public class FastGenContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -579,7 +579,7 @@ public class FastGenContractTests : DiffusionUnitTestBase
 
         Assert.NotNull(clone);
         Assert.NotSame(model, clone);
-        Assert.Equal(model.ParameterCount, clone.ParameterCount);
+        Assert.Equal(model.ParameterCount, (int)clone.ParameterCount);
     }
 
     #endregion

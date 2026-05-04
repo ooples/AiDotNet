@@ -85,7 +85,7 @@ public class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     private T _linearIntercept;
 
     /// <summary>KRR doesn't benefit from optimizer parameter injection.</summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Gets the configuration options specific to Kernel Ridge Regression.

@@ -243,7 +243,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     /// The frozen U, Σ, and V matrices are not trainable parameters.
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -303,7 +303,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         _initializedFromSVD = false;
 
         // Update parameters to reflect only R matrix
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromR();
     }
 
@@ -787,7 +787,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
         for (int i = 0; i < _trainableRGradient.Rows; i++)
         {

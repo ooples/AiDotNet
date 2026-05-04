@@ -109,7 +109,7 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
     /// <summary>Gets the face embedding dimension.</summary>
     public int FaceEmbeddingDim => FACE_EMBEDDING_DIM;
 
@@ -188,7 +188,7 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int uc = _unet.ParameterCount, vc = _vae.ParameterCount;
+        int uc = (int)_unet.ParameterCount, vc = (int)_vae.ParameterCount;
         if (parameters.Length != uc + vc)
             throw new ArgumentException($"Expected {uc + vc}, got {parameters.Length}.", nameof(parameters));
         var up = new Vector<T>(uc); var vp = new Vector<T>(vc);
@@ -232,7 +232,7 @@ public class InstantIDModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "InstantID", Version = "1.0",
             Description = "InstantID zero-shot identity-preserving image generation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "sdxl-ipadapter-identitynet");
         m.SetProperty("base_model", "Stable Diffusion XL");

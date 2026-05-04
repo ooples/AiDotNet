@@ -785,7 +785,7 @@ namespace AiDotNet.AutoML
         private T _lastTrainingLoss;
 
 
-        public override int ParameterCount => _noisePredictor.ParameterCount + _vae.ParameterCount;
+        public override long ParameterCount => _noisePredictor.ParameterCount + _vae.ParameterCount;
 
         public string[] FeatureNames { get; set; } = Array.Empty<string>();
 
@@ -938,7 +938,7 @@ namespace AiDotNet.AutoML
 
         public override void SetParameters(Vector<T> parameters)
         {
-            var noisePredLen = _noisePredictor.ParameterCount;
+            int noisePredLen = checked((int)_noisePredictor.ParameterCount);
             var noisePredParams = new T[noisePredLen];
             var vaeParams = new T[_vae.ParameterCount];
 

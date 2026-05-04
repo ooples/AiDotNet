@@ -950,7 +950,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         return new ChronosFoundationModel<T>(new ChronosOptions<T>(_options));
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -958,7 +958,7 @@ public class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             count += _outputProjection.Length + _outputBias.Length;
             count += _finalLayerNormGamma.Length + _finalLayerNormBeta.Length;
             foreach (var layer in _transformerLayers)
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             return count;
         }
     }
@@ -1047,7 +1047,7 @@ internal class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.LayerBas
     private List<Tensor<T>>? _cachedNorm2;
     private List<Tensor<T>>? _cachedFfnHidden;
 
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _queryProj.Length + _keyProj.Length + _valueProj.Length + _outputProj.Length +
         _ffn1.Length + _ffn1Bias.Length + _ffn2.Length + _ffn2Bias.Length +
         _layerNorm1Gamma.Length * 2 + _layerNorm2Gamma.Length * 2;

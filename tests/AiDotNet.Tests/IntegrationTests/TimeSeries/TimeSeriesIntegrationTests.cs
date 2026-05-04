@@ -280,14 +280,14 @@ public class TimeSeriesIntegrationTests
         var model = new ExponentialSmoothingModel<double>(options);
 
         // Verify model starts untrained with empty parameters
-        Assert.Equal(0, model.ParameterCount);
+        Assert.Equal(0, (int)model.ParameterCount);
 
         // Act: Set parameters on untrained model (simulates optimizer initialization)
         var parameters = new Tensors.LinearAlgebra.Vector<double>(paramValues);
         model.SetParameters(parameters);
 
         // Assert: Model should now have parameters with correct count and values
-        Assert.Equal(paramValues.Length, model.ParameterCount);
+        Assert.Equal(paramValues.Length, (int)model.ParameterCount);
         var retrieved = model.GetParameters();
         for (int i = 0; i < paramValues.Length; i++)
         {
@@ -304,14 +304,14 @@ public class TimeSeriesIntegrationTests
 
         var initialParams = new Tensors.LinearAlgebra.Vector<double>(new double[] { 0.5, 0.3 });
         model.SetParameters(initialParams);
-        Assert.Equal(2, model.ParameterCount);
+        Assert.Equal(2, (int)model.ParameterCount);
 
         // Act: Update parameters
         var newParams = new Tensors.LinearAlgebra.Vector<double>(new double[] { 0.8, 0.1 });
         model.SetParameters(newParams);
 
         // Assert: Parameters should be updated with new values
-        Assert.Equal(2, model.ParameterCount);
+        Assert.Equal(2, (int)model.ParameterCount);
         var retrieved = model.GetParameters();
         Assert.Equal(0.8, retrieved[0], precision: 10);
         Assert.Equal(0.1, retrieved[1], precision: 10);
@@ -339,7 +339,7 @@ public class TimeSeriesIntegrationTests
         var options = new ARModelOptions<double> { AROrder = 3 };
         var model = new ARModel<double>(options);
 
-        Assert.Equal(0, model.ParameterCount);
+        Assert.Equal(0, (int)model.ParameterCount);
 
         // Act
         var paramValues = new double[] { 0.1, 0.2, 0.3, 0.4 };
@@ -347,7 +347,7 @@ public class TimeSeriesIntegrationTests
         model.SetParameters(parameters);
 
         // Assert: Verify count and values
-        Assert.Equal(4, model.ParameterCount);
+        Assert.Equal(4, (int)model.ParameterCount);
         var retrieved = model.GetParameters();
         for (int i = 0; i < paramValues.Length; i++)
         {

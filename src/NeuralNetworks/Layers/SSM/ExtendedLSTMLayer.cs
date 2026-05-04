@@ -165,7 +165,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _inputGateWeights.Length + _inputGateBias.Length +
         _forgetGateWeights.Length + _forgetGateBias.Length +
         _outputGateWeights.Length + _outputGateBias.Length +
@@ -462,7 +462,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -492,7 +492,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_inputGateWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_inputGateWeightsGradient == null) return new Vector<T>((int)ParameterCount);
 
         Vector<T> G(Tensor<T>? grad, Tensor<T> param) =>
             grad != null ? new Vector<T>(grad.ToArray()) : new Vector<T>(param.Length);

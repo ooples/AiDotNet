@@ -73,7 +73,8 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => FLUX_LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _controlEncoder.ParameterCount;
+    public override long ParameterCount =>
+        _predictor.ParameterCount + _vae.ParameterCount + _controlEncoder.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet-FLUX model.
@@ -129,25 +130,45 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
     {
         // Pre-allocate to avoid the List<T> doubling + ToArray triple-copy
         // that OOMs CI on real-scale FLUX (~12B params doubles ⇒ ~96 GB).
+        int predCount = checked((int)_predictor.ParameterCount);
+        int vaeCount = checked((int)_vae.ParameterCount);
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)predCount + vaeCount + ctrlCount;
+        var result = new Vector<T>(checked((int)expectedTotal));
         var predParams = _predictor.GetParameters();
-        var ctrlParams = _controlEncoder.GetParameters();
-        var result = new Vector<T>(predParams.Length + ctrlParams.Length);
         for (int i = 0; i < predParams.Length; i++) result[i] = predParams[i];
-        for (int i = 0; i < ctrlParams.Length; i++) result[predParams.Length + i] = ctrlParams[i];
+        var vaeParams = _vae.GetParameters();
+        for (int i = 0; i < vaeParams.Length; i++) result[predCount + i] = vaeParams[i];
+        var ctrlParams = _controlEncoder.GetParameters();
+        for (int i = 0; i < ctrlParams.Length; i++) result[predCount + vaeCount + i] = ctrlParams[i];
         return result;
     }
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        int predCount = checked((int)_predictor.ParameterCount);
+        int vaeCount = checked((int)_vae.ParameterCount);
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)predCount + vaeCount + ctrlCount;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
-        var predCount = _predictor.ParameterCount;
         var predParams = new T[predCount];
         for (int i = 0; i < predCount; i++) predParams[i] = parameters[offset + i];
         _predictor.SetParameters(new Vector<T>(predParams));
         offset += predCount;
 
-        var ctrlCount = _controlEncoder.ParameterCount;
+        var vaeParams = new T[vaeCount];
+        for (int i = 0; i < vaeCount; i++) vaeParams[i] = parameters[offset + i];
+        _vae.SetParameters(new Vector<T>(vaeParams));
+        offset += vaeCount;
+
         var ctrlParams = new T[ctrlCount];
         for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
@@ -180,7 +201,7 @@ public class ControlNetFluxModel<T> : LatentDiffusionModelBase<T>
             Name = "ControlNet-FLUX",
             Version = "1.0",
             Description = "ControlNet adapted for FLUX.1 flow-matching architecture",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

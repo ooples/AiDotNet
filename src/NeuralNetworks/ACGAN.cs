@@ -107,7 +107,7 @@ public class ACGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the ACGAN.
     /// </summary>
-    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
+    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     private readonly ILossFunction<T> _lossFunction;
 
@@ -869,8 +869,8 @@ public class ACGAN<T> : NeuralNetworkBase<T>
 
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int generatorCount = Generator.GetParameterCount();
-        int discriminatorCount = Discriminator.GetParameterCount();
+        int generatorCount = (int)Generator.GetParameterCount();
+        int discriminatorCount = (int)Discriminator.GetParameterCount();
         int totalCount = generatorCount + discriminatorCount;
 
         if (parameters.Length != totalCount)

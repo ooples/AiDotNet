@@ -627,7 +627,7 @@ public class IntervalBoundPropagationTests
         public Vector<double> GetParameters() => new Vector<double>(_inputDim * _outputDim);
         public void SetParameters(Vector<double> parameters) { }
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockFullModel(_inputDim, _outputDim);
-        public int ParameterCount => _inputDim * _outputDim;
+        public long ParameterCount => _inputDim * _outputDim;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
@@ -686,7 +686,7 @@ public class IntervalBoundPropagationTests
         public Vector<double> GetParameters() => new Vector<double>(_inputDim * _outputDim);
         public void SetParameters(Vector<double> parameters) { }
         public IFullModel<double, Vector<double>, Vector<double>> WithParameters(Vector<double> parameters) => new MockFullModelWithMargin(_inputDim, _outputDim, _margin);
-        public int ParameterCount => _inputDim * _outputDim;
+        public long ParameterCount => _inputDim * _outputDim;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
@@ -744,7 +744,7 @@ public class IntervalBoundPropagationTests
         public Vector<float> GetParameters() => new Vector<float>(_inputDim * _outputDim);
         public void SetParameters(Vector<float> parameters) { }
         public IFullModel<float, Vector<float>, Vector<float>> WithParameters(Vector<float> parameters) => new MockFullModelFloat(_inputDim, _outputDim);
-        public int ParameterCount => _inputDim * _outputDim;
+        public long ParameterCount => _inputDim * _outputDim;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
         public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();

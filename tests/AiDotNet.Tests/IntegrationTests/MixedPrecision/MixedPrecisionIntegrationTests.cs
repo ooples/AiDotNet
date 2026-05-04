@@ -310,7 +310,7 @@ public class MixedPrecisionIntegrationTests
 
         // Assert
         Assert.True(context.IsInitialized);
-        Assert.Equal(5, context.ParameterCount);
+        Assert.Equal(5, (int)context.ParameterCount);
         Assert.Contains("layer1", context.ParameterNames);
     }
 
@@ -330,7 +330,7 @@ public class MixedPrecisionIntegrationTests
 
         // Assert
         Assert.True(context.IsInitialized);
-        Assert.Equal(5, context.ParameterCount); // 3 + 2
+        Assert.Equal(5, (int)context.ParameterCount); // 3 + 2
         Assert.Contains("weights", context.ParameterNames);
         Assert.Contains("biases", context.ParameterNames);
     }
@@ -445,7 +445,7 @@ public class MixedPrecisionIntegrationTests
 
         // Assert
         Assert.False(context.IsInitialized);
-        Assert.Equal(0, context.ParameterCount);
+        Assert.Equal(0, (int)context.ParameterCount);
         Assert.Empty(context.ParameterNames);
     }
 
@@ -771,7 +771,7 @@ public class MixedPrecisionIntegrationTests
 
         // Assert
         Assert.True(context.IsInitialized);
-        Assert.Equal(0, context.ParameterCount);
+        Assert.Equal(0, (int)context.ParameterCount);
         Assert.Equal(0, workingWeights.Length);
     }
 

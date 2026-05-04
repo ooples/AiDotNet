@@ -317,7 +317,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Gets the total number of trainable parameters in this layer.
     /// </summary>
-    public override int ParameterCount => _weights.Length + _bias.Length;
+    public override long ParameterCount => _weights.Length + _bias.Length;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GraphConvolutionalLayer{T}"/> class with the specified dimensions and activation function.
@@ -1208,7 +1208,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         if (_weightsGradient == null || _biasGradient == null)
         {
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         }
 
         return Vector<T>.Concatenate(

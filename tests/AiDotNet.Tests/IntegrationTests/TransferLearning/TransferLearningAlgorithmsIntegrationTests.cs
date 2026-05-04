@@ -463,7 +463,7 @@ public class TransferLearningAlgorithmsIntegrationTests
             _parameters = parameters;
         }
 
-        public int ParameterCount => _featureCount;
+        public long ParameterCount => _featureCount;
         public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)

@@ -400,7 +400,7 @@ public partial class GRULayer<T> : LayerBase<T>
     /// but requires more data and time to train effectively.
     /// </para>
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         // Before first forward, _inputSize is -1 (lazy sentinel) and the weight/bias
         // tensors are zero-sized placeholders. Match what GetParameters() returns:
         // an empty vector. Reporting a real parameter count from an unresolved input
@@ -1481,7 +1481,7 @@ public partial class GRULayer<T> : LayerBase<T>
             _dUz == null || _dUr == null || _dUh == null ||
             _dbz == null || _dbr == null || _dbh == null)
         {
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         }
 
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy

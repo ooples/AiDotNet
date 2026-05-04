@@ -555,7 +555,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int totalExpected = ParameterCount;
+        int totalExpected = (int)ParameterCount;
         if (parameters.Length != totalExpected)
         {
             throw new ArgumentException($"Expected {totalExpected} parameters, but got {parameters.Length}", nameof(parameters));
@@ -578,7 +578,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
 
         foreach (var layer in Layers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = new Vector<T>(layerParamCount);
@@ -815,7 +815,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        int totalCount = ParameterCount;
+        int totalCount = (int)ParameterCount;
         var parameters = new Vector<T>(totalCount);
         int currentIndex = 0;
 
@@ -850,13 +850,13 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of parameters in the model.
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int count = _clsToken.Length;
             count += _positionalEmbeddings.Shape[0] * _positionalEmbeddings.Shape[1];
-            count += Layers.Sum(layer => layer.ParameterCount);
+            count += (int)Layers.Sum(layer => layer.ParameterCount);
             return count;
         }
     }

@@ -75,7 +75,7 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
     public override int FeatureCount => TradingOptions.StateSize;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _actor.ParameterCount + _critic1.ParameterCount + _critic2.ParameterCount;
+    public override long ParameterCount => _actor.ParameterCount + _critic1.ParameterCount + _critic2.ParameterCount;
 
     #endregion
 
@@ -316,9 +316,9 @@ public class FinancialSACAgent<T> : TradingAgentBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        int actorCount = _actor.ParameterCount;
-        int critic1Count = _critic1.ParameterCount;
-        int critic2Count = _critic2.ParameterCount;
+        int actorCount = checked((int)_actor.ParameterCount);
+        int critic1Count = checked((int)_critic1.ParameterCount);
+        int critic2Count = checked((int)_critic2.ParameterCount);
 
         if (parameters.Length != actorCount + critic1Count + critic2Count)
         {

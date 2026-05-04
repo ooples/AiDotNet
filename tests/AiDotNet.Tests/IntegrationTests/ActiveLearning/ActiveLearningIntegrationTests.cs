@@ -1002,7 +1002,7 @@ public class ActiveLearningIntegrationTests
         // IParameterizable<T, TInput, TOutput>
         public Vector<double> GetParameters() => new(0);
         public void SetParameters(Vector<double> parameters) { }
-        public int ParameterCount => 0;
+        public long ParameterCount => 0;
         public bool SupportsParameterInitialization => false;
         public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> parameters) => this;
 

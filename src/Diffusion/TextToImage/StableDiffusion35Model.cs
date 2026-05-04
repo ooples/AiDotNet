@@ -152,7 +152,7 @@ public class StableDiffusion35Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => SD35_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the model variant (Medium or Large).
@@ -303,13 +303,14 @@ public class StableDiffusion35Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var predictorCount = _predictor.ParameterCount;
-        var vaeCount = _vae.GetParameters().Length;
+        int predictorCount = checked((int)_predictor.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
-        if (parameters.Length != predictorCount + vaeCount)
+        long expectedTotal = (long)predictorCount + vaeCount;
+        if (parameters.Length != expectedTotal)
         {
             throw new ArgumentException(
-                $"Expected {predictorCount + vaeCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -367,7 +368,7 @@ public class StableDiffusion35Model<T> : LatentDiffusionModelBase<T>
             Name = $"Stable Diffusion 3.5 [{_variant}]",
             Version = "3.5",
             Description = $"SD 3.5 {_variant} with MMDiT-X ({(isLarge ? "8B" : "2.5B")} params), QK-normalization, and triple text encoders",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

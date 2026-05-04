@@ -347,7 +347,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         // GetParameters().Length to avoid allocating and copying the full U-Net
         // parameter vector just to size this test buffer.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(model.ParameterCount);
+        var parameters = new Vector<double>((int)model.ParameterCount);
         for (int i = 0; i < parameters.Length; i++)
             parameters[i] = (i % 7) * 0.01;
 
@@ -379,7 +379,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         // Arrange — same size-matching pattern as SetParameters_ThenGetParameters above;
         // ParameterCount avoids the full GetParameters() copy for sizing.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(model.ParameterCount);
+        var parameters = new Vector<double>((int)model.ParameterCount);
         for (int i = 0; i < parameters.Length; i++)
             parameters[i] = (i % 5) + 1.0;
         model.SetParameters(parameters);
@@ -405,7 +405,7 @@ public class DDPMModelTests : DiffusionUnitTestBase
         // whose shape matches the underlying network. ParameterCount is used instead
         // of GetParameters().Length to avoid the full vector allocation for sizing.
         var model = new DDPMModel<double>();
-        var parameters = new Vector<double>(model.ParameterCount);
+        var parameters = new Vector<double>((int)model.ParameterCount);
         for (int i = 0; i < parameters.Length; i++)
             parameters[i] = (i % 11) * 0.0125;
         model.SetParameters(parameters);

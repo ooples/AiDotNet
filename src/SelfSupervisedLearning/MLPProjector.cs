@@ -97,7 +97,7 @@ public class MLPProjector<T> : IProjectorHead<T>
     public int? HiddenDimension => _hiddenDim;
 
     /// <inheritdoc />
-    public int ParameterCount
+    public long ParameterCount
     {
         get
         {

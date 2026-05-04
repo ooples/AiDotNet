@@ -107,7 +107,7 @@ public abstract class BackboneBase<T> : NeuralNetworkBase<T>, AiDotNet.Interface
     public abstract long GetBackboneParameterCount();
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

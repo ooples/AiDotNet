@@ -196,7 +196,21 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the InfoGAN.
     /// </summary>
-    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount() + QNetwork.GetParameterCount();
+    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount() + QNetwork.GetParameterCount();
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Streams parameters from <c>Generator</c>, <c>Discriminator</c>, and
+    /// <c>QNetwork</c> in sequence. Per #1237, callers walking these chunks
+    /// accumulate length into a <see cref="long"/> when the aggregate
+    /// crosses int.MaxValue.
+    /// </remarks>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        foreach (var chunk in Generator.GetParameterChunks()) yield return chunk;
+        foreach (var chunk in Discriminator.GetParameterChunks()) yield return chunk;
+        foreach (var chunk in QNetwork.GetParameterChunks()) yield return chunk;
+    }
 
     private ILossFunction<T> _lossFunction;
 
@@ -973,9 +987,9 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
         }
 
-        int generatorCount = Generator.GetParameterCount();
-        int discriminatorCount = Discriminator.GetParameterCount();
-        int qNetworkCount = QNetwork.GetParameterCount();
+        int generatorCount = (int)Generator.GetParameterCount();
+        int discriminatorCount = (int)Discriminator.GetParameterCount();
+        int qNetworkCount = (int)QNetwork.GetParameterCount();
 
         int totalCount = generatorCount + discriminatorCount + qNetworkCount;
 

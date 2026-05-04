@@ -309,7 +309,7 @@ public class LoRADropAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

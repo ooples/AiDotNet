@@ -185,7 +185,7 @@ public partial class MEGALayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _emaAlphaLogit.Length +
         _emaProjectInWeights.Length + _emaProjectInBias.Length +
         _emaProjectOutWeights.Length + _emaProjectOutBias.Length +
@@ -594,7 +594,7 @@ public partial class MEGALayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -627,7 +627,7 @@ public partial class MEGALayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_emaAlphaLogitGradient == null) return new Vector<T>(ParameterCount);
+        if (_emaAlphaLogitGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_emaAlphaLogitGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_emaProjectInWeightsGradient?.ToArray() ?? Array.Empty<T>()),

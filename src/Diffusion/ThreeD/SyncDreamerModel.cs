@@ -135,7 +135,7 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the number of synchronized views generated simultaneously.
@@ -218,8 +218,8 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -264,7 +264,7 @@ public class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "SyncDreamer", Version = "1.0",
             Description = "SyncDreamer synchronized multi-view 3D generation",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "synchronized-multiview-unet");
         metadata.SetProperty("num_views", NUM_VIEWS);

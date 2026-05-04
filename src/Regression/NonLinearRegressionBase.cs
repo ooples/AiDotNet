@@ -1012,7 +1012,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         return clone;
     }
 
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get { return Alphas.Length + 1; } // Alphas + bias term
     }
@@ -1132,7 +1132,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         // For kernel-based models, compute gradients using numerical differentiation
         // This is a simplified implementation - specific algorithms may override with analytical gradients
         var epsilon = NumOps.FromDouble(1e-7);
-        var gradients = new Vector<T>(ParameterCount);
+        var gradients = new Vector<T>((int)ParameterCount);
 
         // Compute gradient for each alpha (support vector weight)
         // Use try-finally to ensure state is restored even if exceptions occur

@@ -72,7 +72,7 @@ public class DeepCompressionVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;

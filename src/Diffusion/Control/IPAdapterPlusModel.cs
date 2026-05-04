@@ -78,7 +78,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _imageProjection.ParameterCount;
+    public override long ParameterCount => _baseUNet.ParameterCount + _imageProjection.ParameterCount;
 
     /// <summary>
     /// Initializes a new IP-Adapter Plus model.
@@ -152,13 +152,13 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int offset = 0;
-        var baseCount = _baseUNet.ParameterCount;
+        int baseCount = checked((int)_baseUNet.ParameterCount);
         var baseParams = new T[baseCount];
         for (int i = 0; i < baseCount; i++) baseParams[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(baseParams));
         offset += baseCount;
 
-        var projCount = _imageProjection.ParameterCount;
+        int projCount = checked((int)_imageProjection.ParameterCount);
         var projParams = new T[projCount];
         for (int i = 0; i < projCount; i++) projParams[i] = parameters[offset + i];
         _imageProjection.SetParameters(new Vector<T>(projParams));
@@ -186,7 +186,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
             Name = "IP-Adapter-Plus",
             Version = "1.0",
             Description = "Image prompt adapter with fine-grained image feature injection",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

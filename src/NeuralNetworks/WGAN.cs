@@ -714,8 +714,8 @@ public class WGAN<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int generatorParameterCount = Generator.GetParameterCount();
-        int criticParameterCount = Critic.GetParameterCount();
+        int generatorParameterCount = (int)Generator.GetParameterCount();
+        int criticParameterCount = (int)Critic.GetParameterCount();
 
         if (parameters.Length != generatorParameterCount + criticParameterCount)
         {
@@ -726,7 +726,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         }
 
         // Split and update Generator parameters
-        var generatorParameters = new Vector<T>(generatorParameterCount);
+        var generatorParameters = new Vector<T>((int)(generatorParameterCount));
         for (int i = 0; i < generatorParameterCount; i++)
         {
             generatorParameters[i] = parameters[i];
@@ -734,7 +734,7 @@ public class WGAN<T> : NeuralNetworkBase<T>
         Generator.UpdateParameters(generatorParameters);
 
         // Split and update Critic parameters
-        var criticParameters = new Vector<T>(criticParameterCount);
+        var criticParameters = new Vector<T>((int)(criticParameterCount));
         for (int i = 0; i < criticParameterCount; i++)
         {
             criticParameters[i] = parameters[generatorParameterCount + i];

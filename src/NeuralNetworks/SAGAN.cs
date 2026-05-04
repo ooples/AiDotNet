@@ -589,7 +589,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             return;
 
         // Offset in momentum arrays: generator uses first half, discriminator uses second half
-        int offset = isGenerator ? 0 : Generator.GetParameterCount();
+        int offset = isGenerator ? 0 : (int)Generator.GetParameterCount();
         int paramCount = parameters.Length;
 
         // Ensure momentum arrays are properly sized
@@ -728,7 +728,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// This includes all parameters from both the Generator and Discriminator networks.
     /// </remarks>
-    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
+    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
@@ -750,8 +750,8 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int generatorCount = Generator.GetParameterCount();
-        int discriminatorCount = Discriminator.GetParameterCount();
+        int generatorCount = (int)Generator.GetParameterCount();
+        int discriminatorCount = (int)Discriminator.GetParameterCount();
 
         // Update Generator parameters
         var generatorParams = new Vector<T>(generatorCount);
@@ -820,7 +820,7 @@ public class SAGAN<T> : NeuralNetworkBase<T>
     protected override void InitializeLayers()
     {
         // Layers are initialized in the constructor via the Generator and Discriminator CNNs
-        var paramCount = Generator.GetParameterCount() + Discriminator.GetParameterCount();
+        int paramCount = (int)(Generator.GetParameterCount() + Discriminator.GetParameterCount());
         _momentum = new Vector<T>(paramCount);
         _secondMoment = new Vector<T>(paramCount);
     }

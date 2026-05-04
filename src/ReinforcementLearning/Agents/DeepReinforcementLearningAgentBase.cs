@@ -86,14 +86,14 @@ public abstract class DeepReinforcementLearningAgentBase<T> : ReinforcementLearn
     /// This sums the parameter counts from all neural networks used by the agent.
     /// Useful for monitoring model complexity and memory requirements.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int count = 0;
             foreach (var network in Networks)
             {
-                count += network.ParameterCount;
+                count += (int)network.ParameterCount;
             }
             return count;
         }

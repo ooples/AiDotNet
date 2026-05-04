@@ -961,7 +961,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // 24 blocks × 1024 hidden ≈ 250 M parameters; 8-byte doubles ⇒
         // 2 GB), the previous List+ToArray pattern peaked at ~3× that
         // size during the doubling and copy, OOMing CI test hosts.
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var result = new Vector<T>(totalParams);
         int offset = 0;
 
@@ -1072,7 +1072,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
 
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
-        var count = layer.ParameterCount;
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++)
         {
@@ -1152,12 +1152,16 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
+            // #1237: long accumulator. DiT-XL/2 with HiddenDim 3072 × 48
+            // layers (Sora's paper config) sums to ~5.4 B parameters,
+            // overflowing int.MaxValue. Per-layer ParameterCount stays
+            // int (single-tensor < 2.1 B); the cross-layer sum is long.
             EnsureLayersInitialized();
-            int count = 0;
+            long count = 0;
 
             if (_patchEmbed != null) count += _patchEmbed.ParameterCount;
             if (_timeEmbed1 != null) count += _timeEmbed1.ParameterCount;
@@ -1214,6 +1218,63 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override bool SupportsCrossAttention => true;
 
+    /// <summary>
+    /// Streams DiT's trainable weights per-layer, yielding from
+    /// <c>_patchEmbed</c>, the time-embedding MLPs, the AdaLN modulation
+    /// projection, every transformer block's sub-layers, and the final
+    /// norm + projection. Per-tensor streaming dodges the foundation-scale
+    /// buffer-allocation path in <see cref="GetParameters"/> that overflows
+    /// when total parameter count gets close to (or above) int.MaxValue —
+    /// each chunk is a single layer's parameter vector, well within the
+    /// per-tensor int contract documented in
+    /// <see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>.
+    /// </summary>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        // Mirror ParameterCount's enumeration exactly — including
+        // EnsureLayersInitialized() to materialize lazy layers — so
+        // sum-of-chunks always equals ParameterCount.
+        EnsureLayersInitialized();
+
+        IEnumerable<ILayer<T>?> EnumerateAllLayers()
+        {
+            yield return _patchEmbed;
+            yield return _timeEmbed1;
+            yield return _timeEmbed2;
+            yield return _labelEmbed;
+            yield return _adaln_modulation;
+            foreach (var block in _blocks)
+            {
+                yield return block.Norm1;
+                yield return block.Attention;
+                yield return block.Norm2;
+                yield return block.MLP1;
+                yield return block.MLP2;
+                yield return block.AdaLNModulation;
+                yield return block.CrossAttnNorm;
+                yield return block.CrossAttnQ;
+                yield return block.CrossAttnK;
+                yield return block.CrossAttnV;
+                yield return block.CrossAttnOut;
+            }
+            yield return _finalNorm;
+            yield return _outputProj;
+        }
+
+        foreach (var layer in EnumerateAllLayers())
+        {
+            if (layer is null) continue;
+            int len = layer.ParameterCount > int.MaxValue
+                ? throw new InvalidOperationException(
+                    $"Layer '{layer.GetType().Name}' has {layer.ParameterCount} parameters, " +
+                    $"exceeding int.MaxValue. Single-layer chunks must fit in int per the " +
+                    $"Vector.Length contract.")
+                : (int)layer.ParameterCount;
+            if (len == 0) continue;
+            yield return new Tensor<T>(new[] { len }, layer.GetParameters());
+        }
+    }
+
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
 
@@ -1227,7 +1288,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // Same pre-allocate-and-fill pattern as GetParameters — see
         // notes there. Avoids List<T> doubling + ToArray() copy on
         // models with hundreds of millions of parameters.
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var result = new Vector<T>(totalParams);
         int offset = 0;
 

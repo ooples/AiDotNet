@@ -326,7 +326,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - Total: 20,200 parameters
     /// </para>
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _transformWeights.Length + _transformBias.Length + _gateWeights.Length + _gateBias.Length;
 
     /// <summary>
@@ -917,7 +917,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (_transformWeightsGradient == null || _transformBiasGradient == null ||
             _gateWeightsGradient == null || _gateBiasGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_transformWeightsGradient.ToArray()),
             new Vector<T>(_transformBiasGradient.ToArray()),

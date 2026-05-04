@@ -103,7 +103,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         (OutputFeatures * InputFeatures) + OutputFeatures;
 
     /// <summary>
@@ -605,7 +605,7 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gradients = new Vector<T>(ParameterCount);
+        var gradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Weights gradients: [OutputFeatures, InputFeatures]

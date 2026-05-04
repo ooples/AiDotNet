@@ -73,7 +73,23 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     public abstract double LatentScaleFactor { get; }
 
     /// <inheritdoc />
-    public abstract int ParameterCount { get; }
+    public abstract long ParameterCount { get; }
+
+    /// <summary>
+    /// Streams the VAE's trainable weight tensors per-tensor without
+    /// materialising a flat aggregate, mirroring PyTorch's
+    /// <c>nn.Module.parameters()</c> generator pattern. Default
+    /// implementation yields a single chunk wrapping
+    /// <see cref="GetParameters"/>; subclasses with separable
+    /// encoder/decoder weight stores can override to yield each piece
+    /// independently.
+    /// </summary>
+    public virtual IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        var p = GetParameters();
+        if (p.Length == 0) yield break;
+        yield return new Tensor<T>(new[] { p.Length }, p);
+    }
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
@@ -202,7 +218,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount,
             Description = $"VAE with {ParameterCount} parameters, {InputChannels} input channels, " +
                           $"{LatentChannels} latent channels, {DownsampleFactor}x downsampling."

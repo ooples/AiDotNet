@@ -123,7 +123,7 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the Pix2Pix model.
     /// </summary>
-    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
+    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     private readonly ILossFunction<T> _lossFunction;
 
@@ -774,8 +774,8 @@ public class Pix2Pix<T> : NeuralNetworkBase<T>
     /// <param name="parameters">The new parameters vector containing parameters for all networks.</param>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int generatorCount = Generator.GetParameterCount();
-        int discriminatorCount = Discriminator.GetParameterCount();
+        int generatorCount = (int)Generator.GetParameterCount();
+        int discriminatorCount = (int)Discriminator.GetParameterCount();
 
         if (parameters.Length != generatorCount + discriminatorCount)
         {

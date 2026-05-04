@@ -1023,7 +1023,7 @@ public partial class RBMLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_weightsGradient == null || _visibleBiasesGradient == null || _hiddenBiasesGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_weightsGradient.ToArray()),
             new Vector<T>(_visibleBiasesGradient.ToArray()),
@@ -1053,9 +1053,9 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the layer.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _visibleUnits > 0
-            ? _visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits
+            ? (long)_visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits
             // Lazy-ctor instance hasn't seen its first Forward yet — visible
             // dim is unknown, all parameter tensors are zero-sized
             // placeholders, and EnsureInitialized hasn't run. Reporting a
@@ -1063,7 +1063,7 @@ public partial class RBMLayer<T> : LayerBase<T>
             // would break the optimizer's per-parameter state allocation
             // (it sizes its bookkeeping arrays from ParameterCount and
             // walks GetParameters() to fill them).
-            : 0;
+            : 0L;
 
     /// <summary>
     /// Indicates whether this layer supports training.

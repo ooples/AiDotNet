@@ -712,7 +712,7 @@ public class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         return new TemporalFusionTransformer<T>(new TemporalFusionTransformerOptions<T>(_options));
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

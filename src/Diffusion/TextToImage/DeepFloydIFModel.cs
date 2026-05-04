@@ -140,7 +140,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => IF_PIXEL_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _stageIUnet.ParameterCount + _stageIIUnet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _stageIUnet.ParameterCount + _stageIIUnet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the Stage II super-resolution noise predictor.
@@ -355,9 +355,9 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var stage1Count = _stageIUnet.ParameterCount;
-        var stage2Count = _stageIIUnet.ParameterCount;
-        var vaeCount = _vae.GetParameters().Length;
+        int stage1Count = checked((int)_stageIUnet.ParameterCount);
+        int stage2Count = checked((int)_stageIIUnet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != stage1Count + stage2Count + vaeCount)
         {
@@ -455,7 +455,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
             Name = "DeepFloyd IF",
             Version = "1.0",
             Description = "DeepFloyd IF cascaded pixel-space diffusion model with T5-XXL text encoder",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

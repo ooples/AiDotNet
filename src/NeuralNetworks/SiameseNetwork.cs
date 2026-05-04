@@ -379,11 +379,11 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int subnetworkParameterCount = _subnetwork.ParameterCount;
+        int subnetworkParameterCount = checked((int)_subnetwork.ParameterCount);
         Vector<T> subnetworkParameters = parameters.SubVector(0, subnetworkParameterCount);
         _subnetwork.UpdateParameters(subnetworkParameters);
 
-        Vector<T> outputLayerParameters = parameters.SubVector(subnetworkParameterCount, _outputLayer.ParameterCount);
+        Vector<T> outputLayerParameters = parameters.SubVector(subnetworkParameterCount, (int)_outputLayer.ParameterCount);
         _outputLayer.UpdateParameters(outputLayerParameters);
     }
 
@@ -414,7 +414,7 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     /// - Determine if you have enough training data (typically you want many times more examples than parameters)
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

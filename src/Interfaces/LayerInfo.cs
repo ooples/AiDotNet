@@ -58,7 +58,7 @@ public class LayerInfo<T>
     /// <summary>
     /// Number of trainable parameters in this layer.
     /// </summary>
-    public int ParameterCount { get; init; }
+    public long ParameterCount { get; init; }
 
     /// <summary>
     /// Input shape expected by this layer.

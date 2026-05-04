@@ -87,7 +87,7 @@ public class BasicBlock<T> : LayerBase<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _conv1.ParameterCount + _bn1.ParameterCount + _conv2.ParameterCount + _bn2.ParameterCount +
         (_downsampleConv?.ParameterCount ?? 0) + (_downsampleBn?.ParameterCount ?? 0);
     public override bool SupportsTraining => true;
@@ -360,7 +360,7 @@ public class BasicBlock<T> : LayerBase<T>
         int idx = 0;
         void Set(ILayer<T> layer)
         {
-            int count = layer.ParameterCount;
+            int count = checked((int)layer.ParameterCount);
             layer.SetParameters(parameters.Slice(idx, count));
             idx += count;
         }

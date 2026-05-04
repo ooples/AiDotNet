@@ -522,7 +522,7 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         // Generate probe inputs by creating small perturbations around a unit vector
         // The number of probes scales with the principle complexity (word count)
         int numProbes = Math.Max(3, principle.Split(' ').Length / 2);
-        int inputDim = Math.Max(1, parameterizable.ParameterCount > 0
+        int inputDim = (int)Math.Max(1, parameterizable.ParameterCount > 0
             ? (int)Math.Sqrt(parameterizable.ParameterCount)
             : 4);
         inputDim = Math.Min(inputDim, 64);

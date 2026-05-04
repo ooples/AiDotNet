@@ -173,7 +173,7 @@ public class ExpectedGradientLength<T, TInput, TOutput> : ContinualLearningStrat
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
         // Initialize gradient length accumulator for the new task
-        int numParams = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int numParams = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
         _gradientLengthSum = new Vector<T>(numParams);
         for (int i = 0; i < numParams; i++)
         {

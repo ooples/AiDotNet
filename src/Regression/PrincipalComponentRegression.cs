@@ -158,7 +158,7 @@ public class PrincipalComponentRegression<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     /// <summary>PCR doesn't benefit from optimizer parameter injection.</summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     public override void Train(Matrix<T> x, Vector<T> y)
     {

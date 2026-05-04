@@ -234,7 +234,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// - How to combine everything into a useful output
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
+    public override long ParameterCount => _keyWeights.Length + _valueWeights.Length + _outputWeights.Length + _outputBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -949,7 +949,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (_keyWeightsGradient == null || _valueWeightsGradient == null ||
             _outputWeightsGradient == null || _outputBiasGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_keyWeightsGradient.ToArray()),
             new Vector<T>(_valueWeightsGradient.ToArray()),

@@ -82,7 +82,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     #endregion
 
-    public override int ParameterCount => _gamma.Length + _beta.Length;
+    public override long ParameterCount => _gamma.Length + _beta.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -405,7 +405,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
     }
 

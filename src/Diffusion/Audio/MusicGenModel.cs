@@ -969,10 +969,10 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _musicVAE.ParameterCount;
-        var melodyCount = _melodyEncoder.ParameterCount;
-        var rhythmCount = _rhythmEncoder.ParameterCount;
+        var unetCount = checked((int)_unet.ParameterCount);
+        int vaeCount = checked((int)_musicVAE.ParameterCount);
+        int melodyCount = checked((int)_melodyEncoder.ParameterCount);
+        int rhythmCount = checked((int)_rhythmEncoder.ParameterCount);
 
         var expected = unetCount + vaeCount + melodyCount + rhythmCount;
         if (parameters.Length != expected)
@@ -1006,7 +1006,7 @@ public class MusicGenModel<T> : AudioDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _unet.ParameterCount + _musicVAE.ParameterCount +
         _melodyEncoder.ParameterCount + _rhythmEncoder.ParameterCount;
 
@@ -1235,7 +1235,7 @@ public class MelodyEncoder<T>
     /// <summary>
     /// Gets parameter count.
     /// </summary>
-    public int ParameterCount =>
+    public long ParameterCount =>
         _intermediateChannels * _inputChannels * 7 + _intermediateChannels +
         _outputDim * _intermediateChannels + _outputDim;
 }
@@ -1368,5 +1368,5 @@ public class RhythmEncoder<T>
     /// <summary>
     /// Gets parameter count.
     /// </summary>
-    public int ParameterCount => _outputDim * _inputDim + _outputDim;
+    public long ParameterCount => _outputDim * _inputDim + _outputDim;
 }

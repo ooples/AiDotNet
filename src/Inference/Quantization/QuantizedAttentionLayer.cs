@@ -145,7 +145,7 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
 
     public override bool SupportsTraining => false;
 
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     public override Tensor<float>? GetWeights() => null;
 

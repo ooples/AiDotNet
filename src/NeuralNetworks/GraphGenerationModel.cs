@@ -516,7 +516,7 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParamCount = layer.ParameterCount;
+            int layerParamCount = checked((int)layer.ParameterCount);
             if (layerParamCount > 0)
             {
                 var layerParams = parameters.SubVector(index, layerParamCount);
@@ -779,12 +779,12 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the network.
     /// </summary>
-    public new int GetParameterCount()
+    public new long GetParameterCount()
     {
         int count = 0;
         foreach (var layer in Layers)
         {
-            count += layer.ParameterCount;
+            count += (int)layer.ParameterCount;
         }
         count += _meanWeights.Length;
         count += _logVarWeights.Length;

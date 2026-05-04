@@ -52,7 +52,7 @@ public class PointCloudLayersIntegrationTests
         var layer = new PointConvolutionLayer<double>(inputCh, outputCh);
 
         // Parameters = inputCh * outputCh (weights) + outputCh (biases)
-        Assert.Equal(inputCh * outputCh + outputCh, layer.ParameterCount);
+        Assert.Equal(inputCh * outputCh + outputCh, (int)layer.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -164,7 +164,7 @@ public class PointCloudLayersIntegrationTests
     public async Task MaxPooling_ParameterCount_IsZero()
     {
         var layer = new MaxPoolingLayer<double>(16);
-        Assert.Equal(0, layer.ParameterCount);
+        Assert.Equal(0, (int)layer.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]

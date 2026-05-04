@@ -69,7 +69,7 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => false;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => true;
-    public override int ParameterCount { get { EnsureInitialized(); return _predictor.ParameterCount + _temporalVAE.GetParameters().Length; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _predictor.ParameterCount + _temporalVAE.GetParameters().Length; } }
 
     /// <summary>
     /// Initializes a new instance of FlowVidModel with full customization support.
@@ -158,7 +158,7 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var predCount = _predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -199,7 +199,7 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
             Name = "FlowVid",
             Version = "1.0",
             Description = "FlowVid optical flow guided video-to-video synthesis.",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "optical-flow-v2v");

@@ -155,7 +155,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Initialize parameter vector
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromMatrices();
     }
 
@@ -166,7 +166,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
     /// LoHa has 2 * rank * inputSize * outputSize parameters (A and B matrices for each rank).
     /// This is more than standard LoRA but still far less than full fine-tuning.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -482,7 +482,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -526,7 +526,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack base layer gradients if not frozen

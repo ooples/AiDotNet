@@ -707,7 +707,7 @@ public class ANILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
         ParamModel.SetParameters(currentParams);
 
         // Extract only body gradients (first _bodyParameterCount parameters)
-        var bodyGradients = new Vector<T>(_bodyParameterCount);
+        var bodyGradients = new Vector<T>((int)(_bodyParameterCount));
         int copyLen = Math.Min(_bodyParameterCount, fullGradients.Length);
         for (int i = 0; i < copyLen; i++)
         {

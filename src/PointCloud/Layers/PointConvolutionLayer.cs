@@ -241,7 +241,7 @@ public class PointConvolutionLayer<T> : LayerBase<T>
         ClearGradients();
     }
 
-    public override int ParameterCount => _inputChannels * _outputChannels + _outputChannels;
+    public override long ParameterCount => _inputChannels * _outputChannels + _outputChannels;
 
     public override bool SupportsTraining => true;
 }

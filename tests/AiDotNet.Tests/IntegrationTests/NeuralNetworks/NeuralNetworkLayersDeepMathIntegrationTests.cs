@@ -400,7 +400,7 @@ public class NeuralNetworkLayersDeepMathIntegrationTests
     {
         // FC layer with inputSize=3, outputSize=2 should have 3*2 + 2 = 8 parameters
         var layer = new FullyConnectedLayer<double>(2, (IActivationFunction<double>?)null);
-        Assert.Equal(8, layer.ParameterCount);
+        Assert.Equal(8, (int)layer.ParameterCount);
     }
 
     // ========================================================================

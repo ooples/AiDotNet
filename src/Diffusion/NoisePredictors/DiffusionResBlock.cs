@@ -76,7 +76,7 @@ public class DiffusionResBlock<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _norm1.ParameterCount + _conv1.ParameterCount +
         _timeMlp.ParameterCount +
         _norm2.ParameterCount + _conv2.ParameterCount +

@@ -920,7 +920,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
         return DeepCopy();
     }
 
-    public virtual int ParameterCount
+    public virtual long ParameterCount
     {
         get { return ExpectedParameterCount; }
     }
@@ -992,7 +992,7 @@ public abstract class RegressionBase<T> : IRegression<T>, IConfigurableModel<T>,
         var gradCoefficients = input.Transpose().Multiply(errors).Divide(n);
 
         // Build full gradient vector (coefficients + intercept)
-        var gradients = new Vector<T>(ExpectedParameterCount);
+        var gradients = new Vector<T>((int)(ExpectedParameterCount));
         for (int i = 0; i < Coefficients.Length; i++)
         {
             gradients[i] = gradCoefficients[i];

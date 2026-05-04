@@ -68,12 +68,12 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _inputDim > 0
-            ? _depth * _inputDim +      // feature selection weights
-              _depth +                   // thresholds
-              _numLeaves * _outputDim    // leaf values
-            : 0;                         // lazy: no params allocated yet
+            ? (long)_depth * _inputDim +      // feature selection weights
+              _depth +                          // thresholds
+              (long)_numLeaves * _outputDim      // leaf values
+            : 0L;                                // lazy: no params allocated yet
 
     /// <summary>
     /// Initializes an oblivious decision tree.

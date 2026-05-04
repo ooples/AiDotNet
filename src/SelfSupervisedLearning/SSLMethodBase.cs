@@ -73,7 +73,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     public abstract bool UsesMomentumEncoder { get; }
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -83,10 +83,10 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
 
             if (_projector is not null)
             {
-                count += _projector.ParameterCount;
+                count += (int)_projector.ParameterCount;
             }
 
-            count += GetAdditionalParameterCount();
+            count += (int)GetAdditionalParameterCount();
             return count;
         }
     }
@@ -259,7 +259,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
         // Set projector parameters
         if (_projector is not null)
         {
-            var projectorLength = _projector.ParameterCount;
+            int projectorLength = checked((int)_projector.ParameterCount);
             var projectorParamArray = new T[projectorLength];
             for (int i = 0; i < projectorLength; i++)
             {
@@ -282,7 +282,7 @@ public abstract class SSLMethodBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>, ISS
     /// Gets the count of additional parameters.
     /// </summary>
     /// <returns>The number of additional parameters.</returns>
-    protected virtual int GetAdditionalParameterCount() => 0;
+    protected virtual long GetAdditionalParameterCount() => 0;
 
     /// <summary>
     /// Sets additional parameters specific to this SSL method.

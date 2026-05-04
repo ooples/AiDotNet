@@ -75,7 +75,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     /// <summary>
     /// Gets the total number of parameters in the model.
     /// </summary>
-    public virtual int ParameterCount => NumFeatures;
+    public virtual long ParameterCount => NumFeatures;
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
@@ -589,7 +589,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Causal models typically don't use standard gradient computation
-        return new Vector<T>(ParameterCount);
+        return new Vector<T>((int)ParameterCount);
     }
 
     /// <summary>

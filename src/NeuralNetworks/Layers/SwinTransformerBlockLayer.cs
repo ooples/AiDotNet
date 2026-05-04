@@ -75,7 +75,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _norm1.ParameterCount +
         _norm2.ParameterCount +
         _qkvProj.ParameterCount +
@@ -622,22 +622,22 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         int offset = 0;
 
         // Norm1
-        int norm1Count = _norm1.ParameterCount;
+        int norm1Count = checked((int)_norm1.ParameterCount);
         _norm1.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, norm1Count).ToArray()));
         offset += norm1Count;
 
         // Norm2
-        int norm2Count = _norm2.ParameterCount;
+        int norm2Count = checked((int)_norm2.ParameterCount);
         _norm2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, norm2Count).ToArray()));
         offset += norm2Count;
 
         // QKV projection
-        int qkvCount = _qkvProj.ParameterCount;
+        int qkvCount = checked((int)_qkvProj.ParameterCount);
         _qkvProj.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, qkvCount).ToArray()));
         offset += qkvCount;
 
         // Output projection
-        int outCount = _outProj.ParameterCount;
+        int outCount = checked((int)_outProj.ParameterCount);
         _outProj.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, outCount).ToArray()));
         offset += outCount;
 
@@ -649,12 +649,12 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         offset += _relativePositionBiasTable.Length;
 
         // MLP FC1
-        int fc1Count = _mlpFc1.ParameterCount;
+        int fc1Count = checked((int)_mlpFc1.ParameterCount);
         _mlpFc1.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, fc1Count).ToArray()));
         offset += fc1Count;
 
         // MLP FC2
-        int fc2Count = _mlpFc2.ParameterCount;
+        int fc2Count = checked((int)_mlpFc2.ParameterCount);
         _mlpFc2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, fc2Count).ToArray()));
     }
 

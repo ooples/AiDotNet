@@ -339,7 +339,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters (weights + biases).
     /// </summary>
-    public override int ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0];
+    public override long ParameterCount => _weights.Shape[0] * _weights.Shape[1] + _biases.Shape[0];
 
     /// <summary>
     /// Initializes the weights and biases with appropriate values for effective training.
@@ -551,7 +551,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         }
 
         int weightCount = _weightsGradient.Shape[0] * _weightsGradient.Shape[1];

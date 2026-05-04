@@ -429,7 +429,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// - Advanced optimization techniques that need access to all parameters
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _gamma.Length + _beta.Length;
+    public override long ParameterCount => _gamma.Length + _beta.Length;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
@@ -495,7 +495,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCount);
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
     }
 

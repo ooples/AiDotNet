@@ -342,7 +342,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>
     /// biologically-inspired learning rules that modify connection strengths based on experience.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _weights.Length;
+    public override long ParameterCount => _weights.Length;
     public override bool SupportsTraining => true;
 
     private Tensor<T>? _lastInputGpu;

@@ -1357,7 +1357,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// This provides access to all the "knowledge" the layer has learned.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _isInitialized
+    public override long ParameterCount => _isInitialized
         ? _kernels.Length + _biases.Shape[0]
         : InputDepth > 0
             ? OutputDepth * InputDepth * KernelSize * KernelSize + OutputDepth
@@ -1403,7 +1403,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // just to return a zero vector.
         if (_kernelsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         }
         EnsureInitialized();
 

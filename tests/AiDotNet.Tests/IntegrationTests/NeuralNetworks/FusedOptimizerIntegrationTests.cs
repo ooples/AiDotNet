@@ -449,7 +449,7 @@ public class FusedOptimizerIntegrationTests
                 Name = "FusedTrainingTestNetwork",
                 Version = "1.0",
                 FeatureCount = Architecture.InputSize,
-                Complexity = ParameterCount
+                Complexity = (int)ParameterCount
             };
 
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
@@ -502,7 +502,7 @@ public class FusedOptimizerIntegrationTests
                 Name = "FusedTrainingTestNetworkDouble",
                 Version = "1.0",
                 FeatureCount = Architecture.InputSize,
-                Complexity = ParameterCount
+                Complexity = (int)ParameterCount
             };
 
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }

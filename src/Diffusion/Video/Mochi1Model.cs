@@ -201,7 +201,7 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => false;
 
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _temporalVAE.GetParameters().Length; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _dit.ParameterCount + _temporalVAE.GetParameters().Length; } }
 
     #endregion
 
@@ -354,7 +354,7 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var ditCount = _dit.ParameterCount;
+        int ditCount = checked((int)_dit.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -424,7 +424,7 @@ public class Mochi1Model<T> : VideoDiffusionModelBase<T>
             Name = "Mochi-1",
             Version = "1.0",
             Description = "Mochi 1 asymmetric DiT video generation with joint text-video attention",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

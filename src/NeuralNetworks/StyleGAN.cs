@@ -157,7 +157,7 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the StyleGAN.
     /// </summary>
-    public override int ParameterCount => MappingNetwork.GetParameterCount() + SynthesisNetwork.GetParameterCount() + Discriminator.GetParameterCount();
+    public override long ParameterCount => MappingNetwork.GetParameterCount() + SynthesisNetwork.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <summary>
     /// Enables style mixing during training.
@@ -954,9 +954,9 @@ public class StyleGAN<T> : NeuralNetworkBase<T>
             throw new ArgumentNullException(nameof(parameters), "Parameters vector cannot be null.");
         }
 
-        int mappingCount = MappingNetwork.GetParameterCount();
-        int synthesisCount = SynthesisNetwork.GetParameterCount();
-        int discriminatorCount = Discriminator.GetParameterCount();
+        int mappingCount = (int)MappingNetwork.GetParameterCount();
+        int synthesisCount = (int)SynthesisNetwork.GetParameterCount();
+        int discriminatorCount = (int)Discriminator.GetParameterCount();
         int expectedTotal = mappingCount + synthesisCount + discriminatorCount;
 
         if (parameters.Length != expectedTotal)

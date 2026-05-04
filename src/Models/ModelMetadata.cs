@@ -125,34 +125,40 @@ public class ModelMetadata<T>
     /// <summary>
     /// Gets or sets a measure of the model's complexity.
     /// </summary>
-    /// <value>An integer representing the model's complexity.</value>
+    /// <value>A long-integer representing the model's complexity.</value>
     /// <remarks>
     /// <para>
-    /// This property provides a measure of the model's complexity, which can vary depending on the type of model. For example, 
-    /// in a linear model, complexity might refer to the number of coefficients; in a decision tree, it might refer to the 
-    /// depth or number of nodes; in a neural network, it might refer to the number of layers or parameters. Higher complexity 
-    /// can allow a model to capture more intricate patterns but may also increase the risk of overfitting and the computational 
+    /// This property provides a measure of the model's complexity, which can vary depending on the type of model. For example,
+    /// in a linear model, complexity might refer to the number of coefficients; in a decision tree, it might refer to the
+    /// depth or number of nodes; in a neural network, it might refer to the number of layers or parameters. Higher complexity
+    /// can allow a model to capture more intricate patterns but may also increase the risk of overfitting and the computational
     /// resources required.
     /// </para>
+    /// <para>
+    /// Type is <see cref="long"/> (int64) so foundation-scale neural networks
+    /// — Sora, HiDream Full, SD3.5 Large, HunyuanVideo, Flux 2 — that report
+    /// their parameter count as the complexity measure don't silently
+    /// truncate when the count exceeds <see cref="int.MaxValue"/> (#1237).
+    /// </para>
     /// <para><b>For Beginners:</b> This indicates how complex or sophisticated the model is.
-    /// 
+    ///
     /// The complexity measure:
     /// - Gives you an idea of how intricate the model's structure is
     /// - Can mean different things for different model types
     /// - Higher values generally indicate more complex models
-    /// 
+    ///
     /// For different model types, complexity might represent:
     /// - Linear models: Number of coefficients or terms
     /// - Decision trees: Depth of the tree or number of nodes
     /// - Neural networks: Number of layers or parameters
-    /// 
+    ///
     /// This information is useful because:
     /// - More complex models can capture more intricate patterns
     /// - But they may also be more prone to overfitting
     /// - And they typically require more computational resources
     /// </para>
     /// </remarks>
-    public int Complexity { get; set; }
+    public long Complexity { get; set; }
 
     /// <summary>
     /// Gets or sets a human-readable description of the model.

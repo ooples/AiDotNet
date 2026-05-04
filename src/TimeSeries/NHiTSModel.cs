@@ -508,13 +508,13 @@ public class NHiTSModel<T> : TimeSeriesModelBase<T>
         return new NHiTSModel<T>(new NHiTSOptions<T>(_options));
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int total = 0;
             foreach (var stack in _stacks)
-                total += stack.ParameterCount;
+                total += (int)stack.ParameterCount;
             return total;
         }
     }
@@ -555,7 +555,7 @@ internal class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     public int PoolingSize { get; }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

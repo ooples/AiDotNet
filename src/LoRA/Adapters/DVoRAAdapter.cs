@@ -167,19 +167,19 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
     /// This is only slightly more than VeRA (adds magnitude vector) but much fewer than DoRA (no full LoRA matrices).
     /// Handles pre-initialization state by using fallback values when fields are null.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             // Guard against pre-initialization state when base class constructor calls this property.
-            int baseCount = _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
+            int baseCount = _freezeBaseLayer ? (int)(0) : (int)_baseLayer.ParameterCount;
             int inputSize = GetInputShape()[0];
             int outputSize = GetOutputShape()[0];
 
             // We must include the LoRA slice size for base class compatibility, even though DVoRA doesn't train it.
             // The base constructor allocates parameter vectors based on this count, and packing/unpacking
             // methods expect the LoRA slice to be present, causing an IndexOutOfRange exception if omitted.
-            int loraCount = _loraLayer?.ParameterCount ?? (inputSize * Rank + outputSize * Rank);
+            int loraCount = (int)(_loraLayer?.ParameterCount ?? (inputSize * Rank + outputSize * Rank));
 
             int magnitudeCount = _magnitude?.Length ?? outputSize;
             int scalingDCount = _scalingVectorD?.Length ?? outputSize;
@@ -270,7 +270,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromComponents();
     }
 
@@ -792,7 +792,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters (if not frozen)
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -802,7 +802,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Unpack LoRA parameters (required for base class compatibility)
-        int loraParamCount = _loraLayer.ParameterCount;
+        int loraParamCount = checked((int)_loraLayer.ParameterCount);
         Vector<T> loraParams = new Vector<T>(loraParamCount);
         for (int i = 0; i < loraParamCount; i++)
         {
@@ -839,7 +839,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack base layer gradients (if not frozen)

@@ -251,8 +251,8 @@ public class MixtureOfExpertsLayerTests
             new[] { 10 }, new[] { 10 });
 
         // Act
-        int totalParams = moe.ParameterCount;
-        int expectedParams = router.ParameterCount + experts.Sum(e => e.ParameterCount);
+        int totalParams = (int)moe.ParameterCount;
+        int expectedParams = (int)router.ParameterCount + experts.Sum(e => e.ParameterCount);
 
         // Assert
         Assert.Equal(expectedParams, totalParams);

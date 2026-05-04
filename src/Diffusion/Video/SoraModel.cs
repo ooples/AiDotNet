@@ -205,7 +205,7 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => true;
 
     /// <inheritdoc />
-    public override int ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _dit.ParameterCount + _temporalVAE.GetParameters().Length;
 
     #endregion
 
@@ -348,7 +348,7 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var ditCount = _dit.ParameterCount;
+        int ditCount = checked((int)_dit.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
 
         if (parameters.Length != ditCount + vaeCount)
@@ -417,7 +417,7 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
             Name = "Sora",
             Version = "1.0",
             Description = "Sora-architecture DiT video generation with native spatiotemporal patches",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

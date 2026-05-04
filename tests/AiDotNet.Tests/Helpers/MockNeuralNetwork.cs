@@ -199,7 +199,7 @@ public class MockNeuralNetwork : INeuralNetwork<double>
         _parameters = parameters.Clone();
     }
 
-    public int ParameterCount => _parameters.Length;
+    public long ParameterCount => _parameters.Length;
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
     public IFullModel<double, Tensor<double>, Tensor<double>> WithParameters(Vector<double> parameters)
@@ -257,7 +257,7 @@ public class MockNeuralNetwork : INeuralNetwork<double>
     public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null)
     {
         // Return mock gradients
-        var gradients = new Vector<double>(ParameterCount);
+        var gradients = new Vector<double>((int)ParameterCount);
         for (int i = 0; i < ParameterCount; i++)
         {
             gradients[i] = 0.1 * (i + 1);

@@ -316,7 +316,7 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
         return new LSTMVAE<T>(new LSTMVAEOptions<T>(_options));
     }
 
-    public override int ParameterCount => _encoder.ParameterCount + _decoder.ParameterCount;
+    public override long ParameterCount => _encoder.ParameterCount + _decoder.ParameterCount;
 
     public override Vector<T> GetParameters()
     {
@@ -330,12 +330,12 @@ public class LSTMVAE<T> : TimeSeriesModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var encoderLen = _encoder.ParameterCount;
+        int encoderLen = checked((int)_encoder.ParameterCount);
         var encoderParams = new Vector<T>(encoderLen);
         for (int i = 0; i < encoderLen && i < parameters.Length; i++) encoderParams[i] = parameters[i];
         _encoder.SetParameters(encoderParams);
 
-        var decoderLen = _decoder.ParameterCount;
+        int decoderLen = checked((int)_decoder.ParameterCount);
         var decoderParams = new Vector<T>(decoderLen);
         for (int i = 0; i < decoderLen && encoderLen + i < parameters.Length; i++) decoderParams[i] = parameters[encoderLen + i];
         _decoder.SetParameters(decoderParams);
@@ -415,7 +415,7 @@ internal class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _logVarWeightsGrad;
     private Tensor<T> _logVarBiasGrad;
 
-    public override int ParameterCount => _weights.Length + _bias.Length +
+    public override long ParameterCount => _weights.Length + _bias.Length +
                                   _meanWeights.Length + _meanBias.Length +
                                   _logVarWeights.Length + _logVarBias.Length;
 
@@ -663,7 +663,7 @@ internal class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _outputWeightsGrad;
     private Tensor<T> _outputBiasGrad;
 
-    public override int ParameterCount => _weights.Length + _bias.Length +
+    public override long ParameterCount => _weights.Length + _bias.Length +
                                   _outputWeights.Length + _outputBias.Length;
 
     private Tensor<T>? _lastLatent;

@@ -176,7 +176,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     protected override bool SupportsGpuExecution => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _weights.Length + _attentionWeights.Length + _bias.Length;
+    public override long ParameterCount => _weights.Length + _attentionWeights.Length + _bias.Length;
 
     /// <inheritdoc/>
     public int InputFeatures => _inputFeatures;

@@ -266,7 +266,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         int startIndex = 0;
         foreach (var layer in Layers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 Vector<T> layerParameters = parameters.SubVector(startIndex, layerParameterCount);
@@ -377,7 +377,7 @@ public class AttentionNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 { "EmbeddingSize", _embeddingSize },
                 { "NumberOfLayers", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToList() },
-                { "ParameterCount", Layers.Sum(l => l.ParameterCount) },
+                { "ParameterCount", (int)Layers.Sum(l => l.ParameterCount) },
                 { "InputShape", new[] { _sequenceLength, _embeddingSize } },
                 { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() }
             },

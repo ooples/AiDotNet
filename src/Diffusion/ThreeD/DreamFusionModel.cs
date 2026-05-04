@@ -135,7 +135,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => DREAM_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _nerf.ParameterCount + _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _nerf.ParameterCount + _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Configuration for DreamFusion model.
@@ -622,9 +622,9 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var nerfCount = _nerf.ParameterCount;
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        int nerfCount = checked((int)_nerf.ParameterCount);
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         var nerfParams = new T[nerfCount];
         var unetParams = new T[unetCount];
@@ -680,7 +680,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
             Name = "DreamFusion",
             Version = "1.0",
             Description = "Text-to-3D generation via Score Distillation Sampling",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 
@@ -904,7 +904,7 @@ public class NeRFNetwork<T>
     /// <summary>
     /// Gets the total parameter count.
     /// </summary>
-    public int ParameterCount
+    public long ParameterCount
     {
         get
         {

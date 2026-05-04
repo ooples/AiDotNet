@@ -114,7 +114,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
     {
         Guard.NotNull(network);
 
-        var paramCount = network.ParameterCount;
+        int paramCount = checked((int)network.ParameterCount);
 
         if (_priorMean.Length == 0)
         {
@@ -153,7 +153,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         // For simplicity, we update based on gradient variance
         if (_posteriorLogVar.Length == 0)
         {
-            _posteriorLogVar = new Vector<T>(network.ParameterCount);
+            _posteriorLogVar = new Vector<T>(checked((int)network.ParameterCount));
             var initialLogVarT = _numOps.FromDouble(_initialLogVar);
             for (int i = 0; i < _posteriorLogVar.Length; i++)
             {

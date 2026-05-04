@@ -166,7 +166,7 @@ public class SplineRegression<T> : NonLinearRegressionBase<T>
     /// Spline regression solves analytically — no optimizer parameter injection needed.
     /// Returning 0 makes SupportsParameterInitialization return false.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Returns original feature indices (not expanded spline basis indices).

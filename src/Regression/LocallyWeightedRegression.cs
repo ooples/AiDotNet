@@ -158,7 +158,7 @@ public class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// LWR is a lazy learner — no optimizer parameter injection.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Returns all features used during training.

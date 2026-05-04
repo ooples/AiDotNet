@@ -77,7 +77,7 @@ public class Causal3DVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
 
     /// <summary>
     /// Gets the temporal compression factor.

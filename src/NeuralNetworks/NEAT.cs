@@ -266,7 +266,7 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// the number of connections in the best-performing genome in the population.
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

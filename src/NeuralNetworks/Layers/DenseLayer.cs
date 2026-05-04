@@ -266,7 +266,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// 100 × 50 = 5,000 weights plus 50 biases, for a total of 5,050 parameters.
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1251,7 +1251,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (_weightsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         }
 
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy

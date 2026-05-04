@@ -338,7 +338,7 @@ public class MappedRandomForestModel<T> : ModelWrapperBase<T, Matrix<T>, Vector<
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

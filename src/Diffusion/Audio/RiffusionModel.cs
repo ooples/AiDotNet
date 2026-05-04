@@ -166,7 +166,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => RIFF_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     /// <summary>
     /// Gets the spectrogram configuration.
@@ -583,8 +583,8 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {

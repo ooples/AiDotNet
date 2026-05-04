@@ -52,7 +52,7 @@ public abstract class MetaLearningModelBase<T, TInput, TOutput> : ModelWrapperBa
     public abstract override void SetParameters(Vector<T> parameters);
 
     /// <inheritdoc/>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
 
     /// <inheritdoc/>
     public override void ApplyGradients(Vector<T> gradients, T learningRate)

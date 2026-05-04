@@ -73,7 +73,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     private Tensor<T>? _cachedNodeProbs;
     private Tensor<T>? _cachedSplitLogits;
 
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _splitWeights.Length + _splitBiases.Length + _leafValues.Length;
 
     /// <summary>
@@ -238,7 +238,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var parameters = new Vector<T>(totalParams);
         int idx = 0;
 
@@ -295,7 +295,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var gradients = new Vector<T>(totalParams);
         int idx = 0;
 

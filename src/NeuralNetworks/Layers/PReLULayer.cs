@@ -58,7 +58,7 @@ public class PReLULayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters (the length of α).
     /// </summary>
-    public override int ParameterCount => _alpha.Length;
+    public override long ParameterCount => _alpha.Length;
 
     /// <summary>
     /// Gets the current α tensor. Shape is <c>[numParameters]</c>.

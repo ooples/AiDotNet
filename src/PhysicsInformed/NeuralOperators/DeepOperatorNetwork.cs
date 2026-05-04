@@ -759,8 +759,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// <param name="parameters">Parameter vector.</param>
         public override void UpdateParameters(Vector<T> parameters)
         {
-            int branchParameterCount = _branchNet.GetParameterCount();
-            int trunkParameterCount = _trunkNet.GetParameterCount();
+            int branchParameterCount = (int)_branchNet.GetParameterCount();
+            int trunkParameterCount = (int)_trunkNet.GetParameterCount();
 
             if (parameters.Length != branchParameterCount + trunkParameterCount)
             {
@@ -931,7 +931,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// <summary>
         /// Gets the total number of parameters across branch and trunk networks.
         /// </summary>
-        public override int ParameterCount => _branchNet.GetParameterCount() + _trunkNet.GetParameterCount();
+        public override long ParameterCount => _branchNet.GetParameterCount() + _trunkNet.GetParameterCount();
 
         public override bool SupportsTraining => true;
     }

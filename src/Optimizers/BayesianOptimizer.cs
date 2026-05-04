@@ -111,7 +111,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         // Get the parameter count from a random solution (includes coefficients + intercept)
         // This is different from inputSize which is just the feature count
         var firstSolution = InitializeRandomSolution(inputData.XTrain);
-        int paramCount = InterfaceGuard.Parameterizable(firstSolution).ParameterCount;
+        int paramCount = (int)InterfaceGuard.Parameterizable(firstSolution).ParameterCount;
 
         // Initial random sampling - use paramCount (model parameters), not inputSize (features)
         _sampledPoints = new Matrix<T>(_options.InitialSamples, paramCount);

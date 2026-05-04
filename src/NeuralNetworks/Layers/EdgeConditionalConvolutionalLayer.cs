@@ -105,7 +105,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     private Tensor<T>? _biasGradient;
 
     /// <inheritdoc/>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

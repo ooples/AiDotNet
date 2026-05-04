@@ -35,7 +35,7 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     private Tensor<T>? _gpuConv1Out;
     private Tensor<T>? _gpuBn2Out;
 
-    public override int ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
+    public override long ParameterCount => _bn1.ParameterCount + _conv1x1.ParameterCount + _bn2.ParameterCount + _conv3x3.ParameterCount;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()

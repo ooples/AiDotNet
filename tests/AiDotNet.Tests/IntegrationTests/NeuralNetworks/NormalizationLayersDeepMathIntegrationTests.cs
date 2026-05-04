@@ -85,7 +85,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // ParameterCount = gamma.Length + beta.Length = 2 * numFeatures
         var bn = new BatchNormalizationLayer<double>();
-        Assert.Equal(10, bn.ParameterCount);
+        Assert.Equal(10, (int)bn.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -443,7 +443,7 @@ public class NormalizationLayersDeepMathIntegrationTests
     public async Task LayerNorm_ParameterCount_IsTwiceFeatureSize()
     {
         var ln = new LayerNormalizationLayer<double>();
-        Assert.Equal(14, ln.ParameterCount);
+        Assert.Equal(14, (int)ln.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
@@ -623,14 +623,14 @@ public class NormalizationLayersDeepMathIntegrationTests
     {
         // ParameterCount = vocabSize * embeddingDim
         var emb = new EmbeddingLayer<double>(100, 32);
-        Assert.Equal(100 * 32, emb.ParameterCount);
+        Assert.Equal(100 * 32, (int)emb.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]
     public async Task Embedding_ParameterCount_SmallVocab()
     {
         var emb = new EmbeddingLayer<double>(5, 3);
-        Assert.Equal(15, emb.ParameterCount);
+        Assert.Equal(15, (int)emb.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]

@@ -84,14 +84,14 @@ public class NeuralNetworkBaseIntegrationTests
         var first = new DenseLayer<float>(3);
         network.AddLayer(first);
 
-        var firstCount = network.ParameterCount;
+        int firstCount = (int)network.ParameterCount;
 
         var second = new DenseLayer<float>(2);
         network.AddLayer(second);
 
-        Assert.Equal(first.ParameterCount + second.ParameterCount, network.ParameterCount);
+        Assert.Equal(first.ParameterCount + second.ParameterCount, (int)network.ParameterCount);
         Assert.True(network.RemoveLayer(second));
-        Assert.Equal(firstCount, network.ParameterCount);
+        Assert.Equal(firstCount, (int)network.ParameterCount);
     }
 
     private sealed class TestNeuralNetwork : NeuralNetworkBase<float>
@@ -150,7 +150,7 @@ public class NeuralNetworkBaseIntegrationTests
                 Name = "TestNetwork",
                 Version = "1.0",
                 FeatureCount = Architecture.InputSize,
-                Complexity = ParameterCount,
+                Complexity = (int)ParameterCount,
                 AdditionalInfo = new Dictionary<string, object>
                 {
                     { "LayerCount", Layers.Count }

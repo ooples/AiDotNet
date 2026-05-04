@@ -135,7 +135,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
     /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -224,8 +224,8 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -271,7 +271,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "One-2-3-45", Version = "1.0",
             Description = "One-2-3-45 single image to 3D mesh in 45 seconds",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "zero123-plus-sparseneus");
         metadata.SetProperty("input_channels", INPUT_CHANNELS);

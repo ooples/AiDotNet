@@ -204,8 +204,11 @@ public interface ILayer<T> : IDiagnosticsProvider, IWeightLoadable<T>
     /// - A pooling layer has 0 parameters (it just selects values, no weights to adjust)
     /// 
     /// More parameters means the layer can learn more complex patterns, but also requires more data to train effectively.
+    ///
+    /// Return type is <see cref="long"/> for consistency with
+    /// <see cref="IParameterizable{T,TInput,TOutput}.ParameterCount"/>.
     /// </remarks>
-    int ParameterCount { get; }
+    long ParameterCount { get; }
 
     /// <summary>
     /// Saves the layer's configuration and parameters to a binary stream.

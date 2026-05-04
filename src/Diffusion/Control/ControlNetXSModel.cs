@@ -102,7 +102,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
 
     /// <summary>Gets the lightweight control encoder.</summary>
     public UNetNoisePredictor<T> ControlEncoder => _controlEncoder;
@@ -198,7 +198,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int uc = _unet.ParameterCount, cc = _controlEncoder.ParameterCount, vc = _vae.ParameterCount;
+        int uc = checked((int)_unet.ParameterCount), cc = checked((int)_controlEncoder.ParameterCount), vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != uc + cc + vc)
             throw new ArgumentException($"Expected {uc + cc + vc}, got {parameters.Length}.", nameof(parameters));
 
@@ -250,7 +250,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-XS", Version = "1.0",
             Description = "ControlNet-XS lightweight spatial control with ~1% parameters",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "controlnet-xs");
         m.SetProperty("base_model", "Stable Diffusion 1.5");

@@ -72,7 +72,7 @@ public class EQVAEModel<T> : VAEModelBase<T>
     public override double LatentScaleFactor => EQVAE_LATENT_SCALE;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
