@@ -64,13 +64,24 @@ serve(async (req: Request) => {
     return json({ success: false, error: "forbidden", message: "Admin role required." }, 403);
   }
 
-  let body: { license_id?: string };
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return json({ success: false, error: "invalid_json" }, 400);
   }
-  const licenseId = body?.license_id?.trim();
+  // Type-guard before calling string methods. Without this, a payload like
+  // `{ "license_id": 123 }` or `{ "license_id": ["abc"] }` would throw a
+  // TypeError on .trim() and bubble up as an opaque 500.
+  const rawId = (body as { license_id?: unknown })?.license_id;
+  if (typeof rawId !== "string") {
+    return json({
+      success: false,
+      error: "invalid_license_id",
+      message: "license_id must be a string.",
+    }, 400);
+  }
+  const licenseId = rawId.trim();
   if (!licenseId) {
     return json({ success: false, error: "missing_license_id" }, 400);
   }
@@ -130,12 +141,34 @@ serve(async (req: Request) => {
   });
 
   if (!result.ok) {
+    // Map failure reasons to actionable HTTP statuses:
+    //   - no_api_key   → 503 (server-side config missing; ops fix)
+    //   - no_recipient → 422 (bad address; admin must fix customer_email)
+    //   - send_failed  → 502 (genuine upstream provider failure / timeout)
+    let status: number;
+    let message: string;
+    switch (result.reason) {
+      case "no_api_key":
+        status = 503;
+        message = "Email is not configured on this Supabase project (RESEND_API_KEY missing). "
+          + "The license remains in DB but no email can be sent until ops sets the secret.";
+        break;
+      case "no_recipient":
+        status = 422;
+        message = "Recipient address is malformed. Edit the license's customer_email in the admin UI before retrying.";
+        break;
+      case "send_failed":
+      default:
+        status = 502;
+        message = "Resend rejected or timed out the email send. Check the Resend dashboard and the function logs.";
+        break;
+    }
     return json({
       success: false,
       error: result.reason ?? "send_failed",
       status: result.status,
-      message: "Failed to dispatch email. Check the Resend dashboard and the function logs.",
-    }, 502);
+      message,
+    }, status);
   }
 
   return json({

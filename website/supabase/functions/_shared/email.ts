@@ -25,6 +25,17 @@
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const DEFAULT_FROM = "AiDotNet <licenses@aidotnet.dev>";
 const DEFAULT_ACCOUNT_URL = "https://www.aidotnet.dev/account/licenses/";
+// Cap the Resend round-trip so a degraded provider doesn't pile latency
+// onto webhook callers (Stripe retries the webhook if we don't 200 within
+// ~10s). 5s is generous for a transactional REST call to Resend's NA
+// region; failures past that are treated as send_failed and the caller
+// proceeds without blocking issuance.
+const RESEND_TIMEOUT_MS = 5000;
+// Loose RFC-5322 sanity check matching the
+// `license_keys_customer_email_format` DB constraint pattern. Catches
+// obvious garbage ("@", "@@", "a@") without trying full RFC compliance —
+// Resend rejects malformed addresses anyway, this is just an early-out.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export interface LicenseEmailInput {
   to: string;
@@ -51,7 +62,7 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
     return { ok: false, reason: "no_api_key" };
   }
 
-  if (!input.to || !input.to.includes("@")) {
+  if (!input.to || !EMAIL_RE.test(input.to)) {
     console.warn(`sendLicenseKeyEmail: invalid or missing recipient '${input.to}' — skipping email.`);
     return { ok: false, reason: "no_recipient" };
   }
@@ -66,6 +77,13 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
   const text = renderText(input, accountUrl);
   const html = renderHtml(input, accountUrl);
 
+  // AbortController-based timeout. AbortSignal.timeout() exists in modern
+  // Deno but a manual controller is portable to older runtimes and lets us
+  // distinguish a timeout from other fetch failures via the AbortError
+  // name in the catch.
+  const ac = new AbortController();
+  const timeoutHandle = setTimeout(() => ac.abort(), RESEND_TIMEOUT_MS);
+
   try {
     const resp = await fetch(RESEND_ENDPOINT, {
       method: "POST",
@@ -74,6 +92,7 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ from, to: input.to, subject, text, html }),
+      signal: ac.signal,
     });
 
     if (!resp.ok) {
@@ -85,8 +104,14 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
     console.log(`sendLicenseKeyEmail: dispatched ${input.tier} key to ${input.to} (status ${resp.status}).`);
     return { ok: true, status: resp.status };
   } catch (err) {
-    console.error(`sendLicenseKeyEmail: fetch failed for ${input.to}:`, err);
+    const isTimeout = (err as { name?: string })?.name === "AbortError";
+    console.error(
+      `sendLicenseKeyEmail: ${isTimeout ? "timed out after " + RESEND_TIMEOUT_MS + "ms" : "fetch failed"} for ${input.to}:`,
+      err,
+    );
     return { ok: false, reason: "send_failed" };
+  } finally {
+    clearTimeout(timeoutHandle);
   }
 }
 
