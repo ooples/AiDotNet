@@ -215,18 +215,33 @@ public class BasicBlock<T> : LayerBase<T>
             _downsampleBn = downBn;
             RegisterSubLayer(downConv);
             RegisterSubLayer(downBn);
+            // Propagate the parent's training mode — see BottleneckBlock
+            // for the same fix; otherwise batch-1 BN collapses to zero.
+            downConv.SetTrainingMode(IsTrainingMode);
+            downBn.SetTrainingMode(IsTrainingMode);
         }
 
-        _conv1.ResolveShapesOnly(new[] { _inChannels, inputHeight, inputWidth });
-        _bn1.ResolveShapesOnly(new[] { 1, _outChannels, outH, outW });
-        _conv2.ResolveShapesOnly(new[] { _outChannels, outH, outW });
-        _bn2.ResolveShapesOnly(new[] { 1, _outChannels, outH, outW });
-        _downsampleConv?.ResolveShapesOnly(new[] { _inChannels, inputHeight, inputWidth });
-        _downsampleBn?.ResolveShapesOnly(new[] { 1, _outChannels, outH, outW });
+        // Use ResolveFromShape so weights are allocated up front — needed
+        // for any buffered Deserialize parameters to slice correctly.
+        _conv1.ResolveFromShape(new[] { _inChannels, inputHeight, inputWidth });
+        _bn1.ResolveFromShape(new[] { 1, _outChannels, outH, outW });
+        _conv2.ResolveFromShape(new[] { _outChannels, outH, outW });
+        _bn2.ResolveFromShape(new[] { 1, _outChannels, outH, outW });
+        _downsampleConv?.ResolveFromShape(new[] { _inChannels, inputHeight, inputWidth });
+        _downsampleBn?.ResolveFromShape(new[] { 1, _outChannels, outH, outW });
 
         ResolveShapes(
             new[] { _inChannels, inputHeight, inputWidth },
             new[] { _outChannels, outH, outW });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before any sub-layer shape was resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
     }
 
     // Constructor args round-trip for serialization. DeserializationHelper
@@ -254,6 +269,10 @@ public class BasicBlock<T> : LayerBase<T>
     /// <returns>The output tensor after the residual connection.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor leaves _hasDownsample / _inChannels unresolved until
+        // OnFirstForward observes input.Shape.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2
@@ -389,6 +408,22 @@ public class BasicBlock<T> : LayerBase<T>
     }
 
     public override void SetParameters(Vector<T> parameters)
+    {
+        // Pre-Forward: every sub-layer's shape is unresolved so each
+        // ParameterCount returns 0 — slicing collapses. Buffer the
+        // whole vector and replay from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
+        ApplyParameters(parameters);
+    }
+
+    private Vector<T>? _pendingParameters;
+
+    private void ApplyParameters(Vector<T> parameters)
     {
         int idx = 0;
         void Set(ILayer<T> layer)

@@ -52,6 +52,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
+
+    // Buffered parameters from a Deserialize → SetParameters that arrives
+    // before the first Forward. Both _bn and _conv are still unresolved
+    // at that point so we can't slice between them; stash the whole
+    // vector and replay inside OnFirstForward.
+    private Vector<T>? _pendingParameters;
     // Non-readonly: lazy ctor leaves _conv = null until OnFirstForward
     // resolves OutputChannels (= inputChannels × compressionFactor) and
     // allocates the 1×1 projection.
@@ -177,16 +183,36 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
         RegisterSubLayer(_conv);
+        // Propagate parent's current training mode to the freshly-allocated
+        // sub-layer; otherwise it stays in default training mode even after
+        // the parent was toggled to eval before its first Forward.
+        _conv.SetTrainingMode(IsTrainingMode);
 
         // Drive sub-layer shape resolution so ParameterCount predicts
         // correctly before each one's own Forward fires.
-        _bn.ResolveShapesOnly(new[] { 1, inputChannels, inputHeight, inputWidth });
-        _conv.ResolveShapesOnly(new[] { inputChannels, inputHeight, inputWidth });
+        // Use ResolveFromShape so weights are allocated up front — needed
+        // for ApplyParameters below to slice correctly with the buffered
+        // Deserialize parameter vector.
+        _bn.ResolveFromShape(new[] { 1, inputChannels, inputHeight, inputWidth });
+        _conv.ResolveFromShape(new[] { inputChannels, inputHeight, inputWidth });
         _pool.ResolveShapesOnly(new[] { OutputChannels, inputHeight, inputWidth });
 
         ResolveShapes(
             new[] { inputChannels, inputHeight, inputWidth },
             new[] { OutputChannels, inputHeight / 2, inputWidth / 2 });
+
+        // Replay parameters that arrived before _bn / _conv shapes were
+        // resolved. With both now allocated, slicing matches the
+        // GetParameters() ordering above.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            int bnCount = _bn.GetParameters().Length;
+            _bn.SetParameters(pending.SubVector(0, bnCount));
+            int convCount = _conv.GetParameters().Length;
+            _conv.SetParameters(pending.SubVector(bnCount, convCount));
+        }
     }
 
     /// <summary>
@@ -196,6 +222,11 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// <returns>The output tensor with reduced channels and spatial dimensions.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor leaves _conv null until OnFirstForward observes the
+        // input channel count and allocates it from compressionFactor.
+        if (!IsShapeResolved) OnFirstForward(input);
+        var conv = _conv ?? throw new InvalidOperationException("OnFirstForward did not allocate _conv.");
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
@@ -235,7 +266,7 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
         // BN → ReLU → Conv1x1 → AvgPool
         _bnOut = _bn.Forward(processInput);
         _reluOut = _relu.Activate(_bnOut);
-        _convOut = _conv.Forward(_reluOut);
+        _convOut = conv.Forward(_reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
         // AveragePoolingLayer expects 3D input, so we handle 4D separately
@@ -454,8 +485,17 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// <param name="parameters">The parameter vector containing all layer parameters.</param>
     public override void SetParameters(Vector<T> parameters)
     {
-        int offset = 0;
+        // Pre-Forward: both _bn and _conv have unresolved shapes so
+        // GetParameters().Length on either returns 0 — we can't slice
+        // between them. Buffer the full vector and replay from
+        // OnFirstForward once shapes are resolved.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
 
+        int offset = 0;
         int count = _bn.GetParameters().Length;
         _bn.SetParameters(parameters.SubVector(offset, count));
         offset += count;
@@ -489,7 +529,7 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
         _gpuAdded3DBatch = false;
 
         _bn.ResetState();
-        _conv.ResetState();
+        _conv?.ResetState();
         _pool.ResetState();
     }
 

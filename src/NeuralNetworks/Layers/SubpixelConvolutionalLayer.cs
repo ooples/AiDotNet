@@ -548,6 +548,15 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         ResolveShapes(
             new[] { _inputDepth, inH, inW },
             new[] { _outputDepth, inH * _upscaleFactor, inW * _upscaleFactor });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before _kernels/_biases were allocated.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            SetParameters(pending);
+        }
     }
 
     /// <summary>
@@ -1020,6 +1029,15 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Pre-Forward: _kernels/_biases are still 0-shaped (channel count
+        // unknown). Buffer the vector and replay from OnFirstForward
+        // after _inputDepth is resolved and the tensors are allocated.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         if (parameters.Length != ParameterCount)
             throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
         int idx = 0;
@@ -1030,6 +1048,8 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_kernels);
         Engine.InvalidatePersistentTensor(_biases);
     }
+
+    private Vector<T>? _pendingParameters;
 
     #region GPU Parameter Updates
 

@@ -120,18 +120,37 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
 
         _inputChannels = channels;
         int bottleneckChannels = 4 * _growthRate;
-        _bn1.ResolveShapesOnly(new[] { 1, _inputChannels, height, width });
-        _conv1x1.ResolveShapesOnly(new[] { _inputChannels, height, width });
-        _bn2.ResolveShapesOnly(new[] { 1, bottleneckChannels, height, width });
-        _conv3x3.ResolveShapesOnly(new[] { bottleneckChannels, height, width });
+        // Use ResolveFromShape (not ResolveShapesOnly) because we may
+        // need to apply buffered Deserialize params below — that requires
+        // weights already allocated so GetParameters().Length is correct.
+        // RNG state cost is the same: weights get allocated either now
+        // or on each sub-layer's first Forward; total draws are identical.
+        _bn1.ResolveFromShape(new[] { 1, _inputChannels, height, width });
+        _conv1x1.ResolveFromShape(new[] { _inputChannels, height, width });
+        _bn2.ResolveFromShape(new[] { 1, bottleneckChannels, height, width });
+        _conv3x3.ResolveFromShape(new[] { bottleneckChannels, height, width });
 
         ResolveShapes(
             new[] { _inputChannels, height, width },
             new[] { _growthRate, height, width });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before sub-layer shapes were resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy gate — OnFirstForward resolves _inputChannels and replays
+        // any Deserialize-buffered parameters before sub-layer Forwards
+        // run with their (possibly stale-from-init) weights.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // BN/Conv expect [N, C, H, W] format. Add batch dim if 3D [C, H, W].
@@ -227,6 +246,22 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     }
 
     public override void SetParameters(Vector<T> parameters)
+    {
+        // Pre-Forward: sub-layers' shapes haven't been resolved, so
+        // their GetParameters().Length is wrong. Buffer and replay
+        // from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
+        ApplyParameters(parameters);
+    }
+
+    private Vector<T>? _pendingParameters;
+
+    private void ApplyParameters(Vector<T> parameters)
     {
         int offset = 0;
 

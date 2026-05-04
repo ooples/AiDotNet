@@ -237,20 +237,38 @@ public class BottleneckBlock<T> : LayerBase<T>
             _downsampleBn = downBn;
             RegisterSubLayer(downConv);
             RegisterSubLayer(downBn);
+            // Propagate the parent's current training mode — without this,
+            // a layer that was switched to eval mode before its first
+            // Forward would still see fresh sub-layers in default training
+            // mode, causing batch-1 BN to collapse to zeros.
+            downConv.SetTrainingMode(IsTrainingMode);
+            downBn.SetTrainingMode(IsTrainingMode);
         }
 
-        _conv1.ResolveShapesOnly(new[] { _inChannels, inputHeight, inputWidth });
-        _bn1.ResolveShapesOnly(new[] { 1, _baseChannels, inputHeight, inputWidth });
-        _conv2.ResolveShapesOnly(new[] { _baseChannels, inputHeight, inputWidth });
-        _bn2.ResolveShapesOnly(new[] { 1, _baseChannels, outH, outW });
-        _conv3.ResolveShapesOnly(new[] { _baseChannels, outH, outW });
-        _bn3.ResolveShapesOnly(new[] { 1, outChannels, outH, outW });
-        _downsampleConv?.ResolveShapesOnly(new[] { _inChannels, inputHeight, inputWidth });
-        _downsampleBn?.ResolveShapesOnly(new[] { 1, outChannels, outH, outW });
+        // Use ResolveFromShape so weights are allocated up front — needed
+        // for any buffered Deserialize parameters to slice correctly.
+        _conv1.ResolveFromShape(new[] { _inChannels, inputHeight, inputWidth });
+        _bn1.ResolveFromShape(new[] { 1, _baseChannels, inputHeight, inputWidth });
+        _conv2.ResolveFromShape(new[] { _baseChannels, inputHeight, inputWidth });
+        _bn2.ResolveFromShape(new[] { 1, _baseChannels, outH, outW });
+        _conv3.ResolveFromShape(new[] { _baseChannels, outH, outW });
+        _bn3.ResolveFromShape(new[] { 1, outChannels, outH, outW });
+        _downsampleConv?.ResolveFromShape(new[] { _inChannels, inputHeight, inputWidth });
+        _downsampleBn?.ResolveFromShape(new[] { 1, outChannels, outH, outW });
 
         ResolveShapes(
             new[] { _inChannels, inputHeight, inputWidth },
             new[] { outChannels, outH, outW });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before any sub-layer shape was resolved. With weights now
+        // allocated, slicing matches the GetParameters() ordering.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
     }
 
     // Constructor args round-trip for serialization. DeserializationHelper
@@ -281,6 +299,11 @@ public class BottleneckBlock<T> : LayerBase<T>
     /// <returns>The output tensor after the residual connection.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor leaves _hasDownsample / _inChannels unresolved until
+        // OnFirstForward observes input.Shape. Resolve before the
+        // identity-branch decision below.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3
@@ -432,6 +455,23 @@ public class BottleneckBlock<T> : LayerBase<T>
     }
 
     public override void SetParameters(Vector<T> parameters)
+    {
+        // Pre-Forward: every sub-layer's shape is unresolved so each
+        // ParameterCount returns 0 — slicing collapses. Buffer the
+        // whole vector; OnFirstForward replays it after sub-layer
+        // shapes (and any conditionally-allocated downsample) exist.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
+        ApplyParameters(parameters);
+    }
+
+    private Vector<T>? _pendingParameters;
+
+    private void ApplyParameters(Vector<T> parameters)
     {
         int idx = 0;
         void Set(ILayer<T> layer)

@@ -166,9 +166,30 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
                 nameof(input));
 
         _inputChannels = channels;
+
+        // Drive each inner DenseBlockLayer's shape resolution so their
+        // GetParameters() length is correct even before any inner Forward
+        // has fired. Per DenseNet semantics, each inner layer receives the
+        // accumulated [previous-features + concatenated-growth] tensor.
+        int currentChannels = channels;
+        foreach (var layer in _layers)
+        {
+            layer.ResolveShapesOnly(new[] { currentChannels, height, width });
+            currentChannels += _growthRate;
+        }
+
         ResolveShapes(
             new[] { channels, height, width },
             new[] { channels + _numLayers * _growthRate, height, width });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before inner-layer shapes were resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
     }
 
     /// <summary>
@@ -178,6 +199,11 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// <returns>The output tensor with all layer outputs concatenated.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy gate — drives inner-layer shape resolution so any
+        // Deserialize-buffered parameters get a chance to be replayed
+        // before the inner-layer Forwards consume their weights.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _layerOutputs = new List<Tensor<T>>(_numLayers + 1) { input };
 
         // Current feature maps (accumulated)
@@ -262,9 +288,29 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// <param name="parameters">The parameter vector containing all layer parameters.</param>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Pre-Forward: inner layers' shapes haven't been resolved, so
+        // their slice lengths are wrong. Buffer the full vector and
+        // replay from OnFirstForward, after each inner DenseBlockLayer
+        // has a chance to lock in its own input channel count.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
+        ApplyParameters(parameters);
+    }
+
+    private Vector<T>? _pendingParameters;
+
+    private void ApplyParameters(Vector<T> parameters)
+    {
         int offset = 0;
         foreach (var layer in _layers)
         {
+            // Each inner layer also buffers: distribute by handing over
+            // its slice (still-unknown size) so its own SetParameters
+            // can buffer/replay independently.
             int count = layer.GetParameters().Length;
             layer.SetParameters(parameters.SubVector(offset, count));
             offset += count;

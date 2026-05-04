@@ -53,11 +53,17 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     // hiddenDim = inChannels × expansionRatio.
     private ConvolutionalLayer<T>? _expandConv;
     private BatchNormalizationLayer<T>? _expandBn;
-    private ConvolutionalLayer<T> _dwConv;
-    private BatchNormalizationLayer<T> _dwBn;
+    private ConvolutionalLayer<T>? _dwConv;
+    private BatchNormalizationLayer<T>? _dwBn;
     private SqueezeAndExcitationLayer<T>? _se;
-    private ConvolutionalLayer<T> _projectConv;
-    private BatchNormalizationLayer<T> _projectBn;
+    private ConvolutionalLayer<T>? _projectConv;
+    private BatchNormalizationLayer<T>? _projectBn;
+
+    // Buffered parameters for the pre-Forward Deserialize → SetParameters
+    // path: sub-layers are still null then, so we stash the vector here
+    // and replay it inside OnFirstForward once the channel-count-driven
+    // layout is known and sub-layers exist.
+    private Vector<T>? _pendingParameters;
 
     // Non-readonly: lazy ctor leaves _useResidual = false until
     // OnFirstForward observes input channel count.
@@ -263,10 +269,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
             activationFunction: new IdentityActivation<T>());
         _projectBn = new BatchNormalizationLayer<T>();
 
-        _expandBn?.SetTrainingMode(false);
-        _dwBn.SetTrainingMode(false);
-        _projectBn.SetTrainingMode(false);
-
         RegisterSubLayer(_dwConv);
         RegisterSubLayer(_dwBn);
         RegisterSubLayer(_projectConv);
@@ -275,23 +277,94 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         if (_expandBn is not null) RegisterSubLayer(_expandBn);
         if (_se is not null) RegisterSubLayer(_se);
 
+        // Propagate the parent's current training mode to the sub-layers
+        // we just allocated — without this, a layer toggled to eval mode
+        // before its first Forward sees fresh sub-layers in default
+        // training mode and BN collapses to zero on batch=1 inputs.
+        _expandConv?.SetTrainingMode(IsTrainingMode);
+        _expandBn?.SetTrainingMode(IsTrainingMode);
+        _dwConv.SetTrainingMode(IsTrainingMode);
+        _dwBn.SetTrainingMode(IsTrainingMode);
+        _se?.SetTrainingMode(IsTrainingMode);
+        _projectConv.SetTrainingMode(IsTrainingMode);
+        _projectBn.SetTrainingMode(IsTrainingMode);
+
         int dwOutH = (inputHeight + 2 - 3) / Stride + 1; // padding=1, kernel=3
         int dwOutW = (inputWidth + 2 - 3) / Stride + 1;
 
-        // Drive sub-layer shape resolution.
+        // Use ResolveFromShape so weights are allocated up front — needed
+        // for buffered Deserialize parameters to slice correctly.
         if (_hasExpansion)
         {
-            _expandConv!.ResolveShapesOnly(new[] { inChannels, inputHeight, inputWidth });
-            _expandBn!.ResolveShapesOnly(new[] { 1, hiddenDim, inputHeight, inputWidth });
+            _expandConv!.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
+            _expandBn!.ResolveFromShape(new[] { 1, hiddenDim, inputHeight, inputWidth });
         }
-        _dwConv.ResolveShapesOnly(new[] { dwInputChannels, inputHeight, inputWidth });
-        _dwBn.ResolveShapesOnly(new[] { 1, dwInputChannels, dwOutH, dwOutW });
-        _projectConv.ResolveShapesOnly(new[] { dwInputChannels, dwOutH, dwOutW });
-        _projectBn.ResolveShapesOnly(new[] { 1, OutChannels, dwOutH, dwOutW });
+        _dwConv.ResolveFromShape(new[] { dwInputChannels, inputHeight, inputWidth });
+        _dwBn.ResolveFromShape(new[] { 1, dwInputChannels, dwOutH, dwOutW });
+        _projectConv.ResolveFromShape(new[] { dwInputChannels, dwOutH, dwOutW });
+        _projectBn.ResolveFromShape(new[] { 1, OutChannels, dwOutH, dwOutW });
 
         ResolveShapes(
             new[] { inChannels, inputHeight, inputWidth },
             new[] { OutChannels, dwOutH, dwOutW });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before sub-layers existed. Doing this AFTER ResolveShapes (which
+        // also forces ResolveFromShape on the sub-layers above when called
+        // through EnsureInitializedFromInput) means each sub-layer's
+        // GetParameters().Length now reports the correct count.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
+    }
+
+    private void ApplyParameters(Vector<T> parameters)
+    {
+        int offset = 0;
+        if (_expandConv is not null)
+        {
+            int count = _expandConv.GetParameters().Length;
+            _expandConv.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        if (_expandBn is not null)
+        {
+            int count = _expandBn.GetParameters().Length;
+            _expandBn.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        if (_dwConv is not null)
+        {
+            int count = _dwConv.GetParameters().Length;
+            _dwConv.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        if (_dwBn is not null)
+        {
+            int count = _dwBn.GetParameters().Length;
+            _dwBn.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        if (_se is not null)
+        {
+            int count = _se.GetParameters().Length;
+            _se.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        if (_projectConv is not null)
+        {
+            int count = _projectConv.GetParameters().Length;
+            _projectConv.SetParameters(parameters.SubVector(offset, count));
+            offset += count;
+        }
+        if (_projectBn is not null)
+        {
+            int count = _projectBn.GetParameters().Length;
+            _projectBn.SetParameters(parameters.SubVector(offset, count));
+        }
     }
 
     /// <inheritdoc />
@@ -317,6 +390,14 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         // calls short-circuit via IsShapeResolved.
         if (!IsShapeResolved) OnFirstForward(input);
 
+        // Post-OnFirstForward contract: the four mandatory sub-layers are
+        // non-null. Capture as locals so flow analysis stops complaining
+        // and the body reads cleanly.
+        var dwConv = _dwConv ?? throw new InvalidOperationException("OnFirstForward did not allocate _dwConv.");
+        var dwBn = _dwBn ?? throw new InvalidOperationException("OnFirstForward did not allocate _dwBn.");
+        var projectConv = _projectConv ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectConv.");
+        var projectBn = _projectBn ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectBn.");
+
         _lastInput = input;
         Tensor<T> x = input;
 
@@ -330,8 +411,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         }
 
         // Depthwise convolution phase
-        _lastDwOut = _dwConv.Forward(x);
-        _lastDwBnOut = _dwBn.Forward(_lastDwOut);
+        _lastDwOut = dwConv.Forward(x);
+        _lastDwBnOut = dwBn.Forward(_lastDwOut);
         _lastDwActOut = ApplyBlockActivation(_lastDwBnOut);
         x = _lastDwActOut;
 
@@ -348,8 +429,8 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         }
 
         // Projection phase (LINEAR - no activation)
-        _lastProjectOut = _projectConv.Forward(x);
-        _lastProjectBnOut = _projectBn.Forward(_lastProjectOut);
+        _lastProjectOut = projectConv.Forward(x);
+        _lastProjectBnOut = projectBn.Forward(_lastProjectOut);
 
         // Residual connection (only if dimensions match)
         if (_useResidual)
@@ -374,6 +455,13 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        if (!IsShapeResolved) OnFirstForward(input);
+        var dwConv = _dwConv ?? throw new InvalidOperationException("OnFirstForward did not allocate _dwConv.");
+        var dwBn = _dwBn ?? throw new InvalidOperationException("OnFirstForward did not allocate _dwBn.");
+        var projectConv = _projectConv ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectConv.");
+        var projectBn = _projectBn ?? throw new InvalidOperationException("OnFirstForward did not allocate _projectBn.");
+
         Tensor<T> x = input;
 
         // Expansion phase (if expansion > 1)
@@ -388,11 +476,11 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         }
 
         // Depthwise convolution phase
-        var dwOut = _dwConv.ForwardGpu(x);
+        var dwOut = dwConv.ForwardGpu(x);
         // Dispose expansion output if we had expansion phase
         if (_hasExpansion && x != input)
             x.Dispose();
-        var dwBnOut = _dwBn.ForwardGpu(dwOut);
+        var dwBnOut = dwBn.ForwardGpu(dwOut);
         dwOut.Dispose(); // Dispose intermediate tensor
         var dwAct = gpuEngine.ActivationGpu(dwBnOut, GetFusedActivationType());
         dwBnOut.Dispose(); // Dispose intermediate tensor
@@ -417,9 +505,9 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         }
 
         // Projection phase (LINEAR - no activation)
-        var projectOut = _projectConv.ForwardGpu(x);
+        var projectOut = projectConv.ForwardGpu(x);
         x.Dispose(); // Dispose SE output (or dwAct if no SE)
-        var projectBnOut = _projectBn.ForwardGpu(projectOut);
+        var projectBnOut = projectBn.ForwardGpu(projectOut);
         projectOut.Dispose(); // Dispose intermediate tensor
 
         // Residual connection (only if dimensions match)
@@ -441,11 +529,11 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     {
         _expandConv?.UpdateParameters(learningRate);
         _expandBn?.UpdateParameters(learningRate);
-        _dwConv.UpdateParameters(learningRate);
-        _dwBn.UpdateParameters(learningRate);
+        _dwConv?.UpdateParameters(learningRate);
+        _dwBn?.UpdateParameters(learningRate);
         _se?.UpdateParameters(learningRate);
-        _projectConv.UpdateParameters(learningRate);
-        _projectBn.UpdateParameters(learningRate);
+        _projectConv?.UpdateParameters(learningRate);
+        _projectBn?.UpdateParameters(learningRate);
     }
 
     /// <summary>
@@ -461,14 +549,18 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         if (_expandBn is not null)
             parameters.AddRange(_expandBn.GetParameters().ToArray());
 
-        parameters.AddRange(_dwConv.GetParameters().ToArray());
-        parameters.AddRange(_dwBn.GetParameters().ToArray());
+        if (_dwConv is not null)
+            parameters.AddRange(_dwConv.GetParameters().ToArray());
+        if (_dwBn is not null)
+            parameters.AddRange(_dwBn.GetParameters().ToArray());
 
         if (_se is not null)
             parameters.AddRange(_se.GetParameters().ToArray());
 
-        parameters.AddRange(_projectConv.GetParameters().ToArray());
-        parameters.AddRange(_projectBn.GetParameters().ToArray());
+        if (_projectConv is not null)
+            parameters.AddRange(_projectConv.GetParameters().ToArray());
+        if (_projectBn is not null)
+            parameters.AddRange(_projectBn.GetParameters().ToArray());
 
         return new Vector<T>(parameters.ToArray());
     }
@@ -479,49 +571,17 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     /// <param name="parameters">The parameter vector containing all layer parameters.</param>
     public override void SetParameters(Vector<T> parameters)
     {
-        int offset = 0;
-
-        if (_expandConv is not null)
+        // Pre-Forward path: sub-layers are still null because their
+        // channel-count layout depends on the input we haven't seen
+        // yet. Buffer the vector and replay it from OnFirstForward,
+        // after sub-layers exist with their resolved shapes.
+        if (!IsShapeResolved)
         {
-            int count = _expandConv.GetParameters().Length;
-            _expandConv.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
-        if (_expandBn is not null)
-        {
-            int count = _expandBn.GetParameters().Length;
-            _expandBn.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
+            _pendingParameters = parameters;
+            return;
         }
 
-        {
-            int count = _dwConv.GetParameters().Length;
-            _dwConv.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
-        {
-            int count = _dwBn.GetParameters().Length;
-            _dwBn.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
-
-        if (_se is not null)
-        {
-            int count = _se.GetParameters().Length;
-            _se.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
-
-        {
-            int count = _projectConv.GetParameters().Length;
-            _projectConv.SetParameters(parameters.SubVector(offset, count));
-            offset += count;
-        }
-        {
-            int count = _projectBn.GetParameters().Length;
-            _projectBn.SetParameters(parameters.SubVector(offset, count));
-            // offset not incremented since this is the last parameter block
-        }
+        ApplyParameters(parameters);
     }
 
     // --- ILayerSerializationExtras: serialize internal BN running stats ---
@@ -597,13 +657,16 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         _lastProjectOut = null;
         _lastProjectBnOut = null;
 
+        // All sub-layers stay null until OnFirstForward resolves the
+        // input channel count; null-guard so ResetState before any
+        // forward is a no-op rather than throwing.
         _expandConv?.ResetState();
         _expandBn?.ResetState();
-        _dwConv.ResetState();
-        _dwBn.ResetState();
+        _dwConv?.ResetState();
+        _dwBn?.ResetState();
         _se?.ResetState();
-        _projectConv.ResetState();
-        _projectBn.ResetState();
+        _projectConv?.ResetState();
+        _projectBn?.ResetState();
     }
 
 
