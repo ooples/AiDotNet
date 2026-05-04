@@ -480,6 +480,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         InputShapes = new[] { resolvedInputShape };
         OutputShape = resolvedOutputShape;
         _cachedInputPorts = null;
+        // Lazy weight allocation often happens immediately after
+        // ResolveShapes (subclass OnFirstForward). Invalidate the
+        // parameter-count cache so the next query reflects the newly-
+        // allocated tensors instead of the pre-resolution stale value.
+        _cachedParameterCount = -1;
     }
 
     /// <summary>
@@ -2461,10 +2466,30 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// but may also require more data to train effectively.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Cache for the base <see cref="ParameterCount"/> getter. -1 sentinel
+    /// means "not yet computed / invalidated"; a non-negative value is
+    /// the cached count. Invalidated by <see cref="RegisterTrainableParameter"/>,
+    /// <see cref="RegisterSubLayer"/>, and <see cref="ResolveShapes"/> —
+    /// any path that can change the parameter set. Subclasses that
+    /// override <see cref="ParameterCount"/> bypass this cache and are
+    /// responsible for their own purity / caching.
+    /// </summary>
+    private long _cachedParameterCount = -1;
+
     public virtual long ParameterCount
     {
         get
         {
+            // Side-effect-free fast path: if a previous query already
+            // walked the tree and the parameter set hasn't been mutated
+            // since, return the cached count. The tree-walk below is
+            // pure (GetTrainableParameters / GetSubLayers return field-
+            // backed read-only lists; recursion just reads); the cache
+            // is mostly an O(N) → O(1) optimization for deep DiT/UNet
+            // models that query ParameterCount on every step.
+            long cached = _cachedParameterCount;
+            if (cached >= 0) return cached;
             // Default counts three sources of trainable weights so the
             // base class behaves correctly for layers that haven't
             // overridden ParameterCount:
@@ -2505,6 +2530,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
                     total += subs[i].ParameterCount;
                 }
             }
+            _cachedParameterCount = total;
             return total;
         }
     }
@@ -2850,6 +2876,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
                 Engine.UnregisterPersistentTensor(_registeredTensors[i]);
                 _registeredTensors[i] = tensor;
                 Engine.RegisterPersistentTensor(tensor, role);
+                // Replaced a stale 0-length placeholder with the real
+                // tensor; the ParameterCount delta is the new tensor's
+                // length. Invalidate so the next query rewalks.
+                _cachedParameterCount = -1;
                 return;
             }
         }
@@ -2863,6 +2893,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         Engine.RegisterPersistentTensor(tensor, role);
         _registeredTensors.Add(tensor);
         _registeredTensorRoles.Add(role);
+        _cachedParameterCount = -1;
     }
 
     /// <summary>
@@ -2882,6 +2913,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
                 Engine.UnregisterPersistentTensor(tensor);
                 _registeredTensors.RemoveAt(i);
                 _registeredTensorRoles.RemoveAt(i);
+                _cachedParameterCount = -1;
                 return;
             }
         }
@@ -2909,6 +2941,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (subLayer is null)
             throw new ArgumentNullException(nameof(subLayer));
         _registeredSubLayers.Add(subLayer);
+        // Sub-layer's ParameterCount contributes to ours; invalidate the
+        // cache so the next query picks up the addition.
+        _cachedParameterCount = -1;
     }
 
     /// <summary>

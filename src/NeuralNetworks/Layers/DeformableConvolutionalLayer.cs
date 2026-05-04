@@ -80,6 +80,16 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T>? _maskWeightGradients;
     private Tensor<T>? _maskBiasGradients;
 
+    // Pending parameters buffer — holds the flat Vector<T> from a
+    // SetParameters call that arrived before OnFirstForward allocated
+    // _weights / _bias / _offsetWeights / _offsetBias / (optional)
+    // _maskWeights / _maskBias. Without this, deserialization writes
+    // into 0×0 tensors and silently drops the parameters; the model
+    // then runs with random initial weights instead of the loaded
+    // checkpoint. OnFirstForward replays the buffer once weights are
+    // allocated, then clears the field.
+    private Vector<T>? _pendingParameters;
+
     // Cached values for backward pass
     private Tensor<T>? _lastInput;
     private Tensor<T>? _lastOffsets;
@@ -258,6 +268,17 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         ResolveShapes(
             new[] { inChannels, inH, inW },
             new[] { _outputChannels, outputHeight, outputWidth });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before _weights / _bias / _offsetWeights / _offsetBias / (optional)
+        // _maskWeights / _maskBias were allocated. With the tensors now
+        // sized correctly, slicing matches GetParameters() ordering.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            SetParameters(pending);
+        }
     }
 
     #endregion
@@ -709,6 +730,16 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Buffer the parameters when the lazy ctor hasn't seen its first
+        // Forward yet — _weights et al. are 0×0 placeholders and writing
+        // into them silently drops the data. OnFirstForward will replay
+        // this buffer once shapes are resolved and tensors allocated.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         int offset = 0;
 
         // Main conv weights

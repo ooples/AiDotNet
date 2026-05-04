@@ -156,7 +156,11 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// </remarks>
     protected override void OnFirstForward(Tensor<T> input)
     {
-        var s = input._shape;
+        // Use the public Shape property rather than the internal _shape
+        // field so we go through Tensor<T>'s encapsulation boundary —
+        // future changes that add validation, lazy-eval or proxy logic
+        // to Shape get applied uniformly to every consumer.
+        var s = input.Shape;
         int channels, height, width;
         if (s.Length == 3) { channels = s[0]; height = s[1]; width = s[2]; }
         else if (s.Length == 4) { channels = s[1]; height = s[2]; width = s[3]; }

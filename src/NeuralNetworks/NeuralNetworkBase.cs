@@ -117,7 +117,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// those are sentinel <c>-1</c> dims, and the real input shape
     /// comes from <see cref="Layers"/>[0].GetInputShape().
     /// </summary>
-    public bool IsLayerOnlyModel => Architecture.IsLayerOnly;
+    // Lazy-shape plumbing, not a user-facing model capability — exposed
+    // protected internal so derived networks (e.g. layer-only test
+    // scaffolds, internal lazy-shape probes) can read the flag, but
+    // external consumers can't take a dependency on this internal
+    // implementation detail.
+    protected internal bool IsLayerOnlyModel => Architecture.IsLayerOnly;
 
     /// <summary>
     /// Set of feature indices that have been explicitly marked as active.
