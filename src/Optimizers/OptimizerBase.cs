@@ -1230,17 +1230,27 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         if (Options.UseAdaptiveLearningRate)
         {
+            // Adaptive-LR semantics:
+            //   improving fitness → reduce LR (we are converging; take smaller, finer steps)
+            //   stagnant or worse → increase LR (we are stuck; take larger steps to escape)
+            // The counter pair tracks improvement/stagnation streaks for the
+            // adaptive-momentum logic further below; correct mapping is
+            // "improving ⇒ IterationsWithImprovement++". The previous code
+            // had both branches reversed: improving fitness incremented
+            // `IterationsWithoutImprovement` and vice versa, which broke
+            // every downstream branch that keys off these counters
+            // (adaptive momentum, scheduler step decisions).
             if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
             {
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
-                IterationsWithoutImprovement++;
-                IterationsWithImprovement = 0;
+                IterationsWithImprovement++;
+                IterationsWithoutImprovement = 0;
             }
             else
             {
                 CurrentLearningRate = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
-                IterationsWithImprovement++;
-                IterationsWithoutImprovement = 0;
+                IterationsWithoutImprovement++;
+                IterationsWithImprovement = 0;
             }
 
             CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(Options.MinLearningRate),

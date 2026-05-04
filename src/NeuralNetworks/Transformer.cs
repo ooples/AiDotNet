@@ -572,24 +572,44 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Trains the Transformer network on a single batch of data.
+    /// Trains the Transformer on a single sample <i>or</i> a batched tensor of samples.
     /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
+    /// <param name="input">
+    /// Either a single-sample input (e.g. <c>[ctxLen]</c> / <c>[ctxLen, F]</c>) or an
+    /// explicitly batched tensor (e.g. <c>[B, ctxLen]</c> / <c>[B, ctxLen, F]</c>).
+    /// Single-sample inputs are auto-promoted to <c>[1, …]</c>; batched inputs are
+    /// passed through unchanged.
+    /// </param>
+    /// <param name="expectedOutput">Per-sample target with matching batch arity.</param>
     /// <remarks>
     /// <para>
-    /// This method performs a forward pass, calculates the loss, and then backpropagates
-    /// the error to update the network's parameters. It uses the specified loss function and optimizer.
+    /// One forward pass + tape-backward + optimizer step. The configured optimizer is
+    /// Adam by default (LR = 1e-3) — see the constructor docs for why and how to override.
     /// </para>
-    /// <para><b>For Beginners:</b> This method teaches the Transformer using example data.
-    /// 
+    /// <para>
+    /// <b>Important — per-sample vs. batched training:</b> calling this method per-sample
+    /// in a Python-style for-loop converges very slowly on language-model-style tasks
+    /// (V ≥ 32 vocabularies). Each step's gradient must compete against <c>V − 1</c>
+    /// negative classes; the cumulative noise stalls the model at the unigram-prior
+    /// accuracy in any practical step budget. For byte-LM, character-LM, token
+    /// classification, or any task with a vocabulary head, **batch your training**:
+    /// either pass a <c>[B, ctxLen, …]</c> tensor directly, or use the
+    /// <see cref="NeuralNetworkBase{T}.TrainBatched"/> convenience overload that stacks
+    /// an array of single-sample tensors for you. Practical batch sizes for Transformers:
+    /// 16–64. The gradient averaging across a batch reduces noise by <c>√B</c>.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method teaches the Transformer using example data.
     /// The process works like this:
     /// 1. The Transformer makes a prediction based on the input
     /// 2. We compare this prediction to the expected output
     /// 3. We calculate how wrong the prediction was (the "loss")
     /// 4. We adjust the Transformer's internal values to make it a little more accurate next time
-    /// 
-    /// This process is repeated many times with different examples to train the Transformer.
+    ///
+    /// This process is repeated many times with different examples. For language models
+    /// (which is most Transformer use cases), give the Transformer a BATCH of examples
+    /// at once rather than one example at a time — TrainBatched does this for you, or
+    /// pass a tensor whose first dimension is the batch size.
     /// </para>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)

@@ -149,8 +149,57 @@ public class TransformerTrainConvergenceTests
             $"got early={earlyAvg:F6}, late={lateAvg:F6}. " +
             $"Parameters are not being updated effectively (issue #1187).");
 
+        // STRONG MEMORIZATION GUARD (closes the test-infra gap that let
+        // ooples/AiDotNet#1264 slip through CI). The previous "lateAvg <
+        // earlyAvg" guard only required loss to decrease SOMEWHAT — a
+        // model trained with vanilla SGD's tiny per-step updates would
+        // see a small loss decrease while never actually learning the
+        // task, and CI would happily green-light it. This guard asserts
+        // the model has actually MEMORISED the training set: after 20
+        // epochs of overfitting on 4 facts, the predicted probability
+        // mass on the correct class must be >0.50 on EVERY training
+        // example. Random (1/V = 1/16 = 0.0625) is the floor; "loss
+        // decreased a bit" sits around 0.10–0.20; genuine memorisation
+        // crosses 0.50 easily.
+        transformer.SetTrainingMode(false);
+        for (int f = 0; f < numFacts; f++)
+        {
+            var pred = transformer.Predict(inputs[f]);
+            // Softmax inline — the network's output may be raw logits or
+            // already-softmax'd depending on the head; normalise both
+            // forms to a probability distribution before checking.
+            float maxLogit = float.NegativeInfinity;
+            for (int v = 0; v < vocabSize; v++)
+                if (pred[0, v] > maxLogit) maxLogit = pred[0, v];
+            float sumExp = 0f;
+            var probs = new float[vocabSize];
+            for (int v = 0; v < vocabSize; v++)
+            {
+                probs[v] = MathF.Exp(pred[0, v] - maxLogit);
+                sumExp += probs[v];
+            }
+            for (int v = 0; v < vocabSize; v++) probs[v] /= sumExp;
+
+            float pTarget = probs[f];
+            int argmax = 0;
+            float pmax = probs[0];
+            for (int v = 1; v < vocabSize; v++)
+                if (probs[v] > pmax) { pmax = probs[v]; argmax = v; }
+
+            _output.WriteLine($"  fact {f}: P(target={f})={pTarget:F4}  argmax={argmax}");
+            Assert.True(pTarget > 0.50f,
+                $"Transformer failed to memorise fact {f} after {epochs} overfitting epochs: "
+                + $"P(target={f})={pTarget:F4} (need >0.50). "
+                + "This is the strong convergence guard that catches optimizer/default-LR bugs "
+                + "(see ooples/AiDotNet#1264) — losing this assertion is what previously let the "
+                + "vanilla-SGD-default ship without anyone noticing the model wasn't learning.");
+            Assert.True(argmax == f,
+                $"Transformer predicted argmax={argmax} but expected {f} for memorised fact {f}. "
+                + "Model converged on wrong class — likely gradient sign or target indexing issue.");
+        }
+
         _output.WriteLine(
             $"Convergence check passed: early={earlyAvg:F6}, late={lateAvg:F6}, " +
-            $"spread={spread:F6}");
+            $"spread={spread:F6}, all {numFacts} facts memorised with P(target)>0.50.");
     }
 }
