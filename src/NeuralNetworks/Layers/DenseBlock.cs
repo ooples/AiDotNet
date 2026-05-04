@@ -171,14 +171,20 @@ public class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 
         _inputChannels = channels;
 
-        // Drive each inner DenseBlockLayer's shape resolution so their
-        // GetParameters() length is correct even before any inner Forward
-        // has fired. Per DenseNet semantics, each inner layer receives the
-        // accumulated [previous-features + concatenated-growth] tensor.
+        // Drive each inner DenseBlockLayer's shape resolution AND weight
+        // allocation. ResolveShapesOnly would skip weight allocation here,
+        // but DenseBlockLayer.OnFirstForward itself already calls
+        // ResolveFromShape on its inner BN/Conv sub-layers (which DO
+        // allocate), so the RNG-neutrality the "Only" variant promises is
+        // already broken at this layer; use ResolveFromShape directly so
+        // GetParameters().Length is correct AND consistent with what a
+        // real Forward will allocate. Per DenseNet semantics, each inner
+        // layer receives the accumulated [previous-features +
+        // concatenated-growth] tensor.
         int currentChannels = channels;
         foreach (var layer in _layers)
         {
-            layer.ResolveShapesOnly(new[] { currentChannels, height, width });
+            layer.ResolveFromShape(new[] { currentChannels, height, width });
             currentChannels += _growthRate;
         }
 

@@ -224,6 +224,20 @@ public class UNetDiscriminator<T> : LayerBase<T>
             $"UNetDiscriminator requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
             nameof(input));
 
+        // U-Net pyramid contract: each encoder stage halves H/W (stride 2),
+        // each decoder stage doubles them (×2 upsample). After N down-then-
+        // up passes we must land on the same spatial dims to align with the
+        // skip connections — that requires H and W divisible by 2^numBlocks.
+        // Reject upfront with a clear message instead of producing
+        // shape-mismatched skip-add later inside Forward.
+        int divisor = 1 << _numBlocks;
+        if (inH % divisor != 0 || inW % divisor != 0)
+            throw new ArgumentException(
+                $"UNetDiscriminator with numBlocks={_numBlocks} requires input H/W " +
+                $"divisible by 2^{_numBlocks}={divisor}; got [{inH}, {inW}]. " +
+                "Resize or pad the input so the encoder/decoder pyramid aligns.",
+                nameof(input));
+
         _convFirst.ResolveFromShape(new[] { inC, inH, inW });
         _convFirst.SetTrainingMode(IsTrainingMode);
 

@@ -498,7 +498,19 @@ public abstract class LayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        if (layer.ParameterCount == 0) return; // Skip for non-trainable layers
+
+        // Probe Forward to drive lazy-shape resolution + weight allocation.
+        // Without this, lazy layers (#1209) report ParameterCount = 0 and the
+        // roundtrip below would skip — which is correct lazy semantics, but
+        // the invariant we're testing only has meaning post-resolution.
+        using (var probeInput = new Tensor<double>(InputShape))
+        {
+            for (int i = 0; i < probeInput.Length; i++)
+                probeInput[i] = 0.01 * (i + 1);
+            try { layer.Forward(probeInput); } catch { }
+        }
+
+        if (layer.ParameterCount == 0) return; // Genuinely non-trainable layers.
 
         var original = layer.GetParameters();
         var modified = new Vector<double>(original.Length);

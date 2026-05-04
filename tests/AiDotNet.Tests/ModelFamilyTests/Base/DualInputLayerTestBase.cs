@@ -255,6 +255,15 @@ public abstract class DualInputLayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
+
+        // Probe Forward(primary) so lazy layers materialise their weights
+        // before the roundtrip — same rationale as the parameter-count probe.
+        using (var probe = new Tensor<double>(PrimaryInputShape))
+        {
+            for (int i = 0; i < probe.Length; i++) probe[i] = 0.01 * (i + 1);
+            try { layer.Forward(probe); } catch { }
+        }
+
         if (layer.ParameterCount == 0) return;
 
         var original = layer.GetParameters();

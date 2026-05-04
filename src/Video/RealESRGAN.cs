@@ -422,8 +422,6 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
 
         // Create RRDBNet generator (the proper ESRGAN generator architecture)
         // — generator is lazy on spatial dims, only channel counts matter at ctor time.
-        int inputHeight = generatorArchitecture.InputHeight > 0 ? generatorArchitecture.InputHeight : 64;
-        int inputWidth = generatorArchitecture.InputWidth > 0 ? generatorArchitecture.InputWidth : 64;
         int inputChannels = generatorArchitecture.InputDepth > 0 ? generatorArchitecture.InputDepth : 3;
         int outputChannels = 3; // RGB output
 

@@ -198,4 +198,31 @@ public class LazySpatialLayerTests
         Assert.Equal(8, o1.Shape[2]);
         Assert.Equal(16, o2.Shape[2]);
     }
+
+    /// <summary>
+    /// Lazy contract requires weights are allocated EXACTLY ONCE — on the
+    /// first Forward — and reused across subsequent Forwards regardless of
+    /// spatial shape. A snapshot of the parameter vector before vs. after a
+    /// second-different-spatial Forward must be identical bit-for-bit; if
+    /// it isn't, the layer rebuilt weights and the lazy contract is broken
+    /// (the multi-scale variable-input promise of #1209 hinges on this).
+    /// </summary>
+    [Fact]
+    public void DenseBlockLayer_MultiScale_DoesNotRebuildWeights()
+    {
+        var layer = new DenseBlockLayer<double>(growthRate: 4, bnMomentum: 0.1);
+        layer.SetTrainingMode(false);
+        layer.Forward(Ramp(new[] { 1, 8, 8, 8 }));
+
+        var paramsBefore = layer.GetParameters();
+        var snapshotBefore = new double[paramsBefore.Length];
+        for (int i = 0; i < paramsBefore.Length; i++) snapshotBefore[i] = paramsBefore[i];
+
+        layer.Forward(Ramp(new[] { 1, 8, 16, 16 })); // different H/W
+
+        var paramsAfter = layer.GetParameters();
+        Assert.Equal(snapshotBefore.Length, paramsAfter.Length);
+        for (int i = 0; i < snapshotBefore.Length; i++)
+            Assert.Equal(snapshotBefore[i], paramsAfter[i]);
+    }
 }

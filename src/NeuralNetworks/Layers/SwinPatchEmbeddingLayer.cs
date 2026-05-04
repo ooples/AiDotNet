@@ -117,12 +117,15 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     protected override void OnFirstForward(Tensor<T> input)
     {
         var s = input._shape;
+        // The Forward path below indexes axis 0 as batch, axis 1 as channels —
+        // so rank-3 [C,H,W] is NOT supported. Reject it explicitly here so
+        // shape resolution and Forward agree on the input rank contract.
         int inChannels, inH, inW;
-        if (s.Length == 3) { inChannels = s[0]; inH = s[1]; inW = s[2]; }
-        else if (s.Length == 4) { inChannels = s[1]; inH = s[2]; inW = s[3]; }
+        if (s.Length == 4) { inChannels = s[1]; inH = s[2]; inW = s[3]; }
         else
             throw new ArgumentException(
-                $"SwinPatchEmbeddingLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                $"SwinPatchEmbeddingLayer requires rank-4 [B,C,H,W] input; got rank {s.Length}. " +
+                "Add a batch dimension before calling Forward.",
                 nameof(input));
         if (inH % _patchSize != 0)
             throw new ArgumentException($"Input height ({inH}) must be divisible by patch size ({_patchSize}).", nameof(input));

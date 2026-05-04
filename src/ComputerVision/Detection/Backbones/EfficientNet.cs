@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -36,6 +37,11 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     private readonly int _stemChannels;
     private readonly int _inChannels;
     private readonly int[] _featureIndices;
+    /// <summary>
+    /// Activation throughout the network. Defaults to Swish per the EfficientNet
+    /// paper (mathematically identical to SiLU); callers can override.
+    /// </summary>
+    private readonly IActivationFunction<T> _activation;
 
     public bool IsFrozen { get; private set; }
     public string Name => $"EfficientNet-{_variant}";
@@ -47,7 +53,14 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// </summary>
     /// <param name="variant">EfficientNet variant (B0-B7).</param>
     /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
-    public EfficientNet(EfficientNetVariant variant = EfficientNetVariant.B0, int inChannels = 3)
+    /// <param name="activation">
+    /// Activation throughout stem + MBConv + SE blocks. <c>null</c> resolves
+    /// to the EfficientNet paper default <see cref="SwishActivation{T}"/>.
+    /// </param>
+    public EfficientNet(
+        EfficientNetVariant variant = EfficientNetVariant.B0,
+        int inChannels = 3,
+        IActivationFunction<T>? activation = null)
         : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.ImageClassification,
@@ -57,6 +70,7 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     {
         _variant = variant;
         _inChannels = inChannels;
+        _activation = activation ?? new SwishActivation<T>();
         _blocks = new List<MBConvBlock<T>>();
 
         var (widthMult, depthMult) = GetScalingFactors(variant);
@@ -98,7 +112,7 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
                 int blockStride = i == 0 ? stride : 1;
                 int blockInChannels = i == 0 ? currentChannels : scaledChannels;
 
-                _blocks.Add(new MBConvBlock<T>(blockInChannels, scaledChannels, kernelSize, blockStride, expandRatio, useSE: true));
+                _blocks.Add(new MBConvBlock<T>(blockInChannels, scaledChannels, kernelSize, blockStride, expandRatio, useSE: true, activation: _activation));
                 blockIdx++;
             }
             currentChannels = scaledChannels;
@@ -135,7 +149,7 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     {
         var features = new List<Tensor<T>>();
         var x = _stem.Forward(input);
-        x = ApplySwish(x);
+        x = _activation.Activate(x);
         for (int i = 0; i < _blocks.Count; i++)
         {
             x = _blocks[i].Forward(x);
@@ -216,7 +230,7 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// Constructs a fresh EfficientNet with the same variant and input-channel configuration.
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new EfficientNet<T>(_variant, _inChannels);
+        => new EfficientNet<T>(_variant, _inChannels, _activation);
 
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
@@ -249,19 +263,29 @@ public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => (EfficientNet<T>)MemberwiseClone();
-
-    private Tensor<T> ApplySwish(Tensor<T> x)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Round-trips the parameter binary stream through a fresh
+    /// <see cref="CreateNewInstance"/> so internal Conv / BN / SE blocks and
+    /// their tensor buffers are independent copies — see ResNet.DeepCopy.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        var result = new Tensor<T>(x._shape);
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < x.Length; i++)
+        var copy = (EfficientNet<T>)CreateNewInstance();
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            double val = ops.ToDouble(x[i]);
-            result[i] = ops.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
+            WriteParameters(writer);
         }
-        return result;
+        ms.Position = 0;
+        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            copy.ReadParameters(reader);
+        }
+        return copy;
     }
+
+    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
 }
 
 /// <summary>
@@ -301,12 +325,15 @@ internal class MBConvBlock<T>
     private readonly int _outChannels;
     private readonly int _expandRatio;
 
-    public MBConvBlock(int inChannels, int outChannels, int kernelSize, int stride, int expandRatio, bool useSE)
+    private readonly IActivationFunction<T> _activation;
+
+    public MBConvBlock(int inChannels, int outChannels, int kernelSize, int stride, int expandRatio, bool useSE, IActivationFunction<T> activation)
     {
         _inChannels = inChannels;
         _outChannels = outChannels;
         _expandRatio = expandRatio;
         _useResidual = inChannels == outChannels && stride == 1;
+        _activation = activation;
 
         int hiddenDim = inChannels * expandRatio;
 
@@ -319,7 +346,7 @@ internal class MBConvBlock<T>
         if (useSE)
         {
             int seChannels = Math.Max(1, inChannels / 4);
-            _se = new SqueezeExcitation<T>(hiddenDim, seChannels);
+            _se = new SqueezeExcitation<T>(hiddenDim, seChannels, activation);
         }
 
         _project = new ConvolutionalLayer<T>(outChannels, kernelSize: 1, stride: 1, padding: 0);
@@ -332,11 +359,11 @@ internal class MBConvBlock<T>
         if (_expand is not null)
         {
             x = _expand.Forward(x);
-            x = ApplySwish(x);
+            x = _activation.Activate(x);
         }
 
         x = _depthwise.Forward(x);
-        x = ApplySwish(x);
+        x = _activation.Activate(x);
 
         if (_se is not null) x = _se.Forward(x);
 
@@ -378,17 +405,7 @@ internal class MBConvBlock<T>
         BackboneSerialization.ReadLayerParameters(reader, _project);
     }
 
-    private Tensor<T> ApplySwish(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = ops.ToDouble(x[i]);
-            result[i] = ops.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
-        }
-        return result;
-    }
+    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
 }
 
 /// <summary>
@@ -399,10 +416,12 @@ internal class SqueezeExcitation<T>
     private readonly INumericOperations<T> _numOps;
     private readonly DenseLayer<T> _fc1;
     private readonly DenseLayer<T> _fc2;
+    private readonly IActivationFunction<T> _activation;
 
-    public SqueezeExcitation(int channels, int reducedChannels)
+    public SqueezeExcitation(int channels, int reducedChannels, IActivationFunction<T> activation)
     {
         _numOps = MathHelper.GetNumericOperations<T>();
+        _activation = activation;
         _fc1 = new DenseLayer<T>(reducedChannels, (Interfaces.IActivationFunction<T>?)null);
         _fc2 = new DenseLayer<T>(channels, (Interfaces.IActivationFunction<T>?)null);
     }
@@ -429,8 +448,11 @@ internal class SqueezeExcitation<T>
         }
 
         var excited = _fc1.Forward(squeezed);
-        excited = ApplySwish(excited);
+        excited = _activation.Activate(excited);
         excited = _fc2.Forward(excited);
+        // Per EfficientNet paper, the SE channel-attention gate ALWAYS uses
+        // sigmoid (not the configurable backbone activation) — the gate must
+        // be in [0,1] to act as a multiplicative attention mask.
         excited = ApplySigmoid(excited);
 
         var output = new Tensor<T>(input._shape);
@@ -462,16 +484,7 @@ internal class SqueezeExcitation<T>
         BackboneSerialization.ReadLayerParameters(reader, _fc2);
     }
 
-    private Tensor<T> ApplySwish(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            result[i] = _numOps.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
-        }
-        return result;
-    }
+    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
 
     private Tensor<T> ApplySigmoid(Tensor<T> x)
     {

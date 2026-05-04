@@ -2219,14 +2219,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Idempotency guard (#1259 review): callers may invoke
             // EnsureArchitectureInitialized multiple times (e.g.,
             // ParameterCount probe before Train, then again at first
-            // Predict). Without this flag, subclasses that append to
-            // Layers in InitializeLayers would duplicate the entire
-            // network on the second call.
-            if (!_layerOnlyInitialized)
+            // Predict). The runtime _layerOnlyInitialized flag handles
+            // that within a session; the Layers.Count check ALSO catches
+            // the post-deserialize case where Layers has been hydrated
+            // from disk but the runtime flag is still false on the fresh
+            // instance — without this, Deserialize → ParameterCount would
+            // double up the entire network.
+            if (!_layerOnlyInitialized && Layers.Count == 0)
             {
                 InitializeLayers();
-                _layerOnlyInitialized = true;
             }
+            _layerOnlyInitialized = true;
             ResolveLazyLayerShapes();
             return;
         }

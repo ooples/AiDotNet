@@ -29961,7 +29961,8 @@ public static class LayerHelper<T>
         int channels = 3, int height = 64, int width = 64,
         int numFeatures = 64, int scaleFactor = 4,
         int numResidualBlocks = 30, int numPropagations = 2,
-        int numLevels = 5, int deformGroups = 8, int growthChannels = 32)
+        int numLevels = 5, int deformGroups = 8, int growthChannels = 32,
+        double residualScale = 0.2)
     {
         // SPyNet flow estimator (lazy on spatial dims and per-frame channels).
         yield return new SpyNetLayer<T>(numLevels: numLevels);
@@ -29969,12 +29970,14 @@ public static class LayerHelper<T>
         // Feature extraction
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
-        // Residual blocks
+        // Residual blocks. residualScale is the BasicVSR++ paper default (0.2);
+        // callers tuning the architecture can override to balance gradient
+        // flow vs. final residual contribution at higher block counts.
         for (int i = 0; i < numResidualBlocks; i++)
         {
             yield return new ResidualDenseBlock<T>(
                 numFeatures: numFeatures, growthChannels: growthChannels,
-                residualScale: 0.2);
+                residualScale: residualScale);
         }
 
         // Deformable alignment modules for each propagation

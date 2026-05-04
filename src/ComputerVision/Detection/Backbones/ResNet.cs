@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -43,6 +44,11 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
     private readonly int _inChannels;
+    /// <summary>
+    /// Activation between stages. Defaults to ReLU per the He et al. 2016 paper;
+    /// callers can override with any <see cref="IActivationFunction{T}"/>.
+    /// </summary>
+    private readonly IActivationFunction<T> _activation;
 
     public bool IsFrozen { get; private set; }
     public string Name => $"ResNet-{GetLayerCount(_variant)}";
@@ -54,7 +60,14 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// </summary>
     /// <param name="variant">ResNet variant (18, 34, 50, 101, or 152).</param>
     /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
-    public ResNet(ResNetVariant variant = ResNetVariant.ResNet50, int inChannels = 3)
+    /// <param name="activation">
+    /// Activation applied between stages and at the stem. <c>null</c> resolves to the
+    /// He et al. 2016 paper default <see cref="ReLUActivation{T}"/>.
+    /// </param>
+    public ResNet(
+        ResNetVariant variant = ResNetVariant.ResNet50,
+        int inChannels = 3,
+        IActivationFunction<T>? activation = null)
         : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.ImageClassification,
@@ -64,6 +77,7 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     {
         _variant = variant;
         _inChannels = inChannels;
+        _activation = activation ?? new ReLUActivation<T>();
         _stages = new List<ResNetStage<T>>();
 
         bool useBottleneck = variant >= ResNetVariant.ResNet50;
@@ -80,7 +94,7 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         {
             int outChannels = baseChannels[i];
             int stride = i == 0 ? 1 : 2;
-            var stage = new ResNetStage<T>(currentChannels, outChannels, blockCounts[i], stride, useBottleneck);
+            var stage = new ResNetStage<T>(currentChannels, outChannels, blockCounts[i], stride, useBottleneck, _activation);
             _stages.Add(stage);
             currentChannels = outChannels * expansion;
         }
@@ -110,7 +124,7 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     {
         var features = new List<Tensor<T>>();
         var x = _conv1.Forward(input);
-        x = BackboneOps<T>.ApplyReLU(x);
+        x = _activation.Activate(x);
         x = BackboneOps<T>.MaxPool2D(x, kernelSize: 3, stride: 2, padding: 1);
         for (int i = 0; i < _stages.Count; i++)
         {
@@ -187,7 +201,7 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// returned instance would mutate the original.
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new ResNet<T>(_variant, _inChannels);
+        => new ResNet<T>(_variant, _inChannels, _activation);
 
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
@@ -225,7 +239,29 @@ public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones. " +
             "Use ReadParameters(BinaryReader) on a fresh instance.");
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => (ResNet<T>)MemberwiseClone();
+    /// <inheritdoc />
+    /// <remarks>
+    /// Round-trips the parameter binary stream through a fresh
+    /// <see cref="CreateNewInstance"/> so internal Conv / BN layers and their
+    /// tensor buffers are independent copies — <c>MemberwiseClone()</c> would
+    /// alias every reference type and a subsequent train step on the copy
+    /// would mutate the original's weights.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var copy = (ResNet<T>)CreateNewInstance();
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            WriteParameters(writer);
+        }
+        ms.Position = 0;
+        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            copy.ReadParameters(reader);
+        }
+        return copy;
+    }
 }
 
 /// <summary>
@@ -235,19 +271,20 @@ internal class ResNetStage<T>
 {
     private readonly List<ResidualBlock<T>> _blocks;
 
-    public ResNetStage(int inChannels, int outChannels, int numBlocks, int stride, bool useBottleneck)
+    public ResNetStage(int inChannels, int outChannels, int numBlocks, int stride, bool useBottleneck, IActivationFunction<T> activation)
     {
         _blocks = new List<ResidualBlock<T>>();
         int expansion = useBottleneck ? 4 : 1;
 
         _blocks.Add(new ResidualBlock<T>(
             inChannels, outChannels, stride, useBottleneck,
-            downsample: inChannels != outChannels * expansion || stride != 1));
+            downsample: inChannels != outChannels * expansion || stride != 1,
+            activation: activation));
 
         for (int i = 1; i < numBlocks; i++)
         {
             _blocks.Add(new ResidualBlock<T>(
-                outChannels * expansion, outChannels, 1, useBottleneck, downsample: false));
+                outChannels * expansion, outChannels, 1, useBottleneck, downsample: false, activation: activation));
         }
     }
 
@@ -290,10 +327,12 @@ internal class ResidualBlock<T>
     private readonly ConvolutionalLayer<T>? _conv3;
     private readonly ConvolutionalLayer<T>? _downsample;
     private readonly bool _useBottleneck;
+    private readonly IActivationFunction<T> _activation;
 
-    public ResidualBlock(int inChannels, int outChannels, int stride, bool useBottleneck, bool downsample)
+    public ResidualBlock(int inChannels, int outChannels, int stride, bool useBottleneck, bool downsample, IActivationFunction<T> activation)
     {
         _useBottleneck = useBottleneck;
+        _activation = activation;
         int expansion = useBottleneck ? 4 : 1;
 
         if (useBottleneck)
@@ -316,12 +355,12 @@ internal class ResidualBlock<T>
     {
         var identity = _downsample is not null ? _downsample.Forward(input) : input;
         var x = _conv1.Forward(input);
-        x = BackboneOps<T>.ApplyReLU(x);
+        x = _activation.Activate(x);
         x = _conv2.Forward(x);
-        x = BackboneOps<T>.ApplyReLU(x);
+        x = _activation.Activate(x);
         if (_useBottleneck && _conv3 is not null) x = _conv3.Forward(x);
         x = BackboneOps<T>.AddResidual(x, identity);
-        return BackboneOps<T>.ApplyReLU(x);
+        return _activation.Activate(x);
     }
 
     public long GetParameterCount()

@@ -1,4 +1,5 @@
 using System.IO;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -41,6 +42,11 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     private readonly double _widthMultiplier;
     private readonly int _inChannels;
     private readonly int[] _stageChannels;
+    /// <summary>
+    /// Activation applied throughout the network. Defaults to SiLU (the YOLOv4 paper's
+    /// choice); callers can pass any <see cref="IActivationFunction{T}"/> to override.
+    /// </summary>
+    private readonly IActivationFunction<T> _activation;
 
     public bool IsFrozen { get; private set; }
     public string Name => $"CSPDarknet-{_widthMultiplier:0.0}x";
@@ -53,7 +59,15 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// <param name="depth">Depth multiplier for number of blocks (default 1.0 = medium).</param>
     /// <param name="widthMultiplier">Width multiplier for channel counts (default 1.0 = medium).</param>
     /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
-    public CSPDarknet(double depth = 1.0, double widthMultiplier = 1.0, int inChannels = 3)
+    /// <param name="activation">
+    /// Activation function applied throughout the network. <c>null</c> resolves to
+    /// the YOLOv4 paper default <see cref="SiLUActivation{T}"/>.
+    /// </param>
+    public CSPDarknet(
+        double depth = 1.0,
+        double widthMultiplier = 1.0,
+        int inChannels = 3,
+        IActivationFunction<T>? activation = null)
         : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.ImageClassification,
@@ -65,6 +79,7 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         _depth = Math.Max(1, (int)Math.Round(depth));
         _widthMultiplier = widthMultiplier;
         _inChannels = inChannels;
+        _activation = activation ?? new SiLUActivation<T>();
         _stages = new List<CSPBlock<T>>();
 
         int[] baseChannels = { 64, 128, 256, 512 };
@@ -78,7 +93,7 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         {
             int outChannels = _stageChannels[i];
             int numBlocks = GetBlockCount(i, _depth);
-            var stage = new CSPBlock<T>(currentChannels, outChannels, numBlocks, stride: 2);
+            var stage = new CSPBlock<T>(currentChannels, outChannels, numBlocks, stride: 2, activation: _activation);
             _stages.Add(stage);
             currentChannels = outChannels;
         }
@@ -94,7 +109,7 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     {
         var features = new List<Tensor<T>>();
         var x = _stem.Forward(input);
-        x = ApplySiLU(x);
+        x = _activation.Activate(x);
         for (int i = 0; i < _stages.Count; i++)
         {
             x = _stages[i].Forward(x);
@@ -160,7 +175,7 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// input-channel configuration. All internal layers are freshly allocated.
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new CSPDarknet<T>(_depthOriginal, _widthMultiplier, _inChannels);
+        => new CSPDarknet<T>(_depthOriginal, _widthMultiplier, _inChannels, _activation);
 
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
@@ -193,19 +208,29 @@ public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => (CSPDarknet<T>)MemberwiseClone();
-
-    private Tensor<T> ApplySiLU(Tensor<T> x)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Round-trips the parameter binary stream through a fresh
+    /// <see cref="CreateNewInstance"/> so internal Conv / BN layers and their
+    /// tensor buffers are independent copies — see ResNet.DeepCopy.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
-        var result = new Tensor<T>(x._shape);
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < x.Length; i++)
+        var copy = (CSPDarknet<T>)CreateNewInstance();
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
         {
-            double val = ops.ToDouble(x[i]);
-            result[i] = ops.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
+            WriteParameters(writer);
         }
-        return result;
+        ms.Position = 0;
+        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            copy.ReadParameters(reader);
+        }
+        return copy;
     }
+
+    // SiLU activation moved to BackboneOps<T>.ApplySiLU — was duplicated 3 times in this file.
 }
 
 /// <summary>
@@ -218,9 +243,11 @@ internal class CSPBlock<T>
     private readonly ConvolutionalLayer<T> _cv2;
     private readonly ConvolutionalLayer<T> _cv3;
     private readonly List<CSPBottleneckBlock<T>> _bottlenecks;
+    private readonly IActivationFunction<T> _activation;
 
-    public CSPBlock(int inChannels, int outChannels, int numBlocks, int stride = 1)
+    public CSPBlock(int inChannels, int outChannels, int numBlocks, int stride, IActivationFunction<T> activation)
     {
+        _activation = activation;
         int hiddenChannels = outChannels / 2;
 
         _downsample = new ConvolutionalLayer<T>(outChannels, kernelSize: 3, stride: stride, padding: 1);
@@ -229,7 +256,7 @@ internal class CSPBlock<T>
 
         _bottlenecks = new List<CSPBottleneckBlock<T>>();
         for (int i = 0; i < numBlocks; i++)
-            _bottlenecks.Add(new CSPBottleneckBlock<T>(hiddenChannels));
+            _bottlenecks.Add(new CSPBottleneckBlock<T>(hiddenChannels, activation: activation));
 
         _cv3 = new ConvolutionalLayer<T>(outChannels, kernelSize: 1, stride: 1, padding: 0);
     }
@@ -237,15 +264,15 @@ internal class CSPBlock<T>
     public Tensor<T> Forward(Tensor<T> input)
     {
         var x = _downsample.Forward(input);
-        x = ApplySiLU(x);
+        x = _activation.Activate(x);
         var y1 = _cv1.Forward(x);
-        y1 = ApplySiLU(y1);
+        y1 = _activation.Activate(y1);
         var y2 = _cv2.Forward(x);
-        y2 = ApplySiLU(y2);
+        y2 = _activation.Activate(y2);
         foreach (var b in _bottlenecks) y2 = b.Forward(y2);
         var concat = AiDotNetEngine.Current.TensorConcatenate(new[] { y1, y2 }, axis: 1);
         var output = _cv3.Forward(concat);
-        return ApplySiLU(output);
+        return _activation.Activate(output);
     }
 
     public long GetParameterCount()
@@ -277,17 +304,7 @@ internal class CSPBlock<T>
         foreach (var b in _bottlenecks) b.ReadParameters(reader);
     }
 
-    private Tensor<T> ApplySiLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = ops.ToDouble(x[i]);
-            result[i] = ops.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
-        }
-        return result;
-    }
+    // SiLU activation moved to BackboneOps<T>.ApplySiLU — was duplicated 3 times in this file.
 }
 
 /// <summary>
@@ -300,10 +317,12 @@ internal class CSPBottleneckBlock<T>
     private readonly ConvolutionalLayer<T> _cv1;
     private readonly ConvolutionalLayer<T> _cv2;
     private readonly bool _add;
+    private readonly IActivationFunction<T> _activation;
 
-    public CSPBottleneckBlock(int channels, bool add = true)
+    public CSPBottleneckBlock(int channels, IActivationFunction<T> activation, bool add = true)
     {
         _add = add;
+        _activation = activation;
         _cv1 = new ConvolutionalLayer<T>(channels, kernelSize: 3, stride: 1, padding: 1);
         _cv2 = new ConvolutionalLayer<T>(channels, kernelSize: 3, stride: 1, padding: 1);
     }
@@ -311,9 +330,9 @@ internal class CSPBottleneckBlock<T>
     public Tensor<T> Forward(Tensor<T> input)
     {
         var y = _cv1.Forward(input);
-        y = ApplySiLU(y);
+        y = _activation.Activate(y);
         y = _cv2.Forward(y);
-        y = ApplySiLU(y);
+        y = _activation.Activate(y);
         if (_add)
             y = BackboneOps<T>.AddResidual(y, input);
         return y;
@@ -333,15 +352,5 @@ internal class CSPBottleneckBlock<T>
         BackboneSerialization.ReadLayerParameters(reader, _cv2);
     }
 
-    private Tensor<T> ApplySiLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = ops.ToDouble(x[i]);
-            result[i] = ops.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
-        }
-        return result;
-    }
+    // SiLU activation moved to BackboneOps<T>.ApplySiLU — was duplicated 3 times in this file.
 }

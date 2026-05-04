@@ -95,6 +95,9 @@ internal class Dense<T>
 
     public Dense(int inDim, int outDim)
     {
+        if (inDim <= 0) throw new ArgumentOutOfRangeException(nameof(inDim), "inDim must be positive.");
+        if (outDim <= 0) throw new ArgumentOutOfRangeException(nameof(outDim), "outDim must be positive.");
+
         _inDim = inDim;
         _outDim = outDim;
         _layer = new DenseLayer<T>(outDim, (Interfaces.IActivationFunction<T>?)null);

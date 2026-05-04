@@ -35,7 +35,10 @@ internal static class BackboneSerialization
     public static void ReadLayerParameters<T>(BinaryReader reader, LayerBase<T> layer)
     {
         int len = reader.ReadInt32();
-        if (len <= 0) return;
+        if (len < 0)
+            throw new InvalidDataException(
+                $"Negative parameter length ({len}) on the wire — corrupt parameter stream.");
+        if (len == 0) return;
         var values = new T[len];
         var ops = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < len; i++)

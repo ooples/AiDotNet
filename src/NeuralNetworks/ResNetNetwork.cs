@@ -271,7 +271,7 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
 
         int currentHeight = config.InputHeight;
         int currentWidth = config.InputWidth;
-        int currentChannels = config.InputChannels;
+        // currentChannels removed — lazy layers (#1209) infer it from input.Shape.
 
         // Stage 0: Initial convolution (conv1)
         // 7x7 conv, 64, stride 2
@@ -284,7 +284,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
 
         currentHeight /= 2;
         currentWidth /= 2;
-        currentChannels = 64;
 
         // Batch normalization after conv1
         layers.Add(new BatchNormalizationLayer<T>());
@@ -306,8 +305,10 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         int[] baseChannels = config.BaseChannels;
         int expansion = config.Expansion;
 
-        // Stage 1-4: Residual blocks
-        int inChannels = 64;
+        // Stage 1-4: Residual blocks. BasicBlock / BottleneckBlock are lazy
+        // on input channels (#1209) — they read in-channel count from the
+        // forward tensor. The local `inChannels` running tally is no longer
+        // needed since the lazy ctors don't accept an inChannels arg.
         for (int stageIdx = 0; stageIdx < 4; stageIdx++)
         {
             int stageBaseChannels = baseChannels[stageIdx];
@@ -330,13 +331,12 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                     zeroInitResidual: config.ZeroInitResidual));
             }
 
-            // Update dimensions
+            // Track only spatial dims for downstream pool / fc sizing.
             if (stride == 2)
             {
                 currentHeight /= 2;
                 currentWidth /= 2;
             }
-            inChannels = stageBaseChannels * expansion;
 
             // Remaining blocks in stage (stride 1, no channel change)
             for (int blockIdx = 1; blockIdx < numBlocks; blockIdx++)

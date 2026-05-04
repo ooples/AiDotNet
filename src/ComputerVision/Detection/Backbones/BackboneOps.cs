@@ -13,17 +13,6 @@ internal static class BackboneOps<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
-    public static Tensor<T> ApplyReLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double v = Ops.ToDouble(x[i]);
-            result[i] = Ops.FromDouble(Math.Max(0, v));
-        }
-        return result;
-    }
-
     public static Tensor<T> MaxPool2D(Tensor<T> x, int kernelSize, int stride, int padding)
     {
         int batch = x.Shape[0];
@@ -58,16 +47,29 @@ internal static class BackboneOps<T>
 
     /// <summary>
     /// Element-wise residual addition (a + b in-place into a fresh tensor of a's shape).
-    /// Validates shape match — used by ResNet/CSPDarknet/SwinTransformer skip paths.
+    /// Validates BOTH length and rank-by-rank shape so a same-element-count but
+    /// different-rank mismatch (e.g. [1,16,8,8] vs [16,8,1,8]) is caught instead
+    /// of silently producing semantically-wrong activations.
     /// </summary>
     public static Tensor<T> AddResidual(Tensor<T> a, Tensor<T> b)
     {
-        if (a.Length != b.Length)
+        if (a.Length != b.Length || a._shape.Length != b._shape.Length)
             throw new InvalidOperationException(
-                $"BackboneOps.AddResidual length mismatch: {a.Length} vs {b.Length}.");
+                $"BackboneOps.AddResidual shape mismatch: [{string.Join(",", a._shape)}] vs [{string.Join(",", b._shape)}].");
+        for (int axis = 0; axis < a._shape.Length; axis++)
+        {
+            if (a._shape[axis] != b._shape[axis])
+                throw new InvalidOperationException(
+                    $"BackboneOps.AddResidual shape mismatch at axis {axis}: " +
+                    $"[{string.Join(",", a._shape)}] vs [{string.Join(",", b._shape)}].");
+        }
         var result = new Tensor<T>(a._shape);
         for (int i = 0; i < a.Length; i++)
             result[i] = Ops.Add(a[i], b[i]);
         return result;
     }
+
+    // ApplyReLU / ApplySiLU / ApplySwish removed — backbones (ResNet, CSPDarknet,
+    // EfficientNet, SwinTransformer) now accept a configurable IActivationFunction<T>?
+    // ctor parameter that resolves to the paper-correct default when null.
 }

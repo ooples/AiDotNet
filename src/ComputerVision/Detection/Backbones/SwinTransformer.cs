@@ -244,7 +244,28 @@ public class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
 
-    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => (SwinTransformer<T>)MemberwiseClone();
+    /// <inheritdoc />
+    /// <remarks>
+    /// Round-trips the parameter binary stream through a fresh
+    /// <see cref="CreateNewInstance"/> so internal patch-embedding /
+    /// transformer / patch-merging blocks and their tensor buffers are
+    /// independent copies — see ResNet.DeepCopy.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var copy = (SwinTransformer<T>)CreateNewInstance();
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            WriteParameters(writer);
+        }
+        ms.Position = 0;
+        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            copy.ReadParameters(reader);
+        }
+        return copy;
+    }
 }
 
 /// <summary>

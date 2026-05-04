@@ -58,10 +58,12 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     // at that point so we can't slice between them; stash the whole
     // vector and replay inside OnFirstForward.
     private Vector<T>? _pendingParameters;
-    // Non-readonly: lazy ctor leaves _conv = null until OnFirstForward
-    // resolves OutputChannels (= inputChannels × compressionFactor) and
-    // allocates the 1×1 projection.
-    private ConvolutionalLayer<T> _conv;
+    // Lazy ctor leaves _conv = null until OnFirstForward resolves
+    // OutputChannels (= inputChannels × compressionFactor) and allocates
+    // the 1×1 projection. Declared nullable so the compiler enforces
+    // null-checks on every reference and the existing null-guards stop
+    // looking like dead code.
+    private ConvolutionalLayer<T>? _conv;
     private readonly AveragePoolingLayer<T> _pool;
     private readonly IActivationFunction<T> _relu;
 
@@ -140,9 +142,8 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
         _compressionFactor = compressionFactor;
         _relu = new ReLUActivation<T>();
         _bn = new BatchNormalizationLayer<T>();
-        // _conv is allocated in OnFirstForward once the input channel
-        // count is known. Placeholder until then.
-        _conv = null!;
+        // _conv stays null until OnFirstForward observes the input channel
+        // count (compiler tracks this via the field's nullability).
 
         // After 1×1 conv, spatial dims are same; 2×2 avg pool with
         // stride 2 halves them.
@@ -319,6 +320,13 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Lazy gate — _conv is null until OnFirstForward observes the input
+        // channel count. The CPU Forward path has the same gate; GPU path was
+        // missing it (PR #1259 review).
+        if (!IsShapeResolved) OnFirstForward(input);
+        var conv = _conv ?? throw new InvalidOperationException("OnFirstForward did not allocate _conv.");
+
         var shape = input._shape;
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
