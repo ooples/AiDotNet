@@ -210,11 +210,32 @@ public class DecoderLayer<T> : LayerBase<T>
         {
             if (sub is LayerBase<T> lb && !lb.IsShapeResolved)
             {
-                try { lb.ResolveShapesOnly(perSampleSeqShape); }
-                catch
+                // Try the [seq, features] shape first; if the sub-layer
+                // is rank-strict (e.g. wants exactly rank-2 features),
+                // fall back to the [features] shape. Catch ONLY
+                // ArgumentException — that's the documented contract
+                // failure for shape mismatch. NRE, OOM, configuration
+                // bugs etc. must propagate so a real problem isn't
+                // hidden behind a silent skip that leaves the sub-layer
+                // with -1 sentinel and breaks downstream Forward.
+                try
                 {
-                    try { lb.ResolveShapesOnly(perSampleShape); }
-                    catch { /* skip — sub-layer needs richer shape */ }
+                    lb.ResolveShapesOnly(perSampleSeqShape);
+                }
+                catch (ArgumentException)
+                {
+                    try
+                    {
+                        lb.ResolveShapesOnly(perSampleShape);
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Sub-layer genuinely needs a richer shape we
+                        // don't have here (e.g., expects [B, S, F] not
+                        // [S, F]). Leaving it unresolved is better than
+                        // forcing a wrong shape — first Forward will
+                        // resolve it correctly via OnFirstForward.
+                    }
                 }
             }
         }

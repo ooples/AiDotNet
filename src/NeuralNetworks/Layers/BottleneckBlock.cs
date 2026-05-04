@@ -186,8 +186,19 @@ public class BottleneckBlock<T> : LayerBase<T>
 
         if (zeroInitResidual) _bn3.ZeroInitGamma();
 
-        // Downsample allocation deferred to OnFirstForward — _hasDownsample
-        // depends on (stride != 1 || inChannels != outChannels), and
+        // Pre-resolve the obvious-true case for _hasDownsample. When
+        // _stride != 1 the shortcut is mandatory regardless of runtime
+        // channel count (spatial dims will differ), so we can flip the
+        // flag at construction time. The actual sub-layer allocation
+        // still happens in OnFirstForward because the conv kernel shape
+        // depends on the runtime inChannels — but having the flag set
+        // early makes pre-Forward queries (e.g. "does this block have a
+        // skip branch?" inspection by NN-base or a debugger) report
+        // accurately. The flag may also flip true in OnFirstForward for
+        // the inChannels != outChannels path even when _stride == 1.
+        if (_stride != 1) _hasDownsample = true;
+
+        // Downsample sub-layer allocation deferred to OnFirstForward —
         // inChannels isn't known until input.Shape is observed.
 
         RegisterSubLayer(_conv1);
@@ -218,8 +229,14 @@ public class BottleneckBlock<T> : LayerBase<T>
         _inChannels = inChannels;
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
-        int outH = inputHeight / _stride;
-        int outW = inputWidth / _stride;
+        // Conv output dim for the 3×3 / pad=1 / stride=_stride middle path:
+        //   out = (in + 2·pad − kernel) / stride + 1
+        // With pad=1, kernel=3 this is `(in − 1) / stride + 1`. Plain
+        // floor division `in / stride` is wrong for odd inputs and
+        // produces a 1-off mismatch between conv2's output and the
+        // downsample BN's expected shape, breaking the residual add.
+        int outH = (inputHeight - 1) / _stride + 1;
+        int outW = (inputWidth - 1) / _stride + 1;
         int outChannels = _baseChannels * Expansion;
 
         // Downsample shortcut: needed when stride != 1 or channel counts differ.
@@ -350,6 +367,15 @@ public class BottleneckBlock<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Mirror the lazy-init guard from Forward(): if this block's
+        // first ever execution lands on the GPU path, _hasDownsample
+        // stays at its construction default (only true when stride!=1
+        // since #7) and _downsampleConv stays null even when the
+        // channel-mismatch path was needed — silently dropping the skip
+        // branch and producing a residual add against the wrong shape.
+        // OnFirstForward resolves shapes and allocates _downsampleConv.
+        if (!IsShapeResolved) OnFirstForward(input);
 
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3
         var conv1Out = _conv1.ForwardGpu(input);

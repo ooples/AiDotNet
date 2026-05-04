@@ -197,8 +197,15 @@ public class BasicBlock<T> : LayerBase<T>
         _inChannels = inChannels;
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
-        int outH = inputHeight / _stride;
-        int outW = inputWidth / _stride;
+        // Conv output dim for the 3×3 / pad=1 / stride=_stride main path:
+        //   out = (in + 2·pad − kernel) / stride + 1
+        // With pad=1, kernel=3 this is `(in − 1) / stride + 1`. Plain
+        // floor division `in / stride` is wrong for odd inputs (e.g.
+        // in=7, stride=2 gives 3 by floor-div but the conv actually
+        // produces 4) — that mismatch propagates to the downsample
+        // branch's BN shape and breaks the residual add.
+        int outH = (inputHeight - 1) / _stride + 1;
+        int outW = (inputWidth - 1) / _stride + 1;
 
         // Downsample shortcut: needed when stride != 1 or channel counts differ.
         _hasDownsample = _stride != 1 || _inChannels != _outChannels;
