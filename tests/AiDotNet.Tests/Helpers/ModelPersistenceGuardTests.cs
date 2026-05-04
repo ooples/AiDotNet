@@ -301,8 +301,16 @@ public class ModelPersistenceGuardTests : IDisposable
     }
 
     [Fact(Timeout = 60000)]
-    public async Task InternalOperation_DoesNotSuppressLoadEnforcement()
+    public async Task InternalOperation_SuppressesLoadEnforcement_ButNotSave()
     {
+        // Load IS suppressed inside InternalOperation scope (the impl's
+        // documented rationale: AiDotNet.Serving controllers, model
+        // registry loaders, and federated coordinator round-trips load
+        // many models per process and would exhaust the 10-op trial
+        // against themselves otherwise). Save is NOT suppressed — see
+        // InternalOperation_DoesNotSuppressSaveEnforcement above.
+        // This test pins the asymmetric behavior so future refactors
+        // don't accidentally make Load symmetric with Save.
         ClearAllLicenseSources();
 
         WithIsolatedTrial(() =>
@@ -313,10 +321,14 @@ public class ModelPersistenceGuardTests : IDisposable
                 manager.RecordOperationOrThrow();
             }
 
+            // Load is suppressed inside the scope — should NOT throw.
             using (ModelPersistenceGuard.InternalOperation())
             {
-                Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
+                ModelPersistenceGuard.EnforceBeforeLoad();
             }
+
+            // Outside the scope, Load throws normally.
+            Assert.Throws<LicenseRequiredException>(() => ModelPersistenceGuard.EnforceBeforeLoad());
         });
     }
 

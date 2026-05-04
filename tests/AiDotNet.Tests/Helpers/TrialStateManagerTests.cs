@@ -351,17 +351,22 @@ public class TrialStateManagerTests : IDisposable
     [Fact(Timeout = 60000)]
     public async Task ConsoleMessage_MatchesExpectedFormat()
     {
+        // TrialStateManager.EmitTrialMessage routes to stderr by default
+        // (to avoid polluting stdout) and offers an internal
+        // TrialMessageHandler hook for tests. Using the hook is more
+        // reliable than redirecting Console.Error since the impl can
+        // bypass Console.Error in environments without a TTY.
         var manager = new TrialStateManager(_trialFilePath);
 
-        var originalOut = Console.Out;
+        var captured = new List<string>();
+        var previousHandler = TrialStateManager.TrialMessageHandler;
+        TrialStateManager.TrialMessageHandler = msg => captured.Add(msg);
         try
         {
-            using var sw = new StringWriter();
-            Console.SetOut(sw);
-
             manager.RecordOperationOrThrow();
 
-            string output = sw.ToString().Trim();
+            Assert.Single(captured);
+            string output = captured[0].Trim();
 
             // Verify format: "AiDotNet Community — X day(s) and Y operation(s) remaining in free trial. Register for a free license at https://aidotnet.dev"
             Assert.Matches(
@@ -374,7 +379,7 @@ public class TrialStateManagerTests : IDisposable
         }
         finally
         {
-            Console.SetOut(originalOut);
+            TrialStateManager.TrialMessageHandler = previousHandler;
         }
     }
 
@@ -383,29 +388,28 @@ public class TrialStateManagerTests : IDisposable
     {
         var manager = new TrialStateManager(_trialFilePath);
 
-        var originalOut = Console.Out;
+        var captured = new List<string>();
+        var previousHandler = TrialStateManager.TrialMessageHandler;
+        TrialStateManager.TrialMessageHandler = msg => captured.Add(msg);
         try
         {
-            var messages = new List<string>();
-
             for (int i = 0; i < 3; i++)
             {
-                using var sw = new StringWriter();
-                Console.SetOut(sw);
                 manager.RecordOperationOrThrow();
-                messages.Add(sw.ToString().Trim());
             }
 
-            // After 1st op: 9 remaining
-            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 1} operation(s)", messages[0]);
-            // After 2nd op: 8 remaining
-            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 2} operation(s)", messages[1]);
-            // After 3rd op: 7 remaining
-            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 3} operation(s)", messages[2]);
+            Assert.Equal(3, captured.Count);
+
+            // After 1st op: TrialOperationLimit-1 remaining
+            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 1} operation(s)", captured[0]);
+            // After 2nd op: TrialOperationLimit-2 remaining
+            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 2} operation(s)", captured[1]);
+            // After 3rd op: TrialOperationLimit-3 remaining
+            Assert.Contains($"{TrialStateManager.TrialOperationLimit - 3} operation(s)", captured[2]);
         }
         finally
         {
-            Console.SetOut(originalOut);
+            TrialStateManager.TrialMessageHandler = previousHandler;
         }
     }
 
@@ -414,19 +418,18 @@ public class TrialStateManagerTests : IDisposable
     {
         var manager = new TrialStateManager(_trialFilePath);
 
-        var originalOut = Console.Out;
+        var captured = new List<string>();
+        var previousHandler = TrialStateManager.TrialMessageHandler;
+        TrialStateManager.TrialMessageHandler = msg => captured.Add(msg);
         try
         {
-            using var sw = new StringWriter();
-            Console.SetOut(sw);
             manager.RecordOperationOrThrow();
-
-            string output = sw.ToString();
-            Assert.Contains("https://aidotnet.dev", output);
+            Assert.Single(captured);
+            Assert.Contains("https://aidotnet.dev", captured[0]);
         }
         finally
         {
-            Console.SetOut(originalOut);
+            TrialStateManager.TrialMessageHandler = previousHandler;
         }
     }
 }

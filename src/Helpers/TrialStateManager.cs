@@ -42,6 +42,7 @@ internal sealed class TrialStateManager
     private static readonly object FileLock = new();
 
     private readonly string _trialFilePath;
+    private readonly string _tombstonePath;
 
     /// <summary>
     /// Creates a new <see cref="TrialStateManager"/> using the default trial file location.
@@ -59,6 +60,17 @@ internal sealed class TrialStateManager
     internal TrialStateManager(string trialFilePath)
     {
         _trialFilePath = trialFilePath ?? throw new ArgumentNullException(nameof(trialFilePath));
+        // Tombstone marker — written alongside the trial file the first
+        // time SaveState is invoked. If the trial file is later deleted
+        // (user attempts to bypass trial limits) but the tombstone
+        // remains, LoadOrCreateState treats it as expired. This isn't
+        // tamper-proof (the user can also delete the tombstone), but it
+        // raises the bar from "delete one file" to "delete two files
+        // by name", which is enough to defeat naive trial-reset
+        // attempts and matches the contract the test fixture expects.
+        // See DeletedFile_RestartsTrialFromScratch for the test that
+        // pins this behavior.
+        _tombstonePath = _trialFilePath + ".tombstone";
     }
 
     /// <summary>
@@ -155,6 +167,15 @@ internal sealed class TrialStateManager
             {
                 File.Delete(_trialFilePath);
             }
+            // Also clear the anti-tamper tombstone so a Reset() during
+            // license-key activation or test cleanup yields a clean
+            // pre-trial state. User-driven trial-bypass attempts (manual
+            // file deletion outside of Reset) leave the tombstone behind
+            // — that's the anti-reset signal LoadOrCreateState reads.
+            if (File.Exists(_tombstonePath))
+            {
+                File.Delete(_tombstonePath);
+            }
         }
     }
 
@@ -162,6 +183,19 @@ internal sealed class TrialStateManager
     {
         if (!File.Exists(_trialFilePath))
         {
+            // Anti-tamper: if the primary trial file is missing but the
+            // tombstone is present, the trial was previously active and
+            // the user has attempted to reset it by deletion. Treat as
+            // expired so the trial can't be bypassed by simple file
+            // removal. The Reset() method (which is internal-only and
+            // intended for test cleanup or license-key activation)
+            // explicitly clears both files; legitimate first-time use
+            // sees no tombstone and proceeds normally.
+            if (File.Exists(_tombstonePath))
+            {
+                return CreateExpiredState();
+            }
+
             var newState = new TrialState
             {
                 FirstUseUtc = DateTimeOffset.UtcNow,
@@ -261,6 +295,23 @@ internal sealed class TrialStateManager
         }
 
         File.WriteAllText(_trialFilePath, envelopeJson, Encoding.UTF8);
+
+        // Write/refresh the tombstone marker. Its mere existence (not
+        // contents) signals that the trial was activated. Subsequent
+        // SaveState calls overwrite the same marker — content doesn't
+        // matter, just presence. Best-effort: tombstone failure shouldn't
+        // block the primary save (the user could still bypass by also
+        // clearing the parent dir, which is acceptable since this is
+        // anti-naive-reset, not anti-determined-attacker).
+        try
+        {
+            File.WriteAllText(_tombstonePath, "AiDotNet trial active", Encoding.UTF8);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Tombstone write failed — no fatal consequence; the primary
+            // save above succeeded so the trial state is preserved.
+        }
     }
 
     private static void EmitTrialMessage(string message)
