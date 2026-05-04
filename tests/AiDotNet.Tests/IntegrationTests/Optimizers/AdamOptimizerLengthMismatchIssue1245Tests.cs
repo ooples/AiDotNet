@@ -171,13 +171,29 @@ public class AdamOptimizerLengthMismatchIssue1245Tests
     /// L=1/2/4 it survived but no real training happened, hence flat
     /// softmax.
     ///
-    /// <para>This test trains a small L=2 Transformer for 200 Adam
-    /// steps on an identity-mapping task and verifies that outputs
-    /// DIFFER between distinct inputs — i.e., training actually updated
-    /// the parameters. Pre-fix: flat outputs. Post-fix: differentiated.</para>
+    /// <para>This test trains a small L=2 Transformer for 500 Adam
+    /// steps on an identity-mapping task and verifies that training
+    /// caused a meaningful CHANGE in the model's output behavior. We
+    /// snapshot pairwise logit divergence before and after training
+    /// and assert that the after-divergence is materially larger.
+    /// Asserting only post-training divergence is too weak — a randomly
+    /// initialized Transformer already produces input-dependent logits
+    /// (different token IDs hit different embedding rows), so the
+    /// post-only check could pass even when training never updated
+    /// the encoder stack. The before/after delta directly pins
+    /// "training is doing something" rather than "init is non-trivial".
+    /// </para>
+    ///
+    /// <para>Flake-safety: the assertion uses a before/after DELTA
+    /// rather than an absolute magnitude. The library's
+    /// <c>RandomHelper.ThreadSafeRandom</c> has no public seed API, so
+    /// we can't deterministically pin weight init across CI agents —
+    /// but the delta metric is robust to init variance because both
+    /// snapshots use the same initial weights, and the post-training
+    /// growth signal dominates init noise by 3+ orders of magnitude.</para>
     /// </summary>
     [Fact(Timeout = 60000)]
-    public async Task L2Transformer_AdamTraining_OutputsDifferentiateAcrossInputs()
+    public async Task L2Transformer_AdamTraining_OutputsLearnRatherThanFlatSoftmax()
     {
         await Task.Yield();
 
@@ -223,12 +239,45 @@ public class AdamOptimizerLengthMismatchIssue1245Tests
             return t;
         }
 
-        // Train enough steps to differentiate. Pre-fix: gradient updates
-        // never reach the encoder stack so outputs stay flat regardless.
-        // Post-fix: gradients flow through every parameter; the model
-        // learns class-specific output distributions. 500 iterations on
-        // a tiny d=16 / L=2 model is plenty to drive output divergence
-        // well above floating-point noise.
+        double MaxPairwiseLogitL2()
+        {
+            var logits = new float[vocab][];
+            for (int k = 0; k < vocab; k++)
+            {
+                var pred = model.Predict(Identity(k));
+                logits[k] = new float[pred.Length];
+                for (int j = 0; j < pred.Length; j++) logits[k][j] = pred[j];
+            }
+            double maxD = 0.0;
+            for (int i = 0; i < vocab; i++)
+            {
+                for (int j = i + 1; j < vocab; j++)
+                {
+                    double s = 0;
+                    for (int d = 0; d < logits[i].Length; d++)
+                    {
+                        double diff = logits[i][d] - logits[j][d];
+                        s += diff * diff;
+                    }
+                    double dist = System.Math.Sqrt(s);
+                    if (dist > maxD) maxD = dist;
+                }
+            }
+            return maxD;
+        }
+
+        // Snapshot divergence BEFORE training. A randomly-initialized
+        // Transformer already gives different logits for different
+        // token IDs (embedding lookup hits different rows), so this
+        // baseline is typically > 0 — exactly the value we need to
+        // distinguish "incidental init diversity" from "training did
+        // something".
+        double divergenceBefore = MaxPairwiseLogitL2();
+
+        // Train. Pre-fix: gradient updates never reach the encoder
+        // stack so the divergence stays at its init level. Post-fix:
+        // gradients flow through every parameter and divergence grows
+        // as the model learns class-specific output distributions.
         model.SetTrainingMode(true);
         for (int iter = 0; iter < 500; iter++)
         {
@@ -237,45 +286,23 @@ public class AdamOptimizerLengthMismatchIssue1245Tests
         }
         model.SetTrainingMode(false);
 
-        // Predict on each class and compute pairwise L2 distance
-        // between logit vectors. If training did anything, distinct
-        // inputs produce distinct logits.
-        var logits = new float[vocab][];
-        for (int k = 0; k < vocab; k++)
-        {
-            var pred = model.Predict(Identity(k));
-            logits[k] = new float[pred.Length];
-            for (int j = 0; j < pred.Length; j++) logits[k][j] = pred[j];
-        }
+        double divergenceAfter = MaxPairwiseLogitL2();
+        double delta = divergenceAfter - divergenceBefore;
 
-        double maxPairwiseDistance = 0.0;
-        for (int i = 0; i < vocab; i++)
-        {
-            for (int j = i + 1; j < vocab; j++)
-            {
-                double s = 0;
-                for (int d = 0; d < logits[i].Length; d++)
-                {
-                    double diff = logits[i][d] - logits[j][d];
-                    s += diff * diff;
-                }
-                double dist = System.Math.Sqrt(s);
-                if (dist > maxPairwiseDistance) maxPairwiseDistance = dist;
-            }
-        }
+        _output.WriteLine($"L=2 Transformer, 500 Adam iters: pairwise logit L2 before={divergenceBefore:E3}, after={divergenceAfter:E3}, delta={delta:E3}");
 
-        _output.WriteLine($"L=2 Transformer, 500 Adam iters: max pairwise L2 between class logits = {maxPairwiseDistance:E3}");
-
-        // Pre-fix: this is exactly 0 (uniform output regardless of input).
-        // Post-fix: training produces non-zero divergence per class.
-        // 1e-4 is the threshold for "definitively not flat" — well above
-        // floating-point noise and below the convergence tail. We're
-        // not testing convergence quality (the small model + identity
-        // task may not fully converge in 500 iters), just that gradient
-        // flow is no longer zero-shorted-to-prefix.
-        Assert.True(maxPairwiseDistance > 1e-4,
-            $"L=2 Transformer with Adam should produce non-flat logits after 500 training " +
-            $"iterations. Got max pairwise L2 = {maxPairwiseDistance:E3} (issue #1232 flat-softmax " +
-            $"symptom — gradient was not flowing through encoder stack pre-fix).");
+        // Pre-fix: delta ≈ 0 (training is a no-op for the encoder, so
+        // post-training divergence ~ pre-training divergence). Post-fix:
+        // training amplifies divergence by orders of magnitude as the
+        // model fits the identity mapping. 1e-3 is well above any
+        // floating-point noise and well below typical post-training
+        // values (which land in 0.1–1.0 range). Margin chosen to
+        // tolerate seed-init variance on the absolute floor without
+        // false-positive flake.
+        Assert.True(delta > 1e-3,
+            $"L=2 Transformer with Adam should learn meaningfully — divergence after training " +
+            $"must materially exceed pre-training baseline. Got before={divergenceBefore:E3}, " +
+            $"after={divergenceAfter:E3}, delta={delta:E3} (issue #1232 flat-softmax symptom — " +
+            $"gradient was not flowing through encoder stack pre-fix).");
     }
 }
