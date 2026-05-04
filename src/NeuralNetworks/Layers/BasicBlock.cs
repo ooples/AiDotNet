@@ -41,7 +41,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1, 1, 8, 8")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "1, 1, 1")]
 public class BasicBlock<T> : LayerBase<T>
 {
     /// <summary>
@@ -66,8 +66,10 @@ public class BasicBlock<T> : LayerBase<T>
     private readonly int _inChannels;
     private readonly int _outChannels;
     private readonly int _stride;
-    private readonly int _inputHeight;
-    private readonly int _inputWidth;
+    // Non-readonly: lazy ctor leaves _inputHeight/_inputWidth = -1 until
+    // OnFirstForward resolves them from the runtime input tensor's shape.
+    private int _inputHeight;
+    private int _inputWidth;
     private readonly bool _zeroInitResidual;
 
     private Tensor<T>? _lastInput;
@@ -112,56 +114,50 @@ public class BasicBlock<T> : LayerBase<T>
     /// When inChannels != outChannels, a projection shortcut is used to match dimensions.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Lazy ctor — input height/width come from the first <see cref="Forward"/>
+    /// call (<see cref="OnFirstForward"/>); only inChannels/outChannels/stride/
+    /// zeroInitResidual are required at construction since the conv kernel
+    /// shapes depend on channels but not spatial dims.
+    /// </summary>
     public BasicBlock(
         int inChannels,
         int outChannels,
         int stride = 1,
-        int inputHeight = 56,
-        int inputWidth = 56,
         bool zeroInitResidual = true)
         : base(
-            inputShape: [inChannels, inputHeight, inputWidth],
-            outputShape: [outChannels, inputHeight / stride, inputWidth / stride])
+            inputShape: [inChannels, -1, -1],
+            outputShape: [outChannels, -1, -1])
     {
+        if (inChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inChannels));
+        if (outChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outChannels));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+
         _inChannels = inChannels;
         _outChannels = outChannels;
         _stride = stride;
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
+        _inputHeight = -1; // resolved in OnFirstForward
+        _inputWidth = -1;
         _zeroInitResidual = zeroInitResidual;
         _relu = new ReLUActivation<T>();
 
-        // First conv: 3x3, stride = stride
         _conv1 = new ConvolutionalLayer<T>(
             outputDepth: outChannels,
             kernelSize: 3,
             stride: stride,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
-
-        int outHeight = inputHeight / stride;
-        int outWidth = inputWidth / stride;
-
         _bn1 = new BatchNormalizationLayer<T>();
-
-        // Second conv: 3x3, stride = 1
         _conv2 = new ConvolutionalLayer<T>(
             outputDepth: outChannels,
             kernelSize: 3,
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
-
         _bn2 = new BatchNormalizationLayer<T>();
 
-        // Zero-init residual: initialize last BN's gamma to zero so residual blocks
-        // start as identity mappings, improving training stability
-        if (zeroInitResidual)
-        {
-            _bn2.ZeroInitGamma();
-        }
+        if (zeroInitResidual) _bn2.ZeroInitGamma();
 
-        // Downsample if dimensions change
         _hasDownsample = stride != 1 || inChannels != outChannels;
         if (_hasDownsample)
         {
@@ -171,7 +167,6 @@ public class BasicBlock<T> : LayerBase<T>
                 stride: stride,
                 padding: 0,
                 activationFunction: new IdentityActivation<T>());
-
             _downsampleBn = new BatchNormalizationLayer<T>();
         }
 
@@ -181,19 +176,40 @@ public class BasicBlock<T> : LayerBase<T>
         RegisterSubLayer(_bn2);
         if (_downsampleConv is not null) RegisterSubLayer(_downsampleConv);
         if (_downsampleBn is not null) RegisterSubLayer(_downsampleBn);
+    }
 
-        // Eagerly resolve sub-layer shapes from the known block dims so
-        // ParameterCount reports real weights immediately (lazy ConvolutionalLayer
-        // and BatchNormalizationLayer return 0 until first Forward, which causes
-        // SetParameters dispatch by ParameterCount slice to silently skip them).
-        int outHeightForBn = inputHeight / stride;
-        int outWidthForBn = inputWidth / stride;
-        _conv1.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
-        _bn1.ResolveFromShape(new[] { 1, outChannels, outHeightForBn, outWidthForBn });
-        _conv2.ResolveFromShape(new[] { outChannels, outHeightForBn, outWidthForBn });
-        _bn2.ResolveFromShape(new[] { 1, outChannels, outHeightForBn, outWidthForBn });
-        _downsampleConv?.ResolveFromShape(new[] { inChannels, inputHeight, inputWidth });
-        _downsampleBn?.ResolveFromShape(new[] { 1, outChannels, outHeightForBn, outWidthForBn });
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves H/W from input.Shape and propagates to all sub-layers
+    /// via ResolveShapesOnly so ParameterCount reports the real weight
+    /// count before any sub-layer's first Forward fires.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inputHeight, inputWidth;
+        if (s.Length == 3) { inputHeight = s[1]; inputWidth = s[2]; }
+        else if (s.Length == 4) { inputHeight = s[2]; inputWidth = s[3]; }
+        else
+            throw new ArgumentException(
+                $"BasicBlock requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+
+        _inputHeight = inputHeight;
+        _inputWidth = inputWidth;
+        int outH = inputHeight / _stride;
+        int outW = inputWidth / _stride;
+
+        _conv1.ResolveShapesOnly(new[] { _inChannels, inputHeight, inputWidth });
+        _bn1.ResolveShapesOnly(new[] { 1, _outChannels, outH, outW });
+        _conv2.ResolveShapesOnly(new[] { _outChannels, outH, outW });
+        _bn2.ResolveShapesOnly(new[] { 1, _outChannels, outH, outW });
+        _downsampleConv?.ResolveShapesOnly(new[] { _inChannels, inputHeight, inputWidth });
+        _downsampleBn?.ResolveShapesOnly(new[] { 1, _outChannels, outH, outW });
+
+        ResolveShapes(
+            new[] { _inChannels, inputHeight, inputWidth },
+            new[] { _outChannels, outH, outW });
     }
 
     // Constructor args round-trip for serialization. DeserializationHelper

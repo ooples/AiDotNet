@@ -3948,7 +3948,7 @@ public class AdvancedLayersIntegrationTests
         int outChannels = 64;
         int height = 56;
         int width = 56;
-        var layer = new BasicBlock<float>(inChannels, outChannels, stride: 1, inputHeight: height, inputWidth: width);
+        var layer = new BasicBlock<float>(inChannels, outChannels, stride: 1);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inChannels, height, width]);
@@ -3969,7 +3969,7 @@ public class AdvancedLayersIntegrationTests
         int outChannels = 32;
         int height = 28;
         int width = 28;
-        var original = new BasicBlock<float>(inChannels, outChannels, stride: 1, inputHeight: height, inputWidth: width);
+        var original = new BasicBlock<float>(inChannels, outChannels, stride: 1);
         var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
 
         // Act
@@ -3995,7 +3995,7 @@ public class AdvancedLayersIntegrationTests
         int baseChannels = 64;
         int height = 56;
         int width = 56;
-        var layer = new BottleneckBlock<float>(inChannels, baseChannels, stride: 1, inputHeight: height, inputWidth: width);
+        var layer = new BottleneckBlock<float>(inChannels, baseChannels, stride: 1);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inChannels, height, width]);
@@ -4016,7 +4016,7 @@ public class AdvancedLayersIntegrationTests
         int baseChannels = 32;
         int height = 28;
         int width = 28;
-        var original = new BottleneckBlock<float>(inChannels, baseChannels, stride: 1, inputHeight: height, inputWidth: width);
+        var original = new BottleneckBlock<float>(inChannels, baseChannels, stride: 1);
         var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
 
         // Act

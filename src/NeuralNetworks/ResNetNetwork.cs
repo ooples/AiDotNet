@@ -321,8 +321,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                     inChannels: inChannels,
                     baseChannels: stageBaseChannels,
                     stride: stride,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     zeroInitResidual: config.ZeroInitResidual));
             }
             else
@@ -331,8 +329,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                     inChannels: inChannels,
                     outChannels: stageBaseChannels * expansion,
                     stride: stride,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     zeroInitResidual: config.ZeroInitResidual));
             }
 
@@ -350,22 +346,18 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 if (config.UsesBottleneck)
                 {
                     layers.Add(new BottleneckBlock<T>(
-                        inChannels: inChannels,
-                        baseChannels: stageBaseChannels,
-                        stride: 1,
-                        inputHeight: currentHeight,
-                        inputWidth: currentWidth,
-                        zeroInitResidual: config.ZeroInitResidual));
+                    inChannels: inChannels,
+                    baseChannels: stageBaseChannels,
+                    stride: 1,
+                    zeroInitResidual: config.ZeroInitResidual));
                 }
                 else
                 {
                     layers.Add(new BasicBlock<T>(
-                        inChannels: inChannels,
-                        outChannels: stageBaseChannels * expansion,
-                        stride: 1,
-                        inputHeight: currentHeight,
-                        inputWidth: currentWidth,
-                        zeroInitResidual: config.ZeroInitResidual));
+                    inChannels: inChannels,
+                    outChannels: stageBaseChannels * expansion,
+                    stride: 1,
+                    zeroInitResidual: config.ZeroInitResidual));
                 }
             }
         }

@@ -20,7 +20,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 64;
         int height = 8;
         int width = 8;
-        var block = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
+        var block = new BasicBlock<float>(channels, channels);
         var input = CreateRandomTensor<float>([2, channels, height, width]); // NCHW format
 
         // Act
@@ -39,7 +39,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 128;
         int height = 16;
         int width = 16;
-        var block = new BasicBlock<float>(inChannels, outChannels, stride: 2, inputHeight: height, inputWidth: width);
+        var block = new BasicBlock<float>(inChannels, outChannels, stride: 2);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -61,7 +61,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 32;
         int height = 8;
         int width = 8;
-        var original = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
+        var original = new BasicBlock<float>(channels, channels);
         var input = CreateRandomTensor<float>([2, channels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -81,7 +81,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 32;
         int height = 8;
         int width = 8;
-        var block = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
+        var block = new BasicBlock<float>(channels, channels);
         var input = CreateRandomTensor<float>([1, channels, height, width]);
 
         // Act
@@ -104,7 +104,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 64;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels, inputHeight: height, inputWidth: width);
+        var block = new BottleneckBlock<float>(inChannels, outChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -126,7 +126,7 @@ public class SpecializedBlocksIntegrationTests
         int baseChannels = 128;
         int height = 16;
         int width = 16;
-        var block = new BottleneckBlock<float>(inChannels, baseChannels, stride: 2, inputHeight: height, inputWidth: width);
+        var block = new BottleneckBlock<float>(inChannels, baseChannels, stride: 2);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -149,7 +149,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 64;
         int height = 8;
         int width = 8;
-        var original = new BottleneckBlock<float>(inChannels, outChannels, inputHeight: height, inputWidth: width);
+        var original = new BottleneckBlock<float>(inChannels, outChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -170,7 +170,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 32;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels, inputHeight: height, inputWidth: width);
+        var block = new BottleneckBlock<float>(inChannels, outChannels);
         var input = CreateRandomTensor<float>([1, inChannels, height, width]);
 
         // Act
@@ -411,7 +411,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 32;
         int height = 4;
         int width = 4;
-        var block = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
+        var block = new BasicBlock<float>(channels, channels);
         var input = CreateRandomTensor<float>([1, channels, height, width]);
 
         // Act
@@ -428,7 +428,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 64;
         int height = 4;
         int width = 4;
-        var block = new BottleneckBlock<float>(channels, channels / 4, inputHeight: height, inputWidth: width);
+        var block = new BottleneckBlock<float>(channels, channels / 4);
         var input = CreateRandomTensor<float>([1, channels, height, width]);
 
         // Act
