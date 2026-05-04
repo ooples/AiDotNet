@@ -101,11 +101,15 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
 
     /// <summary>
     /// DilatedConvolutionalLayer is another matcher-fallback target.
-    /// Verifies the scored matcher handles DilationFactor, OutputDepth,
-    /// KernelSize, Stride, Padding metadata round-trip in one of the
-    /// non-explicit-branch layer families. Pre-#1239 this exact path
-    /// could mis-pick if DilatedConvolutionalLayer ever grew an arity-
-    /// mismatched overload; the scored algorithm makes that future-proof.
+    /// Verifies the scored matcher honors the ctor's actual parameter
+    /// names — DilatedConvolutionalLayer's signature is
+    /// (<c>outputDepth</c>, <c>kernelSize</c>, <c>dilation</c>,
+    /// <c>stride</c>, <c>padding</c>, …), so the metadata keys are
+    /// pascal-cased ctor names: <c>OutputDepth</c>, <c>KernelSize</c>,
+    /// <c>Dilation</c>, <c>Stride</c>, <c>Padding</c>. Using a key
+    /// that doesn't match a ctor parameter (e.g. "DilationFactor")
+    /// would fall through to the matcher's ML-domain default, which
+    /// is precisely the regression the assertion below catches.
     /// </summary>
     [Fact]
     public void ScoredMatcher_DilatedConv_FullMetadata_ProducesValidLayer()
@@ -114,9 +118,9 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
         {
             ["OutputDepth"] = 32,
             ["KernelSize"] = 3,
+            ["Dilation"] = 2,
             ["Stride"] = 1,
             ["Padding"] = 2,
-            ["DilationFactor"] = 2,
         };
 
         var layer = DeserializationHelper.CreateLayerFromType<float>(
@@ -128,17 +132,25 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
         Assert.NotNull(layer);
         var dilConv = Assert.IsType<DilatedConvolutionalLayer<float>>(layer);
 
-        // Verify the scored matcher honored the metadata-driven
-        // hyperparameters via parameter count, which depends solely on
-        // metadata values: kernelSize² × inputDepth × outputDepth +
-        // outputDepth biases. With KernelSize=3, inputDepth=16,
-        // OutputDepth=32: 3·3·16·32 + 32 = 4640. A wrong ctor pick
-        // (e.g., a different overload that resolved kernelSize from
-        // defaults) would land on a different parameter count. We
-        // intentionally don't assert spatial output dims because the
-        // layer recomputes them from input + dilation + padding rather
-        // than echoing back the supplied outputShape.
+        // ParameterCount depends on KernelSize/InputDepth/OutputDepth
+        // (3·3·16·32 + 32 = 4640) but NOT on DilationFactor. Assert it
+        // first to catch a wrong-ctor pick on those three parameters.
         Assert.Equal(3 * 3 * 16 * 32 + 32, dilConv.ParameterCount);
+
+        // Now prove the matcher actually honored DilationFactor=2 by
+        // running a forward pass and checking the dilation-dependent
+        // spatial output dim. With H=16, padding=2, kernel=3, stride=1:
+        //   * dilation=2 (the metadata value): (16+4-2*2-1)/1+1 = 16
+        //   * dilation=1 (the ctor default):   (16+4-1*2-1)/1+1 = 18
+        // If the scored matcher silently dropped DilationFactor and
+        // resolved dilation from the ctor default, the spatial dims
+        // below would be 18, not 16 — making this the regression-
+        // catching observable the test needs.
+        var input = new Tensor<float>([1, 16, 16, 16]);
+        var output = dilConv.Forward(input);
+        Assert.Equal(32, output.Shape[1]);  // outputDepth from metadata
+        Assert.Equal(16, output.Shape[2]);  // dilation-dependent: 16, not 18
+        Assert.Equal(16, output.Shape[3]);
     }
 
     /// <summary>
