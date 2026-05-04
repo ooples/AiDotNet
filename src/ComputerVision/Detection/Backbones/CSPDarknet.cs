@@ -1,6 +1,13 @@
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
@@ -14,12 +21,6 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// designed for real-time object detection. It uses Cross-Stage Partial connections
 /// to reduce computation while maintaining accuracy.</para>
 ///
-/// <para>Key features:
-/// - Cross-Stage Partial (CSP) blocks to reduce redundant gradient information
-/// - Dark blocks with residual connections for gradient flow
-/// - Multi-scale feature extraction at different depths
-/// </para>
-///
 /// <para>Reference: Bochkovskiy et al., "YOLOv4: Optimal Speed and Accuracy of Object Detection"</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
@@ -31,35 +32,20 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/2004.10934",
     Year = 2020,
     Authors = "Alexey Bochkovskiy, Chien-Yao Wang, Hong-Yuan Mark Liao")]
-public class CSPDarknet<T> : BackboneBase<T>
+public class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
     private readonly List<CSPBlock<T>> _stages;
-    private readonly Conv2D<T> _stem;
+    private readonly ConvolutionalLayer<T> _stem;
     private readonly int _depth;
     private readonly double _depthOriginal;
     private readonly double _widthMultiplier;
     private readonly int _inChannels;
-
-    /// <inheritdoc/>
-    public override string Name => $"CSPDarknet-{_widthMultiplier:0.0}x";
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Returns channel counts for P3, P4, P5 feature levels (stages 1, 2, 3).
-    /// Stage 0 (P2) is not extracted as it's typically not used in detection heads.
-    /// </remarks>
-    public override IReadOnlyList<int> OutputChannels { get; }
-
-    /// <summary>
-    /// Internal channel configuration for all 4 stages (used during construction).
-    /// </summary>
     private readonly int[] _stageChannels;
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Returns strides for P3, P4, P5 feature levels: 8, 16, 32.
-    /// </remarks>
-    public override IReadOnlyList<int> Strides => new[] { 8, 16, 32 };
+    public bool IsFrozen { get; private set; }
+    public string Name => $"CSPDarknet-{_widthMultiplier:0.0}x";
+    public IReadOnlyList<int> OutputChannels { get; }
+    public IReadOnlyList<int> Strides => new[] { 8, 16, 32 };
 
     /// <summary>
     /// Creates a new CSP-Darknet backbone.
@@ -68,6 +54,12 @@ public class CSPDarknet<T> : BackboneBase<T>
     /// <param name="widthMultiplier">Width multiplier for channel counts (default 1.0 = medium).</param>
     /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
     public CSPDarknet(double depth = 1.0, double widthMultiplier = 1.0, int inChannels = 3)
+        : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.ImageClassification,
+                channels: inChannels,
+                outputSize: 1),
+              new MeanSquaredErrorLoss<T>())
     {
         _depthOriginal = depth;
         _depth = Math.Max(1, (int)Math.Round(depth));
@@ -75,146 +67,145 @@ public class CSPDarknet<T> : BackboneBase<T>
         _inChannels = inChannels;
         _stages = new List<CSPBlock<T>>();
 
-        // Calculate channel sizes based on width multiplier
-        // _stageChannels contains all 4 stage channels for building the network
         int[] baseChannels = { 64, 128, 256, 512 };
         _stageChannels = baseChannels.Select(c => (int)(c * widthMultiplier)).ToArray();
-
-        // OutputChannels only reflects stages 1, 2, 3 (P3, P4, P5) which are actually extracted
         OutputChannels = new[] { _stageChannels[1], _stageChannels[2], _stageChannels[3] };
 
-        // Stem: Initial convolution (stride 2)
-        _stem = new Conv2D<T>(
-            inChannels: inChannels,
-            outChannels: _stageChannels[0] / 2,
-            kernelSize: 3,
-            stride: 2,
-            padding: 1
-        );
+        _stem = new ConvolutionalLayer<T>(outputDepth: _stageChannels[0] / 2, kernelSize: 3, stride: 2, padding: 1);
 
-        // Build stages
         int currentChannels = _stageChannels[0] / 2;
         for (int i = 0; i < 4; i++)
         {
             int outChannels = _stageChannels[i];
             int numBlocks = GetBlockCount(i, _depth);
-
-            var stage = new CSPBlock<T>(
-                inChannels: currentChannels,
-                outChannels: outChannels,
-                numBlocks: numBlocks,
-                stride: 2
-            );
-
+            var stage = new CSPBlock<T>(currentChannels, outChannels, numBlocks, stride: 2);
             _stages.Add(stage);
             currentChannels = outChannels;
         }
     }
 
-    /// <summary>
-    /// Gets the number of blocks for each stage based on depth.
-    /// </summary>
     private int GetBlockCount(int stage, int depth)
     {
-        // Base block counts for CSP-Darknet53
         int[] baseCounts = { 1, 2, 8, 8 };
         return Math.Max(1, (int)Math.Round(baseCounts[stage] * depth * 0.33));
     }
 
-    /// <inheritdoc/>
-    public override List<Tensor<T>> ExtractFeatures(Tensor<T> input)
+    public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         var features = new List<Tensor<T>>();
-
-        // Stem
         var x = _stem.Forward(input);
         x = ApplySiLU(x);
-
-        // Stages with feature extraction
         for (int i = 0; i < _stages.Count; i++)
         {
             x = _stages[i].Forward(x);
-
-            // Collect features from stages 1, 2, 3 (P3, P4, P5 in FPN)
-            if (i >= 1)
-            {
-                features.Add(x);
-            }
+            if (i >= 1) features.Add(x);
         }
-
         return features;
     }
 
-    /// <inheritdoc/>
-    public override long GetBackboneParameterCount()
-    {
-        long count = _stem.GetParameterCount();
-        for (int i = 0; i < _stages.Count; i++)
-        {
-            count += _stages[i].GetParameterCount();
-        }
-        return count;
-    }
-
-    /// <inheritdoc/>
-    public override void WriteParameters(System.IO.BinaryWriter writer)
-    {
-        // Write stem parameters
-        _stem.WriteParameters(writer);
-
-        // Write number of stages
-        writer.Write(_stages.Count);
-
-        // Write each stage's parameters
-        foreach (var stage in _stages)
-        {
-            stage.WriteParameters(writer);
-        }
-    }
-
-    /// <inheritdoc/>
-    public override void ReadParameters(System.IO.BinaryReader reader)
-    {
-        // Read stem parameters
-        _stem.ReadParameters(reader);
-
-        // Read number of stages
-        int stageCount = reader.ReadInt32();
-        if (stageCount != _stages.Count)
-        {
-            throw new InvalidOperationException($"Expected {_stages.Count} stages but found {stageCount}.");
-        }
-
-        // Read each stage's parameters
-        foreach (var stage in _stages)
-        {
-            stage.ReadParameters(reader);
-        }
-    }
+    public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
-    /// Applies SiLU (Swish) activation.
+    /// Sum across stem + every CSP stage. Inherited
+    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> delegates to this
+    /// virtual property, satisfying the <see cref="IDetectionBackbone{T}"/> contract.
     /// </summary>
-    private Tensor<T> ApplySiLU(Tensor<T> x)
+    public override long ParameterCount
     {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
+        get
         {
-            double val = NumOps.ToDouble(x[i]);
-            double silu = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = NumOps.FromDouble(silu);
+            long count = _stem.ParameterCount;
+            for (int i = 0; i < _stages.Count; i++) count += _stages[i].GetParameterCount();
+            return count;
         }
-        return result;
     }
+
+    public void WriteParameters(BinaryWriter writer)
+    {
+        BackboneSerialization.WriteLayerParameters(writer, _stem);
+        writer.Write(_stages.Count);
+        foreach (var stage in _stages) stage.WriteParameters(writer);
+    }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        BackboneSerialization.ReadLayerParameters(reader, _stem);
+        int stageCount = reader.ReadInt32();
+        if (stageCount != _stages.Count)
+            throw new InvalidOperationException($"Expected {_stages.Count} stages but found {stageCount}.");
+        foreach (var stage in _stages) stage.ReadParameters(reader);
+    }
+
+    public virtual void Freeze() => IsFrozen = true;
+    public virtual void Unfreeze() => IsFrozen = false;
+    public (int Height, int Width) GetExpectedInputSize() => (640, 640);
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        var features = ExtractFeatures(input);
+        if (features.Count == 0)
+            throw new InvalidOperationException(
+                $"{GetType().Name}.ExtractFeatures returned no feature maps.");
+        return features[features.Count - 1];
+    }
+
+    protected override void InitializeLayers() { }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
 
     /// <inheritdoc />
     /// <remarks>
-    /// Constructs a fresh CSPDarknet with the same depth, width multiplier, and input
-    /// channel configuration. All internal CSPBlock and Conv2D layers are freshly
-    /// allocated; no state is shared with the original.
+    /// Constructs a fresh CSPDarknet with the same depth, width multiplier, and
+    /// input-channel configuration. All internal layers are freshly allocated.
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         => new CSPDarknet<T>(_depthOriginal, _widthMultiplier, _inChannels);
+
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
+    {
+        Name = Name,
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            ["BackboneName"] = Name,
+            ["OutputChannels"] = OutputChannels,
+            ["Strides"] = Strides
+        }
+    };
+
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: detection backbones train as part of a parent detector.");
+
+    public override Vector<T> GetParameters() =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not expose a flat parameter vector. Use WriteParameters/ReadParameters.");
+
+    public override void SetParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters.");
+
+    public override void UpdateParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not accept a flat parameter update vector.");
+
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
+
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => (CSPDarknet<T>)MemberwiseClone();
+
+    private Tensor<T> ApplySiLU(Tensor<T> x)
+    {
+        var result = new Tensor<T>(x._shape);
+        var ops = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < x.Length; i++)
+        {
+            double val = ops.ToDouble(x[i]);
+            result[i] = ops.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
+        }
+        return result;
+    }
 }
 
 /// <summary>
@@ -222,188 +213,99 @@ public class CSPDarknet<T> : BackboneBase<T>
 /// </summary>
 internal class CSPBlock<T>
 {
-    private readonly Conv2D<T> _downsample;
-    private readonly Conv2D<T> _cv1;
-    private readonly Conv2D<T> _cv2;
-    private readonly Conv2D<T> _cv3;
-    private readonly List<BottleneckBlock<T>> _bottlenecks;
-    private readonly INumericOperations<T> _numOps;
-    private readonly int _outChannels;
+    private readonly ConvolutionalLayer<T> _downsample;
+    private readonly ConvolutionalLayer<T> _cv1;
+    private readonly ConvolutionalLayer<T> _cv2;
+    private readonly ConvolutionalLayer<T> _cv3;
+    private readonly List<CSPBottleneckBlock<T>> _bottlenecks;
 
     public CSPBlock(int inChannels, int outChannels, int numBlocks, int stride = 1)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        _outChannels = outChannels;
-
         int hiddenChannels = outChannels / 2;
 
-        // Downsample if stride > 1
-        _downsample = new Conv2D<T>(
-            inChannels: inChannels,
-            outChannels: outChannels,
-            kernelSize: 3,
-            stride: stride,
-            padding: 1
-        );
+        _downsample = new ConvolutionalLayer<T>(outChannels, kernelSize: 3, stride: stride, padding: 1);
+        _cv1 = new ConvolutionalLayer<T>(hiddenChannels, kernelSize: 1, stride: 1, padding: 0);
+        _cv2 = new ConvolutionalLayer<T>(hiddenChannels, kernelSize: 1, stride: 1, padding: 0);
 
-        // Split path 1
-        _cv1 = new Conv2D<T>(
-            inChannels: outChannels,
-            outChannels: hiddenChannels,
-            kernelSize: 1,
-            stride: 1,
-            padding: 0
-        );
-
-        // Split path 2 (goes through bottlenecks)
-        _cv2 = new Conv2D<T>(
-            inChannels: outChannels,
-            outChannels: hiddenChannels,
-            kernelSize: 1,
-            stride: 1,
-            padding: 0
-        );
-
-        // Bottleneck blocks
-        _bottlenecks = new List<BottleneckBlock<T>>();
+        _bottlenecks = new List<CSPBottleneckBlock<T>>();
         for (int i = 0; i < numBlocks; i++)
-        {
-            _bottlenecks.Add(new BottleneckBlock<T>(hiddenChannels, hiddenChannels));
-        }
+            _bottlenecks.Add(new CSPBottleneckBlock<T>(hiddenChannels));
 
-        // Concatenation and final conv
-        _cv3 = new Conv2D<T>(
-            inChannels: hiddenChannels * 2,
-            outChannels: outChannels,
-            kernelSize: 1,
-            stride: 1,
-            padding: 0
-        );
+        _cv3 = new ConvolutionalLayer<T>(outChannels, kernelSize: 1, stride: 1, padding: 0);
     }
 
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // Downsample
         var x = _downsample.Forward(input);
         x = ApplySiLU(x);
-
-        // Split
         var y1 = _cv1.Forward(x);
         y1 = ApplySiLU(y1);
-
         var y2 = _cv2.Forward(x);
         y2 = ApplySiLU(y2);
-
-        // Bottlenecks on y2
-        foreach (var bottleneck in _bottlenecks)
-        {
-            y2 = bottleneck.Forward(y2);
-        }
-
-        // Concatenate along channel dimension
-        var concat = ConcatenateChannels(y1, y2);
-
-        // Final conv
+        foreach (var b in _bottlenecks) y2 = b.Forward(y2);
+        var concat = AiDotNetEngine.Current.TensorConcatenate(new[] { y1, y2 }, axis: 1);
         var output = _cv3.Forward(concat);
-        output = ApplySiLU(output);
-
-        return output;
+        return ApplySiLU(output);
     }
 
     public long GetParameterCount()
     {
-        long count = 0;
-        count += _downsample.GetParameterCount();
-        count += _cv1.GetParameterCount();
-        count += _cv2.GetParameterCount();
-        count += _cv3.GetParameterCount();
-        foreach (var b in _bottlenecks)
-        {
-            count += b.GetParameterCount();
-        }
+        long count = _downsample.ParameterCount + _cv1.ParameterCount + _cv2.ParameterCount + _cv3.ParameterCount;
+        foreach (var b in _bottlenecks) count += b.GetParameterCount();
         return count;
     }
 
-    public void WriteParameters(System.IO.BinaryWriter writer)
+    public void WriteParameters(BinaryWriter writer)
     {
-        _downsample.WriteParameters(writer);
-        _cv1.WriteParameters(writer);
-        _cv2.WriteParameters(writer);
-        _cv3.WriteParameters(writer);
+        BackboneSerialization.WriteLayerParameters(writer, _downsample);
+        BackboneSerialization.WriteLayerParameters(writer, _cv1);
+        BackboneSerialization.WriteLayerParameters(writer, _cv2);
+        BackboneSerialization.WriteLayerParameters(writer, _cv3);
         writer.Write(_bottlenecks.Count);
-        foreach (var b in _bottlenecks)
-        {
-            b.WriteParameters(writer);
-        }
+        foreach (var b in _bottlenecks) b.WriteParameters(writer);
     }
 
-    public void ReadParameters(System.IO.BinaryReader reader)
+    public void ReadParameters(BinaryReader reader)
     {
-        _downsample.ReadParameters(reader);
-        _cv1.ReadParameters(reader);
-        _cv2.ReadParameters(reader);
-        _cv3.ReadParameters(reader);
+        BackboneSerialization.ReadLayerParameters(reader, _downsample);
+        BackboneSerialization.ReadLayerParameters(reader, _cv1);
+        BackboneSerialization.ReadLayerParameters(reader, _cv2);
+        BackboneSerialization.ReadLayerParameters(reader, _cv3);
         int bottleneckCount = reader.ReadInt32();
         if (bottleneckCount != _bottlenecks.Count)
-        {
             throw new InvalidOperationException($"Expected {_bottlenecks.Count} bottlenecks but found {bottleneckCount}.");
-        }
-        foreach (var b in _bottlenecks)
-        {
-            b.ReadParameters(reader);
-        }
+        foreach (var b in _bottlenecks) b.ReadParameters(reader);
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
         var result = new Tensor<T>(x._shape);
+        var ops = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < x.Length; i++)
         {
-            double val = _numOps.ToDouble(x[i]);
-            double silu = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = _numOps.FromDouble(silu);
+            double val = ops.ToDouble(x[i]);
+            result[i] = ops.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
         }
         return result;
-    }
-
-    private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
-    {
-        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: 1);
     }
 }
 
 /// <summary>
-/// Bottleneck block with residual connection.
+/// Bottleneck block with residual connection used inside CSP blocks.
+/// Renamed from <c>BottleneckBlock</c> to <c>CSPBottleneckBlock</c> to avoid clashing
+/// with the layer-level <c>BottleneckBlock&lt;T&gt;</c> in <c>NeuralNetworks.Layers</c>.
 /// </summary>
-internal class BottleneckBlock<T>
+internal class CSPBottleneckBlock<T>
 {
-    private readonly Conv2D<T> _cv1;
-    private readonly Conv2D<T> _cv2;
+    private readonly ConvolutionalLayer<T> _cv1;
+    private readonly ConvolutionalLayer<T> _cv2;
     private readonly bool _add;
-    private readonly INumericOperations<T> _numOps;
 
-    public BottleneckBlock(int inChannels, int outChannels, bool add = true)
+    public CSPBottleneckBlock(int channels, bool add = true)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        _add = add && inChannels == outChannels;
-
-        int hiddenChannels = outChannels;
-
-        _cv1 = new Conv2D<T>(
-            inChannels: inChannels,
-            outChannels: hiddenChannels,
-            kernelSize: 3,
-            stride: 1,
-            padding: 1
-        );
-
-        _cv2 = new Conv2D<T>(
-            inChannels: hiddenChannels,
-            outChannels: outChannels,
-            kernelSize: 3,
-            stride: 1,
-            padding: 1
-        );
+        _add = add;
+        _cv1 = new ConvolutionalLayer<T>(channels, kernelSize: 3, stride: 1, padding: 1);
+        _cv2 = new ConvolutionalLayer<T>(channels, kernelSize: 3, stride: 1, padding: 1);
     }
 
     public Tensor<T> Forward(Tensor<T> input)
@@ -412,44 +314,33 @@ internal class BottleneckBlock<T>
         y = ApplySiLU(y);
         y = _cv2.Forward(y);
         y = ApplySiLU(y);
-
         if (_add)
-        {
-            // Residual connection
-            for (int i = 0; i < y.Length; i++)
-            {
-                y[i] = _numOps.Add(y[i], input[i]);
-            }
-        }
-
+            y = BackboneOps<T>.AddResidual(y, input);
         return y;
     }
 
-    public long GetParameterCount()
+    public long GetParameterCount() => _cv1.ParameterCount + _cv2.ParameterCount;
+
+    public void WriteParameters(BinaryWriter writer)
     {
-        return _cv1.GetParameterCount() + _cv2.GetParameterCount();
+        BackboneSerialization.WriteLayerParameters(writer, _cv1);
+        BackboneSerialization.WriteLayerParameters(writer, _cv2);
     }
 
-    public void WriteParameters(System.IO.BinaryWriter writer)
+    public void ReadParameters(BinaryReader reader)
     {
-        _cv1.WriteParameters(writer);
-        _cv2.WriteParameters(writer);
-    }
-
-    public void ReadParameters(System.IO.BinaryReader reader)
-    {
-        _cv1.ReadParameters(reader);
-        _cv2.ReadParameters(reader);
+        BackboneSerialization.ReadLayerParameters(reader, _cv1);
+        BackboneSerialization.ReadLayerParameters(reader, _cv2);
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> x)
     {
         var result = new Tensor<T>(x._shape);
+        var ops = MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < x.Length; i++)
         {
-            double val = _numOps.ToDouble(x[i]);
-            double silu = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = _numOps.FromDouble(silu);
+            double val = ops.ToDouble(x[i]);
+            result[i] = ops.FromDouble(val * (1.0 / (1.0 + Math.Exp(-val))));
         }
         return result;
     }

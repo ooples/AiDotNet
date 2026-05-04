@@ -1,6 +1,11 @@
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -32,21 +37,17 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/1512.03385",
     Year = 2016,
     Authors = "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun")]
-public class ResNet<T> : BackboneBase<T>
+public class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
-    private readonly Conv2D<T> _conv1;
+    private readonly ConvolutionalLayer<T> _conv1;
     private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
     private readonly int _inChannels;
 
-    /// <inheritdoc/>
-    public override string Name => $"ResNet-{GetLayerCount(_variant)}";
-
-    /// <inheritdoc/>
-    public override IReadOnlyList<int> OutputChannels { get; }
-
-    /// <inheritdoc/>
-    public override IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
+    public bool IsFrozen { get; private set; }
+    public string Name => $"ResNet-{GetLayerCount(_variant)}";
+    public IReadOnlyList<int> OutputChannels { get; }
+    public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
     /// Creates a new ResNet backbone.
@@ -54,44 +55,32 @@ public class ResNet<T> : BackboneBase<T>
     /// <param name="variant">ResNet variant (18, 34, 50, 101, or 152).</param>
     /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
     public ResNet(ResNetVariant variant = ResNetVariant.ResNet50, int inChannels = 3)
+        : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.ImageClassification,
+                channels: inChannels,
+                outputSize: 1),
+              new MeanSquaredErrorLoss<T>())
     {
         _variant = variant;
         _inChannels = inChannels;
         _stages = new List<ResNetStage<T>>();
 
-        // Base channels and expansion factor
         bool useBottleneck = variant >= ResNetVariant.ResNet50;
         int expansion = useBottleneck ? 4 : 1;
         int[] baseChannels = { 64, 128, 256, 512 };
         OutputChannels = baseChannels.Select(c => c * expansion).ToArray();
 
-        // Initial conv layer (7x7, stride 2)
-        _conv1 = new Conv2D<T>(
-            inChannels: inChannels,
-            outChannels: 64,
-            kernelSize: 7,
-            stride: 2,
-            padding: 3
-        );
+        // Stem 7×7 conv stride=2 — input depth resolves lazily.
+        _conv1 = new ConvolutionalLayer<T>(outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
 
-        // Get block counts for this variant
         int[] blockCounts = GetBlockCounts(variant);
-
-        // Build stages
         int currentChannels = 64;
         for (int i = 0; i < 4; i++)
         {
             int outChannels = baseChannels[i];
-            int stride = i == 0 ? 1 : 2; // First stage doesn't downsample (pool already did)
-
-            var stage = new ResNetStage<T>(
-                inChannels: currentChannels,
-                outChannels: outChannels,
-                numBlocks: blockCounts[i],
-                stride: stride,
-                useBottleneck: useBottleneck
-            );
-
+            int stride = i == 0 ? 1 : 2;
+            var stage = new ResNetStage<T>(currentChannels, outChannels, blockCounts[i], stride, useBottleneck);
             _stages.Add(stage);
             currentChannels = outChannels * expansion;
         }
@@ -107,9 +96,6 @@ public class ResNet<T> : BackboneBase<T>
         _ => 50
     };
 
-    /// <summary>
-    /// Gets the block counts for each ResNet variant.
-    /// </summary>
     private static int[] GetBlockCounts(ResNetVariant variant) => variant switch
     {
         ResNetVariant.ResNet18 => new[] { 2, 2, 2, 2 },
@@ -120,144 +106,126 @@ public class ResNet<T> : BackboneBase<T>
         _ => new[] { 3, 4, 6, 3 }
     };
 
-    /// <inheritdoc/>
-    public override List<Tensor<T>> ExtractFeatures(Tensor<T> input)
+    public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         var features = new List<Tensor<T>>();
-
-        // Stem: conv + bn + relu + maxpool
         var x = _conv1.Forward(input);
-        x = ApplyReLU(x);
-        x = MaxPool2D(x, kernelSize: 3, stride: 2, padding: 1);
-
-        // Stages with feature extraction
+        x = BackboneOps<T>.ApplyReLU(x);
+        x = BackboneOps<T>.MaxPool2D(x, kernelSize: 3, stride: 2, padding: 1);
         for (int i = 0; i < _stages.Count; i++)
         {
             x = _stages[i].Forward(x);
-            features.Add(x); // C2, C3, C4, C5
+            features.Add(x); // C2..C5
         }
-
         return features;
     }
 
-    /// <inheritdoc/>
-    public override long GetBackboneParameterCount()
+    public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
+
+    /// <summary>
+    /// Sum across the stem conv plus every residual stage. Inherited
+    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> already delegates to
+    /// this virtual property, so the <see cref="IDetectionBackbone{T}"/>
+    /// contract is satisfied without re-declaring the method here.
+    /// </summary>
+    public override long ParameterCount
     {
-        long count = _conv1.GetParameterCount();
-        for (int i = 0; i < _stages.Count; i++)
+        get
         {
-            count += _stages[i].GetParameterCount();
+            long count = _conv1.ParameterCount;
+            for (int i = 0; i < _stages.Count; i++)
+                count += _stages[i].GetParameterCount();
+            return count;
         }
-        return count;
     }
 
-    /// <inheritdoc/>
-    public override void WriteParameters(BinaryWriter writer)
+    public void WriteParameters(BinaryWriter writer)
     {
-        // Write configuration
         writer.Write((int)_variant);
         writer.Write(_stages.Count);
-
-        // Write stem conv parameters
-        _conv1.WriteParameters(writer);
-
-        // Write stage parameters
-        foreach (var stage in _stages)
-        {
-            stage.WriteParameters(writer);
-        }
+        BackboneSerialization.WriteLayerParameters(writer, _conv1);
+        foreach (var stage in _stages) stage.WriteParameters(writer);
     }
 
-    /// <inheritdoc/>
-    public override void ReadParameters(BinaryReader reader)
+    public void ReadParameters(BinaryReader reader)
     {
-        // Read and verify configuration
         var variant = (ResNetVariant)reader.ReadInt32();
         int stageCount = reader.ReadInt32();
-
         if (variant != _variant)
-        {
             throw new InvalidOperationException($"ResNet variant mismatch: expected {_variant}, got {variant}.");
-        }
-
         if (stageCount != _stages.Count)
-        {
             throw new InvalidOperationException($"ResNet stage count mismatch: expected {_stages.Count}, got {stageCount}.");
-        }
-
-        // Read stem conv parameters
-        _conv1.ReadParameters(reader);
-
-        // Read stage parameters
-        foreach (var stage in _stages)
-        {
-            stage.ReadParameters(reader);
-        }
+        BackboneSerialization.ReadLayerParameters(reader, _conv1);
+        foreach (var stage in _stages) stage.ReadParameters(reader);
     }
 
-    private Tensor<T> ApplyReLU(Tensor<T> x)
+    public virtual void Freeze() => IsFrozen = true;
+    public virtual void Unfreeze() => IsFrozen = false;
+    public (int Height, int Width) GetExpectedInputSize() => (640, 640);
+
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            result[i] = NumOps.FromDouble(Math.Max(0, val));
-        }
-        return result;
+        var features = ExtractFeatures(input);
+        if (features.Count == 0)
+            throw new InvalidOperationException(
+                $"{GetType().Name}.ExtractFeatures returned no feature maps. A backbone must produce at least one feature map.");
+        return features[features.Count - 1];
     }
 
-    private Tensor<T> MaxPool2D(Tensor<T> x, int kernelSize, int stride, int padding)
+    protected override void InitializeLayers()
     {
-        int batch = x.Shape[0];
-        int channels = x.Shape[1];
-        int height = x.Shape[2];
-        int width = x.Shape[3];
-
-        int outHeight = (height + 2 * padding - kernelSize) / stride + 1;
-        int outWidth = (width + 2 * padding - kernelSize) / stride + 1;
-
-        var output = new Tensor<T>(new[] { batch, channels, outHeight, outWidth });
-
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int oh = 0; oh < outHeight; oh++)
-                {
-                    for (int ow = 0; ow < outWidth; ow++)
-                    {
-                        double maxVal = double.NegativeInfinity;
-                        for (int kh = 0; kh < kernelSize; kh++)
-                        {
-                            for (int kw = 0; kw < kernelSize; kw++)
-                            {
-                                int ih = oh * stride - padding + kh;
-                                int iw = ow * stride - padding + kw;
-
-                                if (ih >= 0 && ih < height && iw >= 0 && iw < width)
-                                {
-                                    double val = NumOps.ToDouble(x[n, c, ih, iw]);
-                                    maxVal = Math.Max(maxVal, val);
-                                }
-                            }
-                        }
-                        output[n, c, oh, ow] = NumOps.FromDouble(maxVal == double.NegativeInfinity ? 0 : maxVal);
-                    }
-                }
-            }
-        }
-
-        return output;
+        // Backbones own their per-stage layers directly; the inherited Layers list stays empty.
     }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
 
     /// <inheritdoc />
     /// <remarks>
     /// Constructs a fresh ResNet with the same variant and input-channel configuration.
-    /// All internal Conv2D / ResidualBlock / Conv layers are freshly allocated; no state
-    /// is shared with the original.
+    /// MemberwiseClone would alias internal layers and tensors, so deserialization into the
+    /// returned instance would mutate the original.
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
         => new ResNet<T>(_variant, _inChannels);
+
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
+    {
+        Name = Name,
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            ["BackboneName"] = Name,
+            ["OutputChannels"] = OutputChannels,
+            ["Strides"] = Strides
+        }
+    };
+
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: detection backbones train as part of a parent detector " +
+            "(FasterRCNN, YOLOv8, DETR, …) which orchestrates the joint forward/backward pass. " +
+            "Train the parent detection model instead.");
+
+    public override Vector<T> GetParameters() =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not expose a flat parameter vector. " +
+            "Use WriteParameters(BinaryWriter) / ReadParameters(BinaryReader) to round-trip weights.");
+
+    public override void SetParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters(BinaryReader).");
+
+    public override void UpdateParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not accept a flat parameter update vector. " +
+            "Update happens inside the parent detector's optimizer step.");
+
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones. " +
+            "Use ReadParameters(BinaryReader) on a fresh instance.");
+
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy() => (ResNet<T>)MemberwiseClone();
 }
 
 /// <summary>
@@ -272,68 +240,43 @@ internal class ResNetStage<T>
         _blocks = new List<ResidualBlock<T>>();
         int expansion = useBottleneck ? 4 : 1;
 
-        // First block may downsample and change channels
         _blocks.Add(new ResidualBlock<T>(
-            inChannels: inChannels,
-            outChannels: outChannels,
-            stride: stride,
-            useBottleneck: useBottleneck,
-            downsample: inChannels != outChannels * expansion || stride != 1
-        ));
+            inChannels, outChannels, stride, useBottleneck,
+            downsample: inChannels != outChannels * expansion || stride != 1));
 
-        // Remaining blocks maintain channel count
         for (int i = 1; i < numBlocks; i++)
         {
             _blocks.Add(new ResidualBlock<T>(
-                inChannels: outChannels * expansion,
-                outChannels: outChannels,
-                stride: 1,
-                useBottleneck: useBottleneck,
-                downsample: false
-            ));
+                outChannels * expansion, outChannels, 1, useBottleneck, downsample: false));
         }
     }
 
     public Tensor<T> Forward(Tensor<T> input)
     {
         var x = input;
-        foreach (var block in _blocks)
-        {
-            x = block.Forward(x);
-        }
+        foreach (var block in _blocks) x = block.Forward(x);
         return x;
     }
 
     public long GetParameterCount()
     {
         long count = 0;
-        foreach (var block in _blocks)
-        {
-            count += block.GetParameterCount();
-        }
+        foreach (var block in _blocks) count += block.GetParameterCount();
         return count;
     }
 
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write(_blocks.Count);
-        foreach (var block in _blocks)
-        {
-            block.WriteParameters(writer);
-        }
+        foreach (var block in _blocks) block.WriteParameters(writer);
     }
 
     public void ReadParameters(BinaryReader reader)
     {
         int blockCount = reader.ReadInt32();
         if (blockCount != _blocks.Count)
-        {
             throw new InvalidOperationException($"ResNetStage block count mismatch: expected {_blocks.Count}, got {blockCount}.");
-        }
-        foreach (var block in _blocks)
-        {
-            block.ReadParameters(reader);
-        }
+        foreach (var block in _blocks) block.ReadParameters(reader);
     }
 }
 
@@ -342,122 +285,50 @@ internal class ResNetStage<T>
 /// </summary>
 internal class ResidualBlock<T>
 {
-    private readonly Conv2D<T> _conv1;
-    private readonly Conv2D<T> _conv2;
-    private readonly Conv2D<T>? _conv3; // For bottleneck
-    private readonly Conv2D<T>? _downsample;
+    private readonly ConvolutionalLayer<T> _conv1;
+    private readonly ConvolutionalLayer<T> _conv2;
+    private readonly ConvolutionalLayer<T>? _conv3;
+    private readonly ConvolutionalLayer<T>? _downsample;
     private readonly bool _useBottleneck;
-    private readonly INumericOperations<T> _numOps;
-    private readonly int _outChannels;
 
     public ResidualBlock(int inChannels, int outChannels, int stride, bool useBottleneck, bool downsample)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _useBottleneck = useBottleneck;
-        _outChannels = outChannels;
-
         int expansion = useBottleneck ? 4 : 1;
 
         if (useBottleneck)
         {
-            // Bottleneck: 1x1 -> 3x3 -> 1x1
-            _conv1 = new Conv2D<T>(
-                inChannels: inChannels,
-                outChannels: outChannels,
-                kernelSize: 1,
-                stride: 1,
-                padding: 0
-            );
-
-            _conv2 = new Conv2D<T>(
-                inChannels: outChannels,
-                outChannels: outChannels,
-                kernelSize: 3,
-                stride: stride,
-                padding: 1
-            );
-
-            _conv3 = new Conv2D<T>(
-                inChannels: outChannels,
-                outChannels: outChannels * expansion,
-                kernelSize: 1,
-                stride: 1,
-                padding: 0
-            );
+            _conv1 = new ConvolutionalLayer<T>(outChannels, kernelSize: 1, stride: 1, padding: 0);
+            _conv2 = new ConvolutionalLayer<T>(outChannels, kernelSize: 3, stride: stride, padding: 1);
+            _conv3 = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 1, stride: 1, padding: 0);
         }
         else
         {
-            // Basic block: 3x3 -> 3x3
-            _conv1 = new Conv2D<T>(
-                inChannels: inChannels,
-                outChannels: outChannels,
-                kernelSize: 3,
-                stride: stride,
-                padding: 1
-            );
-
-            _conv2 = new Conv2D<T>(
-                inChannels: outChannels,
-                outChannels: outChannels * expansion,
-                kernelSize: 3,
-                stride: 1,
-                padding: 1
-            );
+            _conv1 = new ConvolutionalLayer<T>(outChannels, kernelSize: 3, stride: stride, padding: 1);
+            _conv2 = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 3, stride: 1, padding: 1);
         }
 
         if (downsample)
-        {
-            _downsample = new Conv2D<T>(
-                inChannels: inChannels,
-                outChannels: outChannels * expansion,
-                kernelSize: 1,
-                stride: stride,
-                padding: 0
-            );
-        }
+            _downsample = new ConvolutionalLayer<T>(outChannels * expansion, kernelSize: 1, stride: stride, padding: 0);
     }
 
     public Tensor<T> Forward(Tensor<T> input)
     {
-        Tensor<T> identity = input;
-
-        if (_downsample is not null)
-        {
-            identity = _downsample.Forward(input);
-        }
-
+        var identity = _downsample is not null ? _downsample.Forward(input) : input;
         var x = _conv1.Forward(input);
-        x = ApplyReLU(x);
-
+        x = BackboneOps<T>.ApplyReLU(x);
         x = _conv2.Forward(x);
-        x = ApplyReLU(x);
-
-        if (_useBottleneck && _conv3 is not null)
-        {
-            x = _conv3.Forward(x);
-        }
-
-        // Add residual connection
-        for (int i = 0; i < x.Length; i++)
-        {
-            x[i] = _numOps.Add(x[i], identity[i]);
-        }
-
-        x = ApplyReLU(x);
-        return x;
+        x = BackboneOps<T>.ApplyReLU(x);
+        if (_useBottleneck && _conv3 is not null) x = _conv3.Forward(x);
+        x = BackboneOps<T>.AddResidual(x, identity);
+        return BackboneOps<T>.ApplyReLU(x);
     }
 
     public long GetParameterCount()
     {
-        long count = _conv1.GetParameterCount() + _conv2.GetParameterCount();
-        if (_conv3 is not null)
-        {
-            count += _conv3.GetParameterCount();
-        }
-        if (_downsample is not null)
-        {
-            count += _downsample.GetParameterCount();
-        }
+        long count = _conv1.ParameterCount + _conv2.ParameterCount;
+        if (_conv3 is not null) count += _conv3.ParameterCount;
+        if (_downsample is not null) count += _downsample.ParameterCount;
         return count;
     }
 
@@ -465,58 +336,23 @@ internal class ResidualBlock<T>
     {
         writer.Write(_useBottleneck);
         writer.Write(_downsample is not null);
-
-        _conv1.WriteParameters(writer);
-        _conv2.WriteParameters(writer);
-
-        if (_useBottleneck && _conv3 is not null)
-        {
-            _conv3.WriteParameters(writer);
-        }
-
-        if (_downsample is not null)
-        {
-            _downsample.WriteParameters(writer);
-        }
+        BackboneSerialization.WriteLayerParameters(writer, _conv1);
+        BackboneSerialization.WriteLayerParameters(writer, _conv2);
+        if (_useBottleneck && _conv3 is not null) BackboneSerialization.WriteLayerParameters(writer, _conv3);
+        if (_downsample is not null) BackboneSerialization.WriteLayerParameters(writer, _downsample);
     }
 
     public void ReadParameters(BinaryReader reader)
     {
         bool useBottleneck = reader.ReadBoolean();
         bool hasDownsample = reader.ReadBoolean();
-
         if (useBottleneck != _useBottleneck)
-        {
-            throw new InvalidOperationException($"ResidualBlock bottleneck mismatch.");
-        }
-
+            throw new InvalidOperationException("ResidualBlock bottleneck mismatch.");
         if (hasDownsample != (_downsample is not null))
-        {
-            throw new InvalidOperationException($"ResidualBlock downsample mismatch.");
-        }
-
-        _conv1.ReadParameters(reader);
-        _conv2.ReadParameters(reader);
-
-        if (_useBottleneck && _conv3 is not null)
-        {
-            _conv3.ReadParameters(reader);
-        }
-
-        if (_downsample is not null)
-        {
-            _downsample.ReadParameters(reader);
-        }
-    }
-
-    private Tensor<T> ApplyReLU(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            result[i] = _numOps.FromDouble(Math.Max(0, val));
-        }
-        return result;
+            throw new InvalidOperationException("ResidualBlock downsample mismatch.");
+        BackboneSerialization.ReadLayerParameters(reader, _conv1);
+        BackboneSerialization.ReadLayerParameters(reader, _conv2);
+        if (_useBottleneck && _conv3 is not null) BackboneSerialization.ReadLayerParameters(reader, _conv3);
+        if (_downsample is not null) BackboneSerialization.ReadLayerParameters(reader, _downsample);
     }
 }

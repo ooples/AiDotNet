@@ -1,5 +1,5 @@
 using AiDotNet.Augmentation.Image;
-using AiDotNet.ComputerVision.Detection.Backbones;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
@@ -213,13 +213,13 @@ public abstract class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
     // NumOps inherited from ModelBase
     protected readonly TextDetectionOptions<T> Options;
-    protected BackboneBase<T>? Backbone;
+    protected IDetectionBackbone<T>? Backbone;
 
     /// <summary>
     /// Gets the backbone network, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
-    protected BackboneBase<T> EnsureBackbone =>
+    protected IDetectionBackbone<T> EnsureBackbone =>
         Backbone ?? throw new InvalidOperationException(
             $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");
 

@@ -1,3 +1,6 @@
+using System.IO;
+using AiDotNet.Tensors;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -29,4 +32,28 @@ namespace AiDotNet.Interfaces;
 /// </remarks>
 public interface IDetectionBackbone<T> : INeuralNetworkModel<T>, IFeatureMapProvider<T>
 {
+    /// <summary>
+    /// Extracts multi-scale features from an input image tensor. Equivalent to
+    /// <see cref="IFeatureMapProvider{T}.GetFeatureMaps"/> but returns a mutable
+    /// <c>List&lt;Tensor&lt;T&gt;&gt;</c> for downstream consumers (FPN, anchor
+    /// generators, DETR transformer) that prefer the concrete list type.
+    /// </summary>
+    List<Tensor<T>> ExtractFeatures(Tensor<T> input);
+
+    /// <summary>
+    /// Returns the total parameter count across the backbone's internal layers.
+    /// </summary>
+    long GetParameterCount();
+
+    /// <summary>
+    /// Writes the backbone's complete parameter state to a binary writer for
+    /// persistence. Pairs with <see cref="ReadParameters"/> for round-trip.
+    /// </summary>
+    void WriteParameters(BinaryWriter writer);
+
+    /// <summary>
+    /// Reads the backbone's complete parameter state from a binary reader.
+    /// Pairs with <see cref="WriteParameters"/> for round-trip.
+    /// </summary>
+    void ReadParameters(BinaryReader reader);
 }
