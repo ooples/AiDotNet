@@ -99,7 +99,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             order = orderVal;
                     }
 
-                    paramFields.Add(new ParameterFieldInfo(field.Name, role, order));
+                    paramFields.Add(new ParameterFieldInfo(
+                        field.Name, role, order, DeclIndex: 0,
+                        TypeName: field.Type.ToDisplayString()));
                 }
 
                 // Check for gradient fields (convention: {name}Gradient)
@@ -152,7 +154,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                             // Prefer attribute role if available (more specific)
                             var finalRole = attrRoles.TryGetValue(fieldName, out var attrRole)
                                 ? attrRole : role;
-                            paramFields.Add(new ParameterFieldInfo(matchingField.Name, finalRole, paramFields.Count));
+                            paramFields.Add(new ParameterFieldInfo(
+                                matchingField.Name, finalRole, paramFields.Count, DeclIndex: 0,
+                                TypeName: matchingField.Type.ToDisplayString()));
                         }
                     }
                 }
@@ -265,7 +269,32 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine($"            throw new System.ArgumentException($\"Expected {paramFields.Count} parameters, got {{parameters.Count}}.\");");
             for (int i = 0; i < paramFields.Count; i++)
             {
-                sb.AppendLine($"        {paramFields[i].Name} = parameters[{i}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {i} is null.\");");
+                var pf = paramFields[i];
+                // For Tensor<T> fields the assignment is direct; for
+                // subclass fields (SparseTensor<T> etc.) we need an
+                // explicit downcast since the API exposes Tensor<T>.
+                // The cast will throw InvalidCastException if the buffer
+                // hands back a tensor whose runtime type doesn't match
+                // the registered field type — which is the right failure
+                // mode (the buffer should preserve the concrete type for
+                // sparse-aware leaves).
+                bool needsCast = pf.TypeName is not null
+                    && !(pf.TypeName.StartsWith(TensorTypeName + "<") || pf.TypeName == TensorTypeName);
+                if (needsCast)
+                {
+                    // Generated form (split across two lines for readability):
+                    //   _weights = (parameters[0] ?? throw new ArgumentNullException(...)) as global::SparseTensor<T>
+                    //              ?? throw new ArgumentException("Parameter at index 0 ... is not a SparseTensor<T>", ...);
+                    // Note: the runtime-type message is a plain string (no
+                    // $-interpolation) so we don't have to escape quotes
+                    // inside an interpolation hole.
+                    sb.AppendLine($"        {pf.Name} = (parameters[{i}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {i} is null.\")) as global::{pf.TypeName}");
+                    sb.AppendLine($"            ?? throw new System.ArgumentException(\"Parameter at index {i} is not a {pf.TypeName}. Tape-buffer must preserve sparse leaf types.\", nameof(parameters));");
+                }
+                else
+                {
+                    sb.AppendLine($"        {pf.Name} = parameters[{i}] ?? throw new System.ArgumentNullException(nameof(parameters), \"Parameter at index {i} is null.\");");
+                }
             }
             // Re-sync _registeredTensors with the newly assigned field values.
             // We cannot call base.SetTrainableParameters because _registeredTensors
@@ -433,9 +462,22 @@ public class TrainableParameterGenerator : IIncrementalGenerator
 
     private static bool IsTensorType(ITypeSymbol type)
     {
-        var original = type is INamedTypeSymbol named ? named.OriginalDefinition : type;
-        var display = original.ToDisplayString();
-        return display.StartsWith(TensorTypeName + "<") || display == TensorTypeName;
+        // Walk the inheritance chain so SparseTensor<T> (and any future
+        // Tensor<T> subclass like JaggedTensor / RaggedTensor) is treated
+        // as a trainable-parameter-eligible type. The generator previously
+        // only matched the literal Tensor<T> spelling, which excluded
+        // SparseLinearLayer's _weights field from auto-registration even
+        // though it was meant to be tape-trainable.
+        var current = type;
+        while (current is not null)
+        {
+            var original = current is INamedTypeSymbol named ? named.OriginalDefinition : current;
+            var display = original.ToDisplayString();
+            if (display.StartsWith(TensorTypeName + "<") || display == TensorTypeName)
+                return true;
+            current = current.BaseType;
+        }
+        return false;
     }
 
     private static bool IsLayerType(ITypeSymbol type)
@@ -527,7 +569,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         return results;
     }
 
-    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0);
+    /// <summary>
+    /// Captured info per [TrainableParameter] field. <see cref="TypeName"/>
+    /// is the field's declared type as a fully-qualified display string;
+    /// when it differs from <c>AiDotNet.Tensors.LinearAlgebra.Tensor&lt;T&gt;</c>
+    /// (e.g., <c>SparseTensor&lt;T&gt;</c>) the generator emits a downcast
+    /// in SetTrainableParameters so the field assignment compiles.
+    /// </summary>
+    private record struct ParameterFieldInfo(string Name, string Role, int Order, int DeclIndex = 0, string? TypeName = null);
     private record struct GradientFieldInfo(string Name, bool IsNullable);
     private record struct SubLayerFieldInfo(string Name, bool IsNullable);
 }

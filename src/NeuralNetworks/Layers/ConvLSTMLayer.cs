@@ -1966,6 +1966,23 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
 
     #endregion
 
+    /// <summary>
+    /// Persists kernelSize / filters / padding / strides so the deser path
+    /// doesn't need to fabricate them. The full rank-4 input shape
+    /// [time, channels, H, W] is already round-tripped through the base
+    /// LayerBase serialization, so this only needs the scalar ctor params
+    /// that aren't recoverable from shape.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["KernelSize"] = _kernelSize.ToString();
+        metadata["Filters"] = _filters.ToString();
+        metadata["Padding"] = _padding.ToString();
+        metadata["Strides"] = _strides.ToString();
+        return metadata;
+    }
+
     private struct CellGradients
     {
         public Tensor<T> dWfi, dWii, dWci, dWoi, dWfh, dWih, dWch, dWoh, dbf, dbi, dbc, dbo;
