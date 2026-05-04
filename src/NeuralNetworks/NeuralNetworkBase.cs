@@ -5770,29 +5770,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Reverse-mode AD: compute gradients for all trainable parameters
         var grads = tape.ComputeGradients(lossTensor, trainableParams);
 
-        // Flatten into parameter gradient vector (same ordering as GetParameters)
-        var flatGradients = new List<T>();
-        foreach (var layer in Layers)
+        // Use GetParameterChunks to keep gradient/parameter ordering
+        // aligned (fixes #1245 / #1232). Frozen-or-detached tensors that
+        // tape didn't see are zero-padded to preserve length-alignment.
+        var flatGradients = new List<T>(ParameterCount);
+        foreach (var paramTensor in GetParameterChunks())
         {
-            if (layer is ITrainableLayer<T> trainable)
+            if (paramTensor is null || paramTensor.Length == 0) continue;
+            if (grads.TryGetValue(paramTensor, out var grad))
             {
-                foreach (var param in trainable.GetTrainableParameters())
-                {
-                    if (grads.TryGetValue(param, out var grad))
-                    {
-                        for (int i = 0; i < grad.Length; i++)
-                            flatGradients.Add(grad[i]);
-                    }
-                    else
-                    {
-                        for (int i = 0; i < param.Length; i++)
-                            flatGradients.Add(NumOps.Zero);
-                    }
-                }
+                for (int i = 0; i < grad.Length; i++)
+                    flatGradients.Add(grad[i]);
             }
             else
             {
-                for (int i = 0; i < layer.ParameterCount; i++)
+                for (int i = 0; i < paramTensor.Length; i++)
                     flatGradients.Add(NumOps.Zero);
             }
         }
