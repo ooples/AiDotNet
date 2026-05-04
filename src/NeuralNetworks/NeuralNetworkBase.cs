@@ -2211,7 +2211,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Layers were registered directly by the subclass; skip
             // cached-data hydration but still drive InitializeLayers +
             // lazy-shape resolution so ParameterCount works pre-Forward.
-            InitializeLayers();
+            // Idempotency guard (#1259 review): callers may invoke
+            // EnsureArchitectureInitialized multiple times (e.g.,
+            // ParameterCount probe before Train, then again at first
+            // Predict). Without this flag, subclasses that append to
+            // Layers in InitializeLayers would duplicate the entire
+            // network on the second call.
+            if (!_layerOnlyInitialized)
+            {
+                InitializeLayers();
+                _layerOnlyInitialized = true;
+            }
             ResolveLazyLayerShapes();
             return;
         }
@@ -2256,6 +2266,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// difference between sub-second tests and 120-second timeouts.
     /// </summary>
     private bool _layerShapesResolved;
+
+    /// <summary>
+    /// One-shot flag for the layer-only branch of <see cref="EnsureArchitectureInitialized"/>.
+    /// Without this, repeated calls (ParameterCount probe → Train →
+    /// Predict) would re-invoke <see cref="InitializeLayers"/> and any
+    /// subclass that appends to <see cref="Layers"/> would duplicate
+    /// the network. Mirrors the role of <see cref="NeuralNetworkArchitecture{T}.IsInitialized"/>
+    /// for the architecture-driven branch.
+    /// </summary>
+    private bool _layerOnlyInitialized;
 
     /// <summary>
     /// Walks <see cref="Layers"/> in order, propagating concrete input

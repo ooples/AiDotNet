@@ -89,9 +89,6 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     public int OutputChannels { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <summary>
     /// Sum of trainable parameters across BN and the 1×1 projection.
     /// <c>_conv</c> stays null until <see cref="OnFirstForward"/> resolves
     /// the input channel count — return BN's count alone in that interim
@@ -99,6 +96,10 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// </summary>
     public override long ParameterCount =>
         _bn.ParameterCount + (_conv?.ParameterCount ?? 0L);
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()

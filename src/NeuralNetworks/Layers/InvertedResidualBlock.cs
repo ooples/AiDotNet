@@ -83,9 +83,6 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     private Tensor<T>? _lastProjectBnOut;
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports training.
-    /// </summary>
-    /// <summary>
     /// Sum of trainable parameters across all sub-layers. The non-optional
     /// <c>_dwConv</c>, <c>_dwBn</c>, <c>_projectConv</c>, <c>_projectBn</c>
     /// stay null until <see cref="OnFirstForward"/> resolves the input
@@ -97,6 +94,10 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         (_dwConv?.ParameterCount ?? 0) + (_dwBn?.ParameterCount ?? 0) +
         (_se?.ParameterCount ?? 0) +
         (_projectConv?.ParameterCount ?? 0) + (_projectBn?.ParameterCount ?? 0);
+
+    /// <summary>
+    /// Gets a value indicating whether this layer supports training.
+    /// </summary>
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
