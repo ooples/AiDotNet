@@ -49,8 +49,19 @@ test.describe('Admin — licenses copy + resend buttons', () => {
 
     await firstCopyBtn.click();
 
-    // Click flashes "copied" then reverts. Don't race the revert — assert
-    // on the captured clipboard text directly.
+    // page.click() dispatches the event but does NOT await the async
+    // handler — by the time control returns, navigator.clipboard.writeText
+    // may not have run yet. Poll until __copiedTexts is populated before
+    // reading it; otherwise the assertion can race the click handler and
+    // see length 0 on a fast machine. Same pattern the alert test below
+    // uses for window.alert.
+    await expect
+      .poll(
+        () => page.evaluate(() => (window as unknown as { __copiedTexts: string[] }).__copiedTexts.length),
+        { timeout: 3_000 },
+      )
+      .toBe(1);
+
     const copied = await page.evaluate(() => {
       return (window as unknown as { __copiedTexts: string[] }).__copiedTexts;
     });
@@ -65,9 +76,13 @@ test.describe('Admin — licenses copy + resend buttons', () => {
       .not.toContain('...');
     expect(copiedKey.length).toBeGreaterThan(preview.length);
 
-    // Brief feedback flash should fire and then revert. We check it
-    // appeared at least once (race-tolerant).
-    await expect(firstCopyBtn).toContainText(/copied|aidn|harm/i, { timeout: 2000 });
+    // The "copied" feedback flash must actually render. The previous
+    // regex `/copied|aidn|harm/i` was non-enforcing — it would pass even
+    // if the flash never fired, because the original button label
+    // contains a key preview that starts with `aidn` or `harm`. Tightened
+    // to require the literal "copied" text so a regression that drops
+    // the visual feedback fails the test.
+    await expect(firstCopyBtn).toContainText(/copied/i, { timeout: 2000 });
   });
 
   test('copy button surfaces a clipboard-permission alert when writeText throws', async ({ page }) => {
@@ -118,6 +133,17 @@ test.describe('Admin — licenses copy + resend buttons', () => {
   ): Promise<{ requests: Array<{ body: unknown }> }> {
     const captured: Array<{ body: unknown }> = [];
     await page.route('**/functions/v1/admin-resend-license-email**', async (route: Route) => {
+      // Filter to POST only. supabase.functions.invoke() sends an
+      // Authorization header which triggers a CORS preflight OPTIONS
+      // request before the actual POST; if we counted that too, the
+      // `expect(stub.requests).toHaveLength(1)` assertions below would
+      // intermittently see length 2 and fail. Reply 204 (no content) to
+      // the preflight without recording it.
+      if (route.request().method() !== 'POST') {
+        await route.fulfill({ status: 204 });
+        return;
+      }
+
       let parsed: unknown = null;
       try {
         parsed = JSON.parse(route.request().postData() ?? 'null');
@@ -194,6 +220,13 @@ test.describe('Admin — licenses copy + resend buttons', () => {
   test('resend button makes no request when the admin cancels the confirm dialog', async ({ page }) => {
     let invoked = false;
     await page.route('**/functions/v1/admin-resend-license-email**', async (route: Route) => {
+      // Same preflight filter as stubResend — without it, a CORS OPTIONS
+      // request from the browser would set invoked=true even when the
+      // user dismissed the confirm and the actual POST never fired.
+      if (route.request().method() !== 'POST') {
+        await route.fulfill({ status: 204 });
+        return;
+      }
       invoked = true;
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });

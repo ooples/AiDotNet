@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = master ] || [ \"$VERCEL_GIT_COMMIT_REF\" = main ]; then exit 1; fi; git diff --quiet HEAD^ HEAD -- . && exit 0 || exit 1"
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = master ] || [ \"$VERCEL_GIT_COMMIT_REF\" = main ]; then exit 1; fi; PREV=\"${VERCEL_GIT_PREVIOUS_SHA:-}\"; CURR=\"${VERCEL_GIT_COMMIT_SHA:-HEAD}\"; if [ -z \"$PREV\" ]; then exit 1; fi; git diff --quiet \"$PREV\" \"$CURR\" -- . && exit 0 || exit 1"
 }

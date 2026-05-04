@@ -607,9 +607,29 @@ const productsJson = JSON.stringify(PRODUCTS);
           }
           try {
             await navigator.clipboard.writeText(license.license_key);
-            const orig = btn.innerHTML;
+            // Click-safe revert: capture the ORIGINAL label once per
+            // burst (only on the first click in a series of rapid
+            // clicks — subsequent clicks would otherwise overwrite the
+            // cache with the temporary 'copied' span). Cancel any
+            // in-flight revert from a previous click so its delayed
+            // callback doesn't fire after a newer click already
+            // refreshed the label. Net effect: N clicks in any 1.5s
+            // window all revert exactly once, to the real preview.
+            const el = btn as HTMLElement;
+            if (el.dataset.originalLabel === undefined) {
+              el.dataset.originalLabel = btn.innerHTML;
+            }
+            const existingId = el.dataset.revertTimeoutId;
+            if (existingId !== undefined) {
+              clearTimeout(Number.parseInt(existingId, 10));
+            }
             btn.innerHTML = '<span class="text-green-500">copied</span>';
-            setTimeout(() => { btn.innerHTML = orig; }, 1500);
+            const newId = window.setTimeout(() => {
+              btn.innerHTML = el.dataset.originalLabel ?? '';
+              delete el.dataset.originalLabel;
+              delete el.dataset.revertTimeoutId;
+            }, 1500);
+            el.dataset.revertTimeoutId = String(newId);
           } catch (err) {
             console.error('Clipboard copy failed:', err);
             alert(
@@ -645,8 +665,27 @@ const productsJson = JSON.stringify(PRODUCTS);
             // it so the operator gets actionable detail without opening
             // the network tab.
             if (error) {
-              const serverMsg = (data as { message?: string } | null)?.message;
-              console.error('Resend failed:', { error, serverResponse: data });
+              // Supabase JS sets `data` to null on non-2xx and stashes
+              // the actual Response on `error.context`. The edge function
+              // returns `message` in the body — read it from there, not
+              // from `data` (which never has it in the error path).
+              // Wrap in try/catch because error.context may be missing
+              // (network error before the response was received) or the
+              // body may not be JSON.
+              let serverMsg: string | undefined;
+              try {
+                const ctx = (error as { context?: Response }).context;
+                if (ctx && typeof ctx.json === 'function') {
+                  const body = await ctx.json();
+                  if (body && typeof body.message === 'string') {
+                    serverMsg = body.message;
+                  }
+                }
+              } catch {
+                // Body wasn't JSON / context missing — fall through to
+                // generic "failed" label.
+              }
+              console.error('Resend failed:', { error, serverMsg });
               btn.innerHTML = serverMsg
                 ? `<span class="text-red-500" title="${escapeHtml(serverMsg)}">failed</span>`
                 : '<span class="text-red-500">failed</span>';
