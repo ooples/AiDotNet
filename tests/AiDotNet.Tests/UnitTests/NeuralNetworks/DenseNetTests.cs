@@ -122,11 +122,8 @@ public class DenseNetTests
     {
         // Arrange & Act
         var block = new DenseBlock<float>(
-            inputChannels: 64,
             numLayers: 6,
-            growthRate: 32,
-            inputHeight: 56,
-            inputWidth: 56);
+            growthRate: 32);
 
         // Assert
         Assert.Equal(6, block.NumLayers);
@@ -143,7 +140,7 @@ public class DenseNetTests
         int growthRate = 32;
 
         // Act
-        var block = new DenseBlock<float>(inputChannels, numLayers, growthRate, 28, 28);
+        var block = new DenseBlock<float>(numLayers, growthRate);
 
         // Assert
         // Output = input + (numLayers * growthRate)
@@ -155,11 +152,8 @@ public class DenseNetTests
     {
         // Arrange
         var block = new DenseBlock<float>(
-            inputChannels: 64,
             numLayers: 3,
-            growthRate: 12,
-            inputHeight: 14,
-            inputWidth: 14);
+            growthRate: 12);
 
         var input = new Tensor<float>([1, 64, 14, 14]);
         InitializeWithRandomValues(input);
@@ -184,7 +178,6 @@ public class DenseNetTests
     {
         // Arrange & Act
         var layer = new TransitionLayer<float>(
-            inputChannels: 256,
             compressionFactor: 0.5);
 
         // Assert
@@ -196,7 +189,6 @@ public class DenseNetTests
     {
         // Arrange
         var layer = new TransitionLayer<float>(
-            inputChannels: 128,
             compressionFactor: 0.5);
 
         var input = new Tensor<float>([1, 128, 28, 28]);
@@ -218,7 +210,6 @@ public class DenseNetTests
     {
         // Arrange - no compression (compression = 1.0)
         var layer = new TransitionLayer<float>(
-            inputChannels: 100,
             compressionFactor: 1.0);
 
         // Assert - channels unchanged

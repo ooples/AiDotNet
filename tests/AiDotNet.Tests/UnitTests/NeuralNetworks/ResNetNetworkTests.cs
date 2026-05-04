@@ -509,7 +509,6 @@ public class ResNetNetworkTests
     {
         // Arrange & Act
         var block = new AiDotNet.NeuralNetworks.Layers.BasicBlock<float>(
-            inChannels: 64,
             outChannels: 64,
             stride: 1);
 
@@ -523,7 +522,6 @@ public class ResNetNetworkTests
     {
         // Arrange & Act - stride=2 triggers downsampling
         var block = new AiDotNet.NeuralNetworks.Layers.BasicBlock<float>(
-            inChannels: 64,
             outChannels: 128,
             stride: 2);
 
@@ -538,7 +536,6 @@ public class ResNetNetworkTests
     {
         // Arrange & Act
         var block = new AiDotNet.NeuralNetworks.Layers.BottleneckBlock<float>(
-            inChannels: 64,
             baseChannels: 64,
             stride: 1);
 
@@ -553,7 +550,6 @@ public class ResNetNetworkTests
     {
         // Arrange & Act - stride=2 triggers downsampling
         var block = new AiDotNet.NeuralNetworks.Layers.BottleneckBlock<float>(
-            inChannels: 256,
             baseChannels: 128,
             stride: 2);
 

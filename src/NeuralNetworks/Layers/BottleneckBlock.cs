@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 4, 1")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 1")]
 public class BottleneckBlock<T> : LayerBase<T>
 {
     /// <summary>
@@ -62,16 +62,22 @@ public class BottleneckBlock<T> : LayerBase<T>
     private readonly BatchNormalizationLayer<T> _bn2;
     private readonly ConvolutionalLayer<T> _conv3;  // 1x1 expand
     private readonly BatchNormalizationLayer<T> _bn3;
-    private readonly ConvolutionalLayer<T>? _downsampleConv;
-    private readonly BatchNormalizationLayer<T>? _downsampleBn;
+    // Non-readonly: lazy ctor leaves these null until OnFirstForward
+    // observes the runtime input channel count.
+    private ConvolutionalLayer<T>? _downsampleConv;
+    private BatchNormalizationLayer<T>? _downsampleBn;
     private readonly IActivationFunction<T> _relu;
-    private readonly bool _hasDownsample;
+    // Non-readonly: lazy ctor leaves _hasDownsample = false until
+    // OnFirstForward observes the runtime input channel count.
+    private bool _hasDownsample;
     // Stored constructor args for serialization round-trip — without
     // these, DeserializationHelper defaults Stride=1 / ZeroInitResidual=true
     // which makes the cloned ResNet50 spatial dims diverge from the
     // original (224→56 instead of 224→7) and a single Predict call goes
     // from ~5s to ~80s due to convs running at 64× larger feature maps.
-    private readonly int _inChannels;
+    // Non-readonly: lazy ctor leaves _inChannels = -1 until OnFirstForward
+    // resolves it from the runtime input tensor's shape.
+    private int _inChannels;
     private readonly int _baseChannels;
     private readonly int _stride;
     // Non-readonly: lazy ctor leaves _inputHeight/_inputWidth = -1 until
@@ -128,27 +134,29 @@ public class BottleneckBlock<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Lazy ctor — input height/width come from the first <see cref="Forward"/>
-    /// call (<see cref="OnFirstForward"/>); only inChannels/baseChannels/stride/
-    /// zeroInitResidual are required at construction.
+    /// Lazy ctor — input depth/height/width come from the first
+    /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>). Only
+    /// <c>baseChannels</c> (kernel-sizing target) and <c>stride</c> are
+    /// required at construction. The downsample shortcut's allocation
+    /// is deferred to <see cref="OnFirstForward"/> because
+    /// <c>_hasDownsample</c> depends on whether input channels match
+    /// the expanded output channel count.
     /// </summary>
     public BottleneckBlock(
-        int inChannels,
         int baseChannels,
         int stride = 1,
         bool zeroInitResidual = true)
         : base(
-            inputShape: [inChannels, -1, -1],
+            inputShape: [-1, -1, -1],
             outputShape: [baseChannels * Expansion, -1, -1])
     {
-        if (inChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inChannels));
         if (baseChannels <= 0) throw new ArgumentOutOfRangeException(nameof(baseChannels));
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
 
-        _inChannels = inChannels;
+        _inChannels = -1; // resolved in OnFirstForward
         _baseChannels = baseChannels;
         _stride = stride;
-        _inputHeight = -1; // resolved in OnFirstForward
+        _inputHeight = -1;
         _inputWidth = -1;
         _zeroInitResidual = zeroInitResidual;
         int outChannels = baseChannels * Expansion;
@@ -178,17 +186,9 @@ public class BottleneckBlock<T> : LayerBase<T>
 
         if (zeroInitResidual) _bn3.ZeroInitGamma();
 
-        _hasDownsample = stride != 1 || inChannels != outChannels;
-        if (_hasDownsample)
-        {
-            _downsampleConv = new ConvolutionalLayer<T>(
-                outputDepth: outChannels,
-                kernelSize: 1,
-                stride: stride,
-                padding: 0,
-                activationFunction: new IdentityActivation<T>());
-            _downsampleBn = new BatchNormalizationLayer<T>();
-        }
+        // Downsample allocation deferred to OnFirstForward — _hasDownsample
+        // depends on (stride != 1 || inChannels != outChannels), and
+        // inChannels isn't known until input.Shape is observed.
 
         RegisterSubLayer(_conv1);
         RegisterSubLayer(_bn1);
@@ -196,8 +196,6 @@ public class BottleneckBlock<T> : LayerBase<T>
         RegisterSubLayer(_bn2);
         RegisterSubLayer(_conv3);
         RegisterSubLayer(_bn3);
-        if (_downsampleConv is not null) RegisterSubLayer(_downsampleConv);
-        if (_downsampleBn is not null) RegisterSubLayer(_downsampleBn);
     }
 
     /// <inheritdoc/>
@@ -209,19 +207,37 @@ public class BottleneckBlock<T> : LayerBase<T>
     protected override void OnFirstForward(Tensor<T> input)
     {
         var s = input._shape;
-        int inputHeight, inputWidth;
-        if (s.Length == 3) { inputHeight = s[1]; inputWidth = s[2]; }
-        else if (s.Length == 4) { inputHeight = s[2]; inputWidth = s[3]; }
+        int inChannels, inputHeight, inputWidth;
+        if (s.Length == 3) { inChannels = s[0]; inputHeight = s[1]; inputWidth = s[2]; }
+        else if (s.Length == 4) { inChannels = s[1]; inputHeight = s[2]; inputWidth = s[3]; }
         else
             throw new ArgumentException(
                 $"BottleneckBlock requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
                 nameof(input));
 
+        _inChannels = inChannels;
         _inputHeight = inputHeight;
         _inputWidth = inputWidth;
         int outH = inputHeight / _stride;
         int outW = inputWidth / _stride;
         int outChannels = _baseChannels * Expansion;
+
+        // Downsample shortcut: needed when stride != 1 or channel counts differ.
+        _hasDownsample = _stride != 1 || _inChannels != outChannels;
+        if (_hasDownsample)
+        {
+            var downConv = new ConvolutionalLayer<T>(
+                outputDepth: outChannels,
+                kernelSize: 1,
+                stride: _stride,
+                padding: 0,
+                activationFunction: new IdentityActivation<T>());
+            var downBn = new BatchNormalizationLayer<T>();
+            _downsampleConv = downConv;
+            _downsampleBn = downBn;
+            RegisterSubLayer(downConv);
+            RegisterSubLayer(downBn);
+        }
 
         _conv1.ResolveShapesOnly(new[] { _inChannels, inputHeight, inputWidth });
         _bn1.ResolveShapesOnly(new[] { 1, _baseChannels, inputHeight, inputWidth });

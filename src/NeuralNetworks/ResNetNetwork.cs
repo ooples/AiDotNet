@@ -318,7 +318,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             if (config.UsesBottleneck)
             {
                 layers.Add(new BottleneckBlock<T>(
-                    inChannels: inChannels,
                     baseChannels: stageBaseChannels,
                     stride: stride,
                     zeroInitResidual: config.ZeroInitResidual));
@@ -326,7 +325,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             else
             {
                 layers.Add(new BasicBlock<T>(
-                    inChannels: inChannels,
                     outChannels: stageBaseChannels * expansion,
                     stride: stride,
                     zeroInitResidual: config.ZeroInitResidual));
@@ -346,7 +344,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 if (config.UsesBottleneck)
                 {
                     layers.Add(new BottleneckBlock<T>(
-                    inChannels: inChannels,
                     baseChannels: stageBaseChannels,
                     stride: 1,
                     zeroInitResidual: config.ZeroInitResidual));
@@ -354,7 +351,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 else
                 {
                     layers.Add(new BasicBlock<T>(
-                    inChannels: inChannels,
                     outChannels: stageBaseChannels * expansion,
                     stride: 1,
                     zeroInitResidual: config.ZeroInitResidual));

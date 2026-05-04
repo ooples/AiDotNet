@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4, 4, 4, 4")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4")]
 internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
@@ -56,12 +56,23 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    public DenseBlockLayer(int inputChannels, int growthRate, int height, int width, double bnMomentum = 0.1)
-        : base([inputChannels, height, width], [growthRate, height, width])
+    /// <summary>
+    /// Lazy ctor — input depth/height/width come from the first
+    /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); only
+    /// growthRate/bnMomentum are required at construction. The conv
+    /// kernel shapes that depend on input channels (1×1 bottleneck) are
+    /// allocated against the resolved <c>_inputChannels</c> in
+    /// <see cref="OnFirstForward"/>.
+    /// </summary>
+    public DenseBlockLayer(int growthRate, double bnMomentum = 0.1)
+        : base([-1, -1, -1], [growthRate, -1, -1])
     {
+        if (growthRate <= 0) throw new ArgumentOutOfRangeException(nameof(growthRate));
+
+        _inputChannels = -1; // resolved in OnFirstForward
+        _growthRate = growthRate;
         _relu = new ReLUActivation<T>();
 
-        // Bottleneck layer: 1x1 conv to reduce channels (4 * growthRate is standard)
         int bottleneckChannels = 4 * growthRate;
 
         _bn1 = new BatchNormalizationLayer<T>();
@@ -71,7 +82,6 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
-
         _bn2 = new BatchNormalizationLayer<T>();
         _conv3x3 = new ConvolutionalLayer<T>(
             outputDepth: growthRate,
@@ -84,15 +94,40 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
         RegisterSubLayer(_conv1x1);
         RegisterSubLayer(_bn2);
         RegisterSubLayer(_conv3x3);
+    }
 
-        // Eagerly resolve sub-layer shapes so ParameterCount reflects real weights
-        // immediately (lazy Conv/BN return 0 otherwise, causing SetParameters
-        // dispatch-by-slice to silently skip them — same dispatch bug e0c78b820
-        // fixed for ResNet's BottleneckBlock).
-        _bn1.ResolveFromShape(new[] { 1, inputChannels, height, width });
-        _conv1x1.ResolveFromShape(new[] { inputChannels, height, width });
-        _bn2.ResolveFromShape(new[] { 1, bottleneckChannels, height, width });
-        _conv3x3.ResolveFromShape(new[] { bottleneckChannels, height, width });
+    // Non-readonly: lazy ctor leaves _inputChannels = -1 until
+    // OnFirstForward resolves it from the runtime input tensor.
+    private int _inputChannels;
+    private readonly int _growthRate;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves H/W from input.Shape and propagates to all sub-layers
+    /// via ResolveShapesOnly so ParameterCount reports the real weight
+    /// count before any sub-layer's first Forward fires.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int channels, height, width;
+        if (s.Length == 3) { channels = s[0]; height = s[1]; width = s[2]; }
+        else if (s.Length == 4) { channels = s[1]; height = s[2]; width = s[3]; }
+        else
+            throw new ArgumentException(
+                $"DenseBlockLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+
+        _inputChannels = channels;
+        int bottleneckChannels = 4 * _growthRate;
+        _bn1.ResolveShapesOnly(new[] { 1, _inputChannels, height, width });
+        _conv1x1.ResolveShapesOnly(new[] { _inputChannels, height, width });
+        _bn2.ResolveShapesOnly(new[] { 1, bottleneckChannels, height, width });
+        _conv3x3.ResolveShapesOnly(new[] { bottleneckChannels, height, width });
+
+        ResolveShapes(
+            new[] { _inputChannels, height, width },
+            new[] { _growthRate, height, width });
     }
 
     public override Tensor<T> Forward(Tensor<T> input)

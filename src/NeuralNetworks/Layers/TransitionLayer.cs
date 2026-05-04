@@ -48,11 +48,14 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 0.5")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "0.5")]
 public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
-    private readonly ConvolutionalLayer<T> _conv;
+    // Non-readonly: lazy ctor leaves _conv = null until OnFirstForward
+    // resolves OutputChannels (= inputChannels × compressionFactor) and
+    // allocates the 1×1 projection.
+    private ConvolutionalLayer<T> _conv;
     private readonly AveragePoolingLayer<T> _pool;
     private readonly IActivationFunction<T> _relu;
 
@@ -72,26 +75,39 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     private int[]? _originalInputShape;
 
     /// <summary>
-    /// Gets the number of output channels. Computed at construction
-    /// from <c>inputChannels × compressionFactor</c>.
+    /// Gets the number of output channels. Resolved in
+    /// <see cref="OnFirstForward"/> from <c>inputChannels ×
+    /// compressionFactor</c>; before that point it returns the
+    /// sentinel default (0).
     /// </summary>
-    public int OutputChannels { get; }
+    public int OutputChannels { get; private set; }
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
-    public override long ParameterCount => _bn.ParameterCount + _conv.ParameterCount;
+    /// <summary>
+    /// Sum of trainable parameters across BN and the 1×1 projection.
+    /// <c>_conv</c> stays null until <see cref="OnFirstForward"/> resolves
+    /// the input channel count — return BN's count alone in that interim
+    /// state.
+    /// </summary>
+    public override long ParameterCount =>
+        _bn.ParameterCount + (_conv?.ParameterCount ?? 0L);
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
     {
+        // _conv is null until OnFirstForward runs; return BN's gradients
+        // alone in that interim state to avoid NullReferenceException.
+        if (_conv is null) return _bn.GetParameterGradients();
         return Vector<T>.Concatenate(_bn.GetParameterGradients(), _conv.GetParameterGradients());
     }
 
     public override void ClearGradients()
     {
         base.ClearGradients();
-        _bn.ClearGradients(); _conv.ClearGradients();
+        _bn.ClearGradients();
+        _conv?.ClearGradients();
     }
 
     /// <summary>
@@ -101,51 +117,34 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     protected override bool SupportsGpuExecution => true;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="TransitionLayer{T}"/> class.
+    /// Lazy ctor — input depth/height/width come from the first
+    /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); only
+    /// the channel-compression factor is required at construction. The
+    /// 1×1 projection's <c>outputDepth</c> is allocated against the
+    /// resolved channel count in <see cref="OnFirstForward"/>.
     /// </summary>
-    /// <param name="inputChannels">The number of input channels.</param>
-    /// <param name="inputHeight">The input feature map height.</param>
-    /// <param name="inputWidth">The input feature map width.</param>
-    /// <param name="compressionFactor">The channel compression factor (default: 0.5).</param>
-    /// <summary>
-    /// Lazy ctor — input height and width come from the first
-    /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); the
-    /// input channel count and compression factor must be known at
-    /// construction so <see cref="OutputChannels"/> can drive downstream
-    /// layer planning (DenseNet's growth schedule, e.g.).
-    /// </summary>
-    public TransitionLayer(int inputChannels, double compressionFactor = 0.5)
-        : base(inputShape: [inputChannels, -1, -1],
-               outputShape: [(int)(inputChannels * compressionFactor), -1, -1])
+    public TransitionLayer(double compressionFactor = 0.5)
+        : base(inputShape: [-1, -1, -1], outputShape: [-1, -1, -1])
     {
-        if (inputChannels <= 0)
-            throw new ArgumentOutOfRangeException(nameof(inputChannels), "inputChannels must be positive.");
         if (compressionFactor <= 0 || compressionFactor > 1)
             throw new ArgumentOutOfRangeException(nameof(compressionFactor),
                 "compressionFactor must be in (0, 1].");
 
-        _inputChannels = inputChannels;
         _compressionFactor = compressionFactor;
-        OutputChannels = (int)(inputChannels * compressionFactor);
         _relu = new ReLUActivation<T>();
         _bn = new BatchNormalizationLayer<T>();
-        _conv = new ConvolutionalLayer<T>(
-            outputDepth: OutputChannels,
-            kernelSize: 1,
-            stride: 1,
-            padding: 0,
-            activationFunction: new IdentityActivation<T>());
+        // _conv is allocated in OnFirstForward once the input channel
+        // count is known. Placeholder until then.
+        _conv = null!;
 
         // After 1×1 conv, spatial dims are same; 2×2 avg pool with
         // stride 2 halves them.
         _pool = new AveragePoolingLayer<T>(poolSize: 2, strides: 2);
 
         RegisterSubLayer(_bn);
-        RegisterSubLayer(_conv);
         RegisterSubLayer(_pool);
     }
 
-    private readonly int _inputChannels;
     private readonly double _compressionFactor;
 
     /// <inheritdoc/>
@@ -167,10 +166,17 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
             throw new ArgumentException(
                 $"TransitionLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
                 nameof(input));
-        if (inputChannels != _inputChannels)
-            throw new ArgumentException(
-                $"TransitionLayer was constructed with inputChannels={_inputChannels} but " +
-                $"received tensor with channel dim {inputChannels}.", nameof(input));
+
+        OutputChannels = (int)(inputChannels * _compressionFactor);
+
+        // Allocate the 1×1 projection now that input channel count is known.
+        _conv = new ConvolutionalLayer<T>(
+            outputDepth: OutputChannels,
+            kernelSize: 1,
+            stride: 1,
+            padding: 0,
+            activationFunction: new IdentityActivation<T>());
+        RegisterSubLayer(_conv);
 
         // Drive sub-layer shape resolution so ParameterCount predicts
         // correctly before each one's own Forward fires.
@@ -424,18 +430,21 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     public override void UpdateParameters(T learningRate)
     {
         _bn.UpdateParameters(learningRate);
-        _conv.UpdateParameters(learningRate);
+        _conv?.UpdateParameters(learningRate);
         // Pool has no parameters
     }
 
     /// <summary>
-    /// Gets all trainable parameters from the layer.
+    /// Gets all trainable parameters from the layer. <c>_conv</c> contributes
+    /// nothing until <see cref="OnFirstForward"/> resolves the input channel
+    /// count and allocates the 1×1 projection.
     /// </summary>
     public override Vector<T> GetParameters()
     {
         var parameters = new List<T>();
         parameters.AddRange(_bn.GetParameters().ToArray());
-        parameters.AddRange(_conv.GetParameters().ToArray());
+        if (_conv is not null)
+            parameters.AddRange(_conv.GetParameters().ToArray());
         return new Vector<T>(parameters.ToArray());
     }
 
@@ -451,8 +460,11 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
         _bn.SetParameters(parameters.SubVector(offset, count));
         offset += count;
 
-        count = _conv.GetParameters().Length;
-        _conv.SetParameters(parameters.SubVector(offset, count));
+        if (_conv is not null)
+        {
+            count = _conv.GetParameters().Length;
+            _conv.SetParameters(parameters.SubVector(offset, count));
+        }
     }
 
     internal override Dictionary<string, string> GetMetadata()

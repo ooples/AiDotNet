@@ -4536,26 +4536,28 @@ public static class LayerHelper<T>
         {
             int numLayersInBlock = blockLayers[i];
 
-            // Add Dense Block
+            // Add Dense Block. Lazy ctor — the block's input channel
+            // count resolves from runtime input shape; the helper tracks
+            // currentChannels itself instead of asking the block, since
+            // OutputChannels stays at -1 until first Forward fires.
             var denseBlock = new DenseBlock<T>(
-                inputChannels: currentChannels,
                 numLayers: numLayersInBlock,
-                growthRate: configuration.GrowthRate,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth);
+                growthRate: configuration.GrowthRate);
 
             yield return denseBlock;
-            currentChannels = denseBlock.OutputChannels;
+            // DenseNet growth: each inner layer adds growthRate channels.
+            currentChannels = currentChannels + numLayersInBlock * configuration.GrowthRate;
 
-            // Add Transition (except after the last block)
+            // Add Transition (except after the last block). Lazy ctor —
+            // input channel count is resolved from runtime input shape;
+            // the helper computes the post-transition channel count itself.
             if (i < blockLayers.Length - 1)
             {
                 var transition = new TransitionLayer<T>(
-                    inputChannels: currentChannels,
                     compressionFactor: configuration.CompressionFactor);
 
                 yield return transition;
-                currentChannels = transition.OutputChannels;
+                currentChannels = (int)(currentChannels * configuration.CompressionFactor);
                 currentHeight /= 2;
                 currentWidth /= 2;
             }
