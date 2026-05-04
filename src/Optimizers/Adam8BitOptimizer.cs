@@ -1032,6 +1032,59 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
     /// <summary>
+    /// Test-only snapshot of one tape-state entry. Exposes the structural
+    /// fields downstream tests need (lengths, presence of m-quantized vs
+    /// m-fullprecision, scale block counts) without forcing tests to
+    /// reach into private state via reflection. The fields are public
+    /// readonly because the type itself is internal — only assemblies
+    /// listed in <c>InternalsVisibleTo</c> on AiDotNet.csproj see it.
+    /// </summary>
+    internal sealed class TapeStateInfo
+    {
+        public int Length { get; init; }
+        public int NumBlocks { get; init; }
+        public bool HasMQuantized { get; init; }
+        public int MQuantizedLength { get; init; }
+        public bool HasMScales { get; init; }
+        public int MScalesLength { get; init; }
+        public bool HasMFullPrecision { get; init; }
+        public int MFullPrecisionLength { get; init; }
+        public int VQuantizedLength { get; init; }
+        public int VScalesLength { get; init; }
+    }
+
+    /// <summary>
+    /// Test hook: returns a structural snapshot of every tape-state entry.
+    /// Tests use this to assert per-parameter quantization layout
+    /// (block count, presence of m vs m-fullprecision, etc.) without
+    /// reflecting into private fields. Snapshot is a copy, not a live
+    /// view — mutating the returned dictionary or its values does not
+    /// affect optimizer state.
+    /// </summary>
+    internal IReadOnlyDictionary<Tensor<T>, TapeStateInfo> GetTapeStateSnapshotForTests()
+    {
+        var snapshot = new Dictionary<Tensor<T>, TapeStateInfo>(_tapeStates.Count);
+        foreach (var kvp in _tapeStates)
+        {
+            var s = kvp.Value;
+            snapshot[kvp.Key] = new TapeStateInfo
+            {
+                Length = s.Length,
+                NumBlocks = s.NumBlocks,
+                HasMQuantized = s.MQuantized is not null,
+                MQuantizedLength = s.MQuantized?.Length ?? 0,
+                HasMScales = s.MScales is not null,
+                MScalesLength = s.MScales?.Length ?? 0,
+                HasMFullPrecision = s.MFullPrecision is not null,
+                MFullPrecisionLength = s.MFullPrecision?.Length ?? 0,
+                VQuantizedLength = s.VQuantized.Length,
+                VScalesLength = s.VScales.Length,
+            };
+        }
+        return snapshot;
+    }
+
+    /// <summary>
     /// Serializes the optimizer's state into a byte array.
     /// </summary>
     public override byte[] Serialize()
@@ -1086,6 +1139,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // The previous serialization wrote the data conditionally but
             // Deserialize unconditionally read it, producing
             // EndOfStreamException on uninitialized state.
+            // The compressBothMoments flag is written for cross-checking on
+            // load — _options.CompressBothMoments is the authoritative source
+            // of truth (it round-trips through the options JSON above), but
+            // emitting it here lets Deserialize fail fast on a tampered or
+            // mode-mismatched payload before allocating the wrong moment
+            // representation.
             writer.Write(_options.CompressBothMoments);
             bool hasMState = _options.CompressBothMoments
                 ? _mQuantized is not null
@@ -1096,7 +1155,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 if (_options.CompressBothMoments)
                 {
                     writer.Write(_mQuantized!.Length);
-                    for (int i = 0; i < _mQuantized.Length; i++) writer.Write(_mQuantized[i]);
+                    // Bulk write — per-element BinaryWriter.Write(byte) was
+                    // very slow for large models (a 300M-param checkpoint
+                    // touched the writer 300M times for m alone). Vector<byte>
+                    // exposes a span-backed representation; copy to a flat
+                    // byte[] in one go and let BinaryWriter emit a single
+                    // raw block.
+                    byte[] mBuf = new byte[_mQuantized.Length];
+                    for (int i = 0; i < mBuf.Length; i++) mBuf[i] = _mQuantized[i];
+                    writer.Write(mBuf);
                     foreach (var scale in _mScales!)
                     {
                         writer.Write(scale);
@@ -1117,7 +1184,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (_vQuantized is not null)
             {
                 writer.Write(_vQuantized.Length);
-                for (int i = 0; i < _vQuantized.Length; i++) writer.Write(_vQuantized[i]);
+                // Bulk write — see m's branch above for rationale.
+                byte[] vBuf = new byte[_vQuantized.Length];
+                for (int i = 0; i < vBuf.Length; i++) vBuf[i] = _vQuantized[i];
+                writer.Write(vBuf);
                 foreach (var scale in _vScales!)
                 {
                     writer.Write(scale);
@@ -1208,20 +1278,66 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _parameterLength = reader.ReadInt32();
             _numBlocks = reader.ReadInt32();
 
+            // Bounds-check structural fields before allocating anything
+            // sized off them. Untrusted/tampered checkpoints could otherwise
+            // force multi-GB phantom allocations on the ReadBytes calls
+            // below by claiming impossibly large lengths.
+            if (_parameterLength < 0)
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: invalid _parameterLength={_parameterLength} in checkpoint.");
+            int blockSize = _options.BlockSize;
+            int expectedNumBlocks = _parameterLength == 0 ? 0
+                : (_parameterLength + blockSize - 1) / blockSize;
+            if (_numBlocks != expectedNumBlocks && _parameterLength > 0)
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: _numBlocks={_numBlocks} inconsistent with " +
+                    $"_parameterLength={_parameterLength} and BlockSize={blockSize} " +
+                    $"(expected {expectedNumBlocks}). Checkpoint may be corrupted.");
+
             // Deserialize first moment. The hasMState flag (added in #1240
             // follow-up) tells us whether m was actually initialized at
             // serialize time. If false, leave the m fields null so the
             // first Step / UpdateSolution call after deser allocates them
             // freshly — matches the contract of an optimizer that was
             // serialized before any training had run.
-            bool compressBothMoments = reader.ReadBoolean();
+            //
+            // The streamed compressBothMoments flag is cross-checked
+            // against _options.CompressBothMoments (the authoritative
+            // value, just deserialized from the options JSON). A
+            // mismatch indicates a tampered payload, manual format
+            // surgery, or a bug — fail fast rather than allocate the
+            // wrong moment representation and silently produce wrong
+            // updates downstream.
+            bool streamedCompressBothMoments = reader.ReadBoolean();
+            if (streamedCompressBothMoments != _options.CompressBothMoments)
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: checkpoint compressBothMoments flag " +
+                    $"({streamedCompressBothMoments}) does not match the value in the " +
+                    $"deserialized options ({_options.CompressBothMoments}). The options " +
+                    $"JSON is the source of truth — a mismatch here means the payload's " +
+                    $"m-state layout is inconsistent with the options that were " +
+                    $"serialized alongside it. Re-serialize from a consistent build.");
             bool hasMState = reader.ReadBoolean();
             if (hasMState)
             {
-                if (compressBothMoments)
+                if (_options.CompressBothMoments)
                 {
                     int mLength = reader.ReadInt32();
+                    if (mLength != _parameterLength)
+                        throw new InvalidOperationException(
+                            $"Adam8BitOptimizer: m-quantized length {mLength} does not " +
+                            $"match _parameterLength={_parameterLength}.");
+                    // Bulk read — per-element copy was O(N) writer touches
+                    // and unnecessarily slow for large checkpoints. ReadBytes
+                    // returns a single contiguous byte[] which we copy into
+                    // the Vector<byte>. The bounds check above caps the
+                    // allocation at _parameterLength so a tampered length
+                    // can't force a multi-GB phantom allocation.
                     var mBytes = reader.ReadBytes(mLength);
+                    if (mBytes.Length != mLength)
+                        throw new InvalidOperationException(
+                            $"Adam8BitOptimizer: m-quantized truncated (expected {mLength} " +
+                            $"bytes, got {mBytes.Length}). Checkpoint is corrupted.");
                     _mQuantized = new Vector<byte>(mLength);
                     for (int i = 0; i < mLength; i++) _mQuantized[i] = mBytes[i];
                     _mScales = new Vector<double>(_numBlocks);
@@ -1229,15 +1345,29 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     {
                         _mScales[i] = reader.ReadDouble();
                     }
+                    // Clear stale full-precision m on mode switch — see
+                    // OzYc: deserializing a CompressBothMoments=true payload
+                    // into an instance that previously held _mFullPrecision
+                    // would otherwise leave that buffer resident, inflating
+                    // GetMemoryUsage and breaking the 8x savings claim.
+                    _mFullPrecision = null;
                 }
                 else
                 {
                     int mLength = reader.ReadInt32();
+                    if (mLength != _parameterLength)
+                        throw new InvalidOperationException(
+                            $"Adam8BitOptimizer: m-fullprecision length {mLength} does not " +
+                            $"match _parameterLength={_parameterLength}.");
                     _mFullPrecision = new Vector<T>(mLength);
                     for (int i = 0; i < mLength; i++)
                     {
                         _mFullPrecision[i] = NumOps.FromDouble(reader.ReadDouble());
                     }
+                    // Clear stale quantized m on mode switch (symmetric
+                    // with the compressBothMoments branch above).
+                    _mQuantized = null;
+                    _mScales = null;
                 }
             }
             else
@@ -1252,7 +1382,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (hasVQuantized)
             {
                 int vLength = reader.ReadInt32();
+                if (vLength != _parameterLength)
+                    throw new InvalidOperationException(
+                        $"Adam8BitOptimizer: v-quantized length {vLength} does not " +
+                        $"match _parameterLength={_parameterLength}.");
                 var vBytes = reader.ReadBytes(vLength);
+                if (vBytes.Length != vLength)
+                    throw new InvalidOperationException(
+                        $"Adam8BitOptimizer: v-quantized truncated (expected {vLength} " +
+                        $"bytes, got {vBytes.Length}). Checkpoint is corrupted.");
                 _vQuantized = new Vector<byte>(vLength);
                 for (int i = 0; i < vLength; i++) _vQuantized[i] = vBytes[i];
                 _vScales = new Vector<double>(_numBlocks);
