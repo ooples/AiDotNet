@@ -79,10 +79,13 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
         // parameter count but inconsistent shape arithmetic would
         // throw inside the convolution kernel here. The exact
         // spatial dims depend on how the matcher resolved
-        // outputDepth (it pascal-cases the ctor param `outputDepth`
-        // and prefers outputShape[^1] over the metadata key, which
-        // is matcher-implementation detail and not what this test
-        // is asserting).
+        // outputDepth — TryConstructByMatchingMetadata pascal-cases
+        // the ctor param name and looks up additionalParams first
+        // (metadata wins, weight ×1000), falling through to
+        // shape-derived fallbacks like outputShape[^1] only when
+        // the metadata key is absent (shape-derived weight ×100).
+        // The exact value chosen is matcher-implementation detail
+        // and not what this test asserts.
         var input = new Tensor<float>([1, 8, 8, 8]);
         var output = sepConv.Forward(input);
         Assert.NotNull(output);

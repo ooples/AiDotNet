@@ -60,16 +60,18 @@ internal sealed class TrialStateManager
     internal TrialStateManager(string trialFilePath)
     {
         _trialFilePath = trialFilePath ?? throw new ArgumentNullException(nameof(trialFilePath));
-        // Tombstone marker — written alongside the trial file the first
-        // time SaveState is invoked. If the trial file is later deleted
-        // (user attempts to bypass trial limits) but the tombstone
-        // remains, LoadOrCreateState treats it as expired. This isn't
-        // tamper-proof (the user can also delete the tombstone), but it
-        // raises the bar from "delete one file" to "delete two files
-        // by name", which is enough to defeat naive trial-reset
-        // attempts and matches the contract the test fixture expects.
-        // See DeletedFile_RestartsTrialFromScratch for the test that
-        // pins this behavior.
+        // Tombstone marker — written by RecordOperationOrThrow AFTER a
+        // successful SaveState (i.e., on the first persisted real
+        // save/load operation). NOT written by passive code paths
+        // (LoadOrCreateState first-call init, GetStatus probes) so a
+        // status query alone never marks the install as activated. If
+        // the trial file is later deleted (user attempts to bypass
+        // trial limits) but the tombstone remains, LoadOrCreateState
+        // treats it as expired. This isn't tamper-proof (the user can
+        // also delete the tombstone), but it raises the bar from
+        // "delete one file" to "delete two files by name", which is
+        // enough to defeat naive trial-reset attempts and matches
+        // the contract pinned by DeletedFile_RestartsTrialFromScratch.
         _tombstonePath = _trialFilePath + ".tombstone";
     }
 

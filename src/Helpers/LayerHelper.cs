@@ -3060,10 +3060,20 @@ public static class LayerHelper<T>
         // (their lazy ctor leaves OutputShape with -1 sentinel until
         // first Forward; without chain-resolution, GetOutputShape
         // returns -1 and breaks downstream shape-validation tests).
+        //
+        // Activation contract: BayesianDenseLayer.Forward applies its
+        // configured activation internally. Passing a non-null
+        // activation here AND adding a sibling ActivationLayer would
+        // double-apply (e.g., ReLU∘ReLU is harmless but wasted compute;
+        // softmax∘softmax collapses outputs toward uniform — the same
+        // bug that previously affected the output layer). Construct
+        // every BayesianDenseLayer with Identity (null) and use the
+        // separate ActivationLayer as the sole activation step.
         var layers = new List<ILayer<T>>();
+        IActivationFunction<T>? noOp = null;
 
         int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
-        layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
+        layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, firstHiddenLayerSize, noOp));
         layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
 
         for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
@@ -3071,23 +3081,21 @@ public static class LayerHelper<T>
             int currentLayerSize = hiddenLayerSizes[i];
             int nextLayerSize = hiddenLayerSizes[i + 1];
 
-            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(currentLayerSize, nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
+            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(currentLayerSize, nextLayerSize, noOp));
             layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
         }
 
         if (hiddenLayerSizes.Count > 0)
         {
             int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
-            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(lastHiddenLayerSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>));
+            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(lastHiddenLayerSize, outputSize, noOp));
         }
         else
         {
-            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>));
+            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, outputSize, noOp));
         }
 
-        // BayesianDenseLayer already applies softmax internally — the
-        // trailing ActivationLayer would softmax twice and collapse the
-        // distribution toward uniform. Drop it.
+        layers.Add(new ActivationLayer<T>(new SoftmaxActivation<T>() as IActivationFunction<T>));
 
         ChainResolveLazyLayers(layers, new[] { inputSize });
         foreach (var layer in layers) yield return layer;
