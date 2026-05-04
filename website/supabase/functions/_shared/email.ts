@@ -37,6 +37,30 @@ const RESEND_TIMEOUT_MS = 5000;
 // Resend rejects malformed addresses anyway, this is just an early-out.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/**
+ * PII-redacting log helper. Edge-function logs are centralized and may
+ * be retained beyond what's necessary for transactional debugging, so
+ * raw recipient addresses must not appear in log lines. Keeps the
+ * domain (useful for transport debugging — bounces, MX issues) and
+ * masks the local-part beyond the first two characters.
+ *
+ * Examples:
+ *   "alice@example.com" → "al***@example.com"
+ *   "ab@example.com"    → "***@example.com"
+ *   "@example.com"      → "***@example.com"
+ *   "garbage"           → "***"
+ *   ""                  → "***"
+ */
+function redactEmail(email: string): string {
+  if (!email) return "***";
+  const at = email.indexOf("@");
+  if (at < 0) return "***";
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+  const masked = local.length <= 2 ? "***" : `${local.slice(0, 2)}***`;
+  return domain ? `${masked}@${domain}` : "***";
+}
+
 export interface LicenseEmailInput {
   to: string;
   licenseKey: string;
@@ -63,7 +87,9 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
   }
 
   if (!input.to || !EMAIL_RE.test(input.to)) {
-    console.warn(`sendLicenseKeyEmail: invalid or missing recipient '${input.to}' — skipping email.`);
+    console.warn(
+      `sendLicenseKeyEmail: invalid or missing recipient '${redactEmail(input.to ?? "")}' — skipping email.`,
+    );
     return { ok: false, reason: "no_recipient" };
   }
 
@@ -97,17 +123,24 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
 
     if (!resp.ok) {
       const body = await resp.text();
-      console.error(`sendLicenseKeyEmail: Resend returned ${resp.status} for ${input.to}: ${body.slice(0, 500)}`);
+      // Body kept on the returned object (caller may persist it for
+      // ops triage) but NOT echoed into log output — Resend's error
+      // body sometimes includes the raw `to` address in error messages,
+      // and we don't want that in centralized logs.
+      console.error(
+        `sendLicenseKeyEmail: Resend returned ${resp.status} for ${redactEmail(input.to)}.`,
+      );
       return { ok: false, reason: "send_failed", status: resp.status, body };
     }
 
-    console.log(`sendLicenseKeyEmail: dispatched ${input.tier} key to ${input.to} (status ${resp.status}).`);
+    console.log(
+      `sendLicenseKeyEmail: dispatched ${input.tier} key to ${redactEmail(input.to)} (status ${resp.status}).`,
+    );
     return { ok: true, status: resp.status };
   } catch (err) {
     const isTimeout = (err as { name?: string })?.name === "AbortError";
     console.error(
-      `sendLicenseKeyEmail: ${isTimeout ? "timed out after " + RESEND_TIMEOUT_MS + "ms" : "fetch failed"} for ${input.to}:`,
-      err,
+      `sendLicenseKeyEmail: ${isTimeout ? "timed out after " + RESEND_TIMEOUT_MS + "ms" : "fetch failed"} for ${redactEmail(input.to)}.`,
     );
     return { ok: false, reason: "send_failed" };
   } finally {

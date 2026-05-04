@@ -104,6 +104,20 @@ serve(async (req: Request) => {
   if (!license) {
     return json({ success: false, error: "license_not_found" }, 404);
   }
+  // Refuse to re-email keys that aren't currently usable. The email
+  // template presents the key as something the customer should set
+  // immediately on their dev machine — sending a dead key (revoked,
+  // expired, suspended) would be actively misleading and report
+  // success to the admin. 409 because the row exists but its current
+  // state conflicts with the requested action.
+  if (license.status !== "active") {
+    return json({
+      success: false,
+      error: "license_not_active",
+      message: `Only active licenses can be re-sent. Current status: ${license.status}. `
+        + `Reactivate the license from the admin UI before re-sending its key.`,
+    }, 409);
+  }
 
   // Recipient resolution:
   //   1. license.customer_email (admin-typed at issuance, e.g. bulk training)
