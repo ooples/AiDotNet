@@ -322,6 +322,10 @@ public class PoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy contract — flip IsShapeResolved on the first forward so
+        // chain-walkers and tests see the resolved input/output shapes.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
         _originalInputShape = input._shape;
 
