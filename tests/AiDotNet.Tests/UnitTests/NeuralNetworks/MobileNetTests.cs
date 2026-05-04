@@ -310,10 +310,7 @@ public class MobileNetTests
     {
         // Arrange & Act
         var block = new InvertedResidualBlock<double>(
-            inChannels: 32,
             outChannels: 64,
-            inputHeight: 16,
-            inputWidth: 16,
             expansionRatio: 6,
             stride: 2,
             useSE: false);
@@ -332,10 +329,7 @@ public class MobileNetTests
     {
         // Arrange & Act
         var block = new InvertedResidualBlock<double>(
-            inChannels: 64,
             outChannels: 96,
-            inputHeight: 8,
-            inputWidth: 8,
             expansionRatio: 6,
             stride: 1,
             useSE: true,
@@ -351,10 +345,7 @@ public class MobileNetTests
     {
         // Arrange
         var block = new InvertedResidualBlock<double>(
-            inChannels: 32,
             outChannels: 32,
-            inputHeight: 8,
-            inputWidth: 8,
             expansionRatio: 6,
             stride: 1,
             useSE: false);
@@ -380,10 +371,7 @@ public class MobileNetTests
     {
         // Arrange
         var block = new InvertedResidualBlock<double>(
-            inChannels: 32,
             outChannels: 64,
-            inputHeight: 16,
-            inputWidth: 16,
             expansionRatio: 6,
             stride: 2,
             useSE: false);

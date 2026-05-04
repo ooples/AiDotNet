@@ -4250,7 +4250,7 @@ public class AdvancedLayersIntegrationTests
         int outChannels = 64;
         int height = 28;
         int width = 28;
-        var layer = new InvertedResidualBlock<float>(inChannels, outChannels, height, width,
+        var layer = new InvertedResidualBlock<float>(outChannels,
             expansionRatio: 6, stride: 1);
 
         // Input: [batch, channels, height, width]
@@ -4272,7 +4272,7 @@ public class AdvancedLayersIntegrationTests
         int outChannels = 32;
         int height = 14;
         int width = 14;
-        var original = new InvertedResidualBlock<float>(inChannels, outChannels, height, width,
+        var original = new InvertedResidualBlock<float>(outChannels,
             expansionRatio: 4, stride: 1);
         var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
 

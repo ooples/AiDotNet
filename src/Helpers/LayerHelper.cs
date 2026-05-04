@@ -4653,10 +4653,7 @@ public static class LayerHelper<T>
 
             // First block in each stage may have stride > 1
             yield return new InvertedResidualBlock<T>(
-                inChannels: currentChannels,
                 outChannels: scaledOutChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 expansionRatio: expansion,
                 stride: stride,
                 useSE: true,
@@ -4672,10 +4669,7 @@ public static class LayerHelper<T>
             for (int i = 1; i < scaledNumLayers; i++)
             {
                 yield return new InvertedResidualBlock<T>(
-                    inChannels: currentChannels,
                     outChannels: currentChannels,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     expansionRatio: expansion,
                     stride: 1,
                     useSE: true,
@@ -4775,10 +4769,7 @@ public static class LayerHelper<T>
 
             // First block in each stage may have stride > 1
             yield return new InvertedResidualBlock<T>(
-                inChannels: currentChannels,
                 outChannels: scaledOutChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 expansionRatio: expansion,
                 stride: stride,
                 useSE: false,
@@ -4793,10 +4784,7 @@ public static class LayerHelper<T>
             for (int i = 1; i < numBlocks; i++)
             {
                 yield return new InvertedResidualBlock<T>(
-                    inChannels: currentChannels,
                     outChannels: currentChannels,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     expansionRatio: expansion,
                     stride: 1,
                     useSE: false,
@@ -4892,10 +4880,7 @@ public static class LayerHelper<T>
         foreach (var block in blockConfigs)
         {
             yield return new InvertedResidualBlock<T>(
-                inChannels: currentChannels,
                 outChannels: block.outChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 expansionRatio: block.expansion,
                 stride: block.stride,
                 useSE: block.useSE,
@@ -29870,7 +29855,7 @@ public static class LayerHelper<T>
         {
             yield return new ResidualDenseBlock<T>(
                 numFeatures: numFeatures, growthChannels: growthChannels,
-                inputHeight: height, inputWidth: width, residualScale: 0.2);
+                residualScale: 0.2);
         }
 
         // Deformable alignment modules for each propagation

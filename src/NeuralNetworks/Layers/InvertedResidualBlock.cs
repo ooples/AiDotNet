@@ -45,18 +45,23 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "4, 8, 8, 8")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8, 8", TestConstructorArgs = "8")]
 public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
-    private readonly ConvolutionalLayer<T>? _expandConv;
-    private readonly BatchNormalizationLayer<T>? _expandBn;
-    private readonly ConvolutionalLayer<T> _dwConv;
-    private readonly BatchNormalizationLayer<T> _dwBn;
-    private readonly SqueezeAndExcitationLayer<T>? _se;
-    private readonly ConvolutionalLayer<T> _projectConv;
-    private readonly BatchNormalizationLayer<T> _projectBn;
+    // Non-readonly: lazy ctor leaves these null until OnFirstForward
+    // observes input.Shape and allocates each against the resolved
+    // hiddenDim = inChannels × expansionRatio.
+    private ConvolutionalLayer<T>? _expandConv;
+    private BatchNormalizationLayer<T>? _expandBn;
+    private ConvolutionalLayer<T> _dwConv;
+    private BatchNormalizationLayer<T> _dwBn;
+    private SqueezeAndExcitationLayer<T>? _se;
+    private ConvolutionalLayer<T> _projectConv;
+    private BatchNormalizationLayer<T> _projectBn;
 
-    private readonly bool _useResidual;
+    // Non-readonly: lazy ctor leaves _useResidual = false until
+    // OnFirstForward observes input channel count.
+    private bool _useResidual;
     private readonly bool _hasExpansion;
     private readonly bool _useSE;
 
@@ -74,23 +79,33 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
+    /// <summary>
+    /// Sum of trainable parameters across all sub-layers. The non-optional
+    /// <c>_dwConv</c>, <c>_dwBn</c>, <c>_projectConv</c>, <c>_projectBn</c>
+    /// stay null until <see cref="OnFirstForward"/> resolves the input
+    /// channel count and allocates them — null-guard each so this property
+    /// returns 0 in the pre-Forward state instead of throwing.
+    /// </summary>
     public override long ParameterCount =>
         (_expandConv?.ParameterCount ?? 0) + (_expandBn?.ParameterCount ?? 0) +
-        _dwConv.ParameterCount + _dwBn.ParameterCount +
+        (_dwConv?.ParameterCount ?? 0) + (_dwBn?.ParameterCount ?? 0) +
         (_se?.ParameterCount ?? 0) +
-        _projectConv.ParameterCount + _projectBn.ParameterCount;
+        (_projectConv?.ParameterCount ?? 0) + (_projectBn?.ParameterCount ?? 0);
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
     {
+        // All sub-layers stay null until OnFirstForward resolves input
+        // channel count; null-guard each to keep this query side-effect-
+        // free in the pre-Forward state.
         var grads = new List<T>();
-        if (_expandConv != null) grads.AddRange(_expandConv.GetParameterGradients().ToArray());
-        if (_expandBn != null) grads.AddRange(_expandBn.GetParameterGradients().ToArray());
-        grads.AddRange(_dwConv.GetParameterGradients().ToArray());
-        grads.AddRange(_dwBn.GetParameterGradients().ToArray());
-        if (_se != null) grads.AddRange(_se.GetParameterGradients().ToArray());
-        grads.AddRange(_projectConv.GetParameterGradients().ToArray());
-        grads.AddRange(_projectBn.GetParameterGradients().ToArray());
+        if (_expandConv is not null) grads.AddRange(_expandConv.GetParameterGradients().ToArray());
+        if (_expandBn is not null) grads.AddRange(_expandBn.GetParameterGradients().ToArray());
+        if (_dwConv is not null) grads.AddRange(_dwConv.GetParameterGradients().ToArray());
+        if (_dwBn is not null) grads.AddRange(_dwBn.GetParameterGradients().ToArray());
+        if (_se is not null) grads.AddRange(_se.GetParameterGradients().ToArray());
+        if (_projectConv is not null) grads.AddRange(_projectConv.GetParameterGradients().ToArray());
+        if (_projectBn is not null) grads.AddRange(_projectBn.GetParameterGradients().ToArray());
         return new Vector<T>([.. grads]);
     }
 
@@ -98,9 +113,9 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     {
         base.ClearGradients();
         _expandConv?.ClearGradients(); _expandBn?.ClearGradients();
-        _dwConv.ClearGradients(); _dwBn.ClearGradients();
+        _dwConv?.ClearGradients(); _dwBn?.ClearGradients();
         _se?.ClearGradients();
-        _projectConv.ClearGradients(); _projectBn.ClearGradients();
+        _projectConv?.ClearGradients(); _projectBn?.ClearGradients();
     }
 
     /// <summary>
@@ -111,7 +126,7 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     /// <summary>
     /// Gets the number of input channels.
     /// </summary>
-    public int InChannels { get; }
+    public int InChannels { get; private set; }
 
     /// <summary>
     /// Gets the number of output channels.
@@ -140,89 +155,114 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     /// <param name="useSE">Whether to use Squeeze-and-Excitation (for MobileNetV3).</param>
     /// <param name="seRatio">The reduction ratio for SE block (default: 4).</param>
     /// <param name="activation">The activation function to use. Default is ReLU6.</param>
+    /// <summary>
+    /// Lazy ctor — input depth/height/width come from the first
+    /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); only
+    /// <c>outChannels</c>, <c>expansionRatio</c>, <c>stride</c>, and SE
+    /// configuration are required at construction. The expansion conv's
+    /// <c>hiddenDim = inChannels × expansionRatio</c> isn't known until
+    /// input.Shape is observed, so the expansion / depthwise / SE
+    /// sub-layers are allocated in <see cref="OnFirstForward"/>.
+    /// </summary>
     public InvertedResidualBlock(
-        int inChannels,
         int outChannels,
-        int inputHeight,
-        int inputWidth,
         int expansionRatio = 6,
         int stride = 1,
         bool useSE = false,
         int seRatio = 4,
         IActivationFunction<T>? activationFunction = null)
         : base(
-            inputShape: [inChannels, inputHeight, inputWidth],
-            outputShape: [outChannels, (inputHeight + stride - 1) / stride, (inputWidth + stride - 1) / stride],
+            inputShape: [-1, -1, -1],
+            outputShape: [outChannels, -1, -1],
             scalarActivation: activationFunction ?? new ReLU6Activation<T>())
     {
-        InChannels = inChannels;
+        if (outChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outChannels));
+        if (expansionRatio <= 0) throw new ArgumentOutOfRangeException(nameof(expansionRatio));
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
+
+        InChannels = -1; // resolved in OnFirstForward
         OutChannels = outChannels;
         ExpansionRatio = expansionRatio;
         Stride = stride;
+        _seRatio = seRatio;
 
-        int hiddenDim = inChannels * expansionRatio;
         _hasExpansion = expansionRatio != 1;
         _useSE = useSE;
 
-        // Skip connection only when stride=1 and input/output channels match
-        _useResidual = stride == 1 && inChannels == outChannels;
+        // _expandConv, _expandBn, _dwConv, _dwBn, _se, _projectConv,
+        // _projectBn are allocated in OnFirstForward — their channel
+        // dimensions all derive from the resolved inChannels.
+        _projectConv = null!;
+        _projectBn = null!;
+        _dwConv = null!;
+        _dwBn = null!;
+    }
 
-        int currentHeight = inputHeight;
-        int currentWidth = inputWidth;
+    private readonly int _seRatio;
 
-        // Expansion layer (1x1 conv) - only if expansion ratio > 1
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves input channels + spatial dims, allocates expansion /
+    /// depthwise / SE / projection sub-layers against the resolved
+    /// <c>hiddenDim = inChannels × expansionRatio</c>, and propagates
+    /// shape to each so ParameterCount reports the real weight count
+    /// before any sub-layer's first Forward fires.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inChannels, inputHeight, inputWidth;
+        if (s.Length == 3) { inChannels = s[0]; inputHeight = s[1]; inputWidth = s[2]; }
+        else if (s.Length == 4) { inChannels = s[1]; inputHeight = s[2]; inputWidth = s[3]; }
+        else
+            throw new ArgumentException(
+                $"InvertedResidualBlock requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+
+        InChannels = inChannels;
+        int hiddenDim = inChannels * ExpansionRatio;
+        _useResidual = Stride == 1 && inChannels == OutChannels;
+
+        // Expansion layer (1×1 conv) — only if expansion ratio > 1.
         if (_hasExpansion)
         {
-            _expandConv = new ConvolutionalLayer<T>(
+            var expandConv = new ConvolutionalLayer<T>(
                 outputDepth: hiddenDim,
                 kernelSize: 1,
                 stride: 1,
                 padding: 0,
                 activationFunction: new IdentityActivation<T>());
-
-            _expandBn = new BatchNormalizationLayer<T>();
+            var expandBn = new BatchNormalizationLayer<T>();
+            _expandConv = expandConv;
+            _expandBn = expandBn;
         }
 
-        // Calculate output dimensions after depthwise conv
-        int dwOutputHeight = (currentHeight + 2 * 1 - 3) / stride + 1; // padding=1, kernel=3
-        int dwOutputWidth = (currentWidth + 2 * 1 - 3) / stride + 1;
-
-        // Depthwise separable convolution (3x3)
-        // Note: We use a regular conv with groups=channels for depthwise
-        // Here we use ConvolutionalLayer configured for depthwise operation
         int dwInputChannels = _hasExpansion ? hiddenDim : inChannels;
         _dwConv = new ConvolutionalLayer<T>(
-            outputDepth: dwInputChannels, // Same as input for depthwise
+            outputDepth: dwInputChannels,
             kernelSize: 3,
-            stride: stride,
+            stride: Stride,
             padding: 1,
             activationFunction: new IdentityActivation<T>());
-
         _dwBn = new BatchNormalizationLayer<T>();
 
-        // Squeeze-and-Excitation block (optional, for MobileNetV3)
         if (_useSE)
         {
             _se = new SqueezeAndExcitationLayer<T>(
                 dwInputChannels,
-                seRatio,
+                _seRatio,
                 firstActivation: (IActivationFunction<T>?)null,
                 secondActivation: (IActivationFunction<T>?)null);
         }
 
-        // Projection layer (1x1 conv) - LINEAR (no activation)
         _projectConv = new ConvolutionalLayer<T>(
-            outputDepth: outChannels,
+            outputDepth: OutChannels,
             kernelSize: 1,
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
-
         _projectBn = new BatchNormalizationLayer<T>();
 
-        // Default internal BN layers to eval mode.
-        // BN with batch_size=1 in training mode normalizes to zero (I - 1/N*11^T = 0 when N=1),
-        // which breaks forward pass for single samples. Eval mode uses running stats.
         _expandBn?.SetTrainingMode(false);
         _dwBn.SetTrainingMode(false);
         _projectBn.SetTrainingMode(false);
@@ -234,16 +274,35 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
         if (_expandConv is not null) RegisterSubLayer(_expandConv);
         if (_expandBn is not null) RegisterSubLayer(_expandBn);
         if (_se is not null) RegisterSubLayer(_se);
+
+        int dwOutH = (inputHeight + 2 - 3) / Stride + 1; // padding=1, kernel=3
+        int dwOutW = (inputWidth + 2 - 3) / Stride + 1;
+
+        // Drive sub-layer shape resolution.
+        if (_hasExpansion)
+        {
+            _expandConv!.ResolveShapesOnly(new[] { inChannels, inputHeight, inputWidth });
+            _expandBn!.ResolveShapesOnly(new[] { 1, hiddenDim, inputHeight, inputWidth });
+        }
+        _dwConv.ResolveShapesOnly(new[] { dwInputChannels, inputHeight, inputWidth });
+        _dwBn.ResolveShapesOnly(new[] { 1, dwInputChannels, dwOutH, dwOutW });
+        _projectConv.ResolveShapesOnly(new[] { dwInputChannels, dwOutH, dwOutW });
+        _projectBn.ResolveShapesOnly(new[] { 1, OutChannels, dwOutH, dwOutW });
+
+        ResolveShapes(
+            new[] { inChannels, inputHeight, inputWidth },
+            new[] { OutChannels, dwOutH, dwOutW });
     }
 
     /// <inheritdoc />
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
-        // Propagate to internal BN layers which behave differently in training vs eval mode
+        // Propagate to internal BN layers which behave differently in training vs eval mode.
+        // Null-guard for the pre-Forward state where sub-layers haven't been allocated yet.
         _expandBn?.SetTrainingMode(isTraining);
-        _dwBn.SetTrainingMode(isTraining);
-        _projectBn.SetTrainingMode(isTraining);
+        _dwBn?.SetTrainingMode(isTraining);
+        _projectBn?.SetTrainingMode(isTraining);
     }
 
     /// <summary>
@@ -253,6 +312,11 @@ public class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializationExtras<
     /// <returns>The output tensor after the inverted residual computation.</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor leaves all sub-layers null until OnFirstForward
+        // resolves the input channel count and allocates them. Subsequent
+        // calls short-circuit via IsShapeResolved.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
         Tensor<T> x = input;
 
