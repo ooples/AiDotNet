@@ -186,31 +186,50 @@ public abstract class DualInputLayerTestBase
         // weights resolve only on the first Forward call. The reflection
         // probe handles both the params-Tensor[] dispatch and the
         // (Tensor, Tensor) overload that some dual-input layers expose.
+        var primary = CreateRandomTensor(PrimaryInputShape);
+        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
+        bool probed = false;
+
+        // Try the params-Tensor[] overload (DecoderLayer style) first.
         try
         {
-            var primary = CreateRandomTensor(PrimaryInputShape);
-            var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
             var paramsForward = layer.GetType().GetMethod(
                 "Forward",
                 new[] { typeof(Tensor<double>[]) });
             if (paramsForward is not null)
             {
                 paramsForward.Invoke(layer, new object[] { new[] { primary, secondary } });
+                probed = true;
             }
-            else
+        }
+        catch { /* fall through */ }
+
+        // Try the (Tensor, Tensor) overload (TransformerDecoderLayer style).
+        if (!probed)
+        {
+            try
             {
                 var dualForward = layer.GetType().GetMethod(
                     "Forward",
                     new[] { typeof(Tensor<double>), typeof(Tensor<double>) });
-                dualForward?.Invoke(layer, new object[] { primary, secondary });
+                if (dualForward is not null)
+                {
+                    dualForward.Invoke(layer, new object[] { primary, secondary });
+                    probed = true;
+                }
             }
+            catch { /* fall through */ }
         }
-        catch
+
+        // Last resort: the single-input Forward declared by ILayer<T>.
+        // Many dual-input layers expose a single-input Forward that
+        // delegates to (input, input), which still drives the lazy
+        // resolution chain. Suppress any exception so the invariant
+        // still validates whatever state the ctor produced.
+        if (!probed)
         {
-            // Probe failed; the invariant still validates whatever
-            // state the ctor produced. Layers that can't be probed
-            // this way should override CreateLayer to return a
-            // pre-initialized instance.
+            try { layer.Forward(primary); }
+            catch { /* fall through */ }
         }
 
         int count = (int)layer.ParameterCount;
