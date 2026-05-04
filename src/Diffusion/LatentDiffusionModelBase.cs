@@ -49,6 +49,21 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
+#if NETFRAMEWORK
+        // GetParameterChunks is part of IParameterizable's chunked-API
+        // contract, which IParameterizable.cs gates behind
+        // `#if !NETFRAMEWORK` because default interface methods need
+        // .NET-Standard-2.1+ runtime dispatch that net471 doesn't
+        // provide. The interface cast on net471 therefore can't reach
+        // a chunked enumeration through the IParameterizable surface.
+        // Until the chunked API is widened on net471 (would require
+        // declaring it as a regular interface member with concrete
+        // overrides on every implementer), foundation-scale parameter
+        // counting on net471 is unsupported — return empty so the
+        // ParameterCount property's flat-vector path stays the only
+        // way to enumerate.
+        yield break;
+#else
         if (NoisePredictor is IParameterizable<T, Tensor<T>, Tensor<T>> np)
         {
             foreach (var chunk in np.GetParameterChunks())
@@ -64,6 +79,7 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
             foreach (var chunk in conditioner.GetParameterChunks())
                 yield return chunk;
         }
+#endif
     }
 
     /// <inheritdoc />
