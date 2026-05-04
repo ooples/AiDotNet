@@ -1,6 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -188,7 +190,31 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         _options = options ?? new TransformerOptions();
         Options = _options;
         _transformerArchitecture = architecture;
-        _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default optimizer for Transformer is Adam, not vanilla GradientDescent.
+        // Vaswani 2017 ("Attention Is All You Need") trains Transformers with Adam
+        // (β₁=0.9, β₂=0.98, ε=1e-9) — vanilla SGD does not produce competitive
+        // models on attention architectures because attention's softmax + LayerNorm
+        // gradient surface has very different scales across parameters and SGD's
+        // single-rate update can't accommodate that without per-parameter adaptation.
+        // Every other neural-net family in this library defaults to Adam via
+        // GetOrCreateBaseOptimizer(); Transformer was the lone outlier defaulting
+        // to GradientDescent, which made byte-LM training silently fail to converge
+        // (see ooples/AiDotNet#1264 for the V=256 reproducer that demonstrates this).
+        // LR=1e-3 follows PyTorch's torch.optim.Adam default and lines up with the
+        // Adam paper's recommendation; consumers needing the Vaswani-2017 schedule
+        // (warmup + inverse-sqrt decay) can pass an explicit optimizer + scheduler.
+        if (optimizer is null)
+        {
+            var defaultAdamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-3,
+            };
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, defaultAdamOpts);
+        }
+        else
+        {
+            _optimizer = optimizer;
+        }
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
