@@ -315,6 +315,14 @@ public class BasicBlock<T> : LayerBase<T>
 
         var input = inputs[0];
 
+        // Mirror the lazy-init guard from Forward(): if this block's
+        // first ever execution is on the GPU path, _hasDownsample /
+        // _downsampleConv stay false/null and the skip branch is
+        // silently dropped (residual identity = raw input even when
+        // the stage requires stride=2 downsampling). OnFirstForward
+        // resolves shapes + allocates _downsampleConv / _downsampleBn.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2
         var conv1Out = _conv1.ForwardGpu(input);
         var bn1Out = _bn1.ForwardGpu(conv1Out);
