@@ -6,16 +6,16 @@ const base = import.meta.env.BASE_URL;
 <BaseLayout title="Authenticating... - AiDotNet" description="Processing your authentication.">
   <div class="pt-24 pb-16 min-h-screen flex items-center justify-center">
     <div class="text-center">
-      <div class="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-gradient-to-r from-brand-blue/10 to-brand-purple/10">
+      <div id="auth-spinner" class="inline-flex items-center justify-center w-16 h-16 mb-6 rounded-full bg-gradient-to-r from-brand-blue/10 to-brand-purple/10">
         <svg class="w-8 h-8 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
       </div>
-      <h1 class="text-xl font-semibold text-slate-900 dark:text-white mb-2">Signing you in...</h1>
-      <p class="text-sm text-slate-500 dark:text-slate-400">Please wait while we complete authentication.</p>
+      <h1 id="auth-heading" class="text-xl font-semibold text-slate-900 dark:text-white mb-2">Signing you in...</h1>
+      <p id="auth-subtext" class="text-sm text-slate-500 dark:text-slate-400">Please wait while we complete authentication.</p>
 
-      <div id="auth-error" class="hidden mt-6 p-4 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl max-w-md mx-auto">
+      <div id="auth-error" class="hidden mt-6 p-4 text-sm text-left text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl max-w-xl mx-auto">
       </div>
     </div>
   </div>
@@ -25,48 +25,159 @@ const base = import.meta.env.BASE_URL;
 
     const base = import.meta.env.BASE_URL || '/';
 
+    /**
+     * OAuth providers can fail at three different layers, each surfacing
+     * the error in a different place:
+     *
+     *   1. PKCE / code-flow error → URL search params: ?error=...&error_description=...
+     *   2. Implicit-flow error    → URL hash params:   #error=...&error_description=...
+     *   3. Session-exchange error → returned from supabase.auth.getSession()
+     *
+     * The previous version of this page only checked (3), so any error
+     * routed through (1) or (2) — which is what every Supabase-side
+     * provider config failure produces — landed on a 10-second silent
+     * timeout that printed only "Authentication timed out". That made
+     * "GitHub OAuth doesn't work" effectively undebuggable from the
+     * client.
+     *
+     * Read all three layers and surface whichever fires first. Keeps the
+     * 10-second fallback for the case where the redirect lands here
+     * without any error param AND the session never materializes (e.g.
+     * a third-party cookie block).
+     */
+
+    type AuthErrorParts = {
+      error?: string;
+      errorCode?: string;
+      errorDescription?: string;
+    };
+
+    function parseAuthError(): AuthErrorParts | null {
+      const search = new URLSearchParams(window.location.search);
+      const hash = new URLSearchParams(
+        // Hash starts with '#'; URLSearchParams expects no leading marker.
+        // Strip it before parsing so /auth/callback#error=... resolves.
+        window.location.hash.startsWith('#')
+          ? window.location.hash.slice(1)
+          : window.location.hash,
+      );
+
+      // Hash takes precedence over search: implicit-flow errors are more
+      // specific (they include error_code from the IdP) than code-flow
+      // errors which Supabase rewrites into the search string.
+      const pick = (key: string) => hash.get(key) ?? search.get(key) ?? undefined;
+
+      const error = pick('error');
+      if (!error) return null;
+
+      return {
+        error,
+        errorCode: pick('error_code'),
+        errorDescription: pick('error_description'),
+      };
+    }
+
+    function showFatalError(headline: string, details: string, hint?: string) {
+      const errorDiv = document.getElementById('auth-error');
+      const spinner = document.getElementById('auth-spinner');
+      const heading = document.getElementById('auth-heading');
+      const subtext = document.getElementById('auth-subtext');
+
+      if (heading) heading.textContent = 'Sign-in failed';
+      if (subtext) subtext.textContent = '';
+      if (spinner) spinner.classList.add('hidden');
+
+      if (errorDiv) {
+        // Build a structured error block so the message is readable AND the
+        // technical details are visible for support / debugging. Browsers
+        // will render the <pre> block in a monospace font so error_description
+        // strings (which often include URLs and config keys) stay scannable.
+        const safe = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] ?? c));
+        const hintHtml = hint ? `<p class="mt-3 text-xs text-slate-600 dark:text-slate-400">${safe(hint)}</p>` : '';
+        errorDiv.innerHTML = `
+          <p class="font-semibold text-red-700 dark:text-red-300">${safe(headline)}</p>
+          <pre class="mt-2 text-xs whitespace-pre-wrap break-words bg-red-100/40 dark:bg-red-900/30 p-2 rounded">${safe(details)}</pre>
+          ${hintHtml}
+          <p class="mt-3"><a href="${base}login/" class="underline font-medium">Back to login</a></p>
+        `;
+        errorDiv.classList.remove('hidden');
+      }
+    }
+
     async function handleCallback() {
+      // Layer 1+2: provider/redirect-level error embedded in the URL.
+      const urlError = parseAuthError();
+      if (urlError) {
+        const detailLines = [
+          `error: ${urlError.error}`,
+          urlError.errorCode ? `error_code: ${urlError.errorCode}` : null,
+          urlError.errorDescription ? `error_description: ${decodeURIComponent(urlError.errorDescription).replace(/\+/g, ' ')}` : null,
+        ].filter(Boolean) as string[];
+
+        // Best-effort hint: most common cause of error_code=server_error on
+        // a previously-working provider is a missing client secret on the
+        // Supabase auth provider config. Surface that to the user without
+        // pretending we know it for certain.
+        let hint: string | undefined;
+        if (urlError.errorCode === 'server_error' || urlError.error === 'server_error') {
+          hint = 'This usually means the OAuth provider is misconfigured on the server side '
+            + '(client secret rotated, callback URL drift, or provider disabled). '
+            + 'Try a different sign-in method while we investigate.';
+        } else if (urlError.error === 'access_denied') {
+          hint = 'You declined to grant the requested permissions. '
+            + 'Try again and approve the requested scopes, or use a different sign-in method.';
+        } else if (urlError.errorCode === 'unsupported_provider' || urlError.errorDescription?.includes('not enabled')) {
+          hint = 'This sign-in provider is currently disabled on the server. '
+            + 'Use a different method (e.g. Google or email + password).';
+        }
+
+        console.error('[auth/callback] OAuth returned an error:', urlError);
+        showFatalError('We couldn\'t complete the sign-in.', detailLines.join('\n'), hint);
+        return;
+      }
+
       try {
-        // Supabase processes the hash fragment from the OAuth redirect
+        // Layer 3: session-exchange (PKCE token swap) error.
         const { data, error } = await supabase.auth.getSession();
 
         if (error) {
-          showError(error.message);
+          console.error('[auth/callback] getSession() error:', error);
+          showFatalError('Session exchange failed.', error.message);
           return;
         }
 
         if (data.session) {
-          // Get redirect parameter
           const params = new URLSearchParams(window.location.search);
           const redirectTo = params.get('redirect') || `${base}account/`;
           window.location.href = redirectTo;
-        } else {
-          // No session yet, wait for auth state change
-          const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' && session) {
-              subscription.unsubscribe();
-              const params = new URLSearchParams(window.location.search);
-              const redirectTo = params.get('redirect') || `${base}account/`;
-              window.location.href = redirectTo;
-            }
-          });
-
-          // Timeout after 10 seconds
-          setTimeout(() => {
-            subscription.unsubscribe();
-            showError('Authentication timed out. Please try signing in again.');
-          }, 10000);
+          return;
         }
-      } catch (err) {
-        showError('An unexpected error occurred. Please try signing in again.');
-      }
-    }
 
-    function showError(message: string) {
-      const errorDiv = document.getElementById('auth-error');
-      if (errorDiv) {
-        errorDiv.innerHTML = `${message} <a href="${base}login/" class="underline font-medium">Back to login</a>`;
-        errorDiv.classList.remove('hidden');
+        // No session yet, no URL error — wait for auth state change.
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === 'SIGNED_IN' && session) {
+            subscription.unsubscribe();
+            const params = new URLSearchParams(window.location.search);
+            const redirectTo = params.get('redirect') || `${base}account/`;
+            window.location.href = redirectTo;
+          }
+        });
+
+        // Hard timeout. The 10s window is intentional: if the session-storage
+        // write hasn't fired by now, the browser is almost certainly blocking
+        // third-party cookies, and the user needs an explicit message.
+        setTimeout(() => {
+          subscription.unsubscribe();
+          showFatalError(
+            'Sign-in did not complete in time.',
+            'Supabase did not surface a SIGNED_IN event within 10 seconds.',
+            'If you have third-party cookies blocked, allow them for *.supabase.co and try again. '
+            + 'Alternatively, switch to the email + password method.',
+          );
+        }, 10000);
+      } catch (err) {
+        console.error('[auth/callback] unexpected exception:', err);
+        showFatalError('An unexpected error occurred.', String(err));
       }
     }
 
