@@ -96,9 +96,14 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
   const from = Deno.env.get("EMAIL_FROM") ?? DEFAULT_FROM;
   const accountUrl = Deno.env.get("ACCOUNT_URL") ?? DEFAULT_ACCOUNT_URL;
 
+  // Use the actual product name, not the brand name, so the subject is
+  // accurate when AiDotNet ships multiple products (the wire format
+  // already passes a `product` field; the original copy was treating it
+  // as informational and hardcoding "AiDotNet").
+  const productName = input.product?.trim() || "AiDotNet";
   const subject = input.isExisting
-    ? `Your AiDotNet ${input.tier} license key`
-    : `Welcome to AiDotNet — your ${input.tier} license key`;
+    ? `Your ${productName} ${input.tier} license key`
+    : `Welcome to ${productName} — your ${input.tier} license key`;
 
   const text = renderText(input, accountUrl);
   const html = renderHtml(input, accountUrl);

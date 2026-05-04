@@ -89,7 +89,24 @@ begin
             jsonb_build_array()
     end;
 
-    -- Check if this machine is already activated
+    -- Advisory lock on the license key id to prevent race conditions
+    -- when two concurrent validations try to activate the same license.
+    --
+    -- BUG FIX: pg_advisory_xact_lock takes bigint, but v_license.id is uuid.
+    -- The previous version called it with the raw uuid which threw
+    -- `function pg_advisory_xact_lock(uuid) does not exist` and broke
+    -- every new-machine activation in production. hashtextextended(text,
+    -- seed) returns bigint deterministically, so the same uuid always
+    -- maps to the same lock key — the serialization invariant holds.
+    --
+    -- Acquire BEFORE the existing-activation lookup so two concurrent
+    -- activations from the same machine_id_hash can't both pass the
+    -- "no existing activation" check with stale snapshots and end up
+    -- inserting duplicates. The serialization scope must cover both
+    -- the existence check AND the counting/insert below.
+    perform pg_advisory_xact_lock(hashtextextended(v_license.id::text, 0));
+
+    -- Check if this machine is already activated (serialized by the lock).
     select * into v_existing_activation
     from public.license_activations
     where license_key_id = v_license.id
@@ -118,18 +135,8 @@ begin
         );
     end if;
 
-    -- Advisory lock on the license key id to prevent race conditions
-    -- when two concurrent validations try to activate the same license.
-    --
-    -- BUG FIX: pg_advisory_xact_lock takes bigint, but v_license.id is uuid.
-    -- The previous version called it with the raw uuid which threw
-    -- `function pg_advisory_xact_lock(uuid) does not exist` and broke
-    -- every new-machine activation in production. hashtextextended(text,
-    -- seed) returns bigint deterministically, so the same uuid always
-    -- maps to the same lock key — the serialization invariant holds.
-    perform pg_advisory_xact_lock(hashtextextended(v_license.id::text, 0));
-
-    -- Re-count active activations after acquiring the lock
+    -- Count active activations under the same lock so the activation-limit
+    -- decision is consistent with the existence check above.
     select count(*) into v_activation_count
     from public.license_activations
     where license_key_id = v_license.id

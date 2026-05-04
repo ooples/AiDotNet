@@ -131,7 +131,19 @@ serve(async (req: Request) => {
       .eq("id", license.user_id)
       .maybeSingle();
     if (profileError) {
+      // The profiles row should exist (the license has a user_id FK
+      // to it). A failure here is server-side — RLS misconfiguration,
+      // schema drift, or DB outage — not a user-correctable input
+      // error, so return 500 with the upstream message instead of
+      // silently falling through and reporting "no recipient" at the
+      // bottom of this handler.
       console.error("admin-resend-license-email: profile lookup failed:", profileError);
+      return json({
+        success: false,
+        error: "profile_lookup_failed",
+        message: `Database lookup for the license owner's profile failed: ${profileError.message ?? "unknown error"}. ` +
+          "This is a server-side issue — check Supabase RLS policies, the profiles table schema, and the database health.",
+      }, 500);
     } else if (profile?.email) {
       recipient = profile.email;
     }

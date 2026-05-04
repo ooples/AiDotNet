@@ -531,11 +531,21 @@ const productsJson = JSON.stringify(PRODUCTS);
           actions = '<span class="text-xs text-slate-400">--</span>';
         }
 
+        // The admin-resend-license-email edge function rejects revoked
+        // licenses (the customer no longer has access — re-sending the
+        // key would be misleading). Hide the button on those rows so the
+        // operator doesn't get a UI affordance for an action the backend
+        // will refuse anyway. Suspended licenses can still be resent
+        // since the email goes out for reactivation flows too.
+        const showResend = l.status !== 'revoked';
+        const resendButton = showResend
+          ? `<button class="resend-email-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Re-send the license-key email to the customer">resend</button>`
+          : '';
         return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
           <td class="py-3 px-4">
             <div class="flex items-center gap-2">
               <button class="copy-key-btn font-mono text-xs text-slate-700 dark:text-slate-200 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Click to copy the full license key to the clipboard">${escapeHtml(keyPreview)}</button>
-              <button class="resend-email-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Re-send the license-key email to the customer">resend</button>
+              ${resendButton}
               <button class="activations-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="View activations">activations</button>
             </div>
           </td>
@@ -651,7 +661,20 @@ const productsJson = JSON.stringify(PRODUCTS);
         btn.addEventListener('click', async () => {
           const id = (btn as HTMLElement).dataset.id;
           if (!id) return;
-          if (!confirm('Re-send the license-key email to the customer?')) return;
+          // Rapid re-click guard: bail if a previous click on this same
+          // button is still in flight. Without the dataset flag, an
+          // impatient operator clicking 3× would fire 3 send requests
+          // before any of them returned, deliver 3 emails to the
+          // customer, AND race-overwrite the button's innerHTML state.
+          const buttonEl = btn as HTMLButtonElement;
+          if (buttonEl.dataset.inFlight === 'true') return;
+          buttonEl.dataset.inFlight = 'true';
+          buttonEl.disabled = true;
+          if (!confirm('Re-send the license-key email to the customer?')) {
+            delete buttonEl.dataset.inFlight;
+            buttonEl.disabled = false;
+            return;
+          }
           const orig = btn.innerHTML;
           btn.innerHTML = '<span class="text-slate-400">sending...</span>';
           try {
@@ -695,6 +718,11 @@ const productsJson = JSON.stringify(PRODUCTS);
           } catch (err) {
             console.error('Resend invoke threw:', err);
             btn.innerHTML = '<span class="text-red-500">failed</span>';
+          } finally {
+            // Always release the in-flight guard so the operator can
+            // retry on transient failures without reloading the page.
+            delete buttonEl.dataset.inFlight;
+            buttonEl.disabled = false;
           }
           setTimeout(() => { btn.innerHTML = orig; }, 2500);
         });
