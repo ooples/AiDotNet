@@ -1871,6 +1871,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // dimension mismatch errors (e.g., "Number of columns must equal length of vector").
         normalizedNewData = ApplySelectedFeaturesForPrediction(normalizedNewData);
 
+        // BUG FIX (closes #1267): for neural-network models, ensure inference
+        // mode is active before any prediction path. AiModelBuilder.BuildAsync
+        // leaves the model in training-mode after the final epoch (so dropout,
+        // batch-norm running stats, attention masking, etc. were all in their
+        // training configurations). Calling Model.Predict directly without
+        // toggling SetTrainingMode(false) means dropout masks remain active
+        // and outputs are randomized, producing apparent uniform/zero
+        // predictions even though the underlying weights are trained.
+        // The direct Transformer.Predict path consumers explicitly call
+        // SetTrainingMode(false); the facade path was the broken case.
+        if (Model is NeuralNetworks.NeuralNetworkBase<T> nnForInference)
+        {
+            nnForInference.SetTrainingMode(false);
+        }
+
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;
 
