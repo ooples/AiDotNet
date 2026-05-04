@@ -437,20 +437,41 @@ public abstract class LayerTestBase
         // "post first forward" state to be meaningful.
         using (var probeInput = new Tensor<double>(InputShape))
         {
+            // Fill with non-zero values — some layer Forward paths take
+            // shortcuts on all-zero input (attention with zero weights
+            // producing NaN softmax, etc.) that prevent OnFirstForward
+            // from running. A small deterministic ramp avoids those
+            // shortcuts without coupling to RNG state.
+            for (int i = 0; i < probeInput.Length; i++)
+                probeInput[i] = 0.01 * (i + 1);
+
             try { layer.Forward(probeInput); }
             catch
             {
-                // Some layers reject the default InputShape (e.g. a
-                // RecurrentLayer expecting [batch, seq, features]). The
-                // test will still validate the invariant against whatever
-                // state the ctor produced, which for those layers means
-                // they should report a positive count from ctor args
-                // alone (otherwise the layer needs an InputShape override
-                // in its generated test class).
+                // Single-input Forward failed — for dual-input layers
+                // (DecoderLayer / TransformerDecoderLayer expecting
+                // encoder output alongside decoder input) try the
+                // params-based overload via reflection. The interface
+                // only declares Forward(Tensor<T>); subclasses that
+                // accept multiple tensors expose Forward(params Tensor<T>[]).
+                try
+                {
+                    var paramsForward = layer.GetType().GetMethod(
+                        "Forward",
+                        new[] { typeof(Tensor<double>[]) });
+                    paramsForward?.Invoke(layer, new object[] { new[] { probeInput, probeInput } });
+                }
+                catch
+                {
+                    // All probe shapes failed — the invariant still
+                    // validates whatever state the ctor produced.
+                }
             }
         }
 
-        int count = layer.ParameterCount;
+        // ParameterCount widened to long in #1244; cast for comparison
+        // against Vector<double>.Length which is int-bounded.
+        int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 
         Assert.True(count >= 0, "ParameterCount should be non-negative.");

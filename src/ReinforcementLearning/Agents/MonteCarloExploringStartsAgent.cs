@@ -255,7 +255,7 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
         };
     }
 
-    public override int ParameterCount => _qTable.Count * _options.ActionSize;
+    public override long ParameterCount => _qTable.Count * _options.ActionSize;
 
     public override int FeatureCount => _options.StateSize;
 

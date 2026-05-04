@@ -299,7 +299,7 @@ public class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override int ParameterCount => _valueTable.Count;
+    public override long ParameterCount => _valueTable.Count;
 
     public override int FeatureCount => _options.StateSize;
 

@@ -242,7 +242,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int index = 0;
             foreach (var layer in _graphLayers)
             {
-                int layerParameterCount = layer.ParameterCount;
+                int layerParameterCount = checked((int)layer.ParameterCount);
                 if (layerParameterCount > 0)
                 {
                     Vector<T> layerParameters = parameters.GetSubVector(index, layerParameterCount);
@@ -407,14 +407,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// <summary>
         /// Gets the total number of parameters across graph layers.
         /// </summary>
-        public override int ParameterCount => _graphLayers.Sum(layer => layer.ParameterCount);
+        public override long ParameterCount => (int)_graphLayers.Sum(layer => layer.ParameterCount);
 
         /// <summary>
         /// Gets the operator parameters as a flattened vector.
         /// </summary>
         public override Vector<T> GetParameters()
         {
-            var parameters = new Vector<T>(ParameterCount);
+            var parameters = new Vector<T>((int)ParameterCount);
             int index = 0;
 
             foreach (var layer in _graphLayers)

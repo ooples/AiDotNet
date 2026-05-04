@@ -141,7 +141,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// If the base layer is frozen, this returns only the LoRA parameter count.
     /// Otherwise, it returns the sum of base and LoRA parameters.
     /// </remarks>
-    public override int ParameterCount => _freezeBaseLayer
+    public override long ParameterCount => _freezeBaseLayer
         ? _loraLayer.ParameterCount
         : (_baseLayer.ParameterCount + _loraLayer.ParameterCount);
 
@@ -303,10 +303,13 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// against the derived total. The base ctor calls
     /// <c>UpdateParametersFromLayers</c> via this method, which in turn calls
     /// the now-initialized derived <c>ParameterCount</c> via virtual dispatch.
+    /// Parameter count is cast to int because <c>Vector{T}.Length</c> is int
+    /// per the per-tensor &lt; 2.1 B contract; #1237's long aggregate applies
+    /// only to the model-level <c>ParameterCount</c> property.
     /// </summary>
     protected void RebuildParametersAfterDerivedInit()
     {
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromLayers();
     }
 
@@ -521,7 +524,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         // If base layer is not frozen, unpack its parameters first
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -531,7 +534,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         }
 
         // Unpack LoRA parameters
-        int loraParamCount = _loraLayer.ParameterCount;
+        int loraParamCount = checked((int)_loraLayer.ParameterCount);
         Vector<T> loraParams = new Vector<T>(loraParamCount);
         for (int i = 0; i < loraParamCount; i++)
         {
@@ -554,7 +557,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// </remarks>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

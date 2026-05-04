@@ -167,11 +167,11 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
             $"/api/federated/runs/{createResponse.RunId}/clients/{join0Response.ClientId}/parameters");
         Assert.NotNull(initial);
         Assert.Equal(0, initial.RoundNumber);
-        Assert.Equal(createResponse.ParameterCount, initial.ParameterCount);
+        Assert.Equal(createResponse.ParameterCount, (int)initial.ParameterCount);
         Assert.Equal(createResponse.ParameterCount, initial.Parameters.Length);
 
-        var ones = Enumerable.Repeat(1.0, createResponse.ParameterCount).ToArray();
-        var threes = Enumerable.Repeat(3.0, createResponse.ParameterCount).ToArray();
+        var ones = Enumerable.Repeat(1.0, (int)createResponse.ParameterCount).ToArray();
+        var threes = Enumerable.Repeat(3.0, (int)createResponse.ParameterCount).ToArray();
 
         var update0 = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/updates", new SubmitFederatedUpdateRequest
         {
@@ -234,7 +234,11 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         {
             var proModel = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
                 proPath,
-                metadata => new VectorModel<double>(new Vector<double>(metadata.FeatureCount > 0 ? metadata.FeatureCount : createResponse.ParameterCount)));
+                // ParameterCount widened to long in #1237/#1244; the
+                // test scale is well under int.MaxValue so a checked
+                // cast is safe and surfaces overflow if a future test
+                // grows past that bound.
+                metadata => new VectorModel<double>(new Vector<double>(metadata.FeatureCount > 0 ? metadata.FeatureCount : checked((int)createResponse.ParameterCount))));
 
             var proParams = proModel.GetParameters();
             Assert.Equal(2.0, proParams[0], precision: 6);

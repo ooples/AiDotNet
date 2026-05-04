@@ -166,7 +166,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsCFG => true;
@@ -978,7 +978,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {
-        if (layer != null) count += layer.ParameterCount;
+        if (layer != null) count += (int)layer.ParameterCount;
     }
 
     private static void AddBlockCount(ref long count, UNetBlock block)

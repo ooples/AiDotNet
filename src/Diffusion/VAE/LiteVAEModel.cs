@@ -69,7 +69,7 @@ public class LiteVAEModel<T> : VAEModelBase<T>
     public override double LatentScaleFactor => LITE_LATENT_SCALE;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;

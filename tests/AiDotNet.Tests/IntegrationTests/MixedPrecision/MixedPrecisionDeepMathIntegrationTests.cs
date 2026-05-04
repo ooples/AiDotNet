@@ -937,7 +937,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         ctx.Initialize(weights);
 
         Assert.True(ctx.IsInitialized);
-        Assert.Equal(3, ctx.ParameterCount);
+        Assert.Equal(3, (int)ctx.ParameterCount);
 
         var master = ctx.GetMasterWeights();
         Assert.Equal(1.0f, master[0], FloatTolerance);
@@ -1014,7 +1014,7 @@ public class MixedPrecisionDeepMathIntegrationTests
 
         ctx.Initialize(namedParams);
 
-        Assert.Equal(5, ctx.ParameterCount);
+        Assert.Equal(5, (int)ctx.ParameterCount);
         Assert.Contains("layer1", ctx.ParameterNames);
         Assert.Contains("layer2", ctx.ParameterNames);
 
@@ -1058,7 +1058,7 @@ public class MixedPrecisionDeepMathIntegrationTests
         ctx.Reset();
 
         Assert.False(ctx.IsInitialized);
-        Assert.Equal(0, ctx.ParameterCount);
+        Assert.Equal(0, (int)ctx.ParameterCount);
     }
 
     [Fact(Timeout = 120000)]

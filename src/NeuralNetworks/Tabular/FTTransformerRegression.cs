@@ -63,7 +63,7 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters including the regression head.
     /// </summary>
-    public override int ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
+    public override long ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the FTTransformerRegression class.
@@ -406,7 +406,7 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        int baseCount = base.ParameterCount - _regressionHead.ParameterCount;
+        int baseCount = (int)(base.ParameterCount - _regressionHead.ParameterCount);
         var baseParams = new Vector<T>(baseCount);
         for (int i = 0; i < baseCount; i++)
         {
@@ -414,7 +414,7 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         }
         base.SetParameters(baseParams);
 
-        int headCount = _regressionHead.ParameterCount;
+        int headCount = checked((int)_regressionHead.ParameterCount);
         var headParams = new Vector<T>(headCount);
         for (int i = 0; i < headCount; i++)
         {

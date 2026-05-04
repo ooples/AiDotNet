@@ -401,7 +401,7 @@ public class AdvancedAlgebraNetworkTests
         var sparseNetwork = new SparseNeuralNetwork<double>(architecture, sparsity: 0.9);
 
         // Act
-        int paramCount = sparseNetwork.GetParameterCount();
+        int paramCount = (int)sparseNetwork.GetParameterCount();
 
         // Assert - should be much less than dense
         Assert.True(paramCount < 1000,

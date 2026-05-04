@@ -1278,7 +1278,7 @@ public class PipelineParallelismIntegrationTests
             _gradients = new Vector<double>(new double[parameterCount]);
         }
 
-        public int ParameterCount => _parameterCount;
+        public long ParameterCount => _parameterCount;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 
@@ -1427,7 +1427,7 @@ public class PipelineParallelismIntegrationTests
             _gradients = new Vector<double>(new double[parameterCount]);
         }
 
-        public int ParameterCount => _parameterCount;
+        public long ParameterCount => _parameterCount;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();
 

@@ -36,6 +36,52 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// <inheritdoc />
     public abstract INoisePredictor<T> NoisePredictor { get; }
 
+    /// <summary>
+    /// Streams the network's trainable weight tensors per-tensor without
+    /// materialising a flat aggregate, mirroring PyTorch's
+    /// <c>nn.Module.parameters()</c> generator pattern. Yields the noise
+    /// predictor's chunks first, then the VAE's, then any chunks the
+    /// conditioner exposes (text encoder, IP-Adapter, etc.). Foundation-
+    /// scale latent diffusion stacks (HiDream Full, SD3.5 Large, Sora,
+    /// HunyuanVideo, Flux 2, Veo) overflow <see cref="int.MaxValue"/> in
+    /// the aggregate <see cref="ParameterCount"/>; callers walking these
+    /// chunks accumulate length into a <see cref="long"/>.
+    /// </summary>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+#if NETFRAMEWORK
+        // GetParameterChunks is part of IParameterizable's chunked-API
+        // contract, which IParameterizable.cs gates behind
+        // `#if !NETFRAMEWORK` because default interface methods need
+        // .NET-Standard-2.1+ runtime dispatch that net471 doesn't
+        // provide. The interface cast on net471 therefore can't reach
+        // a chunked enumeration through the IParameterizable surface.
+        // Until the chunked API is widened on net471 (would require
+        // declaring it as a regular interface member with concrete
+        // overrides on every implementer), foundation-scale parameter
+        // counting on net471 is unsupported — return empty so the
+        // ParameterCount property's flat-vector path stays the only
+        // way to enumerate.
+        yield break;
+#else
+        if (NoisePredictor is IParameterizable<T, Tensor<T>, Tensor<T>> np)
+        {
+            foreach (var chunk in np.GetParameterChunks())
+                yield return chunk;
+        }
+        if (VAE is IParameterizable<T, Tensor<T>, Tensor<T>> vae)
+        {
+            foreach (var chunk in vae.GetParameterChunks())
+                yield return chunk;
+        }
+        if (Conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> conditioner)
+        {
+            foreach (var chunk in conditioner.GetParameterChunks())
+                yield return chunk;
+        }
+#endif
+    }
+
     /// <inheritdoc />
     public abstract IConditioningModule<T>? Conditioner { get; }
 

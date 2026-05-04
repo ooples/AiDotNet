@@ -1182,7 +1182,7 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => GetParameterTensors().Sum(t => t.Length);
+    public override long ParameterCount => GetParameterTensors().Sum(t => t.Length);
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()

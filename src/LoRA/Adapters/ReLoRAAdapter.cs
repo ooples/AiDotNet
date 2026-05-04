@@ -287,7 +287,7 @@ public class ReLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Update the LoRA layer's parameters
         int paramIdx = 0;
-        Vector<T> loraParams = new Vector<T>(_loraLayer.ParameterCount);
+        Vector<T> loraParams = new Vector<T>((int)_loraLayer.ParameterCount);
 
         // Pack matrix A
         for (int i = 0; i < matrixA.Rows; i++)

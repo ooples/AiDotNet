@@ -300,7 +300,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int idx = 0;
         void Set(ILayer<T> layer)
         {
-            int count = layer.ParameterCount;
+            int count = checked((int)layer.ParameterCount);
             layer.SetParameters(parameters.Slice(idx, count));
             idx += count;
         }
@@ -337,7 +337,7 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// <remarks>
     /// This returns the sum of all parameters from sublayers: self-attention, layer norms, and feed-forward layers.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

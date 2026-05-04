@@ -204,7 +204,7 @@ public class RunwayGenModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsVideoToVideo => true;
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _videoUNet.GetParameters().Length + _temporalVAE.GetParameters().Length;
 
     /// <summary>
@@ -438,7 +438,7 @@ public class RunwayGenModel<T> : VideoDiffusionModelBase<T>
             Name = _isGen3 ? "Runway-Gen-3" : "Runway-Gen-2",
             Version = "1.0",
             Description = $"Runway {(_isGen3 ? "Gen-3" : "Gen-2")} multi-modal video generation with structure-content disentanglement",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

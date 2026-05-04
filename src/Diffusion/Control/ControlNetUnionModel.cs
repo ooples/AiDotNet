@@ -124,7 +124,7 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _controlNet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _controlNet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>Gets the unified control network.</summary>
     public UNetNoisePredictor<T> ControlNet => _controlNet;
@@ -214,11 +214,15 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var ctrlCount = _controlNet.ParameterCount;
-        var vaeCount = _vae.GetParameters().Length;
-        if (parameters.Length != unetCount + ctrlCount + vaeCount)
-            throw new ArgumentException($"Expected {unetCount + ctrlCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
+        // Use ParameterCount directly — materializing GetParameters() just
+        // to read .Length walks the entire flat U-Net buffer for sizing
+        // purposes only, defeating the long-safe migration.
+        int unetCount = checked((int)_unet.ParameterCount);
+        int ctrlCount = checked((int)_controlNet.ParameterCount);
+        int vaeCount = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)unetCount + ctrlCount + vaeCount;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
         var ctrlParams = new Vector<T>(ctrlCount);
         var vaeParams = new Vector<T>(vaeCount);
@@ -271,7 +275,7 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet Union", Version = "1.0",
             Description = "ControlNet Union all-in-one multi-condition control model for SDXL",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "controlnet-union-task-routing");
         metadata.SetProperty("supported_conditions", "canny,depth,pose,normal,scribble,lineart,segmentation,tile");

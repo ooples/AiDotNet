@@ -2103,7 +2103,7 @@ public class DistributedTrainingIntegrationTests
             _parameters = new Vector<double>(Enumerable.Range(0, parameterCount).Select(i => (double)i * 0.1).ToArray());
         }
 
-        public int ParameterCount => _parameterCount;
+        public long ParameterCount => _parameterCount;
         public bool SupportsParameterInitialization => ParameterCount > 0;
 
         public ILossFunction<double> DefaultLossFunction => new MeanSquaredErrorLoss<double>();

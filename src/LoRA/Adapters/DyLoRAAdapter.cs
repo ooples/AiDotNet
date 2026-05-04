@@ -505,7 +505,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
 
         // Pack gradients into LoRA layer's parameter gradients
         // Store them in cache to be used by UpdateParameterGradientsFromLayers
-        Vector<T> loraParamGrads = new Vector<T>(_loraLayer.ParameterCount);
+        Vector<T> loraParamGrads = new Vector<T>((int)_loraLayer.ParameterCount);
         int idx = 0;
         for (int i = 0; i < fullGradA.Rows; i++)
         {
@@ -556,7 +556,7 @@ public class DyLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Base layer gradients (if not frozen)

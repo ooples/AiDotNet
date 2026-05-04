@@ -89,7 +89,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     /// <summary>
     /// Gets the total number of parameters in the model.
     /// </summary>
-    public virtual int ParameterCount => NumFeatures;
+    public virtual long ParameterCount => NumFeatures;
 
     /// <inheritdoc/>
     public virtual bool SupportsParameterInitialization => ParameterCount > 0;
@@ -672,7 +672,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Survival models typically don't use standard gradient computation
-        return new Vector<T>(ParameterCount);
+        return new Vector<T>((int)ParameterCount);
     }
 
     /// <summary>

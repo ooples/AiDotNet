@@ -200,7 +200,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
         // Update parameter count to reflect NOLA compression
         // Parameters: coefficientsA + coefficientsB (+ base layer if not frozen)
         int nolaParams = 2 * _numBasis;
-        Parameters = new Vector<T>(_freezeBaseLayer ? nolaParams : (_baseLayer.ParameterCount + nolaParams));
+        Parameters = new Vector<T>(_freezeBaseLayer ? nolaParams : (int)(_baseLayer.ParameterCount + nolaParams));
         UpdateParametersFromCoefficients();
     }
 
@@ -211,7 +211,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// For NOLA, this is just 2 * numBasis (coefficients for A and B), plus base layer parameters if not frozen.
     /// This is dramatically smaller than standard LoRA's (inputSize * rank) + (rank * outputSize).
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -221,7 +221,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
                 return _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
             }
 
-            int baseCount = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
             return baseCount + (2 * _numBasis);
         }
     }
@@ -490,7 +490,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -522,7 +522,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack base layer gradients if not frozen

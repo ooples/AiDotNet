@@ -88,7 +88,7 @@ public class MaxPoolingLayer<T> : LayerBase<T>
         _numPoints = 0;
     }
 
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     public override bool SupportsTraining => false; // No parameters to update; still participates in backprop
 }

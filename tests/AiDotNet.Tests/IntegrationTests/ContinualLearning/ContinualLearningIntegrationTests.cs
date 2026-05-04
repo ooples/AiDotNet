@@ -170,7 +170,7 @@ public class ContinualLearningIntegrationTests
         ewc.AfterTask(network, taskData, taskId: 0);
 
         // Get original gradients
-        var gradients = new Vector<double>(network.ParameterCount);
+        var gradients = new Vector<double>((int)network.ParameterCount);
         for (int i = 0; i < gradients.Length; i++)
         {
             gradients[i] = 0.1 * (i + 1);
@@ -188,7 +188,7 @@ public class ContinualLearningIntegrationTests
         var ewc = new ElasticWeightConsolidation<double>();
         var network = CreateMockNetwork();
 
-        var gradients = new Vector<double>(network.ParameterCount);
+        var gradients = new Vector<double>((int)network.ParameterCount);
         for (int i = 0; i < gradients.Length; i++)
         {
             gradients[i] = 0.1 * (i + 1);
@@ -408,7 +408,7 @@ public class ContinualLearningIntegrationTests
         gem.BeforeTask(network, taskId: 0);
         gem.AfterTask(network, taskData, taskId: 0);
 
-        var exception = Record.Exception(() => gem.ModifyGradients(network, new Vector<double>(network.ParameterCount)));
+        var exception = Record.Exception(() => gem.ModifyGradients(network, new Vector<double>((int)network.ParameterCount)));
         Assert.Null(exception);
     }
 
@@ -422,7 +422,7 @@ public class ContinualLearningIntegrationTests
         gem.BeforeTask(network, taskId: 0);
         gem.AfterTask(network, taskData, taskId: 0);
 
-        var gradients = new Vector<double>(network.ParameterCount);
+        var gradients = new Vector<double>((int)network.ParameterCount);
         for (int i = 0; i < gradients.Length; i++)
         {
             gradients[i] = 0.1;
@@ -678,7 +678,7 @@ public class ContinualLearningIntegrationTests
         agem.BeforeTask(network, taskId: 0);
         agem.AfterTask(network, taskData, taskId: 0);
 
-        var gradients = new Vector<double>(network.ParameterCount);
+        var gradients = new Vector<double>((int)network.ParameterCount);
         for (int i = 0; i < gradients.Length; i++)
         {
             gradients[i] = 0.5;

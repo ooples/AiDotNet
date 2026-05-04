@@ -155,7 +155,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => Z123_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _unet.ParameterCount + _vae.ParameterCount +
         _imageEncoder.ParameterCount + _poseEncoder.ParameterCount;
 
@@ -479,7 +479,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
 
         var offset = 0;
 
-        var unetCount = _unet.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
         var unetParams = new T[unetCount];
         for (int i = 0; i < unetCount; i++)
         {
@@ -487,7 +487,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         }
         _unet.SetParameters(new Vector<T>(unetParams));
 
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
         var vaeParams = new T[vaeCount];
         for (int i = 0; i < vaeCount; i++)
         {
@@ -495,7 +495,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         }
         _vae.SetParameters(new Vector<T>(vaeParams));
 
-        var encoderCount = _imageEncoder.ParameterCount;
+        int encoderCount = checked((int)_imageEncoder.ParameterCount);
         var encoderParams = new T[encoderCount];
         for (int i = 0; i < encoderCount; i++)
         {
@@ -503,7 +503,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         }
         _imageEncoder.SetParameters(new Vector<T>(encoderParams));
 
-        var poseCount = _poseEncoder.ParameterCount;
+        int poseCount = checked((int)_poseEncoder.ParameterCount);
         var poseParams = new T[poseCount];
         for (int i = 0; i < poseCount; i++)
         {
@@ -549,7 +549,7 @@ public class CameraPoseEncoder<T>
     /// <summary>
     /// Gets the number of parameters.
     /// </summary>
-    public int ParameterCount => _projection.ParameterCount;
+    public long ParameterCount => _projection.ParameterCount;
 
     /// <summary>
     /// Initializes a new CameraPoseEncoder.

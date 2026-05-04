@@ -1019,7 +1019,7 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// <remarks>
     /// This includes all parameters from both the Generator and Discriminator networks.
     /// </remarks>
-    public override int ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
+    public override long ParameterCount => Generator.GetParameterCount() + Discriminator.GetParameterCount();
 
     /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
@@ -1054,8 +1054,8 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int generatorCount = Generator.GetParameterCount();
-        int discriminatorCount = Discriminator.GetParameterCount();
+        int generatorCount = (int)Generator.GetParameterCount();
+        int discriminatorCount = (int)Discriminator.GetParameterCount();
         int conditioningMatrixCount = NumClasses * ClassEmbeddingDim * 2;
         int expectedCount = generatorCount + discriminatorCount + conditioningMatrixCount;
 
@@ -1174,8 +1174,8 @@ public class BigGAN<T> : NeuralNetworkBase<T>
     {
         // Layers are initialized in the constructor via the Generator and Discriminator CNNs
         // Initialize momentum vectors for Adam optimizer - separate for generator and discriminator
-        var genParamCount = Generator.GetParameterCount();
-        var discParamCount = Discriminator.GetParameterCount();
+        int genParamCount = (int)Generator.GetParameterCount();
+        int discParamCount = (int)Discriminator.GetParameterCount();
 
         _genMomentum = new Vector<T>(genParamCount);
         _genSecondMoment = new Vector<T>(genParamCount);

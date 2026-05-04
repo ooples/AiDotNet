@@ -402,7 +402,7 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

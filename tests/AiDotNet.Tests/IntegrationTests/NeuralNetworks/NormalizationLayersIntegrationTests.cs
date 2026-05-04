@@ -121,7 +121,7 @@ public class NormalizationLayersIntegrationTests
         var layer = new BatchNormalizationLayer<float>();
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - gamma and beta for each feature
         Assert.Equal(numFeatures * 2, paramCount);
@@ -195,7 +195,7 @@ public class NormalizationLayersIntegrationTests
         var layer = new LayerNormalizationLayer<float>();
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - gamma and beta for each feature
         Assert.Equal(featureSize * 2, paramCount);
@@ -371,7 +371,7 @@ public class NormalizationLayersIntegrationTests
         var layer = new InstanceNormalizationLayer<float>(numChannels, affine: true);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - gamma and beta for each channel when affine=true
         Assert.Equal(numChannels * 2, paramCount);
@@ -385,7 +385,7 @@ public class NormalizationLayersIntegrationTests
         var layer = new InstanceNormalizationLayer<float>(numChannels, affine: false);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - no learnable parameters when affine=false
         Assert.Equal(0, paramCount);

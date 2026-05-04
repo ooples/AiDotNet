@@ -111,7 +111,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     /// <remarks>
     /// For sparse layers, this returns the number of non-zero weights plus biases.
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _weights.NonZeroCount + OutputFeatures;
 
     /// <summary>
@@ -494,7 +494,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         // Match GetParameters layout: non-zero weights (CSR order) + biases
-        var gradients = new Vector<T>(ParameterCount);
+        var gradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         if (_weightsGradient != null)

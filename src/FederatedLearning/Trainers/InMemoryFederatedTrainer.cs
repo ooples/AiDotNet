@@ -182,7 +182,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         HomomorphicEncryptionMode heMode = effectiveHeOptions?.Mode ?? HomomorphicEncryptionMode.HeOnly;
         var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
         var encryptedIndices = useHomomorphicEncryption && effectiveHeOptions != null
-            ? ResolveEncryptedIndices(effectiveHeOptions, InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount, heMode)
+            ? ResolveEncryptedIndices(effectiveHeOptions, (int)InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount, heMode)
             : Array.Empty<int>();
 
         metadata.HomomorphicEncryptionEnabled = useHomomorphicEncryption;
@@ -274,7 +274,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         bool isHeadSplitPersonalization = usePersonalization && IsHeadSplitPersonalization(personalizationStrategy);
         bool isClusteredPersonalization = usePersonalization && IsClusteredPersonalization(personalizationStrategy);
         var personalizedIndices = (isHeadSplitPersonalization || isClusteredPersonalization)
-            ? ResolvePersonalizedIndices(metadata.PersonalizedParameterFraction, InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount)
+            ? ResolvePersonalizedIndices(metadata.PersonalizedParameterFraction, (int)InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount)
             : Array.Empty<int>();
 
         Dictionary<int, Vector<T>>? perClientPersonalState = usePersonalization ? new Dictionary<int, Vector<T>>() : null;
@@ -305,7 +305,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             {
                 if (secureAggregationMode == SecureAggregationMode.ThresholdDropoutResilient)
                 {
-                    thresholdSecureAggregation = new ThresholdSecureAggregationVector<T>(InterfaceGuard.Parameterizable(globalBefore).ParameterCount, _randomSeed);
+                    thresholdSecureAggregation = new ThresholdSecureAggregationVector<T>((int)InterfaceGuard.Parameterizable(globalBefore).ParameterCount, _randomSeed);
                     thresholdSecureAggregation.InitializeRound(
                         selectedClientIds,
                         minimumUploaderCount: secureAggregationOptions?.MinimumUploaderCount ?? 0,
@@ -317,7 +317,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
                 else
                 {
-                    secureAggregation = new SecureAggregationVector<T>(InterfaceGuard.Parameterizable(globalBefore).ParameterCount, _randomSeed);
+                    secureAggregation = new SecureAggregationVector<T>((int)InterfaceGuard.Parameterizable(globalBefore).ParameterCount, _randomSeed);
                     secureAggregation.GeneratePairwiseSecrets(selectedClientIds);
 
                     // Full participation mode: "threshold" is effectively the entire selected set.
@@ -578,7 +578,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             UpdateClientPerformanceScores(selectedClientIds, clientWeights);
 
             double averageUploadRatio = uploadRatioCount > 0 ? uploadRatioSum / uploadRatioCount : 1.0;
-            double roundCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, InterfaceGuard.Parameterizable(globalBefore).ParameterCount, averageUploadRatio);
+            double roundCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, (int)InterfaceGuard.Parameterizable(globalBefore).ParameterCount, averageUploadRatio);
             metadata.TotalCommunicationMB += roundCommunicationMB;
             metadata.RoundMetrics.Add(new RoundMetadata
             {
@@ -909,7 +909,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             UpdateClientPerformanceScores(selectedClientIds, startedClientWeights);
 
             double averageUploadRatio = uploadRatioCount > 0 ? uploadRatioSum / uploadRatioCount : 1.0;
-            double stepCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, InterfaceGuard.Parameterizable(globalAtStepStart).ParameterCount, averageUploadRatio);
+            double stepCommunicationMB = EstimateRoundCommunicationMB(selectedClientIds.Count, (int)InterfaceGuard.Parameterizable(globalAtStepStart).ParameterCount, averageUploadRatio);
             metadata.TotalCommunicationMB += stepCommunicationMB;
             metadata.RoundMetrics.Add(new RoundMetadata
             {

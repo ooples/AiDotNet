@@ -68,7 +68,7 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     public FluxSchnellModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -121,10 +121,11 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
-        if (parameters.Length != pc + vc)
-            throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
         var vp = new Vector<T>(vc);
         for (int i = 0; i < pc; i++) pp[i] = parameters[i];
@@ -139,7 +140,11 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
     public override IDiffusionModel<T> Clone()
     {
         var clone = new FluxSchnellModel<T>(conditioner: _conditioner, seed: RandomGenerator.Next());
-        clone.SetParameters(GetParameters());
+        // Field-by-field clone — bypasses the int-bounded flat
+        // Vector<T> that GetParameters/SetParameters round-trip would
+        // require for ~12B FLUX-scale weights.
+        clone._predictor.SetParameters(_predictor.GetParameters());
+        clone._vae.SetParameters(_vae.GetParameters());
         return clone;
     }
 
@@ -150,7 +155,7 @@ public class FluxSchnellModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "FLUX.1 Schnell", Version = "1.0",
             Description = "Ultra-fast 1-4 step FLUX generation, Apache 2.0 licensed",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flux-double-stream-distilled");
         m.SetProperty("base_model", "FLUX.1");

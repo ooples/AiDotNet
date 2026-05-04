@@ -74,7 +74,7 @@ public class LoRAFAAdapter<T> : LoRAAdapterBase<T>
     /// - Total trainable: 8,000 (50% less than standard LoRA's 16,000)
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

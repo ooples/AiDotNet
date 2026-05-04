@@ -162,7 +162,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     public int? HiddenDimension => _hiddenDim;
 
     /// <inheritdoc />
-    public int ParameterCount => ComputeParameterCount();
+    public long ParameterCount => ComputeParameterCount();
 
     private bool _isTraining = true;
 
@@ -644,7 +644,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
-        int expected = ParameterCount;
+        int expected = (int)ParameterCount;
         if (parameters.Length != expected)
         {
             throw new ArgumentException(
@@ -699,7 +699,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     /// <inheritdoc />
     public Vector<T> GetParameterGradients()
     {
-        return _gradients ?? new Vector<T>(new T[ParameterCount]);
+        return _gradients ?? new Vector<T>(new T[(int)ParameterCount]);
     }
 
     /// <inheritdoc />

@@ -616,7 +616,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     /// - Modulation mask weights and bias (if using DCNv2)
     /// All gradients are computed using IEngine backward operations with bilinear interpolation support.
     /// </remarks>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     #endregion

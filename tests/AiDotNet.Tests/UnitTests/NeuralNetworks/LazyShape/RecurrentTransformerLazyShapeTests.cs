@@ -136,7 +136,7 @@ public class RecurrentTransformerLazyShapeTests
         var enc = new TransformerEncoderLayer<double>(numHeads: 4, feedForwardDim: 64);
         // Sublayers don't exist yet — ParameterCount must be a safe 0, not NRE
         // dereferencing the null sublayer fields.
-        Assert.Equal(0, enc.ParameterCount);
+        Assert.Equal(0, (int)enc.ParameterCount);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class RecurrentTransformerLazyShapeTests
     public void LazyTransformerDecoder_BeforeForward_ParameterCount_IsZero()
     {
         var dec = new TransformerDecoderLayer<double>(numHeads: 4, feedForwardDim: 64);
-        Assert.Equal(0, dec.ParameterCount);
+        Assert.Equal(0, (int)dec.ParameterCount);
     }
 
     [Fact]

@@ -77,7 +77,7 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
     public override double LatentScaleFactor => SDXL_LATENT_SCALE;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;

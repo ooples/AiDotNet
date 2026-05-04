@@ -70,7 +70,7 @@ public partial class InteractingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _outputWeights.Length + (_residualWeights?.Length ?? 0);
 
@@ -320,7 +320,7 @@ public partial class InteractingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int total = ParameterCount;
+        int total = (int)ParameterCount;
         var result = new Vector<T>(total);
         int offset = 0;
 

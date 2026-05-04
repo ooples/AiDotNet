@@ -460,7 +460,7 @@ public class ResidualLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => _innerLayer?.ParameterCount ?? 0;
+    public override long ParameterCount => _innerLayer?.ParameterCount ?? 0;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()

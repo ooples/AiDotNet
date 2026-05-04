@@ -639,7 +639,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount => _pointCloudPredictor.ParameterCount;
+    public override long ParameterCount => _pointCloudPredictor.ParameterCount;
 
     #endregion
 
@@ -684,7 +684,7 @@ public class PointEModel<T> : ThreeDDiffusionModelBase<T>
             Name = "Point-E",
             Version = "1.0",
             Description = "Point-E text-to-3D point cloud generation using transformer-based diffusion",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

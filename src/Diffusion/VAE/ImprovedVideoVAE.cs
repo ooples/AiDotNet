@@ -71,7 +71,7 @@ public class ImprovedVideoVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => VIDEO_LATENT_SCALE;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;

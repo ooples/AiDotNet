@@ -117,7 +117,7 @@ public class USM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected) { ThrowIfDisposed(); if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
     public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "USM-Native" : "USM-ONNX", Description = "USM: 2B universal speech model for 100+ languages (Google, 2023)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers };

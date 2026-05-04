@@ -257,7 +257,7 @@ public class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
-    public override int ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
+    public override long ParameterCount => Math.Max(_qTable.Count, 1) * _options.ActionSize;
     public override int FeatureCount => _options.StateSize;
 
     public override byte[] Serialize()

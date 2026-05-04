@@ -93,7 +93,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -220,7 +220,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         // weights (64 * 32) + biases (32) = 2080
@@ -557,7 +557,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new SqueezeAndExcitationLayer<float>(channels, reductionRatio, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -807,7 +807,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new GatedLinearUnitLayer<float>(32, (IActivationFunction<float>?)null);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - GLU has linearWeights (64*32) + gateWeights (64*32) + linearBias (32) + gateBias (32)
         // = 2048 + 2048 + 32 + 32 = 4160 parameters
@@ -861,7 +861,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new HighwayLayer<float>(64, (IActivationFunction<float>?)null, (IActivationFunction<float>?)null);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - Highway has transformWeights (64*64) + transformBias (64) + gateWeights (64*64) + gateBias (64)
         // = 4096 + 64 + 4096 + 64 = 8320 parameters
@@ -1318,7 +1318,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new SelfAttentionLayer<float>(sequenceLength, embeddingSize, numHeads, (IActivationFunction<float>?)null);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -1397,7 +1397,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new MultiHeadAttentionLayer<float>(numHeads, (embeddingSize) / (numHeads));
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -1457,7 +1457,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - weights (64*32) + biases (32) = 2080
         int expected = inputSize * outputSize + outputSize;
@@ -1562,7 +1562,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new LSTMLayer<float>( hiddenSize, (IActivationFunction<float>?)null);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - LSTM has 4 gates, each with weights and biases
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -2017,7 +2017,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new CrossAttentionLayer<float>(queryDim, contextDim, numHeads);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -2085,7 +2085,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new ConvolutionalLayer<float>(outputDepth, kernelSize);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - Conv layer has kernels and biases
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -2140,7 +2140,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new BatchNormalizationLayer<float>();
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - BatchNorm has gamma, beta, running mean, running var
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -2314,7 +2314,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new EmbeddingLayer<float>(vocabSize, embeddingDim);
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - Embedding has vocabSize * embeddingDim parameters
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");
@@ -2370,7 +2370,7 @@ public class AdvancedLayersIntegrationTests
         var layer = new LayerNormalizationLayer<float>();
 
         // Act
-        int paramCount = layer.ParameterCount;
+        int paramCount = (int)layer.ParameterCount;
 
         // Assert - LayerNorm has gamma and beta (2 * featureSize)
         Assert.True(paramCount > 0, $"Expected positive parameter count but got {paramCount}");

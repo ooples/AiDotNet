@@ -767,8 +767,8 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.");
@@ -790,8 +790,15 @@ public class DallE3Model<T> : LatentDiffusionModelBase<T>, IDallE3Model<T>
         _vae.SetParameters(vaeParams);
     }
 
-    /// <inheritdoc/>
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    /// <summary>
+    /// Counts the flat-API parameter surface (predictor + VAE). The
+    /// trainable conditioner is intentionally excluded here because
+    /// <see cref="GetParameters"/> / <see cref="SetParameters"/> move
+    /// only that surface — flat <see cref="Vector{T}"/> is int-bounded.
+    /// Callers needing the full count walk
+    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>.
+    /// </summary>
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 

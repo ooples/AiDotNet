@@ -247,7 +247,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// the parameter count would be 10,000 × 300 = 3,000,000 parameters.
     /// </para>
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
         => _vocabularySize * _embeddingDimension +
            (_projectionWeights?.Length ?? 0);
 
@@ -1128,7 +1128,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Both null: no backward has been run yet, return all-zero vector
         if (_embeddingGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
 
         // Discrete embedding mode: return embedding gradients (+ projection if present)
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy

@@ -143,7 +143,7 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
     public override int LatentChannels => CASCADE_LATENT_CHANNELS;
 
     /// <inheritdoc />
-    public override int ParameterCount => _priorUnet.ParameterCount + _decoderUnet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _priorUnet.ParameterCount + _decoderUnet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the Stage B decoder noise predictor.
@@ -348,9 +348,9 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var priorCount = _priorUnet.ParameterCount;
-        var decoderCount = _decoderUnet.ParameterCount;
-        var vaeCount = _vae.GetParameters().Length;
+        int priorCount = checked((int)_priorUnet.ParameterCount);
+        int decoderCount = checked((int)_decoderUnet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != priorCount + decoderCount + vaeCount)
         {
@@ -447,7 +447,7 @@ public class StableCascadeModel<T> : LatentDiffusionModelBase<T>
             Name = "Stable Cascade",
             Version = "1.0",
             Description = "Stable Cascade (Würstchen v3) three-stage cascaded latent diffusion model with extreme 42:1 compression",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

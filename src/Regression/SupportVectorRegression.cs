@@ -128,7 +128,7 @@ public class SupportVectorRegression<T> : NonLinearRegressionBase<T>
     /// <summary>
     /// SVR uses SMO algorithm — random parameter injection is not applicable.
     /// </summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Optimizes the SVR model using the provided input data and target values.

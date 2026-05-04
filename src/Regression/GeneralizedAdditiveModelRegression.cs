@@ -154,7 +154,7 @@ public class GeneralizedAdditiveModel<T> : RegressionBase<T>
     /// </para>
     /// </remarks>
     /// <summary>GAM doesn't benefit from optimizer parameter injection.</summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>Tracks whether OLS fallback was used.</summary>
     private bool _useOLS;

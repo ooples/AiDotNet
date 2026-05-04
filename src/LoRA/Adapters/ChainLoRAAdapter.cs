@@ -327,7 +327,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// Returns the cached _currentParameterCount once the chain is initialized, or computes it on-the-fly
     /// during construction to handle base class initialization.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -339,7 +339,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
                 // Add base layer parameters if not frozen and baseLayer exists
                 if (_baseLayer != null && !_freezeBaseLayer)
                 {
-                    count += _baseLayer.ParameterCount;
+                    count += (int)_baseLayer.ParameterCount;
                 }
 
                 // Add unmerged adapter parameters from chain
@@ -349,7 +349,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
                     {
                         if (!_mergedStatus[i])
                         {
-                            count += _adapterChain[i].ParameterCount;
+                            count += (int)(_adapterChain[i].ParameterCount);
                         }
                     }
                 }
@@ -546,7 +546,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         // Add base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            count += _baseLayer.ParameterCount;
+            count += (int)_baseLayer.ParameterCount;
         }
 
         // Add unfrozen adapter parameters
@@ -554,7 +554,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             if (!_mergedStatus[i])
             {
-                count += _adapterChain[i].ParameterCount;
+                count += (int)(_adapterChain[i].ParameterCount);
             }
         }
 
@@ -607,7 +607,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -621,7 +621,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             if (!_mergedStatus[i])
             {
-                int adapterParamCount = _adapterChain[i].ParameterCount;
+                int adapterParamCount = (int)_adapterChain[i].ParameterCount;
                 Vector<T> adapterParams = new Vector<T>(adapterParamCount);
                 for (int j = 0; j < adapterParamCount; j++)
                 {
@@ -637,7 +637,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromChain()
     {
-        ParameterGradients = new Vector<T>(ParameterCount);
+        ParameterGradients = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack base layer gradients if not frozen

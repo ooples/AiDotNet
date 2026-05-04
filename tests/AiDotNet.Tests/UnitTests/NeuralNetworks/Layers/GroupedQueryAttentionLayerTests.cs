@@ -110,11 +110,11 @@ public class GroupedQueryAttentionLayerTests
 
         // Standard MHA: Q, K, V each [64, 64] + O [64, 64] + bias [64]
         var mha = new GroupedQueryAttentionLayer<float>(16, embDim, numHeads, numHeads);
-        int mhaParams = mha.ParameterCount;
+        int mhaParams = (int)mha.ParameterCount;
 
         // GQA with 2 KV heads: Q [64, 64], K/V each [64, 16], O [64, 64], bias [64]
         var gqa = new GroupedQueryAttentionLayer<float>(16, embDim, numHeads, 2);
-        int gqaParams = gqa.ParameterCount;
+        int gqaParams = (int)gqa.ParameterCount;
 
         // GQA should have fewer parameters than MHA
         Assert.True(gqaParams < mhaParams,

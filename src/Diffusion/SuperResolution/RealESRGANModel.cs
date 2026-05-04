@@ -200,8 +200,19 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
-    /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    /// <summary>
+    /// Counts the flat-API parameter surface (predictor + VAE). The
+    /// trainable <c>_conditioner</c> is intentionally excluded here
+    /// because <see cref="GetParameters"/> / <see cref="SetParameters"/>
+    /// move only that surface — flat <see cref="Vector{T}"/> is
+    /// int-bounded and a foundation-scale text encoder would push the
+    /// round-trip past <see cref="int.MaxValue"/>. Callers that need
+    /// the full count (including conditioner) walk
+    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>,
+    /// which streams predictor + VAE + conditioner per-tensor and
+    /// accumulates length in <see cref="long"/>.
+    /// </summary>
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets the upscale factor (4x).
@@ -406,8 +417,8 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -483,7 +494,7 @@ public class RealESRGANModel<T> : LatentDiffusionModelBase<T>
             Name = "Real-ESRGAN",
             Version = "1.0",
             Description = "Real-ESRGAN practical blind super-resolution with second-order degradation model",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

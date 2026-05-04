@@ -754,7 +754,7 @@ namespace AiDotNet.AutoML
     /// <summary>
     /// Gets the number of parameters
     /// </summary>
-    public virtual int ParameterCount => InterfaceGuard.TryParameterizable(BestModel)?.ParameterCount ?? 0;
+    public virtual long ParameterCount => InterfaceGuard.TryParameterizable(BestModel)?.ParameterCount ?? 0;
 
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;

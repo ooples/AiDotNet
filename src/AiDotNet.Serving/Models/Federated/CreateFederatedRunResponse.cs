@@ -18,6 +18,6 @@ public class CreateFederatedRunResponse
     /// <summary>
     /// Gets or sets the expected parameter count for submitted updates.
     /// </summary>
-    public int ParameterCount { get; set; }
+    public long ParameterCount { get; set; }
 }
 

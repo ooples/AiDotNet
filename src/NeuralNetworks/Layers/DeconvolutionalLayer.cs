@@ -302,7 +302,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     /// - It will improve its upsampling abilities as it processes more data
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _kernels.Length + _biases.Length;
+    public override long ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

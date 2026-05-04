@@ -58,7 +58,7 @@ public class SequenceLastLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     /// <summary>
     /// Extracts the last timestep from the input sequence.

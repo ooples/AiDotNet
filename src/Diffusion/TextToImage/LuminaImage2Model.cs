@@ -102,7 +102,7 @@ public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LUMINA_LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -185,10 +185,11 @@ public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var pc = _predictor.ParameterCount;
-        var vc = _vae.ParameterCount;
-        if (parameters.Length != pc + vc)
-            throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
+        int pc = checked((int)_predictor.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
 
         var pp = new Vector<T>(pc);
         var vp = new Vector<T>(vc);
@@ -227,7 +228,7 @@ public class LuminaImage2Model<T> : LatentDiffusionModelBase<T>
         {
             Name = "Lumina Image 2.0", Version = "2.0",
             Description = "Flag-DiT with flow matching, Gemma text encoder, and multi-resolution support",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         m.SetProperty("architecture", "flag-dit-flow-matching");
         m.SetProperty("base_model", "Lumina-Image 2.0");

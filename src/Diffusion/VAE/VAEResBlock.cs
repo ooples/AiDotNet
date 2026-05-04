@@ -275,7 +275,7 @@ public class VAEResBlock<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _norm1.ParameterCount + _conv1.ParameterCount +
         _norm2.ParameterCount + _conv2.ParameterCount +
         (_skipConv?.ParameterCount ?? 0);

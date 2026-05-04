@@ -350,7 +350,7 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// a fraction of them per input with sparse routing.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _router.ParameterCount + _experts.Sum(e => e.ParameterCount);
+    public override long ParameterCount => _router.ParameterCount + (int)_experts.Sum(e => e.ParameterCount);
 
     /// <summary>
     /// Gets the number of experts in this MoE layer.
@@ -916,15 +916,15 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         // Set router parameters
         if (_router.ParameterCount > 0)
         {
-            _router.SetParameters(parameters.Slice(offset, _router.ParameterCount));
-            offset += _router.ParameterCount;
+            _router.SetParameters(parameters.Slice(offset, (int)_router.ParameterCount));
+            offset += (int)_router.ParameterCount;
         }
 
         // Set expert parameters
         foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
         {
-            expert.SetParameters(parameters.Slice(offset, expert.ParameterCount));
-            offset += expert.ParameterCount;
+            expert.SetParameters(parameters.Slice(offset, (int)expert.ParameterCount));
+            offset += (int)expert.ParameterCount;
         }
     }
 

@@ -435,7 +435,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private Vector<T> InitializeBodyParameters()
     {
         var totalParams = ParamModel.GetParameters();
-        var bodyParams = new Vector<T>(_bodyParameterCount);
+        var bodyParams = new Vector<T>((int)(_bodyParameterCount));
 
         double scale = Math.Sqrt(2.0 / _boilOptions.FeatureDimension);
         for (int i = 0; i < _bodyParameterCount; i++)
@@ -459,7 +459,7 @@ public class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOut
     private Vector<T> CloneBodyParameters()
     {
         var totalParams = ParamModel.GetParameters();
-        var bodyParams = new Vector<T>(_bodyParameterCount);
+        var bodyParams = new Vector<T>((int)(_bodyParameterCount));
 
         int copyLen = Math.Min(_bodyParameterCount, totalParams.Length);
         for (int i = 0; i < copyLen; i++)

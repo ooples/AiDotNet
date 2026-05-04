@@ -70,7 +70,7 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override int ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _baseUNet.ParameterCount + _controlEncoder.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Initializes a new ControlNet QR model.
@@ -128,16 +128,24 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        int c1 = checked((int)_baseUNet.ParameterCount);
+        int c2 = checked((int)_controlEncoder.ParameterCount);
+        int c3 = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)c1 + c2 + c3;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
-        var c1 = _baseUNet.ParameterCount;
         var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(a1)); offset += c1;
 
-        var c2 = _controlEncoder.ParameterCount;
         var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(a2)); offset += c2;
 
-        var c3 = _vae.ParameterCount;
         var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[offset + i];
         _vae.SetParameters(new Vector<T>(a3));
     }
@@ -160,7 +168,7 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
         {
             Name = "ControlNet-QR", Version = "1.0",
             Description = "ControlNet specialized for embedding QR codes in generated artwork",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "unet-controlnet-qr");
         metadata.SetProperty("base_model", "Stable Diffusion 1.5");

@@ -1611,7 +1611,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1628,22 +1628,22 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
             // Add layer parameters from all native layer lists
             foreach (var layer in _visionEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _textEncoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _textDecoderLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             }
 
             foreach (var layer in _crossAttentionLayers)
             {
-                count += layer.ParameterCount;
+                count += (int)layer.ParameterCount;
             }
 
             return count;
@@ -1653,7 +1653,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         int index = 0;
 
         if (!_useNativeMode) return parameters;
@@ -1746,7 +1746,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
@@ -1806,7 +1806,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
         // Update layer parameters from all native layer lists
         foreach (var layer in _visionEncoderLayers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -1817,7 +1817,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         foreach (var layer in _textEncoderLayers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -1828,7 +1828,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         foreach (var layer in _textDecoderLayers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);
@@ -1839,7 +1839,7 @@ public class BlipNeuralNetwork<T> : NeuralNetworkBase<T>, IBlipModel<T>
 
         foreach (var layer in _crossAttentionLayers)
         {
-            int layerParameterCount = layer.ParameterCount;
+            int layerParameterCount = checked((int)layer.ParameterCount);
             if (layerParameterCount > 0)
             {
                 var layerParameters = parameters.Slice(index, layerParameterCount);

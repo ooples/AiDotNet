@@ -249,7 +249,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// <inheritdoc/>
     public override void PrepareForTask(IFullModel<T, TInput, TOutput> model, IDataset<T, TInput, TOutput> taskData)
     {
-        var paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
 
         // Initialize omega if first task
         if (_omega == null || _omega.Length != paramCount)
@@ -378,7 +378,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </summary>
     private Vector<T> ComputeOutputSensitivity(IFullModel<T, TInput, TOutput> model)
     {
-        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
         var omega = new Vector<T>(paramCount);
 
         for (int i = 0; i < paramCount; i++)
@@ -537,7 +537,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </remarks>
     private Vector<T> ComputeRandomProjectionImportance(IFullModel<T, TInput, TOutput> model)
     {
-        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
         var omega = new Vector<T>(paramCount);
 
         for (int i = 0; i < paramCount; i++)
@@ -631,7 +631,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </remarks>
     private Vector<T> ComputeFisherDiagonalImportance(IFullModel<T, TInput, TOutput> model)
     {
-        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
         var omega = new Vector<T>(paramCount);
 
         for (int i = 0; i < paramCount; i++)
@@ -750,7 +750,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </remarks>
     private Vector<T> ComputeHebbianImportance(IFullModel<T, TInput, TOutput> model)
     {
-        int paramCount = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
         var omega = new Vector<T>(paramCount);
 
         for (int i = 0; i < paramCount; i++)

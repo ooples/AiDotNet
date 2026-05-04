@@ -162,7 +162,7 @@ public partial class ABCLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _slotKeys.Length +
         _forgetGateWeights.Length + _forgetGateBias.Length +
@@ -546,7 +546,7 @@ public partial class ABCLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>(ParameterCount);
+        var parameters = new Vector<T>((int)ParameterCount);
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -576,7 +576,7 @@ public partial class ABCLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_queryWeightsGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),

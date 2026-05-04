@@ -151,7 +151,7 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     public int NumFeatures => _numFeatures;
 
     /// <inheritdoc />
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

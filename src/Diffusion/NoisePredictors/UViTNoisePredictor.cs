@@ -480,11 +480,13 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
     #region IParameterizable
 
     /// <inheritdoc />
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
-            int count = _patchEmbed.ParameterCount + _timeEmbed1.ParameterCount + _timeEmbed2.ParameterCount;
+            // #1237: long accumulator. UViT at full hidden / depth scale
+            // can sum past int.MaxValue across encoder + decoder blocks.
+            long count = _patchEmbed.ParameterCount + _timeEmbed1.ParameterCount + _timeEmbed2.ParameterCount;
 
             foreach (var block in _encoderBlocks)
                 count += GetBlockParamCount(block);
@@ -502,9 +504,9 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
         }
     }
 
-    private static int GetBlockParamCount(UViTBlock block)
+    private static long GetBlockParamCount(UViTBlock block)
     {
-        int c = 0;
+        long c = 0;
         if (block.Norm1 != null) c += block.Norm1.ParameterCount;
         if (block.Attention != null) c += block.Attention.ParameterCount;
         if (block.Norm2 != null) c += block.Norm2.ParameterCount;
@@ -564,7 +566,7 @@ public class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private static int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = layer.ParameterCount;
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count && offset + i < parameters.Length; i++)
             p[i] = parameters[offset + i];

@@ -419,7 +419,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     /// flat vector. This unblocks ParameterCount &gt; 0 invariant tests
     /// without violating the paper-faithful config size.
     /// </remarks>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -429,7 +429,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
                 total += Layers[i].ParameterCount;
                 if (total >= int.MaxValue) return int.MaxValue;
             }
-            if (_patchEmbed is not null) total += _patchEmbed.ParameterCount;
+            if (_patchEmbed is not null) total += (int)_patchEmbed.ParameterCount;
             return total >= int.MaxValue ? int.MaxValue : (int)total;
         }
     }
@@ -449,7 +449,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         // before trying to allocate a Vector<T> that would overflow.
         long total = 0L;
         for (int i = 0; i < Layers.Count; i++) total += Layers[i].ParameterCount;
-        if (_patchEmbed is not null) total += _patchEmbed.ParameterCount;
+        if (_patchEmbed is not null) total += (int)_patchEmbed.ParameterCount;
         if (total > int.MaxValue)
         {
             throw new InvalidOperationException(
@@ -480,7 +480,7 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         EnsurePatchEmbedForParameterVector(parameters.Length);
 
         // Layout matches GetParameters: [base layer params ...] [patch-embed params].
-        int patchCount = _patchEmbed?.ParameterCount ?? 0;
+        int patchCount = (int)(_patchEmbed?.ParameterCount ?? 0);
         int baseCount = parameters.Length - patchCount;
         if (baseCount < 0) baseCount = parameters.Length;
 
@@ -503,14 +503,14 @@ public class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         int idx = 0;
         foreach (var l in Layers)
         {
-            int c = l.ParameterCount;
+            int c = checked((int)l.ParameterCount);
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
         }
         // Apply the patch-embed update from the tail of the parameter vector.
         if (_patchEmbed is not null)
         {
-            int pc = _patchEmbed.ParameterCount;
+            int pc = checked((int)_patchEmbed.ParameterCount);
             if (pc > 0 && idx + pc <= parameters.Length)
             {
                 _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));

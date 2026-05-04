@@ -17,8 +17,8 @@ public class FedBNFullModelAggregationStrategyTests
         var model1 = CreateNetwork();
         var model2 = CreateNetwork();
 
-        var parameters1 = CreateParameters(model1.ParameterCount, offset: 0.0);
-        var parameters2 = CreateParameters(model2.ParameterCount, offset: 1000.0);
+        var parameters1 = CreateParameters((int)model1.ParameterCount, offset: 0.0);
+        var parameters2 = CreateParameters((int)model2.ParameterCount, offset: 1000.0);
         model1.SetParameters(parameters1);
         model2.SetParameters(parameters2);
 
@@ -86,7 +86,7 @@ public class FedBNFullModelAggregationStrategyTests
         int current = 0;
         foreach (var layer in network.Layers)
         {
-            int count = layer.ParameterCount;
+            int count = (int)layer.ParameterCount;
             if (count <= 0)
             {
                 continue;

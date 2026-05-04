@@ -528,7 +528,7 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         int index = 0;
         foreach (var layer in Layers)
         {
-            int layerParams = layer.ParameterCount;
+            int layerParams = checked((int)layer.ParameterCount);
             var layerParameters = parameters.Slice(index, layerParams);
             layer.UpdateParameters(layerParameters);
             index += layerParams;

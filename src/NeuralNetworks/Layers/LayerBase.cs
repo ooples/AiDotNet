@@ -887,7 +887,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     {
         if (ParameterGradients == null || ParameterGradients.Length != ParameterCount)
         {
-            ParameterGradients = new Vector<T>(ParameterCount);
+            ParameterGradients = new Vector<T>((int)ParameterCount);
         }
 
         return ParameterGradients;
@@ -2461,7 +2461,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// but may also require more data to train effectively.
     /// </para>
     /// </remarks>
-    public virtual int ParameterCount => Parameters.Length;
+    public virtual long ParameterCount => Parameters.Length;
 
     /// <summary>
     /// Serializes the layer's parameters to a binary writer.

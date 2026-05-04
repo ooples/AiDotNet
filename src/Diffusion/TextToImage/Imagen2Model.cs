@@ -104,8 +104,19 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
-    /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    /// <summary>
+    /// Counts the flat-API parameter surface (predictor + VAE). The
+    /// trainable <c>_conditioner</c> is intentionally excluded here
+    /// because <see cref="GetParameters"/> / <see cref="SetParameters"/>
+    /// move only that surface — flat <see cref="Vector{T}"/> is
+    /// int-bounded and a foundation-scale text encoder would push the
+    /// round-trip past <see cref="int.MaxValue"/>. Callers that need
+    /// the full count (including conditioner) walk
+    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>,
+    /// which streams predictor + VAE + conditioner per-tensor and
+    /// accumulates length in <see cref="long"/>.
+    /// </summary>
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     /// <summary>
     /// Gets whether this is the Imagen 3 variant.
@@ -226,12 +237,13 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        int unetCount = checked((int)_unet.ParameterCount);
+        int vaeCount = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)unetCount + vaeCount;
 
-        if (parameters.Length != unetCount + vaeCount)
+        if (parameters.Length != expectedTotal)
             throw new ArgumentException(
-                $"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
                 nameof(parameters));
 
         var unetParams = new Vector<T>(unetCount);
@@ -290,7 +302,7 @@ public class Imagen2Model<T> : LatentDiffusionModelBase<T>
             Name = name,
             Version = _isImagen3 ? "3.0" : "2.0",
             Description = $"{name} cascaded text-to-image generation with T5-XXL text encoding",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

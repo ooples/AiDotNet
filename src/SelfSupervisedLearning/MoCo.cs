@@ -123,7 +123,7 @@ public class MoCo<T> : SSLMethodBase<T>
     }
 
     /// <inheritdoc />
-    protected override int GetAdditionalParameterCount()
+    protected override long GetAdditionalParameterCount()
     {
         return _momentumEncoder.GetParameters().Length +
                (_momentumProjector?.ParameterCount ?? 0);

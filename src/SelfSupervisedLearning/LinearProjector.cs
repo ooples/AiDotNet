@@ -62,7 +62,7 @@ public class LinearProjector<T> : IProjectorHead<T>
     public int? HiddenDimension => null;
 
     /// <inheritdoc />
-    public int ParameterCount => _inputDim * _outputDim + (_useBias ? _outputDim : 0);
+    public long ParameterCount => _inputDim * _outputDim + (_useBias ? _outputDim : 0);
 
     /// <summary>
     /// Initializes a new instance of the LinearProjector class.

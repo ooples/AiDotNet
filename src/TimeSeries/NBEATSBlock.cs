@@ -74,7 +74,7 @@ internal class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the block.
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

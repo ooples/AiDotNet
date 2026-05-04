@@ -1164,7 +1164,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
         void SetLayerParams(ILayer<T> layer)
         {
-            var count = layer.ParameterCount;
+            int count = checked((int)layer.ParameterCount);
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++)
             {
@@ -1193,7 +1193,7 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     }
 
     /// <inheritdoc/>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
@@ -1209,19 +1209,19 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
 
             var count = 0;
 
-            count += AudioInputProjection.ParameterCount;
-            foreach (var layer in AudioEncoderLayers) count += layer.ParameterCount;
-            count += AudioOutputProjection.ParameterCount;
+            count += (int)AudioInputProjection.ParameterCount;
+            foreach (var layer in AudioEncoderLayers) count += (int)layer.ParameterCount;
+            count += (int)AudioOutputProjection.ParameterCount;
 
-            count += VisualInputProjection.ParameterCount;
-            foreach (var layer in VisualEncoderLayers) count += layer.ParameterCount;
-            count += VisualOutputProjection.ParameterCount;
+            count += (int)VisualInputProjection.ParameterCount;
+            foreach (var layer in VisualEncoderLayers) count += (int)layer.ParameterCount;
+            count += (int)VisualOutputProjection.ParameterCount;
 
-            foreach (var layer in CrossModalAttentionLayers) count += layer.ParameterCount;
-            count += LocalizationHead.ParameterCount;
-            count += SyncHead.ParameterCount;
-            count += SceneClassificationHead.ParameterCount;
-            count += SeparationMaskPredictor.ParameterCount;
+            foreach (var layer in CrossModalAttentionLayers) count += (int)layer.ParameterCount;
+            count += (int)LocalizationHead.ParameterCount;
+            count += (int)SyncHead.ParameterCount;
+            count += (int)SceneClassificationHead.ParameterCount;
+            count += (int)SeparationMaskPredictor.ParameterCount;
 
             return count;
         }

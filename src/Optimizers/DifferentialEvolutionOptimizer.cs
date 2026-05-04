@@ -140,7 +140,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
     {
         var population = InitializePopulation(inputData.XTrain, _deOptions.PopulationSize);
         // Use model's parameter count instead of input dimensions for trial vectors
-        int paramCount = population.Count > 0 ? InterfaceGuard.Parameterizable(population[0]).ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
+        int paramCount = (int)population.Count > 0 ? (int)InterfaceGuard.Parameterizable(population[0]).ParameterCount : InputHelper<T, TInput>.GetInputSize(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var prevStepData = new OptimizationStepData<T, TInput, TOutput>();
         var currentStepData = new OptimizationStepData<T, TInput, TOutput>();

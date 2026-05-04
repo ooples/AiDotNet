@@ -382,7 +382,7 @@ public class ElasticWeightConsolidation<T, TInput, TOutput> : ContinualLearningS
     /// </summary>
     private Vector<T> ComputeFisherInformation(IFullModel<T, TInput, TOutput> model)
     {
-        int numParams = InterfaceGuard.Parameterizable(model).ParameterCount;
+        int numParams = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
         var fisher = new Vector<T>(numParams);
 
         // Initialize with minimum value

@@ -181,13 +181,13 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters (low-rank + sparse full-rank).
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
-            int loraParams = _loraLayer != null ? _loraLayer.ParameterCount : 0;
+            int loraParams = _loraLayer != null ? (int)_loraLayer.ParameterCount : 0;
             int sparseParams = _sparseFullRankUpdates != null ? _sparseFullRankUpdates.Count : 0;
-            int baseParams = (_baseLayer != null && !_freezeBaseLayer) ? _baseLayer.ParameterCount : 0;
+            int baseParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
             return baseParams + loraParams + sparseParams;
         }
     }
@@ -272,7 +272,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         _sparseScaling = NumOps.FromDouble(0.1);
 
         // Initialize parameters
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         UpdateParametersFromComponents();
     }
 
@@ -656,7 +656,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParametersFromComponents()
     {
-        Parameters = new Vector<T>(ParameterCount);
+        Parameters = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack base layer parameters if not frozen
@@ -792,7 +792,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// <returns>Vector containing all trainable parameters.</returns>
     public override Vector<T> GetParameters()
     {
-        Vector<T> allParams = new Vector<T>(ParameterCount);
+        Vector<T> allParams = new Vector<T>((int)ParameterCount);
         int idx = 0;
 
         // Pack base layer parameters (if not frozen)
@@ -837,7 +837,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         // Unpack base layer parameters (if not frozen)
         if (!_freezeBaseLayer)
         {
-            int baseParamCount = _baseLayer.ParameterCount;
+            int baseParamCount = checked((int)_baseLayer.ParameterCount);
             Vector<T> baseParams = new Vector<T>(baseParamCount);
             for (int i = 0; i < baseParamCount; i++)
             {
@@ -847,7 +847,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Unpack LoRA layer parameters
-        int loraParamCount = _loraLayer.ParameterCount;
+        int loraParamCount = checked((int)_loraLayer.ParameterCount);
         Vector<T> loraParams = new Vector<T>(loraParamCount);
         for (int i = 0; i < loraParamCount; i++)
         {

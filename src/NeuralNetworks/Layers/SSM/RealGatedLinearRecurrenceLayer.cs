@@ -142,7 +142,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _inputProjectionWeights.Length + _inputProjectionBias.Length +
         _recurrenceGateWeights.Length + _recurrenceGateBias.Length +
         _inputGateWeights.Length + _inputGateBias.Length +
@@ -378,7 +378,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        int totalParams = ParameterCount;
+        int totalParams = (int)ParameterCount;
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
@@ -416,7 +416,7 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCount);
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate(
             new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()),

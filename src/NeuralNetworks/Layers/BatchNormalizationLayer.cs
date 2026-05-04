@@ -774,7 +774,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// since there's one gamma and one beta parameter per feature.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _gamma.Length + _beta.Length;
+    public override long ParameterCount => _gamma.Length + _beta.Length;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
@@ -1002,7 +1002,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null)
-            return new Vector<T>(ParameterCount);
+            return new Vector<T>((int)ParameterCount);
         return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
     }
 

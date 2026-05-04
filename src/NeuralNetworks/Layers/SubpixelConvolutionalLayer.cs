@@ -398,7 +398,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// are most important for upscaling the input effectively.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => GetParameters().Length;
+    public override long ParameterCount => GetParameters().Length;
     public override bool SupportsTraining => true;
 
     /// <summary>

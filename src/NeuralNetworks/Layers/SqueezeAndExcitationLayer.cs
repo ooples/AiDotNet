@@ -494,7 +494,7 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// <remarks>
     /// This returns the total count of weights and biases in both fully connected layers.
     /// </remarks>
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _weights1.Shape[0] * _weights1.Shape[1] +   // FC1 weights
         _bias1.Shape[0] +                            // FC1 biases
         _weights2.Shape[0] * _weights2.Shape[1] +   // FC2 weights

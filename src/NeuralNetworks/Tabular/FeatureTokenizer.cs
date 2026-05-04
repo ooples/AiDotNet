@@ -85,7 +85,7 @@ public class FeatureTokenizer<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public int ParameterCount
+    public long ParameterCount
     {
         get
         {

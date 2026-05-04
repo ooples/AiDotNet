@@ -352,7 +352,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         public ILossFunction<T> DefaultLossFunction => _inner.DefaultLossFunction;
 
         /// <inheritdoc/>
-        public int ParameterCount => InterfaceGuard.Parameterizable(_inner).ParameterCount;
+        public long ParameterCount => InterfaceGuard.Parameterizable(_inner).ParameterCount;
 
         /// <inheritdoc/>
         public bool SupportsParameterInitialization => InterfaceGuard.Parameterizable(_inner).SupportsParameterInitialization;

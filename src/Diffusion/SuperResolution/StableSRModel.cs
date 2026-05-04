@@ -188,8 +188,15 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
 
-    /// <inheritdoc />
-    public override int ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
+    /// <summary>
+    /// Counts the flat-API parameter surface (predictor + VAE). The
+    /// trainable conditioner is intentionally excluded here because
+    /// <see cref="GetParameters"/> / <see cref="SetParameters"/> move
+    /// only that surface — flat <see cref="Vector{T}"/> is int-bounded.
+    /// Callers needing the full count walk
+    /// <see cref="LatentDiffusionModelBase{T}.GetParameterChunks"/>.
+    /// </summary>
+    public override long ParameterCount { get { EnsureInitialized(); return _unet.ParameterCount + _vae.ParameterCount; } }
 
     #endregion
 
@@ -404,8 +411,8 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         EnsureInitialized();
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -482,7 +489,7 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
             Name = "StableSR",
             Version = "1.0",
             Description = "StableSR diffusion-prior-based super-resolution with controllable feature wrapping",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

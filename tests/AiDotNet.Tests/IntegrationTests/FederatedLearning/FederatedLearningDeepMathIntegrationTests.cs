@@ -850,7 +850,7 @@ public class FederatedLearningDeepMathIntegrationTests
             for (int i = 0; i < _parameters.Length; i++)
                 _parameters[i] = parameters[i];
         }
-        public int ParameterCount => _parameters.Length;
+        public long ParameterCount => _parameters.Length;
         public bool SupportsParameterInitialization => ParameterCount > 0;
         public IFullModel<double, double[], double[]> WithParameters(Vector<double> p)
         {

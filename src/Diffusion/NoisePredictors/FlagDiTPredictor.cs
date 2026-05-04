@@ -72,7 +72,7 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     public override int ContextDimension => _contextDim;
     /// <inheritdoc />
-    public override int ParameterCount { get; }
+    public override long ParameterCount { get; }
 
     /// <summary>
     /// Initializes a new Flag-DiT predictor.
@@ -116,9 +116,15 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
         _finalLayer = LazyDense(_hiddenSize, patchDim);
     }
 
-    private int CalculateParameterCount()
+    private long CalculateParameterCount()
     {
-        int count = _patchEmbed.ParameterCount;
+        // Foundation-scale FlagDiT instances cross int.MaxValue once we
+        // sum patchEmbed + per-block + finalLayer; widen the accumulator
+        // and per-step casts to long so the property's contract stays
+        // honest. Callers that need an int (Vector<T> sizing) narrow at
+        // the boundary with checked() — this keeps overflow detection
+        // local to the place that actually allocates.
+        long count = _patchEmbed.ParameterCount;
         foreach (var block in _blocks) count += block.ParameterCount;
         count += _finalLayer.ParameterCount;
         return count;
@@ -170,7 +176,7 @@ public class FlagDiTPredictor<T> : NoisePredictorBase<T>
 
     private static int SetParams(DenseLayer<T> layer, Vector<T> parameters, int offset)
     {
-        int count = layer.ParameterCount;
+        int count = checked((int)layer.ParameterCount);
         var p = new T[count];
         for (int i = 0; i < count; i++) p[i] = parameters[offset + i];
         layer.SetParameters(new Vector<T>(p));

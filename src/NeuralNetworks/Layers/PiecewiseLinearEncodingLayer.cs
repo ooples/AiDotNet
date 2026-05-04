@@ -45,7 +45,7 @@ public class PiecewiseLinearEncodingLayer<T> : LayerBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override int ParameterCount => _numFeatures * (_numBins - 1);
+    public override long ParameterCount => _numFeatures * (_numBins - 1);
 
     /// <summary>
     /// Initializes piecewise linear encoding.

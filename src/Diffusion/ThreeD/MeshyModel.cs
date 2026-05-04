@@ -132,7 +132,7 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => false;
     /// <inheritdoc />
-    public override int ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount => _unet.ParameterCount + _vae.ParameterCount;
 
     #endregion
 
@@ -219,8 +219,8 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var unetCount = checked((int)_unet.ParameterCount);
+        var vaeCount = checked((int)_vae.ParameterCount);
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
@@ -265,7 +265,7 @@ public class MeshyModel<T> : ThreeDDiffusionModelBase<T>
         {
             Name = "Meshy", Version = "4.0",
             Description = "Meshy production-grade 3D generation with PBR texturing",
-            FeatureCount = ParameterCount, Complexity = ParameterCount
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount), Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "multiview-plus-pbr-texturing");
         metadata.SetProperty("pbr_maps", "albedo,normal,roughness,metallic");

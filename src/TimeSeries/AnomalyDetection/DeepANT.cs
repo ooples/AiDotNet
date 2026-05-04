@@ -539,13 +539,13 @@ public class DeepANT<T> : TimeSeriesModelBase<T>
         return new DeepANT<T>(new DeepANTOptions<T>(_options), initializeModel: false);
     }
 
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int count = 0;
             foreach (var conv in _convLayers)
-                count += conv.ParameterCount;
+                count += (int)conv.ParameterCount;
             count += _fcWeights.Length + _fcBias.Length;
             return count;
         }
@@ -611,7 +611,7 @@ internal class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T>? _kernelGradients;
     private Tensor<T>? _biasGradients;
 
-    public override int ParameterCount => _kernels.Length + _biases.Length;
+    public override long ParameterCount => _kernels.Length + _biases.Length;
     public override bool SupportsTraining => true;
 
     public ConvLayerTensor(int outputChannels, int kernelSize, int seed = 42)

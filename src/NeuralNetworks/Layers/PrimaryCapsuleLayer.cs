@@ -176,7 +176,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
     /// that best represent the entities in the data.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => _convWeights.Length + _convBias.Length;
+    public override long ParameterCount => _convWeights.Length + _convBias.Length;
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

@@ -181,7 +181,7 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// More parameters means the RBM can learn more complex patterns, but also requires more data and computation.
     /// </para>
     /// </remarks>
-    public override int ParameterCount => (HiddenSize * VisibleSize) + VisibleSize + HiddenSize;
+    public override long ParameterCount => (HiddenSize * VisibleSize) + VisibleSize + HiddenSize;
 
     /// <summary>
     /// Gets or sets the scalar activation function used in the RBM.

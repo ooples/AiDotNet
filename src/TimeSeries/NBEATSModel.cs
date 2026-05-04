@@ -766,14 +766,14 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters in the model.
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {
             int totalParams = 0;
             foreach (var block in _blocks)
             {
-                totalParams += block.ParameterCount;
+                totalParams += (int)block.ParameterCount;
             }
             return totalParams;
         }
@@ -803,7 +803,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedCount = ParameterCount;
+        int expectedCount = (int)ParameterCount;
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
@@ -814,7 +814,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
         int idx = 0;
         foreach (var block in _blocks)
         {
-            int blockParamCount = block.ParameterCount;
+            int blockParamCount = checked((int)block.ParameterCount);
             Vector<T> blockParams = new Vector<T>(blockParamCount);
 
             for (int i = 0; i < blockParamCount; i++)

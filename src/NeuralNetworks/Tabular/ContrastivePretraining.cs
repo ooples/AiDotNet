@@ -50,7 +50,7 @@ public class ContrastivePretraining<T>
     /// <summary>
     /// Gets the total parameter count.
     /// </summary>
-    public int ParameterCount => _projectionWeights.Length + _projectionBias.Length;
+    public long ParameterCount => _projectionWeights.Length + _projectionBias.Length;
 
     /// <summary>
     /// Initializes contrastive pretraining module.

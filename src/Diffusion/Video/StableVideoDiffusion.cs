@@ -746,7 +746,7 @@ public class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// Gets the total number of parameters in the model.
     /// </summary>
-    public override int ParameterCount
+    public override long ParameterCount
     {
         get
         {

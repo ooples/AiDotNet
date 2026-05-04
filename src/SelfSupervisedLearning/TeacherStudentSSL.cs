@@ -193,7 +193,7 @@ public abstract class TeacherStudentSSL<T> : SSLMethodBase<T>
     }
 
     /// <inheritdoc />
-    protected override int GetAdditionalParameterCount()
+    protected override long GetAdditionalParameterCount()
     {
         return TeacherEncoder.GetParameters().Length + TeacherProjector.ParameterCount;
     }

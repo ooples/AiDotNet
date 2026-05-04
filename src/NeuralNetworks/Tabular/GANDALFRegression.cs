@@ -61,7 +61,7 @@ public class GANDALFRegression<T> : GANDALFBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
+    public override long ParameterCount => base.ParameterCount + _regressionHead.ParameterCount;
 
     /// <summary>
     /// Initializes a new instance of the GANDALFRegression class with default configuration.

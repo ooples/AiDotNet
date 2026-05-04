@@ -79,7 +79,7 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
-    public override int ParameterCount => _bn.ParameterCount + _conv.ParameterCount;
+    public override long ParameterCount => _bn.ParameterCount + _conv.ParameterCount;
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()

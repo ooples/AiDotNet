@@ -874,12 +874,17 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _audioVAE.ParameterCount;
-        var projCount = _projectionLayer.ParameterCount;
+        // Use ParameterCount directly instead of materializing the U-Net
+        // weight vector just to read its length — the prior
+        // GetParameters().Length walked the full flat buffer for sizing
+        // purposes only, defeating the long-safe migration.
+        int unetCount = checked((int)_unet.ParameterCount);
+        int vaeCount = checked((int)_audioVAE.ParameterCount);
+        int projCount = checked((int)_projectionLayer.ParameterCount);
+        long expectedTotal = (long)unetCount + vaeCount + projCount;
 
-        if (parameters.Length != unetCount + vaeCount + projCount)
-            throw new ArgumentException($"Expected {unetCount + vaeCount + projCount} parameters, got {parameters.Length}.");
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.");
 
         var unetParams = new Vector<T>(unetCount);
         var vaeParams = new Vector<T>(vaeCount);
@@ -913,7 +918,7 @@ public class AudioLDM2Model<T> : AudioDiffusionModelBase<T>
     }
 
     /// <inheritdoc />
-    public override int ParameterCount =>
+    public override long ParameterCount =>
         _unet.ParameterCount + _audioVAE.ParameterCount + _projectionLayer.ParameterCount;
 
     #endregion
@@ -1104,5 +1109,5 @@ internal class ProjectionLayer<T>
     /// <summary>
     /// Gets the parameter count.
     /// </summary>
-    public int ParameterCount => _inputDim * _outputDim + _outputDim;
+    public long ParameterCount => _inputDim * _outputDim + _outputDim;
 }

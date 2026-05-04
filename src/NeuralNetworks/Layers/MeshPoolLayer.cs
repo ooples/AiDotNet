@@ -583,7 +583,7 @@ public partial class MeshPoolLayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters.
     /// </summary>
-    public override int ParameterCount => InputChannels;
+    public override long ParameterCount => InputChannels;
 
     /// <summary>
     /// Creates a deep copy of the layer.

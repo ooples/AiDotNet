@@ -70,7 +70,7 @@ public class StepVideoModel<T> : VideoDiffusionModelBase<T>
     public override bool SupportsImageToVideo => true;
     public override bool SupportsTextToVideo => true;
     public override bool SupportsVideoToVideo => false;
-    public override int ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
+    public override long ParameterCount => _predictor.ParameterCount + _temporalVAE.GetParameters().Length;
 
     /// <summary>
     /// Initializes a new instance of StepVideoModel with full customization support.
@@ -146,7 +146,7 @@ public class StepVideoModel<T> : VideoDiffusionModelBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
-        var predCount = _predictor.ParameterCount;
+        int predCount = checked((int)_predictor.ParameterCount);
         var vaeCount = _temporalVAE.GetParameters().Length;
         if (parameters.Length != predCount + vaeCount)
             throw new ArgumentException($"Expected {predCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
@@ -189,7 +189,7 @@ public class StepVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "StepVideo",
             Version = "1.0",
             Description = "StepVideo text-to-video model with benchmark-leading quality.",
-            FeatureCount = ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-scalable-text");

@@ -198,7 +198,7 @@ public class VideoUNetPredictor<T> : NoisePredictorBase<T>
     public override int TimeEmbeddingDim => _timeEmbeddingDim;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsCFG => true;

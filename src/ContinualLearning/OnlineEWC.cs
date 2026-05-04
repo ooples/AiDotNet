@@ -106,7 +106,7 @@ public class OnlineEWC<T> : IContinualLearningStrategy<T>
         // Initialize if this is the first task
         if (_fisherDiagonal.Length == 0)
         {
-            var paramCount = network.ParameterCount;
+            int paramCount = checked((int)network.ParameterCount);
             _fisherDiagonal = new Vector<T>(paramCount);
             _optimalParameters = new Vector<T>(paramCount);
         }

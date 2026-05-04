@@ -187,7 +187,7 @@ public class StandardVAE<T> : VAEModelBase<T>
     public override double LatentScaleFactor => _latentScaleFactor;
 
     /// <inheritdoc />
-    public override int ParameterCount => CalculateParameterCount();
+    public override long ParameterCount => CalculateParameterCount();
 
     /// <inheritdoc />
     public override bool SupportsTiling => true;
@@ -506,7 +506,7 @@ public class StandardVAE<T> : VAEModelBase<T>
 
     private static void AddLayerCount(ref long count, ILayer<T>? layer)
     {
-        if (layer != null) count += layer.ParameterCount;
+        if (layer != null) count += (int)layer.ParameterCount;
     }
 
     /// <inheritdoc />

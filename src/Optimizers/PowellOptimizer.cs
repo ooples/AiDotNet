@@ -189,7 +189,7 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
 
         var currentSolution = InitializeRandomSolution(inputData.XTrain);
         // Use model's parameter count instead of input size for direction dimensions
-        int n = InterfaceGuard.Parameterizable(currentSolution).ParameterCount;
+        int n = (int)InterfaceGuard.Parameterizable(currentSolution).ParameterCount;
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 

@@ -361,7 +361,7 @@ public class SymbolicRegression<T> : NonLinearRegressionBase<T>
     /// </para>
     /// </remarks>
     /// <summary>Symbolic regression doesn't benefit from optimizer parameter injection.</summary>
-    public override int ParameterCount => 0;
+    public override long ParameterCount => 0;
 
     private bool _useOLS;
     private Vector<T>? _olsCoefficients;
