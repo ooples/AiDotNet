@@ -67,7 +67,11 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     private Tensor<T>? _endScoresGradient;
 
     private readonly int _numClasses;
-    private readonly int _sequenceLength;
+    // Non-readonly: lazy ctor leaves _sequenceLength = -1 until
+    // OnFirstForward resolves it from input.Shape[0]. Eager ctor sets
+    // it at construction.
+    private int _sequenceLength;
+    private bool _isInitialized;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -105,11 +109,47 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         if (inputs.Length == 0) throw new ArgumentException("CRF requires an input tensor.");
         var input = inputs[0];
 
+        // Lazy ctors leave IsShapeResolved == false until OnFirstForward
+        // / EnsureInitialized run. The CPU Forward path drives that
+        // resolution; if a layer's first execution is on the GPU it must
+        // do the same here, otherwise InputShape/OutputShape stay null
+        // and ParameterCount/serialization break for GPU-only callers.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
-        // Input normalization [Batch, Seq, Class]
+        // Input normalization [Batch, Seq, Class]. Mirror the CPU Forward
+        // contract: validate rank, numClasses, sequence length BEFORE
+        // touching the Viterbi loops below — the GPU kernels assume the
+        // tensor is already in [B, S, C] with S == _sequenceLength and
+        // C == _numClasses.
         int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer.ForwardGpu requires rank>=2 input " +
+                $"[seqLen, numClasses] or [batch, seqLen, numClasses]; got rank " +
+                $"{rank}.", nameof(inputs));
+        int gpuSeenClasses = input.Shape[rank - 1];
+        if (gpuSeenClasses != _numClasses)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer.ForwardGpu numClasses mismatch: layer " +
+                $"was constructed with {_numClasses} classes, but input shape's last " +
+                $"axis is {gpuSeenClasses}.", nameof(inputs));
+        int gpuSeenSeqLen = input.Shape[rank - 2];
+        if (gpuSeenSeqLen <= 0)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer.ForwardGpu sequence length must be " +
+                $"positive; got {gpuSeenSeqLen}.", nameof(inputs));
+        if (gpuSeenSeqLen != _sequenceLength)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer.ForwardGpu sequence length mismatch: " +
+                $"layer was resolved with sequenceLength={_sequenceLength}, but " +
+                $"this input's sequence dimension is {gpuSeenSeqLen}. CRF transition " +
+                $"buffer and Viterbi backpointers are sized to _sequenceLength.",
+                nameof(inputs));
+
         int batchSize, seqLen, numClasses;
         Tensor<T> input3D;
 
@@ -353,6 +393,38 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         _endScores = new Tensor<T>([_numClasses]);
 
         InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor: resolves <c>sequenceLength</c> from
+    /// <c>input.Shape[0]</c> on first <see cref="Forward"/>.
+    /// <paramref name="numClasses"/> (label vocabulary size) is
+    /// architectural and stays required; only sequence length is
+    /// shape-dependent. Note: parameter tensors (transition matrix,
+    /// start/end scores) only depend on numClasses, not sequenceLength,
+    /// so they're allocated eagerly here; only the base layer's
+    /// InputShape / OutputShape are deferred.
+    /// </summary>
+    /// <param name="numClasses">Number of label classes (vocabulary size).</param>
+    /// <param name="scalarActivation">Optional scalar activation (defaults to identity).</param>
+    public ConditionalRandomFieldLayer(int numClasses, IActivationFunction<T>? scalarActivation = null)
+        : base([-1, numClasses], [-1, numClasses], scalarActivation ?? new IdentityActivation<T>())
+    {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be greater than 0.");
+
+        _numClasses = numClasses;
+        _sequenceLength = -1;
+        _transitionMatrix = new Tensor<T>([_numClasses, _numClasses]);
+        _startScores = new Tensor<T>([_numClasses]);
+        _endScores = new Tensor<T>([_numClasses]);
+
+        // Parameters do not depend on sequenceLength, so initialize
+        // eagerly. _isInitialized stays false so EnsureInitialized's
+        // sequenceLength validation runs once on first forward.
+        InitializeParameters();
+        _isInitialized = false;
     }
 
     /// <summary>
@@ -393,6 +465,77 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         _endScores = new Tensor<T>([_numClasses]);
 
         InitializeParameters();
+        _isInitialized = true;
+    }
+
+    /// <summary>
+    /// Lazy constructor with vector activation — resolves
+    /// <c>sequenceLength</c> from <c>input.Shape[0]</c> on first
+    /// <see cref="Forward"/>. See the scalar-activation lazy ctor for
+    /// design notes on why parameters initialize eagerly.
+    /// </summary>
+    /// <param name="numClasses">Number of label classes (vocabulary size).</param>
+    /// <param name="vectorActivation">Optional vector activation (defaults to identity).</param>
+    public ConditionalRandomFieldLayer(int numClasses, IVectorActivationFunction<T>? vectorActivation)
+        : base([-1, numClasses], [-1, numClasses], vectorActivation ?? new IdentityActivation<T>())
+    {
+        if (numClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be greater than 0.");
+
+        _numClasses = numClasses;
+        _sequenceLength = -1;
+        _transitionMatrix = new Tensor<T>([_numClasses, _numClasses]);
+        _startScores = new Tensor<T>([_numClasses]);
+        _endScores = new Tensor<T>([_numClasses]);
+
+        InitializeParameters();
+        _isInitialized = false;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Reads the sequence length from <c>input.Shape[0]</c>. Per-batch
+    /// inputs come in as <c>[sequenceLength, numClasses]</c> in this
+    /// layer's contract.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input.Shape.Length;
+        if (rank < 2)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer requires rank>=2 input [seqLen, numClasses]; got rank {rank}.", nameof(input));
+
+        int sequenceLength = input.Shape[rank - 2];
+        if (sequenceLength <= 0)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer's sequence length must be positive; got {sequenceLength} from input shape.",
+                nameof(input));
+
+        int seenClasses = input.Shape[rank - 1];
+        if (seenClasses != _numClasses)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer's numClasses mismatch: layer was constructed with {_numClasses} classes, " +
+                $"but input shape's last axis is {seenClasses}.", nameof(input));
+
+        _sequenceLength = sequenceLength;
+        ResolveShapes(new[] { sequenceLength, _numClasses }, new[] { sequenceLength, _numClasses });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// CRF parameters (transition matrix, start/end scores) only depend
+    /// on <c>numClasses</c>, not <c>sequenceLength</c>, so they were
+    /// allocated eagerly in the lazy ctor. EnsureInitialized just flips
+    /// the initialized flag once shape is resolved.
+    /// </remarks>
+    protected override void EnsureInitialized()
+    {
+        if (_isInitialized) return;
+        if (_sequenceLength <= 0)
+            throw new InvalidOperationException(
+                "ConditionalRandomFieldLayer cannot initialize until OnFirstForward has resolved the sequence length from input shape.");
+
+        _isInitialized = true;
     }
 
     /// <summary>
@@ -487,6 +630,47 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-ctor instances start with _sequenceLength = -1; resolve
+        // from input.Shape on first call. Eager-ctor instances are
+        // already initialized so both calls are no-ops.
+        if (!IsShapeResolved) OnFirstForward(input);
+        EnsureInitialized();
+
+        // Validate input shape on every call, not just the first.
+        // OnFirstForward only fires once; later inputs with different
+        // sequence-length or class-count would otherwise reach the
+        // Viterbi loops below and silently truncate or index out of
+        // range. Numbers-of-classes is architectural (fixed at
+        // construction), sequence-length is shape-dependent (varies
+        // between inputs), but both must match what the layer was
+        // constructed for.
+        int seenRank = input.Shape.Length;
+        if (seenRank < 2)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer requires rank>=2 input [seqLen, numClasses] " +
+                $"or [batch, seqLen, numClasses]; got rank {seenRank}.", nameof(input));
+        int seenClasses = input.Shape[seenRank - 1];
+        if (seenClasses != _numClasses)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer's numClasses mismatch: layer was constructed " +
+                $"with {_numClasses} classes, but input shape's last axis is {seenClasses}. " +
+                $"numClasses is architectural and cannot vary across inputs.", nameof(input));
+        int seenSeqLen = input.Shape[seenRank - 2];
+        if (seenSeqLen <= 0)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer's sequence length must be positive; got " +
+                $"{seenSeqLen} from input shape.", nameof(input));
+        if (seenSeqLen != _sequenceLength)
+            throw new ArgumentException(
+                $"ConditionalRandomFieldLayer's sequence length mismatch: layer was " +
+                $"resolved with sequenceLength={_sequenceLength} (from constructor or " +
+                $"first forward pass), but this input's sequence dimension is " +
+                $"{seenSeqLen}. Viterbi decoding, transitions buffer, and gradient " +
+                $"reshape are all sized to _sequenceLength; a different value would " +
+                $"silently truncate or run out of bounds. If you need variable-length " +
+                $"sequences, pad to a fixed length and mask, or construct one CRF per " +
+                $"length bucket.", nameof(input));
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;

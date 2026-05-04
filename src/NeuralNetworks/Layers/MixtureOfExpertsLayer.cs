@@ -495,6 +495,77 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// MoE supports two construction patterns:
+    /// (1) <b>Eager:</b> caller passed positive <c>inputShape</c>; ctor
+    /// already eagerly resolved router and experts via <c>ResolveSubLayer</c>
+    /// and <c>IsShapeResolved</c> is true at construction time.
+    /// (2) <b>Lazy:</b> caller passed <c>[-1]</c> or any shape containing
+    /// a negative dim; sub-layers stayed unresolved. On first forward we
+    /// derive the per-sample shape (input shape minus the leading batch
+    /// axis) and propagate it to every sub-layer.
+    ///
+    /// <para>The full per-sample shape is preserved — vanilla MoE may use
+    /// a feature-vector input but the layer's existing <see cref="Forward"/>
+    /// path explicitly supports any-rank tensors, so a Switch
+    /// Transformer / per-token MoE / multi-axis use case must see the
+    /// same shape resolution that the eager constructor delivered. Pre-
+    /// fix this method collapsed every input to <c>[featureDim]</c>,
+    /// which silently broke any expert / router that expected
+    /// multi-axis per-sample inputs.</para>
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        int rank = input._shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                $"MixtureOfExpertsLayer requires rank>=1 input; got rank {rank}.", nameof(input));
+
+        // Strip the leading batch axis when present — sub-layers are
+        // configured against per-sample shapes (matching the ctor's
+        // ResolveSubLayer contract where the caller passed inputShape
+        // without batch).
+        int[] resolvedInputShape;
+        if (rank == 1)
+        {
+            // [features] — no batch axis; whole shape is per-sample.
+            resolvedInputShape = new int[] { input._shape[0] };
+        }
+        else
+        {
+            resolvedInputShape = new int[rank - 1];
+            for (int i = 0; i < resolvedInputShape.Length; i++)
+                resolvedInputShape[i] = input._shape[i + 1];
+        }
+
+        for (int i = 0; i < resolvedInputShape.Length; i++)
+        {
+            if (resolvedInputShape[i] <= 0)
+                throw new ArgumentException(
+                    $"MixtureOfExpertsLayer's per-sample shape axis {i} must be positive; " +
+                    $"got {resolvedInputShape[i]} from input shape.", nameof(input));
+        }
+
+        ResolveSubLayer(_router, resolvedInputShape);
+        foreach (var expert in _experts)
+        {
+            ResolveSubLayer(expert, resolvedInputShape);
+        }
+
+        // Output shape inherits from the first expert's resolved output
+        // (all experts share the same output shape by MoE contract). Use
+        // the ILayer<T> contract directly — GetOutputShape is on the
+        // interface, so any ILayer<T> impl can report its resolved
+        // output shape, not just LayerBase<T> subclasses. Falling back
+        // to the constructor's OutputShape was unnecessary since
+        // ILayer<T> mandates GetOutputShape; the previous LayerBase
+        // typecheck rejected legitimate ILayer<T> impls.
+        int[] resolvedOutputShape = _experts[0].GetOutputShape();
+
+        ResolveShapes(resolvedInputShape, resolvedOutputShape);
+    }
+
     /// <summary>
     /// Performs the forward pass through the MoE layer.
     /// </summary>
@@ -544,6 +615,14 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy-shape support: if the layer (or its sub-layers) wasn't
+        // eagerly resolved at construction (caller passed [-1] or
+        // shape with negative dims), resolve from input.Shape now.
+        // OnFirstForward propagates the resolved shape into router +
+        // experts, then ResolveShapes flips IsShapeResolved on the
+        // outer layer.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
@@ -1783,7 +1862,46 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
-        int batchSize = input.Shape[0];
+
+        // Mirror the CPU Forward's lazy-init dispatch — without this, a
+        // lazy MoE that takes the GPU path on first use would reach
+        // _router and _experts with unresolved shapes / zero-sized
+        // parameter tensors. OnFirstForward propagates resolved feature
+        // dim into router + experts.
+        if (!IsShapeResolved) OnFirstForward(input);
+
+        // Mirror the CPU Forward's any-rank → 2D collapse contract.
+        // _router and each _expert are configured against [B, features]
+        // — feeding them a rank-1 or rank>2 tensor diverges from the
+        // CPU path (different routing batch granularity) and trips
+        // shape mismatches inside expert sub-layers. Collapse leading
+        // dims into a flat batch, run on 2D, then restore the original
+        // leading dims at the end like the CPU path does on lines
+        // 754–768.
+        _originalInputShape = input._shape;
+        int rank = input.Shape.Length;
+        Tensor<T> input2D;
+        int batchSize;
+        if (rank == 1)
+        {
+            batchSize = 1;
+            input2D = gpuEngine.ReshapeGpu(input, new[] { 1, input.Shape[0] });
+        }
+        else if (rank == 2)
+        {
+            batchSize = input.Shape[0];
+            input2D = input;
+        }
+        else
+        {
+            int flatBatch = 1;
+            for (int d = 0; d < rank - 1; d++) flatBatch *= input.Shape[d];
+            batchSize = flatBatch;
+            input2D = gpuEngine.ReshapeGpu(input, new[] { flatBatch, input.Shape[rank - 1] });
+        }
+        // From here on, treat input2D as the canonical [batch, features]
+        // tensor for routing and expert dispatch.
+        input = input2D;
         int numExperts = _experts.Count;
 
         // Step 1: Route input through router to get logits (GPU-resident)
@@ -1926,6 +2044,24 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
             _lastRoutingWeights = routingWeightsGpu;
             _lastPreActivation = combinedGpu;
             _lastExpertOutputs = expertOutputsGpu.Select(e => e).ToList();
+        }
+
+        // Restore the original leading dims to match the CPU path's
+        // contract on lines 754–768. The 2D output is [flatBatch,
+        // outputFeatures]; for rank>2 input we re-expand the batch
+        // axes, for rank-1 input we drop the synthetic batch dim.
+        if (_originalInputShape != null && _originalInputShape.Length > 2)
+        {
+            int outputFeatures = resultGpu.Shape[1];
+            int[] newShape = new int[_originalInputShape.Length];
+            for (int d = 0; d < _originalInputShape.Length - 1; d++)
+                newShape[d] = _originalInputShape[d];
+            newShape[_originalInputShape.Length - 1] = outputFeatures;
+            resultGpu = gpuEngine.ReshapeGpu(resultGpu, newShape);
+        }
+        else if (_originalInputShape != null && _originalInputShape.Length == 1)
+        {
+            resultGpu = gpuEngine.ReshapeGpu(resultGpu, new[] { resultGpu.Shape[1] });
         }
 
         return resultGpu;
