@@ -327,9 +327,16 @@ public partial class RBMLayer<T> : LayerBase<T>
 
         _visibleUnits = -1;
         _hiddenUnits = hiddenUnits;
+        // All parameter tensors get re-allocated in EnsureInitialized once
+        // the visible dimension is resolved on first forward; allocate
+        // empty placeholders here so the not-null reference contract holds
+        // (GetParameters / ClearGradients walk these fields unconditionally)
+        // without doing duplicate work the lazy path will redo. Pre-fix the
+        // hidden-bias was allocated at full size here AND re-allocated in
+        // EnsureInitialized, leaking the first tensor.
         _weights = new Tensor<T>([0, 0]);
         _visibleBiases = new Tensor<T>([0]);
-        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
+        _hiddenBiases = new Tensor<T>([0]);
         _isInitialized = false;
     }
 
@@ -1050,9 +1057,13 @@ public partial class RBMLayer<T> : LayerBase<T>
         _visibleUnits > 0
             ? _visibleUnits * _hiddenUnits + _visibleUnits + _hiddenUnits
             // Lazy-ctor instance hasn't seen its first Forward yet — visible
-            // dim is unknown, so the only parameter we can count is the
-            // hidden-bias vector that the ctor allocates eagerly.
-            : _hiddenUnits;
+            // dim is unknown, all parameter tensors are zero-sized
+            // placeholders, and EnsureInitialized hasn't run. Reporting a
+            // count that doesn't match the actual GetParameters().Length
+            // would break the optimizer's per-parameter state allocation
+            // (it sizes its bookkeeping arrays from ParameterCount and
+            // walks GetParameters() to fill them).
+            : 0;
 
     /// <summary>
     /// Indicates whether this layer supports training.

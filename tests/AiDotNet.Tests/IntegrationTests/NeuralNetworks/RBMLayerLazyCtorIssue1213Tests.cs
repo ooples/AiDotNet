@@ -27,13 +27,15 @@ public class RBMLayerLazyCtorIssue1213Tests
         using var layer = new RBMLayer<float>(hiddenUnits: 8);
 
         // Pre-Forward: lazy state. Visible dim is unknown → InputShape
-        // contains the -1 sentinel, weights matrix is [0, 0], and
-        // ParameterCount counts only the hidden-bias vector.
+        // contains the -1 sentinel, all parameter tensors are zero-sized
+        // placeholders, and ParameterCount returns 0 — matching the
+        // actual GetParameters().Length so the optimizer's per-parameter
+        // bookkeeping isn't sized for state that doesn't yet exist.
         Assert.False(layer.IsShapeResolved);
         Assert.False(layer.IsInitialized);
         Assert.Equal(-1, layer.GetInputShape()[0]);
         Assert.Equal(8, layer.GetOutputShape()[0]);
-        Assert.Equal(8, layer.ParameterCount);
+        Assert.Equal(0, layer.ParameterCount);
 
         // First Forward: rank-2 input [batch=2, visible=4]. Layer must
         // resolve visibleUnits = 4 from input.Shape[^1] and materialize
@@ -110,17 +112,36 @@ public class RBMLayerLazyCtorIssue1213Tests
     }
 
     /// <summary>
-    /// Lazy ctor rejects degenerate input shape. A rank-0 (scalar) or
-    /// rank-1 with non-positive last dim can't be a valid RBM input —
-    /// surface this as ArgumentException at first Forward instead of
-    /// silently allocating a 0-sized weight matrix.
+    /// Lazy ctor rejects degenerate input shape. A rank-1 tensor with shape
+    /// [0] (zero visible units) can't be a valid RBM input — surface this
+    /// as ArgumentException at first Forward instead of silently
+    /// allocating a 0-sized weight matrix. Note: this exercises only the
+    /// non-positive-visible-units branch of OnFirstForward; the
+    /// rank&lt;1 branch is exercised by
+    /// <see cref="LazyCtor_RejectsScalarInput"/>.
     /// </summary>
     [Fact]
-    public void LazyCtor_RejectsDegenerateInput()
+    public void LazyCtor_RejectsZeroVisibleUnitsInput()
     {
         using var layer = new RBMLayer<float>(hiddenUnits: 8);
 
-        var rank0 = new Tensor<float>(new int[] { 0 });
-        Assert.Throws<System.ArgumentException>(() => layer.Forward(rank0));
+        var rank1ZeroLength = new Tensor<float>(new int[] { 0 });
+        Assert.Throws<System.ArgumentException>(() => layer.Forward(rank1ZeroLength));
+    }
+
+    /// <summary>
+    /// Lazy ctor rejects rank-0 (true scalar) input. OnFirstForward's
+    /// rank&lt;1 guard fires before the visible-unit check, since a
+    /// scalar has no last dimension to read a visible-unit count from.
+    /// Pairs with <see cref="LazyCtor_RejectsZeroVisibleUnitsInput"/> to
+    /// cover both degenerate-input branches.
+    /// </summary>
+    [Fact]
+    public void LazyCtor_RejectsScalarInput()
+    {
+        using var layer = new RBMLayer<float>(hiddenUnits: 8);
+
+        var scalar = new Tensor<float>(System.Array.Empty<int>());
+        Assert.Throws<System.ArgumentException>(() => layer.Forward(scalar));
     }
 }
