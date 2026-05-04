@@ -1847,10 +1847,31 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 if (inputs.Length == 0) continue;
 
-                // Fit preprocessing pipeline on first batch if not already fitted
+                // Fit preprocessing pipeline on the FIRST FULL BATCH if not already
+                // fitted. The previous code fitted on `inputs[0]` (a single sample),
+                // which makes mean/variance scalers compute mean = that one sample's
+                // value and variance = 0 — turning the scaler into a no-op. Fitting
+                // on the stacked batch reflects the actual feature distribution
+                // across all samples seen in this batch.
+                //
+                // For TInput == Tensor<T>, stack into a [B, …] tensor before fitting.
+                // For other TInput types we currently fall back to single-sample fit
+                // since there's no generic batch-stack primitive on those types;
+                // tracked as a follow-up.
                 if (_preprocessingPipeline is not null && !pipelineFitted)
                 {
-                    _preprocessingPipeline.Fit(inputs[0]);
+                    if (inputs[0] is Tensor<T> && inputs.Length > 1)
+                    {
+                        var batchedForFit = StackTensorBatch(inputs.Cast<Tensor<T>>().ToArray());
+                        if (batchedForFit is TInput typedBatch)
+                            _preprocessingPipeline.Fit(typedBatch);
+                        else
+                            _preprocessingPipeline.Fit(inputs[0]);
+                    }
+                    else
+                    {
+                        _preprocessingPipeline.Fit(inputs[0]);
+                    }
                     pipelineFitted = true;
                 }
 
@@ -1879,12 +1900,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // moment state, bias correction, weight decay, gradient
                 // clipping. The facade contributes batching + epoch loop
                 // only.
-                if (typeof(TInput) == typeof(Tensor<T>) && typeof(TOutput) == typeof(Tensor<T>) && _model is INeuralNetwork<T> nn)
+                // Subclass-friendly check: `is Tensor<T>` admits SparseTensor<T>
+                // and any future Tensor<T>-derived type, whereas the previous
+                // `typeof(TInput) == typeof(Tensor<T>)` exact-equality check
+                // bounced subclassed tensor types into the per-sample slow path
+                // for no good reason.
+                if (processedInputs.Length > 0 && processedInputs[0] is Tensor<T>
+                    && outputs.Length > 0 && outputs[0] is Tensor<T>
+                    && _model is INeuralNetwork<T> nn)
                 {
-                    var batchedInput = StackTensorBatch(processedInputs as Tensor<T>[]
-                        ?? processedInputs.Cast<Tensor<T>>().ToArray());
-                    var batchedTarget = StackTensorBatch(outputs as Tensor<T>[]
-                        ?? outputs.Cast<Tensor<T>>().ToArray());
+                    var batchedInput = StackTensorBatch(processedInputs.Cast<Tensor<T>>().ToArray());
+                    var batchedTarget = StackTensorBatch(outputs.Cast<Tensor<T>>().ToArray());
                     nn.Train(batchedInput, batchedTarget);
 
                     // Loss for monitoring — TrainWithTape sets LastLoss
@@ -1907,13 +1933,27 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     for (int i = 0; i < processedInputs.Length; i++)
                     {
                         var gradients = InterfaceGuard.GradientComputable(_model).ComputeGradients(processedInputs[i], outputs[i], lossFunction);
-                        // Pass the optimizer's CurrentLearningRate (T-typed) so
-                        // ApplyGradients respects whatever the optimizer's own
-                        // scheduler / step counter has computed for this iteration.
-                        // No facade-level LR decay variable involved.
-                        var modelLr = _optimizer is not null
-                            ? numOps.FromDouble(_optimizer.GetOptions().InitialLearningRate)
-                            : numOps.FromDouble(0.01);
+                        // Pass the optimizer's CURRENT learning rate (which
+                        // reflects scheduler / decay / step-counter state) instead
+                        // of the constant InitialLearningRate. The previous code
+                        // shadowed the scheduler — every step used the same
+                        // initial LR regardless of how many iterations had run,
+                        // so warmup and decay schedules were silently dropped on
+                        // the non-NN path.
+                        // _optimizer is the broader IOptimizer; only
+                        // gradient-based optimizers expose GetCurrentLearningRate.
+                        // Cast through the narrower interface so the schedule-
+                        // aware LR is used when available; fall back to
+                        // InitialLearningRate for non-gradient-based optimizers
+                        // (which don't have a schedule concept anyway).
+                        double currentLr;
+                        if (_optimizer is IGradientBasedOptimizer<T, TInput, TOutput> gbo)
+                            currentLr = gbo.GetCurrentLearningRate();
+                        else if (_optimizer is not null)
+                            currentLr = _optimizer.GetOptions().InitialLearningRate;
+                        else
+                            currentLr = 0.01;
+                        var modelLr = numOps.FromDouble(currentLr);
                         InterfaceGuard.GradientComputable(_model).ApplyGradients(gradients, modelLr);
 
                         var prediction = _model.Predict(processedInputs[i]);
@@ -2031,16 +2071,53 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </summary>
     private static Tensor<T> StackTensorBatch(Tensor<T>[] samples)
     {
+        if (samples is null) throw new ArgumentNullException(nameof(samples));
         if (samples.Length == 0) throw new InvalidOperationException("Cannot stack an empty batch.");
+        if (samples[0] is null)
+            throw new ArgumentException("samples[0] is null — cannot infer batch shape.", nameof(samples));
         if (samples.Length == 1) return samples[0];
 
         var sampleShape = samples[0]._shape;
+        int sampleStride = samples[0].Length;
+
+        // Validate every sample matches the first sample's shape AND length
+        // before any byte is copied. The previous version copied
+        // `sampleStride` elements from each sample assuming uniform shape,
+        // which silently truncated or read past the end when the loader
+        // emitted heterogeneous shapes (a real-world scenario for image
+        // datasets without a Resize transform). Catch it as an explicit
+        // ArgumentException with the index of the first mismatch.
+        for (int b = 1; b < samples.Length; b++)
+        {
+            if (samples[b] is null)
+                throw new ArgumentException(
+                    $"samples[{b}] is null — every sample in the batch must be a valid Tensor<T>.",
+                    nameof(samples));
+            var bShape = samples[b]._shape;
+            if (bShape.Length != sampleShape.Length)
+                throw new ArgumentException(
+                    $"Sample {b} has rank {bShape.Length} but sample 0 has rank {sampleShape.Length}. " +
+                    "Every sample in the batch must have identical shape.",
+                    nameof(samples));
+            for (int d = 0; d < sampleShape.Length; d++)
+            {
+                if (bShape[d] != sampleShape[d])
+                    throw new ArgumentException(
+                        $"Sample {b} shape [{string.Join(",", bShape)}] differs from sample 0 shape " +
+                        $"[{string.Join(",", sampleShape)}] at axis {d}. Every sample must have identical shape.",
+                        nameof(samples));
+            }
+            if (samples[b].Length != sampleStride)
+                throw new ArgumentException(
+                    $"Sample {b} length {samples[b].Length} differs from sample 0 length {sampleStride}.",
+                    nameof(samples));
+        }
+
         var batchedShape = new int[sampleShape.Length + 1];
         batchedShape[0] = samples.Length;
         for (int d = 0; d < sampleShape.Length; d++) batchedShape[d + 1] = sampleShape[d];
 
         var stacked = new Tensor<T>(batchedShape);
-        int sampleStride = samples[0].Length;
         for (int b = 0; b < samples.Length; b++)
         {
             int offset = b * sampleStride;

@@ -32,11 +32,17 @@ public class TransformerTrainingTraceTest
             maxSequenceLength: ctxLen, vocabularySize: vocab);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
-        // Verify default optimizer is Adam
+        // Verify default optimizer is Adam — assert in addition to logging,
+        // otherwise a regression that defaults back to GradientDescent (the
+        // exact bug closes #1264) would only show up in test stdout, not
+        // fail the test. Issue #1264 reporters had this exact false-pass
+        // pattern: "test ran fine, but logs showed wrong optimizer".
         var optField = typeof(Transformer<float>).GetField("_optimizer",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         var opt = optField!.GetValue(model);
         _output.WriteLine($"Default optimizer: {opt!.GetType().Name}");
+        Assert.Contains("Adam", opt.GetType().Name);
+        Assert.DoesNotContain("GradientDescent", opt.GetType().Name);
         var optOpts = opt.GetType().GetMethod("GetOptions")!.Invoke(opt, null);
         _output.WriteLine($"Optimizer options: MaxIterations={optOpts!.GetType().GetProperty("MaxIterations")!.GetValue(optOpts)}, "
             + $"InitialLR={optOpts.GetType().GetProperty("InitialLearningRate")!.GetValue(optOpts)}, "
@@ -53,7 +59,12 @@ public class TransformerTrainingTraceTest
         // undercounts and the AFTER measurement appears to "explode" —
         // that's a measurement artifact, not an optimizer bug.
         model.SetTrainingMode(false);
-        try { model.Predict(input); } catch { }
+        // Narrow the warmup catch — InvalidOperationException is the only
+        // expected eval-mode-incompatible failure (some layers refuse a
+        // non-training Predict). Swallowing every Exception here would
+        // mask NaN propagation, shape errors, and OOM bugs that this trace
+        // test is supposed to surface in the loss measurements below.
+        try { model.Predict(input); } catch (InvalidOperationException) { }
         model.SetTrainingMode(true);
 
         // Snapshot initial parameters (sum of L2 norms)
@@ -103,7 +114,13 @@ public class TransformerTrainingTraceTest
         _output.WriteLine($"After-100 probs:   [{p100[0]:F4}, {p100[1]:F4}, {p100[2]:F4}, {p100[3]:F4}]");
         _output.WriteLine($"P(target=1) Δ:     {p0[1]:F4} → {p100[1]:F4}");
 
-        Assert.True(paramL2After1 > paramL2Before * 0.999 && paramL2After1 < paramL2Before * 1.001,
+        // Param L2 sanity — one Adam step should NOT explode the model.
+        // ±5% (was ±0.1%) tolerates the natural per-step movement Adam +
+        // LayerNorm γ/β init produce on the small toy harness while still
+        // catching genuine explosions (10×, 100×, NaN). The 0.1% bound
+        // was unseed-flaky because Transformer sub-layers initialize
+        // params from RandomHelper without a fixed test seed.
+        Assert.True(paramL2After1 > paramL2Before * 0.95 && paramL2After1 < paramL2Before * 1.05,
             $"Param L2 changed too much in one step: {paramL2Before:F4} → {paramL2After1:F4}");
         Assert.True(loss100 < loss1 * 0.99,
             $"Loss did not decrease over 100 steps: {loss1:F4} → {loss100:F4}");

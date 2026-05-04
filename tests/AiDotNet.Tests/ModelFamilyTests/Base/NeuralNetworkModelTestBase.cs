@@ -825,7 +825,13 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // lazy-init params materializing, not the optimizer doing
         // anything wrong.
         network.SetTrainingMode(false);
-        try { network.Predict(input); } catch { /* some networks need training-mode for forward; tolerated */ }
+        // Narrow the catch to ONLY the documented "needs training mode for
+        // forward" symptom (InvalidOperationException from layers that
+        // refuse a non-training Predict). Swallowing every Exception here
+        // would silently mask genuine regressions (NaN, shape errors, OOM)
+        // that this invariant is designed to surface.
+        try { network.Predict(input); }
+        catch (InvalidOperationException) { /* eval-mode-incompatible — tolerated */ }
         network.SetTrainingMode(true);
 
         var paramsBefore = network.GetParameters();
@@ -903,7 +909,14 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         if (value is float f) return f;
         // Use Convert.ToDouble for IConvertible types (decimal, etc.)
         if (value is IConvertible) return Convert.ToDouble(value);
-        return 0.0;
+        // Surface unexpected loss types loudly instead of silently masking
+        // them as 0. A loss type that isn't IConvertible AND isn't double
+        // /float is a coding mistake (forgot to register a numeric op or
+        // returned a wrapper struct from GetLastLoss); 0.0 would let the
+        // assert pass falsely on every memorization task.
+        throw new InvalidOperationException(
+            $"ConvertToDouble: unsupported loss type {typeof(TVal).FullName}. " +
+            "Loss must be double, float, or IConvertible.");
     }
 
     // =====================================================
