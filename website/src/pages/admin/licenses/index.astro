@@ -533,7 +533,11 @@ const productsJson = JSON.stringify(PRODUCTS);
 
         return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
           <td class="py-3 px-4">
-            <button class="activations-btn font-mono text-xs text-brand-blue hover:underline" data-id="${l.id}" title="View activations">${escapeHtml(keyPreview)}</button>
+            <div class="flex items-center gap-2">
+              <button class="copy-key-btn font-mono text-xs text-slate-700 dark:text-slate-200 hover:text-brand-blue transition-colors" data-key="${escapeHtml(l.license_key)}" title="Click to copy the full license key to the clipboard">${escapeHtml(keyPreview)}</button>
+              <button class="resend-email-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Re-send the license-key email to the customer">resend</button>
+              <button class="activations-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="View activations">activations</button>
+            </div>
           </td>
           <td class="py-3 px-4">${productBadge(l.product)}</td>
           <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(l.ownerName || 'Unknown')}${l.ownerEmail && l.ownerEmail !== l.ownerName ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.ownerEmail)}</span>` : ''}${l.organization_name ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.organization_name)}</span>` : ''}</td>
@@ -583,6 +587,59 @@ const productsJson = JSON.stringify(PRODUCTS);
           const id = (btn as HTMLElement).dataset.id;
           if (!id) return;
           await showActivations(id);
+        });
+      });
+
+      // Copy-key button: writes the FULL license key (not the truncated
+      // preview) to the clipboard. The full key is stored on the button's
+      // data-key attribute so the table can keep showing the obfuscated
+      // preview without losing access to the original. Briefly flashes
+      // "Copied!" feedback so the admin knows it worked without having to
+      // open a paste target.
+      tbody.querySelectorAll('.copy-key-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const fullKey = (btn as HTMLElement).dataset.key;
+          if (!fullKey) return;
+          try {
+            await navigator.clipboard.writeText(fullKey);
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<span class="text-green-500">copied</span>';
+            setTimeout(() => { btn.innerHTML = orig; }, 1500);
+          } catch (err) {
+            console.error('Clipboard copy failed:', err);
+            alert('Copy failed — your browser may have blocked clipboard access. Reveal the key via the activations modal as a workaround.');
+          }
+        });
+      });
+
+      // Re-send email button: calls the admin-resend-license-email edge
+      // function which re-issues a key-delivery email to the customer's
+      // address on file. Used when the original Stripe-checkout email was
+      // dropped (no Resend key configured at the time, recipient bounced,
+      // or transport hiccupped). The license itself is unchanged — only
+      // the email is re-sent.
+      tbody.querySelectorAll('.resend-email-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          if (!confirm('Re-send the license-key email to the customer?')) return;
+          const orig = btn.innerHTML;
+          btn.innerHTML = '<span class="text-slate-400">sending...</span>';
+          try {
+            const { error } = await supabase.functions.invoke('admin-resend-license-email', {
+              body: { license_id: id },
+            });
+            if (error) {
+              console.error('Resend failed:', error);
+              btn.innerHTML = '<span class="text-red-500">failed</span>';
+            } else {
+              btn.innerHTML = '<span class="text-green-500">sent</span>';
+            }
+          } catch (err) {
+            console.error('Resend invoke threw:', err);
+            btn.innerHTML = '<span class="text-red-500">failed</span>';
+          }
+          setTimeout(() => { btn.innerHTML = orig; }, 2500);
         });
       });
     }
