@@ -3525,22 +3525,34 @@ public static class DeserializationHelper
                 // signatures lexicographically gives us cross-process /
                 // cross-machine determinism that depends only on the
                 // type's metadata, not on reflection iteration order.
+                // Use AssemblyQualifiedName when available so two types
+                // sharing a simple name in different assemblies (e.g. an
+                // internal `MyLayer` in two assemblies linked together)
+                // can't collide on the tie-break and silently switch
+                // ctor selection. FullName drops the assembly identity
+                // and Name additionally drops the namespace — both
+                // weaker. ToString() is the deterministic fallback for
+                // open generic parameters / dynamic types where AQN
+                // returns null.
                 string sig = string.Join(",",
-                    parameters.Select(p => p.ParameterType.FullName ?? p.ParameterType.Name));
+                    parameters.Select(p => p.ParameterType.AssemblyQualifiedName ?? p.ParameterType.ToString()));
                 candidates.Add((score, ctor, args, parameters.Length, sig));
             }
         }
 
-        // Sort by descending score, then descending arity, then by
-        // parameter-type signature ascending. The signature key turns
-        // an unstable tie-break into a deterministic one — see the
-        // candidates.Add call above for the rationale.
+        // Sort by descending score, then by parameter-type signature
+        // ascending. Score already incorporates arity (+1 per parameter
+        // in the score formula), so a separate arity tie-break would be
+        // redundant — when scores tie, arities tie too. The signature
+        // key turns an unstable tie-break into a deterministic one for
+        // the case of two same-arity overloads differing only by
+        // parameter type (e.g. IActivationFunction<T> vs
+        // IInitializationStrategy<T>) — see the candidates.Add call
+        // above for the rationale.
         candidates.Sort((a, b) =>
         {
             int byScore = b.score.CompareTo(a.score);
             if (byScore != 0) return byScore;
-            int byArity = b.arity.CompareTo(a.arity);
-            if (byArity != 0) return byArity;
             return string.CompareOrdinal(a.sig, b.sig);
         });
 

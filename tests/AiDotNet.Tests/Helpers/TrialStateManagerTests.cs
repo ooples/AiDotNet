@@ -442,4 +442,86 @@ public class TrialStateManagerTests : IDisposable
             TrialStateManager.TrialMessageHandler = previousHandler;
         }
     }
+
+    // Tombstone path mirrors src/Helpers/TrialStateManager.cs:75 —
+    // {trialFilePath}.tombstone. Exposed here as a constant so the
+    // tombstone-regression tests stay in lock-step with the production
+    // path naming if it ever changes.
+    private string TombstonePath => _trialFilePath + ".tombstone";
+
+    [Fact(Timeout = 60000)]
+    public async Task Tombstone_NotCreatedBefore_FirstSuccessfulOperation()
+    {
+        // Audit PR-#1246 #5 (1 of 3): tombstone must only appear AFTER
+        // a successful RecordOperationOrThrow persists. GetStatus alone
+        // (and the implicit LoadOrCreateState during construction)
+        // should not create the tombstone — otherwise a passive
+        // status-check would commit the user to "trial started" without
+        // them ever performing a real op.
+        var manager = new TrialStateManager(_trialFilePath);
+
+        // Construction alone — no tombstone yet.
+        Assert.False(File.Exists(TombstonePath));
+
+        // GetStatus is a passive read — still no tombstone.
+        _ = manager.GetStatus();
+        Assert.False(File.Exists(TombstonePath));
+
+        // The first real op writes both trial file AND tombstone.
+        manager.RecordOperationOrThrow();
+        Assert.True(File.Exists(_trialFilePath));
+        Assert.True(File.Exists(TombstonePath));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Tombstone_BlocksTrialResetByDeletion()
+    {
+        // Audit PR-#1246 #5 (2 of 3): if a user manually deletes the
+        // trial file to bypass the trial limit, the tombstone (left
+        // behind by a previous SaveState) makes LoadOrCreateState
+        // return CreateExpiredState, so subsequent RecordOperationOrThrow
+        // throws the trial-expired exception instead of starting fresh.
+        var manager1 = new TrialStateManager(_trialFilePath);
+        manager1.RecordOperationOrThrow();
+        Assert.True(File.Exists(_trialFilePath));
+        Assert.True(File.Exists(TombstonePath));
+
+        // Simulate user-driven trial bypass: delete the trial file
+        // without going through Reset() (which would also delete the
+        // tombstone).
+        File.Delete(_trialFilePath);
+        Assert.False(File.Exists(_trialFilePath));
+        Assert.True(File.Exists(TombstonePath));
+
+        // New manager instance — LoadOrCreateState sees missing trial
+        // file + present tombstone → returns expired state.
+        var manager2 = new TrialStateManager(_trialFilePath);
+        var status = manager2.GetStatus();
+        Assert.True(status.IsExpired);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Reset_DeletesBothTrialFileAndTombstone()
+    {
+        // Audit PR-#1246 #5 (3 of 3): the internal Reset() path (used
+        // by tests and license-key activation) must clear BOTH files
+        // so a legitimate post-reset RecordOperationOrThrow starts a
+        // fresh trial — not an expired one (which would happen if the
+        // tombstone lingered).
+        var manager = new TrialStateManager(_trialFilePath);
+        manager.RecordOperationOrThrow();
+        Assert.True(File.Exists(_trialFilePath));
+        Assert.True(File.Exists(TombstonePath));
+
+        // Reset is internal — accessible to test via InternalsVisibleTo.
+        manager.Reset();
+        Assert.False(File.Exists(_trialFilePath));
+        Assert.False(File.Exists(TombstonePath));
+
+        // Post-reset op succeeds — trial is fresh, not expired.
+        manager.RecordOperationOrThrow();
+        var status = manager.GetStatus();
+        Assert.False(status.IsExpired);
+        Assert.Equal(1, status.OperationsUsed);
+    }
 }

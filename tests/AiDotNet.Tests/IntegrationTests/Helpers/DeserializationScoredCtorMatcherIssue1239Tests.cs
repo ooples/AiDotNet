@@ -217,10 +217,16 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
         // Verify the scored matcher actually piped the metadata
         // through: a wrong-ctor pick (e.g., one that resolved numHeads
         // from defaults instead of metadata) would land on
-        // gat.NumHeads != 2. These three properties are the public
+        // gat.NumHeads != 2. All five properties are the public
         // observables for the ctor parameters that came from metadata.
         Assert.Equal(16, gat.InputFeatures);
         Assert.Equal(8, gat.OutputFeatures);
         Assert.Equal(2, gat.NumHeads);
+        // Alpha and DropoutRate were previously unverified — a regression
+        // that left them at default would have passed the test silently.
+        // The metadata supplies 0.2 and 0.0 respectively; both must
+        // round-trip through the scored matcher to the constructed layer.
+        Assert.Equal(0.2, gat.Alpha, precision: 6);
+        Assert.Equal(0.0, gat.DropoutRate, precision: 6);
     }
 }

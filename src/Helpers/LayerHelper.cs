@@ -2987,14 +2987,14 @@ public static class LayerHelper<T>
         // contract this helper used to deliver).
         var layers = new List<ILayer<T>>();
 
-        int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
-        layers.Add(new DenseLayer<T>(firstHiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
-        layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
-
-        for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
+        // Only emit a hidden block when the caller actually requested
+        // hidden layers; an empty list means "linear / single-layer
+        // network", and forcing a ReLU head before the output Dense
+        // changes the requested architecture.
+        for (int i = 0; i < hiddenLayerSizes.Count; i++)
         {
-            int nextLayerSize = hiddenLayerSizes[i + 1];
-            layers.Add(new DenseLayer<T>(nextLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
+            int hiddenSize = hiddenLayerSizes[i];
+            layers.Add(new DenseLayer<T>(hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>));
             layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
         }
 
@@ -3072,21 +3072,25 @@ public static class LayerHelper<T>
         var layers = new List<ILayer<T>>();
         IActivationFunction<T>? noOp = null;
 
-        int firstHiddenLayerSize = hiddenLayerSizes.Count > 0 ? hiddenLayerSizes[0] : outputSize;
-        layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, firstHiddenLayerSize, noOp));
-        layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
-
-        for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
-        {
-            int currentLayerSize = hiddenLayerSizes[i];
-            int nextLayerSize = hiddenLayerSizes[i + 1];
-
-            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(currentLayerSize, nextLayerSize, noOp));
-            layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
-        }
-
+        // Only emit the hidden block when hidden layers were requested;
+        // for the zero-hidden case (linear Bayesian classifier) we skip
+        // straight to the inputSize → outputSize Bayesian layer + softmax.
+        // Previously the code added a redundant inputSize → outputSize
+        // hidden block plus a second inputSize → outputSize output block,
+        // silently changing the requested architecture.
         if (hiddenLayerSizes.Count > 0)
         {
+            layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, hiddenLayerSizes[0], noOp));
+            layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
+
+            for (int i = 0; i < hiddenLayerSizes.Count - 1; i++)
+            {
+                int currentLayerSize = hiddenLayerSizes[i];
+                int nextLayerSize = hiddenLayerSizes[i + 1];
+                layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(currentLayerSize, nextLayerSize, noOp));
+                layers.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
+            }
+
             int lastHiddenLayerSize = hiddenLayerSizes[hiddenLayerSizes.Count - 1];
             layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(lastHiddenLayerSize, outputSize, noOp));
         }
