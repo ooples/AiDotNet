@@ -2461,7 +2461,34 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// but may also require more data to train effectively.
     /// </para>
     /// </remarks>
-    public virtual long ParameterCount => Parameters.Length;
+    public virtual long ParameterCount
+    {
+        get
+        {
+            // Default: count this layer's own [TrainableParameter] fields
+            // (via source-generator-emitted Parameters) PLUS any registered
+            // sub-layers' parameters. Composite layers (MLPMixerBlock,
+            // KairosMultiSizePatch, TimeMoEBlock, UNetDiscriminator, etc.)
+            // store their weights inside sub-layers — without this rollup
+            // they'd report ParameterCount=0 even though GetParameters()
+            // returns a non-empty vector aggregated from sub-layers.
+            // Layers that override Parameters/GetParameters with their own
+            // aggregation can keep overriding ParameterCount too; this
+            // default just removes the manual override boilerplate from
+            // every composite layer.
+            long total = Parameters.Length;
+            var subs = GetSubLayers();
+            if (subs is not null)
+            {
+                for (int i = 0; i < subs.Count; i++)
+                {
+                    if (subs[i] is null) continue;
+                    total += subs[i].ParameterCount;
+                }
+            }
+            return total;
+        }
+    }
 
     /// <summary>
     /// Serializes the layer's parameters to a binary writer.

@@ -438,8 +438,8 @@ public abstract class LayerTestBase
         using (var probeInput = new Tensor<double>(InputShape))
         {
             // Fill with non-zero values — some layer Forward paths take
-            // shortcuts on all-zero input (attention with zero weights
-            // producing NaN softmax, etc.) that prevent OnFirstForward
+            // shortcuts on all-zero input (e.g. attention with zero
+            // weights producing NaN softmax) that prevent OnFirstForward
             // from running. A small deterministic ramp avoids those
             // shortcuts without coupling to RNG state.
             for (int i = 0; i < probeInput.Length; i++)
@@ -465,6 +465,9 @@ public abstract class LayerTestBase
                 {
                     // All probe shapes failed — the invariant still
                     // validates whatever state the ctor produced.
+                    // Layers that can't be probed this way should
+                    // override CreateLayer to return a pre-initialized
+                    // instance.
                 }
             }
         }
@@ -474,7 +477,8 @@ public abstract class LayerTestBase
         int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 
-        Assert.True(count >= 0, "ParameterCount should be non-negative.");
+        Assert.True(count >= 0,
+            $"ParameterCount should be non-negative; got {count} for {layer.GetType().Name} with InputShape=[{string.Join(",", InputShape)}], parameters.Length={parameters.Length}.");
         Assert.Equal(count, parameters.Length);
 
         if (ExpectsTrainableParameters)

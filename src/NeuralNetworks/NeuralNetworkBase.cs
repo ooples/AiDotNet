@@ -5848,7 +5848,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Use GetParameterChunks to keep gradient/parameter ordering
         // aligned (fixes #1245 / #1232). Frozen-or-detached tensors that
         // tape didn't see are zero-padded to preserve length-alignment.
-        var flatGradients = new List<T>(ParameterCount);
+        var flatGradients = new List<T>(checked((int)ParameterCount));
         foreach (var paramTensor in GetParameterChunks())
         {
             if (paramTensor is null || paramTensor.Length == 0) continue;
