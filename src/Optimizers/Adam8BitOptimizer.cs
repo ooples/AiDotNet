@@ -346,9 +346,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
     /// <summary>
     /// Per-parameter quantized Adam state for the tape training path.
-    /// Each registered parameter tensor gets its own block-quantized m and v
-    /// estimates stored as byte[] (signed [-127, 127] mapped to [1, 255] for m,
-    /// unsigned [0, 255] for v) plus per-block scaling factors. When
+    /// Each registered parameter tensor gets its own block-quantized m
+    /// and v estimates stored in span-backed <see cref="Vector{T}"/>
+    /// over <c>byte</c> buffers (signed [-127, 127] mapped to [1, 255]
+    /// for m, unsigned [0, 255] for v) plus per-block scaling factors
+    /// in span-backed <see cref="Vector{T}"/> over <c>double</c>. When
     /// <see cref="Adam8BitOptimizerOptions{T,TInput,TOutput}.CompressBothMoments"/>
     /// is false, m is kept as a full-precision Tensor instead — matching the
     /// legacy <see cref="UpdateSolution"/> path's contract.
@@ -1030,16 +1032,29 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             string optionsJson = JsonConvert.SerializeObject(_options);
             writer.Write(optionsJson);
 
-            // Format version sentinel. Bumped to 2 in #1240 follow-up when
-            // we added the explicit `compressBothMoments` + `hasMState`
-            // boolean flags before the m payload, plus the trailing
-            // _tapeStep field. Pre-#1240 checkpoints (v1) lacked all three
-            // fields and their byte layout is incompatible — Deserialize
-            // would mis-align starting at the first added field. Rather
-            // than silently corrupt, the v1-detection branch in Deserialize
-            // throws a clear error pointing users at the migration path
-            // (re-checkpoint after upgrading).
+            // Magic header + format version. Pre-#1240 (v1) checkpoints
+            // wrote `_t` (the Adam step counter) immediately after the
+            // options JSON. Writing a bare version int here would be
+            // ambiguous: an older checkpoint with `_t == 2` (after just
+            // two training steps) would be mis-detected as v2 format and
+            // every field that follows would parse with the wrong layout
+            // (corrupted lengths, multi-GB phantom allocations on
+            // ReadBytes, confusing failures deep in the call stack).
+            //
+            // Write a distinctive 4-byte ASCII magic before the version
+            // so we disambiguate v2 from v1 by signature, not by guess.
+            // Magic = "A8B1" (Adam-8-Bit v1-of-versioned-format) which
+            // BinaryWriter writes as bytes 0x41 0x38 0x42 0x31 in stream
+            // order — visible in hex dumps. Probability that a v1 _t
+            // ever equals this 32-bit value is 1/2^32 (~2e-10), and
+            // because v1's _t is monotonic from 0 it'd take 0.83 billion
+            // steps to first hit the value — well past any realistic
+            // training run length. Independent of probability, the
+            // semantic check is unambiguous: v1 wrote a step counter,
+            // not this magic, so a match here is a deliberate v2 marker.
+            const int Adam8BitV2Magic = unchecked((int)0x31423841);
             const int StateFormatVersion = 2;
+            writer.Write(Adam8BitV2Magic);
             writer.Write(StateFormatVersion);
 
             // Serialize 8-bit Adam-specific state
@@ -1140,22 +1155,36 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _options = JsonConvert.DeserializeObject<Adam8BitOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
 
-            // Read format version (added in #1240 follow-up). v2 includes
-            // explicit `compressBothMoments` + `hasMState` flags before the
-            // m payload and a trailing `_tapeStep` int. v1 payloads (pre-
-            // #1240) lacked all three and the byte layout is incompatible
-            // — fail fast with a clear migration message rather than silently
-            // mis-aligning every field that follows.
+            // Read magic header + format version (added in #1240 follow-
+            // up). Pre-#1240 (v1) payloads wrote _t immediately after the
+            // options JSON; using a bare version int as the discriminator
+            // would mis-detect any v1 checkpoint whose _t happens to equal
+            // the version number. Read the magic first — the magic value
+            // is a fixed marker that v1 never wrote at this position, so a
+            // match here is unambiguous evidence of v2 format.
+            const int Adam8BitV2Magic = unchecked((int)0x31423841);
+            int magic = reader.ReadInt32();
+            if (magic != Adam8BitV2Magic)
+            {
+                throw new InvalidOperationException(
+                    $"Adam8BitOptimizer: incompatible checkpoint format. Expected v2 " +
+                    $"magic header 0x{Adam8BitV2Magic:X8} ('A8B1' in ASCII LE) immediately " +
+                    $"after the options JSON; got 0x{magic:X8}. Pre-#1240 checkpoints " +
+                    $"wrote the Adam step counter (_t) at that position and the byte " +
+                    $"layout that follows is incompatible with v2. Re-serialize from a " +
+                    $"v0.166.x or later AiDotNet build to upgrade. If you authored a " +
+                    $"custom serializer, write BinaryWriter.Write(0x{Adam8BitV2Magic:X8}) " +
+                    $"followed by BinaryWriter.Write((int)2) immediately after the " +
+                    $"options JSON.");
+            }
             int stateFormatVersion = reader.ReadInt32();
             if (stateFormatVersion != 2)
             {
                 throw new InvalidOperationException(
-                    $"Adam8BitOptimizer: incompatible checkpoint format version {stateFormatVersion} " +
-                    $"(expected 2). Pre-#1240 checkpoints do not contain the hasMState / " +
-                    $"compressBothMoments / tapeStep fields and cannot be migrated in-place. " +
-                    $"Re-serialize from a v0.166.x or later AiDotNet build to upgrade. " +
-                    $"If you authored a custom serializer, write " +
-                    $"BinaryWriter.Write((int)2) immediately after the options JSON.");
+                    $"Adam8BitOptimizer: unrecognized format version {stateFormatVersion} " +
+                    $"after valid v2 magic. Expected version 2; this build does not yet " +
+                    $"support reading newer formats. Upgrade to a build that recognizes " +
+                    $"version {stateFormatVersion} or re-serialize from this build.");
             }
 
             // Deserialize state
@@ -1233,10 +1262,20 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // global step counter so bias-correction continues from the
             // saved trajectory. Per-parameter tape moments cold-start —
             // _tapeStates is left empty and the next tape Step lazily
-            // re-allocates entries on first touch. ReadInt32 is wrapped
-            // to handle older payloads written before this field was
-            // added (pre-#1240 follow-up): EndOfStreamException leaves
-            // _tapeStep=0, which is the safe cold-start default.
+            // re-allocates entries on first touch.
+            //
+            // Defensive try/catch: a valid v2 payload always contains
+            // _tapeStep (the magic-header check above already rejects v1
+            // payloads, so format-migration is not the concern here).
+            // The catch handles a different failure mode — a v2 payload
+            // truncated mid-write (disk full, process killed during
+            // serialize, partial network transfer). Falling back to
+            // _tapeStep=0 lets the optimizer resume with cold-started
+            // bias correction rather than throwing on a recoverable
+            // truncation. Cold-start matches the contract of an
+            // optimizer that was checkpointed before any training had
+            // run, so the resumed run sees one step's worth of slightly-
+            // overconfident updates before bias correction stabilizes.
             try
             {
                 _tapeStep = reader.ReadInt32();

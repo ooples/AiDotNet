@@ -161,11 +161,18 @@ public class Adam8BitTapeStepIssue1238Tests
         await Task.Yield();
 
         // f(x) = sum(x_i^2), gradient = 2x. Adam should drive x toward 0.
+        // Pin every option that materially affects optimizer behavior so
+        // the test's intended trajectory is fully specified by the test
+        // inputs rather than framework defaults — if a future PR flips
+        // UseStochasticRounding to true or changes the percentile cutoff,
+        // this test would silently start measuring something different.
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
             BlockSize = 16,
             CompressBothMoments = true,
             InitialLearningRate = 0.5,
+            UseStochasticRounding = false,
+            QuantizationPercentile = 99.9,
         };
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
