@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { sendLicenseKeyEmail } from "../_shared/email.ts";
 
 // Default matches the production origin the marketing site actually serves from.
 // Override via the ALLOWED_ORIGIN function secret for staging / preview envs.
@@ -179,6 +180,25 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ success: false, error: "server_error", message: "Failed to create license. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Best-effort key delivery email. The license row above is the source
+    // of truth; failure to email is logged but never thrown so a flaky
+    // transport doesn't reject a successful issuance (the user already has
+    // the key in the response body and on /account/licenses).
+    if (user.email) {
+      await sendLicenseKeyEmail({
+        to: user.email,
+        licenseKey,
+        tier: COMMUNITY_TIER,
+        product: COMMUNITY_PRODUCT,
+        isExisting: false,
+      });
+    } else {
+      console.warn(
+        `Community license ${licenseKey.substring(0, 12)}... issued for user ${user.id} `
+        + `but no email on profile — user must retrieve key from /account/licenses.`,
       );
     }
 
