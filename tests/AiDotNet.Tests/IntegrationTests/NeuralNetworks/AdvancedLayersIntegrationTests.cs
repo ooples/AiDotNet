@@ -3901,7 +3901,7 @@ public class AdvancedLayersIntegrationTests
         int inputHeight = 16;
         int inputWidth = 16;
         double compressionFactor = 0.5;
-        var layer = new TransitionLayer<float>(inputChannels, inputHeight, inputWidth, compressionFactor);
+        var layer = new TransitionLayer<float>(inputChannels, compressionFactor);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, inputHeight, inputWidth]);
@@ -3922,7 +3922,7 @@ public class AdvancedLayersIntegrationTests
         int inputHeight = 8;
         int inputWidth = 8;
         double compressionFactor = 0.5;
-        var original = new TransitionLayer<float>(inputChannels, inputHeight, inputWidth, compressionFactor);
+        var original = new TransitionLayer<float>(inputChannels, compressionFactor);
         var input = Tensor<float>.CreateRandom([1, inputChannels, inputHeight, inputWidth]);
 
         // Act

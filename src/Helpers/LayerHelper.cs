@@ -4552,8 +4552,6 @@ public static class LayerHelper<T>
             {
                 var transition = new TransitionLayer<T>(
                     inputChannels: currentChannels,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     compressionFactor: configuration.CompressionFactor);
 
                 yield return transition;

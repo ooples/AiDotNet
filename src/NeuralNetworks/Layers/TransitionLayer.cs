@@ -48,7 +48,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 2, 8, 8")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 0.5")]
 public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn;
@@ -72,7 +72,8 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     private int[]? _originalInputShape;
 
     /// <summary>
-    /// Gets the number of output channels.
+    /// Gets the number of output channels. Computed at construction
+    /// from <c>inputChannels × compressionFactor</c>.
     /// </summary>
     public int OutputChannels { get; }
 
@@ -106,20 +107,28 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
     /// <param name="inputHeight">The input feature map height.</param>
     /// <param name="inputWidth">The input feature map width.</param>
     /// <param name="compressionFactor">The channel compression factor (default: 0.5).</param>
-    public TransitionLayer(
-        int inputChannels,
-        int inputHeight,
-        int inputWidth,
-        double compressionFactor = 0.5)
-        : base(
-            inputShape: [inputChannels, inputHeight, inputWidth],
-            outputShape: [(int)(inputChannels * compressionFactor), inputHeight / 2, inputWidth / 2])
+    /// <summary>
+    /// Lazy ctor — input height and width come from the first
+    /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); the
+    /// input channel count and compression factor must be known at
+    /// construction so <see cref="OutputChannels"/> can drive downstream
+    /// layer planning (DenseNet's growth schedule, e.g.).
+    /// </summary>
+    public TransitionLayer(int inputChannels, double compressionFactor = 0.5)
+        : base(inputShape: [inputChannels, -1, -1],
+               outputShape: [(int)(inputChannels * compressionFactor), -1, -1])
     {
+        if (inputChannels <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputChannels), "inputChannels must be positive.");
+        if (compressionFactor <= 0 || compressionFactor > 1)
+            throw new ArgumentOutOfRangeException(nameof(compressionFactor),
+                "compressionFactor must be in (0, 1].");
+
+        _inputChannels = inputChannels;
+        _compressionFactor = compressionFactor;
         OutputChannels = (int)(inputChannels * compressionFactor);
         _relu = new ReLUActivation<T>();
-
         _bn = new BatchNormalizationLayer<T>();
-
         _conv = new ConvolutionalLayer<T>(
             outputDepth: OutputChannels,
             kernelSize: 1,
@@ -127,24 +136,51 @@ public class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
             padding: 0,
             activationFunction: new IdentityActivation<T>());
 
-        // After 1x1 conv, dimensions are same
-        // Then 2x2 avg pool with stride 2 halves dimensions
-        _pool = new AveragePoolingLayer<T>(
-            poolSize: 2,
-            strides: 2);
+        // After 1×1 conv, spatial dims are same; 2×2 avg pool with
+        // stride 2 halves them.
+        _pool = new AveragePoolingLayer<T>(poolSize: 2, strides: 2);
 
         RegisterSubLayer(_bn);
         RegisterSubLayer(_conv);
         RegisterSubLayer(_pool);
+    }
 
-        // Eagerly resolve sub-layer shapes so ParameterCount reflects real
-        // weights immediately (lazy Conv/BN return 0 otherwise, causing
-        // SetParameters dispatch-by-slice to silently skip them — same
-        // dispatch bug e0c78b820 fixed for ResNet's BottleneckBlock).
-        _bn.ResolveFromShape(new[] { 1, inputChannels, inputHeight, inputWidth });
-        _conv.ResolveFromShape(new[] { inputChannels, inputHeight, inputWidth });
-        // _pool has no trainable parameters but resolve anyway for consistency.
-        _pool.ResolveFromShape(new[] { OutputChannels, inputHeight, inputWidth });
+    private readonly int _inputChannels;
+    private readonly double _compressionFactor;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves input channel count from <c>input.Shape</c>, allocates
+    /// the 1×1 conv against the resolved <c>OutputChannels =
+    /// inputChannels × compressionFactor</c>, then propagates shape to
+    /// each sub-layer so <see cref="LayerBase{T}.ParameterCount"/>
+    /// reflects the real weight count before any sub-layer's first
+    /// Forward fires.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inputChannels, inputHeight, inputWidth;
+        if (s.Length == 3) { inputChannels = s[0]; inputHeight = s[1]; inputWidth = s[2]; }
+        else if (s.Length == 4) { inputChannels = s[1]; inputHeight = s[2]; inputWidth = s[3]; }
+        else
+            throw new ArgumentException(
+                $"TransitionLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+        if (inputChannels != _inputChannels)
+            throw new ArgumentException(
+                $"TransitionLayer was constructed with inputChannels={_inputChannels} but " +
+                $"received tensor with channel dim {inputChannels}.", nameof(input));
+
+        // Drive sub-layer shape resolution so ParameterCount predicts
+        // correctly before each one's own Forward fires.
+        _bn.ResolveShapesOnly(new[] { 1, inputChannels, inputHeight, inputWidth });
+        _conv.ResolveShapesOnly(new[] { inputChannels, inputHeight, inputWidth });
+        _pool.ResolveShapesOnly(new[] { OutputChannels, inputHeight, inputWidth });
+
+        ResolveShapes(
+            new[] { inputChannels, inputHeight, inputWidth },
+            new[] { OutputChannels, inputHeight / 2, inputWidth / 2 });
     }
 
     /// <summary>

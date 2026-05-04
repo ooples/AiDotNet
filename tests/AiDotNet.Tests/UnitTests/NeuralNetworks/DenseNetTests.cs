@@ -185,8 +185,6 @@ public class DenseNetTests
         // Arrange & Act
         var layer = new TransitionLayer<float>(
             inputChannels: 256,
-            inputHeight: 56,
-            inputWidth: 56,
             compressionFactor: 0.5);
 
         // Assert
@@ -199,8 +197,6 @@ public class DenseNetTests
         // Arrange
         var layer = new TransitionLayer<float>(
             inputChannels: 128,
-            inputHeight: 28,
-            inputWidth: 28,
             compressionFactor: 0.5);
 
         var input = new Tensor<float>([1, 128, 28, 28]);
@@ -223,8 +219,6 @@ public class DenseNetTests
         // Arrange - no compression (compression = 1.0)
         var layer = new TransitionLayer<float>(
             inputChannels: 100,
-            inputHeight: 14,
-            inputWidth: 14,
             compressionFactor: 1.0);
 
         // Assert - channels unchanged
