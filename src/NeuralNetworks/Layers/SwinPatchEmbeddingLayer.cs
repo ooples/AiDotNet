@@ -25,14 +25,15 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 4, 16")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "4, 16")]
 public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
 {
     private readonly int _patchSize;
-    private readonly int _inputChannels;
     private readonly int _embedDim;
-    private readonly int _inputHeight;
-    private readonly int _inputWidth;
+    // Non-readonly: lazy ctor leaves these = -1 until OnFirstForward.
+    private int _inputChannels;
+    private int _inputHeight;
+    private int _inputWidth;
 
     /// <summary>
     /// The convolutional layer used for patch projection.
@@ -76,25 +77,22 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     /// <param name="embedDim">Dimension of patch embeddings (default: 96 for Swin-Tiny).</param>
     /// <exception cref="ArgumentException">Thrown if input dimensions are not divisible by patch size.</exception>
     public SwinPatchEmbeddingLayer(
-        int inputHeight,
-        int inputWidth,
-        int inputChannels = 3,
         int patchSize = 4,
         int embedDim = 96)
-        : base([inputChannels, inputHeight, inputWidth], [embedDim])
+        : base([-1, -1, -1], [embedDim])
     {
-        if (inputHeight % patchSize != 0)
-            throw new ArgumentException($"Input height ({inputHeight}) must be divisible by patch size ({patchSize}).", nameof(inputHeight));
-        if (inputWidth % patchSize != 0)
-            throw new ArgumentException($"Input width ({inputWidth}) must be divisible by patch size ({patchSize}).", nameof(inputWidth));
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), "Patch size must be positive.");
+        if (embedDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embedDim), "Embed dim must be positive.");
 
         _patchSize = patchSize;
-        _inputChannels = inputChannels;
         _embedDim = embedDim;
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
+        _inputChannels = -1; // resolved in OnFirstForward
+        _inputHeight = -1;   // resolved in OnFirstForward
+        _inputWidth = -1;    // resolved in OnFirstForward
 
-        // Projection: Conv with kernel=stride=patchSize creates non-overlapping patches
+        // Projection: Conv with kernel=stride=patchSize creates non-overlapping patches.
         _projection = new ConvolutionalLayer<T>(
             embedDim,
             kernelSize: patchSize,
@@ -108,6 +106,49 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         RegisterSubLayer(_norm);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves <c>_inputChannels</c> / <c>_inputHeight</c> / <c>_inputWidth</c>
+    /// from <c>input.Shape</c> and propagates the resolved channel-shape
+    /// to the inner projection conv via <see cref="LayerBase{T}.ResolveFromShape"/>.
+    /// Validates the patch-size divisibility constraint here instead of
+    /// at construction.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inChannels, inH, inW;
+        if (s.Length == 3) { inChannels = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inChannels = s[1]; inH = s[2]; inW = s[3]; }
+        else
+            throw new ArgumentException(
+                $"SwinPatchEmbeddingLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+        if (inH % _patchSize != 0)
+            throw new ArgumentException($"Input height ({inH}) must be divisible by patch size ({_patchSize}).", nameof(input));
+        if (inW % _patchSize != 0)
+            throw new ArgumentException($"Input width ({inW}) must be divisible by patch size ({_patchSize}).", nameof(input));
+
+        _inputChannels = inChannels;
+        _inputHeight = inH;
+        _inputWidth = inW;
+
+        _projection.ResolveFromShape(new[] { inChannels, inH, inW });
+        _projection.SetTrainingMode(IsTrainingMode);
+
+        ResolveShapes(
+            new[] { inChannels, inH, inW },
+            new[] { _embedDim });
+
+        // Replay any Deserialize-buffered parameters now that _projection is resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            SetParameters(pending);
+        }
+    }
+
     /// <summary>
     /// Performs the forward pass, converting image to patch sequence.
     /// </summary>
@@ -115,6 +156,8 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     /// <returns>Output tensor of shape [batch, numPatches, embedDim].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (!IsShapeResolved) OnFirstForward(input);
+
         // Input: [batch, channels, height, width]
         int batch = input.Shape[0];
 
@@ -165,6 +208,14 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Pre-Forward: _projection's input channel count is unresolved.
+        // Buffer and replay from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         int projCount = checked((int)_projection.ParameterCount);
         int normCount = checked((int)_norm.ParameterCount);
 
@@ -177,6 +228,8 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         _projection.SetParameters(new Vector<T>(projParams));
         _norm.SetParameters(new Vector<T>(normParams));
     }
+
+    private Vector<T>? _pendingParameters;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()

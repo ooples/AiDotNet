@@ -37,15 +37,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "8, 8, 1, 2, 3")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 8, 8", TestConstructorArgs = "2, 3")]
 public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
 {
     #region Fields
 
     private readonly IEngine _engine;
-    private readonly int _inputHeight;
-    private readonly int _inputWidth;
-    private readonly int _inputChannels;
+    // Non-readonly: lazy ctor leaves _inputHeight/_inputWidth/_inputChannels
+    // = -1 until OnFirstForward observes the runtime input tensor.
+    private int _inputHeight;
+    private int _inputWidth;
+    private int _inputChannels;
     private readonly int _outputChannels;
     private readonly int _kernelSize;
     private readonly int _stride;
@@ -134,24 +136,23 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     #region Constructors
 
     /// <summary>
-    /// Creates a new Deformable Convolutional Layer.
+    /// Creates a new Deformable Convolutional Layer with lazy spatial dims.
     /// </summary>
-    /// <param name="inputHeight">Height of input feature map.</param>
-    /// <param name="inputWidth">Width of input feature map.</param>
-    /// <param name="inputChannels">Number of input channels.</param>
     /// <param name="outputChannels">Number of output channels.</param>
     /// <param name="kernelSize">Size of the convolution kernel (default: 3).</param>
     /// <param name="stride">Convolution stride (default: 1).</param>
     /// <param name="padding">Padding size (default: 1).</param>
     /// <param name="groups">Number of convolution groups. Currently only groups=1 is supported (default: 1).</param>
-    /// <exception cref="NotSupportedException">Thrown when groups is not 1 (grouped deformable convolution is not yet supported).</exception>
     /// <param name="deformGroups">Number of deformable groups (default: 1).</param>
     /// <param name="useModulation">Whether to use modulation mask (DCNv2, default: true).</param>
-    /// <param name="engine">Optional computation engine (CPU or GPU). If null, uses default CPU engine.</param>
+    /// <param name="engine">Optional computation engine. If null, uses default CPU engine.</param>
+    /// <remarks>
+    /// Lazy ctor — input height/width/channels come from the first
+    /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); only
+    /// outputChannels/kernelSize and the geometric strides are required
+    /// at construction since they don't depend on input dims.
+    /// </remarks>
     public DeformableConvolutionalLayer(
-        int inputHeight,
-        int inputWidth,
-        int inputChannels,
         int outputChannels,
         int kernelSize = 3,
         int stride = 1,
@@ -161,13 +162,9 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         bool useModulation = true,
         IEngine? engine = null)
         : base(
-            [inputChannels, inputHeight, inputWidth],
-            [outputChannels, (inputHeight + 2 * padding - kernelSize) / stride + 1, (inputWidth + 2 * padding - kernelSize) / stride + 1])
+            [-1, -1, -1],
+            [outputChannels, -1, -1])
     {
-        // Validate parameters
-        if (inputHeight <= 0) throw new ArgumentOutOfRangeException(nameof(inputHeight), "Input height must be positive.");
-        if (inputWidth <= 0) throw new ArgumentOutOfRangeException(nameof(inputWidth), "Input width must be positive.");
-        if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels), "Input channels must be positive.");
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels), "Output channels must be positive.");
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "Kernel size must be positive.");
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "Stride must be positive.");
@@ -175,20 +172,11 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         if (groups < 1) throw new ArgumentOutOfRangeException(nameof(groups), "Groups must be at least 1.");
         if (groups != 1) throw new NotSupportedException("Grouped deformable convolution is not supported; set groups to 1 or implement engine support.");
         if (deformGroups < 1) throw new ArgumentOutOfRangeException(nameof(deformGroups), "Deformable groups must be at least 1.");
-        if (inputChannels % groups != 0) throw new ArgumentException($"Input channels ({inputChannels}) must be divisible by groups ({groups}).", nameof(groups));
-
-        // Validate output dimensions are positive
-        int outputHeight = (inputHeight + 2 * padding - kernelSize) / stride + 1;
-        int outputWidth = (inputWidth + 2 * padding - kernelSize) / stride + 1;
-        if (outputHeight <= 0 || outputWidth <= 0)
-            throw new ArgumentException(
-                $"Invalid layer parameters: output size would be {outputHeight}x{outputWidth} " +
-                $"for input {inputHeight}x{inputWidth}, kernel {kernelSize}, stride {stride}, padding {padding}.");
 
         _engine = engine ?? new CpuEngine();
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
-        _inputChannels = inputChannels;
+        _inputHeight = -1;
+        _inputWidth = -1;
+        _inputChannels = -1;
         _outputChannels = outputChannels;
         _kernelSize = kernelSize;
         _stride = stride;
@@ -197,35 +185,79 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         _deformGroups = deformGroups;
         _useModulation = useModulation;
 
-        // Initialize main convolution weights [outC, inC/groups, kH, kW]
-        int inChannelsPerGroup = inputChannels / groups;
-        _weights = InitializeWeights(outputChannels, inChannelsPerGroup, kernelSize, kernelSize);
-        _bias = new Tensor<T>([outputChannels]);
+        // Defer all weight allocation to OnFirstForward — channel-shape
+        // tensors (_weights/_offsetWeights/_maskWeights) need _inputChannels.
+        _weights = new Tensor<T>([0, 0, 0, 0]);
+        _bias = new Tensor<T>([0]);
+        _offsetWeights = new Tensor<T>([0, 0, 0, 0]);
+        _offsetBias = new Tensor<T>([0]);
+    }
 
-        // Initialize offset prediction weights
-        // Offsets: 2 (x, y) * kernelSize^2 per deform group
-        int offsetChannels = 2 * kernelSize * kernelSize * deformGroups;
-        _offsetWeights = InitializeWeights(offsetChannels, inputChannels, kernelSize, kernelSize);
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves <c>_inputChannels</c>, <c>_inputHeight</c>, <c>_inputWidth</c>
+    /// from <c>input.Shape</c>, allocates main / offset / mask weights
+    /// against the resolved channel count, and locks the layer's input /
+    /// output shapes via <see cref="LayerBase{T}.ResolveShapes"/>.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inChannels, inH, inW;
+        if (s.Length == 3) { inChannels = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inChannels = s[1]; inH = s[2]; inW = s[3]; }
+        else
+            throw new ArgumentException(
+                $"DeformableConvolutionalLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+
+        if (inChannels % _groups != 0)
+            throw new ArgumentException(
+                $"Input channels ({inChannels}) must be divisible by groups ({_groups}).",
+                nameof(input));
+
+        _inputChannels = inChannels;
+        _inputHeight = inH;
+        _inputWidth = inW;
+
+        int outputHeight = (inH + 2 * _padding - _kernelSize) / _stride + 1;
+        int outputWidth = (inW + 2 * _padding - _kernelSize) / _stride + 1;
+        if (outputHeight <= 0 || outputWidth <= 0)
+            throw new ArgumentException(
+                $"Invalid layer parameters: output size would be {outputHeight}x{outputWidth} " +
+                $"for input {inH}x{inW}, kernel {_kernelSize}, stride {_stride}, padding {_padding}.");
+
+        // Main convolution weights [outC, inC/groups, kH, kW]
+        int inChannelsPerGroup = inChannels / _groups;
+        _weights = InitializeWeights(_outputChannels, inChannelsPerGroup, _kernelSize, _kernelSize);
+        _bias = new Tensor<T>([_outputChannels]);
+
+        // Offset prediction weights — 2 (x,y) × kernel² per deform group.
+        int offsetChannels = 2 * _kernelSize * _kernelSize * _deformGroups;
+        _offsetWeights = InitializeWeights(offsetChannels, inChannels, _kernelSize, _kernelSize);
         _offsetBias = new Tensor<T>([offsetChannels]);
 
-        // Initialize modulation mask weights (if using DCNv2)
-        if (useModulation)
+        // Modulation mask weights (DCNv2 only).
+        if (_useModulation)
         {
-            int maskChannels = kernelSize * kernelSize * deformGroups;
-            _maskWeights = InitializeWeights(maskChannels, inputChannels, kernelSize, kernelSize);
+            int maskChannels = _kernelSize * _kernelSize * _deformGroups;
+            _maskWeights = InitializeWeights(maskChannels, inChannels, _kernelSize, _kernelSize);
             _maskBias = new Tensor<T>([maskChannels]);
         }
 
-        // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
         RegisterTrainableParameter(_offsetWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_offsetBias, PersistentTensorRole.Biases);
-        if (useModulation && _maskWeights != null && _maskBias != null)
+        if (_useModulation && _maskWeights != null && _maskBias != null)
         {
             RegisterTrainableParameter(_maskWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_maskBias, PersistentTensorRole.Biases);
         }
+
+        ResolveShapes(
+            new[] { inChannels, inH, inW },
+            new[] { _outputChannels, outputHeight, outputWidth });
     }
 
     #endregion
@@ -235,6 +267,10 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor leaves _inputChannels = -1; resolve from input.Shape
+        // and allocate weights on the first Forward.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // Ensure 4D input [batch, channels, height, width]
@@ -295,6 +331,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         }
 
         var input = inputs[0];
+        if (!IsShapeResolved) OnFirstForward(input);
 
         // Validate input shape - GPU uses NCHW format [batch, channels, height, width]
         if (input.Shape.Length < 3)

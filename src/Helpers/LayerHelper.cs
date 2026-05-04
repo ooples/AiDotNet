@@ -9201,11 +9201,8 @@ public static class LayerHelper<T>
         int patchSize,
         int mlpRatio)
     {
-        // Stage 0: Patch embedding
+        // Stage 0: Patch embedding (lazy on input H/W and channel count).
         yield return new SwinPatchEmbeddingLayer<T>(
-            imageHeight,
-            imageWidth,
-            inputChannels,
             patchSize,
             embedDim);
 
@@ -29844,8 +29841,8 @@ public static class LayerHelper<T>
         int numResidualBlocks = 30, int numPropagations = 2,
         int numLevels = 5, int deformGroups = 8, int growthChannels = 32)
     {
-        // SPyNet flow estimator
-        yield return new SpyNetLayer<T>(height, width, channels, numLevels: numLevels);
+        // SPyNet flow estimator (lazy on spatial dims and per-frame channels).
+        yield return new SpyNetLayer<T>(numLevels: numLevels);
 
         // Feature extraction
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
@@ -29862,10 +29859,10 @@ public static class LayerHelper<T>
         for (int i = 0; i < numPropagations; i++)
         {
             yield return new DeformableConvolutionalLayer<T>(
-                height, width, numFeatures * 2, numFeatures,
+                outputChannels: numFeatures,
                 kernelSize: 3, padding: 1, deformGroups: deformGroups);
             yield return new DeformableConvolutionalLayer<T>(
-                height, width, numFeatures * 2, numFeatures,
+                outputChannels: numFeatures,
                 kernelSize: 3, padding: 1, deformGroups: deformGroups);
             yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
             yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);

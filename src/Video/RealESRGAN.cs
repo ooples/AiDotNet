@@ -421,14 +421,13 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
         _realESRGANLoss = new RealESRGANLoss<T>(l1Lambda, perceptualLambda, ganLambda);
 
         // Create RRDBNet generator (the proper ESRGAN generator architecture)
+        // — generator is lazy on spatial dims, only channel counts matter at ctor time.
         int inputHeight = generatorArchitecture.InputHeight > 0 ? generatorArchitecture.InputHeight : 64;
         int inputWidth = generatorArchitecture.InputWidth > 0 ? generatorArchitecture.InputWidth : 64;
         int inputChannels = generatorArchitecture.InputDepth > 0 ? generatorArchitecture.InputDepth : 3;
         int outputChannels = 3; // RGB output
 
         Generator = new RRDBNetGenerator<T>(
-            inputHeight: inputHeight,
-            inputWidth: inputWidth,
             inputChannels: inputChannels,
             outputChannels: outputChannels,
             numFeatures: numFeatures,
@@ -437,14 +436,8 @@ public class RealESRGAN<T> : VideoSuperResolutionBase<T>
             scale: scaleFactor,
             residualScale: residualScale);
 
-        // Create U-Net discriminator (the proper Real-ESRGAN discriminator architecture)
-        int hrHeight = inputHeight * scaleFactor;
-        int hrWidth = inputWidth * scaleFactor;
-
+        // Create U-Net discriminator (lazy on input H/W and channel count).
         Discriminator = new UNetDiscriminator<T>(
-            inputHeight: hrHeight,
-            inputWidth: hrWidth,
-            inputChannels: outputChannels,
             numChannels: 64,
             numBlocks: 4);
 

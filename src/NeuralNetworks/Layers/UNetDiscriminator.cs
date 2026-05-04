@@ -53,7 +53,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 8, 3, 8, 2")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "1, 3, 8, 8", TestConstructorArgs = "8, 2")]
 public class UNetDiscriminator<T> : LayerBase<T>
 {
     #region Fields
@@ -152,14 +152,11 @@ public class UNetDiscriminator<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public UNetDiscriminator(
-        int inputHeight,
-        int inputWidth,
-        int inputChannels = 3,
         int numChannels = 64,
         int numBlocks = 4)
         : base(
-            [inputChannels, inputHeight, inputWidth],
-            [1, inputHeight, inputWidth]) // Per-pixel output
+            [-1, -1, -1],
+            [1, -1, -1]) // Per-pixel output
     {
         if (numBlocks <= 0)
             throw new ArgumentOutOfRangeException(nameof(numBlocks), "Number of blocks must be positive.");
@@ -170,7 +167,7 @@ public class UNetDiscriminator<T> : LayerBase<T>
         _numChannels = numChannels;
         _leakyReLU = new LeakyReLUActivation<T>(0.2);
 
-        // Initial convolution: inputChannels → numChannels
+        // Initial convolution: inputChannels (lazy) → numChannels.
         _convFirst = new ConvolutionalLayer<T>(
             outputDepth: numChannels,
             kernelSize: 3,
@@ -178,41 +175,26 @@ public class UNetDiscriminator<T> : LayerBase<T>
             padding: 1,
             activationFunction: null);
 
-        // Encoder blocks (progressively downsample and increase channels)
+        // Encoder blocks (progressively downsample and double channels — capped at 8×).
         _encoderBlocks = new UNetConvBlock<T>[numBlocks];
         int currentChannels = numChannels;
-        int currentHeight = inputHeight;
-        int currentWidth = inputWidth;
-
         for (int i = 0; i < numBlocks; i++)
         {
-            int outChannels = Math.Min(currentChannels * 2, numChannels * 8); // Cap at 8x base channels
-            _encoderBlocks[i] = new UNetConvBlock<T>(
-                currentChannels, outChannels, currentHeight, currentWidth, downsample: true);
-
+            int outChannels = Math.Min(currentChannels * 2, numChannels * 8);
+            _encoderBlocks[i] = new UNetConvBlock<T>(outChannels, downsample: true);
             currentChannels = outChannels;
-            currentHeight = (currentHeight + 1) / 2; // Account for stride=2
-            currentWidth = (currentWidth + 1) / 2;
         }
 
-        // Decoder blocks (progressively upsample, use skip connections)
+        // Decoder blocks (progressively upsample, use skip connections).
         _decoderBlocks = new UNetUpBlock<T>[numBlocks];
-
         for (int i = numBlocks - 1; i >= 0; i--)
         {
             int skipChannels = i == 0 ? numChannels : Math.Min(numChannels * (1 << i), numChannels * 8);
             int outChannels = i == 0 ? numChannels : Math.Min(numChannels * (1 << (i - 1)), numChannels * 8);
-
-            _decoderBlocks[numBlocks - 1 - i] = new UNetUpBlock<T>(
-                currentChannels, skipChannels, outChannels,
-                currentHeight, currentWidth);
-
-            currentChannels = outChannels;
-            currentHeight *= 2;
-            currentWidth *= 2;
+            _decoderBlocks[numBlocks - 1 - i] = new UNetUpBlock<T>(skipChannels, outChannels);
         }
 
-        // Final convolution: numChannels → 1 (per-pixel prediction)
+        // Final convolution: numChannels → 1 (per-pixel prediction).
         _convLast = new ConvolutionalLayer<T>(
             outputDepth: 1,
             kernelSize: 3,
@@ -226,6 +208,73 @@ public class UNetDiscriminator<T> : LayerBase<T>
         foreach (var block in _decoderBlocks) RegisterSubLayer(block);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves spatial dims and per-input channel count, then drives
+    /// each sub-layer's lazy resolution along the encoder→decoder spatial
+    /// pyramid so weights are allocated up front.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inC, inH, inW;
+        if (s.Length == 3) { inC = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inC = s[1]; inH = s[2]; inW = s[3]; }
+        else throw new ArgumentException(
+            $"UNetDiscriminator requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+            nameof(input));
+
+        _convFirst.ResolveFromShape(new[] { inC, inH, inW });
+        _convFirst.SetTrainingMode(IsTrainingMode);
+
+        int currentChannels = _numChannels;
+        int currentH = inH;
+        int currentW = inW;
+        for (int i = 0; i < _numBlocks; i++)
+        {
+            _encoderBlocks[i].ResolveFromShape(new[] { currentChannels, currentH, currentW });
+            _encoderBlocks[i].SetTrainingMode(IsTrainingMode);
+            int outChannels = Math.Min(currentChannels * 2, _numChannels * 8);
+            currentChannels = outChannels;
+            currentH = (currentH + 1) / 2;
+            currentW = (currentW + 1) / 2;
+        }
+
+        for (int i = 0; i < _numBlocks; i++)
+        {
+            _decoderBlocks[i].ResolveFromShape(new[] { currentChannels, currentH, currentW });
+            _decoderBlocks[i].SetTrainingMode(IsTrainingMode);
+            int decoderIndex = _numBlocks - 1 - i;
+            int outChannels = decoderIndex == 0
+                ? _numChannels
+                : Math.Min(_numChannels * (1 << (decoderIndex - 1)), _numChannels * 8);
+            currentChannels = outChannels;
+            currentH *= 2;
+            currentW *= 2;
+        }
+
+        _convLast.ResolveFromShape(new[] { currentChannels, currentH, currentW });
+        _convLast.SetTrainingMode(IsTrainingMode);
+
+        ResolveShapes(
+            new[] { inC, inH, inW },
+            new[] { 1, inH, inW });
+
+        // Replay any Deserialize-buffered parameters now that block shapes are resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            int offset = 0;
+            offset = SetLayerParams(_convFirst, pending, offset);
+            foreach (var block in _encoderBlocks)
+                offset = SetLayerParams(block, pending, offset);
+            foreach (var block in _decoderBlocks)
+                offset = SetLayerParams(block, pending, offset);
+            SetLayerParams(_convLast, pending, offset);
+        }
+    }
+
     #endregion
 
     #region Forward Pass
@@ -233,6 +282,8 @@ public class UNetDiscriminator<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // Initial conv + activation
@@ -336,6 +387,14 @@ public class UNetDiscriminator<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Pre-Forward: encoder/decoder block shapes are unresolved.
+        // Buffer and replay from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         int offset = 0;
 
         offset = SetLayerParams(_convFirst, parameters, offset);
@@ -349,6 +408,8 @@ public class UNetDiscriminator<T> : LayerBase<T>
         }
         SetLayerParams(_convLast, parameters, offset);
     }
+
+    private Vector<T>? _pendingParameters;
 
     private static void AddParamsToList(List<T> list, Vector<T> parameters)
     {
@@ -405,16 +466,14 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
     private Tensor<T>? _conv1RawOutput;   // Before LeakyReLU (for backward)
     private Tensor<T>? _conv2RawOutput;   // Before LeakyReLU (for backward)
 
-    public UNetConvBlock(int inChannels, int outChannels, int height, int width, bool downsample)
-        : base(
-            [inChannels, height, width],
-            downsample ? [outChannels, (height + 1) / 2, (width + 1) / 2] : [outChannels, height, width])
+    private readonly int _outChannels;
+
+    public UNetConvBlock(int outChannels, bool downsample)
+        : base([-1, -1, -1], [outChannels, -1, -1])
     {
+        _outChannels = outChannels;
         _downsample = downsample;
         _leakyReLU = new LeakyReLUActivation<T>(0.2);
-
-        int outHeight = downsample ? (height + 1) / 2 : height;
-        int outWidth = downsample ? (width + 1) / 2 : width;
 
         // First conv (with optional stride for downsampling)
         _conv1 = new ConvolutionalLayer<T>(
@@ -432,14 +491,48 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
             padding: 1,
             activationFunction: null);
 
-        RegisterSubLayer(_conv1);
-        RegisterSubLayer(_conv2);
+        // No manual RegisterSubLayer here — the source generator's
+        // EnsureSubLayersRegistered (called from EnsureInitialized) auto-
+        // discovers _conv1/_conv2. Manual registration would double-count
+        // the convs in ParameterCount.
+    }
+
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inC, inH, inW;
+        if (s.Length == 3) { inC = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inC = s[1]; inH = s[2]; inW = s[3]; }
+        else throw new ArgumentException(
+            $"UNetConvBlock requires rank-3 or rank-4 input; got rank {s.Length}.", nameof(input));
+
+        int outH = _downsample ? (inH + 1) / 2 : inH;
+        int outW = _downsample ? (inW + 1) / 2 : inW;
+        _conv1.ResolveFromShape(new[] { inC, inH, inW });
+        _conv2.ResolveFromShape(new[] { _outChannels, outH, outW });
+        _conv1.SetTrainingMode(IsTrainingMode);
+        _conv2.SetTrainingMode(IsTrainingMode);
+
+        ResolveShapes(
+            new[] { inC, inH, inW },
+            new[] { _outChannels, outH, outW });
+
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            int count1 = _conv1.GetParameters().Length;
+            _conv1.SetParameters(pending.SubVector(0, count1));
+            _conv2.SetParameters(pending.SubVector(count1, pending.Length - count1));
+        }
     }
 
     public override bool SupportsTraining => true;
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // Conv1 + LeakyReLU
@@ -493,10 +586,18 @@ internal partial class UNetConvBlock<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         int count1 = _conv1.GetParameters().Length;
         _conv1.SetParameters(parameters.SubVector(0, count1));
         _conv2.SetParameters(parameters.SubVector(count1, parameters.Length - count1));
     }
+
+    private Vector<T>? _pendingParameters;
 
     public override void ResetState()
     {
@@ -528,16 +629,14 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
     private Tensor<T>? _concatenated;
     private Tensor<T>? _conv1Output;
 
-    public UNetUpBlock(int inChannels, int skipChannels, int outChannels, int height, int width)
-        : base(
-            [inChannels, height, width],
-            [outChannels, height * 2, width * 2])
+    private readonly int _outChannels;
+
+    public UNetUpBlock(int skipChannels, int outChannels)
+        : base([-1, -1, -1], [outChannels, -1, -1])
     {
         _skipChannels = skipChannels;
+        _outChannels = outChannels;
         _leakyReLU = new LeakyReLUActivation<T>(0.2);
-
-        int outHeight = height * 2;
-        int outWidth = width * 2;
 
         // Bilinear upsampling
         _upsample = new UpsamplingLayer<T>(scaleFactor: 2);
@@ -557,9 +656,42 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
             padding: 1,
             activationFunction: null);
 
-        RegisterSubLayer(_upsample);
-        RegisterSubLayer(_conv1);
-        RegisterSubLayer(_conv2);
+        // No manual RegisterSubLayer — the source generator's
+        // EnsureSubLayersRegistered (called from EnsureInitialized) auto-
+        // discovers _upsample/_conv1/_conv2.
+    }
+
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inC, inH, inW;
+        if (s.Length == 3) { inC = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inC = s[1]; inH = s[2]; inW = s[3]; }
+        else throw new ArgumentException(
+            $"UNetUpBlock requires rank-3 or rank-4 input; got rank {s.Length}.", nameof(input));
+
+        int upH = inH * 2;
+        int upW = inW * 2;
+        _upsample.ResolveFromShape(new[] { inC, inH, inW });
+        // After concat with skip the channel count is inC + skipChannels.
+        _conv1.ResolveFromShape(new[] { inC + _skipChannels, upH, upW });
+        _conv2.ResolveFromShape(new[] { _outChannels, upH, upW });
+        _upsample.SetTrainingMode(IsTrainingMode);
+        _conv1.SetTrainingMode(IsTrainingMode);
+        _conv2.SetTrainingMode(IsTrainingMode);
+
+        ResolveShapes(
+            new[] { inC, inH, inW },
+            new[] { _outChannels, upH, upW });
+
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            int count1 = _conv1.GetParameters().Length;
+            _conv1.SetParameters(pending.SubVector(0, count1));
+            _conv2.SetParameters(pending.SubVector(count1, pending.Length - count1));
+        }
     }
 
     public override bool SupportsTraining => true;
@@ -571,6 +703,8 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
 
     public Tensor<T> Forward(Tensor<T> input, Tensor<T>? skip)
     {
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
         _lastSkip = skip;
 
@@ -729,10 +863,18 @@ internal partial class UNetUpBlock<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         int count1 = _conv1.GetParameters().Length;
         _conv1.SetParameters(parameters.SubVector(0, count1));
         _conv2.SetParameters(parameters.SubVector(count1, parameters.Length - count1));
     }
+
+    private Vector<T>? _pendingParameters;
 
     public override void ResetState()
     {
