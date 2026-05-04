@@ -88,7 +88,7 @@ public class ResNetNetworkTests
     {
         // Arrange
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
-            inputChannels: 3);
+            inputHeight: 224, inputWidth: 224, inputChannels: 3);
 
         // Act
         var inputShape = config.InputShape;
@@ -143,9 +143,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_Construction_CreatesValidNetwork()
     {
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -166,9 +169,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_WithBottleneck_CreatesValidNetwork()
     {
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -187,6 +193,8 @@ public class ResNetNetworkTests
         // Arrange
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -201,9 +209,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_MismatchedOutputSize_ThrowsArgumentException()
     {
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 5, // Mismatch!
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -218,7 +229,8 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_MismatchedInputShape_ThrowsArgumentException()
     {
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);  // 64x64
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 64, inputWidth: 64);  // 64x64
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             inputHeight: 32,   // 32x32 - Mismatch!
@@ -241,9 +253,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_Forward_ReturnsCorrectShape()
     {
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -269,9 +284,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_Predict_ReturnsCorrectShape()
     {
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -295,9 +313,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_Predict_With4DInput_ReturnsCorrectShape()
     {
         // Arrange - test with batch dimension [B, C, H, W]
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -323,9 +344,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_BasicBlock_Forward_ReturnsCorrectShape()
     {
         // Arrange - specifically test BasicBlock architecture (ResNet18/34)
-        var config = new ResNetConfiguration(ResNetVariant.ResNet34, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet34, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -349,9 +373,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_Bottleneck_Forward_ReturnsCorrectShape()
     {
         // Arrange - specifically test BottleneckBlock architecture (ResNet50/101/152)
-        var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -380,9 +407,12 @@ public class ResNetNetworkTests
     {
         await Task.Yield();
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -403,9 +433,12 @@ public class ResNetNetworkTests
     {
         await Task.Yield();
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -440,9 +473,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_GetModelMetadata_ReturnsValidMetadata()
     {
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet50, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -465,9 +501,12 @@ public class ResNetNetworkTests
     public async Task ResNetNetwork_GetParameterCount_ReturnsPositiveValue()
     {
         // Arrange
-        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10);
+        var config = new ResNetConfiguration(ResNetVariant.ResNet18, numClasses: 10,
+            inputHeight: 32, inputWidth: 32);
         var architecture = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
+            inputHeight: 32,
+            inputWidth: 32,
             inputDepth: 3,
             outputSize: 10,
             taskType: NeuralNetworkTaskType.MultiClassClassification
@@ -507,12 +546,13 @@ public class ResNetNetworkTests
     [Fact(Timeout = 120000)]
     public async Task BasicBlock_Construction_CreatesValidLayer()
     {
-        // Arrange & Act
+        await Task.Yield();
+        // Lazy ctor (#1209): only outChannels/stride configure the block.
+        // Input channels + spatial dims resolve from input.Shape on first Forward.
         var block = new AiDotNet.NeuralNetworks.Layers.BasicBlock<float>(
             outChannels: 64,
             stride: 1);
 
-        // Assert
         Assert.NotNull(block);
         Assert.True(block.SupportsTraining);
     }
@@ -520,42 +560,36 @@ public class ResNetNetworkTests
     [Fact(Timeout = 120000)]
     public async Task BasicBlock_WithDownsample_CreatesValidLayer()
     {
-        // Arrange & Act - stride=2 triggers downsampling
+        await Task.Yield();
         var block = new AiDotNet.NeuralNetworks.Layers.BasicBlock<float>(
             outChannels: 128,
             stride: 2);
 
-        // Assert
         Assert.NotNull(block);
-
         Assert.True(block.SupportsTraining);
     }
 
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_Construction_CreatesValidLayer()
     {
-        // Arrange & Act
+        await Task.Yield();
         var block = new AiDotNet.NeuralNetworks.Layers.BottleneckBlock<float>(
             baseChannels: 64,
             stride: 1);
 
-        // Assert
         Assert.NotNull(block);
-        Assert.True(block.SupportsTraining);
         Assert.True(block.SupportsTraining);
     }
 
     [Fact(Timeout = 120000)]
     public async Task BottleneckBlock_WithDownsample_CreatesValidLayer()
     {
-        // Arrange & Act - stride=2 triggers downsampling
+        await Task.Yield();
         var block = new AiDotNet.NeuralNetworks.Layers.BottleneckBlock<float>(
             baseChannels: 128,
             stride: 2);
 
-        // Assert
         Assert.NotNull(block);
-
         Assert.True(block.SupportsTraining);
     }
 

@@ -962,6 +962,16 @@ public class NeuralNetworkArchitecture<T>
                 {
                     throw new ArgumentException("InputDepth must be greater than 0 for ThreeDimensional input.");
                 }
+                // Normalize the unsupplied default (H = 0 AND W = 0) into the lazy
+                // sentinel (-1, -1). The pre-#1209 contract required positive H/W;
+                // post-#1209 users routinely construct architectures without
+                // spatial dims and rely on the first Forward to resolve them. A
+                // single dimension at zero is still half-dynamic and rejected.
+                if (InputHeight == 0 && InputWidth == 0)
+                {
+                    InputHeight = -1;
+                    InputWidth = -1;
+                }
                 if ((InputHeight <= 0 && InputHeight != -1) || (InputWidth <= 0 && InputWidth != -1))
                 {
                     throw new ArgumentException("InputHeight and InputWidth must be greater than 0 (or -1 for dynamic spatial dims) for ThreeDimensional input.");
@@ -977,6 +987,11 @@ public class NeuralNetworkArchitecture<T>
                 if (InputFrames <= 0 || InputDepth <= 0)
                 {
                     throw new ArgumentException("InputFrames and InputDepth must be greater than 0 for FourDimensional (temporal video) input.");
+                }
+                if (InputHeight == 0 && InputWidth == 0)
+                {
+                    InputHeight = -1;
+                    InputWidth = -1;
                 }
                 if ((InputHeight <= 0 && InputHeight != -1) || (InputWidth <= 0 && InputWidth != -1))
                 {
