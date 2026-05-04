@@ -72,6 +72,21 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
         // A wrong-ctor pick (e.g. one that resolved kernelSize from
         // defaults) would land on a different parameter count.
         Assert.Equal(3 * 3 * 8 + 8 * 16 + 16, sepConv.ParameterCount);
+
+        // Forward through a representative input so we prove the
+        // chosen ctor wired stride/padding to a self-consistent
+        // configuration — a wrong-ctor pick that landed on the same
+        // parameter count but inconsistent shape arithmetic would
+        // throw inside the convolution kernel here. The exact
+        // spatial dims depend on how the matcher resolved
+        // outputDepth (it pascal-cases the ctor param `outputDepth`
+        // and prefers outputShape[^1] over the metadata key, which
+        // is matcher-implementation detail and not what this test
+        // is asserting).
+        var input = new Tensor<float>([1, 8, 8, 8]);
+        var output = sepConv.Forward(input);
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
     }
 
     /// <summary>
@@ -96,7 +111,19 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
             additionalParams: null);
 
         Assert.NotNull(layer);
-        Assert.IsType<SeparableConvolutionalLayer<float>>(layer);
+        var sepConv = Assert.IsType<SeparableConvolutionalLayer<float>>(layer);
+
+        // Even without metadata, the matcher should resolve via shape
+        // hits + ML-domain defaults and produce a layer that runs end-
+        // to-end. Forward through a representative input — the
+        // matcher's floor is "build a model that doesn't crash". A
+        // wrong-ctor pick that resolved kernel/stride to incompatible
+        // defaults would fail the convolution shape arithmetic at
+        // Forward time.
+        var input = new Tensor<float>([1, 8, 8, 8]);
+        var output = sepConv.Forward(input);
+        Assert.NotNull(output);
+        Assert.True(output.Length > 0);
     }
 
     /// <summary>
@@ -133,16 +160,16 @@ public class DeserializationScoredCtorMatcherIssue1239Tests
         var dilConv = Assert.IsType<DilatedConvolutionalLayer<float>>(layer);
 
         // ParameterCount depends on KernelSize/InputDepth/OutputDepth
-        // (3·3·16·32 + 32 = 4640) but NOT on DilationFactor. Assert it
-        // first to catch a wrong-ctor pick on those three parameters.
+        // (3·3·16·32 + 32 = 4640) but NOT on Dilation. Assert it first
+        // to catch a wrong-ctor pick on those three parameters.
         Assert.Equal(3 * 3 * 16 * 32 + 32, dilConv.ParameterCount);
 
-        // Now prove the matcher actually honored DilationFactor=2 by
-        // running a forward pass and checking the dilation-dependent
-        // spatial output dim. With H=16, padding=2, kernel=3, stride=1:
-        //   * dilation=2 (the metadata value): (16+4-2*2-1)/1+1 = 16
-        //   * dilation=1 (the ctor default):   (16+4-1*2-1)/1+1 = 18
-        // If the scored matcher silently dropped DilationFactor and
+        // Now prove the matcher actually honored Dilation=2 by running
+        // a forward pass and checking the dilation-dependent spatial
+        // output dim. With H=16, padding=2, kernel=3, stride=1:
+        //   * Dilation=2 (the metadata value): (16+4-2*2-1)/1+1 = 16
+        //   * Dilation=1 (the ctor default):   (16+4-1*2-1)/1+1 = 18
+        // If the scored matcher silently dropped the Dilation key and
         // resolved dilation from the ctor default, the spatial dims
         // below would be 18, not 16 — making this the regression-
         // catching observable the test needs.

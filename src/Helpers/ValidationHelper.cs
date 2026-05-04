@@ -142,6 +142,15 @@ public static class ValidationHelper<T>
     /// </remarks>
     public static void ValidatePoissonData(Vector<T> y)
     {
+        // Fail fast on null with a clear message instead of letting
+        // y.Length throw NullReferenceException — the latter strips
+        // the parameter name and gives no hint about what was wrong.
+        if (y is null)
+        {
+            throw new ArgumentNullException(nameof(y),
+                "Poisson target vector cannot be null.");
+        }
+
         // Poisson regression requires non-negative integer count data.
         // Throw on bad input rather than silently coercing — coercion
         // would mask upstream data-quality bugs (e.g., a regression

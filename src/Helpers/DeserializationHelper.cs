@@ -1849,7 +1849,16 @@ public static class DeserializationHelper
             }
             else
             {
-                throw new MissingLayerCtorException("Cannot find MambaBlock constructor for deserialization.");
+                // Keep NotSupportedException here (rather than the
+                // MissingLayerCtorException used by other branches) so
+                // we preserve the original observable behavior: the
+                // outer catch in CreateLayerFromType only re-routes
+                // MissingLayerCtorException to the metadata matcher;
+                // NotSupportedException propagates to the caller, which
+                // is the right signal when MambaBlock's expected named-
+                // parameter ctor isn't present (a specifically-shaped
+                // layer that the generic matcher cannot reconstruct).
+                throw new NotSupportedException("Cannot find MambaBlock constructor for deserialization.");
             }
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".ContinuumMemorySystemLayer`1"))
@@ -1890,7 +1899,10 @@ public static class DeserializationHelper
             }
             else
             {
-                throw new MissingLayerCtorException("Cannot find ContinuumMemorySystemLayer constructor for deserialization.");
+                // Keep NotSupportedException to preserve original
+                // observable behavior — see MambaBlock branch above
+                // for rationale.
+                throw new NotSupportedException("Cannot find ContinuumMemorySystemLayer constructor for deserialization.");
             }
         }
         else if (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".FeedForwardLayer`1"))

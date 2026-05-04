@@ -311,6 +311,14 @@ internal sealed class TrialStateManager
         {
             // Tombstone write failed — no fatal consequence; the primary
             // save above succeeded so the trial state is preserved.
+            // Surface the failure via Trace so we can diagnose the
+            // "anti-naive-reset is silently disabled" case (read-only
+            // filesystem, sandbox/permissions, etc.) without breaking
+            // the user-facing flow.
+            System.Diagnostics.Trace.TraceWarning(
+                $"TrialStateManager: tombstone write failed (anti-reset " +
+                $"protection effectively disabled): {ex.GetType().Name}: " +
+                $"{ex.Message}");
         }
     }
 

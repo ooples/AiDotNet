@@ -10,6 +10,16 @@ namespace AiDotNet.Tests.Helpers;
 /// Tests for <see cref="TrialStateManager"/> covering all trial state transitions,
 /// tamper detection, and edge cases.
 /// </summary>
+/// <remarks>
+/// Several tests mutate <c>TrialStateManager.TrialMessageHandler</c>, a
+/// process-global static. xUnit runs test classes in parallel by default,
+/// so two classes both touching that handler concurrently would clobber
+/// each other's captured-message lists. The xUnit
+/// <see cref="CollectionAttribute"/> disables parallel execution within
+/// this class's collection — pinning the static-handler tests to a
+/// single execution context.
+/// </remarks>
+[Collection("TrialStateManager-static-handler")]
 public class TrialStateManagerTests : IDisposable
 {
     private readonly string _tempDir;

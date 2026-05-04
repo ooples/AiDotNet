@@ -456,6 +456,20 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Convenience: chain-resolve lazy shapes and yield each layer in
+    /// order. Many builder methods repeat the
+    /// <c>ChainResolveLazyLayers(layers, [inputSize]); foreach (var l in
+    /// layers) yield return l;</c> pattern at the end; this helper keeps
+    /// the contract consistent across them and reduces drift if the
+    /// resolution policy ever changes.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> ResolveAndYield(IList<ILayer<T>> layers, int[] rootInputShape)
+    {
+        ChainResolveLazyLayers(layers, rootInputShape);
+        foreach (var layer in layers) yield return layer;
+    }
+
+    /// <summary>
     /// Walks a sequential layer list and resolves each lazy layer's input
     /// shape from the previous layer's output (or <paramref name="rootInputShape"/>
     /// for the first layer). Layers already resolved are skipped via
@@ -475,7 +489,7 @@ public static class LayerHelper<T>
             if (layer is LayerBase<T> lb && !lb.IsShapeResolved)
             {
                 try { lb.ResolveFromShape(running); }
-                catch (Exception)
+                catch (Exception ex)
                 {
                     // ResolveFromShape can throw if the shape doesn't
                     // satisfy the layer's runtime preconditions (e.g.,
@@ -485,7 +499,14 @@ public static class LayerHelper<T>
                     // by their own Forward calls. We do not re-throw
                     // because helpers historically returned working
                     // layer collections even when chain-resolution
-                    // wasn't possible.
+                    // wasn't possible. Surface the failure via Trace
+                    // so debugging a "ParameterCount = 0 after build"
+                    // surprise has a breadcrumb back to the actual
+                    // shape-mismatch cause instead of an empty pipeline.
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"LayerHelper.ChainResolveLazyShapes: stopped at " +
+                        $"{layer.GetType().Name} (running shape " +
+                        $"[{string.Join(", ", running)}]): {ex.Message}");
                     return;
                 }
             }
@@ -3064,7 +3085,9 @@ public static class LayerHelper<T>
             layers.Add(new AiDotNet.UncertaintyQuantification.Layers.BayesianDenseLayer<T>(inputSize, outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>));
         }
 
-        layers.Add(new ActivationLayer<T>(new SoftmaxActivation<T>() as IActivationFunction<T>));
+        // BayesianDenseLayer already applies softmax internally — the
+        // trailing ActivationLayer would softmax twice and collapse the
+        // distribution toward uniform. Drop it.
 
         ChainResolveLazyLayers(layers, new[] { inputSize });
         foreach (var layer in layers) yield return layer;
