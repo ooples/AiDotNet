@@ -108,10 +108,16 @@ const base = import.meta.env.BASE_URL;
       // Layer 1+2: provider/redirect-level error embedded in the URL.
       const urlError = parseAuthError();
       if (urlError) {
+        // URLSearchParams.get() already percent-decodes its return value
+        // and converts '+' to space, so the error fields here are plain
+        // text. Decoding again would (a) throw on legitimate messages
+        // containing a literal '%' (e.g. a value previously encoded as
+        // %25 → '%' that decodes once but then trips a second decode)
+        // and (b) corrupt literal '+' characters from the IdP message.
         const detailLines = [
           `error: ${urlError.error}`,
           urlError.errorCode ? `error_code: ${urlError.errorCode}` : null,
-          urlError.errorDescription ? `error_description: ${decodeURIComponent(urlError.errorDescription).replace(/\+/g, ' ')}` : null,
+          urlError.errorDescription ? `error_description: ${urlError.errorDescription}` : null,
         ].filter(Boolean) as string[];
 
         // Best-effort hint: most common cause of error_code=server_error on
@@ -126,7 +132,14 @@ const base = import.meta.env.BASE_URL;
         } else if (urlError.error === 'access_denied') {
           hint = 'You declined to grant the requested permissions. '
             + 'Try again and approve the requested scopes, or use a different sign-in method.';
-        } else if (urlError.errorCode === 'unsupported_provider' || urlError.errorDescription?.includes('not enabled')) {
+        } else if (urlError.errorCode === 'unsupported_provider'
+            || urlError.error === 'unsupported_provider'
+            || urlError.errorDescription?.includes('not enabled')) {
+          // Check both fields: providers split inconsistently — some put
+          // the disabled-provider name in error_code, others in error.
+          // Missing the latter would have left a callback like
+          // ?error=unsupported_provider&error_description=... with the
+          // generic message instead of the actionable hint.
           hint = 'This sign-in provider is currently disabled on the server. '
             + 'Use a different method (e.g. Google or email + password).';
         }
@@ -154,9 +167,18 @@ const base = import.meta.env.BASE_URL;
         }
 
         // No session yet, no URL error — wait for auth state change.
+        // Hold the timeout id so the SIGNED_IN handler can clear it
+        // before the redirect — otherwise a near-deadline success
+        // (event at ~9.9s) would still fire the timeout's
+        // showFatalError after the redirect has already started, and
+        // the user would briefly see the "did not complete in time"
+        // message before navigation completes.
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
           if (event === 'SIGNED_IN' && session) {
             subscription.unsubscribe();
+            if (timeoutId !== undefined) clearTimeout(timeoutId);
             const params = new URLSearchParams(window.location.search);
             const redirectTo = params.get('redirect') || `${base}account/`;
             window.location.href = redirectTo;
@@ -166,7 +188,7 @@ const base = import.meta.env.BASE_URL;
         // Hard timeout. The 10s window is intentional: if the session-storage
         // write hasn't fired by now, the browser is almost certainly blocking
         // third-party cookies, and the user needs an explicit message.
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           subscription.unsubscribe();
           showFatalError(
             'Sign-in did not complete in time.',

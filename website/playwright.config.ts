@@ -94,6 +94,19 @@ export default defineConfig({
       testMatch: /admin\.setup\.ts/,
     },
 
+    // ---------- Anonymous auth specs ----------
+    //
+    // Auth flow specs that DON'T need a logged-in session — error
+    // handling on /auth/callback, sign-in form validation, etc.
+    // Stays separate from anon-desktop so the auth folder's setup
+    // files (user.setup.ts, admin.setup.ts) don't get picked up here.
+    {
+      name: 'auth-anon',
+      testDir: './tests/e2e/auth',
+      testIgnore: ['**/*.setup.ts'],
+      use: { viewport: { width: 1440, height: 900 } },
+    },
+
     // ---------- Authenticated projects ----------
     {
       name: 'user-auth',
