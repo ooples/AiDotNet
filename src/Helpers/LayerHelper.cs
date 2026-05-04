@@ -1520,11 +1520,10 @@ public static class LayerHelper<T>
             // Encoder layers
             yield return new DenseLayer<T>(flatInputSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-            // Pooling layer to reduce dimensions
+            // Pooling layer to reduce dimensions. Lazy ctor — input dims
+            // resolve from the first forward pass; only pool/stride/type
+            // need to be known at construction.
             yield return new PoolingLayer<T>(
-                inputDepth: inputDepth,
-                inputHeight: inputHeight,
-                inputWidth: inputWidth,
                 poolSize: 2,
                 stride: 2,
                 type: PoolingType.Average
