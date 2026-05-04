@@ -186,7 +186,7 @@ public class IPAdapterPlusModel<T> : LatentDiffusionModelBase<T>
             Name = "IP-Adapter-Plus",
             Version = "1.0",
             Description = "Image prompt adapter with fine-grained image feature injection",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

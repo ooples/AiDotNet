@@ -278,7 +278,7 @@ public class MagicBrushModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -354,7 +354,7 @@ public class MagicBrushModel<T> : LatentDiffusionModelBase<T>
             Name = "MagicBrush",
             Version = "1.0",
             Description = "MagicBrush enables instruction-based image editing with visual brush stroke guidance",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

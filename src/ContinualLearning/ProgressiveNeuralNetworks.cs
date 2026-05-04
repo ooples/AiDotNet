@@ -138,7 +138,7 @@ public class ProgressiveNeuralNetworks<T> : IContinualLearningStrategy<T>
         {
             TaskId = taskId,
             FrozenParameters = null,
-            ParameterCount = (int)network.ParameterCount,
+            ParameterCount = checked((int)network.ParameterCount),
             IsFrozen = false
         });
     }

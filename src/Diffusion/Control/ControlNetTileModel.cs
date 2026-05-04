@@ -119,9 +119,9 @@ public class ControlNetTileModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int o = 0;
-        int c1 = (int)_baseUNet.ParameterCount; var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
-        int c2 = (int)_controlEncoder.ParameterCount; var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2)); o += c2;
-        int c3 = (int)_vae.ParameterCount; var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[o + i]; _vae.SetParameters(new Vector<T>(a3));
+        int c1 = checked((int)_baseUNet.ParameterCount); var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[o + i]; _baseUNet.SetParameters(new Vector<T>(a1)); o += c1;
+        int c2 = checked((int)_controlEncoder.ParameterCount); var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[o + i]; _controlEncoder.SetParameters(new Vector<T>(a2)); o += c2;
+        int c3 = checked((int)_vae.ParameterCount); var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[o + i]; _vae.SetParameters(new Vector<T>(a3));
     }
 
     /// <inheritdoc />

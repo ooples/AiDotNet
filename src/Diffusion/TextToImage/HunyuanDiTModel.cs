@@ -223,7 +223,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
     {
         EnsureInitialized();
         int ditCount = checked((int)_dit.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != ditCount + vaeCount)
             throw new ArgumentException(
@@ -281,7 +281,7 @@ public class HunyuanDiTModel<T> : LatentDiffusionModelBase<T>
             Name = "Hunyuan-DiT",
             Version = "1.2",
             Description = "Hunyuan-DiT bilingual Chinese-English DiT text-to-image model",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

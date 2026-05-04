@@ -414,7 +414,7 @@ public class OpenSoraModel<T> : VideoDiffusionModelBase<T>
             Name = "Open-Sora",
             Version = "1.2",
             Description = "Open-Sora STDiT video generation with rectified flow training",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

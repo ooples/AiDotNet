@@ -125,14 +125,22 @@ public class ReferenceOnlyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int o = 0;
         int uc = checked((int)_baseUNet.ParameterCount);
+        int vc = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)uc + vc;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int o = 0;
         var unetArr = new T[uc];
         for (int i = 0; i < uc; i++) unetArr[i] = parameters[o + i];
         _baseUNet.SetParameters(new Vector<T>(unetArr));
         o += uc;
 
-        int vc = checked((int)_vae.ParameterCount);
         var vaeArr = new T[vc];
         for (int i = 0; i < vc; i++) vaeArr[i] = parameters[o + i];
         _vae.SetParameters(new Vector<T>(vaeArr));

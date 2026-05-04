@@ -187,7 +187,7 @@ public class ControlNetPlusPlusModel<T> : LatentDiffusionModelBase<T>
             Name = "ControlNet++",
             Version = "1.0",
             Description = "Improved ControlNet with reward-guided training for better control adherence",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

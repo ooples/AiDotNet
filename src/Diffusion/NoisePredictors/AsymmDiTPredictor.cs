@@ -117,11 +117,11 @@ public class AsymmDiTPredictor<T> : NoisePredictorBase<T>
         _finalLayer = LazyDense(_hiddenSize, patchDim);
     }
 
-    private int CalculateParameterCount()
+    private long CalculateParameterCount()
     {
-        int count = checked((int)_patchEmbed.ParameterCount);
-        foreach (var block in _blocks) count += (int)block.ParameterCount;
-        count += (int)_finalLayer.ParameterCount;
+        long count = _patchEmbed.ParameterCount;
+        foreach (var block in _blocks) count += block.ParameterCount;
+        count += _finalLayer.ParameterCount;
         return count;
     }
 

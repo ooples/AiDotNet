@@ -209,7 +209,7 @@ public class ControlNetUnionProModel<T> : LatentDiffusionModelBase<T>
             Name = "ControlNet-Union-Pro",
             Version = "1.0",
             Description = "Unified ControlNet supporting multiple control types in a single model",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

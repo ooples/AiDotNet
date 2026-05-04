@@ -185,7 +185,7 @@ public class LumaRay3Model<T> : VideoDiffusionModelBase<T>
             Name = "Luma-Ray-3",
             Version = "1.0",
             Description = "Luma Ray 3 with Hi-Fi Diffusion for 4K HDR video.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-hifi-4k-hdr");

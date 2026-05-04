@@ -536,7 +536,7 @@ public class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifier<T>
             int count = checked((int)layer.ParameterCount);
             var layerParams = parameters.Slice(index, count);
             layer.UpdateParameters(layerParams);
-            index += count;
+            index = checked(index + count);
         }
     }
 

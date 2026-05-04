@@ -174,10 +174,10 @@ public class ControlNetModel<T> : LatentDiffusionModelBase<T>
     {
         get
         {
-            int count = checked((int)_baseUNet.ParameterCount);
+            long count = _baseUNet.ParameterCount;
             foreach (var encoder in _encoderCache.Values)
             {
-                count += (int)encoder.ParameterCount;
+                count += encoder.ParameterCount;
             }
             return count;
         }
@@ -869,12 +869,15 @@ public class ControlNetEncoder<T>
             prevChannels = channels;
         }
 
-        // Count parameters
-        ParameterCount = 0;
+        // Count parameters. ParameterCount is long, so accumulate in long
+        // and skip the per-layer narrowing — the prior `(int)x.ParameterCount`
+        // would silently wrap before the long-typed property got the sum,
+        // which defeats the whole long-widening goal.
+        ParameterCount = 0L;
         foreach (var block in _downBlocks)
-            ParameterCount += (int)block.ParameterCount;
+            ParameterCount += block.ParameterCount;
         foreach (var zc in _zeroConvs)
-            ParameterCount += (int)zc.ParameterCount;
+            ParameterCount += zc.ParameterCount;
     }
 
     /// <summary>

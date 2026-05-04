@@ -65,7 +65,9 @@ public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override int LatentChannels => LATENT_CHANNELS;
     /// <inheritdoc />
-    public override long ParameterCount => _predictor.ParameterCount + _vae.ParameterCount;
+    public override long ParameterCount =>
+        _predictor.ParameterCount + _vae.ParameterCount +
+        (_conditioner is IParameterizable<T, Tensor<T>, Tensor<T>> p ? p.ParameterCount : 0L);
 
     public AutoRegressiveMaskedDiffusion(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -121,8 +123,9 @@ public class AutoRegressiveMaskedDiffusion<T> : LatentDiffusionModelBase<T>
     {
         int pc = checked((int)_predictor.ParameterCount);
         int vc = checked((int)_vae.ParameterCount);
-        if (parameters.Length != pc + vc)
-            throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
         var vp = new Vector<T>(vc);
         for (int i = 0; i < pc; i++) pp[i] = parameters[i];

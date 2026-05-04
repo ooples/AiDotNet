@@ -127,7 +127,7 @@ public class PackNet<T> : IContinualLearningStrategy<T>
         Guard.NotNull(network);
 
         _currentTaskId = taskId;
-        _totalParameters = (int)network.ParameterCount;
+        _totalParameters = checked((int)network.ParameterCount);
 
         // Initialize free weights if this is the first task
         if (_freeWeights.Count == 0 && _taskMasks.Count == 0)

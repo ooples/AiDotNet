@@ -188,7 +188,7 @@ public class LumiereModel<T> : VideoDiffusionModelBase<T>
             Name = "Lumiere",
             Version = "1.0",
             Description = "Lumiere Space-Time UNet for single-pass 80-frame video generation.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "stunet-spacetime");

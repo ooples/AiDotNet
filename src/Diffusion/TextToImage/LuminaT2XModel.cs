@@ -196,8 +196,9 @@ public class LuminaT2XModel<T> : LatentDiffusionModelBase<T>
     {
         int pc = checked((int)_predictor.ParameterCount);
         int vc = checked((int)_vae.ParameterCount);
-        if (parameters.Length != pc + vc)
-            throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
 
         var pp = new Vector<T>(pc);
         var vp = new Vector<T>(vc);

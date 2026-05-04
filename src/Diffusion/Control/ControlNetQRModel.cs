@@ -128,16 +128,24 @@ public class ControlNetQRModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int offset = 0;
         int c1 = checked((int)_baseUNet.ParameterCount);
+        int c2 = checked((int)_controlEncoder.ParameterCount);
+        int c3 = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)c1 + c2 + c3;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int offset = 0;
         var a1 = new T[c1]; for (int i = 0; i < c1; i++) a1[i] = parameters[offset + i];
         _baseUNet.SetParameters(new Vector<T>(a1)); offset += c1;
 
-        int c2 = checked((int)_controlEncoder.ParameterCount);
         var a2 = new T[c2]; for (int i = 0; i < c2; i++) a2[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(a2)); offset += c2;
 
-        int c3 = checked((int)_vae.ParameterCount);
         var a3 = new T[c3]; for (int i = 0; i < c3; i++) a3[i] = parameters[offset + i];
         _vae.SetParameters(new Vector<T>(a3));
     }

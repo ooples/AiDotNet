@@ -199,7 +199,7 @@ public class FlowVidModel<T> : VideoDiffusionModelBase<T>
             Name = "FlowVid",
             Version = "1.0",
             Description = "FlowVid optical flow guided video-to-video synthesis.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "optical-flow-v2v");

@@ -202,7 +202,7 @@ public class Wan22Model<T> : VideoDiffusionModelBase<T>
             Name = "Wan22",
             Version = "2.2",
             Description = "Wan 2.2 video model with timestep-specialized MoE experts.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-moe-timestep-specialized");

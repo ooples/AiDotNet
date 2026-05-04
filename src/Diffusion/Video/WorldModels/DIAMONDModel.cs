@@ -190,7 +190,7 @@ public class DIAMONDModel<T> : VideoDiffusionModelBase<T>
             Name = "DIAMOND",
             Version = "1.0",
             Description = "DIAMOND diffusion-based game engine from video with action conditioning.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-action-conditioned-world");

@@ -189,7 +189,7 @@ public class StepVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "StepVideo",
             Version = "1.0",
             Description = "StepVideo text-to-video model with benchmark-leading quality.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-scalable-text");

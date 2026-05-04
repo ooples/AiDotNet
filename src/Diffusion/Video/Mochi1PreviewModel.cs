@@ -190,7 +190,7 @@ public class Mochi1PreviewModel<T> : VideoDiffusionModelBase<T>
             Name = "Mochi-1-Preview",
             Version = "1.0",
             Description = "Mochi 1 Preview with Asymmetric Diffusion Transformer (AsymmDiT).",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "asymm-dit");

@@ -189,7 +189,7 @@ public class Seedance1Model<T> : VideoDiffusionModelBase<T>
             Name = "Seedance1",
             Version = "1.0",
             Description = "Seedance 1 ranked #1 on T2V and I2V leaderboards.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-leaderboard-t2v-i2v");

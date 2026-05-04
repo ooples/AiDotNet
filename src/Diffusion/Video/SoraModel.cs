@@ -417,7 +417,7 @@ public class SoraModel<T> : VideoDiffusionModelBase<T>
             Name = "Sora",
             Version = "1.0",
             Description = "Sora-architecture DiT video generation with native spatiotemporal patches",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

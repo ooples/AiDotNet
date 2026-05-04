@@ -326,7 +326,7 @@ public class CogVideoModel<T> : VideoDiffusionModelBase<T>
             Name = $"CogVideoX-{_variant}",
             Version = _variant,
             Description = $"CogVideoX-{_variant} text-to-video model with 3D causal VAE and diffusion transformer",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

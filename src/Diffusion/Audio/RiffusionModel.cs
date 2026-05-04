@@ -584,7 +584,7 @@ public class RiffusionModel<T> : LatentDiffusionModelBase<T>
     {
         EnsureInitialized();
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {

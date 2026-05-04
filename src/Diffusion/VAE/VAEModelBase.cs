@@ -218,7 +218,7 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount,
             Description = $"VAE with {ParameterCount} parameters, {InputChannels} input channels, " +
                           $"{LatentChannels} latent channels, {DownsampleFactor}x downsampling."

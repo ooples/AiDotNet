@@ -358,7 +358,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
     {
         int priorCount = checked((int)_priorUnet.ParameterCount);
         int decoderCount = checked((int)_decoderUnet.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != priorCount + decoderCount + vaeCount)
         {
@@ -457,7 +457,7 @@ public class KandinskyModel<T> : LatentDiffusionModelBase<T>
             Name = $"Kandinsky {versionName}",
             Version = versionName,
             Description = $"Kandinsky {versionName} two-stage text-to-image model with CLIP prior and latent diffusion decoder",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

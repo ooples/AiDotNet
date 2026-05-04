@@ -198,7 +198,7 @@ public class ControlNetXSModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int uc = (int)_unet.ParameterCount, cc = (int)_controlEncoder.ParameterCount, vc = (int)_vae.ParameterCount;
+        int uc = checked((int)_unet.ParameterCount), cc = checked((int)_controlEncoder.ParameterCount), vc = checked((int)_vae.ParameterCount);
         if (parameters.Length != uc + cc + vc)
             throw new ArgumentException($"Expected {uc + cc + vc}, got {parameters.Length}.", nameof(parameters));
 

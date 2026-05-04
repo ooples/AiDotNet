@@ -520,7 +520,7 @@ public class IPAdapterModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int unetCount = checked((int)_baseUNet.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
         int encoderCount = checked((int)_imageEncoder.ParameterCount);
         int projectorCount = checked((int)_imageProjector.ParameterCount);
 

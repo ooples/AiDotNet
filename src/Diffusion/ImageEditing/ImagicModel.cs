@@ -278,7 +278,7 @@ public class ImagicModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -354,7 +354,7 @@ public class ImagicModel<T> : LatentDiffusionModelBase<T>
             Name = "Imagic",
             Version = "1.0",
             Description = "Imagic edits real images to match target text via text embedding optimization and model fine-tuning",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

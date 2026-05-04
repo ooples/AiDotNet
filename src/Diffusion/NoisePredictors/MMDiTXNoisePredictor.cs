@@ -130,11 +130,11 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
             _posEmbed[i] = NumOps.FromDouble(rng.NextDouble() * 0.02 - 0.01);
     }
 
-    private int CalculateParameterCount()
+    private long CalculateParameterCount()
     {
-        int count = checked((int)_patchEmbed.ParameterCount);
-        foreach (var block in _jointBlocks) count += (int)block.ParameterCount;
-        count += (int)_finalLayer.ParameterCount;
+        long count = _patchEmbed.ParameterCount;
+        foreach (var block in _jointBlocks) count += block.ParameterCount;
+        count += _finalLayer.ParameterCount;
         count += _posEmbed.Length;
         return count;
     }

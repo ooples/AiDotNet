@@ -138,14 +138,22 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int offset = 0;
         int predCount = checked((int)_predictor.ParameterCount);
+        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
+        long expectedTotal = (long)predCount + ctrlCount;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        int offset = 0;
         var predParams = new T[predCount];
         for (int i = 0; i < predCount; i++) predParams[i] = parameters[offset + i];
         _predictor.SetParameters(new Vector<T>(predParams));
         offset += predCount;
 
-        int ctrlCount = checked((int)_controlEncoder.ParameterCount);
         var ctrlParams = new T[ctrlCount];
         for (int i = 0; i < ctrlCount; i++) ctrlParams[i] = parameters[offset + i];
         _controlEncoder.SetParameters(new Vector<T>(ctrlParams));
@@ -173,7 +181,7 @@ public class ControlNetSD3Model<T> : LatentDiffusionModelBase<T>
             Name = "ControlNet-SD3",
             Version = "1.0",
             Description = "ControlNet adapted for Stable Diffusion 3 MMDiT architecture",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

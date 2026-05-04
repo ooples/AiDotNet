@@ -189,7 +189,7 @@ public class LoongModel<T> : VideoDiffusionModelBase<T>
             Name = "Loong",
             Version = "1.0",
             Description = "Loong autoregressive LLM-based minute-long video generator.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "llm-autoregressive-long");

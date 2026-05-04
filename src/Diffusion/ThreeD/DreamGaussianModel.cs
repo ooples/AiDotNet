@@ -333,7 +333,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     {
         EnsureInitialized();
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -408,7 +408,7 @@ public class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
             Name = "DreamGaussian",
             Version = "1.0",
             Description = "DreamGaussian 3D Gaussian splatting generation with SDS optimization",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

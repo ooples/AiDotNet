@@ -189,7 +189,7 @@ public class UniSimModel<T> : VideoDiffusionModelBase<T>
             Name = "UniSim",
             Version = "1.0",
             Description = "UniSim universal simulator from video and action pairs.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-universal-simulator");

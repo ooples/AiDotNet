@@ -189,7 +189,7 @@ public class FreeNoiseVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "FreeNoiseVideo",
             Version = "1.0",
             Description = "FreeNoise extended video generation through noise rescheduling.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "noise-rescheduling");

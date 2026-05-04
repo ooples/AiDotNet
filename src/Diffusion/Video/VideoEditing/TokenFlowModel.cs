@@ -191,7 +191,7 @@ public class TokenFlowModel<T> : VideoDiffusionModelBase<T>
             Name = "TokenFlow",
             Version = "1.0",
             Description = "TokenFlow consistent video editing via token flow propagation.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "token-flow-propagation");

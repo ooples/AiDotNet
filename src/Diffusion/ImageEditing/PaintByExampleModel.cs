@@ -291,7 +291,7 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -367,7 +367,7 @@ public class PaintByExampleModel<T> : LatentDiffusionModelBase<T>
             Name = "Paint-by-Example",
             Version = "1.0",
             Description = "Paint-by-Example fills masked regions using exemplar images as visual references",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

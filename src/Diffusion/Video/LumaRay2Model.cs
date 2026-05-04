@@ -189,7 +189,7 @@ public class LumaRay2Model<T> : VideoDiffusionModelBase<T>
             Name = "Luma-Ray-2",
             Version = "1.0",
             Description = "Luma Ray 2 video model with fast natural motion and better physics.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-physics-enhanced");

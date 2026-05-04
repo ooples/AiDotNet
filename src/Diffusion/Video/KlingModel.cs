@@ -339,7 +339,7 @@ public class KlingModel<T> : VideoDiffusionModelBase<T>
             Name = "Kling",
             Version = "1.5",
             Description = "Kling 3D spatiotemporal attention video generation model by Kuaishou",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -416,7 +416,7 @@ public class LTXVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "LTX-Video",
             Version = "1.0",
             Description = "LTX-Video lightweight real-time video generation with extreme latent compression",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

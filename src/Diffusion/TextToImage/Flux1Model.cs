@@ -319,7 +319,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int mmditCount = checked((int)_mmdit.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != mmditCount + vaeCount)
         {
@@ -391,7 +391,7 @@ public class Flux1Model<T> : LatentDiffusionModelBase<T>
             Name = $"FLUX.1 [{_variant.ToString().ToLowerInvariant()}]",
             Version = _variant.ToString(),
             Description = $"FLUX.1 [{_variant.ToString().ToLowerInvariant()}] hybrid MMDiT with {FLUX_JOINT_LAYERS} joint + {FLUX_SINGLE_LAYERS} single blocks and rectified flow",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

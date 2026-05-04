@@ -262,7 +262,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
     {
         int coarseCount = checked((int)_coarseUnet.ParameterCount);
         int fineCount = checked((int)_fineUnet.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != coarseCount + fineCount + vaeCount)
         {
@@ -345,7 +345,7 @@ public class Magic3DModel<T> : ThreeDDiffusionModelBase<T>
             Name = "Magic3D",
             Version = "1.0",
             Description = "Magic3D two-stage coarse-to-fine text-to-3D generation with score distillation sampling",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -153,7 +153,7 @@ public class VariationalContinualLearning<T> : IContinualLearningStrategy<T>
         // For simplicity, we update based on gradient variance
         if (_posteriorLogVar.Length == 0)
         {
-            _posteriorLogVar = new Vector<T>((int)network.ParameterCount);
+            _posteriorLogVar = new Vector<T>(checked((int)network.ParameterCount));
             var initialLogVarT = _numOps.FromDouble(_initialLogVar);
             for (int i = 0; i < _posteriorLogVar.Length; i++)
             {

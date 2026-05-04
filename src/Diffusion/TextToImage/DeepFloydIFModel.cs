@@ -357,7 +357,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
     {
         int stage1Count = checked((int)_stageIUnet.ParameterCount);
         int stage2Count = checked((int)_stageIIUnet.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != stage1Count + stage2Count + vaeCount)
         {
@@ -455,7 +455,7 @@ public class DeepFloydIFModel<T> : LatentDiffusionModelBase<T>
             Name = "DeepFloyd IF",
             Version = "1.0",
             Description = "DeepFloyd IF cascaded pixel-space diffusion model with T5-XXL text encoder",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

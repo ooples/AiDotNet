@@ -188,7 +188,7 @@ public class Show1Model<T> : VideoDiffusionModelBase<T>
             Name = "Show1",
             Version = "1.0",
             Description = "Show-1 marrying pixel and latent diffusion for text-to-video.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "pixel-latent-cascade");

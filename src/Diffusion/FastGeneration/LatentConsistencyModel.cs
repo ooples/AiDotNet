@@ -320,7 +320,7 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -404,7 +404,7 @@ public class LatentConsistencyModel<T> : LatentDiffusionModelBase<T>
             Name = "Latent Consistency Model",
             Version = "1.0",
             Description = $"Latent Consistency Model distilled from {_baseModel} for fast 2-8 step generation",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

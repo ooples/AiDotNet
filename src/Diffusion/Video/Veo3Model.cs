@@ -189,7 +189,7 @@ public class Veo3Model<T> : VideoDiffusionModelBase<T>
             Name = "Veo3",
             Version = "1.0",
             Description = "Veo 3 with native audio generation and dialogue synchronization.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-native-audio");

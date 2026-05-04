@@ -189,7 +189,7 @@ public class SkyReelsV1Model<T> : VideoDiffusionModelBase<T>
             Name = "SkyReelsV1",
             Version = "1.0",
             Description = "SkyReels V1 human-centric video generation model.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-human-centric");

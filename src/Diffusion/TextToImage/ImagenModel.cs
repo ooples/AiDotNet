@@ -364,7 +364,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
     {
         int baseCount = checked((int)_baseUnet.ParameterCount);
         int sr1Count = checked((int)_superRes1Unet.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != baseCount + sr1Count + vaeCount)
         {
@@ -462,7 +462,7 @@ public class ImagenModel<T> : LatentDiffusionModelBase<T>
             Name = "Imagen",
             Version = "1.0",
             Description = "Imagen cascaded pixel-space diffusion model with T5-XXL text encoder and dynamic thresholding",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

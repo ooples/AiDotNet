@@ -190,7 +190,7 @@ public class MAGI1Model<T> : VideoDiffusionModelBase<T>
             Name = "MAGI1",
             Version = "1.0",
             Description = "MAGI-1 video model with strong temporal coherence and multi-task support.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-autoregressive");

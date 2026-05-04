@@ -189,7 +189,7 @@ public class OasisModel<T> : VideoDiffusionModelBase<T>
             Name = "Oasis",
             Version = "1.0",
             Description = "Oasis playable AI game via next-frame prediction.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-next-frame-prediction");

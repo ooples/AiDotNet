@@ -473,7 +473,7 @@ public class WanVideoModel<T> : VideoDiffusionModelBase<T>
             Name = $"Wan-{_variant}",
             Version = "2.1",
             Description = $"Wan {_variant} video generation with full 3D attention and WanVAE",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

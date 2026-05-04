@@ -189,7 +189,7 @@ public class CogVideoX15Model<T> : VideoDiffusionModelBase<T>
             Name = "CogVideoX15",
             Version = "1.5",
             Description = "CogVideoX 1.5 model with 10-second any-resolution video generation.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "expert-transformer-3d-causal-vae");

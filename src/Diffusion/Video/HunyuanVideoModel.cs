@@ -416,7 +416,7 @@ public class HunyuanVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "HunyuanVideo",
             Version = "1.0",
             Description = "HunyuanVideo dual-stream DiT video generation with 3D causal VAE",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

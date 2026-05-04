@@ -189,7 +189,7 @@ public class RunwayGen4Model<T> : VideoDiffusionModelBase<T>
             Name = "Runway-Gen-4",
             Version = "1.0",
             Description = "Runway Gen-4 multi-modal understanding and generation model.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-multimodal-understanding");

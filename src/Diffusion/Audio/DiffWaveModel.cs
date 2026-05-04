@@ -481,7 +481,11 @@ public class DiffWaveNetwork<T>
 
         foreach (var block in _residualBlocks)
         {
-            ParameterCount += (int)block.ParameterCount;
+            // No per-block narrowing — ParameterCount is long, and a
+            // truncate-then-add would silently wrap the running sum once
+            // an individual block crosses int.MaxValue. Accumulate in
+            // the property's native long width.
+            ParameterCount += block.ParameterCount;
         }
     }
 

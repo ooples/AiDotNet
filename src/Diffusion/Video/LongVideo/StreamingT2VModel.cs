@@ -188,7 +188,7 @@ public class StreamingT2VModel<T> : VideoDiffusionModelBase<T>
             Name = "StreamingT2V",
             Version = "1.0",
             Description = "StreamingT2V autoregressive long video generation up to 1200 frames.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "autoregressive-streaming");

@@ -280,12 +280,13 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int predictorCount = checked((int)_predictor.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
-        if (parameters.Length != predictorCount + vaeCount)
+        long expectedTotal = (long)predictorCount + vaeCount;
+        if (parameters.Length != expectedTotal)
         {
             throw new ArgumentException(
-                $"Expected {predictorCount + vaeCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -342,7 +343,7 @@ public class CogView4Model<T> : LatentDiffusionModelBase<T>
             Name = "CogView-4",
             Version = "4.0",
             Description = "Bilingual Chinese-English T2I with SiT architecture and relay diffusion",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

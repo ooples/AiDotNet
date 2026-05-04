@@ -281,12 +281,13 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int predictorCount = checked((int)_predictor.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
-        if (parameters.Length != predictorCount + vaeCount)
+        long expectedTotal = (long)predictorCount + vaeCount;
+        if (parameters.Length != expectedTotal)
         {
             throw new ArgumentException(
-                $"Expected {predictorCount + vaeCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -341,7 +342,7 @@ public class RecraftV3Model<T> : LatentDiffusionModelBase<T>
             Name = "Recraft V3",
             Version = "3.0",
             Description = "Professional-grade MMDiT-X with style presets, color palette control, and text rendering",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -188,7 +188,7 @@ public class Pika21Model<T> : VideoDiffusionModelBase<T>
             Name = "Pika21",
             Version = "1.0",
             Description = "Pika 2.1 short-form video with creative effects.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-creative-effects");

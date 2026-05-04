@@ -280,7 +280,7 @@ public class SDEditModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -356,7 +356,7 @@ public class SDEditModel<T> : LatentDiffusionModelBase<T>
             Name = "SDEdit",
             Version = "1.0",
             Description = "SDEdit transforms sketches and images through partial noising and guided denoising",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

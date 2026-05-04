@@ -214,11 +214,15 @@ public class ControlNetUnionModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        var unetCount = _unet.GetParameters().Length;
+        // Use ParameterCount directly — materializing GetParameters() just
+        // to read .Length walks the entire flat U-Net buffer for sizing
+        // purposes only, defeating the long-safe migration.
+        int unetCount = checked((int)_unet.ParameterCount);
         int ctrlCount = checked((int)_controlNet.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
-        if (parameters.Length != unetCount + ctrlCount + vaeCount)
-            throw new ArgumentException($"Expected {unetCount + ctrlCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
+        int vaeCount = checked((int)_vae.ParameterCount);
+        long expectedTotal = (long)unetCount + ctrlCount + vaeCount;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
         var ctrlParams = new Vector<T>(ctrlCount);
         var vaeParams = new Vector<T>(vaeCount);

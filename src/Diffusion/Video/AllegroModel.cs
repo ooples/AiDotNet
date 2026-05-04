@@ -190,7 +190,7 @@ public class AllegroModel<T> : VideoDiffusionModelBase<T>
             Name = "Allegro",
             Version = "1.0",
             Description = "Allegro efficient DiT-based video generation model.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-efficient");

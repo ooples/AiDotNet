@@ -190,7 +190,7 @@ public class MovieGenModel<T> : VideoDiffusionModelBase<T>
             Name = "MovieGen",
             Version = "1.0",
             Description = "MovieGen 30B foundation model for video, audio, and editing.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-30b-multimodal");

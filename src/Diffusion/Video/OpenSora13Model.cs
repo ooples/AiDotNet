@@ -188,7 +188,7 @@ public class OpenSora13Model<T> : VideoDiffusionModelBase<T>
             Name = "OpenSora13",
             Version = "1.3",
             Description = "Open-Sora 1.3 with upgraded 3D-VAE and rectified flow.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "stdit-rectified-flow");

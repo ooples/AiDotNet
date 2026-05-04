@@ -201,7 +201,7 @@ public class OpenSora2Model<T> : VideoDiffusionModelBase<T>
             Name = "OpenSora2",
             Version = "2.0",
             Description = "Open-Sora 2.0 commercial-level video generation model.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "stdit-v2-commercial");

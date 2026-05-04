@@ -313,7 +313,7 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -389,7 +389,7 @@ public class PlaygroundV25Model<T> : LatentDiffusionModelBase<T>
             Name = "Playground v2.5",
             Version = "2.5",
             Description = "Playground v2.5 aesthetic-optimized text-to-image model with SDXL architecture and EDM training",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

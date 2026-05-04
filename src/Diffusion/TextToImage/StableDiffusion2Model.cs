@@ -322,7 +322,7 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -399,7 +399,7 @@ public class StableDiffusion2Model<T> : LatentDiffusionModelBase<T>
             Name = "Stable Diffusion 2.1",
             Version = "2.1",
             Description = "Stable Diffusion 2.x latent diffusion model with OpenCLIP ViT-H/14 text conditioning and v-prediction",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

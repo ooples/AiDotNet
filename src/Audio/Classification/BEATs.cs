@@ -1115,13 +1115,19 @@ public class BEATs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (!_useNativeMode)
             throw new NotSupportedException("UpdateParameters is not supported in ONNX mode.");
 
+        // The cumulative offset must fit in int because Vector<T>.Slice
+        // takes int arguments; checked() here turns a silent wrap into
+        // a fail-fast OverflowException if the sum of layer counts
+        // crosses int.MaxValue (which would also mean the input
+        // Vector<T> couldn't possibly hold them all). Per-layer counts
+        // come from `checked((int)layer.ParameterCount)` already.
         int index = 0;
         foreach (var layer in Layers)
         {
             int count = checked((int)layer.ParameterCount);
             var layerParams = parameters.Slice(index, count);
             layer.UpdateParameters(layerParams);
-            index += count;
+            index = checked(index + count);
         }
     }
 

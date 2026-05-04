@@ -624,7 +624,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     {
         int nerfCount = checked((int)_nerf.ParameterCount);
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         var nerfParams = new T[nerfCount];
         var unetParams = new T[unetCount];
@@ -680,7 +680,7 @@ public class DreamFusionModel<T> : LatentDiffusionModelBase<T>
             Name = "DreamFusion",
             Version = "1.0",
             Description = "Text-to-3D generation via Score Distillation Sampling",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -192,7 +192,7 @@ public class EmuVideo2Model<T> : VideoDiffusionModelBase<T>
             Name = "EmuVideo2",
             Version = "1.0",
             Description = "Emu Video 2 with improved generation quality and motion.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-factorized-t2v-v2");

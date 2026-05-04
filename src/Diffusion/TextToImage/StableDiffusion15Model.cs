@@ -558,7 +558,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
     {
         // Use actual parameter counts from GetParameters to match what was returned
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -619,7 +619,7 @@ public class StableDiffusion15Model<T> : LatentDiffusionModelBase<T>
             Name = "Stable Diffusion 1.5",
             Version = "1.5",
             Description = "Stable Diffusion 1.5 latent diffusion model with CLIP ViT-L/14 text conditioning",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

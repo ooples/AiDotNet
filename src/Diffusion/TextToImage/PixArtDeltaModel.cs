@@ -212,7 +212,7 @@ public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int ditCount = checked((int)_dit.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != ditCount + vaeCount)
             throw new ArgumentException(
@@ -269,7 +269,7 @@ public class PixArtDeltaModel<T> : LatentDiffusionModelBase<T>
             Name = "PixArt-Delta",
             Version = "1.0",
             Description = "LCM-distilled PixArt for fast 2-8 step text-to-image generation",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

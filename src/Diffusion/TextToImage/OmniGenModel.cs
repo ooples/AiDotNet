@@ -364,7 +364,7 @@ public class OmniGenModel<T> : LatentDiffusionModelBase<T>
             Name = "OmniGen",
             Version = "1.0",
             Description = "OmniGen unified multi-task image generation model",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

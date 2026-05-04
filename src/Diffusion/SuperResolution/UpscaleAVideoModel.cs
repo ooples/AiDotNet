@@ -457,7 +457,7 @@ public class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "Upscale-A-Video",
             Version = "1.0",
             Description = "Upscale-A-Video temporally consistent video super-resolution with diffusion",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

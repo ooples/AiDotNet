@@ -190,7 +190,7 @@ public class VideoPoetModel<T> : VideoDiffusionModelBase<T>
             Name = "VideoPoet",
             Version = "1.0",
             Description = "VideoPoet LLM-based zero-shot video generation.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "llm-video-tokenizer");

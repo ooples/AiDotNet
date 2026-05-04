@@ -405,7 +405,7 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
     {
         EnsureInitialized();
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -482,7 +482,7 @@ public class StableSRModel<T> : LatentDiffusionModelBase<T>
             Name = "StableSR",
             Version = "1.0",
             Description = "StableSR diffusion-prior-based super-resolution with controllable feature wrapping",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

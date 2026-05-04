@@ -224,7 +224,7 @@ public class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int tCount = checked((int)_transformer.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
         if (parameters.Length != tCount + vaeCount)
             throw new ArgumentException($"Expected {tCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var tParams = new Vector<T>(tCount);

@@ -189,7 +189,7 @@ public class FateZeroModel<T> : VideoDiffusionModelBase<T>
             Name = "FateZero",
             Version = "1.0",
             Description = "FateZero zero-shot video editing via attention blending.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "attention-blending-zero-shot");

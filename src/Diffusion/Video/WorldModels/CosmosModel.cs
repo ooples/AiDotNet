@@ -190,7 +190,7 @@ public class CosmosModel<T> : VideoDiffusionModelBase<T>
             Name = "Cosmos",
             Version = "1.0",
             Description = "NVIDIA Cosmos physics-aware world generation model.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-physics-world");

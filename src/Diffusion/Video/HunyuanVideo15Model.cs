@@ -190,7 +190,7 @@ public class HunyuanVideo15Model<T> : VideoDiffusionModelBase<T>
             Name = "HunyuanVideo15",
             Version = "1.5",
             Description = "HunyuanVideo 1.5 efficient video generation model for consumer GPUs.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dual-stream-dit-causal-3dvae");

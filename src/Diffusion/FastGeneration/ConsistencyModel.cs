@@ -659,7 +659,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             Name = "ConsistencyModel",
             Version = "1.0",
             Description = "Consistency Model for single-step or few-step image generation",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -190,7 +190,7 @@ public class PyramidFlowModel<T> : VideoDiffusionModelBase<T>
             Name = "PyramidFlow",
             Version = "1.0",
             Description = "Pyramid Flow multi-resolution video generation via pyramid flow matching.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "pyramid-flow-matching");

@@ -296,7 +296,7 @@ public class JEN1Model<T> : AudioDiffusionModelBase<T>
             Name = "JEN-1",
             Version = "1.0",
             Description = "JEN-1 high-fidelity text-to-music generation with 1D latent diffusion at 48kHz",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

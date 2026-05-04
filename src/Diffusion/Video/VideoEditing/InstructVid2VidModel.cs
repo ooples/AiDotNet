@@ -188,7 +188,7 @@ public class InstructVid2VidModel<T> : VideoDiffusionModelBase<T>
             Name = "InstructVid2Vid",
             Version = "1.0",
             Description = "InstructVid2Vid natural language instruction-based video editing.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "instruction-conditioned-v2v");

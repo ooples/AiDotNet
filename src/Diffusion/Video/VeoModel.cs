@@ -449,7 +449,7 @@ public class VeoModel<T> : VideoDiffusionModelBase<T>
             Name = _isVeo2 ? "Veo-2" : "Veo",
             Version = "1.0",
             Description = $"Google {(_isVeo2 ? "Veo 2" : "Veo")} cascaded video generation with temporal super-resolution",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

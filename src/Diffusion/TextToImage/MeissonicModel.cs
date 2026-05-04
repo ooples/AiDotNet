@@ -284,12 +284,13 @@ public class MeissonicModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int predictorCount = checked((int)_predictor.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
-        if (parameters.Length != predictorCount + vaeCount)
+        long expectedTotal = (long)predictorCount + vaeCount;
+        if (parameters.Length != expectedTotal)
         {
             throw new ArgumentException(
-                $"Expected {predictorCount + vaeCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -346,7 +347,7 @@ public class MeissonicModel<T> : LatentDiffusionModelBase<T>
             Name = "Meissonic",
             Version = "1.0",
             Description = "Non-autoregressive masked image modeling with E-MMDiT (304M) for efficient high-resolution T2I",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

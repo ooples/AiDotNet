@@ -295,7 +295,7 @@ public class StableAudioModel<T> : AudioDiffusionModelBase<T>
             Name = "Stable-Audio-Open",
             Version = "1.0",
             Description = "Stable Audio Open DiT-based audio generation with timing conditioning at 44.1 kHz",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

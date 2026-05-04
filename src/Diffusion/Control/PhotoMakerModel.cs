@@ -299,7 +299,7 @@ public class PhotoMakerModel<T> : LatentDiffusionModelBase<T>
             Name = "PhotoMaker",
             Version = "2.0",
             Description = "PhotoMaker identity-customized photo generation with stacked ID embedding",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

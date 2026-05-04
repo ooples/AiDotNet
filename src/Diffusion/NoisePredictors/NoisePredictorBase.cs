@@ -574,7 +574,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount,
             Description = $"Noise predictor with {ParameterCount} parameters, {InputChannels} input channels, {BaseChannels} base channels."
         };

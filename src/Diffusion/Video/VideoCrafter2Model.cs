@@ -189,7 +189,7 @@ public class VideoCrafter2Model<T> : VideoDiffusionModelBase<T>
             Name = "VideoCrafter2",
             Version = "1.0",
             Description = "VideoCrafter 2 with improved quality and style fusion.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "video-ldm-factorized");

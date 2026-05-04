@@ -295,7 +295,7 @@ public class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
             Name = "Instant3D",
             Version = "1.0",
             Description = "Instant3D feed-forward text-to-3D generation",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -487,7 +487,7 @@ public class Zero123Model<T> : LatentDiffusionModelBase<T>
         }
         _unet.SetParameters(new Vector<T>(unetParams));
 
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
         var vaeParams = new T[vaeCount];
         for (int i = 0; i < vaeCount; i++)
         {

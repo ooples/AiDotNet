@@ -188,7 +188,7 @@ public class MinimaxVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "MinimaxVideo",
             Version = "1.0",
             Description = "MiniMax Hailuo video model with strong image-to-video generation.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-motion-rendering");

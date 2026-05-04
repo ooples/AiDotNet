@@ -461,7 +461,7 @@ public class T2IAdapterModel<T> : LatentDiffusionModelBase<T>
             Name = "T2I-Adapter",
             Version = "1.0",
             Description = "T2I-Adapter lightweight spatial conditioning adapter for text-to-image diffusion models",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

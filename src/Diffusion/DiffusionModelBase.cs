@@ -505,7 +505,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         return new ModelMetadata<T>
         {
             Name = GetType().Name,
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount,
             Description = $"Diffusion model with {ParameterCount} parameters using {_scheduler.GetType().Name} scheduler."
         };

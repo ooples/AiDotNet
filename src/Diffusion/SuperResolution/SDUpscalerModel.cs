@@ -392,7 +392,7 @@ public class SDUpscalerModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -468,7 +468,7 @@ public class SDUpscalerModel<T> : LatentDiffusionModelBase<T>
             Name = "SD-Upscaler-x4",
             Version = "1.0",
             Description = "Stable Diffusion x4 Upscaler for text-guided latent super-resolution",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -187,7 +187,7 @@ public class VideoP2PModel<T> : VideoDiffusionModelBase<T>
             Name = "VideoP2P",
             Version = "1.0",
             Description = "VideoP2P prompt-to-prompt cross-attention control for video editing.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "cross-attention-p2p");

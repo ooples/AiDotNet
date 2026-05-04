@@ -454,7 +454,7 @@ public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
         if (parameters.Length != unetCount + vaeCount)
         {
@@ -530,7 +530,7 @@ public class DiffBIRModel<T> : LatentDiffusionModelBase<T>
             Name = "DiffBIR",
             Version = "1.0",
             Description = "DiffBIR blind image restoration with generative diffusion prior",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

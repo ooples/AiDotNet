@@ -189,7 +189,7 @@ public class Genie2Model<T> : VideoDiffusionModelBase<T>
             Name = "Genie2",
             Version = "1.0",
             Description = "Genie 2 real-time interactive 3D environment generation.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "dit-interactive-3d");

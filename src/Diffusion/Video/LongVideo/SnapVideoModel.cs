@@ -188,7 +188,7 @@ public class SnapVideoModel<T> : VideoDiffusionModelBase<T>
             Name = "SnapVideo",
             Version = "1.0",
             Description = "Snap Video scaled spatiotemporal transformer for text-to-video.",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         metadata.SetProperty("architecture", "scaled-spatiotemporal-transformer");

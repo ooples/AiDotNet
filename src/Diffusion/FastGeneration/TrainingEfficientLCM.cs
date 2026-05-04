@@ -167,8 +167,9 @@ public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
     {
         int pc = checked((int)_predictor.ParameterCount);
         int vc = checked((int)_vae.ParameterCount);
-        if (parameters.Length != pc + vc)
-            throw new ArgumentException($"Expected {pc + vc} parameters, got {parameters.Length}.", nameof(parameters));
+        long expectedTotal = (long)pc + vc;
+        if (parameters.Length != expectedTotal)
+            throw new ArgumentException($"Expected {expectedTotal} parameters, got {parameters.Length}.", nameof(parameters));
         var pp = new Vector<T>(pc);
         var vp = new Vector<T>(vc);
         for (int i = 0; i < pc; i++) pp[i] = parameters[i];
@@ -197,7 +198,7 @@ public class TrainingEfficientLCM<T> : LatentDiffusionModelBase<T>
             Name = "Training-Efficient LCM",
             Version = "1.0",
             Description = "Resource-efficient LCM distillation using LoRA adapters and gradient checkpointing",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
         m.SetProperty("architecture", "lcm-lora-unet");

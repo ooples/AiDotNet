@@ -303,12 +303,13 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
     public override void SetParameters(Vector<T> parameters)
     {
         int predictorCount = checked((int)_predictor.ParameterCount);
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
 
-        if (parameters.Length != predictorCount + vaeCount)
+        long expectedTotal = (long)predictorCount + vaeCount;
+        if (parameters.Length != expectedTotal)
         {
             throw new ArgumentException(
-                $"Expected {predictorCount + vaeCount} parameters, got {parameters.Length}.",
+                $"Expected {expectedTotal} parameters, got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -366,7 +367,7 @@ public class Flux2Model<T> : LatentDiffusionModelBase<T>
             Name = $"FLUX.2 [{_variant}]",
             Version = _variant.ToString(),
             Description = $"FLUX.2 [{_variant}] next-generation hybrid MMDiT with {FLUX2_JOINT_LAYERS} joint + {FLUX2_SINGLE_LAYERS} single blocks and improved rectified flow",
-            FeatureCount = (int)ParameterCount,
+            FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 

@@ -225,7 +225,7 @@ public class One2345Model<T> : ThreeDDiffusionModelBase<T>
     {
         EnsureInitialized();
         var unetCount = _unet.GetParameters().Length;
-        var vaeCount = _vae.GetParameters().Length;
+        var vaeCount = checked((int)_vae.ParameterCount);
         if (parameters.Length != unetCount + vaeCount)
             throw new ArgumentException($"Expected {unetCount + vaeCount} parameters, got {parameters.Length}.", nameof(parameters));
         var unetParams = new Vector<T>(unetCount);
