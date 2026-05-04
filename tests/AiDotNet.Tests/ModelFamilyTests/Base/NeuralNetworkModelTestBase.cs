@@ -816,6 +816,18 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(EffectiveOutputShape, rng);
 
+        // Materialize lazy-initialized parameters via a warmup forward
+        // pass BEFORE measuring L2. Some layers (LayerNormalization with
+        // γ=1.0 default, MultiHeadAttention's lazy weight banks, etc.)
+        // don't allocate their params until the first forward pass.
+        // Without this warmup, the BEFORE measurement undercounts and
+        // the AFTER measurement appears to "explode" — which is just the
+        // lazy-init params materializing, not the optimizer doing
+        // anything wrong.
+        network.SetTrainingMode(false);
+        try { network.Predict(input); } catch { /* some networks need training-mode for forward; tolerated */ }
+        network.SetTrainingMode(true);
+
         var paramsBefore = network.GetParameters();
         double l2Before = 0;
         for (int i = 0; i < paramsBefore.Length; i++) l2Before += paramsBefore[i] * paramsBefore[i];

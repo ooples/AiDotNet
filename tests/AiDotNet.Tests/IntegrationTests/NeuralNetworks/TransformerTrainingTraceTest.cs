@@ -48,6 +48,14 @@ public class TransformerTrainingTraceTest
         var target = new Tensor<float>([1, vocab]);
         target[0, 1] = 1f;
 
+        // Warmup forward pass to materialize lazy-init params (LayerNorm γ,
+        // MHA lazy weight banks). Without this, the BEFORE measurement
+        // undercounts and the AFTER measurement appears to "explode" —
+        // that's a measurement artifact, not an optimizer bug.
+        model.SetTrainingMode(false);
+        try { model.Predict(input); } catch { }
+        model.SetTrainingMode(true);
+
         // Snapshot initial parameters (sum of L2 norms)
         double paramL2Before = ComputeTotalParamL2(model);
         _output.WriteLine($"Total param L2 BEFORE training: {paramL2Before:F6}");
@@ -67,6 +75,18 @@ public class TransformerTrainingTraceTest
 
         double paramL2After1 = ComputeTotalParamL2(model);
         _output.WriteLine($"Total param L2 AFTER 1 step:  {paramL2After1:F6}  (Δ = {paramL2After1 - paramL2Before:+0.000000;-0.000000})");
+
+        // Per-layer L2 decomposition: which layer exploded?
+        _output.WriteLine("--- per-layer L2 after 1 step ---");
+        for (int li = 0; li < model.Layers.Count; li++)
+        {
+            var layer = model.Layers[li];
+            var p = layer.GetParameters();
+            double l2 = 0;
+            for (int i = 0; i < p.Length; i++) l2 += p[i] * p[i];
+            l2 = System.Math.Sqrt(l2);
+            _output.WriteLine($"  layer[{li}] {layer.GetType().Name,-40} count={p.Length,5} L2={l2:F6}");
+        }
 
         // 99 more steps
         for (int s = 0; s < 99; s++) model.Train(input, target);
