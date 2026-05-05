@@ -901,6 +901,31 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         _biasGradients = null;
     }
 
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist resolved input shape so Deserialize can re-resolve before
+        // SetParameters lands. The 6-D weight tensor's shape can't be uniquely
+        // inferred from parameter count alone (outputH×outputW×outputC×k²×inputC
+        // + outputC has multiple solutions), so we serialize the input shape
+        // explicitly. base.Serialize then writes the parameter vector.
+        writer.Write(_inputHeight);
+        writer.Write(_inputWidth);
+        writer.Write(_inputChannels);
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        int inH = reader.ReadInt32();
+        int inW = reader.ReadInt32();
+        int inC = reader.ReadInt32();
+        if (!IsShapeResolved && inH > 0 && inW > 0 && inC > 0)
+        {
+            ResolveFromShape(new[] { inH, inW, inC });
+        }
+        base.Deserialize(reader);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int totalParams = _weights.Length + _biases.Length;

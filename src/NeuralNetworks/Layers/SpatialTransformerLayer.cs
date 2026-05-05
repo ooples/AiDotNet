@@ -988,6 +988,29 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _localizationBias2Gradient = null;
     }
 
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist resolved input H/W so Deserialize can re-resolve. The
+        // 230-param fixed tail (W2/b2 = 32*6+6 = 198 + 32) leaves the
+        // remaining params for W1[H*W, 32] + b1[32] = 32*(H*W + 1).
+        // Inferring H*W from total alone is doable but fails when the
+        // test re-runs Forward at the actual H/W expected by Forward.
+        writer.Write(_inputHeight);
+        writer.Write(_inputWidth);
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        int inH = reader.ReadInt32();
+        int inW = reader.ReadInt32();
+        if (!IsShapeResolved && inH > 0 && inW > 0)
+        {
+            ResolveFromShape(new[] { inH, inW });
+        }
+        base.Deserialize(reader);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int w1Size = _localizationWeights1.Shape[0] * _localizationWeights1.Shape[1];

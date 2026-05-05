@@ -730,6 +730,22 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if shape isn't resolved, infer inputDim from param
+        // vector. Layout: 2*[outDim, inDim] weights + 2*[outDim] biases
+        // = 2*outDim*(inDim + 1) → inDim = total/(2*outDim) - 1.
+        if (!IsShapeResolved && _outputDimension > 0)
+        {
+            int divisor = 2 * _outputDimension;
+            if (parameters.Length % divisor == 0)
+            {
+                int candidateInput = parameters.Length / divisor - 1;
+                if (candidateInput > 0)
+                {
+                    ResolveFromShape(new[] { candidateInput });
+                }
+            }
+        }
+
         int linearWeightsSize = _linearWeights.Shape[0] * _linearWeights.Shape[1];
         int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
         int expectedLength = linearWeightsSize + gateWeightsSize +

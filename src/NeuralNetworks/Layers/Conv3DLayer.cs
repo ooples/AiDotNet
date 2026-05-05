@@ -763,7 +763,9 @@ public partial class Conv3DLayer<T> : LayerBase<T>
                 || candidateInputChannels * kernelVol + OutputChannels != parameters.Length)
                 throw new ArgumentException(
                     $"Cannot infer inputChannels for Conv3DLayer from {parameters.Length} parameters.");
-            ResolveFromShape(new[] { candidateInputChannels, 1, 1, 1 });
+            // Use KernelSize for D/H/W dummy spatial dims so the
+            // OnFirstForward shape check (input dims >= kernel) passes.
+            ResolveFromShape(new[] { candidateInputChannels, KernelSize, KernelSize, KernelSize });
         }
 
         int expected = _kernels.Length + _biases.Length;
