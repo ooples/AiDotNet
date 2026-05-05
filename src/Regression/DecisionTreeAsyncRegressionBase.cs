@@ -979,23 +979,32 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         // In gradient boosting, subsequent trees are fit to these negative gradients
         var sampleGradients = loss.CalculateDerivative(predictions, target);
 
+        // Snapshot the int-narrowed count ONCE — both the Vector<T>
+        // allocation and the loop bound below reuse this single value.
+        // Calling ToFlatVectorSize twice was a real waste (each call
+        // walks the long->int guard) AND opened a race window where the
+        // two calls could disagree if ParameterCount were ever to
+        // change between them. The single call also means a model with
+        // > int.MaxValue parameters fails with the helper's actionable
+        // error message exactly here, instead of producing a truncated
+        // samplesPerParam from a re-narrowed cast. Loop bound is also
+        // the int snapshot so paramIdx (int) and the upper bound match
+        // types — the previous `paramIdx < ParameterCount` mixed int
+        // and long, which on a >int.MaxValue model would either
+        // silently overflow paramIdx or run past the gradients array
+        // (closes review-comment #1271.vDOQ, #1271.zD7G).
+        int paramCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
+
         // Map per-sample gradients to per-parameter gradients
         // For decision trees, parameters typically represent leaf values or split thresholds
         // We aggregate sample gradients into ParameterCount buckets
-        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        var gradients = new Vector<T>(paramCount);
 
         if (sampleGradients.Length == 0 || ParameterCount == 0)
         {
             return gradients; // Return zeros
         }
 
-        // Snapshot the int-narrowed count once so the loop bound and
-        // the indexing math share a single type (int) — the previous
-        // `paramIdx < ParameterCount` (int < long) implicit-widened the
-        // comparison but kept paramIdx as int, which on a >int.MaxValue
-        // model would silently overflow paramIdx or run past the
-        // gradients array. Closes review-comment #1271.vDOQ.
-        int paramCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         int samplesPerParam = Math.Max(1, (sampleGradients.Length + paramCount - 1) / paramCount);
 
         for (int paramIdx = 0; paramIdx < paramCount; paramIdx++)
