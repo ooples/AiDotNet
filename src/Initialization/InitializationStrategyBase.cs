@@ -31,7 +31,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected readonly Random Random;
 
     /// <summary>
-    /// Read-only accessor for the seeded RNG instance. Lets layers that
+    /// Assembly-internal accessor for the seeded RNG instance. Lets layers that
     /// don't go through the strategy's <c>InitializeXavier</c> / <c>InitializeHe</c>
     /// helpers (e.g. <c>EmbeddingLayer</c>'s <c>SimdRandom</c>-based fill,
     /// or any layer that drives a hardware-specialized batched RNG)
@@ -39,8 +39,17 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     /// Returns the same instance the strategy itself uses, so a layer
     /// can pull <c>Random.Next()</c> to seed its own SIMD RNG without
     /// changing the framework-level reproducibility contract.
+    /// <para>
+    /// Visibility is <c>internal</c> rather than <c>public</c>: external
+    /// callers should not observe or mutate the strategy's RNG progression.
+    /// AiDotNet.Tests has access via <c>InternalsVisibleTo</c>; if a future
+    /// consumer outside the assembly needs a determinism handle, expose a
+    /// purpose-built read-only API (e.g. a <c>NextSeed()</c> wrapper) rather
+    /// than leaking the live <see cref="System.Random"/> reference. Closes
+    /// review-comment #1270.xElH.
+    /// </para>
     /// </summary>
-    public Random RandomGenerator => Random;
+    internal Random RandomGenerator => Random;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InitializationStrategyBase{T}"/> class
