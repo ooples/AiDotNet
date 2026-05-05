@@ -3466,14 +3466,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // For unbatched per-sample inputs (rank == expectedUnbatchedRank):
         //   STACK  : N × [ctxLen]      →  [N, ctxLen]      ← correct
         //
-        // expectedUnbatchedRank == 0 means we don't know the architecture's
-        // expected layout; fall back to legacy stack behaviour for backward
-        // compatibility with non-NN-architecture-aware models.
+        // Detection is shape-driven rather than architecture-driven because
+        // models with custom Train overrides (Transformer) bypass
+        // NormalizeBatchDim and treat input shapes flexibly. Architecture-
+        // reported expectedUnbatchedRank can also disagree with the runtime
+        // shape contract: e.g., a Transformer with InputType.TwoDimensional
+        // + inputSize=8 gets InputHeight=1, InputWidth=8 auto-assigned and
+        // its GetInputShape reports rank-2, but its Train override accepts
+        // [batch, ctxLen] inputs whose effective unbatched form is rank-1.
+        //
+        // Heuristic: if the per-sample shape has a leading dim that looks
+        // like a batch axis (any positive size — typically 1 for the
+        // standard Predict shape, but could be a partial-batch chunk),
+        // concatenate along that existing axis. Otherwise the per-sample
+        // shape is genuinely unbatched and we stack a new dim.
+        //
+        // Conservative: only fires when the per-sample input has rank > 1.
+        // Rank-1 per-sample inputs are unambiguously unbatched (a single
+        // feature/token vector); always stack.
         int batchSize = inputs.Length;
-        int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
         bool concatAlongLeadingDim =
-            expectedUnbatchedRank > 0
-            && inputShape.Length == expectedUnbatchedRank + 1
+            inputShape.Length > 1
             && inputShape[0] > 0;
 
         Tensor<T> batchedInput;
