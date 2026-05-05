@@ -2488,8 +2488,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             // backed read-only lists; recursion just reads); the cache
             // is mostly an O(N) → O(1) optimization for deep DiT/UNet
             // models that query ParameterCount on every step.
+            //
+            // Cache validity gate: this layer's _cachedParameterCount is
+            // invalidated by RegisterTrainableParameter / UnregisterTrainable
+            // Parameter / RegisterSubLayer on THIS layer, but a sub-layer's
+            // own OnFirstForward can lazily allocate trainable tensors via
+            // its own RegisterTrainableParameter without notifying us. Until
+            // every sub-layer has IsShapeResolved=true, fall through to a
+            // fresh rewalk so a pre-OnFirstForward query (e.g. eager weight
+            // streaming probe, Predict warm-up) doesn't pin a stale total.
+            // Once every descendant is resolved, the parameter set is stable
+            // and the cache is safe.
             long cached = _cachedParameterCount;
-            if (cached >= 0) return cached;
+            if (cached >= 0 && AllSubLayersShapeResolved())
+                return cached;
             // Default counts three sources of trainable weights so the
             // base class behaves correctly for layers that haven't
             // overridden ParameterCount:
@@ -2533,6 +2545,32 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             _cachedParameterCount = total;
             return total;
         }
+    }
+
+    /// <summary>
+    /// True iff every registered sub-layer has finished its lazy-shape
+    /// resolution (and thus has a stable trainable-parameter set). Used by
+    /// <see cref="ParameterCount"/> to gate cache reuse: a sub-layer's
+    /// OnFirstForward can lazily call its own RegisterTrainableParameter
+    /// without invalidating the parent's cache, so we re-walk until every
+    /// descendant is resolved.
+    /// </summary>
+    private bool AllSubLayersShapeResolved()
+    {
+        var subs = GetSubLayers();
+        if (subs is null || subs.Count == 0) return true;
+        for (int i = 0; i < subs.Count; i++)
+        {
+            var s = subs[i];
+            if (s is null) continue;
+            if (!s.IsShapeResolved) return false;
+            // Recurse: a resolved sub-layer can still hold unresolved
+            // grandchildren. LayerBase exposes the same predicate; for any
+            // ILayer<T> implementation that doesn't subclass LayerBase we
+            // trust IsShapeResolved alone.
+            if (s is LayerBase<T> sb && !sb.AllSubLayersShapeResolved()) return false;
+        }
+        return true;
     }
 
     /// <summary>

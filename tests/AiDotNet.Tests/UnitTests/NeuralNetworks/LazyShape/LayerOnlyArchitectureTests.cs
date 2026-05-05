@@ -9,7 +9,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
 using Xunit;
 
-namespace AiDotNetTests.UnitTests.NeuralNetworks.LazyShape;
+namespace AiDotNet.Tests.UnitTests.NeuralNetworks.LazyShape;
 
 /// <summary>
 /// Issue #1214: NeuralNetworkBase models should be constructable without a

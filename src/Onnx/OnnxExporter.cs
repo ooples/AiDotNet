@@ -138,10 +138,18 @@ public static class OnnxExporter
         // Vision exports require a batch axis (NCHW). If the caller
         // passes rank-3 [C,H,W], BuildAxisSpec would mark axis 0 as the
         // "batch" symbolic dim — but it's actually the channel axis,
-        // and downstream consumers expect NCHW. Auto-prefix a batch
-        // dim of 1 with a clear log so the caller knows the shape was
-        // adjusted.
-        if (effectiveInputShape.Length == 3 && HasDynamicSpatialAxes(model))
+        // and downstream consumers expect NCHW.
+        //
+        // Auto-prefix on rank-3 regardless of HasDynamicSpatialAxes:
+        //   - dynamic-spatial models: prefix lets the caller pass [C,H,W]
+        //     and have BuildAxisSpec mark the new axis 0 as symbolic batch.
+        //   - fixed-spatial models: prefix still recovers a usable shape
+        //     and BuildAxisSpec labels axis 0 as a unit batch (or symbolic
+        //     batch if the model's architecture allows it). Without the
+        //     prefix, the rank-3 path would propagate a nonsense
+        //     channel-as-batch axis through BuildAxisSpec and produce a
+        //     graph that fails consumer validation.
+        if (effectiveInputShape.Length == 3)
         {
             var prefixed = new int[4];
             prefixed[0] = 1;

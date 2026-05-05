@@ -52,17 +52,28 @@ internal class Conv2D<T>
         // Weights/Bias slicing (which uses the construction-time
         // _inChannels) silently misaligns. Throw loud rather than
         // ship corrupted weight inspections.
-        if (input.Shape.Length >= 2)
+        // Conv2D backbone shim only supports NCHW (rank 4). Reject lower
+        // ranks explicitly: a rank-3 [C, H, W] would let runtimeChannels
+        // read input.Shape[1] = H and throw a misleading "channels" error
+        // that leads the caller to fix the wrong axis. ConvolutionalLayer
+        // itself accepts rank-3, but the BackboneBase contract is NCHW-
+        // only — backbones produce batched feature maps.
+        if (input.Shape.Length < 4)
         {
-            int runtimeChannels = input.Shape[1]; // NCHW
-            if (runtimeChannels != _inChannels)
-                throw new ArgumentException(
-                    $"Conv2D shim was constructed for inChannels={_inChannels} but input has " +
-                    $"{runtimeChannels} channels along axis 1 (NCHW). The shim's parameter slicing " +
-                    $"depends on the construction-time channel count; reconstruct the shim with the " +
-                    $"correct inChannels or reshape the input.",
-                    nameof(input));
+            throw new ArgumentException(
+                $"Conv2D backbone shim requires NCHW (rank 4) input; got rank {input.Shape.Length} " +
+                $"with shape [{string.Join(",", input.Shape)}]. Detection backbones operate on " +
+                "batched feature maps — add a leading batch dimension before passing through.",
+                nameof(input));
         }
+        int runtimeChannels = input.Shape[1]; // NCHW
+        if (runtimeChannels != _inChannels)
+            throw new ArgumentException(
+                $"Conv2D shim was constructed for inChannels={_inChannels} but input has " +
+                $"{runtimeChannels} channels along axis 1 (NCHW). The shim's parameter slicing " +
+                $"depends on the construction-time channel count; reconstruct the shim with the " +
+                $"correct inChannels or reshape the input.",
+                nameof(input));
         return _layer.Forward(input);
     }
 
