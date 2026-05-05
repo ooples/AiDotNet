@@ -74,6 +74,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
       });
     });
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
 
     // Wait for the table to populate. The stat counter `#active-count`

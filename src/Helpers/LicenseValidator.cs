@@ -290,8 +290,8 @@ internal sealed class LicenseValidator
     /// encoded HMAC-SHA256 tags via WebEncoders.Base64UrlEncode — those tags
     /// routinely contain '-' / '_'. A stricter alphanumeric-only check would
     /// misclassify those legitimate signed keys as "not signed" and route them
-    /// through online validation instead of the offline HMAC path. Closes
-    /// review-comment #1256.htee.
+    /// through online validation instead of the offline HMAC path. Originally
+    /// landed in PR #1256 follow-up.
     /// </remarks>
     internal static bool IsSignedKeyFormat(string key)
     {
