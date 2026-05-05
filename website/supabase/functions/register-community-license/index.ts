@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
+import { lookupProductDisplayName } from "../_shared/products.ts";
 
 // Default matches the production origin the marketing site actually serves from.
 // Override via the ALLOWED_ORIGIN function secret for staging / preview envs.
@@ -200,6 +201,7 @@ serve(async (req: Request) => {
         licenseKey,
         tier: COMMUNITY_TIER,
         product: COMMUNITY_PRODUCT,
+        productDisplayName: lookupProductDisplayName(COMMUNITY_PRODUCT),
         isExisting: false,
       });
     } else {

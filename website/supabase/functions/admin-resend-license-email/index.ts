@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
+import { lookupProductDisplayName } from "../_shared/products.ts";
 
 // Admin-only endpoint that re-sends the license-key email for an existing
 // license_keys row. Used by the Resend button on /admin/licenses when the
@@ -163,6 +164,7 @@ serve(async (req: Request) => {
     licenseKey: license.license_key,
     tier: license.tier,
     product: license.product,
+    productDisplayName: lookupProductDisplayName(license.product),
     isExisting: true,
   });
 

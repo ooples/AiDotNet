@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
+import { lookupProductDisplayName } from "../_shared/products.ts";
 
 // Product this webhook issues licenses for. All Stripe products created
 // for aidotnet.dev route through here; Harmonic Engine (and any future
@@ -268,6 +269,7 @@ async function handleCheckoutCompleted(
       licenseKey,
       tier,
       product: WEBHOOK_PRODUCT,
+      productDisplayName: lookupProductDisplayName(WEBHOOK_PRODUCT),
       isExisting: false,
     });
   } else {
