@@ -302,8 +302,8 @@ public partial class RBFLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "RBFLayer cannot initialize until OnFirstForward has resolved the input feature dimension from input shape.");
 
-        _centers = new Tensor<T>([_numCenters, _inputSize]);
-        _widths = new Tensor<T>([_numCenters]);
+        _centers = AllocateLazyWeight([_numCenters, _inputSize]);
+        _widths = AllocateLazyWeight([_numCenters]);
         InitializeParameters();
         _isInitialized = true;
     }

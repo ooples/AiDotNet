@@ -338,10 +338,10 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 $"AttentionLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
         _inputSize = input.Shape[rank - 1];
-        _Wq = new Tensor<T>(new[] { _attentionSize, _inputSize });
-        _Wk = new Tensor<T>(new[] { _attentionSize, _inputSize });
-        _Wv = new Tensor<T>(new[] { _attentionSize, _inputSize });
-        _Wo = new Tensor<T>(new[] { _inputSize, _attentionSize });
+        _Wq = AllocateLazyWeight([_attentionSize, _inputSize]);
+        _Wk = AllocateLazyWeight([_attentionSize, _inputSize]);
+        _Wv = AllocateLazyWeight([_attentionSize, _inputSize]);
+        _Wo = AllocateLazyWeight([_inputSize, _attentionSize]);
         InitializeLayerWeights(_Wq, _inputSize, _attentionSize);
         InitializeLayerWeights(_Wk, _inputSize, _attentionSize);
         InitializeLayerWeights(_Wv, _inputSize, _attentionSize);

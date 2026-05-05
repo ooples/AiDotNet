@@ -425,7 +425,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "DigitCapsuleLayer cannot initialize until OnFirstForward has resolved the input capsule structure from input shape.");
 
-        _weights = new Tensor<T>([_inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
+        _weights = AllocateLazyWeight([_inputCapsules, _numClasses, _inputCapsuleDimension, _outputCapsuleDimension]);
         InitializeParameters();
         _isInitialized = true;
     }

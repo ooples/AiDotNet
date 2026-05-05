@@ -215,7 +215,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int inputCapsules = input.Shape[rank - 2];
         int inputDimension = input.Shape[rank - 1];
-        _transformationMatrix = new Tensor<T>([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
+        _transformationMatrix = AllocateLazyWeight([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
         InitializeParameters();
         RegisterTrainableParameter(_transformationMatrix, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);

@@ -240,19 +240,19 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
         // Main convolution weights [outC, inC/groups, kH, kW]
         int inChannelsPerGroup = inChannels / _groups;
         _weights = InitializeWeights(_outputChannels, inChannelsPerGroup, _kernelSize, _kernelSize);
-        _bias = new Tensor<T>([_outputChannels]);
+        _bias = AllocateLazyWeight([_outputChannels]);
 
         // Offset prediction weights — 2 (x,y) × kernel² per deform group.
         int offsetChannels = 2 * _kernelSize * _kernelSize * _deformGroups;
         _offsetWeights = InitializeWeights(offsetChannels, inChannels, _kernelSize, _kernelSize);
-        _offsetBias = new Tensor<T>([offsetChannels]);
+        _offsetBias = AllocateLazyWeight([offsetChannels]);
 
         // Modulation mask weights (DCNv2 only).
         if (_useModulation)
         {
             int maskChannels = _kernelSize * _kernelSize * _deformGroups;
             _maskWeights = InitializeWeights(maskChannels, inChannels, _kernelSize, _kernelSize);
-            _maskBias = new Tensor<T>([maskChannels]);
+            _maskBias = AllocateLazyWeight([maskChannels]);
         }
 
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
@@ -649,7 +649,9 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>
 
     private Tensor<T> InitializeWeights(int outC, int inC, int kH, int kW)
     {
-        var weights = new Tensor<T>([outC, inC, kH, kW]);
+        // Streaming-aware: route through AllocateLazyWeight so the pool
+        // pre-evicts before the He-init fill.
+        var weights = AllocateLazyWeight([outC, inC, kH, kW]);
         double fan_in = inC * kH * kW;
         double std = Math.Sqrt(2.0 / fan_in); // He initialization
 

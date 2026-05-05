@@ -378,9 +378,9 @@ public partial class RBMLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "RBMLayer cannot initialize until OnFirstForward has resolved the visible-unit count from input shape.");
 
-        _weights = new Tensor<T>([_hiddenUnits, _visibleUnits]);
-        _visibleBiases = new Tensor<T>([_visibleUnits]);
-        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
+        _weights = AllocateLazyWeight([_hiddenUnits, _visibleUnits]);
+        _visibleBiases = AllocateLazyWeight([_visibleUnits]);
+        _hiddenBiases = AllocateLazyWeight([_hiddenUnits]);
         InitializeParameters();
         _isInitialized = true;
     }

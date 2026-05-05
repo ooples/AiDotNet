@@ -458,8 +458,8 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         _outputHeight = (h - _kernelSize) / _stride + 1;
         _outputWidth = (w - _kernelSize) / _stride + 1;
 
-        _weights = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
-        _biases = new Tensor<T>([_outputChannels]);
+        _weights = AllocateLazyWeight([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
+        _biases = AllocateLazyWeight([_outputChannels]);
         InitializeParameters();
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);

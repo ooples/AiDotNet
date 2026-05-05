@@ -284,8 +284,8 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         int inputSize = input.Shape[rank - 1];
         int outputSize = OutputShape[0];
 
-        _weights = new Tensor<T>([outputSize, inputSize]);
-        _biases = new Tensor<T>([outputSize]);
+        _weights = AllocateLazyWeight([outputSize, inputSize]);
+        _biases = AllocateLazyWeight([outputSize]);
         InitializeParameters();
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);

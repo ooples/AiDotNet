@@ -434,8 +434,8 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         int outputChannels = _capsuleChannels * _capsuleDimension;
         int inputSize = _inputChannels * _kernelSize * _kernelSize;
-        _convWeights = new Tensor<T>([outputChannels, inputSize]);
-        _convBias = new Tensor<T>([outputChannels]);
+        _convWeights = AllocateLazyWeight([outputChannels, inputSize]);
+        _convBias = AllocateLazyWeight([outputChannels]);
         InitializeParameters();
         _isInitialized = true;
     }

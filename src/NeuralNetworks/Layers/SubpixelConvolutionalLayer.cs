@@ -538,8 +538,8 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _inputDepth = inDepth;
 
         // Allocate kernels/biases against the now-known channel count.
-        _kernels = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor]);
+        _kernels = AllocateLazyWeight([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
+        _biases = AllocateLazyWeight([_outputDepth * _upscaleFactor * _upscaleFactor]);
         InitializeWeights();
 
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);

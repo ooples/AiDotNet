@@ -380,8 +380,8 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>
 
         InputChannels = c;
         int weightSize = c * NumTimeScales;
-        _weights = new Tensor<T>([OutputChannels, weightSize]);
-        _biases = new Tensor<T>([OutputChannels]);
+        _weights = AllocateLazyWeight([OutputChannels, weightSize]);
+        _biases = AllocateLazyWeight([OutputChannels]);
         InitializeWeights();
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);

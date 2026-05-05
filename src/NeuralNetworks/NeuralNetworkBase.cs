@@ -3116,6 +3116,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var tensor in layer.GetTrainableParameters())
         {
             if (tensor is null || tensor.Length == 0) continue;
+            // Already-registered tensors (StreamingPoolHandle >= 0)
+            // must be skipped: re-entering the streaming branch of
+            // RegisterWeight would call SerializeToBytes on a tensor
+            // whose storage was already dropped, throwing
+            // ArgumentOutOfRangeException from AsSpan(). Idempotency
+            // gate.
+            if (tensor.StreamingPoolHandle >= 0) continue;
             tensor.Lifetime = _registrationLifetime;
             WeightRegistry.RegisterWeight(tensor);
         }
@@ -3561,6 +3568,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             foreach (var tensor in layer.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
+                // Already-registered tensors (StreamingPoolHandle >= 0
+                // from a prior RegisterWeight) MUST be skipped on the
+                // refresh pass: a re-register would re-enter the
+                // streaming branch, hit SerializeToBytes on a tensor
+                // whose storage was already dropped by the first
+                // register's DropStorageForStreaming, and throw
+                // ArgumentOutOfRangeException from AsSpan(). Idempotency
+                // gate.
+                if (tensor.StreamingPoolHandle >= 0) continue;
                 // CRITICAL: set Lifetime BEFORE RegisterWeight. The
                 // registry's switch early-returns for Lifetime=Default,
                 // so without this assignment every register call is a
@@ -3588,6 +3604,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             foreach (var tensor in extra.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
+                if (tensor.StreamingPoolHandle >= 0) continue;
                 tensor.Lifetime = _registrationLifetime;
                 WeightRegistry.RegisterWeight(tensor);
             }

@@ -298,7 +298,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         int inputDimension = input.Shape[rank - 1];
         int outputDimension = OutputShape[0];
 
-        _keyWeights = new Tensor<T>([inputDimension, _memoryDimension]);
+        _keyWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
         InitializeParameters();
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);

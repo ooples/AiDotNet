@@ -299,9 +299,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>
                 throw new InvalidOperationException(
                     "RecurrentLayer.EnsureInitialized called before _inputSize was resolved.");
 
-            _inputWeights = new Tensor<T>(new[] { _hiddenSize, _inputSize });
-            _hiddenWeights = new Tensor<T>(new[] { _hiddenSize, _hiddenSize });
-            _biases = new Tensor<T>(new[] { _hiddenSize });
+            _inputWeights = AllocateLazyWeight([_hiddenSize, _inputSize]);
+            _hiddenWeights = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+            _biases = AllocateLazyWeight([_hiddenSize]);
 
             InitializeParameters();
 

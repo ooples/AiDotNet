@@ -283,8 +283,8 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         _numPatches = _numPatchesHeight * _numPatchesWidth;
 
         int patchDim = _channels * _patchSize * _patchSize;
-        _projectionWeights = new Tensor<T>([patchDim, _embeddingDim]);
-        _projectionBias = new Tensor<T>([_embeddingDim]);
+        _projectionWeights = AllocateLazyWeight([patchDim, _embeddingDim]);
+        _projectionBias = AllocateLazyWeight([_embeddingDim]);
 
         InitializeParameters();
 

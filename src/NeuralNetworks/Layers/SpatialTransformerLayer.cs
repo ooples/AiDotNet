@@ -469,7 +469,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _inputHeight = input.Shape[rank - 2];
         _inputWidth = input.Shape[rank - 1];
 
-        _localizationWeights1 = new Tensor<T>([_inputHeight * _inputWidth, 32]);
+        _localizationWeights1 = AllocateLazyWeight([_inputHeight * _inputWidth, 32]);
         InitializeParameters();
         RegisterTrainableParameter(_localizationWeights1, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_localizationBias1, PersistentTensorRole.Biases);

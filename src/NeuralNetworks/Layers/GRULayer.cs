@@ -568,9 +568,9 @@ public partial class GRULayer<T> : LayerBase<T>
             _Ur = InitializeTensor(_hiddenSize, _hiddenSize, scale);
             _Uh = InitializeTensor(_hiddenSize, _hiddenSize, scale);
 
-            _bz = new Tensor<T>(new[] { _hiddenSize });
-            _br = new Tensor<T>(new[] { _hiddenSize });
-            _bh = new Tensor<T>(new[] { _hiddenSize });
+            _bz = AllocateLazyWeight([_hiddenSize]);
+            _br = AllocateLazyWeight([_hiddenSize]);
+            _bh = AllocateLazyWeight([_hiddenSize]);
 
             RegisterTrainableParameter(_Wz, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_Wr, PersistentTensorRole.Weights);
@@ -613,16 +613,27 @@ public partial class GRULayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> InitializeTensor(int rows, int cols, T scale)
     {
-        // Create random tensor using Tensor<T>.CreateRandom [0, 1]
-        var randomTensor = Tensor<T>.CreateRandom(rows, cols);
-
-        // Shift to [-0.5, 0.5] range: random - 0.5
-        var halfTensor = new Tensor<T>([rows, cols]);
-        halfTensor.Fill(NumOps.FromDouble(0.5));
-        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-
-        // Scale by the scale factor
-        return Engine.TensorMultiplyScalar(shifted, scale);
+        // Streaming-aware allocation: route through AllocateLazyWeight
+        // so the streaming pool can pre-evict competing weights to disk
+        // before this allocation hits the GC heap. The previous
+        // implementation chained CreateRandom + Subtract + MultiplyScalar
+        // through Engine arithmetic — each Engine op allocated its own
+        // intermediate tensor on the GC heap, peaking at 4× the final
+        // tensor size during init. The new path: allocate ONCE via
+        // AllocateLazyWeight, fill in-place with `(rng - 0.5) × scale`.
+        // For non-streaming models this still goes through plain
+        // `new Tensor<T>(shape)` so behavior matches the old path.
+        var t = AllocateLazyWeight([rows, cols]);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+        T half = NumOps.FromDouble(0.5);
+        for (int i = 0; i < t.Length; i++)
+        {
+            T r = NumOps.FromDouble(rng.NextDouble());
+            T shifted = NumOps.Subtract(r, half);
+            T scaled = NumOps.Multiply(shifted, scale);
+            t.SetFlat(i, scaled);
+        }
+        return t;
     }
 
     /// <summary>
