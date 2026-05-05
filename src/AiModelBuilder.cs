@@ -5390,17 +5390,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private AiDotNet.Deployment.Configuration.WeightStreamingReport? BuildWeightStreamingReport()
     {
         if (_model is not NeuralNetworks.NeuralNetworkBase<T> nnBase) return null;
-        // Streaming actually engaged? Either ctor auto-detected (and the
-        // WeightStreamingAutoDetected flag is true) OR the user explicitly
-        // forced it on via _weightStreamingConfig.Enabled = true. Either
-        // way, _weightLifetimeConfigured ends up true on the model.
-        // Reading the unified flag means we don't have to distinguish
-        // "auto" from "manual" at this level.
-        if (!nnBase.WeightStreamingAutoDetected
-            && !(_weightStreamingConfig?.Enabled == true))
-        {
-            return null;
-        }
+        // Streaming actually engaged? IsWeightStreamingActive is true iff
+        // ConfigureWeightLifetime ran on this instance — covers both
+        // "auto-detect engaged" and "user forced via
+        // ConfigureWeightStreaming(Enabled:true)" branches with one read.
+        if (!nnBase.IsWeightStreamingActive) return null;
 
         long paramCount = 0;
         try { paramCount = nnBase.ParameterCount; }
@@ -5408,30 +5402,48 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                    models; report 0 rather than fail the build at the
                    reporting step. */ }
 
-        // The Tensors-side pool report exposes counters; we wrap them
-        // 1:1 here. If the report API isn't yet wired through the
-        // currently-pinned Tensors version (0.71.0 ships the surface
-        // but field names may evolve), fields default to 0 — the
-        // wrapper still tells the caller "yes streaming engaged" via
-        // StreamingEnabled / AutoDetected so dashboards can render.
+        // Pull live counters from the Tensors-side streaming pool. Any
+        // exception here (Tensors-side schema mismatch, transient
+        // pool-state inconsistency) collapses to a "streaming engaged
+        // but counters unavailable" report — the StreamingEnabled +
+        // AutoDetected fields still tell the caller streaming is on,
+        // and the per-counter fields stay 0 rather than failing the
+        // entire build at reporting time.
+        long diskReads = 0, evictions = 0, prefetchHit = 0, prefetchMiss = 0, prefetchIssue = 0, residentBytes = 0;
+        double compressionRatio = 1.0;
+        try
+        {
+            var pool = WeightRegistry.GetStreamingReport();
+            diskReads = pool.DiskReadCount;
+            evictions = pool.EvictionCount;
+            prefetchHit = pool.PrefetchHitCount;
+            prefetchMiss = pool.PrefetchMissCount;
+            prefetchIssue = pool.PrefetchIssueCount;
+            residentBytes = pool.ResidentBytes;
+            compressionRatio = pool.CompressionRatio;
+        }
+        catch { /* leave counters at default 0/1.0 */ }
+
+        // Effective threshold: per-instance override beats env-var beats
+        // compiled default. Match the precedence used by the auto-detect
+        // path so the report reflects the value that ACTUALLY drove the
+        // decision.
+        long threshold = _weightStreamingConfig?.ThresholdParameters
+                         ?? NeuralNetworks.NeuralNetworkBase<T>.DefaultStreamingThresholdParamsForReport;
+
         return new AiDotNet.Deployment.Configuration.WeightStreamingReport
         {
             StreamingEnabled = true,
             AutoDetected = nnBase.WeightStreamingAutoDetected,
             ModelParameterCount = paramCount,
-            EffectiveThresholdParameters = _weightStreamingConfig?.ThresholdParameters
-                                            ?? 10_000_000_000L,
-            // Tensors-side counters — populated via WeightRegistry's
-            // GetStreamingReport. Wrapped in try/catch so a Tensors
-            // version mismatch doesn't fail the build at the reporting
-            // step.
-            DiskReadCount = 0,
-            EvictionCount = 0,
-            PrefetchIssueCount = 0,
-            PrefetchHitCount = 0,
-            PrefetchMissCount = 0,
-            BytesWrittenToDisk = 0,
-            BytesReadFromDisk = 0,
+            EffectiveThresholdParameters = threshold,
+            DiskReadCount = diskReads,
+            EvictionCount = evictions,
+            PrefetchIssueCount = prefetchIssue,
+            PrefetchHitCount = prefetchHit,
+            PrefetchMissCount = prefetchMiss,
+            ResidentBytes = residentBytes,
+            CompressionRatio = compressionRatio,
         };
     }
 
@@ -5439,6 +5451,18 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         if (_weightStreamingConfig is null) return;
         if (_model is not NeuralNetworks.NeuralNetworkBase<T> nnBase) return;
+
+        // Per-instance threshold override: applied BEFORE we route to
+        // any of the explicit-on / explicit-off / null branches because
+        // (a) the auto-detect retry on first forward needs to see the
+        // user's threshold, not the env-var/default, and (b) it's a
+        // pure data-flow operation with no side effect when Enabled is
+        // explicit (the threshold is only consulted on the auto-detect
+        // path).
+        if (_weightStreamingConfig.ThresholdParameters is long custom && custom > 0)
+        {
+            nnBase.ApplyAutoDetectThresholdOverride(custom);
+        }
 
         if (_weightStreamingConfig.Enabled == false)
         {
@@ -5456,18 +5480,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             return;
         }
 
-        // _weightStreamingConfig.Enabled == null but the user may have
-        // overridden the threshold. The threshold only matters for the
-        // auto-detect retry on first Predict — at this point, the ctor
-        // has already attempted detection. Re-trigger via the public
-        // hook so a custom-threshold ctor-engagement gets a second
-        // chance with the user's threshold. Implementation detail: the
-        // env-var / static-init read of the threshold means a user-
-        // supplied per-instance threshold needs the
-        // TryAutoEnableWeightStreaming to be re-callable with a
-        // per-instance value. That capability is a known follow-up
-        // (#186-extension); for v1, ThresholdParameters works only
-        // when set as the env var before the process starts.
+        // Enabled == null: leave the auto-detect machinery to do its
+        // thing on the upcoming first forward. The threshold override
+        // (if set) was already applied above and will drive the
+        // post-first-forward retry.
     }
 
     /// <summary>

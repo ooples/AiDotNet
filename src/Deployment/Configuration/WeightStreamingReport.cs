@@ -98,17 +98,23 @@ public sealed class WeightStreamingReport
     public long PrefetchMissCount { get; init; }
 
     /// <summary>
-    /// Total bytes the streaming pool wrote to its disk-backing store
-    /// during the run (for compressed pools, this is the
-    /// post-compression size). Useful for IO-budget planning on
-    /// constrained devices.
+    /// Current resident bytes in the streaming pool — the size of the
+    /// in-RAM working set at the time the report was captured. For a
+    /// streaming run on a 562 GB model with a 24 GB GPU + 64 GB host
+    /// budget, expect this to plateau near the budget once steady-state
+    /// hits. A value much smaller than the budget points at a
+    /// too-conservative pool configuration; equal to the budget is
+    /// healthy.
     /// </summary>
-    public long BytesWrittenToDisk { get; init; }
+    public long ResidentBytes { get; init; }
 
     /// <summary>
-    /// Total bytes the streaming pool read from its disk-backing store
-    /// during the run (post-decompression for compressed pools, so
-    /// represents the materialized weight bytes).
+    /// Effective compression ratio achieved by the LZ4-compressed
+    /// disk-backing store (uncompressed bytes / compressed bytes;
+    /// higher is better). 1.0 means compression bought nothing — the
+    /// weights are likely already in a packed format the codec can't
+    /// shrink further (e.g. fp16). Float weights typically compress
+    /// 1.5–2.0×.
     /// </summary>
-    public long BytesReadFromDisk { get; init; }
+    public double CompressionRatio { get; init; }
 }

@@ -2489,17 +2489,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
 
-        // Lazy auto-detect retry (#1222 / #183). For lazy networks
-        // (Transformer / MultiHeadAttention with 0×0 placeholders), the
-        // ctor's eager check ran before weights materialized and saw
-        // ParameterCount=0 — under threshold. Now that the first forward
-        // is about to run (or has already run if this isn't the first
-        // call), try again. RegisterTrainableTensorsWithWeightRegistry
-        // skips zero-length tensors, so calling this before the forward
-        // walks layers but only acts on already-allocated weights; the
-        // RefreshWeightRegistry inside ConfigureWeightLifetime + tensor
-        // resolution during forward picks up newly-allocated tensors.
-        // No-op once attempted (or once explicitly configured/disabled).
+        // Pre-forward auto-detect attempt (#1222 / #183). Catches eager
+        // networks (ResNet/VGG/CNN) whose ParameterCount is reliable as
+        // soon as InitializeLayers ran. For lazy networks (Transformer,
+        // MultiHeadAttention with 0×0 placeholders) ParameterCount is 0
+        // here, so this is a no-op and the post-forward retry below
+        // catches them once their weights have materialized through the
+        // first PredictEager call. Idempotent once finalized.
         TryAutoEnableWeightStreaming();
 
         try
@@ -2559,6 +2555,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         finally
         {
             if (wasTraining) SetTrainingMode(true);
+
+            // Mark first-forward-completed and run the auto-detect retry.
+            // For lazy networks (Transformer / MultiHeadAttention) the
+            // pre-forward attempt above saw ParameterCount=0 and bailed
+            // without finalizing; now that PredictEager has materialized
+            // the placeholder weights, ParameterCount returns the real
+            // value and the threshold comparison can engage streaming
+            // for the NEXT call. The first call of an above-threshold
+            // lazy model still runs in eager mode — engaging streaming
+            // mid-forward would require a more invasive
+            // RegisterTrainableParameter-time hook (filed as a follow-up).
+            // Eager networks finalized in the pre-forward call above so
+            // this is a no-op for them.
+            if (!_firstForwardCompleted)
+            {
+                _firstForwardCompleted = true;
+                TryAutoEnableWeightStreaming();
+            }
         }
     }
 
@@ -2711,17 +2725,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // tape stores tensor references, not copies, so a tensor
         // already pinned by forward's MaterializeScope is the SAME
         // object the backward-replay reads.
+        Tensor<T> result;
         if (_weightLifetimeConfigured)
         {
-            return PredictEagerStreaming(input);
+            result = PredictEagerStreaming(input);
+        }
+        else
+        {
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            result = current;
         }
 
-        var current = input;
-        foreach (var layer in Layers)
+        // Post-first-forward auto-detect retry (mirrors Predict's finally
+        // block). Lazy training-only networks that never call Predict
+        // (e.g. a fine-tuning loop where forward is always paired with
+        // backward) need this hook to ever engage streaming.
+        if (!_firstForwardCompleted)
         {
-            current = layer.Forward(current);
+            _firstForwardCompleted = true;
+            TryAutoEnableWeightStreaming();
         }
-        return current;
+
+        return result;
     }
 
     /// <summary>
@@ -3393,6 +3422,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private const long DefaultStreamingThresholdParams = 10_000_000_000L;
 
     /// <summary>
+    /// Public-readable view of the auto-detect threshold for telemetry
+    /// callers (e.g. <c>AiModelBuilder.BuildWeightStreamingReport</c>).
+    /// Reflects the effective value (env-var override applied if present
+    /// at process start, else the compiled default 10B). Per-instance
+    /// overrides via <c>WeightStreamingConfig.ThresholdParameters</c> are
+    /// not visible here — callers that need the per-instance value
+    /// should consult the config they passed in.
+    /// </summary>
+    internal static long DefaultStreamingThresholdParamsForReport => s_streamingThresholdParams;
+
+    /// <summary>
     /// Resolved threshold: env-var override if set + parseable, else the
     /// compiled-in default. Read once at first use rather than per-call so
     /// the env var is captured at process start (matching the conventions
@@ -3414,12 +3454,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// True once <see cref="TryAutoEnableWeightStreaming"/> has run on this
-    /// instance — guards against re-checking on every Predict call. Set
-    /// regardless of whether streaming was actually enabled (the threshold
-    /// answer is stable per instance once layers are materialized).
+    /// True once auto-detect has FINALIZED on this instance. Distinct from
+    /// "attempted once" because lazy models legitimately need a second
+    /// look after the first forward materializes their placeholder weights
+    /// — the ctor's pre-forward attempt sees ParameterCount=0 (placeholders)
+    /// and would otherwise latch a "below threshold, never retry" state.
+    ///
+    /// Finalized when:
+    ///   * Auto-detect engaged (ConfigureWeightLifetime called → stream
+    ///     mode active for the model's lifetime).
+    ///   * Explicit ConfigureWeightLifetime by user code outside auto-detect.
+    ///   * User opted out via DisableAutoStreaming.
+    ///   * Post-first-forward retry ran AND model is still under threshold
+    ///     (so the parameter count is now reliable).
     /// </summary>
-    private bool _streamingAutoDetectAttempted;
+    private bool _streamingAutoDetectFinalized;
+
+    /// <summary>
+    /// Set to true ONLY when the auto-detect path itself called
+    /// <see cref="ConfigureWeightLifetime"/> (vs the user calling it
+    /// explicitly via <see cref="ConfigureWeightLifetime"/> or
+    /// <c>ConfigureWeightStreaming(Enabled: true)</c>). Drives the
+    /// <c>WeightStreamingReport.AutoDetected</c> telemetry field —
+    /// dashboards distinguishing "framework caught a too-big model" from
+    /// "user explicitly opted in" rely on this flag.
+    /// </summary>
+    private bool _streamingEngagedByAutoDetect;
+
+    /// <summary>
+    /// True after this network's first <see cref="Predict"/> or
+    /// <see cref="ForwardForTraining"/> call has completed. Used by the
+    /// auto-detect retry to know whether ParameterCount is reliable
+    /// (placeholders materialize during the first forward, so post-first-
+    /// forward the count reflects actual allocated weights).
+    /// </summary>
+    private bool _firstForwardCompleted;
 
     /// <summary>
     /// True when the user explicitly opted out of auto-streaming for this
@@ -3428,6 +3497,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Honoured by <see cref="TryAutoEnableWeightStreaming"/>.
     /// </summary>
     private bool _streamingAutoDetectDisabled;
+
+    /// <summary>
+    /// Per-instance threshold override applied by
+    /// <see cref="ApplyAutoDetectThresholdOverride"/> when the user passes
+    /// <c>WeightStreamingConfig.ThresholdParameters</c>. Null falls back
+    /// to <see cref="s_streamingThresholdParams"/>.
+    /// </summary>
+    private long? _streamingThresholdOverride;
 
     /// <summary>
     /// Opts this model OUT of auto-streaming detection. Useful for tests
@@ -3445,15 +3522,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal void DisableAutoStreaming() => _streamingAutoDetectDisabled = true;
 
     /// <summary>
-    /// Returns true iff this instance has had auto-detect successfully
-    /// promote it into streaming mode (vs being explicitly configured by
-    /// the user, or auto-detect deciding the model fits in RAM). Used by
-    /// telemetry / regression tests that need to assert on the auto-detect
-    /// branch having fired.
+    /// Sets a per-instance threshold for auto-detect. Used by
+    /// <c>AiModelBuilder.ConfigureWeightStreaming(config)</c> so a caller's
+    /// <c>WeightStreamingConfig.ThresholdParameters</c> actually drives the
+    /// per-instance auto-detect comparison.
     /// </summary>
-    internal bool WeightStreamingAutoDetected => _streamingAutoDetectAttempted
-                                                   && _weightLifetimeConfigured
-                                                   && !_streamingAutoDetectDisabled;
+    internal void ApplyAutoDetectThresholdOverride(long thresholdParams)
+    {
+        if (thresholdParams > 0) _streamingThresholdOverride = thresholdParams;
+    }
+
+    /// <summary>
+    /// Returns true iff streaming was engaged by auto-detect on THIS
+    /// instance (vs. the user explicitly forcing it on via
+    /// <see cref="ConfigureWeightLifetime"/> /
+    /// <c>ConfigureWeightStreaming(Enabled: true)</c>). Used by
+    /// <see cref="WeightStreamingReport.AutoDetected"/> so operator
+    /// dashboards can distinguish framework-engaged from user-requested
+    /// streaming.
+    /// </summary>
+    internal bool WeightStreamingAutoDetected => _streamingEngagedByAutoDetect;
+
+    /// <summary>
+    /// True when the model is currently in streaming mode for ANY reason
+    /// (auto-detect or explicit). Drives the public-facing "is streaming?"
+    /// query the report DTO surfaces as <c>StreamingEnabled</c>.
+    /// </summary>
+    internal bool IsWeightStreamingActive => _weightLifetimeConfigured;
 
     /// <summary>
     /// Auto-enables weight streaming if this model's total parameter count
@@ -3490,9 +3585,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     internal void TryAutoEnableWeightStreaming()
     {
-        if (_streamingAutoDetectAttempted) return;
-        if (_weightLifetimeConfigured) { _streamingAutoDetectAttempted = true; return; }
-        if (_streamingAutoDetectDisabled) { _streamingAutoDetectAttempted = true; return; }
+        if (_streamingAutoDetectFinalized) return;
+        if (_weightLifetimeConfigured) { _streamingAutoDetectFinalized = true; return; }
+        if (_streamingAutoDetectDisabled) { _streamingAutoDetectFinalized = true; return; }
 
         long paramCount;
         try
@@ -3505,19 +3600,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // (e.g. a subclass ctor failing before InitializeLayers
             // completes). Don't propagate from auto-detect — the explicit
             // ConfigureWeightLifetime entry point stays available for
-            // those models to call later.
+            // those models to call later. Don't finalize either: we
+            // want to retry once the model is fully built.
             return;
         }
 
-        if (paramCount < s_streamingThresholdParams)
+        long threshold = _streamingThresholdOverride ?? s_streamingThresholdParams;
+
+        if (paramCount < threshold)
         {
-            // Below threshold: stays eager. Set the attempted flag so the
-            // first-forward path's call doesn't re-pay the ParameterCount
-            // walk on every Predict. If a lazy model's parameter count
-            // grows AFTER the first forward (rare — only happens with
-            // dynamically-added sub-layers), the user can call
-            // ConfigureWeightLifetime explicitly.
-            _streamingAutoDetectAttempted = true;
+            // Below threshold. For lazy models (Transformer, etc.),
+            // ParameterCount may legitimately report 0 here because
+            // weights haven't materialized yet. We DON'T finalize on
+            // the pre-forward call — the post-first-forward retry will
+            // re-check with materialized weights. Once we've seen the
+            // first forward, the count is stable and we can safely
+            // latch off.
+            if (_firstForwardCompleted)
+            {
+                _streamingAutoDetectFinalized = true;
+            }
             return;
         }
 
@@ -3530,7 +3632,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // pinned today.
         var options = new GpuOffloadOptions();
         ConfigureWeightLifetime(options);
-        _streamingAutoDetectAttempted = true;
+        _streamingEngagedByAutoDetect = true;
+        _streamingAutoDetectFinalized = true;
     }
 
     /// <summary>

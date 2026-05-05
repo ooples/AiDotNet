@@ -72,8 +72,8 @@ public sealed class WeightStreamingBuilderIntegrationTests
             PrefetchIssueCount = 67_890,
             PrefetchHitCount = 67_000,
             PrefetchMissCount = 890,
-            BytesWrittenToDisk = 1_500_000_000L,
-            BytesReadFromDisk = 1_500_000_000L,
+            ResidentBytes = 24_000_000_000L,    // 24 GB resident in pool
+            CompressionRatio = 1.85,            // healthy LZ4 ratio for fp32 weights
         };
 
         Assert.True(report.StreamingEnabled);
