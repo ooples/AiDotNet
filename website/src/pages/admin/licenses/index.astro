@@ -565,6 +565,83 @@ const productsJson = JSON.stringify(PRODUCTS);
       attachHandlers();
     }
 
+    /**
+     * Renders the resend button's failure state — both the error-result
+     * branch (server returned a non-2xx) and the exception branch (network
+     * threw before a response arrived) flow through here so the markup,
+     * dismiss wiring, and accessibility attributes stay in lockstep.
+     *
+     * Accessibility notes:
+     *   - The actionable server message is rendered as visible inline
+     *     text wrapped in <span role="alert" aria-live="polite"> so screen
+     *     readers announce it on append. The previous tooltip-only
+     *     placement was inaccessible to keyboard, touch, and assistive
+     *     technology users (review-comment #1268.h3tx / .h3t6).
+     *   - Dismiss is a real <button> with type="button" and aria-label so
+     *     it's focusable, keyboard-activatable (Enter/Space), and screen-
+     *     reader-discoverable. The <span> + click-handler version was
+     *     mouse-only (review-comment #1268.h3uC).
+     *   - Refactored out of the call-site so future changes to the failure
+     *     markup (label text, dismiss UX) don't drift between the
+     *     error-result and exception branches (review-comment
+     *     #1268.h3uQ / .h3ua).
+     */
+    function renderResendFailure(btn: Element, orig: string, serverMsg: string | undefined): void {
+      // role="alert" already creates an assertive live region — pairing
+      // it with aria-live="polite" sent conflicting instructions to AT
+      // (some screen readers honored one, some the other), making the
+      // failure-message announcement timing undefined. Use role="alert"
+      // alone (review-comment #1268.iCwz).
+      const messageBlock = serverMsg
+        ? `<span role="alert" class="ml-2 text-xs text-red-600 dark:text-red-400">${escapeHtml(serverMsg)}</span>`
+        : '';
+      // Render the failure label + message INSIDE the resend button, but
+      // place the dismiss control as a SIBLING (not nested) so we don't
+      // emit invalid button-within-button HTML — that pattern produced
+      // inconsistent keyboard / screen-reader behavior across browsers
+      // (review-comment #1268.iCwG).
+      btn.innerHTML = `<span class="text-red-500">failed</span>${messageBlock}`;
+
+      // Idempotent dismiss control: if a previous failure on this button
+      // left one in place, remove it before creating a fresh one. Using
+      // a data-for attribute pointing at the parent .resend-email-btn
+      // would let multiple resend buttons coexist on the page without
+      // their dismiss controls colliding, but here each table row has a
+      // unique resend button, so a parent-scoped selector is enough.
+      const parent = btn.parentElement;
+      if (!parent) return;
+      const existing = parent.querySelector(':scope > .resend-dismiss');
+      if (existing) existing.remove();
+
+      const dismiss = document.createElement('button');
+      dismiss.type = 'button';
+      dismiss.className = 'resend-dismiss text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer ml-1';
+      dismiss.setAttribute('aria-label', 'Dismiss failure message');
+      dismiss.textContent = '✕';
+      dismiss.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        btn.innerHTML = orig;
+        // Focus management: the dismiss button is about to remove
+        // itself from the DOM, which leaves the keyboard user with no
+        // focused element (browser falls back to <body>, which is
+        // disorienting and breaks tab-order). Move focus back to the
+        // resend button — the natural next action after dismissing a
+        // failure is to retry, and `btn` is the resend button itself,
+        // so focusing it is both stable and semantically correct.
+        // Closes review-comment #1268.pmPI.
+        if (btn instanceof HTMLElement) {
+          btn.focus();
+        }
+        dismiss.remove();
+      });
+      // Tab order: insertAdjacentElement('afterend', dismiss) places
+      // the dismiss button immediately after the resend button in the
+      // DOM, so the natural tab-order is resend -> dismiss -> next
+      // row's resend. Verified by the e2e keyboard-accessibility test
+      // in licenses-copy-and-resend.spec.ts (resendRow.locator path).
+      btn.insertAdjacentElement('afterend', dismiss);
+    }
+
     function attachHandlers() {
       const tbody = document.getElementById('licenses-body');
       if (!tbody) return;
@@ -676,8 +753,48 @@ const productsJson = JSON.stringify(PRODUCTS);
             buttonEl.disabled = false;
             return;
           }
-          const orig = btn.innerHTML;
+          // Cancel any pending success-revert timer from a previous
+          // resend attempt on THIS button. Without this, if the operator
+          // clicked resend, got "sent", then clicked resend again within
+          // 2.5s, the stale revert callback would fire AFTER the new
+          // attempt set "sending..." and silently restore the OLD label
+          // (or worse, overwrite a "failed" state from the new attempt).
+          // Closes review-comment #1268.iCwg / .iCws.
+          const stalePendingRevertId = buttonEl.dataset.successRevertId;
+          if (stalePendingRevertId !== undefined) {
+            clearTimeout(Number.parseInt(stalePendingRevertId, 10));
+            delete buttonEl.dataset.successRevertId;
+          }
+          // Remove any leftover dismiss sibling from a previous failure
+          // on this button — without this, a retry after a failure would
+          // leave the old ✕ in place after the new attempt succeeds.
+          const parentEl = buttonEl.parentElement;
+          if (parentEl) {
+            const staleDismiss = parentEl.querySelector(':scope > .resend-dismiss');
+            if (staleDismiss) staleDismiss.remove();
+          }
+          // Cache the IDLE label once per button on the dataset, then
+          // always revert to that. Snapshotting btn.innerHTML on every
+          // click is a regression hazard: on a retry-after-failure path
+          // the innerHTML at this moment is the failure markup
+          // (<span>failed</span><span role="alert">...</span>), so a
+          // subsequent success would auto-revert to that stale failure
+          // label instead of the original idle "Resend" text. Closes
+          // review-comments #1268.peGx / .pmOa. Mirrors the
+          // `originalLabel` cache pattern already used by the copy-key
+          // button at line 670-680.
+          if (buttonEl.dataset.idleLabel === undefined) {
+            buttonEl.dataset.idleLabel = btn.innerHTML;
+          }
+          const orig = buttonEl.dataset.idleLabel;
           btn.innerHTML = '<span class="text-slate-400">sending...</span>';
+          // Track outcome so the auto-revert can run on success but skip
+          // on failure — without this, the resend button reverts back to
+          // its idle label 2.5s after a failure and takes the actionable
+          // error tooltip with it. Operators who looked away during the
+          // call would never know what went wrong. Closes review-comment
+          // #1256.hteN.
+          let succeeded = false;
           try {
             const { data, error } = await supabase.functions.invoke('admin-resend-license-email', {
               body: { license_id: id },
@@ -710,22 +827,40 @@ const productsJson = JSON.stringify(PRODUCTS);
                 // generic "failed" label.
               }
               console.error('Resend failed:', { error, serverMsg });
-              btn.innerHTML = serverMsg
-                ? `<span class="text-red-500" title="${escapeHtml(serverMsg)}">failed</span>`
-                : '<span class="text-red-500">failed</span>';
+              renderResendFailure(btn, orig, serverMsg);
             } else {
               btn.innerHTML = '<span class="text-green-500">sent</span>';
+              succeeded = true;
             }
           } catch (err) {
             console.error('Resend invoke threw:', err);
-            btn.innerHTML = '<span class="text-red-500">failed</span>';
+            renderResendFailure(btn, orig, undefined);
           } finally {
             // Always release the in-flight guard so the operator can
             // retry on transient failures without reloading the page.
             delete buttonEl.dataset.inFlight;
             buttonEl.disabled = false;
           }
-          setTimeout(() => { btn.innerHTML = orig; }, 2500);
+          // Auto-revert ONLY on success. Failure label persists until the
+          // operator clicks the ✕ dismiss control, ensuring the
+          // server's actionable error message is never silently hidden
+          // (the previous unconditional 2.5s revert removed both the
+          // "failed" label AND the tooltip carrying the cause, leaving
+          // an operator who looked away unable to see what went wrong).
+          //
+          // Per-button revert tracking: store the timeout ID on the
+          // dataset and clear the pointer when it fires. The next click
+          // on this button cancels any in-flight timer so a stale
+          // callback can never overwrite a fresh state (cancel happens
+          // at the top of this handler; this side just makes sure the
+          // timer ID is reachable from there).
+          if (succeeded) {
+            const revertId = window.setTimeout(() => {
+              btn.innerHTML = orig;
+              delete buttonEl.dataset.successRevertId;
+            }, 2500);
+            buttonEl.dataset.successRevertId = String(revertId);
+          }
         });
       });
     }

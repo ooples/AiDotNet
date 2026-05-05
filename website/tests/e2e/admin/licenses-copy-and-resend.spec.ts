@@ -2,9 +2,60 @@ import { test, expect, Route } from '@playwright/test';
 
 // Coverage for the per-row Copy and Resend controls added to /admin/licenses
 // in PR #1256. Each test stubs the side-effecting boundary it cares about
-// (clipboard for copy, the supabase functions endpoint for resend) so this
-// suite is safe to run against any seeded admin environment without
-// mutating real user state or sending real email.
+// (clipboard for copy, the supabase functions endpoint for resend, the
+// license_keys REST query for the row source) so this suite is safe to
+// run against any seeded admin environment without mutating real user
+// state or sending real email — including a freshly-seeded environment
+// with zero license rows. Closes review-comment #1256.hteW.
+
+/**
+ * Stubs the supabase REST query that loads the license_keys table so the
+ * /admin/licenses page is guaranteed to render at least one row regardless
+ * of the underlying DB state. Without this, `.copy-key-btn.first()` and
+ * `.resend-email-btn.first()` would never resolve on an empty environment
+ * and the tests would fail on locator timeout, masking the actual control
+ * behavior the suite is supposed to verify.
+ */
+async function stubLicenseRows(
+  page: import('@playwright/test').Page,
+): Promise<void> {
+  const cannedRow = {
+    id: 'fixture-license-id-0001',
+    license_key: 'aidn.fixturekey1234.fixturesig5678abcdef',
+    user_id: null,
+    customer_email: 'fixture@example.com',
+    product: 'aidotnet',
+    tier: 'community',
+    status: 'active',
+    activations_used: 0,
+    activations_limit: 1,
+    issued_at: new Date().toISOString(),
+    expires_at: null,
+    revoked_at: null,
+    organization_name: null,
+    profiles: { full_name: 'Fixture Owner', email: 'fixture@example.com' },
+  };
+  await page.route('**/rest/v1/license_keys**', async (route) => {
+    const method = route.request().method();
+    // Stub GETs (the read path that loads the table). For everything else
+    // — POST, PATCH, DELETE, OPTIONS preflight — let the request continue
+    // to the real network so a future test that exercises a mutation
+    // (suspend, revoke, reactivate) sees the genuine response and can
+    // assert on real failure modes. Synthesizing a 204 for non-GETs would
+    // mask those failures and produce false-green tests.
+    // Closes review-comment #1268.h3tm.
+    if (method !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([cannedRow]),
+    });
+  });
+}
+
 test.describe('Admin — licenses copy + resend buttons', () => {
   // ---------------------------------------------------------------------
   // Copy button
@@ -28,6 +79,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
       });
     });
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
 
     // Wait for the table to populate. The stat counter `#active-count`
@@ -104,6 +156,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
       await d.dismiss();
     });
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
     await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
 
@@ -168,6 +221,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     // making the request. Without this, the request never fires.
     page.on('dialog', (d) => d.accept());
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
     await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
 
@@ -188,7 +242,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     expect(stub.requests[0].body).toEqual({ license_id: expectedId });
   });
 
-  test('resend button shows "failed" + tooltip carrying the server message on a 422', async ({ page }) => {
+  test('resend button shows "failed" with the server message visible inline on a 422', async ({ page }) => {
     const stub = await stubResend(page, {
       status: 422,
       body: {
@@ -200,6 +254,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
 
     page.on('dialog', (d) => d.accept());
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
     await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
 
@@ -208,13 +263,166 @@ test.describe('Admin — licenses copy + resend buttons', () => {
 
     await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
 
-    // The handler embeds the server message into the title attribute on
-    // the inner <span>, so the admin sees WHICH failure category fired
-    // (no_recipient → 422) on hover without opening devtools.
-    const failedSpan = firstResend.locator('span[title]').first();
-    await expect(failedSpan).toHaveAttribute('title', /customer_email/i, { timeout: 5_000 });
+    // Server message is rendered inline as visible text inside a
+    // role="alert" span so it's accessible to keyboard, touch, and
+    // screen-reader users (review-comment #1268.h3tx / .h3t6 — the
+    // previous tooltip-only placement was inaccessible).
+    const alertText = firstResend.locator('[role="alert"]');
+    await expect(alertText).toBeVisible({ timeout: 5_000 });
+    await expect(alertText).toContainText('customer_email');
 
     expect(stub.requests).toHaveLength(1);
+  });
+
+  test('resend dismiss button restores the original label on click and is keyboard-accessible', async ({ page }) => {
+    // PR #1268 review-comment #h3uM: pin the new dismiss interaction.
+    // Before this PR, failure auto-reverted via setTimeout and there was
+    // no dismiss control; this test ensures (a) the dismiss button
+    // appears on failure, (b) clicking it restores the idle label,
+    // (c) the dismiss control is a real <button> (not a clickable
+    // <span>), and (d) it is reachable AND activatable from the
+    // keyboard (tab to focus, Enter or Space to activate) — review-
+    // comment #1268.iCxY/g/k/o flagged that earlier revisions only
+    // checked attributes, which would let a regression that broke
+    // keyboard reach (display:none focus, tabindex=-1, etc.) pass.
+    await stubResend(page, {
+      status: 500,
+      body: { success: false, error: 'send_failed', message: 'Resend provider returned 503.' },
+    });
+    page.on('dialog', (d) => d.accept());
+
+    await stubLicenseRows(page);
+    await page.goto('/admin/licenses/');
+    await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
+
+    const firstResend = page.locator('.resend-email-btn').first();
+    const originalLabel = (await firstResend.textContent() ?? '').trim();
+    await firstResend.click();
+
+    // Failure renders.
+    await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
+
+    // Dismiss control is a real <button> (not a clickable <span>) with
+    // a screen-reader-friendly aria-label. The dismiss is rendered as a
+    // SIBLING of the resend button (button-within-button is invalid
+    // markup), so locate it via the resend button's parent rather than
+    // as a descendant of the resend button.
+    const resendRow = firstResend.locator('xpath=..');
+    const dismiss = resendRow.locator('> button.resend-dismiss');
+    await expect(dismiss).toBeVisible();
+    await expect(dismiss).toHaveAttribute('type', 'button');
+    await expect(dismiss).toHaveAttribute('aria-label', /dismiss/i);
+
+    // Real keyboard reachability: tab from the resend button to the
+    // dismiss control (it should be the very next focusable element in
+    // DOM order since it's an immediate sibling). If anything along
+    // the way regresses (tabindex=-1, hidden, focusable: false), this
+    // expect-focus assertion fails and locks down the regression.
+    await firstResend.focus();
+    await page.keyboard.press('Tab');
+    await expect(dismiss).toBeFocused();
+
+    // Real keyboard activation: pressing Enter on a focused <button>
+    // fires a click event. Without a proper <button> element (e.g., if
+    // someone regresses back to a clickable <span>), Enter would do
+    // nothing and the failure state would remain — catching that is
+    // the whole point of this assertion.
+    await page.keyboard.press('Enter');
+    await expect(firstResend).not.toContainText(/failed/i, { timeout: 2_000 });
+    // The button text returns to whatever was originally there. The
+    // original label is short ("resend") so equality is fine.
+    const restored = (await firstResend.textContent() ?? '').trim();
+    expect(restored).toBe(originalLabel);
+
+    // Sanity: a second failure → dismiss cycle, this time using Space
+    // (the OTHER conventional button-activation key). A regression that
+    // bound a keypress handler to Enter only would fail here.
+    await firstResend.click();
+    await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
+    const dismiss2 = resendRow.locator('> button.resend-dismiss');
+    await expect(dismiss2).toBeVisible();
+    await dismiss2.focus();
+    await page.keyboard.press('Space');
+    await expect(firstResend).not.toContainText(/failed/i, { timeout: 2_000 });
+  });
+
+  test('failure → retry → success preserves the original idle label', async ({ page }) => {
+    // Closes review-comment #1268.pmQd: previous tests covered first-
+    // failure + dismiss, but not the retry path where the operator
+    // clicks resend AGAIN after a failure. The button's innerHTML at
+    // the moment of the second click is the failure markup, not the
+    // original idle label — so without the dataset.idleLabel cache,
+    // a successful second attempt would auto-revert to the stale
+    // failure label after 2.5s instead of the original "Resend" text.
+    // This test pins the dataset.idleLabel snapshot-once behaviour by
+    // failing once, dismissing, retrying with success, waiting for the
+    // 2.5s auto-revert, and asserting the button shows the original
+    // idle label.
+
+    // First call fails. Subsequent calls succeed. Use a per-request
+    // counter route handler to vary the response between calls without
+    // re-routing mid-test.
+    let callCount = 0;
+    await page.route('**/functions/v1/admin-resend-license-email**', async (route: Route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      callCount += 1;
+      if (callCount === 1) {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: false,
+            error: 'send_failed',
+            message: 'Resend provider returned 503.',
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true }),
+        });
+      }
+    });
+    page.on('dialog', (d) => d.accept());
+
+    await stubLicenseRows(page);
+    await page.goto('/admin/licenses/');
+    await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
+
+    const firstResend = page.locator('.resend-email-btn').first();
+    const originalLabel = (await firstResend.textContent() ?? '').trim();
+    const resendRow = firstResend.locator('xpath=..');
+
+    // Click 1 — server returns 500, button shows "failed".
+    await firstResend.click();
+    await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
+
+    // Dismiss the failure to clear the markup before retrying.
+    const dismiss = resendRow.locator('> button.resend-dismiss');
+    await expect(dismiss).toBeVisible();
+    await dismiss.click();
+    await expect(firstResend).not.toContainText(/failed/i, { timeout: 2_000 });
+
+    // Click 2 — server returns 200, button shows "sent" then auto-
+    // reverts after 2.5s. The CRITICAL assertion is the post-revert
+    // label: must equal the ORIGINAL idle label (cached on dataset),
+    // not the stale failure markup.
+    await firstResend.click();
+    await expect(firstResend).toContainText(/sent/i, { timeout: 5_000 });
+
+    // Wait past the auto-revert window (2.5s + a small buffer for
+    // DOM repaint / event-loop slippage on slow CI runners).
+    await page.waitForTimeout(3_000);
+
+    const restored = (await firstResend.textContent() ?? '').trim();
+    expect(restored).toBe(originalLabel);
+    // No failure markup leaks through.
+    await expect(firstResend).not.toContainText(/failed/i);
+    expect(callCount).toBe(2);
   });
 
   test('resend button makes no request when the admin cancels the confirm dialog', async ({ page }) => {
@@ -223,6 +431,8 @@ test.describe('Admin — licenses copy + resend buttons', () => {
       // Same preflight filter as stubResend — without it, a CORS OPTIONS
       // request from the browser would set invoked=true even when the
       // user dismissed the confirm and the actual POST never fired.
+      // Stub functions endpoint preflights with 204 so we never count
+      // them; this is the resend endpoint, not the rest/v1 stub.
       if (route.request().method() !== 'POST') {
         await route.fulfill({ status: 204 });
         return;
@@ -235,6 +445,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     // short-circuit and never enqueue a network call.
     page.on('dialog', (d) => d.dismiss());
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
     await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
 
