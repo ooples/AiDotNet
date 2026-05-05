@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -211,10 +212,10 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                 InitialLearningRate = 1e-3,
                 Beta2 = 0.98,
                 Epsilon = 1e-9,
-                LearningRateScheduler = new LearningRateSchedulers.NoamSchedule(
+                LearningRateScheduler = new NoamSchedule(
                     modelDimension: _transformerArchitecture.ModelDimension,
                     warmupSteps: _transformerArchitecture.WarmupSteps),
-                SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             });
     }
 
