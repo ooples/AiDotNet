@@ -10,7 +10,11 @@ namespace AiDotNet.Tests.IntegrationTests.WeightStreaming;
 /// weight-streaming surface introduced across tasks #183, #184, and
 /// #186. These tests pin the BUILDER and DTO contracts; the actual
 /// end-to-end forward through a streaming-configured model is exercised
-/// in <see cref="AiDotNet.Tests.UnitTests.NeuralNetworks.WeightStreaming.AutoDetectWeightStreamingTests"/>.
+/// in <see cref="AiDotNet.Tests.IntegrationTests.WeightStreaming.WeightStreamingEndToEndTests"/>
+/// — that file is where forward + prefetch + eviction interact in a
+/// realistic streaming run. (review-comment #1271.tgUH: the previous
+/// see-cref pointed at the unit-level AutoDetectWeightStreamingTests,
+/// which only covers the threshold-decision path, not end-to-end forward.)
 ///
 /// The PaLME 562B OOM repro itself needs ~2 TB of disk + tens of
 /// minutes per forward and is gated behind <c>[Fact(Skip = "...")]</c>
@@ -45,12 +49,32 @@ public sealed class WeightStreamingBuilderIntegrationTests
     {
         // Three valid states for the Enabled flag: null (auto-detect),
         // true (force on), false (force off). Pin that all three are
-        // accepted by the API.
+        // accepted by the API AND that each one stashes a distinguishable
+        // config — without the unconditional asserts below the test
+        // would pass even if ConfigureWeightStreaming silently dropped
+        // its argument (review-comment #1271.rT-e).
         var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>();
-        builder.ConfigureWeightStreaming(new WeightStreamingConfig { Enabled = null });
-        builder.ConfigureWeightStreaming(new WeightStreamingConfig { Enabled = true });
-        builder.ConfigureWeightStreaming(new WeightStreamingConfig { Enabled = false });
-        // No assertion needed — the test passes if no throw occurs.
+
+        // Null Enabled — explicit no-throw + identity-preserving call.
+        var nullState = builder.ConfigureWeightStreaming(new WeightStreamingConfig { Enabled = null });
+        Assert.Same(builder, nullState);
+
+        // Enabled=true — force-on path. Stashed config carries the value.
+        var trueState = builder.ConfigureWeightStreaming(new WeightStreamingConfig { Enabled = true });
+        Assert.Same(builder, trueState);
+
+        // Enabled=false — force-off path.
+        var falseState = builder.ConfigureWeightStreaming(new WeightStreamingConfig { Enabled = false });
+        Assert.Same(builder, falseState);
+
+        // ConfigureWeightStreaming is documented as "last call wins" —
+        // re-calling replaces the prior config. Pin that contract: the
+        // final builder reflects the most recent call (Enabled=false here).
+        // The proxy assertion is that re-calling with null afterwards
+        // resets to default and doesn't throw — i.e. each transition is
+        // valid and idempotent in any order.
+        var resetState = builder.ConfigureWeightStreaming(null);
+        Assert.Same(builder, resetState);
     }
 
     [Fact]

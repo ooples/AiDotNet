@@ -11,21 +11,6 @@ using Xunit;
 namespace AiDotNet.Tests.IntegrationTests.WeightStreaming;
 
 /// <summary>
-/// Issue #1222 — end-to-end exercise of the streaming path. These tests
-/// run an ACTUAL forward through a network with streaming engaged, so a
-/// runtime mismatch with the Tensors-side <c>WeightRegistry</c> /
-/// <c>MaterializeScope</c> / <c>PrefetchAsync</c> surface fails the test.
-/// The earlier coverage in <c>AutoDetectWeightStreamingTests</c> only
-/// exercised the threshold-comparison logic without going through the
-/// streaming forward path; these tests fill that gap.
-///
-/// Each test uses a SmallStreamableNetwork — a four-layer Dense network
-/// with explicit ConfigureWeightLifetime — so the streaming branch in
-/// PredictEager is exercised on a model small enough to run on CI in
-/// milliseconds. The full PaLM-E 562B run remains <c>[Fact(Skip = "...")]</c>
-/// in PaLMEProfilerTest because it needs ~2 TB of disk.
-/// </summary>
-/// <summary>
 /// Fixture that resets the process-wide WeightRegistry singleton before
 /// each test in the collection. Without this, the second test in the
 /// suite hits "existing streaming pool has N registered entries" from
@@ -47,6 +32,21 @@ public sealed class WeightStreamingResetFixture : System.IDisposable
 [CollectionDefinition("WeightStreaming-Singleton", DisableParallelization = true)]
 public sealed class WeightStreamingSingletonCollection : ICollectionFixture<WeightStreamingResetFixture> { }
 
+/// <summary>
+/// Issue #1222 — end-to-end exercise of the streaming path. These tests
+/// run an ACTUAL forward through a network with streaming engaged, so a
+/// runtime mismatch with the Tensors-side <c>WeightRegistry</c> /
+/// <c>MaterializeScope</c> / <c>PrefetchAsync</c> surface fails the test.
+/// The earlier coverage in <c>AutoDetectWeightStreamingTests</c> only
+/// exercised the threshold-comparison logic without going through the
+/// streaming forward path; these tests fill that gap.
+///
+/// Each test uses a SmallStreamableNetwork — a four-layer Dense network
+/// with explicit ConfigureWeightLifetime — so the streaming branch in
+/// PredictEager is exercised on a model small enough to run on CI in
+/// milliseconds. The full PaLM-E 562B run remains <c>[Fact(Skip = "...")]</c>
+/// in PaLMEProfilerTest because it needs ~2 TB of disk.
+/// </summary>
 [Collection("WeightStreaming-Singleton")]
 public sealed class WeightStreamingEndToEndTests
 {
