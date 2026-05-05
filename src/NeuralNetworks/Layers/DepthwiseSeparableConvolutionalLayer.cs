@@ -571,9 +571,9 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
         int outH = (h - _kernelSize + 2 * _padding) / _stride + 1;
         int outW = (w - _kernelSize + 2 * _padding) / _stride + 1;
 
-        _depthwiseKernels = new Tensor<T>([_inputDepth, 1, _kernelSize, _kernelSize]);
-        _pointwiseKernels = new Tensor<T>([_outputDepth, _inputDepth, 1, 1]);
-        _biases = new Tensor<T>([_outputDepth]);
+        _depthwiseKernels = AllocateLazyWeight([_inputDepth, 1, _kernelSize, _kernelSize]);
+        _pointwiseKernels = AllocateLazyWeight([_outputDepth, _inputDepth, 1, 1]);
+        _biases = AllocateLazyWeight([_outputDepth]);
         InitializeParameters();
         RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);

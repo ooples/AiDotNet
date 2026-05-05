@@ -489,6 +489,50 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     }
 
     /// <summary>
+    /// Routes lazy-layer weight allocation through the streaming pool's
+    /// reservation-then-allocate path when this layer's parent network
+    /// has engaged weight streaming, falling back to a plain
+    /// <c>new Tensor&lt;T&gt;(shape)</c> otherwise. Set by
+    /// <c>NeuralNetworkBase&lt;T&gt;.ConfigureWeightLifetime</c> when it
+    /// engages streaming, propagated to layers iterated under
+    /// <c>Layers</c> + the composite-network override hooks.
+    /// </summary>
+    /// <remarks>
+    /// <para>Layers themselves don't track their parent network, so the
+    /// flag is mutated externally rather than read from a parent
+    /// reference. Internal setter so external code can't desync the
+    /// pool's accounting by enabling streaming on a layer whose parent
+    /// hasn't called Configure.</para>
+    /// </remarks>
+    internal bool UseStreamingAllocator { get; set; }
+
+    /// <summary>
+    /// Allocates a lazy-init weight tensor of the given shape, routing
+    /// through <see cref="WeightRegistry.AllocateStreaming{T}"/> when
+    /// <see cref="UseStreamingAllocator"/> is true (so the pool can
+    /// pre-evict competing weights to disk before this allocation hits
+    /// the GC heap), or via the caller's <paramref name="nonStreamingAllocator"/>
+    /// fallback when streaming is off. The fallback defaults to plain
+    /// <c>new Tensor&lt;T&gt;(shape)</c>; layers like
+    /// <see cref="DenseLayer{T}"/> that already use
+    /// <c>TensorAllocator.Rent</c> for weights pass that delegate so
+    /// the arena fast-path is preserved when streaming is inactive.
+    /// </summary>
+    /// <remarks>
+    /// <para>Lazy layers' <see cref="OnFirstForward"/> overrides should
+    /// call this instead of <c>new Tensor&lt;T&gt;(shape)</c> for any
+    /// trainable weight large enough to matter for peak-GC-heap
+    /// occupancy (Q/K/V/O matrices, dense kernels, conv kernels,
+    /// embeddings). Tiny scratch tensors don't need to route through
+    /// the pool — the lookup overhead exceeds the benefit.</para>
+    /// </remarks>
+    protected Tensor<T> AllocateLazyWeight(int[] shape, Func<Tensor<T>>? nonStreamingAllocator = null)
+    {
+        if (UseStreamingAllocator) return WeightRegistry.AllocateStreaming<T>(shape);
+        return nonStreamingAllocator?.Invoke() ?? new Tensor<T>(shape);
+    }
+
+    /// <summary>
     /// Convenience helper for deferred-shape layers: invokes <see cref="OnFirstForward"/>
     /// (if shapes are not yet resolved) followed by <see cref="EnsureInitialized"/>. Lazy
     /// layer Forward overrides should call this instead of <see cref="EnsureInitialized"/>

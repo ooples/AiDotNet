@@ -337,7 +337,13 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             if (_embeddingInitialized) return;
 
-            _embeddingTensor = new Tensor<T>([_vocabularySize, _embeddingDimension]);
+            // Streaming-aware allocation: PaLM-E-scale models have
+            // vocab × embed embedding matrices in the multi-GB range
+            // (e.g. 256K × 8192 fp32 = 8 GB). Routing through
+            // AllocateLazyWeight lets the streaming pool pre-evict
+            // before the GC byte[] lands. Falls back to plain
+            // new Tensor<T>(shape) for non-streaming models.
+            _embeddingTensor = AllocateLazyWeight([_vocabularySize, _embeddingDimension]);
             InitializeParameters();
             RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
             _embeddingInitialized = true;

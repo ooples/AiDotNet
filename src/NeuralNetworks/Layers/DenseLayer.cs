@@ -432,8 +432,16 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             int inputSize = InputShape[0];
             int outputSize = OutputShape[0];
 
-            _weights = TensorAllocator.Rent<T>([inputSize, outputSize]);
-            _biases = TensorAllocator.Rent<T>([outputSize]);
+            // Streaming-aware allocation: when the parent network has
+            // engaged streaming, route through WeightRegistry.AllocateStreaming
+            // so the pool can pre-evict competing weights to disk before
+            // this allocation hits the GC heap. Otherwise preserve the
+            // existing arena-allocator fast path so non-streaming models
+            // don't pay the pool-lookup overhead.
+            int[] wShape = [inputSize, outputSize];
+            int[] bShape = [outputSize];
+            _weights = AllocateLazyWeight(wShape, () => TensorAllocator.Rent<T>(wShape));
+            _biases = AllocateLazyWeight(bShape, () => TensorAllocator.Rent<T>(bShape));
 
             // Initialize using strategy or default
             if (InitializationStrategy is not null)

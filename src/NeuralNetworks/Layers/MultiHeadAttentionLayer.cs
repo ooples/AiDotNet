@@ -507,11 +507,23 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         {
             if (_isInitialized) return;
 
-            _queryWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
-            _keyWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
-            _valueWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
-            _outputWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
-            _outputBias = new Tensor<T>([_embeddingDimension]);
+            // Route lazy-weight allocation through AllocateLazyWeight: when
+            // streaming is engaged on the parent network, this calls
+            // WeightRegistry.AllocateStreaming which pre-evicts competing
+            // pool entries to disk BEFORE the new GC byte[] lands —
+            // bounding peak GC heap by the pool budget. For PaLM-E 562B's
+            // 64 MHA layers × 4×2.1 GB Q/K/V/O matrices, this is the
+            // difference between 134 GB and ~budget-sized peak. When
+            // streaming is off (small/medium models), falls back to plain
+            // new Tensor<T>(shape) with no overhead.
+            // Output bias is small (embed-dim sized) — also routes through
+            // AllocateLazyWeight for consistency, but the eviction step is
+            // a near-no-op for it.
+            _queryWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _keyWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _valueWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _outputWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _outputBias = AllocateLazyWeight([_embeddingDimension]);
 
             if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
             {

@@ -884,20 +884,20 @@ public partial class LSTMLayer<T> : LayerBase<T>
                     "LSTMLayer.EnsureInitialized called before _inputSize was resolved. " +
                     "OnFirstForward must run first.");
 
-            _weightsFi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-            _weightsIi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-            _weightsCi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
-            _weightsOi = new Tensor<T>(new int[] { _hiddenSize, _inputSize });
+            _weightsFi = AllocateLazyWeight([_hiddenSize, _inputSize]);
+            _weightsIi = AllocateLazyWeight([_hiddenSize, _inputSize]);
+            _weightsCi = AllocateLazyWeight([_hiddenSize, _inputSize]);
+            _weightsOi = AllocateLazyWeight([_hiddenSize, _inputSize]);
 
-            _weightsFh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-            _weightsIh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-            _weightsCh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
-            _weightsOh = new Tensor<T>(new int[] { _hiddenSize, _hiddenSize });
+            _weightsFh = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+            _weightsIh = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+            _weightsCh = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
+            _weightsOh = AllocateLazyWeight([_hiddenSize, _hiddenSize]);
 
-            _biasF = new Tensor<T>(new int[] { _hiddenSize });
-            _biasI = new Tensor<T>(new int[] { _hiddenSize });
-            _biasC = new Tensor<T>(new int[] { _hiddenSize });
-            _biasO = new Tensor<T>(new int[] { _hiddenSize });
+            _biasF = AllocateLazyWeight([_hiddenSize]);
+            _biasI = AllocateLazyWeight([_hiddenSize]);
+            _biasC = AllocateLazyWeight([_hiddenSize]);
+            _biasO = AllocateLazyWeight([_hiddenSize]);
 
             InitializeWeights();
 

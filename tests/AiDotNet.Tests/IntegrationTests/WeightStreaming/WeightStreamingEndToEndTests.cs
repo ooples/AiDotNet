@@ -255,6 +255,59 @@ public sealed class WeightStreamingEndToEndTests
     }
 
     [Fact]
+    public void Streaming_LazyLayer_RoutesAllocationThroughPool_OnFirstForward()
+    {
+        // The PaLM-E fix: when streaming is engaged BEFORE a lazy
+        // layer's first forward, the layer's OnFirstForward
+        // (DenseLayer here) should call WeightRegistry.AllocateStreaming
+        // — recording a reservation in the pool that an outstanding
+        // get-then-register cycle would observe. This test pins the
+        // wiring: configure streaming on a fresh network whose layers
+        // have NOT yet materialized weights, run a forward that
+        // triggers OnFirstForward, and verify the pool's ResidentBytes
+        // reflects the new weights.
+        //
+        // Without the layer-side migration to AllocateLazyWeight, the
+        // layers would have allocated via plain new Tensor<T> + the
+        // post-forward RefreshWeightRegistry would still add them to
+        // the pool, so ResidentBytes would still be > 0. To prove the
+        // migration is wiring through, we additionally check that
+        // UseStreamingAllocator was set on each layer by Configure.
+        var net = new SmallStreamableNetwork();
+        // No warm-up: weights are still 0×0 placeholders.
+        net.ConfigureWeightLifetimeForTest(new GpuOffloadOptions());
+        Assert.True(net.IsWeightStreamingActive);
+        Assert.True(net.LayersForTest().Count > 0);
+        foreach (var layer in net.LayersForTest())
+        {
+            if (layer is LayerBase<float> lb)
+            {
+                Assert.True(lb.UseStreamingAllocatorForTest(),
+                    $"Layer {lb.GetType().Name} should have UseStreamingAllocator=true "
+                    + "after ConfigureWeightLifetime engages streaming. If false, the "
+                    + "layer's OnFirstForward will fall back to plain new Tensor<T> "
+                    + "and the PaLM-E peak-GC-heap fix won't fire.");
+            }
+        }
+
+        // First forward materializes weights via OnFirstForward →
+        // EnsureInitialized → AllocateLazyWeight → AllocateStreaming
+        // (because UseStreamingAllocator is true). Pool now tracks
+        // the just-allocated weights.
+        var input = new Tensor<float>([1, 8]);
+        for (int i = 0; i < 8; i++) input[0, i] = (float)(i + 1) * 0.5f;
+        _ = net.Predict(input);
+
+        long resident = net.WeightStreamingResidentBytes;
+        Assert.True(resident > 0,
+            $"Streaming pool ResidentBytes should be > 0 after lazy first-forward, "
+            + $"but is {resident}. This means OnFirstForward → AllocateLazyWeight is "
+            + "not routing through the streaming pool — UseStreamingAllocator may not "
+            + "be propagating from NeuralNetworkBase to the layers, or the post-forward "
+            + "RefreshWeightRegistry hook isn't firing.");
+    }
+
+    [Fact]
     public void Streaming_ConfigureWeightLifetime_ActuallyTracksWeightsInPool()
     {
         // Pre-audit (commit 190801e1b and earlier), this test would have
@@ -307,6 +360,10 @@ public sealed class WeightStreamingEndToEndTests
 // thin delegating wrapper lets the test call site stay readable.
 internal static class StreamableNetworkTestHelpers
 {
+    public static System.Collections.Generic.IList<ILayer<float>> LayersForTest(this NeuralNetworkBase<float> net)
+        => net.Layers;
+    public static bool UseStreamingAllocatorForTest(this LayerBase<float> layer)
+        => layer.UseStreamingAllocator;
     public static void ConfigureWeightLifetimeForTest(this NeuralNetworkBase<float> net, GpuOffloadOptions options)
     {
         net.ConfigureWeightLifetime(options);

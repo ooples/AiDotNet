@@ -3540,9 +3540,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected void RegisterTrainableTensorsWithWeightRegistry()
     {
+        // Propagate the streaming-allocator hint to every layer BEFORE
+        // we walk their tensors. When a lazy layer's OnFirstForward later
+        // calls AllocateLazyWeight, it'll route through
+        // WeightRegistry.AllocateStreaming so the pool pre-evicts
+        // competing weights to disk before the new GC byte[] lands.
+        // Without this propagation, layers default to plain
+        // `new Tensor<T>(shape)` and the peak-GC-heap reduction the
+        // streaming pool was built for never fires for lazy models like
+        // PaLM-E. _registrationLifetime is set to Streaming or GpuOffload;
+        // the GpuOffload path doesn't need pool pre-eviction (allocation
+        // goes to the pinned-host allocator, not the GC heap), so we
+        // only enable the streaming-allocator hint for Streaming.
+        bool useStreamingAlloc = _registrationLifetime == WeightLifetime.Streaming;
+
         for (int i = 0; i < Layers.Count; i++)
         {
             if (Layers[i] is not LayerBase<T> layer) continue;
+            layer.UseStreamingAllocator = useStreamingAlloc;
             foreach (var tensor in layer.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
@@ -3569,6 +3584,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
+            extra.UseStreamingAllocator = useStreamingAlloc;
             foreach (var tensor in extra.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
@@ -3810,7 +3826,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     internal void TryAutoEnableWeightStreaming()
     {
         if (_streamingAutoDetectFinalized) return;
-        if (_weightLifetimeConfigured) { _streamingAutoDetectFinalized = true; return; }
+        if (_weightLifetimeConfigured)
+        {
+            // User opted in explicitly via ConfigureWeightLifetime. Catch
+            // up the registry with any lazy weights that materialized
+            // since then — without this, layers whose OnFirstForward
+            // allocated via AllocateLazyWeight + AllocateStreaming would
+            // hold their reservations forever (RegisterWeight never
+            // runs on them, so the bytes stay on the GC heap and the
+            // pool's _reservedBytes drifts up). Idempotent: tensors
+            // already registered are skipped by the Length==0 / handle>=0
+            // gates inside RegisterTrainableTensorsWithWeightRegistry.
+            //
+            // Only finalize auto-detect AFTER first forward — otherwise
+            // the pre-forward call (from EnsureLayersInitialized) would
+            // latch the flag before lazy layers materialize, and the
+            // post-forward retry hook at line 2747 would early-return
+            // on `if (_streamingAutoDetectFinalized) return`, skipping
+            // the registry refresh that picks up the just-materialized
+            // weights. Tests
+            // Streaming_LazyLayer_RoutesAllocationThroughPool_OnFirstForward
+            // pin this flow; without the gate, ResidentBytes stays 0
+            // for explicitly-configured-streaming + lazy-layer flows.
+            if (_firstForwardCompleted)
+            {
+                RefreshWeightRegistry();
+                _streamingAutoDetectFinalized = true;
+            }
+            return;
+        }
         if (_streamingAutoDetectDisabled) { _streamingAutoDetectFinalized = true; return; }
 
         long paramCount;

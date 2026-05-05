@@ -299,8 +299,8 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int outH = (h + 2 * Padding - KernelSize) / Stride + 1;
         int outW = (w + 2 * Padding - KernelSize) / Stride + 1;
 
-        _kernels = new Tensor<T>([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
-        _biases = new Tensor<T>([OutputChannels]);
+        _kernels = AllocateLazyWeight([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
+        _biases = AllocateLazyWeight([OutputChannels]);
         InitializeWeights();
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);

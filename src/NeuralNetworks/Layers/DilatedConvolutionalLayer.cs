@@ -499,8 +499,8 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         int outH = (h + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
         int outW = (w + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
 
-        _kernels = new Tensor<T>([_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = new Tensor<T>([_outputDepth]);
+        _kernels = AllocateLazyWeight([_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
+        _biases = AllocateLazyWeight([_outputDepth]);
         InitializeWeights();
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);

@@ -835,8 +835,18 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
 
             // Allocate kernels and biases with proper shapes before initializing weights.
             // The lazy path sets _kernels to [0,0,0,0], so we must resize here.
-            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _biases = new Tensor<T>([OutputDepth]);
+            // Streaming-aware allocation: kernels are the dominant memory
+            // contributor for vision backbones (e.g. ResNet50: 25M params,
+            // largely conv kernels). When the parent network has engaged
+            // streaming, route through AllocateLazyWeight so the pool
+            // pre-evicts before the new GC byte[] lands. The non-streaming
+            // fallback preserves the existing arena fast-path
+            // (TensorAllocator.RentUninitialized) for kernels and the
+            // plain Tensor ctor for the small biases tensor.
+            int[] kShape = [OutputDepth, InputDepth, KernelSize, KernelSize];
+            int[] bShape = [OutputDepth];
+            _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentUninitialized<T>(kShape));
+            _biases = AllocateLazyWeight(bShape);
 
             // Initialize weights (fills _kernels and _biases with He-uniform values)
             InitializeWeights();
