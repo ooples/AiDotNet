@@ -85,23 +85,65 @@ const base = import.meta.env.BASE_URL;
       // Search → code flow (Supabase rewrites hash into ?error after the
       // PKCE token swap). They're different protocol layers and the
       // fields within one shouldn't mix with the fields of another.
-      const hashError = hash.get('error');
-      if (hashError) {
+      // Treat any of `error`, `error_code`, `error_description` as a
+      // failure marker — some IdP / Supabase code paths omit `error`
+      // and return only `error_code` (e.g. `?error_code=otp_expired`)
+      // or `error_description` alone. The PR description's contract is
+      // "surface every URL-level OAuth failure", so we can't gate on
+      // `error` being present or those callbacks fall through to the
+      // 10-second timeout with no actionable feedback.
+      const hashHasFailure =
+        hash.get('error') !== null ||
+        hash.get('error_code') !== null ||
+        hash.get('error_description') !== null;
+      if (hashHasFailure) {
         return {
-          error: hashError,
+          error: hash.get('error') ?? undefined,
           errorCode: hash.get('error_code') ?? undefined,
           errorDescription: hash.get('error_description') ?? undefined,
         };
       }
-      const searchError = search.get('error');
-      if (searchError) {
+      const searchHasFailure =
+        search.get('error') !== null ||
+        search.get('error_code') !== null ||
+        search.get('error_description') !== null;
+      if (searchHasFailure) {
         return {
-          error: searchError,
+          error: search.get('error') ?? undefined,
           errorCode: search.get('error_code') ?? undefined,
           errorDescription: search.get('error_description') ?? undefined,
         };
       }
       return null;
+    }
+
+    /**
+     * Reduces a user-supplied `?redirect=` value to a same-origin path.
+     *
+     * Without sanitization, an attacker can craft a phishing link of the
+     * form `/auth/callback?redirect=https://attacker.example/fake-account`.
+     * The user signs in successfully, the script assigns
+     * `window.location.href = '<attacker URL>'`, and the browser
+     * navigates off-domain — but the user just typed their password into
+     * what looked like our legitimate sign-in flow. The attacker's
+     * landing page can then mimic our /account/ UI and harvest tokens
+     * or trigger follow-up actions.
+     *
+     * Strategy:
+     *   - Reject anything that doesn't start with `/` (absolute or
+     *     protocol-relative URLs go elsewhere by construction).
+     *   - Reject `//` (protocol-relative — `//evil.example` resolves to
+     *     `https://evil.example`).
+     *   - Fall back to the default `${base}account/` for empty / null
+     *     / disallowed input.
+     */
+    function sanitizeRedirect(raw: string | null): string {
+      const fallback = `${base}account/`;
+      if (!raw) return fallback;
+      // Same-origin paths only: must start with a single '/' (not '//').
+      if (raw.startsWith('//')) return fallback;
+      if (!raw.startsWith('/')) return fallback;
+      return raw;
     }
 
     function showFatalError(headline: string, details: string, hint?: string) {
@@ -115,16 +157,30 @@ const base = import.meta.env.BASE_URL;
       if (spinner) spinner.classList.add('hidden');
 
       if (errorDiv) {
-        // Build a structured error block so the message is readable AND the
-        // technical details are visible for support / debugging. Browsers
-        // will render the <pre> block in a monospace font so error_description
-        // strings (which often include URLs and config keys) stay scannable.
+        // Build a structured error block. Browsers render the <pre>
+        // block in a monospace font so error_description strings (which
+        // often include URLs and config keys) stay scannable.
+        //
+        // Phishing surface: the IdP-controlled `details` text is
+        // user-controlled (anyone can craft /auth/callback?error=...) and
+        // reflecting it verbatim on a first-party sign-in page lets an
+        // attacker write branded support-scam messages on our domain.
+        // Hide the raw provider text behind a <details> disclosure
+        // ("Show technical details") so the default sign-in-failed page
+        // shows only our mapped headline + hint copy. HTML-escaping is
+        // still applied (safe()) so XSS is blocked even when expanded.
         const safe = (s: string) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] ?? c));
         const hintHtml = hint ? `<p class="mt-3 text-xs text-slate-600 dark:text-slate-400">${safe(hint)}</p>` : '';
+        const detailsHtml = details
+          ? `<details class="mt-3 text-xs text-slate-600 dark:text-slate-400">
+               <summary class="cursor-pointer select-none">Show technical details</summary>
+               <pre class="mt-2 whitespace-pre-wrap break-words bg-red-100/40 dark:bg-red-900/30 p-2 rounded">${safe(details)}</pre>
+             </details>`
+          : '';
         errorDiv.innerHTML = `
           <p class="font-semibold text-red-700 dark:text-red-300">${safe(headline)}</p>
-          <pre class="mt-2 text-xs whitespace-pre-wrap break-words bg-red-100/40 dark:bg-red-900/30 p-2 rounded">${safe(details)}</pre>
           ${hintHtml}
+          ${detailsHtml}
           <p class="mt-3"><a href="${base}login/" class="underline font-medium">Back to login</a></p>
         `;
         errorDiv.classList.remove('hidden');
@@ -141,8 +197,11 @@ const base = import.meta.env.BASE_URL;
         // containing a literal '%' (e.g. a value previously encoded as
         // %25 → '%' that decodes once but then trips a second decode)
         // and (b) corrupt literal '+' characters from the IdP message.
+        // urlError.error can now be undefined (parser accepts callbacks
+        // that send only error_code or error_description). Skip the
+        // `error: …` line in that case rather than emit `error: undefined`.
         const detailLines = [
-          `error: ${urlError.error}`,
+          urlError.error ? `error: ${urlError.error}` : null,
           urlError.errorCode ? `error_code: ${urlError.errorCode}` : null,
           urlError.errorDescription ? `error_description: ${urlError.errorDescription}` : null,
         ].filter(Boolean) as string[];
@@ -188,7 +247,7 @@ const base = import.meta.env.BASE_URL;
 
         if (data.session) {
           const params = new URLSearchParams(window.location.search);
-          const redirectTo = params.get('redirect') || `${base}account/`;
+          const redirectTo = sanitizeRedirect(params.get('redirect'));
           window.location.href = redirectTo;
           return;
         }
@@ -203,11 +262,19 @@ const base = import.meta.env.BASE_URL;
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === 'SIGNED_IN' && session) {
+          // Accept both SIGNED_IN and INITIAL_SESSION. Supabase emits
+          // INITIAL_SESSION right after the client constructor finishes
+          // loading the session from storage; if the prior getSession()
+          // returned null because the storage read hadn't completed yet,
+          // INITIAL_SESSION is the event that fires once it has, and
+          // ignoring it would let valid sessions fall through to the
+          // 10s timeout. (Documented:
+          // supabase.com/docs/reference/javascript/auth-onauthstatechange.)
+          if (session && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
             subscription.unsubscribe();
             if (timeoutId !== undefined) clearTimeout(timeoutId);
             const params = new URLSearchParams(window.location.search);
-            const redirectTo = params.get('redirect') || `${base}account/`;
+            const redirectTo = sanitizeRedirect(params.get('redirect'));
             window.location.href = redirectTo;
           }
         });
@@ -235,11 +302,18 @@ const base = import.meta.env.BASE_URL;
         // useful fields instead. Error.message is the readable text;
         // a fallback JSON.stringify catches non-Error throws (some
         // Supabase SDK paths reject with a plain object).
+        // JSON.stringify can return `undefined` (not a string) when given
+        // a top-level symbol, function, or undefined value — the type is
+        // string|undefined, so we coalesce to String(err) when it does.
+        // The try/catch covers circular refs which throw TypeError.
         let detail: string;
         if (err instanceof Error) {
           detail = err.message || err.toString();
         } else {
-          try { detail = JSON.stringify(err); }
+          try {
+            const json = JSON.stringify(err);
+            detail = json ?? String(err);
+          }
           catch { detail = String(err); }
         }
         showFatalError('An unexpected error occurred.', detail);

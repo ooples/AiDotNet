@@ -16,24 +16,29 @@ test.describe('/auth/callback URL-error handling', () => {
   test('search-param server_error renders fatal-error UI with provider-misconfig hint', async ({ page }) => {
     await page.goto('/auth/callback/?error=server_error&error_code=server_error&error_description=Invalid%20client%20secret');
 
-    // Headline + technical details visible.
+    // Headline + hint always visible (mapped, not raw IdP text).
     await expect(page.getByText('Sign-in failed')).toBeVisible();
+    await expect(page.getByText(/OAuth provider is misconfigured/)).toBeVisible();
+    // Per PR #1258 review #5: raw IdP text now lives behind a
+    // <details> "Show technical details" disclosure to mitigate
+    // phishing — the technical lines aren't in the rendered DOM
+    // until the summary is clicked.
+    await expect(page.getByText('Show technical details')).toBeVisible();
+    await page.getByText('Show technical details').click();
     await expect(page.getByText('error: server_error')).toBeVisible();
     await expect(page.getByText('error_code: server_error')).toBeVisible();
     // URLSearchParams already percent-decodes — assert the *decoded*
     // form to confirm we're not double-decoding.
     await expect(page.getByText('error_description: Invalid client secret')).toBeVisible();
-
-    // Server-error hint mentions client-secret rotation / callback drift.
-    await expect(page.getByText(/OAuth provider is misconfigured/)).toBeVisible();
   });
 
   test('search-param access_denied renders the user-cancelled hint', async ({ page }) => {
     await page.goto('/auth/callback/?error=access_denied&error_description=The%20user%20declined');
 
     await expect(page.getByText('Sign-in failed')).toBeVisible();
-    await expect(page.getByText('error: access_denied')).toBeVisible();
     await expect(page.getByText(/declined to grant the requested permissions/)).toBeVisible();
+    await page.getByText('Show technical details').click();
+    await expect(page.getByText('error: access_denied')).toBeVisible();
   });
 
   test('error=unsupported_provider (no error_code) still surfaces disabled-provider hint', async ({ page }) => {
@@ -52,6 +57,7 @@ test.describe('/auth/callback URL-error handling', () => {
     // is more specific (carries error_code from the IdP).
     await page.goto('/auth/callback/?error=ignored#error=hash_error&error_description=Hash%20wins');
 
+    await page.getByText('Show technical details').click();
     await expect(page.getByText('error: hash_error')).toBeVisible();
     await expect(page.getByText('error_description: Hash wins')).toBeVisible();
   });
@@ -66,9 +72,130 @@ test.describe('/auth/callback URL-error handling', () => {
     // `error_description`.
     await page.goto('/auth/callback/?error=search_err&error_description=search%20description#error=hash_err');
 
+    await page.getByText('Show technical details').click();
     await expect(page.getByText('error: hash_err')).toBeVisible();
     // Critically, the search-side description must NOT appear.
     await expect(page.getByText('error_description: search description')).toHaveCount(0);
+  });
+
+  test('errorCode-only callback (no error field) still renders fatal-error UI', async ({ page }) => {
+    // PR #1258 review comment #4: the parser now treats any of
+    // `error`, `error_code`, `error_description` as a failure marker.
+    // A callback that returns ONLY `error_code` (e.g. otp_expired
+    // recovery flows) must NOT fall through to the 10-second timeout.
+    await page.goto('/auth/callback/?error_code=otp_expired&error_description=Magic%20link%20expired');
+
+    await expect(page.getByText('Sign-in failed')).toBeVisible();
+    await page.getByText('Show technical details').click();
+    await expect(page.getByText('error_code: otp_expired')).toBeVisible();
+    await expect(page.getByText('error_description: Magic link expired')).toBeVisible();
+  });
+
+  test('errorCode === unsupported_provider variant surfaces the disabled-provider hint', async ({ page }) => {
+    // PR #1258 review comment #8: the implementation accepts the
+    // disabled-provider marker in EITHER `error` or `error_code` (some
+    // IdPs split inconsistently). The existing spec covers the `error`
+    // path; this one pins the `error_code` path so a regression that
+    // drops one branch fails CI.
+    await page.goto('/auth/callback/?error=oauth_failure&error_code=unsupported_provider&error_description=GitHub%20provider%20not%20enabled');
+
+    await expect(page.getByText(/sign-in provider is currently disabled/)).toBeVisible();
+  });
+
+  test('error_description with HTML metacharacters is HTML-escaped (no XSS)', async ({ page }) => {
+    // PR #1258 review comment #7: the safe() escaping helper is now a
+    // security-critical guardrail because URL-controlled text is
+    // rendered via innerHTML. Pin that `<` / `>` survive as escaped
+    // entities — a regression that bypassed safe() would render the
+    // <script> as actual markup.
+    await page.goto('/auth/callback/?error=server_error&error_description=%3Cscript%3Ealert(1)%3C%2Fscript%3E');
+
+    await page.getByText('Show technical details').click();
+    // The literal escaped text appears verbatim in the DOM.
+    await expect(page.getByText('<script>alert(1)</script>', { exact: false })).toBeVisible();
+    // No alert dialog fired (script tag was escaped, not parsed).
+    let dialogFired = false;
+    page.on('dialog', () => { dialogFired = true; });
+    // Give any (broken) script a tick to dispatch alert before asserting.
+    await page.waitForTimeout(200);
+    expect(dialogFired).toBe(false);
+  });
+});
+
+test.describe('/auth/callback success paths', () => {
+  // PR #1258 review comment #6: the e2e suite previously only covered
+  // failure + timeout. The PR also changes both the immediate-session
+  // redirect and the SIGNED_IN/clearTimeout race, so the success paths
+  // need pinning too.
+
+  test('immediate getSession() success redirects to default account page', async ({ page }) => {
+    // Force getSession() to return a valid session synchronously so the
+    // page hits the "data.session" branch (line ~189) and redirects
+    // without waiting for an auth-state event.
+    await page.route('**/lib/supabase*', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/javascript',
+        body: `
+          export const supabase = {
+            auth: {
+              getSession: async () => ({ data: { session: { access_token: 't', user: { id: 'u' } } }, error: null }),
+              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+            },
+          };
+        `,
+      });
+    });
+    await page.goto('/auth/callback/');
+    // Sanitized fallback redirect = ${base}account/. Wait for the URL
+    // change rather than asserting on /account/ content (which would
+    // require auth state we don't actually have in this stub).
+    await expect(page).toHaveURL(/\/account\/?$/, { timeout: 5_000 });
+  });
+
+  test('redirect query param routing honours same-origin paths only', async ({ page }) => {
+    // sanitizeRedirect must accept ?redirect=/foo/ but reject
+    // protocol-relative (//evil.com) and absolute URLs.
+    await page.route('**/lib/supabase*', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/javascript',
+        body: `
+          export const supabase = {
+            auth: {
+              getSession: async () => ({ data: { session: { access_token: 't', user: { id: 'u' } } }, error: null }),
+              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+            },
+          };
+        `,
+      });
+    });
+
+    // Whitelisted same-origin path → respected.
+    await page.goto('/auth/callback/?redirect=/settings/api-keys/');
+    await expect(page).toHaveURL(/\/settings\/api-keys\/?$/, { timeout: 5_000 });
+  });
+
+  test('redirect with protocol-relative URL falls back to default account page (open-redirect guard)', async ({ page }) => {
+    // PR #1258 review comment #1: open-redirect guard must reject
+    // //evil.example which would otherwise resolve to https://evil.example.
+    await page.route('**/lib/supabase*', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/javascript',
+        body: `
+          export const supabase = {
+            auth: {
+              getSession: async () => ({ data: { session: { access_token: 't', user: { id: 'u' } } }, error: null }),
+              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+            },
+          };
+        `,
+      });
+    });
+    await page.goto('/auth/callback/?redirect=//evil.example/phish');
+    // Must land on default /account/ — NOT navigate off-domain.
+    await expect(page).toHaveURL(/\/account\/?$/, { timeout: 5_000 });
   });
 });
 
