@@ -246,18 +246,36 @@ public class TransformerEndToEndIntegrationTests
 
         var arch = MakeArch(vocab: vocab, ctxLen: ctxLen, dModel: 8, dFf: 16, layers: 1, heads: 2);
 
-        // Default-construction path
+        // Default-construction path: Adam with the Vaswani 2017 hyperparameters
+        // the ctor constructs internally (β₁=0.9, β₂=0.98, ε=1e-9, lr=1e-3).
         var defaultTransformer = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
-        // Explicit-Adam path with PyTorch default LR
+        // Explicit-Adam path. Mirror the ctor's exact hyperparameters so this
+        // test reflects "user constructs the same Adam by hand vs. user lets
+        // the ctor build it" — NOT "ctor's Vaswani Adam vs library-default
+        // Adam." The latter is a different (and noisier) comparison that
+        // would conflate optimizer-config drift with anything the ctor does.
         var adamOpts = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
         {
             InitialLearningRate = 1e-3,
+            Beta2 = 0.98,
+            Epsilon = 1e-9,
         };
         var explicitTransformer = new Transformer<float>(
             arch,
             lossFunction: new CategoricalCrossEntropyLoss<float>(),
             optimizer: new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, adamOpts));
+
+        // DETERMINISM: the two transformers are constructed independently so
+        // their initial weights differ (Xavier/He init draws from the static
+        // Random). Without a seed, the convergence-after-N-steps comparison
+        // can drift across runs. Copy the default model's parameter vector
+        // into the explicit model before training so both start from the
+        // SAME weights — this makes the test robust to any global RNG state
+        // and isolates the comparison to "do the two construction paths
+        // wire up identical optimizers."
+        var sharedInitialParams = defaultTransformer.GetParameters();
+        explicitTransformer.UpdateParameters(sharedInitialParams);
 
         var input = new Tensor<float>([1, ctxLen]);
         for (int s = 0; s < ctxLen; s++) input[0, s] = (float)(s % vocab);
@@ -279,12 +297,17 @@ public class TransformerEndToEndIntegrationTests
         float pExplicit = SoftmaxAndPickClass(explicitTransformer.Predict(input), vocab, targetClass: 1);
         _output.WriteLine($"default-Adam P(target)={pDefault:F4}  explicit-Adam P(target)={pExplicit:F4}");
 
-        // Initialization randomness means the two won't be bit-identical, but
-        // both should converge to comparable accuracy ranges (within 30%).
-        Assert.True(System.Math.Abs(pDefault - pExplicit) < 0.30f,
-            $"Default-Adam and explicit-Adam should produce comparable convergence; "
-            + $"got default={pDefault:F4}, explicit={pExplicit:F4}. "
-            + "If these differ substantially, the default-optimizer construction is misconfigured.");
+        // Same initial weights, same optimizer, same training loop — both
+        // should converge to the SAME answer (modulo floating-point summation
+        // order across the two parallel Train() calls). A 5% absolute spread
+        // is conservative; bit-identical floats would require deterministic
+        // SIMD reductions which we don't guarantee yet.
+        Assert.True(System.Math.Abs(pDefault - pExplicit) < 0.05f,
+            $"Default-Adam and explicit-Adam should produce essentially identical "
+            + $"convergence after weight cloning; got default={pDefault:F4}, "
+            + $"explicit={pExplicit:F4}. A spread > 5% indicates the two paths "
+            + "wire up different optimizers — i.e., the ctor's default-Adam config "
+            + "drifted from the explicit AdamOptimizerOptions used here.");
     }
 
     // ---- helpers ----
@@ -305,11 +328,36 @@ public class TransformerEndToEndIntegrationTests
 
     private static float SoftmaxAndPickClass(Tensor<float> pred, int vocab, int targetClass)
     {
+        // If pred is already a normalized probability distribution (every entry
+        // in [0,1] and the row sums to ~1), don't re-apply softmax — that would
+        // re-normalize and lower confident predictions, masking real model
+        // behavior on a network whose final layer is softmax. Otherwise treat
+        // pred as logits and apply numerically-stable softmax.
+        // Use System.Math.Exp (double precision) cast to float instead of
+        // MathF.Exp because MathF was added in .NET 5 and this test compiles
+        // against net471 too.
+        float rowSum = 0f;
+        bool looksNormalized = true;
+        for (int v = 0; v < vocab; v++)
+        {
+            float pv = pred[0, v];
+            if (pv < 0f || pv > 1f) looksNormalized = false;
+            rowSum += pv;
+        }
+        if (looksNormalized && Math.Abs(rowSum - 1f) <= 1e-3f)
+        {
+            return pred[0, targetClass];
+        }
+
         float max = float.NegativeInfinity;
         for (int v = 0; v < vocab; v++) if (pred[0, v] > max) max = pred[0, v];
-        float sum = 0;
+        float sum = 0f;
         var p = new float[vocab];
-        for (int v = 0; v < vocab; v++) { p[v] = MathF.Exp(pred[0, v] - max); sum += p[v]; }
+        for (int v = 0; v < vocab; v++)
+        {
+            p[v] = (float)Math.Exp(pred[0, v] - max);
+            sum += p[v];
+        }
         return p[targetClass] / sum;
     }
 

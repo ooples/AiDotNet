@@ -1860,16 +1860,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // tracked as a follow-up.
                 if (_preprocessingPipeline is not null && !pipelineFitted)
                 {
-                    if (inputs[0] is Tensor<T> && inputs.Length > 1)
+                    if (inputs[0] is Tensor<T> && inputs.Length > 1
+                        && TryStackTensorBatch(inputs.Cast<Tensor<T>>().ToArray(), out var batchedForFit)
+                        && batchedForFit is TInput typedBatch)
                     {
-                        var batchedForFit = StackTensorBatch(inputs.Cast<Tensor<T>>().ToArray());
-                        if (batchedForFit is TInput typedBatch)
-                            _preprocessingPipeline.Fit(typedBatch);
-                        else
-                            _preprocessingPipeline.Fit(inputs[0]);
+                        _preprocessingPipeline.Fit(typedBatch);
                     }
                     else
                     {
+                        // Fall back to fitting on a single sample when the
+                        // batch isn't stackable (heterogeneous shapes — the
+                        // loader chose not to override AggregateSamples to
+                        // pad, which is fine but means we can't construct a
+                        // [B, …] tensor for the scaler to compute statistics
+                        // over). The single-sample fit is a degenerate case
+                        // (mean = sample, var = 0) but matches the pre-#1264
+                        // behavior and lets training proceed.
                         _preprocessingPipeline.Fit(inputs[0]);
                     }
                     pipelineFitted = true;
@@ -1909,15 +1915,46 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     && outputs.Length > 0 && outputs[0] is Tensor<T>
                     && _model is INeuralNetwork<T> nn)
                 {
-                    var batchedInput = StackTensorBatch(processedInputs.Cast<Tensor<T>>().ToArray());
-                    var batchedTarget = StackTensorBatch(outputs.Cast<Tensor<T>>().ToArray());
-                    nn.Train(batchedInput, batchedTarget);
-
-                    // Loss for monitoring — TrainWithTape sets LastLoss
-                    // during the optimizer step.
-                    var lastLoss = nn.GetLastLoss();
-                    epochLoss = numOps.Add(epochLoss, lastLoss);
-                    epochBatches++;
+                    // The loader's StreamingDataLoaderBase.AggregateSamples
+                    // override is the documented extension point for padding
+                    // / stacking variable-length sequences into a uniform-
+                    // shape batch. When the loader uses AggregateSamples to
+                    // produce uniform-shape tensors, TryStackTensorBatch
+                    // succeeds and we get a single batched optimizer step.
+                    // If a loader yields heterogeneous shapes (e.g. an
+                    // image dataset without a Resize transform, or a
+                    // sequence loader without a padding override), we
+                    // gracefully fall back to per-sample nn.Train calls so
+                    // training still progresses — matching the behavior of
+                    // the per-sample loop that existed pre-#1264. This
+                    // preserves correctness for default loaders while
+                    // letting padded loaders enjoy the batched fast path.
+                    var inputArray = processedInputs.Cast<Tensor<T>>().ToArray();
+                    var outputArray = outputs.Cast<Tensor<T>>().ToArray();
+                    if (TryStackTensorBatch(inputArray, out var batchedInput) &&
+                        TryStackTensorBatch(outputArray, out var batchedTarget))
+                    {
+                        nn.Train(batchedInput!, batchedTarget!);
+                        var lastLoss = nn.GetLastLoss();
+                        epochLoss = numOps.Add(epochLoss, lastLoss);
+                        epochBatches++;
+                    }
+                    else
+                    {
+                        // Heterogeneous shapes — process each sample
+                        // independently. Each call still goes through
+                        // TrainWithTape → Optimizer.Step so the optimizer
+                        // (Adam moments, AdamW weight decay, schedulers)
+                        // is correctly engaged, just at a smaller per-
+                        // call batch dim.
+                        for (int i = 0; i < inputArray.Length; i++)
+                        {
+                            nn.Train(inputArray[i], outputArray[i]);
+                            var sampleLoss = nn.GetLastLoss();
+                            epochLoss = numOps.Add(epochLoss, sampleLoss);
+                            epochBatches++;
+                        }
+                    }
                 }
                 else
                 {
@@ -2071,59 +2108,64 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </summary>
     private static Tensor<T> StackTensorBatch(Tensor<T>[] samples)
     {
-        if (samples is null) throw new ArgumentNullException(nameof(samples));
-        if (samples.Length == 0) throw new InvalidOperationException("Cannot stack an empty batch.");
-        if (samples[0] is null)
-            throw new ArgumentException("samples[0] is null — cannot infer batch shape.", nameof(samples));
-        if (samples.Length == 1) return samples[0];
+        if (!TryStackTensorBatch(samples, out var stacked))
+        {
+            throw new ArgumentException(
+                "Batch contains samples with heterogeneous shapes; cannot stack into a uniform " +
+                "[B, ...] tensor. Override StreamingDataLoaderBase.AggregateSamples on your " +
+                "loader to pad sequences / resize images to a common shape before they reach " +
+                "the trainer.",
+                nameof(samples));
+        }
+        return stacked!;
+    }
+
+    /// <summary>
+    /// Attempts to stack an array of single-sample tensors along a new
+    /// leading batch dimension. Returns false (with <paramref name="stacked"/>
+    /// set to null) when shapes are heterogeneous so callers can fall back
+    /// to per-sample handling rather than throwing.
+    /// </summary>
+    private static bool TryStackTensorBatch(Tensor<T>[] samples, out Tensor<T>? stacked)
+    {
+        stacked = null;
+        if (samples is null || samples.Length == 0) return false;
+        if (samples[0] is null) return false;
+        if (samples.Length == 1) { stacked = samples[0]; return true; }
 
         var sampleShape = samples[0]._shape;
         int sampleStride = samples[0].Length;
 
         // Validate every sample matches the first sample's shape AND length
-        // before any byte is copied. The previous version copied
-        // `sampleStride` elements from each sample assuming uniform shape,
-        // which silently truncated or read past the end when the loader
-        // emitted heterogeneous shapes (a real-world scenario for image
-        // datasets without a Resize transform). Catch it as an explicit
-        // ArgumentException with the index of the first mismatch.
+        // before allocating output storage. A heterogeneous batch is a
+        // legitimate runtime case (the loader's AggregateSamples override
+        // is the documented place to pad / resize), so signal it via the
+        // bool return rather than throwing — the caller can then route
+        // through the per-sample fallback path.
         for (int b = 1; b < samples.Length; b++)
         {
-            if (samples[b] is null)
-                throw new ArgumentException(
-                    $"samples[{b}] is null — every sample in the batch must be a valid Tensor<T>.",
-                    nameof(samples));
+            if (samples[b] is null) return false;
             var bShape = samples[b]._shape;
-            if (bShape.Length != sampleShape.Length)
-                throw new ArgumentException(
-                    $"Sample {b} has rank {bShape.Length} but sample 0 has rank {sampleShape.Length}. " +
-                    "Every sample in the batch must have identical shape.",
-                    nameof(samples));
+            if (bShape.Length != sampleShape.Length) return false;
             for (int d = 0; d < sampleShape.Length; d++)
             {
-                if (bShape[d] != sampleShape[d])
-                    throw new ArgumentException(
-                        $"Sample {b} shape [{string.Join(",", bShape)}] differs from sample 0 shape " +
-                        $"[{string.Join(",", sampleShape)}] at axis {d}. Every sample must have identical shape.",
-                        nameof(samples));
+                if (bShape[d] != sampleShape[d]) return false;
             }
-            if (samples[b].Length != sampleStride)
-                throw new ArgumentException(
-                    $"Sample {b} length {samples[b].Length} differs from sample 0 length {sampleStride}.",
-                    nameof(samples));
+            if (samples[b].Length != sampleStride) return false;
         }
 
         var batchedShape = new int[sampleShape.Length + 1];
         batchedShape[0] = samples.Length;
         for (int d = 0; d < sampleShape.Length; d++) batchedShape[d + 1] = sampleShape[d];
 
-        var stacked = new Tensor<T>(batchedShape);
+        var result = new Tensor<T>(batchedShape);
         for (int b = 0; b < samples.Length; b++)
         {
             int offset = b * sampleStride;
-            for (int j = 0; j < sampleStride; j++) stacked[offset + j] = samples[b][j];
+            for (int j = 0; j < sampleStride; j++) result[offset + j] = samples[b][j];
         }
-        return stacked;
+        stacked = result;
+        return true;
     }
 
     private async Task<(TInput Features, TOutput Labels)> CollectStreamingDataAsync(

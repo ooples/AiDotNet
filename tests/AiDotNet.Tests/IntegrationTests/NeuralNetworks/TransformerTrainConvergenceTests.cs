@@ -168,17 +168,44 @@ public class TransformerTrainConvergenceTests
             // Softmax inline — the network's output may be raw logits or
             // already-softmax'd depending on the head; normalise both
             // forms to a probability distribution before checking.
-            float maxLogit = float.NegativeInfinity;
-            for (int v = 0; v < vocabSize; v++)
-                if (pred[0, v] > maxLogit) maxLogit = pred[0, v];
-            float sumExp = 0f;
-            var probs = new float[vocabSize];
+            //
+            // Detect already-normalized distributions and skip the
+            // re-softmax. Re-applying softmax to a softmax output is
+            // a numerically valid operation, but it lowers confident
+            // predictions (e.g. an output of 0.95 collapses to ~0.27
+            // after a second softmax over 16 classes) and would let a
+            // network that genuinely memorised the fact appear to
+            // have failed the >0.50 threshold below.
+            //
+            // Use System.Math.Exp (double) cast to float in lieu of
+            // MathF.Exp — MathF is .NET 5+ and this test multi-targets
+            // net471.
+            float rowSum = 0f;
+            bool looksNormalized = true;
             for (int v = 0; v < vocabSize; v++)
             {
-                probs[v] = MathF.Exp(pred[0, v] - maxLogit);
-                sumExp += probs[v];
+                float pv = pred[0, v];
+                if (pv < 0f || pv > 1f) looksNormalized = false;
+                rowSum += pv;
             }
-            for (int v = 0; v < vocabSize; v++) probs[v] /= sumExp;
+            var probs = new float[vocabSize];
+            if (looksNormalized && Math.Abs(rowSum - 1f) <= 1e-3f)
+            {
+                for (int v = 0; v < vocabSize; v++) probs[v] = pred[0, v];
+            }
+            else
+            {
+                float maxLogit = float.NegativeInfinity;
+                for (int v = 0; v < vocabSize; v++)
+                    if (pred[0, v] > maxLogit) maxLogit = pred[0, v];
+                float sumExp = 0f;
+                for (int v = 0; v < vocabSize; v++)
+                {
+                    probs[v] = (float)Math.Exp(pred[0, v] - maxLogit);
+                    sumExp += probs[v];
+                }
+                for (int v = 0; v < vocabSize; v++) probs[v] /= sumExp;
+            }
 
             float pTarget = probs[f];
             int argmax = 0;

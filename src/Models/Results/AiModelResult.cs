@@ -1871,20 +1871,20 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // dimension mismatch errors (e.g., "Number of columns must equal length of vector").
         normalizedNewData = ApplySelectedFeaturesForPrediction(normalizedNewData);
 
-        // BUG FIX (closes #1267): for neural-network models, ensure inference
-        // mode is active before any prediction path. AiModelBuilder.BuildAsync
-        // leaves the model in training-mode after the final epoch (so dropout,
-        // batch-norm running stats, attention masking, etc. were all in their
-        // training configurations). Calling Model.Predict directly without
-        // toggling SetTrainingMode(false) means dropout masks remain active
-        // and outputs are randomized, producing apparent uniform/zero
-        // predictions even though the underlying weights are trained.
-        // The direct Transformer.Predict path consumers explicitly call
-        // SetTrainingMode(false); the facade path was the broken case.
-        if (Model is NeuralNetworks.NeuralNetworkBase<T> nnForInference)
-        {
-            nnForInference.SetTrainingMode(false);
-        }
+        // Inference-mode handling: NeuralNetworkBase.Predict() already
+        // saves the current training-mode flag, switches to eval, runs
+        // the forward, and restores the saved mode in a finally block —
+        // so a plain Predict() call never permanently mutates training
+        // mode (NeuralNetworkBase.cs:2378 / 2436). We don't repeat the
+        // toggle here because doing so would permanently flip the
+        // wrapped model into eval mode the first time
+        // AiModelResult.Predict is called, breaking any caller that
+        // continues training the same instance after an inference call
+        // (a common pattern for online-learning / continual-learning
+        // setups, and for tests that interleave train+predict assertions).
+        // If a code path leaves the model in training mode after build —
+        // that's a bug to fix at the build site, not by clobbering state
+        // here in every Predict invocation.
 
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;

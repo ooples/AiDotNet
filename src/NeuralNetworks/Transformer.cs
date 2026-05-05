@@ -205,9 +205,22 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // (warmup + inverse-sqrt decay) can pass an explicit optimizer + scheduler.
         if (optimizer is null)
         {
+            // Vaswani 2017 §5.3 hyperparameters. β₂=0.98 (NOT the library
+            // default 0.999) is critical: with β₂=0.999 the second-moment
+            // estimate adapts more slowly than the attention/embedding
+            // gradient distribution actually changes, and updates become
+            // mis-scaled in late training. ε=1e-9 (NOT 1e-8) keeps the
+            // denominator from washing out small but real second-moment
+            // signal. lr=1e-3 follows torch.optim.Adam's default and is
+            // the value commonly paired with the warmup+inverse-sqrt
+            // schedule consumers can attach via WithScheduler(...).
+            // β₁=0.9 already matches AdamOptimizerOptions's default, so
+            // we leave it unset.
             var defaultAdamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = 1e-3,
+                Beta2 = 0.98,
+                Epsilon = 1e-9,
             };
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, defaultAdamOpts);
         }
@@ -747,12 +760,19 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // Match the constructor's default-optimizer policy (Adam, not vanilla SGD).
         // Stale-on-disk Transformer state-dicts written before this fix didn't
         // serialize their optimizer; reading null-optimizer back must produce the
-        // same Adam(β₁=0.9, β₂=0.98 default, lr=1e-3) the ctor would, otherwise
-        // the deserialized model silently regresses to non-converging vanilla SGD.
+        // same Adam(β₁=0.9, β₂=0.98, ε=1e-9, lr=1e-3) the ctor would, otherwise
+        // the deserialized model silently regresses to non-converging vanilla SGD
+        // — or, with the library defaults of β₂=0.999/ε=1e-8, to a different
+        // (Vaswani-non-conformant) Adam configuration than the one the ctor uses.
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
                 this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-3 });
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-3,
+                    Beta2 = 0.98,
+                    Epsilon = 1e-9,
+                });
     }
 
     /// <summary>
