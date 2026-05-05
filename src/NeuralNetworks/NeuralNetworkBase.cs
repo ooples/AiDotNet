@@ -4242,6 +4242,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 input, input, ComputeForward, RecomputeLoss);
 
             opt.Step(context);
+
+            // Advance the optimizer's learning-rate scheduler. Same hook
+            // as TrainWithTape — without this, a per-batch scheduler
+            // (Noam, LinearWarmupScheduler, CosineAnnealing, etc.)
+            // attached to the optimizer remains inert when callers use
+            // TrainWithCustomLoss instead of the standard Train path,
+            // pinning the LR at its initial value forever. Closes
+            // review-comment #1269.zFt3.
+            if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
+            {
+                stepped.OnBatchEnd();
+            }
+
             return lossValue;
         }
         finally

@@ -475,24 +475,46 @@ public static class OnnxExporter
         }
 
         // Tensor<T>: GetBiases() on LayerBase<T> returns Tensor<T>; rank-1
-        // for Dense bias. Read flat via int indexer.
+        // for Dense bias. Same fast-path as the 2D weights branch — pull
+        // the underlying T[] in a single reflection call, then iterate
+        // without per-element reflection. Closes #1269.zFuH for the bias
+        // path too.
         if (objType.IsGenericType && objType.Name.Contains("Tensor"))
         {
             var lengthProp = objType.GetProperty("Length");
-            var indexer = objType.GetProperty("Item", new[] { typeof(int) });
-            if (lengthProp is not null && indexer is not null)
+            if (lengthProp is not null)
             {
                 int length = (int)lengthProp.GetValue(obj)!;
-                var result = new float[length];
-                for (int i = 0; i < length; i++)
+
+                var getDataArrayMethod = objType.GetMethod("GetDataArray", System.Type.EmptyTypes);
+                if (getDataArrayMethod is not null)
                 {
-                    var val = indexer.GetValue(obj, new object[] { i });
-                    if (val is T tval)
+                    var raw = getDataArrayMethod.Invoke(obj, null);
+                    if (raw is T[] flat && flat.Length >= length)
                     {
-                        result[i] = (float)numOps.ToDouble(tval);
+                        var result = new float[length];
+                        for (int i = 0; i < length; i++)
+                        {
+                            result[i] = (float)numOps.ToDouble(flat[i]);
+                        }
+                        return result;
                     }
                 }
-                return result;
+
+                var indexer = objType.GetProperty("Item", new[] { typeof(int) });
+                if (indexer is not null)
+                {
+                    var result = new float[length];
+                    for (int i = 0; i < length; i++)
+                    {
+                        var val = indexer.GetValue(obj, new object[] { i });
+                        if (val is T tval)
+                        {
+                            result[i] = (float)numOps.ToDouble(tval);
+                        }
+                    }
+                    return result;
+                }
             }
         }
 
@@ -547,6 +569,39 @@ public static class OnnxExporter
                 if (shape is { Length: 2 })
                 {
                     int rows = shape[0], cols = shape[1];
+                    // Fast path: pull the underlying T[] data array via a
+                    // SINGLE reflection call, then do a tight non-reflective
+                    // copy/cast loop. The previous per-element indexer
+                    // reflection (PropertyInfo.GetValue inside the nested
+                    // loop) made export O(rows × cols) reflection calls —
+                    // for a 4096×4096 attention weight that's 16M reflective
+                    // dispatches and was unusably slow on realistic models.
+                    // Closes review-comment #1269.zFuH.
+                    var getDataArrayMethod = objType.GetMethod("GetDataArray", System.Type.EmptyTypes);
+                    if (getDataArrayMethod is not null)
+                    {
+                        var raw = getDataArrayMethod.Invoke(obj, null);
+                        if (raw is T[] flat && flat.Length >= rows * cols)
+                        {
+                            var result = new float[rows, cols];
+                            int idx = 0;
+                            for (int i = 0; i < rows; i++)
+                            {
+                                for (int j = 0; j < cols; j++)
+                                {
+                                    // numOps.ToDouble already returns double;
+                                    // System.Convert.ToDouble was redundant.
+                                    result[i, j] = (float)numOps.ToDouble(flat[idx++]);
+                                }
+                            }
+                            return result;
+                        }
+                    }
+
+                    // Fallback: per-element indexer if the tensor type
+                    // doesn't expose GetDataArray() (custom Tensor<T>
+                    // implementations from a future version, etc.).
+                    // Slow but correct.
                     var indexer = objType.GetProperty("Item", new[] { typeof(int) });
                     if (indexer is not null)
                     {
@@ -559,7 +614,7 @@ public static class OnnxExporter
                                 var val = indexer.GetValue(obj, new object[] { idx++ });
                                 if (val is T tval)
                                 {
-                                    result[i, j] = (float)System.Convert.ToDouble(numOps.ToDouble(tval));
+                                    result[i, j] = (float)numOps.ToDouble(tval);
                                 }
                             }
                         }

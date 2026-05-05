@@ -220,18 +220,29 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// <remarks>
     /// <para>
     /// Setting this to a fixed integer (e.g., <c>0</c> or <c>42</c>) makes
-    /// <see cref="LayerHelper{T}.CreateDefaultTransformerLayers"/> wire each
-    /// layer's <c>InitializationStrategy</c> to a seeded
-    /// <see cref="Initialization.EagerInitializationStrategy{T}"/>, so Xavier
-    /// init produces the same weights every run. This is required for
-    /// reproducible unit tests, multi-seed experiment harnesses, and
-    /// CI determinism.
+    /// <see cref="LayerHelper{T}.CreateDefaultTransformerLayers"/> derive a
+    /// per-layer seed (one <c>seedRng.Next()</c> per constructed layer, in
+    /// declaration order) and assign it to each layer's <c>RandomSeed</c>
+    /// property on <c>LayerBase&lt;T&gt;</c>. Each layer's own
+    /// <c>InitializeParameters</c> reads <c>RandomSeed</c> and uses it to
+    /// build a seeded RNG via <c>RandomHelper.CreateSeededRandom</c> — so
+    /// the layer's natural init algorithm (DenseLayer's activation-aware
+    /// He / LeCun, MultiHeadAttention's Xavier-uniform via SimdRandom,
+    /// EmbeddingLayer's small-noise scaled-by-sqrt(d) fill) runs unchanged
+    /// but with reproducible RNG state. This is required for reproducible
+    /// unit tests, multi-seed experiment harnesses, and CI determinism.
     /// </para>
     /// <para>
     /// Without a fixed seed, every <c>new Transformer(arch, ...)</c> instance
     /// gets different initial weights drawn from the process-wide thread-safe
     /// RNG, and small training-budget convergence tests (e.g., V=256 batched
     /// 100-step memorization) show non-deterministic accuracy across runs.
+    /// </para>
+    /// <para>
+    /// Determinism scope: <see cref="System.Random"/>'s internal algorithm is
+    /// runtime-specific (legacy Knuth subtractive on net471, modern
+    /// xoshiro256** on .NET 6+). Same-runtime + same-seed produces identical
+    /// weights; cross-runtime determinism is not provided.
     /// </para>
     /// </remarks>
     public int? RandomSeed { get; }
