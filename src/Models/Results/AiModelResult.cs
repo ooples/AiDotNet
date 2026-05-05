@@ -1871,6 +1871,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // dimension mismatch errors (e.g., "Number of columns must equal length of vector").
         normalizedNewData = ApplySelectedFeaturesForPrediction(normalizedNewData);
 
+        // Inference-mode handling: NeuralNetworkBase.Predict() already
+        // saves the current training-mode flag, switches to eval, runs
+        // the forward, and restores the saved mode in a finally block —
+        // so a plain Predict() call never permanently mutates training
+        // mode (NeuralNetworkBase.cs:2378 / 2436). We don't repeat the
+        // toggle here because doing so would permanently flip the
+        // wrapped model into eval mode the first time
+        // AiModelResult.Predict is called, breaking any caller that
+        // continues training the same instance after an inference call
+        // (a common pattern for online-learning / continual-learning
+        // setups, and for tests that interleave train+predict assertions).
+        // If a code path leaves the model in training mode after build —
+        // that's a bug to fix at the build site, not by clobbering state
+        // here in every Predict invocation.
+
         // Use JIT-compiled function if available for 5-10x faster predictions
         TOutput normalizedPredictions;
 

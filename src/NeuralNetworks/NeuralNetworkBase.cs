@@ -3275,27 +3275,51 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Trains the neural network on a single input-output pair.
+    /// Trains the neural network on a single input-output pair, OR on a batch when the caller
+    /// passes a tensor whose leading dimension is the batch axis (shape <c>[B, …]</c>).
     /// </summary>
-    /// <param name="input">The input data.</param>
-    /// <param name="expectedOutput">The expected output for the given input.</param>
+    /// <param name="input">
+    /// The input data. May be either a single sample (e.g. <c>[ctxLen, F]</c> / <c>[C, H, W]</c> /
+    /// <c>[F]</c>) or an explicitly batched tensor (e.g. <c>[B, ctxLen, F]</c> / <c>[B, C, H, W]</c>
+    /// / <c>[B, F]</c>). Single-sample inputs are auto-promoted to <c>[1, …]</c> by
+    /// <see cref="NormalizeBatchDim"/>; batched inputs are passed through unchanged.
+    /// </param>
+    /// <param name="expectedOutput">
+    /// The expected output. Must match the batch arity of <paramref name="input"/>: pass a single
+    /// target with a single input, or a batched target with a batched input.
+    /// </param>
     /// <remarks>
     /// <para>
-    /// This method performs one training step on the neural network using the provided input and expected output.
-    /// It updates the network's parameters to reduce the error between the network's prediction and the expected output.
+    /// This method performs <i>one</i> gradient step on the network. With <c>B = 1</c> (per-sample
+    /// training) the gradient is exactly the loss gradient on that one example; with <c>B &gt; 1</c>
+    /// the gradient is the per-sample loss summed across the batch (which the optimizer then
+    /// averages via its scaled update step).
+    /// </para>
+    /// <para>
+    /// <b>Per-sample vs. batched training — when to use which:</b> per-sample updates
+    /// (<c>B = 1</c>) are mathematically slow at output cardinalities <c>V</c> ≥ ~32 because
+    /// each step's gradient signal must compete with <c>V − 1</c> negative classes. For tasks
+    /// like character / byte language modelling (V = 256), token classification, or any
+    /// downstream task with a vocabulary head, prefer batched training: pass a tensor with
+    /// <c>B</c> = 16…64. The gradient averaging across a batch reduces noise by a factor of
+    /// <c>√B</c> and is what allows the model to escape unigram-prior accuracy in practical
+    /// step budgets. See <see cref="TrainBatched"/> for a convenience overload that stacks an
+    /// array of single-sample tensors into a batch for you.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is how your neural network learns. You provide:
     /// - An input (what the network should process)
     /// - The expected output (what the correct answer should be)
-    /// 
+    ///
     /// The network then:
     /// 1. Makes a prediction based on the input
     /// 2. Compares its prediction to the expected output
     /// 3. Calculates how wrong it was (the loss)
     /// 4. Adjusts its internal values to do better next time
-    /// 
+    ///
     /// After training, you can get the loss value using the GetLastLoss() method to see how well the network is learning.
+    /// For training language models (Transformers especially), pass a BATCH of inputs at once
+    /// rather than calling Train one example at a time — see TrainBatched().
     /// </para>
     /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -3346,6 +3370,200 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Trains the network on a batch of input/target pairs in a single optimizer step.
+    /// Stacks the per-sample tensors along a new leading batch dimension and dispatches
+    /// to <see cref="Train(Tensor{T}, Tensor{T})"/>, so the gradient is computed against
+    /// the SUM of per-sample losses — the optimizer's update is therefore the
+    /// average gradient signal across <paramref name="inputs"/>.
+    /// </summary>
+    /// <param name="inputs">
+    /// One or more single-sample input tensors with identical shapes (e.g. each <c>[ctxLen, F]</c>
+    /// or each <c>[C, H, W]</c>). The method stacks them into <c>[B, …]</c> where <c>B = inputs.Length</c>.
+    /// Must contain at least one element; all elements must share the same shape.
+    /// </param>
+    /// <param name="targets">
+    /// Per-sample target tensors, one per input, with identical shapes. Stacked into <c>[B, …]</c>
+    /// the same way as <paramref name="inputs"/>.
+    /// </param>
+    /// <exception cref="ArgumentNullException">Either array is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// The arrays have different lengths, are empty, or contain tensors with mismatched shapes.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// <b>When to use this:</b> any classification / sequence task where the per-sample
+    /// gradient signal is small relative to the noise floor — most notably language modelling
+    /// (V ≥ 32 vocabularies). Per-sample <see cref="Train(Tensor{T}, Tensor{T})"/> calls each
+    /// produce a gradient that has to compete against <c>V − 1</c> negative classes; over many
+    /// steps these cancel out and the model stalls at the unigram-prior accuracy. Batched
+    /// updates with <c>B</c> = 16…64 reduce gradient noise by <c>√B</c> and let the model
+    /// actually escape that floor in a practical step budget.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Calling <c>Train(input, target)</c> in a loop one sample at a time
+    /// works for tiny tasks but converges very slowly — and on language-model-style tasks
+    /// (predicting the next character / token from a 256-class output) it can fail to
+    /// converge at all in any reasonable step budget. <c>TrainBatched</c> takes a list of
+    /// samples and updates the network from all of them at once, which is dramatically more
+    /// stable. The standard practice is batches of 16–64 samples; experiment to find what
+    /// fits your task. This is what every modern training script (PyTorch / TensorFlow /
+    /// JAX) does under the hood — they batch by default.
+    /// </para>
+    /// </remarks>
+    public virtual void TrainBatched(Tensor<T>[] inputs, Tensor<T>[] targets)
+    {
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (inputs.Length == 0) throw new ArgumentException("At least one input is required.", nameof(inputs));
+        if (inputs.Length != targets.Length)
+            throw new ArgumentException($"inputs.Length ({inputs.Length}) must equal targets.Length ({targets.Length}).");
+
+        // No single-sample fast path: a one-element TrainBatched still adds
+        // the batch dimension via the same stack-and-dispatch flow as a
+        // multi-sample call. Previously the fast path delegated to
+        // Train(inputs[0], targets[0]) on the assumption the override
+        // would call NormalizeBatchDim itself, but Transformer.Train and
+        // similar overrides do not — they pass the (unbatched) sample
+        // straight into TrainWithTape, which reaches Layers with a rank
+        // one-lower than what a 2+ sample call produces. Reaching layers
+        // with a different rank for B=1 vs B≥2 is a class of bug that
+        // bites only when callers happen to feed a single-element batch
+        // (e.g. last batch of an uneven epoch). Stacking the unit batch
+        // here keeps the layer pipeline rank-stable.
+
+        // Validate consistent shapes across the batch — concrete element-shape
+        // mismatch is a programming error and the resulting concat would fail
+        // anyway, but with a less actionable error message. Surface it here.
+        var inputShape = inputs[0]._shape;
+        var targetShape = targets[0]._shape;
+        for (int i = 1; i < inputs.Length; i++)
+        {
+            if (!inputs[i]._shape.SequenceEqual(inputShape))
+                throw new ArgumentException(
+                    $"All inputs must have identical shapes. inputs[0]={string.Join("x",inputShape)} but inputs[{i}]={string.Join("x",inputs[i]._shape)}.",
+                    nameof(inputs));
+            if (!targets[i]._shape.SequenceEqual(targetShape))
+                throw new ArgumentException(
+                    $"All targets must have identical shapes. targets[0]={string.Join("x",targetShape)} but targets[{i}]={string.Join("x",targets[i]._shape)}.",
+                    nameof(targets));
+        }
+
+        // Detect whether per-sample inputs are already in batched form
+        // (rank == expectedUnbatchedRank + 1 with a leading dim that the user
+        // intends as the batch axis — typically 1 for the per-sample Predict
+        // shape, but can be any positive value when the caller is passing
+        // already-batched chunks). In that case, CONCATENATE along the
+        // existing leading batch dim rather than stacking a new dim:
+        //
+        //   STACK  : N × [1, ctxLen]   →  [N, 1, ctxLen]   ← double-batch, wrong
+        //   CONCAT : N × [1, ctxLen]   →  [N, ctxLen]      ← correct
+        //   STACK  : N × [B_i, ctxLen] →  [N, B_i, ctxLen] ← double-batch
+        //   CONCAT : N × [B_i, ctxLen] →  [sum(B_i), ctxLen] ← correct
+        //
+        // For unbatched per-sample inputs (rank == expectedUnbatchedRank):
+        //   STACK  : N × [ctxLen]      →  [N, ctxLen]      ← correct
+        //
+        // Detection is shape-driven rather than architecture-driven because
+        // models with custom Train overrides (Transformer) bypass
+        // NormalizeBatchDim and treat input shapes flexibly. Architecture-
+        // reported expectedUnbatchedRank can also disagree with the runtime
+        // shape contract: e.g., a Transformer with InputType.TwoDimensional
+        // + inputSize=8 gets InputHeight=1, InputWidth=8 auto-assigned and
+        // its GetInputShape reports rank-2, but its Train override accepts
+        // [batch, ctxLen] inputs whose effective unbatched form is rank-1.
+        //
+        // Heuristic: if the per-sample shape has a leading dim that looks
+        // like a batch axis (any positive size — typically 1 for the
+        // standard Predict shape, but could be a partial-batch chunk),
+        // concatenate along that existing axis. Otherwise the per-sample
+        // shape is genuinely unbatched and we stack a new dim.
+        //
+        // Conservative: only fires when the per-sample input has rank > 1.
+        // Rank-1 per-sample inputs are unambiguously unbatched (a single
+        // feature/token vector); always stack.
+        int batchSize = inputs.Length;
+        bool concatAlongLeadingDim =
+            inputShape.Length > 1
+            && inputShape[0] > 0;
+
+        Tensor<T> batchedInput;
+        Tensor<T> batchedTarget;
+
+        if (concatAlongLeadingDim)
+        {
+            // Concat: leading dim sums per-sample batch sizes.
+            int totalBatch = batchSize * inputShape[0];
+            var batchedInputShape = new int[inputShape.Length];
+            batchedInputShape[0] = totalBatch;
+            for (int d = 1; d < inputShape.Length; d++) batchedInputShape[d] = inputShape[d];
+
+            // Mirror the same concat for targets when they have the same
+            // structure (rank matches expected output rank + 1). Otherwise
+            // stack targets along a new leading dim — labels can be flat
+            // [vocab] or matrix [B, vocab] independent of input layout.
+            int[] batchedTargetShape;
+            bool concatTargets =
+                targetShape.Length >= 2
+                && targetShape[0] == inputShape[0];
+            if (concatTargets)
+            {
+                int totalTargetBatch = batchSize * targetShape[0];
+                batchedTargetShape = new int[targetShape.Length];
+                batchedTargetShape[0] = totalTargetBatch;
+                for (int d = 1; d < targetShape.Length; d++) batchedTargetShape[d] = targetShape[d];
+            }
+            else
+            {
+                batchedTargetShape = new int[targetShape.Length + 1];
+                batchedTargetShape[0] = batchSize;
+                for (int d = 0; d < targetShape.Length; d++) batchedTargetShape[d + 1] = targetShape[d];
+            }
+
+            batchedInput = new Tensor<T>(batchedInputShape);
+            batchedTarget = new Tensor<T>(batchedTargetShape);
+
+            int inputStride = inputs[0].Length;
+            int targetStride = targets[0].Length;
+            for (int b = 0; b < batchSize; b++)
+            {
+                int inputOffset = b * inputStride;
+                for (int j = 0; j < inputStride; j++) batchedInput[inputOffset + j] = inputs[b][j];
+                int targetOffset = b * targetStride;
+                for (int j = 0; j < targetStride; j++) batchedTarget[targetOffset + j] = targets[b][j];
+            }
+        }
+        else
+        {
+            // Stack along a new leading batch dim. Allocate once for the batch
+            // and copy each sample's flat-index range into its slice; this avoids
+            // any per-sample tape allocation and keeps the resulting tensor
+            // contiguous so downstream Conv / matmul kernels stay on their
+            // fast paths. The output shape is [B, *inputShape].
+            var batchedInputShape = new int[inputShape.Length + 1];
+            batchedInputShape[0] = batchSize;
+            for (int d = 0; d < inputShape.Length; d++) batchedInputShape[d + 1] = inputShape[d];
+            var batchedTargetShape = new int[targetShape.Length + 1];
+            batchedTargetShape[0] = batchSize;
+            for (int d = 0; d < targetShape.Length; d++) batchedTargetShape[d + 1] = targetShape[d];
+
+            batchedInput = new Tensor<T>(batchedInputShape);
+            batchedTarget = new Tensor<T>(batchedTargetShape);
+
+            int inputStride = inputs[0].Length;
+            int targetStride = targets[0].Length;
+            for (int b = 0; b < batchSize; b++)
+            {
+                int inputOffset = b * inputStride;
+                for (int j = 0; j < inputStride; j++) batchedInput[inputOffset + j] = inputs[b][j];
+                int targetOffset = b * targetStride;
+                for (int j = 0; j < targetStride; j++) batchedTarget[targetOffset + j] = targets[b][j];
+            }
+        }
+
+        Train(batchedInput, batchedTarget);
     }
 
     /// <summary>
@@ -4024,6 +4242,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
         return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    }
+
+    /// <summary>
+    /// Pre-wires the optimizer instance that <see cref="GetOrCreateBaseOptimizer"/>
+    /// will return on subsequent calls. Used by <c>AiModelBuilder.ConfigureOptimizer</c>
+    /// to inject the user-configured optimizer (e.g. AdamW with a learning-rate
+    /// scheduler, Lion, custom subclass) into the model BEFORE the streaming /
+    /// build training loop calls <see cref="Train(Tensor{T}, Tensor{T})"/>.
+    /// Without this hook, calling <c>nn.Train(input, target)</c> would resolve
+    /// to a freshly-allocated default Adam via the lazy fallback in
+    /// <see cref="GetOrCreateBaseOptimizer"/>, silently dropping any builder-
+    /// level optimizer configuration on the floor.
+    /// </summary>
+    /// <param name="optimizer">
+    /// The optimizer to install as the model's base training optimizer, or null
+    /// to clear the override (the next call to <see cref="GetOrCreateBaseOptimizer"/>
+    /// will then re-create the lazy default).
+    /// </param>
+    /// <remarks>
+    /// Subclasses that maintain a separate private optimizer field (e.g.
+    /// <see cref="Transformer{T}"/>'s <c>_optimizer</c>) are responsible for
+    /// keeping that field in sync if they want their <c>Train</c> override to
+    /// honor builder overrides — typically by routing their override through
+    /// <see cref="GetOrCreateBaseOptimizer"/> rather than reading the private
+    /// field directly.
+    /// </remarks>
+    internal void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        _baseTrainOptimizer = optimizer;
     }
 
     /// <summary>

@@ -185,7 +185,7 @@ public class DifferentialEvolutionOptimizer<T, TInput, TOutput> : OptimizerBase<
         var population = new List<IFullModel<T, TInput, TOutput>>();
         for (int i = 0; i < populationSize; i++)
         {
-            population.Add(InitializeRandomSolution(input));
+            population.Add(SpawnIndividual(input));
         }
 
         return population;

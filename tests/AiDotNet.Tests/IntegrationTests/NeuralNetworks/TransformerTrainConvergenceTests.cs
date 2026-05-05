@@ -149,8 +149,84 @@ public class TransformerTrainConvergenceTests
             $"got early={earlyAvg:F6}, late={lateAvg:F6}. " +
             $"Parameters are not being updated effectively (issue #1187).");
 
+        // STRONG MEMORIZATION GUARD (closes the test-infra gap that let
+        // ooples/AiDotNet#1264 slip through CI). The previous "lateAvg <
+        // earlyAvg" guard only required loss to decrease SOMEWHAT — a
+        // model trained with vanilla SGD's tiny per-step updates would
+        // see a small loss decrease while never actually learning the
+        // task, and CI would happily green-light it. This guard asserts
+        // the model has actually MEMORISED the training set: after 20
+        // epochs of overfitting on 4 facts, the predicted probability
+        // mass on the correct class must be >0.50 on EVERY training
+        // example. Random (1/V = 1/16 = 0.0625) is the floor; "loss
+        // decreased a bit" sits around 0.10–0.20; genuine memorisation
+        // crosses 0.50 easily.
+        transformer.SetTrainingMode(false);
+        for (int f = 0; f < numFacts; f++)
+        {
+            var pred = transformer.Predict(inputs[f]);
+            // Softmax inline — the network's output may be raw logits or
+            // already-softmax'd depending on the head; normalise both
+            // forms to a probability distribution before checking.
+            //
+            // Detect already-normalized distributions and skip the
+            // re-softmax. Re-applying softmax to a softmax output is
+            // a numerically valid operation, but it lowers confident
+            // predictions (e.g. an output of 0.95 collapses to ~0.27
+            // after a second softmax over 16 classes) and would let a
+            // network that genuinely memorised the fact appear to
+            // have failed the >0.50 threshold below.
+            //
+            // Use System.Math.Exp (double) cast to float in lieu of
+            // MathF.Exp — MathF is .NET 5+ and this test multi-targets
+            // net471.
+            float rowSum = 0f;
+            bool looksNormalized = true;
+            for (int v = 0; v < vocabSize; v++)
+            {
+                float pv = pred[0, v];
+                if (pv < 0f || pv > 1f) looksNormalized = false;
+                rowSum += pv;
+            }
+            var probs = new float[vocabSize];
+            if (looksNormalized && Math.Abs(rowSum - 1f) <= 1e-3f)
+            {
+                for (int v = 0; v < vocabSize; v++) probs[v] = pred[0, v];
+            }
+            else
+            {
+                float maxLogit = float.NegativeInfinity;
+                for (int v = 0; v < vocabSize; v++)
+                    if (pred[0, v] > maxLogit) maxLogit = pred[0, v];
+                float sumExp = 0f;
+                for (int v = 0; v < vocabSize; v++)
+                {
+                    probs[v] = (float)Math.Exp(pred[0, v] - maxLogit);
+                    sumExp += probs[v];
+                }
+                for (int v = 0; v < vocabSize; v++) probs[v] /= sumExp;
+            }
+
+            float pTarget = probs[f];
+            int argmax = 0;
+            float pmax = probs[0];
+            for (int v = 1; v < vocabSize; v++)
+                if (probs[v] > pmax) { pmax = probs[v]; argmax = v; }
+
+            _output.WriteLine($"  fact {f}: P(target={f})={pTarget:F4}  argmax={argmax}");
+            Assert.True(pTarget > 0.50f,
+                $"Transformer failed to memorise fact {f} after {epochs} overfitting epochs: "
+                + $"P(target={f})={pTarget:F4} (need >0.50). "
+                + "This is the strong convergence guard that catches optimizer/default-LR bugs "
+                + "(see ooples/AiDotNet#1264) — losing this assertion is what previously let the "
+                + "vanilla-SGD-default ship without anyone noticing the model wasn't learning.");
+            Assert.True(argmax == f,
+                $"Transformer predicted argmax={argmax} but expected {f} for memorised fact {f}. "
+                + "Model converged on wrong class — likely gradient sign or target indexing issue.");
+        }
+
         _output.WriteLine(
             $"Convergence check passed: early={earlyAvg:F6}, late={lateAvg:F6}, " +
-            $"spread={spread:F6}");
+            $"spread={spread:F6}, all {numFacts} facts memorised with P(target)>0.50.");
     }
 }

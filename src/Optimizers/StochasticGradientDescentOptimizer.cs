@@ -107,7 +107,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         // Initialize with random solution
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 

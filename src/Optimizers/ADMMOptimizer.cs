@@ -108,7 +108,7 @@ public class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _z = new Vector<T>(parameters.Length);
         _u = new Vector<T>(parameters.Length);

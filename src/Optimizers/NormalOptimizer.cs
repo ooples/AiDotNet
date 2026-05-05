@@ -96,7 +96,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
-            var currentSolution = InitializeRandomSolution(inputData.XTrain);
+            var currentSolution = SpawnIndividual(inputData.XTrain);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);

@@ -244,7 +244,7 @@ public class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, T
         var dimensions = InputHelper<T, TInput>.GetInputSize(xTrain);
 
         // Create a base model with InitializeRandomSolution
-        var model = InitializeRandomSolution(xTrain);
+        var model = SpawnIndividual(xTrain);
         // Parameters should match the model's expected parameter count (features + intercept)
         int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
         var parameters = new Vector<T>(paramCount);

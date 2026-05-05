@@ -134,7 +134,7 @@ public class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOutp
 
         InitializeAdaptiveParameters();
         // Always use a deep copy of Model to avoid mutating the original during optimization
-        var initialSolution = InitializeRandomSolution(inputData.XTrain);
+        var initialSolution = SpawnIndividual(inputData.XTrain);
         _mean = InterfaceGuard.Parameterizable(initialSolution).GetParameters();
         // Use parameter count (coefficients + intercept), not input size (features only)
         // This ensures covariance matrix dimensions match the mean vector length

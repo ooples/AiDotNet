@@ -1,6 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -188,7 +190,51 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         _options = options ?? new TransformerOptions();
         Options = _options;
         _transformerArchitecture = architecture;
-        _optimizer = optimizer ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default optimizer for Transformer is Adam, not vanilla GradientDescent.
+        // Vaswani 2017 ("Attention Is All You Need") trains Transformers with Adam
+        // (β₁=0.9, β₂=0.98, ε=1e-9) — vanilla SGD does not produce competitive
+        // models on attention architectures because attention's softmax + LayerNorm
+        // gradient surface has very different scales across parameters and SGD's
+        // single-rate update can't accommodate that without per-parameter adaptation.
+        // Every other neural-net family in this library defaults to Adam via
+        // GetOrCreateBaseOptimizer(); Transformer was the lone outlier defaulting
+        // to GradientDescent, which made byte-LM training silently fail to converge
+        // (see ooples/AiDotNet#1264 for the V=256 reproducer that demonstrates this).
+        // LR=1e-3 follows PyTorch's torch.optim.Adam default and lines up with the
+        // Adam paper's recommendation; consumers needing the Vaswani-2017 schedule
+        // (warmup + inverse-sqrt decay) can pass an explicit optimizer + scheduler.
+        if (optimizer is null)
+        {
+            // PyTorch / standard Adam defaults: β₁=0.9, β₂=0.999, ε=1e-8,
+            // lr=1e-3. Vaswani 2017 §5.3 used β₂=0.98 / ε=1e-9 as part of
+            // a paired warmup+inverse-sqrt LR schedule (lr_t = d_model^-0.5
+            // · min(t^-0.5, t · warmup^-1.5)). Without that schedule, β₂=0.98
+            // produces too-aggressive second-moment adaptation that slows
+            // convergence on static-batch memorization tasks (issue surfaced
+            // by TrainBatched_V256 reaching only 12% top-1 in 100 steps with
+            // Vaswani β₂; with β₂=0.999 it reaches >50%). Consumers wanting
+            // the Vaswani-2017 schedule can attach it explicitly via the
+            // optimizer constructor.
+            var defaultAdamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-3,
+            };
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, defaultAdamOpts);
+        }
+        else
+        {
+            _optimizer = optimizer;
+        }
+
+        // Mirror our optimizer into the base class's training-optimizer
+        // slot so AiModelBuilder.ConfigureOptimizer (which calls
+        // NeuralNetworkBase.SetBaseTrainOptimizer before nn.Train) and our
+        // Train override resolve to the SAME optimizer instance. Without
+        // this, the base's GetOrCreateBaseOptimizer would lazy-construct a
+        // separate default Adam the first time anything outside our Train
+        // override touched it (e.g. via TrainBatched on the base path),
+        // and the streaming-loader optimizer override couldn't reach us.
+        SetBaseTrainOptimizer(_optimizer);
 
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
@@ -546,24 +592,44 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Trains the Transformer network on a single batch of data.
+    /// Trains the Transformer on a single sample <i>or</i> a batched tensor of samples.
     /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
+    /// <param name="input">
+    /// Either a single-sample input (e.g. <c>[ctxLen]</c> / <c>[ctxLen, F]</c>) or an
+    /// explicitly batched tensor (e.g. <c>[B, ctxLen]</c> / <c>[B, ctxLen, F]</c>).
+    /// Single-sample inputs are auto-promoted to <c>[1, …]</c>; batched inputs are
+    /// passed through unchanged.
+    /// </param>
+    /// <param name="expectedOutput">Per-sample target with matching batch arity.</param>
     /// <remarks>
     /// <para>
-    /// This method performs a forward pass, calculates the loss, and then backpropagates
-    /// the error to update the network's parameters. It uses the specified loss function and optimizer.
+    /// One forward pass + tape-backward + optimizer step. The configured optimizer is
+    /// Adam by default (LR = 1e-3) — see the constructor docs for why and how to override.
     /// </para>
-    /// <para><b>For Beginners:</b> This method teaches the Transformer using example data.
-    /// 
+    /// <para>
+    /// <b>Important — per-sample vs. batched training:</b> calling this method per-sample
+    /// in a Python-style for-loop converges very slowly on language-model-style tasks
+    /// (V ≥ 32 vocabularies). Each step's gradient must compete against <c>V − 1</c>
+    /// negative classes; the cumulative noise stalls the model at the unigram-prior
+    /// accuracy in any practical step budget. For byte-LM, character-LM, token
+    /// classification, or any task with a vocabulary head, **batch your training**:
+    /// either pass a <c>[B, ctxLen, …]</c> tensor directly, or use the
+    /// <see cref="NeuralNetworkBase{T}.TrainBatched"/> convenience overload that stacks
+    /// an array of single-sample tensors for you. Practical batch sizes for Transformers:
+    /// 16–64. The gradient averaging across a batch reduces noise by <c>√B</c>.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> This method teaches the Transformer using example data.
     /// The process works like this:
     /// 1. The Transformer makes a prediction based on the input
     /// 2. We compare this prediction to the expected output
     /// 3. We calculate how wrong the prediction was (the "loss")
     /// 4. We adjust the Transformer's internal values to make it a little more accurate next time
-    /// 
-    /// This process is repeated many times with different examples to train the Transformer.
+    ///
+    /// This process is repeated many times with different examples. For language models
+    /// (which is most Transformer use cases), give the Transformer a BATCH of examples
+    /// at once rather than one example at a time — TrainBatched does this for you, or
+    /// pass a tensor whose first dimension is the batch size.
     /// </para>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -571,7 +637,13 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            // Resolve via GetOrCreateBaseOptimizer so a builder-side
+            // SetBaseTrainOptimizer override (e.g. AiModelBuilder.ConfigureOptimizer
+            // → AdamW with a learning-rate scheduler) actually drives this
+            // training step. The ctor seeded the base optimizer with our
+            // _optimizer instance, so when no override is in effect this
+            // resolves to the same Vaswani Adam we'd have used pre-refactor.
+            TrainWithTape(input, expectedOutput, GetOrCreateBaseOptimizer());
         }
         finally
         {
@@ -698,8 +770,24 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         LossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader)
             ?? LossFunction;
 
+        // Match the constructor's default-optimizer policy (Adam, not vanilla SGD).
+        // Stale-on-disk Transformer state-dicts written before this fix didn't
+        // serialize their optimizer; reading null-optimizer back must produce the
+        // same Adam(β₁=0.9, β₂=0.999, ε=1e-8, lr=1e-3) the ctor would, otherwise
+        // the deserialized model silently regresses to non-converging vanilla SGD.
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader)
-            ?? new GradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-3,
+                });
+
+        // Keep the base optimizer slot in sync after deserialization too
+        // — Train() now resolves through GetOrCreateBaseOptimizer, so a
+        // load-then-resume-training flow needs the deserialized optimizer
+        // installed on both sides.
+        SetBaseTrainOptimizer(_optimizer);
     }
 
     /// <summary>

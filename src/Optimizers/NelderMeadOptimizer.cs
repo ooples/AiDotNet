@@ -214,7 +214,7 @@ public class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
         var simplex = new List<IFullModel<T, TInput, TOutput>>();
         for (int i = 0; i <= n; i++)
         {
-            simplex.Add(InitializeRandomSolution(input));
+            simplex.Add(SpawnIndividual(input));
         }
 
         return simplex;

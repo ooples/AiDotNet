@@ -796,6 +796,130 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     }
 
     // =====================================================
+    // MATHEMATICAL INVARIANT: Optimizer Step Magnitude Bound
+    // The L2 norm of model parameters should not change by more than 100%
+    // in a single training step. A first-step explosion (e.g. Adam's bias
+    // correction at default β₁=0.9 / β₂=0.999 amplifying a fresh gradient
+    // ~10×) destroys the model's initialization and causes training to
+    // diverge from the optimum. The previous invariant set only checked
+    // NaN/Inf — a 4× L2 explosion in one step passes that bar but is
+    // catastrophic for convergence.
+    // =====================================================
+
+    [Fact(Timeout = 120000)]
+    public async Task OptimizerStep_ParamL2_DoesNotExplode()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+
+        // Materialize lazy-initialized parameters via a warmup forward
+        // pass BEFORE measuring L2. Some layers (LayerNormalization with
+        // γ=1.0 default, MultiHeadAttention's lazy weight banks, etc.)
+        // don't allocate their params until the first forward pass.
+        // Without this warmup, the BEFORE measurement undercounts and
+        // the AFTER measurement appears to "explode" — which is just the
+        // lazy-init params materializing, not the optimizer doing
+        // anything wrong.
+        network.SetTrainingMode(false);
+        // Narrow the catch to ONLY the documented "needs training mode for
+        // forward" symptom (InvalidOperationException from layers that
+        // refuse a non-training Predict). Swallowing every Exception here
+        // would silently mask genuine regressions (NaN, shape errors, OOM)
+        // that this invariant is designed to surface.
+        try { network.Predict(input); }
+        catch (InvalidOperationException) { /* eval-mode-incompatible — tolerated */ }
+        network.SetTrainingMode(true);
+
+        var paramsBefore = network.GetParameters();
+        double l2Before = 0;
+        for (int i = 0; i < paramsBefore.Length; i++) l2Before += paramsBefore[i] * paramsBefore[i];
+        l2Before = Math.Sqrt(l2Before);
+
+        network.Train(input, target);
+
+        var paramsAfter = network.GetParameters();
+        double l2After = 0;
+        for (int i = 0; i < paramsAfter.Length; i++) l2After += paramsAfter[i] * paramsAfter[i];
+        l2After = Math.Sqrt(l2After);
+
+        // An order-of-magnitude bound: post-train L2 must be within
+        // [0.5×, 2×] of pre-train L2. Anything outside this range
+        // indicates either explosion (Adam first-step bug, missing
+        // bias correction, no gradient clipping) or collapse
+        // (over-shrinking weight decay).
+        Assert.True(l2After >= 0.5 * l2Before,
+            $"Param L2 collapsed after one training step: {l2Before:F4} → {l2After:F4} "
+            + "(post < 0.5× pre). Likely cause: weight decay too aggressive, or update applied with wrong sign.");
+        Assert.True(l2After <= 2.0 * l2Before,
+            $"Param L2 exploded after one training step: {l2Before:F4} → {l2After:F4} "
+            + $"(post > 2× pre). Likely cause: Adam first-step bias correction without warmup, "
+            + "double-applied gradient update, or LR too high for d_model.");
+    }
+
+    // =====================================================
+    // MATHEMATICAL INVARIANT: Loss Decreases on Memorization Task
+    // After N gradient steps on the SAME (input, target) pair, the loss
+    // must be strictly lower than after step 1. Catches optimizer
+    // oscillation, wrong gradient sign, and explosions that don't NaN.
+    // =====================================================
+
+    [Fact(Timeout = 180000)]
+    public async Task LossStrictlyDecreasesOnMemorizationTask()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+
+        // First step establishes the baseline loss.
+        network.Train(input, target);
+        double lossStep1 = ConvertToDouble(network.GetLastLoss());
+
+        // 99 more steps on the same pair.
+        for (int s = 0; s < 99; s++) network.Train(input, target);
+        double lossStep100 = ConvertToDouble(network.GetLastLoss());
+
+        Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
+            $"Loss after step 1 is non-finite: {lossStep1}");
+        Assert.False(double.IsNaN(lossStep100) || double.IsInfinity(lossStep100),
+            $"Loss after step 100 is non-finite: {lossStep100}");
+
+        // Strict decrease by at least 1% over 99 additional steps. A
+        // working training pipeline cuts loss by far more than 1% on a
+        // memorization task; a broken pipeline (oscillation, sign flip,
+        // post-explosion drift) leaves loss flat or rising.
+        Assert.True(lossStep100 < lossStep1 * 0.99,
+            $"Loss did NOT strictly decrease on memorization task: step 1={lossStep1:F6}, step 100={lossStep100:F6}. "
+            + "Diagnostic: optimizer is oscillating, gradient sign is wrong, or first-step blew the model "
+            + "into a high-loss region it can't recover from.");
+    }
+
+    // Convert T-typed loss to double for finite-numeric-bounds assertions.
+    // The T type parameter on test bases is the model's numeric type;
+    // converting to double here keeps the invariant logic generic.
+    private static double ConvertToDouble<TVal>(TVal value)
+    {
+        if (value is double d) return d;
+        if (value is float f) return f;
+        // Use Convert.ToDouble for IConvertible types (decimal, etc.)
+        if (value is IConvertible) return Convert.ToDouble(value);
+        // Surface unexpected loss types loudly instead of silently masking
+        // them as 0. A loss type that isn't IConvertible AND isn't double
+        // /float is a coding mistake (forgot to register a numeric op or
+        // returned a wrapper struct from GetLastLoss); 0.0 would let the
+        // assert pass falsely on every memorization task.
+        throw new InvalidOperationException(
+            $"ConvertToDouble: unsupported loss type {typeof(TVal).FullName}. " +
+            "Loss must be double, float, or IConvertible.");
+    }
+
+    // =====================================================
     // MATHEMATICAL INVARIANT: Batch Consistency
     // Predicting a single input should produce the same result as
     // predicting that input within a sequence of predictions.

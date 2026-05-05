@@ -164,7 +164,7 @@ public class SimulatedAnnealingOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         ValidationHelper<T>.ValidateInputData(inputData);
 
         InitializeAdaptiveParameters();
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = SpawnIndividual(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 

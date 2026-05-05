@@ -875,8 +875,60 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected OptimizationResult<T, TInput, TOutput> CreateOptimizationResult(OptimizationStepData<T, TInput, TOutput> bestStepData, OptimizationInputData<T, TInput, TOutput> input)
     {
+        // Single-trajectory contract (Adam, SGD, RMSProp, etc.): the working
+        // solution IS the user's model — already trained in place by the
+        // optimizer's per-iteration UpdateSolution. ReferenceEquals returns
+        // true and the writeback below is a no-op.
+        //
+        // Population/structural-training contract (PSO, GA, CMAES, Bayesian,
+        // DE, SimulatedAnnealing, etc.): bestStepData.Solution is the best
+        // individual — a Clone with its own trained parameters. The user's
+        // model reference (RequireModel) is unchanged. To honor the
+        // PyTorch-style "model you passed in is the model you get back,
+        // trained" contract, copy the best individual's parameters back
+        // into the user's model and use the user's reference as
+        // BestSolution.
+        var userModel = RequireModel();
+        var bestSolutionForResult = bestStepData.Solution;
+        if (!ReferenceEquals(bestSolutionForResult, userModel))
+        {
+            var userParameterizable = InterfaceGuard.TryParameterizable(userModel);
+            var bestParameterizable = InterfaceGuard.TryParameterizable(bestSolutionForResult);
+            if (userParameterizable is not null
+                && bestParameterizable is not null
+                && bestParameterizable.ParameterCount > 0)
+            {
+                // Lazy-init NN case: user's model has ParameterCount=0 (no
+                // forward pass yet). The best individual has fully-materialized
+                // parameters. SetParameters on a lazy-init NN should grow the
+                // parameter vector to match. NeuralNetworkBase.UpdateParameters
+                // handles this via right-sizing. If the user's model already
+                // has a different (non-zero) param count, sizes must match
+                // exactly — otherwise this is a structural mismatch (e.g.,
+                // GA evolved a different architecture) and we leave the best
+                // individual as-is.
+                if (userParameterizable.ParameterCount == 0
+                    || userParameterizable.ParameterCount == bestParameterizable.ParameterCount)
+                {
+                    try
+                    {
+                        userParameterizable.SetParameters(bestParameterizable.GetParameters());
+                        bestSolutionForResult = userModel;
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Size mismatch after lazy-init growth attempt — fall
+                        // back to returning the trained clone unchanged.
+                        // Caller still gets a working trained model via
+                        // result.Model, just not the same instance as their
+                        // ConfigureModel reference.
+                    }
+                }
+            }
+        }
+
         return OptimizerHelper<T, TInput, TOutput>.CreateOptimizationResult(
-            bestStepData.Solution,
+            bestSolutionForResult,
             bestStepData.FitnessScore,
             FitnessList,
             bestStepData.SelectedFeatures,
@@ -1230,17 +1282,27 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     {
         if (Options.UseAdaptiveLearningRate)
         {
+            // Adaptive-LR semantics:
+            //   improving fitness → reduce LR (we are converging; take smaller, finer steps)
+            //   stagnant or worse → increase LR (we are stuck; take larger steps to escape)
+            // The counter pair tracks improvement/stagnation streaks for the
+            // adaptive-momentum logic further below; correct mapping is
+            // "improving ⇒ IterationsWithImprovement++". The previous code
+            // had both branches reversed: improving fitness incremented
+            // `IterationsWithoutImprovement` and vice versa, which broke
+            // every downstream branch that keys off these counters
+            // (adaptive momentum, scheduler step decisions).
             if (FitnessCalculator.IsBetterFitness(currentStepData.FitnessScore, previousStepData.FitnessScore))
             {
                 CurrentLearningRate = NumOps.Multiply(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
-                IterationsWithoutImprovement++;
-                IterationsWithImprovement = 0;
+                IterationsWithImprovement++;
+                IterationsWithoutImprovement = 0;
             }
             else
             {
                 CurrentLearningRate = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(Options.LearningRateDecay));
-                IterationsWithImprovement++;
-                IterationsWithoutImprovement = 0;
+                IterationsWithoutImprovement++;
+                IterationsWithImprovement = 0;
             }
 
             CurrentLearningRate = MathHelper.Max(NumOps.FromDouble(Options.MinLearningRate),
@@ -1681,63 +1743,220 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// this method analyzes your training data to find the minimum and maximum values for each feature,
     /// then creates random parameters somewhere within those ranges.</para>
     /// </remarks>
-    protected virtual IFullModel<T, TInput, TOutput> InitializeRandomSolution(TInput trainingData)
+    /// <summary>
+    /// Returns the working solution that single-trajectory optimizers
+    /// (Adam / SGD / RMSProp / LBFGS / etc.) train in place.
+    /// </summary>
+    /// <param name="trainingData">The training data — used to derive
+    /// random parameter init for genuinely uninitialized models that need it.</param>
+    /// <returns>The user's model reference (NOT a clone) — the optimizer's
+    /// per-iteration <c>UpdateSolution</c> mutates this instance directly.</returns>
+    /// <remarks>
+    /// <para>
+    /// Single-trajectory optimizers maintain one current solution that they
+    /// refine over iterations. The PyTorch / TensorFlow / Keras semantic is
+    /// that the model the user passed to <c>ConfigureModel</c> IS the model
+    /// that gets trained — same reference, mutated in place. Without this,
+    /// <c>AiModelResult.Model</c> is a different instance from the user's
+    /// reference and direct vs facade prediction paths diverge (issue #1267).
+    /// </para>
+    /// <para>
+    /// For models that don't support parameter init (decision trees, etc.):
+    /// returns the user's model as-is. The structural-training subclass takes
+    /// over and trains the model in place.
+    /// </para>
+    /// <para>
+    /// For models with already-initialized parameters (NN with Xavier, fine-
+    /// tuning a warm-started model): returns the user's model as-is. The
+    /// user-chosen init is preserved — Adam refines from there.
+    /// </para>
+    /// <para>
+    /// For genuinely-uninitialized parameter-vector models (e.g., a fresh
+    /// linear regression with no coefficients yet): seeds the user's model
+    /// in place with data-derived random parameters. No clone allocated.
+    /// </para>
+    /// <para>
+    /// Population optimizers (PSO, Bayesian, CMAES, GA, DE, …) must NOT call
+    /// this method — they need genuinely-distinct instances per swarm member.
+    /// They call <see cref="SpawnIndividual"/> instead, which produces a Clone.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> InitializeWorkingSolution(TInput trainingData)
     {
         if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
 
-        // Use the Strategy pattern: let the model decide if it supports parameter initialization.
-        // Models like decision trees, meta classifiers, and untrained clustering models don't
-        // support having random parameters injected — they learn their structure during training.
-        if (!InterfaceGuard.Parameterizable(RequireModel()).SupportsParameterInitialization)
+        var model = RequireModel();
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+
+        // Decision trees, meta classifiers, untrained clustering models, etc.:
+        // they learn their structure during training, not via parameter injection.
+        // Return the user's model as-is — the structural-training path mutates it.
+        if (!parameterizable.SupportsParameterInitialization)
         {
-            return RequireModel().Clone();
+            return model;
         }
 
-        // Compute lower and upper bounds from the training data
-        // Following GitHub Copilot's suggestion: compute min/max from the data
+        // For neural networks, the constructor's Xavier/He/etc. initializer
+        // has already populated weight magnitudes proportional to 1/√fanIn —
+        // exactly the scale the layers expect. Re-randomizing those weights
+        // from training-data feature ranges (e.g. [0, 255] for byte input,
+        // or [0, 1] for normalized features) replaces well-chosen initial
+        // weights with values orders of magnitude too large or too small,
+        // and the optimizer cannot recover from that starting point in
+        // any reasonable budget. Closes #1267.
+        //
+        // SCOPE: This skip is NN-specific. For non-NN parametric models
+        // (linear regression, polynomial regression, classical optimizers
+        // operating in feature space) the data-derived random init IS the
+        // right behavior — gating on `model is INeuralNetwork<T>` preserves
+        // that. Single-trajectory path returns the in-place user model;
+        // population diversity is handled in SpawnIndividual via Gaussian
+        // perturbation (review-comment #1265.hc85).
+        if (model is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return model;
+        }
+
+        // Genuinely-uninitialized parameter-vector model: seed it in place with
+        // data-derived random parameters drawn from feature ranges. This is
+        // appropriate for shallow linear/ridge models where the parameter space
+        // IS the feature space — uniform [feature_min, feature_max] is a
+        // reasonable starting point.
+        var randomParams = BuildDataDerivedRandomParameters(trainingData, parameterizable.ParameterCount);
+        randomParams = parameterizable.SanitizeParameters(randomParams);
+        parameterizable.SetParameters(randomParams);
+        return model;
+    }
+
+    /// <summary>
+    /// Spawns a fresh independent solution that population optimizers
+    /// (PSO / Bayesian / CMAES / GA / DE / SA / AntColony / …) add to their
+    /// swarm or population.
+    /// </summary>
+    /// <param name="trainingData">The training data — used to derive random
+    /// parameter init for genuinely uninitialized models that need it.</param>
+    /// <returns>A Clone of the user's model with random parameters applied
+    /// when appropriate. Each call returns a NEW instance — population
+    /// optimizers can store N of these in a list without aliasing.</returns>
+    /// <remarks>
+    /// <para>
+    /// Population optimizers genuinely need distinct model instances — each
+    /// swarm member / population individual is evaluated and updated
+    /// independently, so they cannot share a reference. This method always
+    /// returns a fresh Clone.
+    /// </para>
+    /// <para>
+    /// Single-trajectory optimizers (Adam, SGD, etc.) must NOT call this — it
+    /// allocates an unnecessary clone and breaks the user-model-is-trained-in-
+    /// place contract. They call <see cref="InitializeWorkingSolution"/> instead.
+    /// </para>
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> SpawnIndividual(TInput trainingData)
+    {
+        if (trainingData == null) throw new ArgumentNullException(nameof(trainingData));
+
+        var model = RequireModel();
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+
+        // Models that don't support parameter init: clone the user's model
+        // and let the structural-training path build out the cloned individual.
+        if (!parameterizable.SupportsParameterInitialization)
+        {
+            return model.Clone();
+        }
+
+        // For neural networks, the clone preserves the user's chosen init
+        // (Xavier/He) at the right magnitude. But returning identical clones
+        // would give the population zero diversity — every member of a
+        // PSO swarm / DE generation / GA cohort starts from the SAME point
+        // and the meta-search degenerates. Add small Gaussian perturbations
+        // to each individual's parameter vector — scaled to ~10% of the
+        // per-parameter magnitude — so the population explores the basin
+        // around the user's well-initialized weights without escaping
+        // into the wrong scale regime. Closes review-comment #1265.hc85.
+        //
+        // For non-NN parametric models, retain the legacy data-derived
+        // randomization path so PSO / Differential Evolution / Bayesian
+        // can spread their initial swarm/population across the feature
+        // space as before.
+        if (model is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            var nnClone = model.Clone();
+            var nnCloneParameterizable = InterfaceGuard.Parameterizable(nnClone);
+            // Skip perturbation when ParameterCount==0 (lazy NN that hasn't
+            // materialized yet). Diversity will come from each candidate's
+            // own first-forward materialization in that case.
+            if (nnCloneParameterizable.ParameterCount > 0)
+            {
+                var current = nnCloneParameterizable.GetParameters();
+                var perturbed = new Vector<T>(current.Length);
+                var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+                for (int i = 0; i < current.Length; i++)
+                {
+                    // Gaussian noise ~ N(0, σ²) where σ = max(|current[i]|, ε) * 0.1.
+                    // Box-Muller transform: two uniforms → one Gaussian. The
+                    // ε=1e-3 floor keeps zero-init biases / fresh-allocated
+                    // tensors from getting bit-identical zero perturbations
+                    // (which would also produce zero diversity).
+                    double u1 = rng.NextDouble();
+                    double u2 = rng.NextDouble();
+                    if (u1 < 1e-15) u1 = 1e-15; // log(0) guard
+                    double gaussian = System.Math.Sqrt(-2.0 * System.Math.Log(u1)) * System.Math.Cos(2.0 * System.Math.PI * u2);
+                    double currentDouble = Convert.ToDouble(current[i]);
+                    double sigma = System.Math.Max(System.Math.Abs(currentDouble), 1e-3) * 0.1;
+                    double noisy = currentDouble + gaussian * sigma;
+                    perturbed[i] = NumOps.FromDouble(noisy);
+                }
+                nnCloneParameterizable.SetParameters(perturbed);
+            }
+            return nnClone;
+        }
+
+        // Genuinely-uninitialized parameter-vector model: clone and seed
+        // with data-derived random parameters.
+        var clone = model.Clone();
+        var cloneParameterizable = InterfaceGuard.Parameterizable(clone);
+        var randomParams = BuildDataDerivedRandomParameters(trainingData, cloneParameterizable.ParameterCount);
+        randomParams = cloneParameterizable.SanitizeParameters(randomParams);
+        cloneParameterizable.SetParameters(randomParams);
+        return clone;
+    }
+
+    /// <summary>
+    /// Computes data-derived random parameter bounds and samples a vector
+    /// of length <paramref name="parameterCount"/> uniformly in those bounds.
+    /// Used by both <see cref="InitializeWorkingSolution"/> and
+    /// <see cref="SpawnIndividual"/> for the genuinely-uninitialized branch.
+    /// </summary>
+    private Vector<T> BuildDataDerivedRandomParameters(TInput trainingData, long parameterCount)
+    {
         Vector<T> lowerBounds;
         Vector<T> upperBounds;
 
         if (trainingData is Matrix<T> matrix)
         {
-            // Validate non-empty matrix before accessing elements
             if (matrix.Rows == 0)
-            {
                 throw new ArgumentException("Training data matrix cannot be empty", nameof(trainingData));
-            }
-
-            // Validate matrix has columns
             if (matrix.Columns == 0)
-            {
                 throw new ArgumentException("Training data matrix must have at least one column", nameof(trainingData));
-            }
 
-            // For Matrix input: compute min and max of each column (feature)
             int features = matrix.Columns;
-            int paramCount = (int)InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
-
+            int paramCount = (int)parameterCount;
             // If the model is untrained (ParameterCount is less than the number of features),
             // infer the correct parameter count from the input dimensions.
             // For regression models: paramCount = features + 1 (for intercept) is typical.
             if (paramCount < features)
             {
-                // Assume model uses intercept (common default)
                 paramCount = features + 1;
             }
 
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
 
-            // Compute min/max for each feature column
             var featureMins = new T[features];
             var featureMaxs = new T[features];
             for (int col = 0; col < features; col++)
             {
-                // Safe to access matrix[0, col] after validation above
-                if (matrix.Rows == 0)
-                {
-                    throw new ArgumentException("Matrix cannot be empty", nameof(matrix));
-                }
                 T initialValue = matrix[0, col];
                 T min = initialValue;
                 T max = initialValue;
@@ -1751,7 +1970,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 featureMaxs[col] = max;
             }
 
-            // Fill bounds for each parameter using feature min/max, repeating or defaulting as needed
             for (int i = 0; i < paramCount; i++)
             {
                 if (i < features)
@@ -1761,7 +1979,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 }
                 else
                 {
-                    // If more parameters than features, use global min/max from all features
                     T min = featureMins[0];
                     T max = featureMaxs[0];
                     for (int j = 1; j < featureMins.Length; j++)
@@ -1776,16 +1993,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
         else if (trainingData is Vector<T> vector)
         {
-            // For Vector input: compute min and max of the vector
             if (vector.Length == 0)
-            {
                 throw new ArgumentException("Training data vector cannot be empty", nameof(trainingData));
-            }
 
             T initialValue = vector[0];
             T min = initialValue;
             T max = initialValue;
-
             for (int i = 1; i < vector.Length; i++)
             {
                 T value = vector[i];
@@ -1793,8 +2006,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
                 if (NumOps.GreaterThan(value, max)) max = value;
             }
 
-            // Bounds should match parameter count, not input dimensionality
-            int paramCount = (int)InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
+            int paramCount = (int)parameterCount;
+            if (paramCount < 1) paramCount = 1;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
             for (int i = 0; i < paramCount; i++)
@@ -1805,11 +2018,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
         else
         {
-            // Fallback: create reasonable default bounds based on parameter count
-            int paramCount = (int)InterfaceGuard.Parameterizable(RequireModel()).ParameterCount;
+            int paramCount = (int)parameterCount;
+            if (paramCount < 1) paramCount = 1;
             lowerBounds = new Vector<T>(paramCount);
             upperBounds = new Vector<T>(paramCount);
-
             for (int i = 0; i < paramCount; i++)
             {
                 lowerBounds[i] = NumOps.FromDouble(-10.0);
@@ -1817,17 +2029,25 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             }
         }
 
-        // Generate random parameters within the computed bounds
-        var randomParams = InitializeRandomSolution(lowerBounds, upperBounds);
+        return InitializeRandomSolution(lowerBounds, upperBounds);
+    }
 
-        // Let the model sanitize parameters to satisfy structural constraints
-        // (e.g., monotonically increasing thresholds for ordinal models)
-        randomParams = InterfaceGuard.Parameterizable(RequireModel()).SanitizeParameters(randomParams);
-
-        // Create a new model with these sanitized random parameters
-        var randomModel = RequireModel().Clone();
-        InterfaceGuard.Parameterizable(randomModel).SetParameters(randomParams);
-        return randomModel;
+    /// <summary>
+    /// Legacy entry point. Existing optimizer implementations call this; new
+    /// code should call <see cref="InitializeWorkingSolution"/> for single-
+    /// trajectory optimizers or <see cref="SpawnIndividual"/> for population
+    /// optimizers. This wrapper preserves backward compatibility for any
+    /// out-of-tree optimizer subclass that overrode the original method —
+    /// it now routes through <see cref="SpawnIndividual"/> (clone semantic),
+    /// which is the safer of the two for unknown call-site intent.
+    /// </summary>
+    /// <remarks>
+    /// All in-tree optimizers have been migrated. This method exists only to
+    /// preserve the protected-virtual contract for external subclasses.
+    /// </remarks>
+    protected virtual IFullModel<T, TInput, TOutput> InitializeRandomSolution(TInput trainingData)
+    {
+        return SpawnIndividual(trainingData);
     }
 
     /// <summary>

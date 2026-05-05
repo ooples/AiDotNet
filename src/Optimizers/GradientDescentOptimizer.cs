@@ -86,7 +86,7 @@ public class GradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var bestStepData = EvaluateSolution(currentSolution, inputData);
         var previousStepData = bestStepData;
         InitializeAdaptiveParameters();
