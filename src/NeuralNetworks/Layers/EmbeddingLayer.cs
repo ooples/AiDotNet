@@ -407,26 +407,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Initialize embedding tensor with small random values using Engine operations
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
 
-        // Honour an architecture-supplied seed via InitializationStrategy:
-        // when LayerHelper.Wire (driven by TransformerArchitecture.RandomSeed)
-        // assigns an EagerInitializationStrategy carrying a System.Random
-        // built from a seed, derive a SimdRandom seed from one Next() call
-        // on that RNG so the embedding fill is deterministic too. Without
-        // this hook the architecture's RandomSeed flowed into every other
-        // weighted layer's init but EmbeddingLayer kept generating
-        // process-wide-counter-seeded SimdRandom values, breaking the
-        // reproducibility contract specifically for embedding weights —
-        // surfaced in review-comment #1270.vhmx. Falls back to the
-        // existing default SimdRandom() when no strategy was wired in.
-        SimdRandom rng;
-        if (InitializationStrategy is Initialization.InitializationStrategyBase<T> baseStrategy)
-        {
-            rng = new SimdRandom(baseStrategy.RandomGenerator.Next());
-        }
-        else
-        {
-            rng = new SimdRandom();
-        }
+        // Honour the layer-level deterministic seed when set
+        // (LayerBase<T>.RandomSeed is the per-layer-seed mechanism wired
+        // by LayerHelper.Wire from architecture.RandomSeed). Without
+        // this hook, the architecture's RandomSeed wouldn't reach the
+        // embedding fill — closes review-comment #1270.vhmx.
+        SimdRandom rng = RandomSeed.HasValue
+            ? new SimdRandom(RandomSeed.Value)
+            : new SimdRandom();
         var span = _embeddingTensor.Data.Span;
         int total = span.Length;
         if (total == 0) return; // zero-sized embedding (no vocab or zero dim): nothing to fill
@@ -554,22 +542,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 if (_projectionWeights != null)
                     TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
-                // Xavier initialization. Honour the architecture-supplied
-                // seed via InitializationStrategy when one was wired in,
-                // matching the embedding-tensor seeding path above —
-                // without this hook, RandomSeed would deterministically
-                // initialize _embeddingTensor but the projection weights
-                // here would still pull from CreateSecureRandom (different
-                // values every run). Closes review-comment #1270.xElw.
-                Random random;
-                if (InitializationStrategy is Initialization.InitializationStrategyBase<T> baseStrategy)
-                {
-                    random = RandomHelper.CreateSeededRandom(baseStrategy.RandomGenerator.Next());
-                }
-                else
-                {
-                    random = RandomHelper.CreateSecureRandom();
-                }
+                // Xavier initialization. Honour the layer-level
+                // deterministic seed (LayerBase<T>.RandomSeed) when set
+                // so projection weights follow the same reproducibility
+                // contract as the embedding tensor above. Closes
+                // review-comment #1270.xElw.
+                Random random = RandomSeed.HasValue
+                    ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                    : RandomHelper.CreateSecureRandom();
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
                 for (int i = 0; i < _projectionWeights.Length; i++)
                 {
@@ -724,22 +704,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 if (_projectionWeights != null)
                     TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
-                // Xavier initialization. Honour the architecture-supplied
-                // seed via InitializationStrategy when one was wired in,
-                // matching the embedding-tensor seeding path above —
-                // without this hook, RandomSeed would deterministically
-                // initialize _embeddingTensor but the projection weights
-                // here would still pull from CreateSecureRandom (different
-                // values every run). Closes review-comment #1270.xElw.
-                Random random;
-                if (InitializationStrategy is Initialization.InitializationStrategyBase<T> baseStrategy)
-                {
-                    random = RandomHelper.CreateSeededRandom(baseStrategy.RandomGenerator.Next());
-                }
-                else
-                {
-                    random = RandomHelper.CreateSecureRandom();
-                }
+                // Xavier initialization. Honour the layer-level
+                // deterministic seed (LayerBase<T>.RandomSeed) when set
+                // so projection weights follow the same reproducibility
+                // contract as the embedding tensor above. Closes
+                // review-comment #1270.xElw.
+                Random random = RandomSeed.HasValue
+                    ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                    : RandomHelper.CreateSecureRandom();
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
                 for (int i = 0; i < _projectionWeights.Length; i++)
                 {

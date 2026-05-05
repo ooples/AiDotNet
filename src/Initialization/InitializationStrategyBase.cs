@@ -31,27 +31,6 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected readonly Random Random;
 
     /// <summary>
-    /// Assembly-internal accessor for the seeded RNG instance. Lets layers that
-    /// don't go through the strategy's <c>InitializeXavier</c> / <c>InitializeHe</c>
-    /// helpers (e.g. <c>EmbeddingLayer</c>'s <c>SimdRandom</c>-based fill,
-    /// or any layer that drives a hardware-specialized batched RNG)
-    /// derive a deterministic seed from the same underlying generator.
-    /// Returns the same instance the strategy itself uses, so a layer
-    /// can pull <c>Random.Next()</c> to seed its own SIMD RNG without
-    /// changing the framework-level reproducibility contract.
-    /// <para>
-    /// Visibility is <c>internal</c> rather than <c>public</c>: external
-    /// callers should not observe or mutate the strategy's RNG progression.
-    /// AiDotNet.Tests has access via <c>InternalsVisibleTo</c>; if a future
-    /// consumer outside the assembly needs a determinism handle, expose a
-    /// purpose-built read-only API (e.g. a <c>NextSeed()</c> wrapper) rather
-    /// than leaking the live <see cref="System.Random"/> reference. Closes
-    /// review-comment #1270.xElH.
-    /// </para>
-    /// </summary>
-    internal Random RandomGenerator => Random;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="InitializationStrategyBase{T}"/> class
     /// using the framework's default thread-safe non-deterministic RNG. Use the
     /// other overload when reproducibility is required.
@@ -328,7 +307,10 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
             int chunkStart = c * chunkSize;
             int chunkEnd = Math.Min(chunkStart + chunkSize, length);
             if (chunkStart >= chunkEnd) return;
-            var chunkRng = new Random(seeds[c]);
+            // Per-thread seeded RNG goes through RandomHelper to keep
+            // the codebase-wide rule (never construct System.Random
+            // directly) intact even on the parallel-fill path.
+            var chunkRng = RandomHelper.CreateSeededRandom(seeds[c]);
             FillChunkDouble(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), stddev, clipBound, chunkRng);
         });
     }
@@ -400,7 +382,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
             int chunkStart = c * chunkSize;
             int chunkEnd = Math.Min(chunkStart + chunkSize, length);
             if (chunkStart >= chunkEnd) return;
-            var chunkRng = new Random(seeds[c]);
+            var chunkRng = RandomHelper.CreateSeededRandom(seeds[c]);
             FillChunkFloat(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), stddev, clipBound, chunkRng);
         });
     }

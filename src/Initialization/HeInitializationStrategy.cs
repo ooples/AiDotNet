@@ -27,6 +27,20 @@ public class HeInitializationStrategy<T> : InitializationStrategyBase<T>
         _useNormal = useNormal;
     }
 
+    /// <summary>
+    /// Creates a He initialization strategy with a caller-supplied
+    /// <see cref="Random"/> source. Use this overload when reproducible
+    /// weight initialization is required (typically driven by
+    /// <see cref="LayerBase{T}.RandomSeed"/> via the layer's own
+    /// <see cref="RandomHelper.CreateSeededRandom(int)"/>).
+    /// </summary>
+    /// <param name="rng">Seeded RNG (or null for the default thread-safe RNG).</param>
+    /// <param name="useNormal">If true, use normal distribution; if false, use uniform.</param>
+    public HeInitializationStrategy(Random? rng, bool useNormal = true) : base(rng)
+    {
+        _useNormal = useNormal;
+    }
+
     /// <inheritdoc />
     public override bool IsLazy => false;
 

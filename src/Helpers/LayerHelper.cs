@@ -1686,42 +1686,38 @@ public static class LayerHelper<T>
         NeuralNetworkTaskType taskType = architecture.TaskType;
         double temperature = architecture.Temperature;
 
-        // When the architecture specifies a deterministic random seed, build
-        // a "seed RNG" once. Per-layer seeded RNGs are derived from this
-        // single source so the layer stack's seeds (and therefore weights)
-        // are reproducible for a given architecture seed.
+        // Layer-level seed plumbing (industry-standard pattern). When the
+        // architecture specifies a deterministic random seed, derive per-
+        // layer seeds from a single seed-RNG and assign each layer's
+        // LayerBase<T>.RandomSeed property. Each layer's own
+        // InitializeParameters reads RandomSeed directly and uses it to
+        // construct a seeded RandomHelper.CreateSeededRandom — so the
+        // layer's natural init algorithm (DenseLayer's activation-aware
+        // He/LeCun, MultiHeadAttention's Xavier-uniform via SimdRandom,
+        // EmbeddingLayer's small-noise scaled-by-sqrt(d) fill) runs
+        // unchanged but with reproducible RNG state. Closes review-
+        // comment #1270.yA1v (the previous Wire override replaced
+        // InitializationStrategy with EagerInitializationStrategy and
+        // silently changed every Dense layer's init from He to
+        // Xavier-normal — a behaviour change masquerading as a
+        // determinism fix).
         //
-        // Wire's job is NARROW: do not override the layer's natural init
-        // policy. Earlier versions of this code unconditionally replaced
-        // every layer's InitializationStrategy with EagerInitializationStrategy
-        // (Xavier-normal). For DenseLayer (which DOES consume
-        // InitializationStrategy), that quietly changed the init from
-        // activation-aware He / LeCun (the production default for
-        // ReLU / SELU layers) to Xavier-normal — a behaviour change beyond
-        // "make it deterministic." Closes review-comment #1270.yA1v.
-        //
-        // The fix: don't touch InitializationStrategy at all. Each layer
-        // that needs deterministic init should derive its RNG from a
-        // seed-aware source (the per-layer hook EmbeddingLayer uses via
-        // InitializationStrategyBase.RandomGenerator on the strategy
-        // when one IS provided by the caller). For layers that don't
-        // consume InitializationStrategy and use internal SimdRandom,
-        // layer-side cooperation would be needed to plumb the seed —
-        // tracked as a follow-up. Wire keeps the seedRng instance
-        // available so the helper can be evolved without re-threading
-        // architecture.RandomSeed everywhere, but no longer mutates
-        // any layer.
+        // RNG ordering: Wire is called in layer-construction order and
+        // pulls one .Next() per layer, so the per-layer seed sequence is
+        // deterministic for a given architecture seed. Concurrent lazy-
+        // init paths each get their own private RNG instance (no shared
+        // mutable state).
         Random? seedRng = architecture.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(architecture.RandomSeed.Value)
             : null;
 
         ILayer<T> Wire(ILayer<T> layer)
         {
-            // Intentionally a no-op for now. See block comment above.
-            // The seedRng closure is kept so the helper can opt into a
-            // future seed-aware layer-side hook without re-threading
-            // architecture.RandomSeed across this entire method.
-            _ = seedRng;
+            if (seedRng is null) return layer;
+            if (layer is NeuralNetworks.Layers.LayerBase<T> baseLayer)
+            {
+                baseLayer.RandomSeed = seedRng.Next();
+            }
             return layer;
         }
 

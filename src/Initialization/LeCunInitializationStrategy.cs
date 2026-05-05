@@ -15,6 +15,22 @@ namespace AiDotNet.Initialization;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class LeCunInitializationStrategy<T> : InitializationStrategyBase<T>
 {
+    /// <summary>
+    /// Creates a LeCun initialization strategy with the framework's default
+    /// thread-safe RNG.
+    /// </summary>
+    public LeCunInitializationStrategy() { }
+
+    /// <summary>
+    /// Creates a LeCun initialization strategy with a caller-supplied
+    /// <see cref="Random"/> source. Use this overload when reproducible
+    /// weight initialization is required (typically driven by
+    /// <see cref="LayerBase{T}.RandomSeed"/> via the layer's own
+    /// <see cref="RandomHelper.CreateSeededRandom(int)"/>).
+    /// </summary>
+    /// <param name="rng">Seeded RNG (or null for the default thread-safe RNG).</param>
+    public LeCunInitializationStrategy(Random? rng) : base(rng) { }
+
     /// <inheritdoc />
     public override bool IsLazy => false;
 
