@@ -74,7 +74,9 @@ public class NoamSchedule : LearningRateSchedulerBase
         _factor = factor;
 
         // Step 0 (before any Step() call) maps to t=1 (warmup-start) under
-        // the t=step+1 convention. Without this override, the base ctor
+        // the t=step+1 convention (industry-standard, matching tensor2tensor
+        // and Hugging Face / PyTorch warmup schedulers driven from a
+        // 0-indexed step counter). Without this override, the base ctor
         // leaves _currentLearningRate at _baseLearningRate (which we set to
         // the peak LR via ComputePeakLr to satisfy the base's positive-LR
         // guard) — causing the very first batch to use the peak LR instead
@@ -105,6 +107,15 @@ public class NoamSchedule : LearningRateSchedulerBase
     /// </remarks>
     protected override double ComputeLearningRate(int step)
     {
+        // Industry-standard mapping (tensor2tensor / Hugging Face /
+        // PyTorch): the framework's 0-indexed step → paper's 1-indexed t
+        // via t = step + 1. The negative-step clamp is defensive — base
+        // class never passes a negative step, but if a deserialized state
+        // ever did, 0^(-0.5) = ∞ would otherwise leak through. Closes
+        // review-comment #1269.yuXt (PR #1269 had the older
+        // `step <= 0 ? 1 : step` mapping that collapsed steps 0 and 1
+        // onto t=1; this branch always had t=step+1 so the cherry-pick
+        // preserves the existing fix).
         int t = step < 0 ? 1 : step + 1;
         double arg1 = Math.Pow(t, -0.5);
         double arg2 = t * Math.Pow(_warmupSteps, -1.5);
@@ -122,6 +133,9 @@ public class NoamSchedule : LearningRateSchedulerBase
     public override void Reset()
     {
         base.Reset();
+        // base.Reset() sets _currentStep = 0; mirror the ctor's
+        // "warmup-start LR for batch 0" by passing step=0
+        // (ComputeLearningRate maps step=0 → paper's t=1).
         _currentLearningRate = ComputeLearningRate(0);
     }
 
