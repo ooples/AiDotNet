@@ -101,9 +101,11 @@ public class NoamSchedule : LearningRateSchedulerBase
     ///   <item><c>step = warmup_steps - 1</c> → <c>t = warmup_steps</c> (peak)</item>
     ///   <item><c>step = N</c> → <c>t = N + 1</c> (LR for the (N+1)th batch)</item>
     /// </list>
-    /// Negative <c>step</c> is clamped to 0 so the formula never sees a
-    /// non-positive t (which would produce 0^(-0.5) = ∞ or a negative
-    /// arg2 multiplier).
+    /// Negative <c>step</c> is clamped to <c>t = 1</c> (the warmup-start
+    /// value), keeping the formula away from a non-positive t that would
+    /// produce <c>0^(-0.5) = ∞</c> or a negative <c>arg2</c> multiplier.
+    /// The base class never passes a negative step at runtime; this guard
+    /// is purely defensive against deserialized state.
     /// </remarks>
     protected override double ComputeLearningRate(int step)
     {
