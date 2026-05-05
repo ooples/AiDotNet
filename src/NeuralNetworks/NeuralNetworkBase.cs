@@ -3361,9 +3361,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             else
             {
                 // Fallback for networks without ITrainableLayer layers:
-                // use the legacy per-layer UpdateParameters path
+                // use the legacy per-layer UpdateParameters path. Step
+                // the scheduler at the batch boundary via the shared
+                // helper so all training entry points keep the same
+                // OnBatchEnd contract. Closes #1270.yYuK.
                 var opt = GetOrCreateBaseOptimizer();
                 opt.UpdateParameters(Layers);
+                StepSchedulerIfSupported(opt);
             }
         }
         finally
@@ -3907,20 +3911,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 }
             }
 
-            // Advance the optimizer's learning-rate scheduler. This was
-            // never being called from the training pipeline — schedulers
-            // configured on optimizers (LinearWarmupScheduler, NoamSchedule,
-            // CosineAnnealing, etc.) silently never stepped, leaving the LR
-            // pinned at its initial value forever. The contract documented
-            // on GradientBasedOptimizerBase.OnBatchEnd is "called at the end
-            // of each training batch"; TrainWithTape is the canonical batch
-            // boundary for tape-based training so it's the right place for
-            // the call. Optimizers that don't derive from
-            // GradientBasedOptimizerBase fall through unchanged.
-            if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
-            {
-                stepped.OnBatchEnd();
-            }
+            // Advance the optimizer's learning-rate scheduler at the
+            // tape-batch boundary via the shared helper. Without this,
+            // any LR scheduler attached to the optimizer (NoamSchedule,
+            // LinearWarmupScheduler, CosineAnnealing, etc.) would never
+            // tick and the LR would stay pinned at its initial value.
+            StepSchedulerIfSupported(opt);
         }
         finally
         {
@@ -4243,17 +4239,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             opt.Step(context);
 
-            // Advance the optimizer's learning-rate scheduler. Same hook
-            // as TrainWithTape — without this, a per-batch scheduler
-            // (Noam, LinearWarmupScheduler, CosineAnnealing, etc.)
-            // attached to the optimizer remains inert when callers use
-            // TrainWithCustomLoss instead of the standard Train path,
-            // pinning the LR at its initial value forever. Closes
-            // review-comment #1269.zFt3.
-            if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
-            {
-                stepped.OnBatchEnd();
-            }
+            // Mirror the OnBatchEnd advance from TrainWithTape via the
+            // shared helper so a custom-loss caller and a regular Train
+            // caller see identical scheduler behaviour. Closes #1269.zFt3.
+            StepSchedulerIfSupported(opt);
 
             return lossValue;
         }
@@ -4270,6 +4259,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
         return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    }
+
+    /// <summary>
+    /// Advances the optimizer's learning-rate scheduler at a training-batch
+    /// boundary. Single source of truth for the OnBatchEnd contract — every
+    /// training entry point (legacy <c>Train</c>, <see cref="TrainWithTape"/>,
+    /// <c>TrainWithCustomLoss</c>) routes through this helper so all paths
+    /// keep identical scheduler-step semantics. Optimizers that don't derive
+    /// from <see cref="Optimizers.GradientBasedOptimizerBase{T, TInput, TOutput}"/>
+    /// are silently ignored — that's the documented contract on
+    /// <c>OnBatchEnd</c>: only gradient-based optimizers carry an LR
+    /// scheduler. Closes review-comment #1270.zKjB.
+    /// </summary>
+    /// <param name="optimizer">The optimizer that just finished a batch.</param>
+    private static void StepSchedulerIfSupported(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
+        {
+            stepped.OnBatchEnd();
+        }
     }
 
     /// <summary>

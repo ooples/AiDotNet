@@ -77,6 +77,22 @@ public class NoamSchedule : LearningRateSchedulerBase
     public int ModelDimension => _modelDimension;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <c>step</c> here is the library's "batches completed so far" counter
+    /// (0-based), matching the value that <see cref="LearningRateSchedulerBase.Step"/>
+    /// passes in after its post-batch increment. Internally we map to the
+    /// paper's 1-indexed t via <c>t = step + 1</c>:
+    /// <list type="bullet">
+    ///   <item><c>step = 0</c> (no batches yet, ctor) → <c>t = 1</c> (warmup-start)</item>
+    ///   <item><c>step = warmup_steps - 1</c> → <c>t = warmup_steps</c> (peak)</item>
+    ///   <item><c>step = N</c> → <c>t = N + 1</c> (LR for the (N+1)th batch)</item>
+    /// </list>
+    /// Negative <c>step</c> is clamped to <c>t = 1</c> (the warmup-start
+    /// value), keeping the formula away from a non-positive t that would
+    /// produce <c>0^(-0.5) = ∞</c> or a negative <c>arg2</c> multiplier.
+    /// The base class never passes a negative step at runtime; this guard
+    /// is purely defensive against deserialized state.
+    /// </remarks>
     protected override double ComputeLearningRate(int step)
     {
         // Vaswani 2017 uses 1-indexed steps; LearningRateSchedulerBase

@@ -375,6 +375,26 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     }
 
     /// <summary>
+    /// Lazy-initializes the continuous-input projection weights with Xavier
+    /// scaling. Honours the layer-level deterministic seed
+    /// (<see cref="LayerBase{T}.RandomSeed"/>) when set so projection
+    /// weights follow the same reproducibility contract as the embedding
+    /// tensor. Shared by both CPU and GPU forward paths to keep the two
+    /// init policies in lock-step (closes review-comment #1270.yLf-).
+    /// </summary>
+    private void InitializeProjectionWeights(Tensor<T> projectionWeights, int inputFeatures, int embeddingDim)
+    {
+        Random random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
+        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
+        for (int i = 0; i < projectionWeights.Length; i++)
+        {
+            projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+        }
+    }
+
+    /// <summary>
     /// Initializes the embedding tensor with small random values.
     /// </summary>
     /// <remarks>
