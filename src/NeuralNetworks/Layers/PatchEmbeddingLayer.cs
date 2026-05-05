@@ -527,19 +527,33 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         {
             int patchArea = _patchSize * _patchSize;
             int divisor = _embeddingDim * patchArea;
-            int candidateChannels = (parameters.Length - _embeddingDim) / divisor;
-            if (candidateChannels <= 0
-                || _embeddingDim * (candidateChannels * patchArea + 1) != parameters.Length)
+            // Special case: param vector is just bias-sized (placeholder
+            // round-trip — fresh lazy layer's GetParameters returned only
+            // the bias values since weights are 0×embeddingDim). Skip
+            // channel inference and let the bias-only update fall through
+            // to the regular write path below.
+            if (parameters.Length == _embeddingDim)
             {
-                throw new ArgumentException(
-                    $"Cannot infer channel count for PatchEmbeddingLayer from {parameters.Length} parameters " +
-                    $"(patchSize={_patchSize}, embeddingDim={_embeddingDim}).");
+                // weights stay at [0, embeddingDim], biases get the new vector.
+                // Falls through to the totalParams check which will see
+                // 0*embeddingDim + embeddingDim == parameters.Length and pass.
             }
-            _channels = candidateChannels;
-            _projectionWeights = new Tensor<T>([candidateChannels * patchArea, _embeddingDim]);
-            _projectionBias = new Tensor<T>([_embeddingDim]);
-            RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
+            else
+            {
+                int candidateChannels = (parameters.Length - _embeddingDim) / divisor;
+                if (candidateChannels <= 0
+                    || _embeddingDim * (candidateChannels * patchArea + 1) != parameters.Length)
+                {
+                    throw new ArgumentException(
+                        $"Cannot infer channel count for PatchEmbeddingLayer from {parameters.Length} parameters " +
+                        $"(patchSize={_patchSize}, embeddingDim={_embeddingDim}).");
+                }
+                _channels = candidateChannels;
+                _projectionWeights = new Tensor<T>([candidateChannels * patchArea, _embeddingDim]);
+                _projectionBias = new Tensor<T>([_embeddingDim]);
+                RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
+                RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
+            }
         }
 
         int totalParams = _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Shape[0];
