@@ -110,7 +110,7 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 

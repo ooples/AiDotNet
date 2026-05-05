@@ -98,7 +98,7 @@ public class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         var swarm = new List<IFullModel<T, TInput, TOutput>>();
         for (int i = 0; i < _psoOptions.SwarmSize; i++)
         {
-            swarm.Add(InitializeRandomSolution(inputData.XTrain));
+            swarm.Add(SpawnIndividual(inputData.XTrain));
         }
 
         // Use model's parameter count instead of input size for velocity dimensions

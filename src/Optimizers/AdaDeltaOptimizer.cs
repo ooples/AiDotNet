@@ -186,7 +186,7 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         ValidationHelper<T>.ValidateInputData(inputData);
 
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();

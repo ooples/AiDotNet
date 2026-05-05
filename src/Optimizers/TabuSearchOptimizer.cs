@@ -128,7 +128,7 @@ public class TabuSearchOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, 
     /// </remarks>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = SpawnIndividual(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
 
         // Use a HashSet for faster tabu list lookups, with a custom comparer

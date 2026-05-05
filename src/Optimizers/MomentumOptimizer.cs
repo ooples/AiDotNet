@@ -132,7 +132,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         ValidationHelper<T>.ValidateInputData(inputData);
 
         // Initialize with random solution
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 

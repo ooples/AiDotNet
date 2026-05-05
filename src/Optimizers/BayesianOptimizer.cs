@@ -110,7 +110,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
 
         // Get the parameter count from a random solution (includes coefficients + intercept)
         // This is different from inputSize which is just the feature count
-        var firstSolution = InitializeRandomSolution(inputData.XTrain);
+        var firstSolution = SpawnIndividual(inputData.XTrain);
         int paramCount = (int)InterfaceGuard.Parameterizable(firstSolution).ParameterCount;
 
         // Initial random sampling - use paramCount (model parameters), not inputSize (features)
@@ -130,7 +130,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
         // Continue with remaining initial samples
         for (int i = 1; i < _options.InitialSamples; i++)
         {
-            var randomSolution = InitializeRandomSolution(inputData.XTrain);
+            var randomSolution = SpawnIndividual(inputData.XTrain);
             var stepData = EvaluateSolution(randomSolution, inputData);
             UpdateBestSolution(stepData, ref bestStepData);
             var parameters = InterfaceGuard.Parameterizable(randomSolution).GetParameters();
@@ -151,7 +151,7 @@ public class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TO
 
             // Find next point to sample using acquisition function - use paramCount, not inputSize
             var nextPoint = OptimizeAcquisitionFunction(paramCount);
-            var baseSolution = InitializeRandomSolution(inputData.XTrain);
+            var baseSolution = SpawnIndividual(inputData.XTrain);
             var currentSolution = InterfaceGuard.Parameterizable(baseSolution).WithParameters(nextPoint);
 
             var currentStepData = EvaluateSolution(currentSolution, inputData);

@@ -3352,30 +3352,103 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     nameof(targets));
         }
 
-        // Stack along a new leading batch dim. Allocate once for the batch
-        // and copy each sample's flat-index range into its slice; this avoids
-        // any per-sample tape allocation and keeps the resulting tensor
-        // contiguous so downstream Conv / matmul kernels stay on their
-        // fast paths. The output shape is [B, *inputShape].
+        // Detect whether per-sample inputs are already in batched form
+        // (rank == expectedUnbatchedRank + 1 with a leading dim that the user
+        // intends as the batch axis — typically 1 for the per-sample Predict
+        // shape, but can be any positive value when the caller is passing
+        // already-batched chunks). In that case, CONCATENATE along the
+        // existing leading batch dim rather than stacking a new dim:
+        //
+        //   STACK  : N × [1, ctxLen]   →  [N, 1, ctxLen]   ← double-batch, wrong
+        //   CONCAT : N × [1, ctxLen]   →  [N, ctxLen]      ← correct
+        //   STACK  : N × [B_i, ctxLen] →  [N, B_i, ctxLen] ← double-batch
+        //   CONCAT : N × [B_i, ctxLen] →  [sum(B_i), ctxLen] ← correct
+        //
+        // For unbatched per-sample inputs (rank == expectedUnbatchedRank):
+        //   STACK  : N × [ctxLen]      →  [N, ctxLen]      ← correct
+        //
+        // expectedUnbatchedRank == 0 means we don't know the architecture's
+        // expected layout; fall back to legacy stack behaviour for backward
+        // compatibility with non-NN-architecture-aware models.
         int batchSize = inputs.Length;
-        var batchedInputShape = new int[inputShape.Length + 1];
-        batchedInputShape[0] = batchSize;
-        for (int d = 0; d < inputShape.Length; d++) batchedInputShape[d + 1] = inputShape[d];
-        var batchedTargetShape = new int[targetShape.Length + 1];
-        batchedTargetShape[0] = batchSize;
-        for (int d = 0; d < targetShape.Length; d++) batchedTargetShape[d + 1] = targetShape[d];
+        int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
+        bool concatAlongLeadingDim =
+            expectedUnbatchedRank > 0
+            && inputShape.Length == expectedUnbatchedRank + 1
+            && inputShape[0] > 0;
 
-        var batchedInput = new Tensor<T>(batchedInputShape);
-        var batchedTarget = new Tensor<T>(batchedTargetShape);
+        Tensor<T> batchedInput;
+        Tensor<T> batchedTarget;
 
-        int inputStride = inputs[0].Length;
-        int targetStride = targets[0].Length;
-        for (int b = 0; b < batchSize; b++)
+        if (concatAlongLeadingDim)
         {
-            int inputOffset = b * inputStride;
-            for (int j = 0; j < inputStride; j++) batchedInput[inputOffset + j] = inputs[b][j];
-            int targetOffset = b * targetStride;
-            for (int j = 0; j < targetStride; j++) batchedTarget[targetOffset + j] = targets[b][j];
+            // Concat: leading dim sums per-sample batch sizes.
+            int totalBatch = batchSize * inputShape[0];
+            var batchedInputShape = new int[inputShape.Length];
+            batchedInputShape[0] = totalBatch;
+            for (int d = 1; d < inputShape.Length; d++) batchedInputShape[d] = inputShape[d];
+
+            // Mirror the same concat for targets when they have the same
+            // structure (rank matches expected output rank + 1). Otherwise
+            // stack targets along a new leading dim — labels can be flat
+            // [vocab] or matrix [B, vocab] independent of input layout.
+            int[] batchedTargetShape;
+            bool concatTargets =
+                targetShape.Length >= 2
+                && targetShape[0] == inputShape[0];
+            if (concatTargets)
+            {
+                int totalTargetBatch = batchSize * targetShape[0];
+                batchedTargetShape = new int[targetShape.Length];
+                batchedTargetShape[0] = totalTargetBatch;
+                for (int d = 1; d < targetShape.Length; d++) batchedTargetShape[d] = targetShape[d];
+            }
+            else
+            {
+                batchedTargetShape = new int[targetShape.Length + 1];
+                batchedTargetShape[0] = batchSize;
+                for (int d = 0; d < targetShape.Length; d++) batchedTargetShape[d + 1] = targetShape[d];
+            }
+
+            batchedInput = new Tensor<T>(batchedInputShape);
+            batchedTarget = new Tensor<T>(batchedTargetShape);
+
+            int inputStride = inputs[0].Length;
+            int targetStride = targets[0].Length;
+            for (int b = 0; b < batchSize; b++)
+            {
+                int inputOffset = b * inputStride;
+                for (int j = 0; j < inputStride; j++) batchedInput[inputOffset + j] = inputs[b][j];
+                int targetOffset = b * targetStride;
+                for (int j = 0; j < targetStride; j++) batchedTarget[targetOffset + j] = targets[b][j];
+            }
+        }
+        else
+        {
+            // Stack along a new leading batch dim. Allocate once for the batch
+            // and copy each sample's flat-index range into its slice; this avoids
+            // any per-sample tape allocation and keeps the resulting tensor
+            // contiguous so downstream Conv / matmul kernels stay on their
+            // fast paths. The output shape is [B, *inputShape].
+            var batchedInputShape = new int[inputShape.Length + 1];
+            batchedInputShape[0] = batchSize;
+            for (int d = 0; d < inputShape.Length; d++) batchedInputShape[d + 1] = inputShape[d];
+            var batchedTargetShape = new int[targetShape.Length + 1];
+            batchedTargetShape[0] = batchSize;
+            for (int d = 0; d < targetShape.Length; d++) batchedTargetShape[d + 1] = targetShape[d];
+
+            batchedInput = new Tensor<T>(batchedInputShape);
+            batchedTarget = new Tensor<T>(batchedTargetShape);
+
+            int inputStride = inputs[0].Length;
+            int targetStride = targets[0].Length;
+            for (int b = 0; b < batchSize; b++)
+            {
+                int inputOffset = b * inputStride;
+                for (int j = 0; j < inputStride; j++) batchedInput[inputOffset + j] = inputs[b][j];
+                int targetOffset = b * targetStride;
+                for (int j = 0; j < targetStride; j++) batchedTarget[targetOffset + j] = targets[b][j];
+            }
         }
 
         Train(batchedInput, batchedTarget);

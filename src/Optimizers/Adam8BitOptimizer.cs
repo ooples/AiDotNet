@@ -313,7 +313,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <returns>The result of the optimization process, including the best solution found.</returns>
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 

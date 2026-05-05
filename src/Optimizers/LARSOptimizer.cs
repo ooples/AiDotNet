@@ -138,7 +138,7 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     public override OptimizationResult<T, TInput, TOutput> Optimize(OptimizationInputData<T, TInput, TOutput> inputData)
     {
         // Initialize with random solution
-        var currentSolution = InitializeRandomSolution(inputData.XTrain);
+        var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         _velocity = new Vector<T>(parameters.Length);
