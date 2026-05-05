@@ -222,10 +222,24 @@ public static class OnnxExporter
     {
         // Reflection rather than a hard cast — IFullModel doesn't expose
         // Architecture, but every NeuralNetworkBase-derived model does.
-        var archProp = model.GetType().GetProperty("Architecture");
-        if (archProp is null) return false;
-        var arch = archProp.GetValue(model);
+        // NeuralNetworkBase declares Architecture as a public FIELD (not a
+        // property), so probe BOTH GetField and GetProperty — the original
+        // GetProperty-only path silently returned false for every NN model
+        // and made the symbolic-axis emission no-op even when the
+        // architecture truly was dynamic.
+        var modelType = model.GetType();
+        object? arch = null;
+        var archField = modelType.GetField("Architecture");
+        if (archField is not null) arch = archField.GetValue(model);
+        if (arch is null)
+        {
+            var archProp = modelType.GetProperty("Architecture");
+            if (archProp is null) return false;
+            arch = archProp.GetValue(model);
+        }
         if (arch is null) return false;
+
+        // HasDynamicSpatialDims is a property on NeuralNetworkArchitecture<T>.
         var dynProp = arch.GetType().GetProperty("HasDynamicSpatialDims");
         return dynProp is not null && dynProp.GetValue(arch) is bool b && b;
     }
