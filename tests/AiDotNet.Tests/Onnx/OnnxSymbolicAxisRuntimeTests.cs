@@ -183,12 +183,22 @@ public class OnnxSymbolicAxisRuntimeTests
 
         // Warm the layer chain so each layer reports IsShapeResolved=true
         // (the exporter rejects unresolved layers with InvalidOperationException).
-        AdnTensor x = MakeRamp(new[] { 1, 3, 32, 32 });
+        // 2D [batch, features] shape matches Dense + ReLU's contract; the
+        // outer architecture is still dynamic-spatial which is what the
+        // reflection probe under test cares about (the probe inspects
+        // HasDynamicSpatialDims on the architecture, independent of the
+        // actual layer ranks the architecture chose to compose).
+        AdnTensor x = MakeRamp(new[] { 1, 16 });
         x = model.Layers[0].Forward(x);
         x = model.Layers[1].Forward(x);
 
         // Run the model through the public exporter path — exercises the
-        // HasDynamicSpatialAxes reflection probe end-to-end.
+        // HasDynamicSpatialAxes reflection probe end-to-end. The exporter's
+        // input shape is the dynamic-spatial canonical 4D shape that
+        // triggers symbolic-axis emission for batch/H/W axes; the Dense
+        // layer's actual 2D operation runs orthogonally to this shape
+        // (the test pins the dim_param emission, not the layer-output
+        // shape correctness).
         var onnxBytes = OnnxExporter.ExportToBytes(model, new[] { 1, 3, 32, 32 });
         Assert.True(onnxBytes.Length > 0);
 
@@ -233,35 +243,58 @@ public class OnnxSymbolicAxisRuntimeTests
         }
         byte lengthPrefix = (byte)nameBytes.Length;
 
-        // Slide a window of length (1 + nameBytes.Length) across the bytes
-        // looking for `lengthPrefix nameBytes[0] nameBytes[1] ...`.
-        for (int start = 0; start <= haystack.Length - 1 - nameBytes.Length; start++)
+        // Slide a window across the bytes looking for the FULL protobuf
+        // tag-length-value triple for TensorShapeProto.Dimension.dim_param:
+        //   - Field tag byte: 0x12 (field number 2 << 3 | wire type 2 = LEN)
+        //   - Length byte:    nameBytes.Length (single-byte varint, since
+        //                     all test sentinels are < 128 bytes)
+        //   - Name bytes:     UTF-8 encoding of the symbolic name
+        // Closes review-comment #1269.vzGE — the previous version checked
+        // only `<length> <name>` without the 0x12 field-tag byte, so
+        // matches could land on (length+name) sequences that aren't
+        // actually dim_param emissions (e.g., elsewhere in the protobuf
+        // where field tag 1 / 3 / etc. precedes a similar length+payload).
+        // Adding the 0x12 anchor ties the match to the correct field tag.
+        const byte DimParamFieldTag = 0x12; // (2 << 3) | wire_type=2 (LEN)
+        for (int start = 0; start <= haystack.Length - 2 - nameBytes.Length; start++)
         {
-            if (haystack[start] != lengthPrefix) continue;
+            if (haystack[start] != DimParamFieldTag) continue;
+            if (haystack[start + 1] != lengthPrefix) continue;
             bool match = true;
             for (int j = 0; j < nameBytes.Length; j++)
             {
-                if (haystack[start + 1 + j] != nameBytes[j]) { match = false; break; }
+                if (haystack[start + 2 + j] != nameBytes[j]) { match = false; break; }
             }
             if (match) return;
         }
         Assert.Fail(
-            $"Could not find protobuf length-prefixed encoding of '{needle}' " +
-            $"({1 + nameBytes.Length} bytes: 0x{lengthPrefix:X2} followed by the UTF-8 " +
-            $"of '{needle}') anywhere in the {haystack.Length}-byte ONNX graph. " +
-            $"This means the symbolic axis was NOT emitted as a dim_param in the " +
-            $"wire format — the axis is being written as a fixed dim_value instead, " +
-            $"contradicting the issue #1211 contract.");
+            $"Could not find protobuf TensorShapeProto.Dimension.dim_param " +
+            $"encoding of '{needle}' (0x{DimParamFieldTag:X2} 0x{lengthPrefix:X2} followed by the UTF-8 " +
+            $"of '{needle}', total {2 + nameBytes.Length} bytes) anywhere in " +
+            $"the {haystack.Length}-byte ONNX graph. This means the symbolic " +
+            $"axis was NOT emitted as a dim_param (field tag 2) in the wire " +
+            $"format — the axis is being written as a fixed dim_value (field " +
+            $"tag 1) or omitted entirely, contradicting the issue #1211 contract.");
     }
 
     /// <summary>
-    /// Minimal lazy-spatial model used by the reflection-path test. Two
-    /// lazy layers — Conv (3→8) + MaxPool (2×2/stride 2) — that resolve
-    /// shape from input on first Forward. Only the architecture's
-    /// HasDynamicSpatialDims=true is needed to drive the test's
-    /// reflection assertion; the actual ONNX op-export fidelity for
-    /// Conv/Pool is separate scope (the runtime test in this file uses
-    /// ReLU which IS supported by the exporter).
+    /// Minimal lazy-spatial model used by the reflection-path test. The
+    /// architecture is dynamic-spatial (rank-3 [B, Sq, D]) and uses ONLY
+    /// layers that <c>OnnxExporter</c> supports today (Dense + ReLU).
+    /// Closes review-comment #1269.vzGT — the previous version used
+    /// ConvolutionalLayer + PoolingLayer, neither of which the exporter
+    /// recognizes (its ExportLayer switch handles Dense / Linear /
+    /// FullyConnected, ReLU/Sigmoid/Tanh/Softmax, Dropout, Flatten and
+    /// SKIPS everything else). That made the test brittle in two ways:
+    ///   (a) the exporter's silent-skip behaviour was load-bearing for
+    ///       the test passing, so a future change that throws on
+    ///       unsupported layers would regress this test;
+    ///   (b) Conv/Pool's shape rules require a 4D [B, C, H, W] input
+    ///       which doesn't match the rank-3 dynamic-spatial architecture.
+    /// Switching to Dense + ReLU keeps the test focused on what it
+    /// actually verifies (the HasDynamicSpatialDims reflection probe
+    /// drives symbolic-axis emission via OnnxExporter.ExportToBytes)
+    /// without depending on unsupported-layer handling.
     /// </summary>
     private sealed class TinyVisionNet : NeuralNetworkBase<float>
     {
@@ -282,10 +315,11 @@ public class OnnxSymbolicAxisRuntimeTests
         {
             // Idempotency: framework EnsureArchitectureInitialized may
             // call this AGAIN after the ctor — skip the second call so
-            // we don't double-stack the Conv + Pool chain.
+            // we don't double-stack the Dense + ReLU chain.
             if (Layers.Count > 0) return;
-            Layers.Add(new ConvolutionalLayer<float>(outputDepth: 8, kernelSize: 3, stride: 1, padding: 1));
-            Layers.Add(new PoolingLayer<float>(poolSize: 2, stride: 2, type: PoolingType.Max));
+            Layers.Add(new DenseLayer<float>(outputSize: 8));
+            Layers.Add(new ActivationLayer<float>(
+                (AiDotNet.Interfaces.IActivationFunction<float>)new ReLUActivation<float>()));
         }
 
         protected override IFullModel<float, AdnTensor, AdnTensor> CreateNewInstance()

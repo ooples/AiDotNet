@@ -427,6 +427,21 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
             outputSize: outputSize,
             layers: layers)
     {
+        // Validate warmupSteps at the architecture boundary so a 0/negative
+        // value fails immediately and is attributed to this parameter,
+        // instead of bubbling up later as an exception from the
+        // NoamSchedule ctor during Transformer construction or training
+        // (where the call stack makes the root cause harder to find).
+        // Closes review-comment #1269.vuR5 / .vzGk.
+        if (warmupSteps <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(warmupSteps),
+                warmupSteps,
+                "warmupSteps must be positive — the Vaswani 2017 Noam schedule has no defined behavior for non-positive warmup. " +
+                "For a budget too small to warm up over (less than ~100 steps), drop the schedule entirely and use a constant LR.");
+        }
+
         NumEncoderLayers = numEncoderLayers;
         NumDecoderLayers = numDecoderLayers;
         NumHeads = numHeads;
