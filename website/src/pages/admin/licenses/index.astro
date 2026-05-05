@@ -621,8 +621,24 @@ const productsJson = JSON.stringify(PRODUCTS);
       dismiss.addEventListener('click', (ev) => {
         ev.stopPropagation();
         btn.innerHTML = orig;
+        // Focus management: the dismiss button is about to remove
+        // itself from the DOM, which leaves the keyboard user with no
+        // focused element (browser falls back to <body>, which is
+        // disorienting and breaks tab-order). Move focus back to the
+        // resend button — the natural next action after dismissing a
+        // failure is to retry, and `btn` is the resend button itself,
+        // so focusing it is both stable and semantically correct.
+        // Closes review-comment #1268.pmPI.
+        if (btn instanceof HTMLElement) {
+          btn.focus();
+        }
         dismiss.remove();
       });
+      // Tab order: insertAdjacentElement('afterend', dismiss) places
+      // the dismiss button immediately after the resend button in the
+      // DOM, so the natural tab-order is resend -> dismiss -> next
+      // row's resend. Verified by the e2e keyboard-accessibility test
+      // in licenses-copy-and-resend.spec.ts (resendRow.locator path).
       btn.insertAdjacentElement('afterend', dismiss);
     }
 
@@ -757,7 +773,20 @@ const productsJson = JSON.stringify(PRODUCTS);
             const staleDismiss = parentEl.querySelector(':scope > .resend-dismiss');
             if (staleDismiss) staleDismiss.remove();
           }
-          const orig = btn.innerHTML;
+          // Cache the IDLE label once per button on the dataset, then
+          // always revert to that. Snapshotting btn.innerHTML on every
+          // click is a regression hazard: on a retry-after-failure path
+          // the innerHTML at this moment is the failure markup
+          // (<span>failed</span><span role="alert">...</span>), so a
+          // subsequent success would auto-revert to that stale failure
+          // label instead of the original idle "Resend" text. Closes
+          // review-comments #1268.peGx / .pmOa. Mirrors the
+          // `originalLabel` cache pattern already used by the copy-key
+          // button at line 670-680.
+          if (buttonEl.dataset.idleLabel === undefined) {
+            buttonEl.dataset.idleLabel = btn.innerHTML;
+          }
+          const orig = buttonEl.dataset.idleLabel;
           btn.innerHTML = '<span class="text-slate-400">sending...</span>';
           // Track outcome so the auto-revert can run on success but skip
           // on failure — without this, the resend button reverts back to

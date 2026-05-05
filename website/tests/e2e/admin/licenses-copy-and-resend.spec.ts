@@ -346,6 +346,85 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     await expect(firstResend).not.toContainText(/failed/i, { timeout: 2_000 });
   });
 
+  test('failure → retry → success preserves the original idle label', async ({ page }) => {
+    // Closes review-comment #1268.pmQd: previous tests covered first-
+    // failure + dismiss, but not the retry path where the operator
+    // clicks resend AGAIN after a failure. The button's innerHTML at
+    // the moment of the second click is the failure markup, not the
+    // original idle label — so without the dataset.idleLabel cache,
+    // a successful second attempt would auto-revert to the stale
+    // failure label after 2.5s instead of the original "Resend" text.
+    // This test pins the dataset.idleLabel snapshot-once behaviour by
+    // failing once, dismissing, retrying with success, waiting for the
+    // 2.5s auto-revert, and asserting the button shows the original
+    // idle label.
+
+    // First call fails. Subsequent calls succeed. Use a per-request
+    // counter route handler to vary the response between calls without
+    // re-routing mid-test.
+    let callCount = 0;
+    await page.route('**/functions/v1/admin-resend-license-email**', async (route: Route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      callCount += 1;
+      if (callCount === 1) {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: false,
+            error: 'send_failed',
+            message: 'Resend provider returned 503.',
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true }),
+        });
+      }
+    });
+    page.on('dialog', (d) => d.accept());
+
+    await stubLicenseRows(page);
+    await page.goto('/admin/licenses/');
+    await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
+
+    const firstResend = page.locator('.resend-email-btn').first();
+    const originalLabel = (await firstResend.textContent() ?? '').trim();
+    const resendRow = firstResend.locator('xpath=..');
+
+    // Click 1 — server returns 500, button shows "failed".
+    await firstResend.click();
+    await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
+
+    // Dismiss the failure to clear the markup before retrying.
+    const dismiss = resendRow.locator('> button.resend-dismiss');
+    await expect(dismiss).toBeVisible();
+    await dismiss.click();
+    await expect(firstResend).not.toContainText(/failed/i, { timeout: 2_000 });
+
+    // Click 2 — server returns 200, button shows "sent" then auto-
+    // reverts after 2.5s. The CRITICAL assertion is the post-revert
+    // label: must equal the ORIGINAL idle label (cached on dataset),
+    // not the stale failure markup.
+    await firstResend.click();
+    await expect(firstResend).toContainText(/sent/i, { timeout: 5_000 });
+
+    // Wait past the auto-revert window (2.5s + a small buffer for
+    // DOM repaint / event-loop slippage on slow CI runners).
+    await page.waitForTimeout(3_000);
+
+    const restored = (await firstResend.textContent() ?? '').trim();
+    expect(restored).toBe(originalLabel);
+    // No failure markup leaks through.
+    await expect(firstResend).not.toContainText(/failed/i);
+    expect(callCount).toBe(2);
+  });
+
   test('resend button makes no request when the admin cancels the confirm dialog', async ({ page }) => {
     let invoked = false;
     await page.route('**/functions/v1/admin-resend-license-email**', async (route: Route) => {

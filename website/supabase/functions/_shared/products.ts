@@ -65,9 +65,20 @@ export const PRODUCTS: ReadonlyArray<ProductInfo> =
  * read at runtime) to the `ProductSlug` union. Returns false for
  * unknown slugs so the caller can decide how to handle drift between
  * the DB enum and this registry.
+ *
+ * Implementation note: uses `Object.prototype.hasOwnProperty.call` rather
+ * than the `in` operator. The `in` operator on a plain object also
+ * matches inherited keys like `toString`, `constructor`, `__proto__`,
+ * `hasOwnProperty`, `isPrototypeOf`, etc. — so `isProductSlug("toString")`
+ * with the naive `in` check would incorrectly return true and any caller
+ * that fed an attacker-controlled or accidentally-prototype-named string
+ * into `resolveProductDisplayName` would either bypass the validation or
+ * crash at the bracket access. Explicit own-property check fixes the
+ * false positive (review-comment #1268.peG9 / #1268.pmPg).
  */
 export function isProductSlug(value: unknown): value is ProductSlug {
-  return typeof value === "string" && (value in PRODUCT_DISPLAY_NAMES);
+  return typeof value === "string"
+    && Object.prototype.hasOwnProperty.call(PRODUCT_DISPLAY_NAMES, value);
 }
 
 /**
@@ -78,7 +89,11 @@ export function isProductSlug(value: unknown): value is ProductSlug {
  * a customer email titled "Welcome to Some_New_Product".
  *
  * For tolerant lookups (e.g., a logging path that should never throw)
- * use `isProductSlug` + `PRODUCT_DISPLAY_NAMES[slug]` directly.
+ * use {@link lookupProductDisplayName}, which returns `undefined` on
+ * unknown slugs instead of throwing. Both functions live in this module
+ * — there is no exported direct-access surface for the underlying
+ * registry (the registry is module-private to keep the resolver as the
+ * single point of guarded lookup). Closes review-comment #1268.pmPy.
  */
 export function resolveProductDisplayName(slug: string | null | undefined): string {
   const cleaned = (slug ?? "").trim().toLowerCase();
