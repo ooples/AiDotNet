@@ -2,9 +2,55 @@ import { test, expect, Route } from '@playwright/test';
 
 // Coverage for the per-row Copy and Resend controls added to /admin/licenses
 // in PR #1256. Each test stubs the side-effecting boundary it cares about
-// (clipboard for copy, the supabase functions endpoint for resend) so this
-// suite is safe to run against any seeded admin environment without
-// mutating real user state or sending real email.
+// (clipboard for copy, the supabase functions endpoint for resend, the
+// license_keys REST query for the row source) so this suite is safe to
+// run against any seeded admin environment without mutating real user
+// state or sending real email — including a freshly-seeded environment
+// with zero license rows. Closes review-comment #1256.hteW.
+
+/**
+ * Stubs the supabase REST query that loads the license_keys table so the
+ * /admin/licenses page is guaranteed to render at least one row regardless
+ * of the underlying DB state. Without this, `.copy-key-btn.first()` and
+ * `.resend-email-btn.first()` would never resolve on an empty environment
+ * and the tests would fail on locator timeout, masking the actual control
+ * behavior the suite is supposed to verify.
+ */
+async function stubLicenseRows(
+  page: import('@playwright/test').Page,
+): Promise<void> {
+  const cannedRow = {
+    id: 'fixture-license-id-0001',
+    license_key: 'aidn.fixturekey1234.fixturesig5678abcdef',
+    user_id: null,
+    customer_email: 'fixture@example.com',
+    product: 'aidotnet',
+    tier: 'community',
+    status: 'active',
+    activations_used: 0,
+    activations_limit: 1,
+    issued_at: new Date().toISOString(),
+    expires_at: null,
+    revoked_at: null,
+    organization_name: null,
+    profiles: { full_name: 'Fixture Owner', email: 'fixture@example.com' },
+  };
+  await page.route('**/rest/v1/license_keys**', async (route) => {
+    if (route.request().method() !== 'GET') {
+      // Pass through non-GETs (or 204 the preflight) so updateLicenseStatus
+      // and similar mutations aren't masked by the stub. The admin/licenses
+      // tests don't mutate, but a future test could.
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([cannedRow]),
+    });
+  });
+}
+
 test.describe('Admin — licenses copy + resend buttons', () => {
   // ---------------------------------------------------------------------
   // Copy button
@@ -104,6 +150,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
       await d.dismiss();
     });
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
     await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
 
@@ -168,6 +215,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     // making the request. Without this, the request never fires.
     page.on('dialog', (d) => d.accept());
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
     await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
 
@@ -200,6 +248,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
 
     page.on('dialog', (d) => d.accept());
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
     await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
 
@@ -235,6 +284,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     // short-circuit and never enqueue a network call.
     page.on('dialog', (d) => d.dismiss());
 
+    await stubLicenseRows(page);
     await page.goto('/admin/licenses/');
     await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
 

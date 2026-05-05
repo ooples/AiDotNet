@@ -678,6 +678,13 @@ const productsJson = JSON.stringify(PRODUCTS);
           }
           const orig = btn.innerHTML;
           btn.innerHTML = '<span class="text-slate-400">sending...</span>';
+          // Track outcome so the auto-revert can run on success but skip
+          // on failure — without this, the resend button reverts back to
+          // its idle label 2.5s after a failure and takes the actionable
+          // error tooltip with it. Operators who looked away during the
+          // call would never know what went wrong. Closes review-comment
+          // #1256.hteN.
+          let succeeded = false;
           try {
             const { data, error } = await supabase.functions.invoke('admin-resend-license-email', {
               body: { license_id: id },
@@ -710,22 +717,55 @@ const productsJson = JSON.stringify(PRODUCTS);
                 // generic "failed" label.
               }
               console.error('Resend failed:', { error, serverMsg });
+              // Persistent failure label: include both the visible "failed"
+              // text AND a click-to-dismiss "✕" so the operator can clear
+              // the message manually after reading it. The tooltip carries
+              // the actionable server message.
+              const escapedMsg = serverMsg ? escapeHtml(serverMsg) : '';
               btn.innerHTML = serverMsg
-                ? `<span class="text-red-500" title="${escapeHtml(serverMsg)}">failed</span>`
-                : '<span class="text-red-500">failed</span>';
+                ? `<span class="text-red-500" title="${escapedMsg}">failed</span>`
+                  + ` <span class="resend-dismiss text-xs text-slate-400 cursor-pointer hover:text-slate-600" title="Dismiss">✕</span>`
+                : `<span class="text-red-500">failed</span>`
+                  + ` <span class="resend-dismiss text-xs text-slate-400 cursor-pointer hover:text-slate-600" title="Dismiss">✕</span>`;
+              // Click-to-dismiss restores the original label so the operator
+              // can retry without a page reload.
+              const dismiss = btn.querySelector('.resend-dismiss');
+              if (dismiss) {
+                dismiss.addEventListener('click', (ev) => {
+                  ev.stopPropagation();
+                  btn.innerHTML = orig;
+                });
+              }
             } else {
               btn.innerHTML = '<span class="text-green-500">sent</span>';
+              succeeded = true;
             }
           } catch (err) {
             console.error('Resend invoke threw:', err);
-            btn.innerHTML = '<span class="text-red-500">failed</span>';
+            btn.innerHTML = '<span class="text-red-500">failed</span>'
+              + ` <span class="resend-dismiss text-xs text-slate-400 cursor-pointer hover:text-slate-600" title="Dismiss">✕</span>`;
+            const dismiss = btn.querySelector('.resend-dismiss');
+            if (dismiss) {
+              dismiss.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                btn.innerHTML = orig;
+              });
+            }
           } finally {
             // Always release the in-flight guard so the operator can
             // retry on transient failures without reloading the page.
             delete buttonEl.dataset.inFlight;
             buttonEl.disabled = false;
           }
-          setTimeout(() => { btn.innerHTML = orig; }, 2500);
+          // Auto-revert ONLY on success. Failure label persists until the
+          // operator clicks the ✕ dismiss control, ensuring the
+          // server's actionable error message is never silently hidden
+          // (the previous unconditional 2.5s revert removed both the
+          // "failed" label AND the tooltip carrying the cause, leaving
+          // an operator who looked away unable to see what went wrong).
+          if (succeeded) {
+            setTimeout(() => { btn.innerHTML = orig; }, 2500);
+          }
         });
       });
     }

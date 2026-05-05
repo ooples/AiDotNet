@@ -65,8 +65,31 @@ export interface LicenseEmailInput {
   to: string;
   licenseKey: string;
   tier: string;
+  /** Product slug as stored in the `license_product` enum (aidotnet, harmonic_engine, …). */
   product: string;
   isExisting?: boolean;
+}
+
+/**
+ * Maps the `license_product` enum slug to a human-readable display name
+ * for use in email subjects, headings, and signature lines. Keep this
+ * aligned with the PRODUCTS array in
+ * website/src/pages/admin/licenses/index.astro and the enum migration in
+ * website/supabase/migrations/20260419000000_add_product_to_license_keys.sql.
+ *
+ * Used by both renderText() and renderHtml() so the entire email — subject,
+ * heading, body text, signature — refers to the same brand. Without this
+ * map, the subject said "Welcome to Harmonic Engine" while the body still
+ * said "Your AiDotNet license key" and the signature still said "— The
+ * AiDotNet team", which is the inconsistency review-comment #1256.hteC
+ * called out.
+ */
+function productDisplayName(slug: string | undefined | null): string {
+  switch ((slug ?? "").trim().toLowerCase()) {
+    case "aidotnet": return "AiDotNet";
+    case "harmonic_engine": return "Harmonic Engine";
+    default: return "AiDotNet"; // safe fallback for unknown / future slugs
+  }
 }
 
 export interface LicenseEmailResult {
@@ -96,17 +119,17 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
   const from = Deno.env.get("EMAIL_FROM") ?? DEFAULT_FROM;
   const accountUrl = Deno.env.get("ACCOUNT_URL") ?? DEFAULT_ACCOUNT_URL;
 
-  // Use the actual product name, not the brand name, so the subject is
-  // accurate when AiDotNet ships multiple products (the wire format
-  // already passes a `product` field; the original copy was treating it
-  // as informational and hardcoding "AiDotNet").
-  const productName = input.product?.trim() || "AiDotNet";
+  // Resolve the display name once and thread it through subject + body
+  // so every surface (heading, paragraph copy, signature) uses the same
+  // brand. The `product` field is a slug — productDisplayName() maps
+  // it to "AiDotNet" / "Harmonic Engine" / etc.
+  const productName = productDisplayName(input.product);
   const subject = input.isExisting
     ? `Your ${productName} ${input.tier} license key`
     : `Welcome to ${productName} — your ${input.tier} license key`;
 
-  const text = renderText(input, accountUrl);
-  const html = renderHtml(input, accountUrl);
+  const text = renderText(input, accountUrl, productName);
+  const html = renderHtml(input, accountUrl, productName);
 
   // AbortController-based timeout. AbortSignal.timeout() exists in modern
   // Deno but a manual controller is portable to older runtimes and lets us
@@ -153,12 +176,12 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
   }
 }
 
-function renderText(i: LicenseEmailInput, accountUrl: string): string {
+function renderText(i: LicenseEmailInput, accountUrl: string, productName: string): string {
   const verb = i.isExisting ? "Here is your existing" : "Here is your new";
   return [
     `Hi,`,
     ``,
-    `${verb} AiDotNet ${i.tier} license key:`,
+    `${verb} ${productName} ${i.tier} license key:`,
     ``,
     `    AIDOTNET_LICENSE_KEY=${i.licenseKey}`,
     ``,
@@ -174,18 +197,19 @@ function renderText(i: LicenseEmailInput, accountUrl: string): string {
     ``,
     `If you didn't request this license, please reply to this email so we can revoke it.`,
     ``,
-    `— The AiDotNet team`,
+    `— The ${productName} team`,
   ].join("\n");
 }
 
-function renderHtml(i: LicenseEmailInput, accountUrl: string): string {
+function renderHtml(i: LicenseEmailInput, accountUrl: string, productName: string): string {
   const verb = i.isExisting ? "Here is your existing" : "Here is your new";
+  const safeProductName = escapeHtml(productName);
   // Inline styles only — most email clients strip <style> blocks.
   return `<!DOCTYPE html>
 <html>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #0f172a; max-width: 560px; margin: 0 auto; padding: 24px;">
-  <h2 style="margin-top: 0;">Your AiDotNet ${escapeHtml(i.tier)} license key</h2>
-  <p>${verb} AiDotNet <strong>${escapeHtml(i.tier)}</strong> license key for the <strong>${escapeHtml(i.product)}</strong> product:</p>
+  <h2 style="margin-top: 0;">Your ${safeProductName} ${escapeHtml(i.tier)} license key</h2>
+  <p>${verb} ${safeProductName} <strong>${escapeHtml(i.tier)}</strong> license key for the <strong>${escapeHtml(i.product)}</strong> product:</p>
   <pre style="background: #0f172a; color: #f1f5f9; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px;"><code>AIDOTNET_LICENSE_KEY=${escapeHtml(i.licenseKey)}</code></pre>
   <p><strong>Quick start:</strong></p>
   <ul>
@@ -196,7 +220,7 @@ function renderHtml(i: LicenseEmailInput, accountUrl: string): string {
     <a href="${escapeHtml(accountUrl)}" style="color: #2563eb;">${escapeHtml(accountUrl)}</a>
   </p>
   <p style="color: #64748b; font-size: 13px; margin-top: 32px;">If you didn't request this license, please reply to this email so we can revoke it.</p>
-  <p style="color: #64748b; font-size: 13px;">— The AiDotNet team</p>
+  <p style="color: #64748b; font-size: 13px;">— The ${safeProductName} team</p>
 </body>
 </html>`;
 }
