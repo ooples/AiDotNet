@@ -183,23 +183,23 @@ public class OnnxSymbolicAxisRuntimeTests
 
         // Warm the layer chain so each layer reports IsShapeResolved=true
         // (the exporter rejects unresolved layers with InvalidOperationException).
-        // 2D [batch, features] shape matches Dense + ReLU's contract; the
-        // outer architecture is still dynamic-spatial which is what the
-        // reflection probe under test cares about (the probe inspects
-        // HasDynamicSpatialDims on the architecture, independent of the
-        // actual layer ranks the architecture chose to compose).
-        AdnTensor x = MakeRamp(new[] { 1, 16 });
+        // The warmup shape MUST equal the shape we hand to ExportToBytes
+        // below — the exporter wires the input tensor's declared shape
+        // into every downstream node's expected rank/dim, and a mismatch
+        // between the layers' concretized weight shape and the graph's
+        // declared input shape produces a graph that ORT would reject
+        // (MatMul rank/inner-dim misalignment). Closes review-comment
+        // #1269.xZd-. The 4D [B, C, H, W] shape matches the dynamic-
+        // spatial architecture's canonical contract that triggers the
+        // symbolic dim_param emission this test is verifying.
+        var inputShape = new[] { 1, 3, 32, 32 };
+        AdnTensor x = MakeRamp(inputShape);
         x = model.Layers[0].Forward(x);
         x = model.Layers[1].Forward(x);
 
         // Run the model through the public exporter path — exercises the
-        // HasDynamicSpatialAxes reflection probe end-to-end. The exporter's
-        // input shape is the dynamic-spatial canonical 4D shape that
-        // triggers symbolic-axis emission for batch/H/W axes; the Dense
-        // layer's actual 2D operation runs orthogonally to this shape
-        // (the test pins the dim_param emission, not the layer-output
-        // shape correctness).
-        var onnxBytes = OnnxExporter.ExportToBytes(model, new[] { 1, 3, 32, 32 });
+        // HasDynamicSpatialAxes reflection probe end-to-end.
+        var onnxBytes = OnnxExporter.ExportToBytes(model, inputShape);
         Assert.True(onnxBytes.Length > 0);
 
         // The reflection probe MUST find the public Architecture field
@@ -279,22 +279,20 @@ public class OnnxSymbolicAxisRuntimeTests
 
     /// <summary>
     /// Minimal lazy-spatial model used by the reflection-path test. The
-    /// architecture is dynamic-spatial (rank-3 [B, Sq, D]) and uses ONLY
-    /// layers that <c>OnnxExporter</c> supports today (Dense + ReLU).
-    /// Closes review-comment #1269.vzGT — the previous version used
-    /// ConvolutionalLayer + PoolingLayer, neither of which the exporter
-    /// recognizes (its ExportLayer switch handles Dense / Linear /
-    /// FullyConnected, ReLU/Sigmoid/Tanh/Softmax, Dropout, Flatten and
-    /// SKIPS everything else). That made the test brittle in two ways:
-    ///   (a) the exporter's silent-skip behaviour was load-bearing for
-    ///       the test passing, so a future change that throws on
-    ///       unsupported layers would regress this test;
-    ///   (b) Conv/Pool's shape rules require a 4D [B, C, H, W] input
-    ///       which doesn't match the rank-3 dynamic-spatial architecture.
-    /// Switching to Dense + ReLU keeps the test focused on what it
-    /// actually verifies (the HasDynamicSpatialDims reflection probe
-    /// drives symbolic-axis emission via OnnxExporter.ExportToBytes)
-    /// without depending on unsupported-layer handling.
+    /// architecture is dynamic-spatial (rank-3 / 4D [B, C, H, W]) and
+    /// uses ONLY shape-preserving activation layers (ReLU). The choice
+    /// of activation-only layers is deliberate: this test verifies the
+    /// HasDynamicSpatialDims reflection probe drives symbolic-axis
+    /// emission via OnnxExporter.ExportToBytes, NOT the exporter's
+    /// per-layer op-fidelity for a particular kernel — so we want the
+    /// model contents to be a no-op pass-through that produces no
+    /// rank/shape mismatches between layer warm-up and graph export.
+    /// Activation layers are rank-agnostic (preserve the input shape
+    /// exactly), so the same 4D [1, 3, 32, 32] tensor flows from
+    /// warm-up through both layers and into the export call without
+    /// any MatMul/Conv weight-shape concerns. Closes review-comment
+    /// #1269.xZd- (the prior Dense-based stub had a 2D-warmup vs
+    /// 4D-export mismatch that produced a non-runnable ONNX graph).
     /// </summary>
     private sealed class TinyVisionNet : NeuralNetworkBase<float>
     {
@@ -315,9 +313,10 @@ public class OnnxSymbolicAxisRuntimeTests
         {
             // Idempotency: framework EnsureArchitectureInitialized may
             // call this AGAIN after the ctor — skip the second call so
-            // we don't double-stack the Dense + ReLU chain.
+            // we don't double-stack the activation chain.
             if (Layers.Count > 0) return;
-            Layers.Add(new DenseLayer<float>(outputSize: 8));
+            Layers.Add(new ActivationLayer<float>(
+                (AiDotNet.Interfaces.IActivationFunction<float>)new ReLUActivation<float>()));
             Layers.Add(new ActivationLayer<float>(
                 (AiDotNet.Interfaces.IActivationFunction<float>)new ReLUActivation<float>()));
         }

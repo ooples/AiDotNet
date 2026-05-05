@@ -84,6 +84,22 @@ public class NoamSchedule : LearningRateSchedulerBase
         return _factor * Math.Pow(_modelDimension, -0.5) * Math.Min(arg1, arg2);
     }
 
+    /// <summary>
+    /// Restores the scheduler to its initial state. The base implementation
+    /// would set <c>_currentLearningRate = _baseLearningRate</c>, but Noam
+    /// uses <c>_baseLearningRate</c> as a peak-LR sentinel (to satisfy the
+    /// base ctor's positive-LR guard at <c>ComputePeakLr</c>), so the default
+    /// <c>Reset()</c> would skip warmup and jump straight to the peak LR on
+    /// any subsequent training run — exactly the regression review-comment
+    /// #1269.xZeb flagged. Override to restore the warmup-start LR (t=1)
+    /// instead, matching the post-ctor state.
+    /// </summary>
+    public override void Reset()
+    {
+        base.Reset();
+        _currentLearningRate = ComputeLearningRate(1);
+    }
+
     private static double ComputePeakLr(int modelDimension, int warmupSteps, double factor)
     {
         if (modelDimension <= 0 || warmupSteps <= 0 || factor <= 0)
