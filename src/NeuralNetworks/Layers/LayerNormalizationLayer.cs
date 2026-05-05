@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -495,7 +496,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameterGradients()
     {
-        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
     }
 

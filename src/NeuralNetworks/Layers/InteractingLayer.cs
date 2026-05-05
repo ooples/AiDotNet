@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
 
@@ -320,7 +321,7 @@ public partial class InteractingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int total = (int)ParameterCount;
+        int total = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var result = new Vector<T>(total);
         int offset = 0;
 

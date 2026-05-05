@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -338,7 +339,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public override Vector<T> GetParameters()
     {
         Vector<T> baseParams = base.GetParameters(); // Base layer + LoRA layer
-        Vector<T> allParams = new Vector<T>((int)ParameterCount);
+        Vector<T> allParams = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         int idx = 0;
 
@@ -413,7 +414,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public override Vector<T> GetParameterGradients()
     {
         Vector<T> baseGrads = base.GetParameterGradients(); // Base layer + LoRA layer gradients
-        Vector<T> allGrads = new Vector<T>((int)ParameterCount);
+        Vector<T> allGrads = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         int idx = 0;
 

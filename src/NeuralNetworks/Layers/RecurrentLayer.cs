@@ -790,7 +790,7 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         // If gradients haven't been computed yet, return zero gradients
         if (_inputWeightsGradient == null || _hiddenWeightsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
 
         // VECTORIZED: Concatenate gradient data using Vector.Concatenate

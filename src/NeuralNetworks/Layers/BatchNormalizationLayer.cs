@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -1002,7 +1003,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
     }
 

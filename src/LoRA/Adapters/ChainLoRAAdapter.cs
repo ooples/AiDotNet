@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -637,7 +638,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromChain()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer gradients if not frozen

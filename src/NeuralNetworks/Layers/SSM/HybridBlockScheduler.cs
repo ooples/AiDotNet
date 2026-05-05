@@ -365,7 +365,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
@@ -388,7 +388,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedParams = (int)ParameterCount;
+        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != expectedParams)
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
 

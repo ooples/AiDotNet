@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -211,7 +212,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         _gatingNetwork = new DenseLayer<T>(numberOfExperts, (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
 
         // Update parameter vector to include all experts and gating network
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromLayers();
     }
 
@@ -435,7 +436,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

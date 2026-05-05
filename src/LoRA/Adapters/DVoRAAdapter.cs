@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -270,7 +271,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Update parameter vector
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromComponents();
     }
 
@@ -839,7 +840,7 @@ public class DVoRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer gradients (if not frozen)

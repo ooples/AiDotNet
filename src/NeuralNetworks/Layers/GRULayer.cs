@@ -1481,7 +1481,7 @@ public partial class GRULayer<T> : LayerBase<T>
             _dUz == null || _dUr == null || _dUh == null ||
             _dbz == null || _dbr == null || _dbh == null)
         {
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
 
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy

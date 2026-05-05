@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -349,7 +350,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_kernelGradients == null || _biasGradients == null) return new Vector<T>((int)ParameterCount);
+        if (_kernelGradients == null || _biasGradients == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(new Vector<T>(_kernelGradients.ToArray()), new Vector<T>(_biasGradients.ToArray()));
     }
 

@@ -532,7 +532,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -561,7 +561,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_routerWeightsGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_routerWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_routerWeightsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_routerBiasGradient?.ToArray() ?? Array.Empty<T>()),

@@ -272,7 +272,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
             throw new InvalidOperationException("Ensemble has no members.");
         }
 
-        int expected = (int)ParameterCount;
+        int expected = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != expected)
         {
             throw new ArgumentException($"Parameter vector length {parameters.Length} does not match expected {expected}.", nameof(parameters));
@@ -416,7 +416,7 @@ public sealed class AutoMLEnsembleModel<T> : ModelBase<T, Matrix<T>, Vector<T>>
             throw new InvalidOperationException("Ensemble has no members.");
         }
 
-        int expected = (int)ParameterCount;
+        int expected = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (gradients.Length != expected)
         {
             throw new ArgumentException($"Gradient vector length {gradients.Length} does not match expected {expected}.", nameof(gradients));

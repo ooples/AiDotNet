@@ -644,7 +644,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
-        int expected = (int)ParameterCount;
+        int expected = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != expected)
         {
             throw new ArgumentException(
@@ -699,7 +699,7 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     /// <inheritdoc />
     public Vector<T> GetParameterGradients()
     {
-        return _gradients ?? new Vector<T>(new T[(int)ParameterCount]);
+        return _gradients ?? new Vector<T>(new T[ParameterCountHelper.ToFlatVectorSize(ParameterCount)]);
     }
 
     /// <inheritdoc />

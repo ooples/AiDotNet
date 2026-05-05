@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿#pragma warning disable CS0649, CS0414, CS0169
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
@@ -272,7 +273,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
         _sparseScaling = NumOps.FromDouble(0.1);
 
         // Initialize parameters
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromComponents();
     }
 
@@ -656,7 +657,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParametersFromComponents()
     {
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer parameters if not frozen
@@ -792,7 +793,7 @@ public class HRAAdapter<T> : LoRAAdapterBase<T>
     /// <returns>Vector containing all trainable parameters.</returns>
     public override Vector<T> GetParameters()
     {
-        Vector<T> allParams = new Vector<T>((int)ParameterCount);
+        Vector<T> allParams = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer parameters (if not frozen)

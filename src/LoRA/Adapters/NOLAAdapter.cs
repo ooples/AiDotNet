@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using System;
 using AiDotNet.Interfaces;
 
@@ -522,7 +523,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer gradients if not frozen

@@ -679,7 +679,7 @@ internal partial class MambaBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
@@ -703,7 +703,7 @@ internal partial class MambaBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedParams = (int)ParameterCount;
+        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != expectedParams)
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
 
@@ -725,7 +725,7 @@ internal partial class MambaBlock<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_inputProjectionWeightsGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()),

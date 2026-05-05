@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
@@ -215,7 +216,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         InitializeTTCores();
 
         // Update parameter vector
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromCores();
     }
 
@@ -741,7 +742,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromCores()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

@@ -545,7 +545,7 @@ public partial class HyenaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -556,7 +556,7 @@ public partial class HyenaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameterGradients()
     {
-        var result = new Vector<T>((int)ParameterCount);
+        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
 
         // Input projections — same order as GetAllTensors()

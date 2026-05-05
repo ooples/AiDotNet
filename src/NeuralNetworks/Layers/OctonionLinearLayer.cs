@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 #pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
@@ -312,7 +313,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        var gradients = new Vector<T>((int)ParameterCount);
+        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int weightSize = OutputFeatures * InputFeatures * 8;
 
         if (_weightsGradient is not null)

@@ -418,7 +418,7 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// </summary>
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return new Vector<T>((int)ParameterCount);
+        return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
     }
 
     /// <summary>

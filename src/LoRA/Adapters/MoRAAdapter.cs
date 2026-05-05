@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
@@ -230,7 +231,7 @@ public class MoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     private void RebuildParameterSnapshot()
     {
-        int paramCount = (int)ParameterCount;
+        int paramCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         Parameters = new Vector<T>(paramCount);
         ParameterGradients = new Vector<T>(paramCount);
 

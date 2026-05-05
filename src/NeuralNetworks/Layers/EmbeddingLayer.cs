@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
@@ -1128,7 +1129,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Both null: no backward has been run yet, return all-zero vector
         if (_embeddingGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         // Discrete embedding mode: return embedding gradients (+ projection if present)
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy

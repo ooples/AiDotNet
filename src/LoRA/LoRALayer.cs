@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Extensions;
 
@@ -207,7 +208,7 @@ public class LoRALayer<T> : LayerBase<T>
         }
 
         // Initialize parameter vector
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromMatrices();
     }
 
@@ -433,7 +434,7 @@ public class LoRALayer<T> : LayerBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack matrix A gradients

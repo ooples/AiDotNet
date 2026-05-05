@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
@@ -1225,7 +1226,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var parameters = new Vector<T>(totalParams);
         int offset = 0;
 

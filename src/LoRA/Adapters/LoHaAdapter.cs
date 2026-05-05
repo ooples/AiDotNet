@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
@@ -155,7 +156,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Initialize parameter vector
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromMatrices();
     }
 
@@ -526,7 +527,7 @@ public class LoHaAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer gradients if not frozen

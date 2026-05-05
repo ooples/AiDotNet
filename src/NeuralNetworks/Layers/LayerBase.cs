@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
@@ -892,7 +893,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     {
         if (ParameterGradients == null || ParameterGradients.Length != ParameterCount)
         {
-            ParameterGradients = new Vector<T>((int)ParameterCount);
+            ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
 
         return ParameterGradients;

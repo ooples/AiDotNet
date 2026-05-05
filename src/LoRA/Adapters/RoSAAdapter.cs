@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
@@ -239,7 +240,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         PruneSparseWeights();
 
         // Update parameters to include sparse component
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromComponents();
     }
 

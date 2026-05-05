@@ -110,7 +110,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(new Vector<T>(_kernelsGradient.ToArray()), new Vector<T>(_biasesGradient.ToArray()));
     }
 

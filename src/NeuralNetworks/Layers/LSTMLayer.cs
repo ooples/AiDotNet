@@ -2093,7 +2093,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (Gradients == null || Gradients.Count == 0)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
 

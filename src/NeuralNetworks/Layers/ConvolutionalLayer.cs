@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
@@ -1403,7 +1404,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // just to return a zero vector.
         if (_kernelsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
         EnsureInitialized();
 

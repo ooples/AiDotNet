@@ -555,7 +555,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int totalExpected = (int)ParameterCount;
+        int totalExpected = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != totalExpected)
         {
             throw new ArgumentException($"Expected {totalExpected} parameters, but got {parameters.Length}", nameof(parameters));
@@ -815,7 +815,7 @@ public class VisionTransformer<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        int totalCount = (int)ParameterCount;
+        int totalCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var parameters = new Vector<T>(totalCount);
         int currentIndex = 0;
 

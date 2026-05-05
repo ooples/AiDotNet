@@ -551,7 +551,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// </summary>
         public override Vector<T> GetParameters()
         {
-            var parameters = new Vector<T>((int)ParameterCount);
+            var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
             int index = 0;
 
             foreach (var layer in Layers)
@@ -570,7 +570,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         public override Vector<T> GetGradients()
         {
-            var gradients = new Vector<T>((int)ParameterCount);
+            var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
             int index = 0;
 
             foreach (var layer in Layers)
@@ -1033,7 +1033,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             // Tape-based training computes gradients through GradientTape<T> on
             // each forward call and applies them immediately — no persistent
             // gradient buffers are maintained here.
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
 
         public override void ClearGradients()

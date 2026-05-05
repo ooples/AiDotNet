@@ -786,7 +786,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     {
         if (_linearWeightsGradient == null || _gateWeightsGradient == null ||
             _linearBiasGradient == null || _gateBiasGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_linearWeightsGradient.ToArray()),
             new Vector<T>(_gateWeightsGradient.ToArray()),

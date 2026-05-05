@@ -541,7 +541,7 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_projectionWeightsGradient == null || _projectionBiasGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_projectionWeightsGradient.ToArray()),
             new Vector<T>(_projectionBiasGradient.ToArray()));

@@ -298,7 +298,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Cached parameter count to avoid repeated Sum() calculations.
     /// Null when invalid (layers modified).
     /// </summary>
-    private int? _cachedParameterCount;
+    private long? _cachedParameterCount;
 
     /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).
@@ -524,13 +524,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // every lazy layer reachable from the architecture, so each
         // layer's GetParameters() now returns its concrete vector — no
         // need to two-pass to "trigger lazy init via the first pass".
-        int totalParameterCount = 0;
+        // Accumulate as long so the per-layer Length sum can never
+        // silently wrap before the int.MaxValue gate below catches it.
+        long totalParameterCountLong = 0;
         foreach (var layer in Layers)
         {
-            totalParameterCount += layer.GetParameters().Length;
+            totalParameterCountLong += layer.GetParameters().Length;
         }
+        if (totalParameterCountLong > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Total parameter count ({totalParameterCountLong:N0}) exceeds " +
+                $"int32 capacity ({int.MaxValue:N0}). The flat-parameter " +
+                $"Vector<T> API cannot represent this many elements in a " +
+                $"single Vector<T>. Walk Layers per-layer and stay in long " +
+                $"arithmetic, or split this architecture across multiple " +
+                $"network instances. Note: ParameterCount itself is now long " +
+                $"and reads correctly at any size; the limit applies only to " +
+                $"the flat-vector materialization path GetParameters / " +
+                $"SetParameters use.");
+        }
+        int totalParameterCount = (int)totalParameterCountLong;
 
-        var parameters = new Vector<T>((int)(totalParameterCount));
+        var parameters = new Vector<T>(totalParameterCount);
         var destSpan = parameters.AsWritableSpan();
 
         int currentIndex = 0;
@@ -1825,31 +1841,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // pre-Forward query work as designed.
                 ResolveLazyLayerShapes();
 
-                // Accumulate as long so the addition itself doesn't overflow
-                // under the checked Linq Sum overload introduced in .NET 7+.
-                // If the total exceeds int.MaxValue we MUST fail fast: the
-                // rest of the flat-parameter int-indexed API
-                // (GetParameters / SetParameters / GetAllLayerInfo) cannot
-                // represent that many elements as a single Vector<T>, so
-                // returning a saturated int here would silently mis-slice
-                // the parameter buffer downstream. Callers hitting this
-                // limit either need to walk Layers themselves and stay in
-                // long arithmetic, or split the model across instances.
+                // Sum the per-layer counts in long throughout — both the
+                // accumulator and the cache are long, so this getter returns
+                // the genuine count even for >2.1B-parameter models. The
+                // public signature has been long since PR #1244 (#1237);
+                // this is the matching internal storage migration that
+                // unblocks weight-streaming auto-detect on PaLM-E-class
+                // models (#1271 / #1222) where ParameterCount is the input
+                // to the threshold check. Consumers of the flat-Vector<T>
+                // parameter API (GetParameters / SetParameters /
+                // GetAllLayerInfo) STILL cannot represent more than
+                // int.MaxValue elements in a single Vector<T> — that
+                // invariant is enforced at THOSE call sites, where the
+                // throw is actionable, rather than blocking every read of
+                // the count itself (e.g. weight-streaming auto-detect,
+                // model-metadata reporting, telemetry).
                 long total = 0L;
                 for (int i = 0; i < Layers.Count; i++)
                 {
                     total += Layers[i].ParameterCount;
                 }
-                if (total > int.MaxValue)
-                {
-                    throw new InvalidOperationException(
-                        $"Total parameter count ({total:N0}) exceeds int32 capacity " +
-                        $"({int.MaxValue:N0}). The flat-parameter API in NeuralNetworkBase " +
-                        $"cannot represent this many parameters as a single Vector<T>. Walk " +
-                        $"Layers per-layer and accumulate in long, or split this " +
-                        $"architecture across multiple network instances.");
-                }
-                _cachedParameterCount = (int)total;
+                _cachedParameterCount = total;
             }
             return _cachedParameterCount.Value;
         }
@@ -6346,7 +6358,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(parameters));
         }
 
-        int totalParameterCount = (int)ParameterCount;
+        // ParameterCount is long; SetParameters takes a flat Vector<T> whose
+        // Length is int. Guard at this boundary: if the model's true
+        // parameter count exceeds int.MaxValue the caller can't even
+        // construct a Vector<T> big enough to feed in, so report which
+        // limit was hit clearly instead of silently truncating.
+        long totalParameterCountLong = ParameterCount;
+        if (totalParameterCountLong > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Model parameter count ({totalParameterCountLong:N0}) exceeds " +
+                $"int32 capacity ({int.MaxValue:N0}); the flat-vector " +
+                $"SetParameters path cannot accept a model this large. Walk " +
+                $"Layers per-layer and call SetParameters on each, or split " +
+                $"this architecture across multiple network instances.");
+        }
+        int totalParameterCount = (int)totalParameterCountLong;
         if (parameters.Length != totalParameterCount)
         {
             throw new ArgumentException($"Expected {totalParameterCount} parameters, got {parameters.Length}");

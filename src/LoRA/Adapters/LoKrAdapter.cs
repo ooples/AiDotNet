@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
@@ -197,7 +198,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Initialize parameter vector
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromMatrices();
     }
 
@@ -576,7 +577,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
         else
         {
             // Include base layer parameters
-            Vector<T> allParams = new Vector<T>((int)ParameterCount);
+            Vector<T> allParams = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
             Vector<T> baseParams = _baseLayer.GetParameters();
 
             // Copy base parameters
@@ -695,7 +696,7 @@ public class LoKrAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack matrix A gradients

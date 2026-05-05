@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -122,7 +123,7 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_linear1WeightsGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_linear1WeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             _linear1WeightsGradient?.ToVector() ?? new Vector<T>(0), _linear1BiasGradient?.ToVector() ?? new Vector<T>(0),
             _linear2WeightsGradient?.ToVector() ?? new Vector<T>(0), _linear2BiasGradient?.ToVector() ?? new Vector<T>(0));

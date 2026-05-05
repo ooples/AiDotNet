@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 ﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
@@ -494,7 +495,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         // Match GetParameters layout: non-zero weights (CSR order) + biases
-        var gradients = new Vector<T>((int)ParameterCount);
+        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         if (_weightsGradient != null)

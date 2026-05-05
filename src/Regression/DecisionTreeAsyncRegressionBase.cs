@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -981,7 +982,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         // Map per-sample gradients to per-parameter gradients
         // For decision trees, parameters typically represent leaf values or split thresholds
         // We aggregate sample gradients into ParameterCount buckets
-        var gradients = new Vector<T>((int)ParameterCount);
+        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         if (sampleGradients.Length == 0 || ParameterCount == 0)
         {
@@ -989,7 +990,7 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
         }
 
         // Distribute samples across parameters
-        int samplesPerParam = Math.Max(1, (sampleGradients.Length + (int)ParameterCount - 1) / (int)ParameterCount);
+        int samplesPerParam = Math.Max(1, (sampleGradients.Length + ParameterCountHelper.ToFlatVectorSize(ParameterCount) - 1) / ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
         {

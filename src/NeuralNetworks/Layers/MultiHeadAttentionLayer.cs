@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using System.Buffers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -1431,7 +1432,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     public override Vector<T> GetParameterGradients()
     {
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_queryWeightsGradient.Data),

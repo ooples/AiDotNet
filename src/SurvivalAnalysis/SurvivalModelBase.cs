@@ -672,7 +672,7 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Survival models typically don't use standard gradient computation
-        return new Vector<T>((int)ParameterCount);
+        return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
     }
 
     /// <summary>

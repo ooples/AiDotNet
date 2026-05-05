@@ -427,7 +427,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(

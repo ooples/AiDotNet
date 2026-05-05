@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -238,7 +239,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var parameters = new Vector<T>(totalParams);
         int idx = 0;
 
@@ -295,7 +296,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var gradients = new Vector<T>(totalParams);
         int idx = 0;
 
