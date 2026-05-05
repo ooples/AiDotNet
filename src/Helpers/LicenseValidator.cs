@@ -101,12 +101,23 @@ internal sealed class LicenseValidator
             // key. Until that lands, AIDN-* keys are server-only.
             if (!IsSignedKeyFormat(_licenseKey.Key))
             {
-                return new LicenseValidationResult(
-                    LicenseKeyStatus.Invalid,
-                    message: "Offline-only mode requires a signed license key (aidn.{id}.{signature} format). " +
-                             "Server-validated keys (AIDN-PROD-*, AIDN-DEV-*) require online validation — set ServerUrl " +
-                             "to null (default endpoint) or to a custom URL. To enable air-gapped operation, " +
-                             "request a signed license key from support.");
+                // Cache the rejection so the sync path matches ValidateAsync()
+                // (line ~461) and CachedResult is non-null after the first call.
+                // Without this, repeated Validate() calls allocate a fresh
+                // Invalid result each time and CachedResult stays null even
+                // though we've already decided this key can't validate.
+                lock (_cacheLock)
+                {
+                    if (_cached is not null) return _cached;
+                    var rejected = new LicenseValidationResult(
+                        LicenseKeyStatus.Invalid,
+                        message: "Offline-only mode requires a signed license key (aidn.{id}.{signature} format). " +
+                                 "Server-validated keys (AIDN-PROD-*, AIDN-DEV-*) require online validation — set ServerUrl " +
+                                 "to null (default endpoint) or to a custom URL. To enable air-gapped operation, " +
+                                 "request a signed license key from support.");
+                    _cached = rejected;
+                    return rejected;
+                }
             }
 
             // Return the cached result on repeat calls so reference equality holds —

@@ -12,10 +12,21 @@ namespace AiDotNet.Models;
 ///
 /// <para><b>Usage:</b></para>
 /// <code>
-/// // Minimal: just the key (offline-only, no server validation)
+/// // Default: validate against the built-in AiDotNet license server.
+/// // (ServerUrl defaults to null, which routes to LicenseValidator.DefaultServerUrl —
+/// // it does NOT mean "offline." If the server is unreachable, validation falls back
+/// // through the OfflineGracePeriod cache window.)
 /// var license = new AiDotNetLicenseKey("aidn.abc123.secretXYZ");
 ///
-/// // Full: with server validation
+/// // Offline-only: no network at all. Only signed `aidn.{id}.{sig}` keys are accepted;
+/// // server-validated `AIDN-PROD-*` / `AIDN-DEV-*` keys are rejected because the SDK
+/// // can't cryptographically verify them locally.
+/// var license = new AiDotNetLicenseKey("aidn.abc123.secretXYZ")
+/// {
+///     ServerUrl = "",  // explicit empty string == offline-only
+/// };
+///
+/// // Custom server: validate against your own license endpoint.
 /// var license = new AiDotNetLicenseKey("aidn.abc123.secretXYZ")
 /// {
 ///     ServerUrl = "https://license.example.com",

@@ -74,6 +74,34 @@ public class LicenseValidatorTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task OfflineMode_ServerValidatedKey_RejectionIsCached()
+    {
+        // PR #1256 second-pass review: the sync path's offline-only
+        // rejection branch must populate _cached just like ValidateAsync()
+        // does. Otherwise CachedResult is null after a validation attempt
+        // and repeated Validate() calls allocate a fresh Invalid result
+        // each time, both of which diverge from the established caching
+        // contract (and from the async path).
+        await Task.Yield();
+        var key = new AiDotNetLicenseKey("AIDN-PROD-COMMUNITY-1234567890ABCDEF1234567890ABCDEF")
+        {
+            ServerUrl = string.Empty
+        };
+
+        var validator = new LicenseValidator(key);
+        var first = validator.Validate();
+        var second = validator.Validate();
+
+        var cached = validator.CachedResult;
+        Assert.NotNull(cached);
+        Assert.Equal(LicenseKeyStatus.Invalid, cached.Status);
+        // Reference equality: both calls return the cached instance,
+        // and the cached instance is the one returned by Validate().
+        Assert.Same(first, second);
+        Assert.Same(first, cached);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task OfflineMode_ServerValidatedKey_AsyncPath_IsRejected()
     {
         // Same gate on the async path as the sync path.

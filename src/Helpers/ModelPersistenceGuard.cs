@@ -342,15 +342,30 @@ internal static class ModelPersistenceGuard
                 }
                 else
                 {
-                    // Env var or file — let the validator pick the right path:
-                    //   - HMAC-signed `aidn.{id}.{sig}` keys: validate offline against build key.
-                    //   - Server-validated `AIDN-PROD-*` keys: hit the default server endpoint.
-                    // Leaving ServerUrl=null routes through the validator's auto-detect logic
-                    // (default URL for online keys, offline path for signed keys). The previous
-                    // code forced ServerUrl="" which made the validator's offline-only branch
-                    // reject AIDN-* keys outright AND, before the offline-mode signed-key gate
-                    // landed, accepted them WITHOUT cryptographic verification — both wrong.
+                    // Env var or file — route by key format. The validator does
+                    // NOT auto-detect: ServerUrl=null always means "use the
+                    // default server URL" regardless of key format. We have to
+                    // choose explicitly here:
+                    //   - HMAC-signed `aidn.{id}.{sig}` keys → ServerUrl="" so
+                    //     the validator's offline-only branch verifies the key
+                    //     locally against the build key (no network needed).
+                    //   - Server-validated `AIDN-PROD-*`/`AIDN-DEV-*` keys →
+                    //     ServerUrl=null so the validator hits the default
+                    //     license-server endpoint. These carry no signature
+                    //     the SDK can verify locally; the server is the only
+                    //     source of truth for valid-vs-revoked status.
+                    // Picking the wrong branch here is a behavioral regression:
+                    // a signed key would suddenly require network reachability,
+                    // and an AIDN-* key would be rejected outright by the
+                    // offline-only signed-key gate.
+                    //
+                    // Construct first so AiDotNetLicenseKey's Guard.NotNullOrWhiteSpace
+                    // runs on the raw string before anything else inspects it.
                     keyConfig = new AiDotNetLicenseKey(licenseKey);
+                    if (LicenseValidator.IsSignedKeyFormat(licenseKey))
+                    {
+                        keyConfig.ServerUrl = string.Empty;
+                    }
                 }
 
                 _validator = new LicenseValidator(keyConfig);

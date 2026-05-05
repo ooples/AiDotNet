@@ -531,13 +531,14 @@ const productsJson = JSON.stringify(PRODUCTS);
           actions = '<span class="text-xs text-slate-400">--</span>';
         }
 
-        // The admin-resend-license-email edge function rejects revoked
-        // licenses (the customer no longer has access — re-sending the
-        // key would be misleading). Hide the button on those rows so the
+        // The admin-resend-license-email edge function refuses to re-send
+        // anything except active licenses (it returns 409 for suspended,
+        // expired, revoked, etc. — see functions/admin-resend-license-email/
+        // index.ts:113). Hide the button on every non-active row so the
         // operator doesn't get a UI affordance for an action the backend
-        // will refuse anyway. Suspended licenses can still be resent
-        // since the email goes out for reactivation flows too.
-        const showResend = l.status !== 'revoked';
+        // will refuse. Reactivation flows reactivate the license first
+        // (status -> active), then resend; they don't bypass this check.
+        const showResend = l.status === 'active';
         const resendButton = showResend
           ? `<button class="resend-email-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Re-send the license-key email to the customer">resend</button>`
           : '';
