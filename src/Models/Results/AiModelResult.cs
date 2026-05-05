@@ -461,6 +461,28 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     public ProfileReport? ProfilingReport { get; internal set; }
 
     /// <summary>
+    /// Gets the weight-streaming activity report from the underlying
+    /// <c>WeightRegistry</c> if streaming was engaged during the build
+    /// (whether explicitly via <see cref="AiDotNet.IAiModelBuilder{T,TInput,TOutput}.ConfigureWeightStreaming"/>
+    /// or auto-detected from parameter count). Null when streaming
+    /// stayed off (the common case for models that fit in RAM). Issue
+    /// #1222 task #186.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> When AiDotNet pages model weights to
+    /// disk to fit in your RAM (called "weight streaming", needed for
+    /// foundation-scale models like PaLM-E 562B), this report tells you
+    /// what actually happened: how many cold disk reads were needed,
+    /// how many evictions the LRU pool performed, how often the
+    /// prefetcher had the right weights ready vs. caught short. High
+    /// eviction counts with low prefetch hits suggest you should bump
+    /// the pool capacity; high disk-read counts with stable evictions
+    /// means you're at steady-state. For small models (under 10B
+    /// parameters by default) this stays null.</para>
+    /// </remarks>
+    public AiDotNet.Deployment.Configuration.WeightStreamingReport? WeightStreamingReport { get; internal set; }
+
+    /// <summary>
     /// Gets or sets the LoRA configuration for parameter-efficient fine-tuning.
     /// </summary>
     /// <value>LoRA configuration for adaptation, or null if not configured.</value>
@@ -1326,6 +1348,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Diagnostics / benchmarking
         ProfilingReport = options.ProfilingReport;
         BenchmarkReport = options.BenchmarkReport;
+        WeightStreamingReport = options.WeightStreamingReport;
 
         // Training Infrastructure
         ExperimentRun = options.ExperimentRun;

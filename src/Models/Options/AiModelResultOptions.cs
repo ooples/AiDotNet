@@ -742,6 +742,19 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public ProfileReport? ProfilingReport { get; set; }
 
+    /// <summary>
+    /// Weight-streaming activity report from the underlying
+    /// <c>WeightRegistry</c> if streaming engaged during the build
+    /// (issue #1222 task #186). Null when streaming stayed off (the
+    /// common case for models that fit in RAM).
+    /// </summary>
+    /// <remarks>
+    /// <para>Forwarded to <c>AiModelResult.WeightStreamingReport</c> via
+    /// the options ctor so callers can inspect streaming behavior:
+    /// disk-read counts, eviction counts, prefetch hit/miss ratio.</para>
+    /// </remarks>
+    public AiDotNet.Deployment.Configuration.WeightStreamingReport? WeightStreamingReport { get; set; }
+
     // ============================================================================
     // Training Infrastructure Properties
     // ============================================================================

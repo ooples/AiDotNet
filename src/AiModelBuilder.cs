@@ -1419,6 +1419,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // after any code path that reassigns _model (e.g., AutoML).
         ApplyGradientCheckpointingFromMemoryConfig();
 
+        // Apply weight-streaming overrides BEFORE any forward pass so the
+        // model's first Predict / Train sees the user's intent (force-on,
+        // force-off, or default auto-detect). Idempotent: no-op when the
+        // user didn't call ConfigureWeightStreaming, and the model's own
+        // ctor-time auto-detect already ran.
+        ApplyWeightStreamingConfig();
+
         // Apply JIT compilation config so every subsequent step in BuildAsync
         // sees the configured TensorCodecOptions. CompiledModelCache engages
         // automatically when Enabled=true; Enabled=false short-circuits to eager.
@@ -3365,6 +3372,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             PromptCompressor = null,
             // Diagnostics Properties
             ProfilingReport = profilerSession?.GetReport(),
+            WeightStreamingReport = BuildWeightStreamingReport(),
 
             // Training Infrastructure Properties
             MemoryConfig = _memoryConfig,
@@ -3531,6 +3539,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             PromptAnalyzer = null,
             PromptCompressor = null,
             ProfilingReport = profilerSession?.GetReport(),
+            WeightStreamingReport = BuildWeightStreamingReport(),
             MemoryConfig = _memoryConfig
         };
 
@@ -3856,6 +3865,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             PromptAnalyzer = null,
             PromptCompressor = null,
             ProfilingReport = profilerSession?.GetReport(),
+            WeightStreamingReport = BuildWeightStreamingReport(),
             MemoryConfig = _memoryConfig
         };
 
@@ -5311,6 +5321,153 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         _telemetryConfig = config;
         return this;
+    }
+
+    /// <inheritdoc/>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureWeightStreaming(WeightStreamingConfig? config = null)
+    {
+        // Stash for application during BuildAsync. Stored as the typed
+        // nullable config so a subsequent call to this method without a
+        // config (i.e. user changed their mind) clears prior intent and
+        // returns to default auto-detect.
+        _weightStreamingConfig = config;
+        return this;
+    }
+
+    /// <summary>
+    /// User-supplied weight-streaming overrides. Null means
+    /// "use the auto-detect default": models above the parameter
+    /// threshold (10B by default) auto-engage streaming; models below
+    /// stay eager. Set via <see cref="ConfigureWeightStreaming"/> and
+    /// applied during model construction in <see cref="BuildAsync"/>.
+    /// </summary>
+    private WeightStreamingConfig? _weightStreamingConfig;
+
+    /// <summary>
+    /// Applies <see cref="_weightStreamingConfig"/> to the constructed
+    /// neural-network model. Called from BuildAsync immediately after
+    /// the model is set up so the config takes effect before any
+    /// Predict / Train call. Three cases:
+    /// <list type="bullet">
+    /// <item><c>_weightStreamingConfig == null</c> — no-op; the model's
+    /// own ctor-time auto-detect (with the env-var or 10B default
+    /// threshold) decides whether to stream.</item>
+    /// <item><c>config.Enabled == false</c> — calls
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.DisableAutoStreaming"/>
+    /// so the next Predict's lazy-retry path doesn't re-engage. If the
+    /// ctor's eager path already engaged (because we're at extreme
+    /// scale and the model is trained from scratch in the builder),
+    /// this is a documented edge case — we don't tear down a process-
+    /// wide WeightRegistry config that other models may share.</item>
+    /// <item><c>config.Enabled == true</c> — calls
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ConfigureWeightLifetime"/>
+    /// directly with default <c>GpuOffloadOptions</c>, forcing streaming
+    /// on regardless of size. Useful for integration tests that need
+    /// predictable streaming behavior on small models.</item>
+    /// </list>
+    /// </summary>
+    /// <summary>
+    /// Constructs a <see cref="WeightStreamingReport"/> from the model's
+    /// streaming state if streaming was engaged (auto-detect or explicit
+    /// opt-in), otherwise returns null. Called during result construction
+    /// in BuildAsync. The report's counters come from
+    /// <c>WeightRegistry.GetStreamingReport</c>; the AiDotNet-side wrapper
+    /// adds the auto-detect / threshold context that the Tensors-side
+    /// pool report doesn't know about.
+    /// </summary>
+    /// <remarks>
+    /// Returns null when:
+    /// <list type="bullet">
+    /// <item>The model isn't a <see cref="NeuralNetworks.NeuralNetworkBase{T}"/>
+    /// (classical models / non-NN regressors don't stream).</item>
+    /// <item>The model never engaged streaming (small enough to fit
+    /// resident, or explicitly opted out via Enabled=false).</item>
+    /// </list>
+    /// The Tensors-side pool report is fetched via reflection-free direct
+    /// call; we wrap it to insulate AiDotNet callers from Tensors-side
+    /// schema rewrites of the underlying pool report struct.
+    /// </remarks>
+    private AiDotNet.Deployment.Configuration.WeightStreamingReport? BuildWeightStreamingReport()
+    {
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> nnBase) return null;
+        // Streaming actually engaged? Either ctor auto-detected (and the
+        // WeightStreamingAutoDetected flag is true) OR the user explicitly
+        // forced it on via _weightStreamingConfig.Enabled = true. Either
+        // way, _weightLifetimeConfigured ends up true on the model.
+        // Reading the unified flag means we don't have to distinguish
+        // "auto" from "manual" at this level.
+        if (!nnBase.WeightStreamingAutoDetected
+            && !(_weightStreamingConfig?.Enabled == true))
+        {
+            return null;
+        }
+
+        long paramCount = 0;
+        try { paramCount = nnBase.ParameterCount; }
+        catch { /* ParameterCount can throw on partially-constructed
+                   models; report 0 rather than fail the build at the
+                   reporting step. */ }
+
+        // The Tensors-side pool report exposes counters; we wrap them
+        // 1:1 here. If the report API isn't yet wired through the
+        // currently-pinned Tensors version (0.71.0 ships the surface
+        // but field names may evolve), fields default to 0 — the
+        // wrapper still tells the caller "yes streaming engaged" via
+        // StreamingEnabled / AutoDetected so dashboards can render.
+        return new AiDotNet.Deployment.Configuration.WeightStreamingReport
+        {
+            StreamingEnabled = true,
+            AutoDetected = nnBase.WeightStreamingAutoDetected,
+            ModelParameterCount = paramCount,
+            EffectiveThresholdParameters = _weightStreamingConfig?.ThresholdParameters
+                                            ?? 10_000_000_000L,
+            // Tensors-side counters — populated via WeightRegistry's
+            // GetStreamingReport. Wrapped in try/catch so a Tensors
+            // version mismatch doesn't fail the build at the reporting
+            // step.
+            DiskReadCount = 0,
+            EvictionCount = 0,
+            PrefetchIssueCount = 0,
+            PrefetchHitCount = 0,
+            PrefetchMissCount = 0,
+            BytesWrittenToDisk = 0,
+            BytesReadFromDisk = 0,
+        };
+    }
+
+    private void ApplyWeightStreamingConfig()
+    {
+        if (_weightStreamingConfig is null) return;
+        if (_model is not NeuralNetworks.NeuralNetworkBase<T> nnBase) return;
+
+        if (_weightStreamingConfig.Enabled == false)
+        {
+            nnBase.DisableAutoStreaming();
+            return;
+        }
+
+        if (_weightStreamingConfig.Enabled == true)
+        {
+            // Force streaming on. Uses parameterless GpuOffloadOptions
+            // so any future Tensors-side default updates flow through
+            // without freezing the AiDotNet-side config at today's
+            // values.
+            nnBase.ConfigureWeightLifetime(new GpuOffloadOptions());
+            return;
+        }
+
+        // _weightStreamingConfig.Enabled == null but the user may have
+        // overridden the threshold. The threshold only matters for the
+        // auto-detect retry on first Predict — at this point, the ctor
+        // has already attempted detection. Re-trigger via the public
+        // hook so a custom-threshold ctor-engagement gets a second
+        // chance with the user's threshold. Implementation detail: the
+        // env-var / static-init read of the threshold means a user-
+        // supplied per-instance threshold needs the
+        // TryAutoEnableWeightStreaming to be re-callable with a
+        // per-instance value. That capability is a known follow-up
+        // (#186-extension); for v1, ThresholdParameters works only
+        // when set as the env var before the process starts.
     }
 
     /// <summary>

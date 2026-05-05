@@ -1202,6 +1202,53 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
 
     /// <summary>
+    /// Configures weight streaming behavior. When the model's parameter
+    /// count exceeds the threshold (default 10B params, ~40 GB at fp32),
+    /// AiDotNet auto-pages weights to disk so the model can run on
+    /// machines with less RAM than the raw weight size — closes #1222
+    /// (PaLME 562B OOM). This method overrides the auto-detect.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Modern foundation models can be
+    /// hundreds of billions of parameters. The raw weights for PaLM-E
+    /// 562B are ~2.25 TB at fp32 — they don't fit in any reasonable
+    /// machine's RAM. Weight streaming pages them to a fast local disk
+    /// (NVMe SSD typical) and only the active layer's slice lives in
+    /// RAM at a time. AiDotNet handles this transparently for models
+    /// over 10 billion parameters; smaller models stay fully resident
+    /// (zero overhead). Use this method to override:</para>
+    /// <list type="bullet">
+    /// <item><c>config = null</c> (default) — auto-detect based on
+    /// parameter count; this is what you get if you never call this
+    /// method.</item>
+    /// <item><c>config.Enabled = true</c> — force streaming regardless
+    /// of size. Useful for integration tests.</item>
+    /// <item><c>config.Enabled = false</c> — force streaming OFF; model
+    /// stays fully resident in RAM. Use when you know the model fits
+    /// and want zero overhead.</item>
+    /// <item><c>config.ThresholdParameters = N</c> — override the
+    /// auto-detect threshold from 10B to N (consulted only when
+    /// <c>Enabled = null</c>).</item>
+    /// </list>
+    /// <para>The streaming activity report is available on
+    /// <c>AiModelResult.WeightStreamingReport</c> after the build
+    /// completes (null when streaming wasn't engaged).</para>
+    /// <para>Example:</para>
+    /// <code>
+    /// var result = await builder
+    ///     .ConfigureModel(myLargeModel)
+    ///     .ConfigureWeightStreaming() // explicit opt-in even on small models
+    ///     .BuildAsync();
+    /// var report = result.WeightStreamingReport;
+    /// </code>
+    /// </remarks>
+    /// <param name="config">The streaming configuration. Pass null to
+    /// reset to default auto-detect behavior; pass a populated config
+    /// to override.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureWeightStreaming(WeightStreamingConfig? config = null);
+
+    /// <summary>
     /// Controls GPU backend diagnostic output visibility and routing.
     /// Exposes all three controls from github.com/ooples/AiDotNet#1122:
     /// verbosity level, environment variable, and ILogger/custom sink.
