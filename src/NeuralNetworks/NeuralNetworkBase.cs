@@ -2865,10 +2865,176 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected virtual Tensor<T> PredictEager(Tensor<T> input)
     {
+        // Hot path: no streaming configured — every layer's weights are
+        // already resident in RAM, so the simple foreach-and-forward loop
+        // matches the pre-#1222 behavior bit-for-bit. Adding the streaming
+        // orchestration overhead unconditionally would penalize every
+        // small / mid model that fits in memory without help.
+        if (!_weightLifetimeConfigured)
+        {
+            var c = input;
+            foreach (var layer in Layers)
+                c = layer.Forward(c);
+            return c;
+        }
+
+        // Streaming path (#1222 / #184): prefetch ahead by W=2 layers,
+        // materialize the active layer's weights for the duration of its
+        // forward, then release so the LRU pool can evict if memory is
+        // tight. This keeps the working set bounded by ~3 layers' worth
+        // of weights regardless of total model size — the difference
+        // between OOM-ing on a 562B PaLM-E and running through.
+        return PredictEagerStreaming(input);
+    }
+
+    /// <summary>
+    /// Streaming-aware forward path used when
+    /// <see cref="ConfigureWeightLifetime"/> has been called (whether
+    /// explicitly or via the auto-detect threshold). Walks layers
+    /// sequentially while:
+    ///   1. Prefetching weights for the next <c>W = StreamingPrefetchWindow</c>
+    ///      layers asynchronously while the current layer's forward runs;
+    ///   2. Materializing the current layer's weights inside an
+    ///      <c>IDisposable</c> scope so they stay resident during forward;
+    ///   3. Releasing the scope after forward so the LRU pool can evict
+    ///      the layer's weights when memory pressure demands.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The prefetch window is fixed at W=2 per the locked v1 design — one
+    /// layer being computed, two layers' worth of weights paging in
+    /// behind it. Larger windows would amortize disk-read latency better
+    /// but require correspondingly larger pool capacity to avoid
+    /// thrashing.
+    /// </para>
+    /// <para>
+    /// Layers with zero trainable tensors (Activation, Dropout, Reshape,
+    /// Add, Concat, …) skip the materialize/release dance — there's no
+    /// weight tensor to page. The prefetch loop still walks them so
+    /// downstream layers get their prefetch budget; <c>upcoming</c>
+    /// effectively counts only weighted layers.
+    /// </para>
+    /// </remarks>
+    private const int StreamingPrefetchWindow = 2;
+
+    private Tensor<T> PredictEagerStreaming(Tensor<T> input)
+    {
+        // Pre-flight: kick off prefetch for the first W layers so the
+        // first layer's weights are warm by the time we hit Forward.
+        // Without this, every Predict call eats one cold disk read on
+        // layer 0 even when the pool has plenty of headroom.
+        for (int j = 0; j < StreamingPrefetchWindow && j < Layers.Count; j++)
+        {
+            PrefetchLayerWeights(j);
+        }
+
         var current = input;
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            // Slide the prefetch window forward: by the time we're
+            // computing layer i, layers i..i+W-1 should be in the pool;
+            // start fetching layer i+W now so it's ready when layer i+1
+            // begins. The pre-flight loop above primed i=0; this call
+            // covers i+W for every subsequent layer.
+            int prefetchTarget = i + StreamingPrefetchWindow;
+            if (prefetchTarget < Layers.Count)
+            {
+                PrefetchLayerWeights(prefetchTarget);
+            }
+
+            // Materialize this layer's weights for the duration of its
+            // forward. The scope's IDisposable release is what allows
+            // the LRU pool to evict if memory pressure builds.
+            using (BeginLayerMaterializeScope(i))
+            {
+                current = Layers[i].Forward(current);
+            }
+        }
         return current;
+    }
+
+    /// <summary>
+    /// Hook into <c>WeightRegistry.PrefetchAsyncMany</c> for the given
+    /// layer's trainable tensors. No-op for layers without weights
+    /// (Activation, Dropout, …) and for tensors that are already
+    /// resident in the pool — the registry's own short-circuit handles
+    /// the common case where streaming was enabled but the working set
+    /// is small enough to keep everything resident.
+    /// </summary>
+    /// <remarks>
+    /// Issued fire-and-forget — the returned Task isn't awaited because
+    /// the next layer's forward begins as soon as this one's weights
+    /// are materialized, and prefetching N+1's weights while computing
+    /// N is exactly the parallelism we want. If the prefetch hasn't
+    /// finished by the time layer N+1 needs its weights,
+    /// MaterializeScope will block briefly until it completes —
+    /// equivalent to a synchronous read but without serializing every
+    /// disk-read with every forward.
+    /// </remarks>
+    private void PrefetchLayerWeights(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count) return;
+        if (Layers[layerIndex] is not LayerBase<T> layer) return;
+        var tensors = layer.GetTrainableParameters();
+        if (tensors is null) return;
+        foreach (var tensor in tensors)
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            // PrefetchAsync is the per-tensor entry point and returns
+            // void (the registry's async-internally fire-and-forget
+            // contract — no Task to await from the caller). We loop
+            // over tensors rather than calling PrefetchAsyncMany so a
+            // future lazy-yield enumerator doesn't materialize the
+            // whole list just to prefetch it.
+            WeightRegistry.PrefetchAsync(tensor);
+        }
+    }
+
+    /// <summary>
+    /// Returns an <see cref="IDisposable"/> that pins the given layer's
+    /// trainable tensors as resident in the streaming pool for the scope's
+    /// lifetime. Disposing the scope releases the pin, allowing the LRU
+    /// pool to evict if other layers' weights need the slot.
+    /// </summary>
+    /// <remarks>
+    /// For weight-less layers this returns a no-op disposable so the
+    /// caller's <c>using</c> block doesn't need to special-case rank-0
+    /// trainable parameter sets.
+    /// </remarks>
+    private IDisposable BeginLayerMaterializeScope(int layerIndex)
+    {
+        if (Layers[layerIndex] is not LayerBase<T> layer) return NoOpDisposable.Instance;
+        var tensors = layer.GetTrainableParameters();
+        if (tensors is null || tensors.Count == 0) return NoOpDisposable.Instance;
+        // Filter out empty placeholder tensors — lazy layers may still
+        // have 0×0 tensors registered before first forward, which the
+        // pool can't materialize. Filtering avoids a registry-side throw
+        // on the empty case.
+        var live = new List<Tensor<T>>(tensors.Count);
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            if (tensors[i] is null || tensors[i].Length == 0) continue;
+            live.Add(tensors[i]);
+        }
+        if (live.Count == 0) return NoOpDisposable.Instance;
+        // MaterializeScope is a nested type, not a method — instantiating
+        // it pins the supplied tensors in the streaming pool until
+        // Dispose. Constructor takes IEnumerable<Tensor<T>>; passing the
+        // List<Tensor<T>> directly satisfies that contract without
+        // copying.
+        return new WeightRegistry.MaterializeScope<T>(live);
+    }
+
+    /// <summary>
+    /// Returned in place of a real materialize scope when there's nothing
+    /// to materialize (weight-less layer, or layer with only empty
+    /// placeholder tensors). Lets the caller's <c>using</c> block stay
+    /// uniform across both branches.
+    /// </summary>
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public static readonly NoOpDisposable Instance = new();
+        public void Dispose() { }
     }
 
     /// <summary>
