@@ -25,8 +25,44 @@ namespace AiDotNet.Tests.IntegrationTests.WeightStreaming;
 /// milliseconds. The full PaLM-E 562B run remains <c>[Fact(Skip = "...")]</c>
 /// in PaLMEProfilerTest because it needs ~2 TB of disk.
 /// </summary>
+/// <summary>
+/// Fixture that resets the process-wide WeightRegistry singleton before
+/// each test in the collection. Without this, the second test in the
+/// suite hits "existing streaming pool has N registered entries" from
+/// WeightRegistry.Configure's mid-flight guard, since the previous
+/// test's Configure left live pool entries behind.
+/// </summary>
+public sealed class WeightStreamingResetFixture : System.IDisposable
+{
+    public WeightStreamingResetFixture()
+    {
+        NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+    }
+    public void Dispose()
+    {
+        NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+    }
+}
+
+[CollectionDefinition("WeightStreaming-Singleton", DisableParallelization = true)]
+public sealed class WeightStreamingSingletonCollection : ICollectionFixture<WeightStreamingResetFixture> { }
+
+[Collection("WeightStreaming-Singleton")]
 public sealed class WeightStreamingEndToEndTests
 {
+    private readonly WeightStreamingResetFixture _fixture;
+
+    public WeightStreamingEndToEndTests(WeightStreamingResetFixture fixture)
+    {
+        _fixture = fixture;
+        // Reset between EVERY test in the collection (the fixture's ctor
+        // only fires once for the whole collection). xUnit doesn't expose
+        // a [BeforeEach] hook for collection-scoped fixtures; the
+        // constructor runs per test, so resetting here is the right
+        // place. The Dispose half handles teardown after the last test.
+        NeuralNetworkBase<float>.ResetWeightStreamingForTests();
+    }
+
     /// <summary>
     /// Minimal subclass so the test can drive ConfigureWeightLifetime
     /// directly without going through the AiModelBuilder facade. Three
@@ -156,14 +192,52 @@ public sealed class WeightStreamingEndToEndTests
         Assert.Equal(4, output.Shape[1]); // last DenseLayer outputSize
     }
 
-    // The StreamingPoolReport schema (DiskReadCount / EvictionCount /
-    // PrefetchHitCount / PrefetchMissCount / PrefetchIssueCount /
-    // ResidentBytes / CompressionRatio) is pinned by AiModelBuilder.
-    // BuildWeightStreamingReport in src/ — any rename on the Tensors
-    // side breaks the src build, which is a stronger guarantee than a
-    // test in this assembly could provide (WeightRegistry is internal
-    // to Tensors with InternalsVisibleTo on AiDotNet but NOT
-    // AiDotNetTests, so a test-side access wouldn't compile anyway).
+    [Fact]
+    public void Streaming_ConfigureWeightLifetime_ActuallyTracksWeightsInPool()
+    {
+        // Pre-audit (commit 190801e1b and earlier), this test would have
+        // FAILED: RegisterTrainableTensorsWithWeightRegistry called
+        // WeightRegistry.RegisterWeight on every tensor, but those
+        // tensors had Lifetime=Default, and RegisterWeight's switch
+        // early-returns for Default. Result: the streaming pool was
+        // completely inert — every "weight registered" call was a
+        // silent no-op, ResidentBytes stayed 0 forever, and PaLM-E
+        // OOMed exactly as if streaming were never configured.
+        //
+        // Post-fix: ConfigureWeightLifetime sets per-instance
+        // _registrationLifetime to Streaming (or GpuOffload when an
+        // allocator is wired), and RegisterTrainableTensorsWithWeightRegistry
+        // assigns it to each tensor BEFORE RegisterWeight. The pool
+        // now actually tracks the tensors and ResidentBytes reflects
+        // the registered weight bytes.
+        //
+        // This test pins the fix: streaming on a network with
+        // materialized weights should produce a non-zero report.
+        var net = new SmallStreamableNetwork();
+
+        // First materialize the weights via a warm-up forward (lazy
+        // DenseLayer allocates [in, out] tensors on first Forward).
+        // We do this BEFORE configuring streaming so the warm-up runs
+        // through the eager fast path and the resulting GC-heap
+        // tensors are what get registered with the pool.
+        var input = new Tensor<float>([1, 8]);
+        for (int i = 0; i < 8; i++) input[0, i] = (float)(i + 1) * 0.5f;
+        _ = net.Predict(input);
+
+        // Engage streaming → walks materialized layers, sets each
+        // tensor's Lifetime = Streaming, registers with pool. Pool's
+        // ResidentBytes should now be > 0.
+        net.ConfigureWeightLifetimeForTest(new GpuOffloadOptions());
+
+        long resident = net.WeightStreamingResidentBytes;
+        Assert.True(resident > 0,
+            $"Streaming pool ResidentBytes should be > 0 after registering "
+            + $"a network's weights, but is {resident}. This means "
+            + "RegisterTrainableTensorsWithWeightRegistry's RegisterWeight "
+            + "calls were no-ops — Lifetime was likely never set to Streaming "
+            + "before the register call. See ConfigureWeightLifetime + "
+            + "_registrationLifetime in NeuralNetworkBase.cs.");
+    }
 }
 
 // Exposes ConfigureWeightLifetime to the test project. The base method

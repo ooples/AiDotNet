@@ -3321,8 +3321,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         else
             WeightRegistry.Configure(options, allocator);
         _weightLifetimeConfigured = true;
+        // Pick the per-tensor lifetime to apply: GpuOffload when the user
+        // wired in a real GPU offload allocator, Streaming otherwise (the
+        // disk-backed pool path PaLM-E and other foundation-scale models
+        // need). Without this, RegisterTrainableTensorsWithWeightRegistry
+        // would call WeightRegistry.RegisterWeight on every layer's tensors
+        // — but those tensors keep their default Lifetime=Default, and
+        // RegisterWeight's switch early-returns for Default. Result before
+        // this fix: ConfigureWeightLifetime was completely inert for
+        // streaming, the pool tracked nothing, and PaLM-E OOMed exactly
+        // as if streaming were never configured. Setting the lifetime
+        // BEFORE the register loop is what makes the pool actually
+        // start tracking weights.
+        _registrationLifetime = allocator is null
+            ? WeightLifetime.Streaming
+            : WeightLifetime.GpuOffload;
         RegisterTrainableTensorsWithWeightRegistry();
     }
+
+    /// <summary>
+    /// Per-instance lifetime applied by
+    /// <see cref="RegisterTrainableTensorsWithWeightRegistry"/> to every
+    /// trainable tensor it walks. Set in <see cref="ConfigureWeightLifetime"/>
+    /// based on whether the user wired in a real GPU offload allocator
+    /// (→ GpuOffload) or just the disk-backed streaming path (→ Streaming).
+    /// Stays <see cref="WeightLifetime.Default"/> until explicitly set, so
+    /// pre-streaming-configuration register calls (rare; mostly defensive)
+    /// remain inert.
+    /// </summary>
+    private WeightLifetime _registrationLifetime = WeightLifetime.Default;
 
     /// <summary>
     /// True once <see cref="ConfigureWeightLifetime"/> has been called on this
@@ -3372,6 +3399,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             foreach (var tensor in layer.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
+                // CRITICAL: set Lifetime BEFORE RegisterWeight. The
+                // registry's switch early-returns for Lifetime=Default,
+                // so without this assignment every register call is a
+                // silent no-op and the streaming pool never tracks the
+                // tensor. _registrationLifetime is set in
+                // ConfigureWeightLifetime to Streaming (disk-backed) or
+                // GpuOffload (pinned-host) based on whether the user
+                // wired in a real GPU offload allocator.
+                tensor.Lifetime = _registrationLifetime;
                 WeightRegistry.RegisterWeight(tensor);
             }
         }
@@ -3389,6 +3425,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             foreach (var tensor in extra.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
+                tensor.Lifetime = _registrationLifetime;
                 WeightRegistry.RegisterWeight(tensor);
             }
         }
@@ -3401,6 +3438,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var tensor in GetExtraTrainableTensors())
         {
             if (tensor is null || tensor.Length == 0) continue;
+            tensor.Lifetime = _registrationLifetime;
             WeightRegistry.RegisterWeight(tensor);
         }
     }
@@ -3549,6 +3587,45 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// query the report DTO surfaces as <c>StreamingEnabled</c>.
     /// </summary>
     internal bool IsWeightStreamingActive => _weightLifetimeConfigured;
+
+    /// <summary>
+    /// Live read of the streaming pool's resident-bytes counter. Used by
+    /// tests that need to verify the pool is actually tracking weights
+    /// (ResidentBytes > 0 after ConfigureWeightLifetime → register flow
+    /// engaged correctly; ResidentBytes == 0 → registration was a no-op,
+    /// likely because Lifetime wasn't set to Streaming pre-RegisterWeight).
+    /// Returns 0 when streaming isn't configured at all.
+    /// </summary>
+    internal long WeightStreamingResidentBytes
+    {
+        get
+        {
+            try { return WeightRegistry.GetStreamingReport().ResidentBytes; }
+            catch { return 0; }
+        }
+    }
+
+    /// <summary>
+    /// Forces the process-wide WeightRegistry into a clean state — drops
+    /// all registered entries, disposes the streaming pool, clears any
+    /// offload allocator. ONLY for tests that need to exercise multiple
+    /// streaming-configured networks in the same test process: the
+    /// registry is a singleton and Configure() throws when there are
+    /// live entries from a prior test, so tests must reset between
+    /// configurations to avoid leaking state.
+    /// </summary>
+    /// <remarks>
+    /// Production code should never call this — resetting mid-flight
+    /// breaks every tensor whose StreamingPoolHandle was assigned from
+    /// the disposed pool. Even within tests, only call between
+    /// fully-finished test runs (after Predict / Train completes), not
+    /// mid-forward.
+    /// </remarks>
+    internal static void ResetWeightStreamingForTests()
+    {
+        try { WeightRegistry.Reset(); }
+        catch { /* best-effort; nothing else we can do here */ }
+    }
 
     /// <summary>
     /// Auto-enables weight streaming if this model's total parameter count
