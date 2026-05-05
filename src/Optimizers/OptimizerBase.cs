@@ -1809,7 +1809,9 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // (linear regression, polynomial regression, classical optimizers
         // operating in feature space) the data-derived random init IS the
         // right behavior — gating on `model is INeuralNetwork<T>` preserves
-        // that.
+        // that. Single-trajectory path returns the in-place user model;
+        // population diversity is handled in SpawnIndividual via Gaussian
+        // perturbation (review-comment #1265.hc85).
         if (model is AiDotNet.Interfaces.INeuralNetwork<T>)
         {
             return model;
@@ -1864,10 +1866,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
 
         // For neural networks, the clone preserves the user's chosen init
-        // (Xavier/He). Population optimizers can perturb from there using
-        // their own operators (PSO velocity, GA mutation, etc.). We don't
-        // apply data-derived random overwrite — that destroyed good init
-        // for NN models pre-fix (PR #1265 / issue #1267).
+        // (Xavier/He) at the right magnitude. But returning identical clones
+        // would give the population zero diversity — every member of a
+        // PSO swarm / DE generation / GA cohort starts from the SAME point
+        // and the meta-search degenerates. Add small Gaussian perturbations
+        // to each individual's parameter vector — scaled to ~10% of the
+        // per-parameter magnitude — so the population explores the basin
+        // around the user's well-initialized weights without escaping
+        // into the wrong scale regime. Closes review-comment #1265.hc85.
         //
         // For non-NN parametric models, retain the legacy data-derived
         // randomization path so PSO / Differential Evolution / Bayesian
@@ -1875,7 +1881,35 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // space as before.
         if (model is AiDotNet.Interfaces.INeuralNetwork<T>)
         {
-            return model.Clone();
+            var nnClone = model.Clone();
+            var nnCloneParameterizable = InterfaceGuard.Parameterizable(nnClone);
+            // Skip perturbation when ParameterCount==0 (lazy NN that hasn't
+            // materialized yet). Diversity will come from each candidate's
+            // own first-forward materialization in that case.
+            if (nnCloneParameterizable.ParameterCount > 0)
+            {
+                var current = nnCloneParameterizable.GetParameters();
+                var perturbed = new Vector<T>(current.Length);
+                var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
+                for (int i = 0; i < current.Length; i++)
+                {
+                    // Gaussian noise ~ N(0, σ²) where σ = max(|current[i]|, ε) * 0.1.
+                    // Box-Muller transform: two uniforms → one Gaussian. The
+                    // ε=1e-3 floor keeps zero-init biases / fresh-allocated
+                    // tensors from getting bit-identical zero perturbations
+                    // (which would also produce zero diversity).
+                    double u1 = rng.NextDouble();
+                    double u2 = rng.NextDouble();
+                    if (u1 < 1e-15) u1 = 1e-15; // log(0) guard
+                    double gaussian = System.Math.Sqrt(-2.0 * System.Math.Log(u1)) * System.Math.Cos(2.0 * System.Math.PI * u2);
+                    double currentDouble = Convert.ToDouble(current[i]);
+                    double sigma = System.Math.Max(System.Math.Abs(currentDouble), 1e-3) * 0.1;
+                    double noisy = currentDouble + gaussian * sigma;
+                    perturbed[i] = NumOps.FromDouble(noisy);
+                }
+                nnCloneParameterizable.SetParameters(perturbed);
+            }
+            return nnClone;
         }
 
         // Genuinely-uninitialized parameter-vector model: clone and seed

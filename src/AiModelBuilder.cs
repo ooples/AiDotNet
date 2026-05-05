@@ -2128,38 +2128,26 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Stacks an array of single-sample tensors along a new leading batch
-    /// dimension. Used by the data-loader BuildAsync path to convert a
-    /// batch of <c>[…]</c> tensors into a single <c>[B, …]</c> tensor that
-    /// the network's batched <see cref="INeuralNetwork{T}.Train"/> path
-    /// consumes in one optimizer step.
-    /// </summary>
-    private static Tensor<T> StackTensorBatch(Tensor<T>[] samples)
-    {
-        if (!TryStackTensorBatch(samples, out var stacked))
-        {
-            throw new ArgumentException(
-                "Batch contains samples with heterogeneous shapes; cannot stack into a uniform " +
-                "[B, ...] tensor. Override StreamingDataLoaderBase.AggregateSamples on your " +
-                "loader to pad sequences / resize images to a common shape before they reach " +
-                "the trainer.",
-                nameof(samples));
-        }
-        return stacked!;
-    }
-
-    /// <summary>
     /// Attempts to stack an array of single-sample tensors along a new
     /// leading batch dimension. Returns false (with <paramref name="stacked"/>
     /// set to null) when shapes are heterogeneous so callers can fall back
     /// to per-sample handling rather than throwing.
     /// </summary>
+    /// <remarks>
+    /// Even for samples.Length == 1 this still adds the leading batch dim,
+    /// producing a [1, *sampleShape] tensor rather than passing the
+    /// unbatched sample through. Subclass training overrides like
+    /// Transformer.Train don't call NormalizeBatchDim, so a final batch of
+    /// size 1 would otherwise reach the layer pipeline at rank-N while
+    /// every other batch of the same epoch reaches it at rank-(N+1) —
+    /// a class of bug that bites only when the loader's last batch
+    /// happens to be unevenly-sized (review-comment #1265.hc8I).
+    /// </remarks>
     private static bool TryStackTensorBatch(Tensor<T>[] samples, out Tensor<T>? stacked)
     {
         stacked = null;
         if (samples is null || samples.Length == 0) return false;
         if (samples[0] is null) return false;
-        if (samples.Length == 1) { stacked = samples[0]; return true; }
 
         var sampleShape = samples[0]._shape;
         int sampleStride = samples[0].Length;
