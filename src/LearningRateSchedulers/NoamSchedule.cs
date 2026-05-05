@@ -61,11 +61,13 @@ public class NoamSchedule : LearningRateSchedulerBase
         _warmupSteps = warmupSteps;
         _factor = factor;
 
-        // Step 0 (before any Step() call) — start at the t=1 value, not the
-        // base/peak LR. Otherwise the first Train() call before the scheduler
-        // is stepped would use the peak LR, contradicting the "warmup from
-        // tiny" semantic.
-        _currentLearningRate = ComputeLearningRate(1);
+        // Step 0 (before any Step() call) — start at the paper's t=1 value,
+        // not the base/peak LR. Otherwise the first Train() call before the
+        // scheduler is stepped would use the peak LR, contradicting the
+        // "warmup from tiny" semantic. ComputeLearningRate maps the
+        // 0-indexed framework step to the paper's 1-indexed t via t=step+1,
+        // so step=0 → paper's t=1.
+        _currentLearningRate = ComputeLearningRate(0);
     }
 
     /// <summary>Number of warmup steps configured.</summary>
@@ -77,8 +79,21 @@ public class NoamSchedule : LearningRateSchedulerBase
     /// <inheritdoc />
     protected override double ComputeLearningRate(int step)
     {
-        // Vaswani uses 1-indexed steps. Guard against step=0 producing 0^-0.5 = ∞.
-        int t = step <= 0 ? 1 : step;
+        // Vaswani 2017 uses 1-indexed steps; LearningRateSchedulerBase
+        // exposes 0-indexed _currentStep (count of completed batches:
+        // 0 before the first batch, 1 after batch 0 ends, ...).
+        // Map step → paper's t via t = step + 1 so:
+        //   - ctor / Reset: step=0 → t=1 (batch 0's LR)
+        //   - after batch 0's OnBatchEnd: step=1 → t=2 (batch 1's LR)
+        //   - after batch N's OnBatchEnd: step=N+1 → t=N+2 (batch N+1's LR)
+        // The previous `step <= 0 ? 1 : step` collapsed step=0 and
+        // step=1 onto t=1, so batches 0 and 1 used identical LRs and
+        // the entire warmup/decay curve was shifted by one step
+        // (closes review-comment #1269.yuXt). This matches the
+        // tensor2tensor reference implementation's `global_step + 1`
+        // and the Hugging Face / PyTorch convention for warmup
+        // schedulers driven from a 0-indexed step counter.
+        int t = step + 1;
         double arg1 = Math.Pow(t, -0.5);
         double arg2 = t * Math.Pow(_warmupSteps, -1.5);
         return _factor * Math.Pow(_modelDimension, -0.5) * Math.Min(arg1, arg2);
@@ -96,7 +111,10 @@ public class NoamSchedule : LearningRateSchedulerBase
     public override void Reset()
     {
         base.Reset();
-        _currentLearningRate = ComputeLearningRate(1);
+        // base.Reset() sets _currentStep = 0; mirror the ctor's
+        // "warmup-start LR for batch 0" by passing step=0
+        // (ComputeLearningRate maps step=0 → paper's t=1).
+        _currentLearningRate = ComputeLearningRate(0);
     }
 
     private static double ComputePeakLr(int modelDimension, int warmupSteps, double factor)
