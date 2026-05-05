@@ -56,6 +56,94 @@ test.describe('/auth/callback URL-error handling', () => {
     await expect(page.getByText('error_description: Hash wins')).toBeVisible();
   });
 
+  test('per-source precedence: hash error_description wins, search description ignored', async ({ page }) => {
+    // PR #1258 review: per-FIELD merge could splice an `error` from
+    // hash with `error_description` from search. Per-SOURCE precedence
+    // (current behaviour after the precedence-rewrite commit) MUST take
+    // ALL fields from hash when hash carries an error, ignoring search
+    // entirely. This spec pins that contract: a hash `error` with NO
+    // hash `error_description` must NOT pick up the search's
+    // `error_description`.
+    await page.goto('/auth/callback/?error=search_err&error_description=search%20description#error=hash_err');
+
+    await expect(page.getByText('error: hash_err')).toBeVisible();
+    // Critically, the search-side description must NOT appear.
+    await expect(page.getByText('error_description: search description')).toHaveCount(0);
+  });
+});
+
+test.describe('/auth/callback non-URL failure paths', () => {
+  // PR #1258 review #6/#7: every failure layer is supposed to leave a
+  // console.error trace and surface the fatal-error UI. Previously the
+  // tests only exercised URL-param failures; these specs cover the
+  // session-exchange error path and the 10-second timeout path that
+  // gated the silent-stall regression #1258 was created to fix.
+
+  test('getSession() error renders "Session exchange failed."', async ({ page }) => {
+    // Intercept the Supabase client lib that the page imports and force
+    // its `auth.getSession()` to return an error tuple. Routing the
+    // import to a small inline shim is sufficient — the page only uses
+    // `auth.getSession()` and `auth.onAuthStateChange()` from the lib.
+    await page.route('**/lib/supabase*', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/javascript',
+        body: `
+          export const supabase = {
+            auth: {
+              getSession: async () => ({ data: { session: null }, error: { message: 'Forced session-exchange failure for test' } }),
+              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+            },
+          };
+        `,
+      });
+    });
+
+    const consoleErrors: string[] = [];
+    page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+
+    await page.goto('/auth/callback/');
+
+    await expect(page.getByText('Session exchange failed.')).toBeVisible();
+    await expect(page.getByText('Forced session-exchange failure for test')).toBeVisible();
+    // PR #1258 promise: every failure path leaves a console.error.
+    expect(consoleErrors.some(e => e.includes('getSession() error'))).toBeTruthy();
+  });
+
+  test('10-second timeout renders fatal-error UI when no SIGNED_IN event fires', async ({ page }) => {
+    // Force getSession() to return an empty session AND the auth-state
+    // listener to never fire — the only escape hatch is the 10-second
+    // setTimeout fallback. Use page.clock.fastForward to skip the wall-
+    // clock wait so the spec runs in <1s.
+    await page.clock.install();
+    await page.route('**/lib/supabase*', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/javascript',
+        body: `
+          export const supabase = {
+            auth: {
+              getSession: async () => ({ data: { session: null }, error: null }),
+              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+            },
+          };
+        `,
+      });
+    });
+
+    const consoleErrors: string[] = [];
+    page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+
+    await page.goto('/auth/callback/');
+    // Skip the 10-second hard timeout deterministically.
+    await page.clock.fastForward(10_500);
+
+    await expect(page.getByText('Sign-in did not complete in time.')).toBeVisible();
+    await expect(page.getByText(/SIGNED_IN event within 10 seconds/)).toBeVisible();
+    // PR #1258 review #2/#7: timeout path must console.error too.
+    expect(consoleErrors.some(e => e.includes('timed out waiting for SIGNED_IN'))).toBeTruthy();
+  });
+
   test('error_description with literal % does not crash the handler', async ({ page }) => {
     // PR #1258 review comment #1+#3: the previous code called
     // decodeURIComponent on a value URLSearchParams had already

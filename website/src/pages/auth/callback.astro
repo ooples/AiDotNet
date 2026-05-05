@@ -75,19 +75,33 @@ const base = import.meta.env.BASE_URL;
           : window.location.hash,
       );
 
-      // Hash takes precedence over search: implicit-flow errors are more
-      // specific (they include error_code from the IdP) than code-flow
-      // errors which Supabase rewrites into the search string.
-      const pick = (key: string) => hash.get(key) ?? search.get(key) ?? undefined;
-
-      const error = pick('error');
-      if (!error) return null;
-
-      return {
-        error,
-        errorCode: pick('error_code'),
-        errorDescription: pick('error_description'),
-      };
+      // Per-SOURCE precedence: if the hash carries any `error`, use ALL
+      // hash fields together; otherwise use ALL search fields together.
+      // The previous per-field merge (`hash.get(key) ?? search.get(key)`)
+      // could splice an `error` from one source with an
+      // `error_description` from the OTHER, producing a synthetic error
+      // that didn't actually arrive from any single OAuth callback layer.
+      // Hash → implicit flow (IdP returns directly to the browser).
+      // Search → code flow (Supabase rewrites hash into ?error after the
+      // PKCE token swap). They're different protocol layers and the
+      // fields within one shouldn't mix with the fields of another.
+      const hashError = hash.get('error');
+      if (hashError) {
+        return {
+          error: hashError,
+          errorCode: hash.get('error_code') ?? undefined,
+          errorDescription: hash.get('error_description') ?? undefined,
+        };
+      }
+      const searchError = search.get('error');
+      if (searchError) {
+        return {
+          error: searchError,
+          errorCode: search.get('error_code') ?? undefined,
+          errorDescription: search.get('error_description') ?? undefined,
+        };
+      }
+      return null;
     }
 
     function showFatalError(headline: string, details: string, hint?: string) {
