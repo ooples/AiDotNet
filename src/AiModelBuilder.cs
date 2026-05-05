@@ -5396,11 +5396,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // ConfigureWeightStreaming(Enabled:true)" branches with one read.
         if (!nnBase.IsWeightStreamingActive) return null;
 
+        // ParameterCount returns long since #1244 + this PR's #1271 migration —
+        // no longer throws on >int.MaxValue (was the source of misleading
+        // ModelParameterCount=0 reports for >2.1B-param models flagged by
+        // review-comment #1271.tgVo). The defensive catch survives only to
+        // cover truly-broken model state (a subclass override raising on a
+        // partially-constructed instance during reporting); under normal
+        // construction, paramCount carries the real long value.
         long paramCount = 0;
         try { paramCount = nnBase.ParameterCount; }
-        catch { /* ParameterCount can throw on partially-constructed
-                   models; report 0 rather than fail the build at the
-                   reporting step. */ }
+        catch { /* unreachable on the supported path; defensive only. */ }
 
         // Pull live counters from the Tensors-side streaming pool. Any
         // exception here (Tensors-side schema mismatch, transient
