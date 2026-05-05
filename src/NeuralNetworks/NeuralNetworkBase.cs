@@ -4242,6 +4242,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 input, input, ComputeForward, RecomputeLoss);
 
             opt.Step(context);
+
+            // Mirror the OnBatchEnd advance from TrainWithTape so that
+            // schedulers (NoamSchedule, LinearWarmupScheduler, CosineAnnealing,
+            // ...) configured on the optimizer also tick when training goes
+            // through the custom-loss path. Without this call the LR was
+            // pinned at its initial value forever for any caller using
+            // TrainWithCustomLoss — making the LR behavior inconsistent by
+            // entry point. The contract on
+            // GradientBasedOptimizerBase.OnBatchEnd is "called at the end
+            // of each training batch"; this method is one such batch
+            // boundary, so it gets the call.
+            if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
+            {
+                stepped.OnBatchEnd();
+            }
+
             return lossValue;
         }
         finally
@@ -4276,14 +4292,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// will then re-create the lazy default).
     /// </param>
     /// <remarks>
-    /// Subclasses that maintain a separate private optimizer field (e.g.
-    /// <see cref="Transformer{T}"/>'s <c>_optimizer</c>) are responsible for
-    /// keeping that field in sync if they want their <c>Train</c> override to
-    /// honor builder overrides — typically by routing their override through
-    /// <see cref="GetOrCreateBaseOptimizer"/> rather than reading the private
-    /// field directly.
+    /// Virtual so subclasses that maintain a separate private optimizer
+    /// field (e.g. <see cref="Transformer{T}"/>'s <c>_optimizer</c>) can
+    /// override and keep that field in sync. Without the override, the
+    /// subclass field becomes stale after the first builder-driven
+    /// <see cref="SetBaseTrainOptimizer"/> call — and any path that still
+    /// reads the subclass field (metadata, serialization, custom training
+    /// shortcuts) silently reports / persists the wrong optimizer.
     /// </remarks>
-    internal void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
         _baseTrainOptimizer = optimizer;
     }

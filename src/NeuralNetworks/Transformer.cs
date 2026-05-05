@@ -161,6 +161,27 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
+    /// Overrides the base hook so any caller of <see cref="NeuralNetworkBase{T}.SetBaseTrainOptimizer"/>
+    /// — typically <c>AiModelBuilder.ConfigureOptimizer</c> — also updates
+    /// the subclass-private <see cref="_optimizer"/> field. Without this
+    /// override, the field stayed pinned to whatever was constructed in
+    /// the ctor, while training routed through the base optimizer slot —
+    /// so <see cref="GetModelMetadata"/> and <see cref="SerializeNetworkSpecificData"/>
+    /// (which read <see cref="_optimizer"/>) would report and persist the
+    /// stale ctor optimizer instead of the live training one. The current
+    /// effective optimizer is now the single source of truth for both
+    /// reads and writes.
+    /// </summary>
+    internal override void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        base.SetBaseTrainOptimizer(optimizer);
+        if (optimizer is not null)
+        {
+            _optimizer = optimizer;
+        }
+    }
+
+    /// <summary>
     /// Creates a new Transformer neural network with the specified architecture.
     /// </summary>
     /// <param name="architecture">

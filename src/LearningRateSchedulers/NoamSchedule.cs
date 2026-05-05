@@ -10,9 +10,21 @@ namespace AiDotNet.LearningRateSchedulers;
 /// <code>
 ///   lr(t) = factor · d_model^(-0.5) · min(t^(-0.5), t · warmup^(-1.5))
 /// </code>
-/// where t is the 1-indexed training step. The schedule rises linearly during
-/// the warmup phase (steps 1 .. warmup), peaks at step = warmup with value
-/// <c>factor · d_model^(-0.5) · warmup^(-0.5)</c>, then decays as t^(-0.5).
+/// where t is the 1-indexed training step from the paper. Peaks at t = warmup
+/// with value <c>factor · d_model^(-0.5) · warmup^(-0.5)</c>, then decays as
+/// t^(-0.5).
+/// </para>
+/// <para>
+/// Step-counter convention (matches PyTorch / HuggingFace transformer
+/// schedulers): the library's <see cref="LearningRateSchedulerBase._currentStep"/>
+/// is incremented at end-of-batch and represents "batches completed so far"
+/// (0-based). The Noam paper's t is 1-based, so this scheduler maps
+/// <c>t = step + 1</c> internally:
+/// <list type="bullet">
+///   <item>Before any Step() call, <c>_currentStep = 0</c> ⇒ <c>t = 1</c> ⇒ warmup-start LR.</item>
+///   <item>Batch N reads the LR that was set by the (N-1)th Step() call ⇒ lr(t=N) ⇒ <c>t = step + 1</c> with <c>step = N-1</c>.</item>
+///   <item>Reset restores the warmup-start LR (NOT <c>_baseLearningRate</c>, which we use as a peak-LR sentinel for the base ctor's positive guard).</item>
+/// </list>
 /// </para>
 /// <para>
 /// This schedule pairs with Adam β₁=0.9, β₂=0.98, ε=1e-9 (the Vaswani 2017
@@ -61,11 +73,13 @@ public class NoamSchedule : LearningRateSchedulerBase
         _warmupSteps = warmupSteps;
         _factor = factor;
 
-        // Step 0 (before any Step() call) — start at the t=1 value, not the
-        // base/peak LR. Otherwise the first Train() call before the scheduler
-        // is stepped would use the peak LR, contradicting the "warmup from
-        // tiny" semantic.
-        _currentLearningRate = ComputeLearningRate(1);
+        // Step 0 (before any Step() call) maps to t=1 (warmup-start) under
+        // the t=step+1 convention. Without this override, the base ctor
+        // leaves _currentLearningRate at _baseLearningRate (which we set to
+        // the peak LR via ComputePeakLr to satisfy the base's positive-LR
+        // guard) — causing the very first batch to use the peak LR instead
+        // of the tiny warmup-start value.
+        _currentLearningRate = ComputeLearningRate(0);
     }
 
     /// <summary>Number of warmup steps configured.</summary>
@@ -75,13 +89,40 @@ public class NoamSchedule : LearningRateSchedulerBase
     public int ModelDimension => _modelDimension;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <c>step</c> here is the library's "batches completed so far" counter
+    /// (0-based), matching the value that <see cref="LearningRateSchedulerBase.Step"/>
+    /// passes in after its post-batch increment. Internally we map to the
+    /// paper's 1-indexed t via <c>t = step + 1</c>:
+    /// <list type="bullet">
+    ///   <item><c>step = 0</c> (no batches yet, ctor) → <c>t = 1</c> (warmup-start)</item>
+    ///   <item><c>step = warmup_steps - 1</c> → <c>t = warmup_steps</c> (peak)</item>
+    ///   <item><c>step = N</c> → <c>t = N + 1</c> (LR for the (N+1)th batch)</item>
+    /// </list>
+    /// Negative <c>step</c> is clamped to 0 so the formula never sees a
+    /// non-positive t (which would produce 0^(-0.5) = ∞ or a negative
+    /// arg2 multiplier).
+    /// </remarks>
     protected override double ComputeLearningRate(int step)
     {
-        // Vaswani uses 1-indexed steps. Guard against step=0 producing 0^-0.5 = ∞.
-        int t = step <= 0 ? 1 : step;
+        int t = step < 0 ? 1 : step + 1;
         double arg1 = Math.Pow(t, -0.5);
         double arg2 = t * Math.Pow(_warmupSteps, -1.5);
         return _factor * Math.Pow(_modelDimension, -0.5) * Math.Min(arg1, arg2);
+    }
+
+    /// <summary>
+    /// Restores the scheduler to its initial state. The base implementation
+    /// would set <c>_currentLearningRate = _baseLearningRate</c>, but Noam
+    /// uses <c>_baseLearningRate</c> as a peak-LR sentinel (to satisfy the
+    /// base ctor's positive-LR guard), so the default Reset would skip
+    /// warmup on resume. Override to restore the warmup-start LR (t=1)
+    /// instead — matching the post-ctor state.
+    /// </summary>
+    public override void Reset()
+    {
+        base.Reset();
+        _currentLearningRate = ComputeLearningRate(0);
     }
 
     private static double ComputePeakLr(int modelDimension, int warmupSteps, double factor)

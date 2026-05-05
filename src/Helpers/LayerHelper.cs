@@ -1686,33 +1686,35 @@ public static class LayerHelper<T>
         NeuralNetworkTaskType taskType = architecture.TaskType;
         double temperature = architecture.Temperature;
 
-        // When the architecture specifies a deterministic random seed,
-        // derive a single shared seeded RNG and use it to seed each layer's
-        // initialization strategy. Each layer ends up with its own
-        // EagerInitializationStrategy backed by THIS shared RNG, so the
-        // sequence of weight draws across the entire layer stack is
-        // reproducible (same seed -> same weights every run).
-        //
-        // System.Random is not thread-safe, but layer-stack construction is
-        // synchronous and runs on a single thread, so a single shared
-        // instance is correct here. The downstream training pipeline uses
-        // Adam moments / gradient buffers from a separate path that doesn't
-        // touch this RNG.
+        // When the architecture specifies a deterministic random seed, derive
+        // a per-layer seeded initialization strategy: build a "seed RNG" from
+        // the architecture seed, then for each layer pull a fresh int from
+        // that seed RNG and construct an EagerInitializationStrategy backed
+        // by its own private System.Random(thatInt). This gives:
+        //   1. Determinism — the seed RNG produces the same sequence of layer
+        //      seeds for a given architecture seed, so the layer stack ends
+        //      up with the exact same weights every run.
+        //   2. Thread-safety — System.Random is not thread-safe, and several
+        //      layers initialize lazily (e.g. MultiHeadAttention allocates on
+        //      first forward / parameter query). With a single shared RNG
+        //      across layers, two lazy-init paths racing in concurrent
+        //      forward / parameter access would tear the RNG state and break
+        //      determinism. Per-layer RNGs eliminate the shared-state hazard.
         Random? seedRng = architecture.RandomSeed.HasValue
             ? new Random(architecture.RandomSeed.Value)
             : null;
-        Initialization.IInitializationStrategy<T>? sharedInit = seedRng is null
-            ? null
-            : new Initialization.EagerInitializationStrategy<T>(seedRng);
 
-        // Apply the seeded init strategy to a layer if one was configured.
-        // No-op when randomSeed wasn't set (preserves backward-compatible
-        // behaviour for users who don't request reproducibility).
+        // Apply a freshly-seeded init strategy to a layer if reproducibility
+        // was requested. No-op when randomSeed wasn't set (preserves
+        // backward-compatible behaviour for users who don't request
+        // reproducibility).
         ILayer<T> Wire(ILayer<T> layer)
         {
-            if (sharedInit is not null && layer is NeuralNetworks.Layers.LayerBase<T> baseLayer)
+            if (seedRng is not null && layer is NeuralNetworks.Layers.LayerBase<T> baseLayer)
             {
-                baseLayer.InitializationStrategy = sharedInit;
+                int layerSeed = seedRng.Next();
+                baseLayer.InitializationStrategy =
+                    new Initialization.EagerInitializationStrategy<T>(new Random(layerSeed));
             }
             return layer;
         }

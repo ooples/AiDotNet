@@ -382,5 +382,138 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
         }
 
         #endregion
+
+        #region NoamSchedule Tests
+
+        // Locks down the t = step + 1 mapping the schedule uses to align the
+        // library's "Step at end of batch" convention (currentStep is
+        // 0-based "batches completed") with the Vaswani 2017 paper's
+        // 1-based t. PR #1270 review-comments o_xq + o_yU + o_yf flagged
+        // that the previous implementation gave the same LR for the first
+        // two batches, lagged the formula by one step throughout, and
+        // jumped to the peak LR on Reset() instead of restoring the
+        // warmup-start.
+
+        [Fact(Timeout = 60000)]
+        public async Task NoamSchedule_InitialLR_IsWarmupStart_NotPeak()
+        {
+            // d_model=512, warmup=4000, factor=1 — paper-canonical Vaswani recipe.
+            var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: 4000);
+
+            // Peak LR (at t=warmup) — what `_baseLearningRate` is set to.
+            double peak = scheduler.BaseLearningRate;
+            // Warmup-start (at t=1): formula gives factor * d_model^-0.5 * 1 * warmup^-1.5.
+            double expectedStart = Math.Pow(512, -0.5) * 1.0 * Math.Pow(4000, -1.5);
+
+            // Initial LR (before any Step()) MUST be the tiny warmup-start,
+            // not the peak. This was the regression where ctor pre-set the
+            // peak LR via the base ctor and the override only happened
+            // after step=1 — meaning the very first Train() call before
+            // OnBatchEnd ticks would use peak LR.
+            Assert.Equal(expectedStart, scheduler.CurrentLearningRate, 12);
+            Assert.True(scheduler.CurrentLearningRate < peak / 100,
+                "Initial LR should be much smaller than peak (warmup-start, not peak).");
+            await Task.CompletedTask;
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task NoamSchedule_FirstTwoSteps_GiveDistinctLRs()
+        {
+            // Original bug (review-comment o_xq): the ctor pre-set
+            // ComputeLearningRate(1) AND the first Step() also computed
+            // ComputeLearningRate(1) — so batches 1 and 2 both saw lr(t=1).
+            var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: 4000);
+
+            double initial = scheduler.CurrentLearningRate;  // batch 1 reads this (lr(t=1))
+            double afterStep1 = scheduler.Step();             // becomes lr(t=2), batch 2 reads
+            double afterStep2 = scheduler.Step();             // becomes lr(t=3), batch 3 reads
+
+            Assert.NotEqual(initial, afterStep1);
+            Assert.NotEqual(afterStep1, afterStep2);
+            // During warmup, lr is monotonically increasing.
+            Assert.True(afterStep1 > initial);
+            Assert.True(afterStep2 > afterStep1);
+            await Task.CompletedTask;
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task NoamSchedule_StepsToWarmupBoundary_HitsPeak()
+        {
+            int warmup = 100;
+            var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: warmup);
+
+            // After (warmup - 1) Step() calls, currentStep = warmup - 1, t = warmup → peak.
+            for (int i = 0; i < warmup - 1; i++)
+            {
+                scheduler.Step();
+            }
+
+            double peak = scheduler.BaseLearningRate;
+            Assert.Equal(peak, scheduler.CurrentLearningRate, 10);
+            await Task.CompletedTask;
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task NoamSchedule_PostWarmup_DecaysAsInverseSqrt()
+        {
+            int warmup = 100;
+            var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: warmup);
+
+            // Step well past the warmup so we're in the decay phase.
+            for (int i = 0; i < 400; i++)
+            {
+                scheduler.Step();
+            }
+            double lrAt400 = scheduler.CurrentLearningRate;
+
+            for (int i = 0; i < 400; i++)
+            {
+                scheduler.Step();
+            }
+            double lrAt800 = scheduler.CurrentLearningRate;
+
+            // Decay phase: lr(t) ∝ t^-0.5 ⇒ lr(t=801)/lr(t=401) = sqrt(401/801) ≈ 0.7077.
+            // (currentStep = 400 → t = 401; currentStep = 800 → t = 801.)
+            double ratio = lrAt800 / lrAt400;
+            double expectedRatio = Math.Sqrt(401.0 / 801.0);
+            Assert.Equal(expectedRatio, ratio, 6);
+            await Task.CompletedTask;
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task NoamSchedule_Reset_RestoresWarmupStart_NotPeak()
+        {
+            var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: 4000);
+            double initialLr = scheduler.CurrentLearningRate;
+
+            // Advance past warmup so currentLR is now well past the warmup-start.
+            for (int i = 0; i < 5000; i++)
+            {
+                scheduler.Step();
+            }
+            Assert.NotEqual(initialLr, scheduler.CurrentLearningRate);
+
+            scheduler.Reset();
+
+            // Reset MUST restore warmup-start LR, not the peak (which is
+            // what `_baseLearningRate` is set to). Without the Reset
+            // override (review-comment o_yf), the base.Reset() would snap
+            // currentLR to peak and the next training run would skip warmup.
+            Assert.Equal(0, scheduler.CurrentStep);
+            Assert.Equal(initialLr, scheduler.CurrentLearningRate, 12);
+            await Task.CompletedTask;
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task NoamSchedule_ZeroOrNegativeWarmup_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => new NoamSchedule(modelDimension: 512, warmupSteps: 0));
+            Assert.Throws<ArgumentException>(() => new NoamSchedule(modelDimension: 512, warmupSteps: -1));
+            Assert.Throws<ArgumentException>(() => new NoamSchedule(modelDimension: 0, warmupSteps: 4000));
+            Assert.Throws<ArgumentException>(() => new NoamSchedule(modelDimension: 512, warmupSteps: 4000, factor: 0));
+            await Task.CompletedTask;
+        }
+
+        #endregion
     }
 }
