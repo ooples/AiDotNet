@@ -1915,6 +1915,23 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     && outputs.Length > 0 && outputs[0] is Tensor<T>
                     && _model is INeuralNetwork<T> nn)
                 {
+                    // BUILDER-OPTIMIZER PLUMBING (closes review-comment #1265.f03A):
+                    // pre-wire the builder's configured optimizer onto the model
+                    // so nn.Train resolves to it via GetOrCreateBaseOptimizer.
+                    // Without this, nn.Train would lazy-construct a default Adam
+                    // and silently drop AiModelBuilder.ConfigureOptimizer settings
+                    // (custom AdamW, Lion, attached LR scheduler, hyperparameter
+                    // overrides). We only set when the configured optimizer is
+                    // actually gradient-based (the only kind tape-based Train
+                    // can use); non-gradient optimizers fall through to the
+                    // model's own default. Done once per epoch outer-loop and
+                    // re-set inside the batch loop is a no-op (same instance).
+                    if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gboTrain
+                        && nn is NeuralNetworks.NeuralNetworkBase<T> nnBaseForOpt)
+                    {
+                        nnBaseForOpt.SetBaseTrainOptimizer(gboTrain);
+                    }
+
                     // The loader's StreamingDataLoaderBase.AggregateSamples
                     // override is the documented extension point for padding
                     // / stacking variable-length sequences into a uniform-

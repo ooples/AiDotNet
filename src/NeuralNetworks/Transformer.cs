@@ -229,6 +229,16 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             _optimizer = optimizer;
         }
 
+        // Mirror our optimizer into the base class's training-optimizer
+        // slot so AiModelBuilder.ConfigureOptimizer (which calls
+        // NeuralNetworkBase.SetBaseTrainOptimizer before nn.Train) and our
+        // Train override resolve to the SAME optimizer instance. Without
+        // this, the base's GetOrCreateBaseOptimizer would lazy-construct a
+        // separate default Adam the first time anything outside our Train
+        // override touched it (e.g. via TrainBatched on the base path),
+        // and the streaming-loader optimizer override couldn't reach us.
+        SetBaseTrainOptimizer(_optimizer);
+
         // Initialize NumOps-based fields
         AuxiliaryLossWeight = NumOps.FromDouble(0.005);
         _lastAttentionRegularizationLoss = NumOps.Zero;
@@ -630,7 +640,13 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
+            // Resolve via GetOrCreateBaseOptimizer so a builder-side
+            // SetBaseTrainOptimizer override (e.g. AiModelBuilder.ConfigureOptimizer
+            // → AdamW with a learning-rate scheduler) actually drives this
+            // training step. The ctor seeded the base optimizer with our
+            // _optimizer instance, so when no override is in effect this
+            // resolves to the same Vaswani Adam we'd have used pre-refactor.
+            TrainWithTape(input, expectedOutput, GetOrCreateBaseOptimizer());
         }
         finally
         {
@@ -773,6 +789,12 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
                     Beta2 = 0.98,
                     Epsilon = 1e-9,
                 });
+
+        // Keep the base optimizer slot in sync after deserialization too
+        // — Train() now resolves through GetOrCreateBaseOptimizer, so a
+        // load-then-resume-training flow needs the deserialized optimizer
+        // installed on both sides.
+        SetBaseTrainOptimizer(_optimizer);
     }
 
     /// <summary>

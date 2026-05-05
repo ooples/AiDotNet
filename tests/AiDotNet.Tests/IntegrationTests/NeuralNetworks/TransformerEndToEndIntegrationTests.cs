@@ -310,6 +310,89 @@ public class TransformerEndToEndIntegrationTests
             + "drifted from the explicit AdamOptimizerOptions used here.");
     }
 
+    /// <summary>
+    /// Pins the SetBaseTrainOptimizer plumbing that closes review-comment
+    /// #1265.f03A (streaming nn.Train silently dropped builder-configured
+    /// optimizer). Asserts that a high-LR override actually drives training
+    /// — the parameter delta after N steps with LR=0.1 is dramatically
+    /// larger than the Vaswani default LR=1e-3, so confusing the two
+    /// optimizer instances would surface as a clearly-failing assertion.
+    /// </summary>
+    [Fact]
+    public void SetBaseTrainOptimizer_OverridesCtorDefault_OnTrainCall()
+    {
+        const int vocab = 4;
+        const int ctxLen = 4;
+        const int trainSteps = 50;
+
+        var arch = MakeArch(vocab: vocab, ctxLen: ctxLen, dModel: 8, dFf: 16, layers: 1, heads: 2);
+
+        // Two transformers from identical seeds. One trains via the ctor's
+        // default Vaswani Adam (lr=1e-3); the other gets SetBaseTrainOptimizer
+        // called with a much higher-LR Adam (lr=0.1). After identical Train
+        // sequences, the high-LR model's parameters must have moved markedly
+        // further from init.
+        var lowLr = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+        var highLr = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+        var sharedInit = lowLr.GetParameters();
+        highLr.UpdateParameters(sharedInit);
+
+        // Override highLr's training optimizer via the new internal hook.
+        var aggressiveAdam = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(
+            null,
+            new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.1, // 100x the Vaswani default
+                Beta2 = 0.98,
+                Epsilon = 1e-9,
+            });
+        highLr.SetBaseTrainOptimizer(aggressiveAdam);
+
+        var input = new Tensor<float>([1, ctxLen]);
+        for (int s = 0; s < ctxLen; s++) input[0, s] = (float)(s % vocab);
+        var target = new Tensor<float>([1, vocab]);
+        target[0, 1] = 1f;
+
+        lowLr.SetTrainingMode(true);
+        highLr.SetTrainingMode(true);
+        for (int step = 0; step < trainSteps; step++)
+        {
+            lowLr.Train(input, target);
+            highLr.Train(input, target);
+        }
+
+        // Compute L2 distance from the shared init for each model.
+        float lowDistSq = ParameterDistanceSquared(lowLr.GetParameters(), sharedInit);
+        float highDistSq = ParameterDistanceSquared(highLr.GetParameters(), sharedInit);
+        _output.WriteLine($"  low-LR ‖Δ‖²={lowDistSq:F6}  high-LR ‖Δ‖²={highDistSq:F6}  ratio={highDistSq / System.Math.Max(lowDistSq, 1e-9f):F2}x");
+
+        // The high-LR override must have moved parameters substantially
+        // further. Allowing a ~3x ratio lower bound keeps this guard
+        // robust to step-size clipping / weight decay / bias correction
+        // while still failing loudly if SetBaseTrainOptimizer were a
+        // no-op (in which case both models would train identically and
+        // the ratio would be ~1.0).
+        Assert.True(highDistSq > 3.0f * lowDistSq,
+            $"SetBaseTrainOptimizer didn't take effect: high-LR ‖Δ‖²={highDistSq:F6} "
+            + $"should be >3x low-LR ‖Δ‖²={lowDistSq:F6}, but isn't. "
+            + "If this fails, the streaming-loader code path in AiModelBuilder "
+            + "would also silently drop ConfigureOptimizer settings (review #1265.f03A).");
+    }
+
+    private static float ParameterDistanceSquared(LinearAlgebra.Vector<float> a, LinearAlgebra.Vector<float> b)
+    {
+        if (a.Length != b.Length)
+            throw new System.InvalidOperationException(
+                $"Parameter vectors differ in length: {a.Length} vs {b.Length}.");
+        float sumSq = 0f;
+        for (int i = 0; i < a.Length; i++)
+        {
+            float d = a[i] - b[i];
+            sumSq += d * d;
+        }
+        return sumSq;
+    }
+
     // ---- helpers ----
 
     private static TransformerArchitecture<float> MakeArch(int vocab, int ctxLen, int dModel, int dFf, int layers, int heads)

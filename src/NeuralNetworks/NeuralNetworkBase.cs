@@ -4055,6 +4055,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Pre-wires the optimizer instance that <see cref="GetOrCreateBaseOptimizer"/>
+    /// will return on subsequent calls. Used by <c>AiModelBuilder.ConfigureOptimizer</c>
+    /// to inject the user-configured optimizer (e.g. AdamW with a learning-rate
+    /// scheduler, Lion, custom subclass) into the model BEFORE the streaming /
+    /// build training loop calls <see cref="Train(Tensor{T}, Tensor{T})"/>.
+    /// Without this hook, calling <c>nn.Train(input, target)</c> would resolve
+    /// to a freshly-allocated default Adam via the lazy fallback in
+    /// <see cref="GetOrCreateBaseOptimizer"/>, silently dropping any builder-
+    /// level optimizer configuration on the floor.
+    /// </summary>
+    /// <param name="optimizer">
+    /// The optimizer to install as the model's base training optimizer, or null
+    /// to clear the override (the next call to <see cref="GetOrCreateBaseOptimizer"/>
+    /// will then re-create the lazy default).
+    /// </param>
+    /// <remarks>
+    /// Subclasses that maintain a separate private optimizer field (e.g.
+    /// <see cref="Transformer{T}"/>'s <c>_optimizer</c>) are responsible for
+    /// keeping that field in sync if they want their <c>Train</c> override to
+    /// honor builder overrides — typically by routing their override through
+    /// <see cref="GetOrCreateBaseOptimizer"/> rather than reading the private
+    /// field directly.
+    /// </remarks>
+    internal void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        _baseTrainOptimizer = optimizer;
+    }
+
+    /// <summary>
     /// Persistent optimizer for models using the standard TrainStep pattern.
     /// Lazily initialized on first use (Adam with default settings).
     /// </summary>
