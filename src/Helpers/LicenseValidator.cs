@@ -84,29 +84,56 @@ internal sealed class LicenseValidator
 
         if (explicitOfflineOnly)
         {
-            // Explicit offline mode — only signed keys (aidn.{id}.{sig}) are accepted.
-            // Return the cached result on repeat calls so reference equality
-            // holds: the public LicenseValidationResult API surfaces a
-            // defensive-copy DecryptionToken / Capabilities, and tests
-            // (and consumers) rely on Assert.Same(result1, result2) to
-            // distinguish "fresh validation" from "cache hit". Without
-            // this short-circuit, every call would re-run ValidateOffline
-            // and return a new instance even though nothing changed.
+            // Explicit offline mode — only HMAC-signed keys (aidn.{id}.{sig}) are
+            // accepted. Server-validated keys (AIDN-PROD-*, AIDN-DEV-*, etc.) MUST
+            // go through online validation against the license server because they
+            // carry no cryptographic signature the SDK can verify locally — the
+            // server is the only source of truth for their valid-vs-revoked status.
+            //
+            // Previously the offline path ALSO accepted AIDN-* keys (treated them
+            // as "valid format" and returned LicenseKeyStatus.Active without any
+            // cryptographic check), which is the security gap PR #1256 review
+            // flagged: anyone who guessed/forged a well-formed AIDN-PROD-* key
+            // would be granted Active status indefinitely in offline-only mode.
+            //
+            // Future work: add Ed25519-signed AIDN-{ENV}-{TIER}-{V}-{ID}-{SIG}
+            // format that CAN be validated offline against a SDK-shipped public
+            // key. Until that lands, AIDN-* keys are server-only.
+            if (!IsSignedKeyFormat(_licenseKey.Key))
+            {
+                // Cache the rejection so the sync path matches ValidateAsync()
+                // (line ~461) and CachedResult is non-null after the first call.
+                // Without this, repeated Validate() calls allocate a fresh
+                // Invalid result each time and CachedResult stays null even
+                // though we've already decided this key can't validate.
+                lock (_cacheLock)
+                {
+                    if (_cached is not null) return _cached;
+                    var rejected = new LicenseValidationResult(
+                        LicenseKeyStatus.Invalid,
+                        message: "Offline-only mode requires a signed license key (aidn.{id}.{signature} format). " +
+                                 "Server-validated keys (AIDN-PROD-*, AIDN-DEV-*) require online validation — set ServerUrl " +
+                                 "to null (default endpoint) or to a custom URL. To enable air-gapped operation, " +
+                                 "request a signed license key from support.");
+                    _cached = rejected;
+                    return rejected;
+                }
+            }
+
+            // Return the cached result on repeat calls so reference equality holds —
+            // tests (and consumers) rely on Assert.Same(result1, result2) to
+            // distinguish "fresh validation" from "cache hit".
             lock (_cacheLock)
             {
-                if (_cached is not null)
-                {
-                    return _cached;
-                }
+                if (_cached is not null) return _cached;
             }
 
             var offlineResult = ValidateOffline();
             lock (_cacheLock)
             {
-                // Double-checked locking: another thread may have
-                // populated the cache while we were validating. Honour
-                // their instance to keep reference equality stable
-                // across concurrent first calls.
+                // Double-checked locking: another thread may have populated the
+                // cache while we were validating. Honour their instance to keep
+                // reference equality stable across concurrent first calls.
                 _cached ??= offlineResult;
                 return _cached;
             }
@@ -428,9 +455,23 @@ internal sealed class LicenseValidator
     public async System.Threading.Tasks.Task<LicenseValidationResult> ValidateAsync(
         System.Threading.CancellationToken cancellationToken = default)
     {
-        // Offline mode: when no server URL is configured (null) or explicitly empty
-        if (_licenseKey.ServerUrl is null || _licenseKey.ServerUrl.Trim().Length == 0)
+        // Offline mode: only when ServerUrl is EXPLICITLY empty string (caller
+        // opted out of server validation). ServerUrl=null still uses the default
+        // server URL — only ""=opt-out skips online validation. Same security
+        // gate as Validate(): AIDN-* server-validated keys are rejected here
+        // because the SDK can't cryptographically verify them; only the
+        // HMAC-signed `aidn.{id}.{sig}` format is accepted offline.
+        if (_licenseKey.ServerUrl is not null && _licenseKey.ServerUrl.Trim().Length == 0)
         {
+            if (!IsSignedKeyFormat(_licenseKey.Key))
+            {
+                var rejected = new LicenseValidationResult(
+                    LicenseKeyStatus.Invalid,
+                    message: "Offline-only mode requires a signed license key (aidn.{id}.{signature} format). " +
+                             "Server-validated keys (AIDN-PROD-*) require online validation.");
+                lock (_cacheLock) { _cached = rejected; }
+                return rejected;
+            }
             var offlineResult = ValidateOffline();
             lock (_cacheLock) { _cached = offlineResult; }
             return offlineResult;

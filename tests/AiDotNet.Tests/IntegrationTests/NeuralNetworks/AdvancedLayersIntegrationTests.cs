@@ -3081,7 +3081,7 @@ public class AdvancedLayersIntegrationTests
         int height = 8;
         int width = 8;
         var layer = new SubpixelConvolutionalLayer<float>(
-            inputDepth, outputDepth, upscaleFactor, kernelSize, height, width,
+            outputDepth, upscaleFactor, kernelSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
 
         // Input: [batch, channels, height, width]
@@ -3104,7 +3104,7 @@ public class AdvancedLayersIntegrationTests
         int upscaleFactor = 2;
         int kernelSize = 3;
         var original = new SubpixelConvolutionalLayer<float>(
-            inputDepth, outputDepth, upscaleFactor, kernelSize, 8, 8,
+            outputDepth, upscaleFactor, kernelSize,
             (IActivationFunction<float>)new ReLUActivation<float>());
         var input = Tensor<float>.CreateRandom([1, inputDepth, 8, 8]);
 
@@ -3132,7 +3132,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 16;
         int poolSize = 2;
         int stride = 2;
-        var layer = new PoolingLayer<float>(inputDepth, inputHeight, inputWidth, poolSize, stride, PoolingType.Max);
+        var layer = new PoolingLayer<float>(poolSize, stride, PoolingType.Max);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputDepth, inputHeight, inputWidth]);
@@ -3157,7 +3157,7 @@ public class AdvancedLayersIntegrationTests
         int inputWidth = 8;
         int poolSize = 2;
         int stride = 2;
-        var original = new PoolingLayer<float>(inputDepth, inputHeight, inputWidth, poolSize, stride, PoolingType.Average);
+        var original = new PoolingLayer<float>(poolSize, stride, PoolingType.Average);
         var input = Tensor<float>.CreateRandom([1, inputDepth, inputHeight, inputWidth]);
 
         // Act
@@ -3901,7 +3901,7 @@ public class AdvancedLayersIntegrationTests
         int inputHeight = 16;
         int inputWidth = 16;
         double compressionFactor = 0.5;
-        var layer = new TransitionLayer<float>(inputChannels, inputHeight, inputWidth, compressionFactor);
+        var layer = new TransitionLayer<float>(compressionFactor);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, inputHeight, inputWidth]);
@@ -3922,7 +3922,7 @@ public class AdvancedLayersIntegrationTests
         int inputHeight = 8;
         int inputWidth = 8;
         double compressionFactor = 0.5;
-        var original = new TransitionLayer<float>(inputChannels, inputHeight, inputWidth, compressionFactor);
+        var original = new TransitionLayer<float>(compressionFactor);
         var input = Tensor<float>.CreateRandom([1, inputChannels, inputHeight, inputWidth]);
 
         // Act
@@ -3948,7 +3948,7 @@ public class AdvancedLayersIntegrationTests
         int outChannels = 64;
         int height = 56;
         int width = 56;
-        var layer = new BasicBlock<float>(inChannels, outChannels, stride: 1, inputHeight: height, inputWidth: width);
+        var layer = new BasicBlock<float>(outChannels, stride: 1);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inChannels, height, width]);
@@ -3969,7 +3969,7 @@ public class AdvancedLayersIntegrationTests
         int outChannels = 32;
         int height = 28;
         int width = 28;
-        var original = new BasicBlock<float>(inChannels, outChannels, stride: 1, inputHeight: height, inputWidth: width);
+        var original = new BasicBlock<float>(outChannels, stride: 1);
         var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
 
         // Act
@@ -3995,7 +3995,7 @@ public class AdvancedLayersIntegrationTests
         int baseChannels = 64;
         int height = 56;
         int width = 56;
-        var layer = new BottleneckBlock<float>(inChannels, baseChannels, stride: 1, inputHeight: height, inputWidth: width);
+        var layer = new BottleneckBlock<float>(baseChannels, stride: 1);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inChannels, height, width]);
@@ -4016,7 +4016,7 @@ public class AdvancedLayersIntegrationTests
         int baseChannels = 32;
         int height = 28;
         int width = 28;
-        var original = new BottleneckBlock<float>(inChannels, baseChannels, stride: 1, inputHeight: height, inputWidth: width);
+        var original = new BottleneckBlock<float>(baseChannels, stride: 1);
         var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
 
         // Act
@@ -4092,7 +4092,7 @@ public class AdvancedLayersIntegrationTests
         int growthRate = 32;
         int height = 28;
         int width = 28;
-        var layer = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var layer = new DenseBlock<float>(numLayers, growthRate);
 
         // Input: [batch, channels, height, width]
         var input = Tensor<float>.CreateRandom([2, inputChannels, height, width]);
@@ -4114,7 +4114,7 @@ public class AdvancedLayersIntegrationTests
         int growthRate = 16;
         int height = 14;
         int width = 14;
-        var original = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var original = new DenseBlock<float>(numLayers, growthRate);
         var input = Tensor<float>.CreateRandom([1, inputChannels, height, width]);
 
         // Act
@@ -4250,7 +4250,7 @@ public class AdvancedLayersIntegrationTests
         int outChannels = 64;
         int height = 28;
         int width = 28;
-        var layer = new InvertedResidualBlock<float>(inChannels, outChannels, height, width,
+        var layer = new InvertedResidualBlock<float>(outChannels,
             expansionRatio: 6, stride: 1);
 
         // Input: [batch, channels, height, width]
@@ -4272,7 +4272,7 @@ public class AdvancedLayersIntegrationTests
         int outChannels = 32;
         int height = 14;
         int width = 14;
-        var original = new InvertedResidualBlock<float>(inChannels, outChannels, height, width,
+        var original = new InvertedResidualBlock<float>(outChannels,
             expansionRatio: 4, stride: 1);
         var input = Tensor<float>.CreateRandom([1, inChannels, height, width]);
 

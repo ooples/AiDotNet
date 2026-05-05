@@ -658,6 +658,29 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             RegisterSubLayer(_feedForwardProjection);
             RegisterSubLayer(_norm3);
 
+            // Propagate the resolved per-sample feature shape to lazy
+            // sub-layers so their ParameterCount reports the real
+            // weight count before each one's first Forward fires.
+            // Without this, sub-MHA / FFN / norm layers report 0 even
+            // after this parent's Forward has driven its own
+            // EnsureInitialized — which the
+            // ParameterCount-vs-GetParameters-Length invariant catches.
+            // Use a rank-2 [seq, features] shape because MHA's
+            // OnFirstForward expects at least rank-2 input.
+            var perSampleSeqShape = new[] { 1, _embeddingSize };
+            foreach (var sub in GetSubLayers())
+            {
+                if (sub is LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    try { lb.ResolveShapesOnly(perSampleSeqShape); }
+                    catch
+                    {
+                        try { lb.ResolveShapesOnly(new[] { _embeddingSize }); }
+                        catch { /* skip — sub-layer needs richer shape */ }
+                    }
+                }
+            }
+
             _isInitialized = true;
         }
     }

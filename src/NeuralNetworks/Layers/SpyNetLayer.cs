@@ -36,16 +36,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </remarks>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "128, 128, 2")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 128, 128", TestConstructorArgs = "2")]
 public class SpyNetLayer<T> : LayerBase<T>
 {
     #region Fields
 
     private readonly IEngine _engine;
     private readonly int _numLevels;
-    private readonly int _inputChannels;
-    private readonly int _inputHeight;
-    private readonly int _inputWidth;
+    // Non-readonly: lazy ctor leaves these = -1 until OnFirstForward.
+    private int _inputChannels;
+    private int _inputHeight;
+    private int _inputWidth;
     private readonly List<ConvolutionalLayer<T>> _basicModules;
     private Tensor<T>? _lastInput1;
     private Tensor<T>? _lastInput2;
@@ -72,37 +73,120 @@ public class SpyNetLayer<T> : LayerBase<T>
     /// <param name="numLevels">Number of pyramid levels (default: 5).</param>
     /// <param name="engine">Optional computation engine (CPU or GPU). If null, uses default CPU engine.</param>
     public SpyNetLayer(
-        int inputHeight,
-        int inputWidth,
-        int inputChannels = 3,
         int numLevels = 5,
         IEngine? engine = null)
-        : base([inputChannels, inputHeight, inputWidth], [2, inputHeight, inputWidth])
+        : base([-1, -1, -1], [2, -1, -1])
     {
+        // Reject numLevels <= 0 at construction. The pyramid loop below
+        // would silently produce a zero-module SPyNet (no flow estimation
+        // capacity), and Forward downstream would either crash on the
+        // empty-pyramid case or return a default-zero flow without any
+        // signal. Reject loud here so callers see the configuration bug
+        // immediately.
+        if (numLevels <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(numLevels),
+                $"SpyNetLayer requires numLevels >= 1; got {numLevels}.");
+
         _engine = engine ?? new CpuEngine();
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
-        _inputChannels = inputChannels;
+        _inputHeight = -1; // resolved in OnFirstForward
+        _inputWidth = -1;  // resolved in OnFirstForward
+        _inputChannels = -1; // resolved in OnFirstForward (single-frame channels)
         _numLevels = numLevels;
         _basicModules = [];
-
-        // Initialize basic modules for each pyramid level
-        // Each module processes concatenated (img1, img2, flow_estimate)
-        // Input channels: 2 * inputChannels (two frames) + 2 (flow)
-        int moduleInputChannels = 2 * inputChannels + 2;
 
         for (int i = 0; i < numLevels; i++)
         {
             // Per SPyNet paper (Ranjan & Black, CVPR 2017): each pyramid level uses
-            // a single Conv(7x7) that maps [2*C + 2] input channels → 2 output channels (flow residual dx, dy).
-            // The paper's 5-layer architecture is simplified here to a single conv for efficiency.
+            // a single Conv(7x7) that maps [2*C + 2] input channels → 2 output channels.
+            // outputDepth/kernel/stride/padding are channel-count-independent so the
+            // module is constructed eagerly; its own input channels resolve lazily on
+            // first Forward.
             var conv = new ConvolutionalLayer<T>(
-                2,  // outputDepth: 2 channels for (dx, dy) flow residual per the paper
+                2,  // outputDepth: (dx, dy) flow residual
                 7,  // kernelSize
                 1,  // stride
                 3); // padding
             _basicModules.Add(conv);
             RegisterSubLayer(conv);
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Input is two stacked frames along channel-axis: rank-3 [2C, H, W]
+    /// or rank-4 [B, 2C, H, W]. Resolves single-frame channel count
+    /// <c>C = 2C/2</c>, spatial H/W, then drives each pyramid-level
+    /// conv module's lazy resolution against [2C+2, levelH, levelW].
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int totalChannels, inH, inW;
+        if (s.Length == 3) { totalChannels = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { totalChannels = s[1]; inH = s[2]; inW = s[3]; }
+        else
+            throw new ArgumentException(
+                $"SpyNetLayer requires rank-3 [2C,H,W] or rank-4 [B,2C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+        if (totalChannels % 2 != 0)
+            throw new ArgumentException(
+                $"SpyNetLayer expects two stacked frames along channel axis (even channel count); got {totalChannels}.",
+                nameof(input));
+
+        _inputChannels = totalChannels / 2;
+        _inputHeight = inH;
+        _inputWidth = inW;
+
+        // Reject inputs that collapse below the coarsest pyramid level.
+        // BuildPyramid / EstimateFlow downstream assume each level has
+        // at least 1×1 spatial resolution AFTER the level-i halving;
+        // when inH/inW is too small for _numLevels halvings, the
+        // coarsest level becomes degenerate (all-ones tensor) and the
+        // 7×7 conv inside _basicModules[level] either silently produces
+        // zero-flow or trips a shape-mismatch deeper in the dispatch.
+        // Reject loud here so the caller can either reduce numLevels or
+        // upsample the input.
+        int minSpatial = 1 << (_numLevels - 1);
+        if (inH < minSpatial || inW < minSpatial)
+            throw new ArgumentException(
+                $"SpyNetLayer with numLevels={_numLevels} requires input H, W >= {minSpatial} " +
+                $"(so the coarsest level retains >=1×1 spatial); got [{inH},{inW}]. " +
+                $"Reduce numLevels or upsample the input first.",
+                nameof(input));
+
+        // Each pyramid level's conv consumes (frame1 + frame2 + flow) =
+        // 2C + 2 channels at level-i resolution (level 0 is full-res).
+        int moduleInputChannels = 2 * _inputChannels + 2;
+        for (int level = 0; level < _numLevels; level++)
+        {
+            int levelH = inH >> level;
+            int levelW = inW >> level;
+            if (levelH < 1) levelH = 1;
+            if (levelW < 1) levelW = 1;
+            _basicModules[level].ResolveFromShape(new[] { moduleInputChannels, levelH, levelW });
+            _basicModules[level].SetTrainingMode(IsTrainingMode);
+        }
+
+        ResolveShapes(
+            new[] { totalChannels, inH, inW },
+            new[] { 2, inH, inW });
+
+        // Replay any Deserialize-buffered parameters now that per-level conv shapes are resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            int offset = 0;
+            foreach (var module in _basicModules)
+            {
+                var moduleParams = module.GetParameters();
+                var newParams = new T[moduleParams.Length];
+                for (int i = 0; i < moduleParams.Length; i++)
+                    newParams[i] = pending[offset + i];
+                module.SetParameters(new Vector<T>(newParams));
+                offset += moduleParams.Length;
+            }
         }
     }
 
@@ -113,6 +197,8 @@ public class SpyNetLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (!IsShapeResolved) OnFirstForward(input);
+
         // Input should be concatenated [frame1, frame2] along channel dimension
         // Shape: [2*C, H, W] or [B, 2*C, H, W]
         bool hasBatch = input.Rank == 4;
@@ -969,6 +1055,12 @@ public class SpyNetLayer<T> : LayerBase<T>
         if (Engine is not DirectGpuTensorEngine gpuEngine)
             throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
 
+        // Mirror Forward()'s lazy-resolution gate. OnFirstForward owns
+        // _basicModules shape resolution + _pendingParameters replay
+        // (per the CPU path); without this, GPU-first execution
+        // dispatches against unresolved sub-conv weights.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         // Input: [B, 2*C, H, W]
         int batch = input.Shape[0];
         int doubleChannels = input.Shape[1];
@@ -1252,6 +1344,14 @@ public class SpyNetLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Pre-Forward: per-pyramid-level conv shapes are unresolved.
+        // Buffer and replay from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         int offset = 0;
         foreach (var module in _basicModules)
         {
@@ -1265,6 +1365,8 @@ public class SpyNetLayer<T> : LayerBase<T>
             offset += moduleParams.Length;
         }
     }
+
+    private Vector<T>? _pendingParameters;
 
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)

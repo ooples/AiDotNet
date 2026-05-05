@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Upsampling)]
 [LayerTask(LayerTask.UpSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 1, 2, 3, 4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, Cost = ComputeCost.High, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 2, 3, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -59,7 +59,9 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     ///   representing different patterns detected in the data
     /// </para>
     /// </remarks>
-    private readonly int _inputDepth;
+    // Non-readonly: lazy ctor leaves _inputDepth = -1 until OnFirstForward
+    // resolves it from the runtime input tensor's shape.
+    private int _inputDepth;
 
     /// <summary>
     /// The number of channels in the output tensor after upscaling.
@@ -433,27 +435,30 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// how to transform it into a higher-resolution output.
     /// </para>
     /// </remarks>
-    public SubpixelConvolutionalLayer(int inputDepth, int outputDepth, int upscaleFactor, int kernelSize, int inputHeight, int inputWidth,
+    /// <summary>
+    /// Lazy ctor — input depth/height/width come from the first <see cref="Forward"/>
+    /// call (<see cref="OnFirstForward"/>); only outputDepth/upscaleFactor/kernelSize
+    /// are required at construction since they don't depend on input spatial dims.
+    /// </summary>
+    public SubpixelConvolutionalLayer(int outputDepth, int upscaleFactor, int kernelSize,
                                     IActivationFunction<T>? activation = null)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
-            CalculateOutputShape(outputDepth, inputHeight * upscaleFactor, inputWidth * upscaleFactor),
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
             activation ?? new ReLUActivation<T>())
     {
-        _inputDepth = inputDepth;
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
+        if (upscaleFactor <= 0) throw new ArgumentOutOfRangeException(nameof(upscaleFactor), "upscaleFactor must be positive.");
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+
+        _inputDepth = -1; // resolved in OnFirstForward
         _outputDepth = outputDepth;
         _upscaleFactor = upscaleFactor;
         _kernelSize = kernelSize;
         _momentumFactor = NumOps.FromDouble(0.9);
         _weightDecay = NumOps.FromDouble(0.0001);
 
-        _kernels = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor]);
-
-        InitializeWeights();
-
-        // Register trainable parameters for GPU memory persistence
-        RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        // Defer weight allocation until OnFirstForward resolves _inputDepth.
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
     }
 
     /// <summary>
@@ -482,27 +487,76 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// how different features relate to each other, rather than treating each feature independently.
     /// </para>
     /// </remarks>
-    public SubpixelConvolutionalLayer(int inputDepth, int outputDepth, int upscaleFactor, int kernelSize, int inputHeight, int inputWidth,
+    /// <summary>
+    /// Lazy ctor with vector activation — see the scalar-activation overload above.
+    /// </summary>
+    public SubpixelConvolutionalLayer(int outputDepth, int upscaleFactor, int kernelSize,
                                     IVectorActivationFunction<T>? vectorActivation = null)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
-            CalculateOutputShape(outputDepth, inputHeight * upscaleFactor, inputWidth * upscaleFactor),
+        : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 },
             vectorActivation ?? new ReLUActivation<T>())
     {
-        _inputDepth = inputDepth;
+        if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
+        if (upscaleFactor <= 0) throw new ArgumentOutOfRangeException(nameof(upscaleFactor), "upscaleFactor must be positive.");
+        if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize), "kernelSize must be positive.");
+
+        _inputDepth = -1; // resolved in OnFirstForward
         _outputDepth = outputDepth;
         _upscaleFactor = upscaleFactor;
         _kernelSize = kernelSize;
         _momentumFactor = NumOps.FromDouble(0.9);
         _weightDecay = NumOps.FromDouble(0.0001);
 
+        _kernels = new Tensor<T>([0, 0, 0, 0]);
+        _biases = new Tensor<T>([0]);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Reads input depth + spatial dims from input.Shape, allocates kernel + bias
+    /// tensors against the resolved <c>_inputDepth</c>, and locks input/output
+    /// shapes via <see cref="LayerBase{T}.ResolveShapes"/>. Output spatial dims
+    /// follow the SubpixelConv contract: input H/W are upscaled by
+    /// <c>_upscaleFactor</c> and the channel count is <c>_outputDepth</c>.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inDepth, inH, inW;
+        if (s.Length == 3) { inDepth = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inDepth = s[1]; inH = s[2]; inW = s[3]; }
+        else
+        {
+            throw new ArgumentException(
+                $"SubpixelConvolutionalLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+        }
+        if (inDepth <= 0)
+            throw new ArgumentException(
+                $"SubpixelConvolutionalLayer's input channel count must be positive; got {inDepth}.",
+                nameof(input));
+
+        _inputDepth = inDepth;
+
+        // Allocate kernels/biases against the now-known channel count.
         _kernels = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
         _biases = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor]);
-
         InitializeWeights();
 
-        // Register trainable parameters for GPU memory persistence
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+
+        ResolveShapes(
+            new[] { _inputDepth, inH, inW },
+            new[] { _outputDepth, inH * _upscaleFactor, inW * _upscaleFactor });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before _kernels/_biases were allocated.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            SetParameters(pending);
+        }
     }
 
     /// <summary>
@@ -579,6 +633,12 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy ctor leaves _inputDepth = -1; resolve from input.Shape on
+        // first call, allocate kernel + bias against the resolved channel
+        // count, then proceed with the conv. Subsequent calls short-circuit
+        // via IsShapeResolved.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
@@ -674,6 +734,14 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Mirror Forward()'s lazy-init gate. OnFirstForward owns
+        // _kernels / _biases allocation (lazy ctor leaves _inputDepth=-1
+        // and the weight tensors as 0-length placeholders); GPU-first
+        // execution would otherwise dispatch the depth-to-space kernel
+        // with zero-initialized weights and produce a black output.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         var shape = input._shape;
 
         // Ensure 4D [B, C, H, W] format
@@ -969,6 +1037,15 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Pre-Forward: _kernels/_biases are still 0-shaped (channel count
+        // unknown). Buffer the vector and replay from OnFirstForward
+        // after _inputDepth is resolved and the tensors are allocated.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         if (parameters.Length != ParameterCount)
             throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
         int idx = 0;
@@ -979,6 +1056,8 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_kernels);
         Engine.InvalidatePersistentTensor(_biases);
     }
+
+    private Vector<T>? _pendingParameters;
 
     #region GPU Parameter Updates
 

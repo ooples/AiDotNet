@@ -20,7 +20,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 64;
         int height = 8;
         int width = 8;
-        var block = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
+        var block = new BasicBlock<float>(channels);
         var input = CreateRandomTensor<float>([2, channels, height, width]); // NCHW format
 
         // Act
@@ -39,7 +39,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 128;
         int height = 16;
         int width = 16;
-        var block = new BasicBlock<float>(inChannels, outChannels, stride: 2, inputHeight: height, inputWidth: width);
+        var block = new BasicBlock<float>(outChannels, stride: 2);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -61,7 +61,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 32;
         int height = 8;
         int width = 8;
-        var original = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
+        var original = new BasicBlock<float>(channels);
         var input = CreateRandomTensor<float>([2, channels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -81,7 +81,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 32;
         int height = 8;
         int width = 8;
-        var block = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
+        var block = new BasicBlock<float>(channels);
         var input = CreateRandomTensor<float>([1, channels, height, width]);
 
         // Act
@@ -104,7 +104,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 64;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels, inputHeight: height, inputWidth: width);
+        var block = new BottleneckBlock<float>(inChannels, outChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -126,7 +126,7 @@ public class SpecializedBlocksIntegrationTests
         int baseChannels = 128;
         int height = 16;
         int width = 16;
-        var block = new BottleneckBlock<float>(inChannels, baseChannels, stride: 2, inputHeight: height, inputWidth: width);
+        var block = new BottleneckBlock<float>(baseChannels, stride: 2);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -149,7 +149,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 64;
         int height = 8;
         int width = 8;
-        var original = new BottleneckBlock<float>(inChannels, outChannels, inputHeight: height, inputWidth: width);
+        var original = new BottleneckBlock<float>(inChannels, outChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -170,7 +170,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 32;
         int height = 8;
         int width = 8;
-        var block = new BottleneckBlock<float>(inChannels, outChannels, inputHeight: height, inputWidth: width);
+        var block = new BottleneckBlock<float>(inChannels, outChannels);
         var input = CreateRandomTensor<float>([1, inChannels, height, width]);
 
         // Act
@@ -192,7 +192,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 64;
         int height = 8;
         int width = 8;
-        var block = new InvertedResidualBlock<float>(inChannels, outChannels, height, width);
+        var block = new InvertedResidualBlock<float>(outChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -214,7 +214,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 64;
         int height = 16;
         int width = 16;
-        var block = new InvertedResidualBlock<float>(inChannels, outChannels, height, width, stride: 2);
+        var block = new InvertedResidualBlock<float>(outChannels, stride: 2);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -237,7 +237,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 64;
         int height = 8;
         int width = 8;
-        var original = new InvertedResidualBlock<float>(inChannels, outChannels, height, width);
+        var original = new InvertedResidualBlock<float>(outChannels);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -259,7 +259,7 @@ public class SpecializedBlocksIntegrationTests
         int height = 8;
         int width = 8;
         int expansionRatio = 6;
-        var block = new InvertedResidualBlock<float>(inChannels, outChannels, height, width, expansionRatio: expansionRatio);
+        var block = new InvertedResidualBlock<float>(outChannels, expansionRatio: expansionRatio);
         var input = CreateRandomTensor<float>([1, inChannels, height, width]);
 
         // Act
@@ -278,7 +278,7 @@ public class SpecializedBlocksIntegrationTests
         int outChannels = 32;
         int height = 8;
         int width = 8;
-        var block = new InvertedResidualBlock<float>(inChannels, outChannels, height, width, useSE: true);
+        var block = new InvertedResidualBlock<float>(outChannels, useSE: true);
         var input = CreateRandomTensor<float>([2, inChannels, height, width]);
 
         // Act
@@ -302,7 +302,7 @@ public class SpecializedBlocksIntegrationTests
         int growthRate = 32;
         int height = 8;
         int width = 8;
-        var block = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var block = new DenseBlock<float>(numLayers, growthRate);
         var input = CreateRandomTensor<float>([2, inputChannels, height, width]);
 
         // Act
@@ -326,7 +326,7 @@ public class SpecializedBlocksIntegrationTests
         int growthRate = 16;
         int height = 8;
         int width = 8;
-        var block = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var block = new DenseBlock<float>(numLayers, growthRate);
 
         // Assert - verify property calculation
         Assert.Equal(inputChannels + numLayers * growthRate, block.OutputChannels);
@@ -344,7 +344,7 @@ public class SpecializedBlocksIntegrationTests
         int growthRate = 16;
         int height = 8;
         int width = 8;
-        var original = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var original = new DenseBlock<float>(numLayers, growthRate);
         var input = CreateRandomTensor<float>([2, inputChannels, height, width]);
         var originalOutput = original.Forward(input);
 
@@ -366,7 +366,7 @@ public class SpecializedBlocksIntegrationTests
         int growthRate = 8;
         int height = 4;
         int width = 4;
-        var block = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var block = new DenseBlock<float>(numLayers, growthRate);
         var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
 
         // Act
@@ -387,7 +387,7 @@ public class SpecializedBlocksIntegrationTests
         int growthRate = 16;
         int height = 4;
         int width = 4;
-        var block = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var block = new DenseBlock<float>(numLayers, growthRate);
         var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
 
         // Act - forward then reset
@@ -411,7 +411,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 32;
         int height = 4;
         int width = 4;
-        var block = new BasicBlock<float>(channels, channels, inputHeight: height, inputWidth: width);
+        var block = new BasicBlock<float>(channels);
         var input = CreateRandomTensor<float>([1, channels, height, width]);
 
         // Act
@@ -428,7 +428,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 64;
         int height = 4;
         int width = 4;
-        var block = new BottleneckBlock<float>(channels, channels / 4, inputHeight: height, inputWidth: width);
+        var block = new BottleneckBlock<float>(channels, channels / 4);
         var input = CreateRandomTensor<float>([1, channels, height, width]);
 
         // Act
@@ -445,7 +445,7 @@ public class SpecializedBlocksIntegrationTests
         int channels = 32;
         int height = 4;
         int width = 4;
-        var block = new InvertedResidualBlock<float>(channels, channels, height, width, expansionRatio: 1);
+        var block = new InvertedResidualBlock<float>(channels, expansionRatio: 1);
         var input = CreateRandomTensor<float>([1, channels, height, width]);
 
         // Act
@@ -465,7 +465,7 @@ public class SpecializedBlocksIntegrationTests
         int growthRate = 8;
         int height = 4;
         int width = 4;
-        var block = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var block = new DenseBlock<float>(numLayers, growthRate);
         var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
 
         // Act
@@ -485,7 +485,7 @@ public class SpecializedBlocksIntegrationTests
         int growthRate = 64;
         int height = 4;
         int width = 4;
-        var block = new DenseBlock<float>(inputChannels, numLayers, growthRate, height, width);
+        var block = new DenseBlock<float>(numLayers, growthRate);
         var input = CreateRandomTensor<float>([1, inputChannels, height, width]);
 
         // Act

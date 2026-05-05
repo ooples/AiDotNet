@@ -136,6 +136,25 @@ public abstract class GraphLayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateAndSetup();
+
+        // Drive lazy-shape resolution + weight allocation by running a
+        // probe Forward against InputShape. Without this, lazy graph
+        // layers (SpiralConvLayer, GraphAttention, etc.) report
+        // ParameterCount = 0 because their weights resolve only on the
+        // first Forward call. CreateAndSetup may already have called
+        // SetupGraph or similar, but the layer's weights are still
+        // allocated lazily.
+        try
+        {
+            using var probe = CreateRandomTensor(InputShape);
+            layer.Forward(probe);
+        }
+        catch
+        {
+            // Some layers reject the default InputShape — the invariant
+            // still validates whatever state the ctor produced.
+        }
+
         int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 

@@ -395,9 +395,9 @@ public class GpuStressTests
 
             // Build a small CNN: Conv -> ReLU -> Pool -> Conv -> ReLU -> Pool
             var conv1 = new ConvolutionalLayer<float>(32, 32, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
-            var pool1 = new PoolingLayer<float>(16, 32, 32, 2, 2, PoolingType.Max);
+            var pool1 = new PoolingLayer<float>(2, 2, PoolingType.Max);
             var conv2 = new ConvolutionalLayer<float>(16, 16, 1, 1, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
-            var pool2 = new PoolingLayer<float>(32, 16, 16, 2, 2, PoolingType.Max);
+            var pool2 = new PoolingLayer<float>(2, 2, PoolingType.Max);
 
             var input = CreateRandomTensor(new[] { 2, 3, 32, 32 }); // RGB images
 

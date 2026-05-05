@@ -52,7 +52,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 3")]
+[LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
 public class ResidualDenseBlock<T> : LayerBase<T>
 {
     #region Fields
@@ -83,14 +83,14 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     private readonly int _numFeatures;
 
     /// <summary>
-    /// Input height.
+    /// Input height — non-readonly: lazy ctor leaves -1 until OnFirstForward.
     /// </summary>
-    private readonly int _inputHeight;
+    private int _inputHeight;
 
     /// <summary>
-    /// Input width.
+    /// Input width — non-readonly: lazy ctor leaves -1 until OnFirstForward.
     /// </summary>
-    private readonly int _inputWidth;
+    private int _inputWidth;
 
     /// <summary>
     /// Cached input for backpropagation.
@@ -188,12 +188,10 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     public ResidualDenseBlock(
         int numFeatures = 64,
         int growthChannels = 32,
-        int inputHeight = 64,
-        int inputWidth = 64,
         double residualScale = 0.2)
         : base(
-            [numFeatures, inputHeight, inputWidth],
-            [numFeatures, inputHeight, inputWidth])
+            [numFeatures, -1, -1],
+            [numFeatures, -1, -1])
     {
         if (numFeatures <= 0)
             throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be positive.");
@@ -204,8 +202,8 @@ public class ResidualDenseBlock<T> : LayerBase<T>
 
         _numFeatures = numFeatures;
         _growthChannels = growthChannels;
-        _inputHeight = inputHeight;
-        _inputWidth = inputWidth;
+        _inputHeight = -1; // resolved in OnFirstForward
+        _inputWidth = -1;  // resolved in OnFirstForward
         _residualScale = residualScale;
         _activation = new LeakyReLUActivation<T>(0.2); // ESRGAN uses 0.2 negative slope
 
@@ -257,6 +255,65 @@ public class ResidualDenseBlock<T> : LayerBase<T>
             RegisterSubLayer(conv);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves input height/width from <c>input.Shape</c> and propagates
+    /// to each conv sub-layer via <see cref="LayerBase{T}.ResolveFromShape"/>
+    /// so weights are allocated up front and downstream Forward calls see
+    /// fully resolved shapes.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inChannels, inH, inW;
+        if (s.Length == 3) { inChannels = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inChannels = s[1]; inH = s[2]; inW = s[3]; }
+        else
+            throw new ArgumentException(
+                $"ResidualDenseBlock requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+        if (inChannels != _numFeatures)
+            throw new ArgumentException(
+                $"ResidualDenseBlock expected {_numFeatures} input channels, got {inChannels}.",
+                nameof(input));
+
+        _inputHeight = inH;
+        _inputWidth = inW;
+
+        // Each conv's input is the running concat of x0 + previous growth-channel
+        // outputs, so the channel counts grow by _growthChannels per layer.
+        int currentChannels = _numFeatures;
+        for (int i = 0; i < 4; i++)
+        {
+            _convLayers[i].ResolveFromShape(new[] { currentChannels, inH, inW });
+            currentChannels += _growthChannels;
+        }
+        _convLayers[4].ResolveFromShape(new[] { currentChannels, inH, inW });
+
+        // Propagate parent's training mode to each conv (RegisterSubLayer
+        // doesn't backfill it for sub-layers allocated before SetTrainingMode).
+        foreach (var conv in _convLayers)
+            conv.SetTrainingMode(IsTrainingMode);
+
+        ResolveShapes(
+            new[] { _numFeatures, inH, inW },
+            new[] { _numFeatures, inH, inW });
+
+        // Replay any Deserialize-buffered parameters now that conv shapes are resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            int offset = 0;
+            foreach (var conv in _convLayers)
+            {
+                int count = conv.GetParameters().Length;
+                conv.SetParameters(pending.SubVector(offset, count));
+                offset += count;
+            }
+        }
+    }
+
     #endregion
 
     #region Forward Pass
@@ -264,6 +321,8 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
         _convOutputs = new Tensor<T>[5];
         _activationOutputs = new Tensor<T>[4]; // Only first 4 have activation
@@ -326,6 +385,15 @@ public class ResidualDenseBlock<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
+
+        // Mirror Forward()'s lazy-resolution gate. OnFirstForward owns
+        // shape resolution + _pendingParameters replay for inner conv
+        // layers; without this guard a GPU-first execution leaves them
+        // in their unresolved state and the GPU forward reads zero-
+        // length weight buffers. ResolveFromShape is idempotent so the
+        // CPU path is unaffected.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         var originalShape = input._shape;
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
@@ -712,6 +780,14 @@ public class ResidualDenseBlock<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Pre-Forward: each conv's input shape is unresolved, so its
+        // GetParameters().Length is wrong. Buffer; OnFirstForward replays.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         int offset = 0;
         foreach (var conv in _convLayers)
         {
@@ -720,6 +796,8 @@ public class ResidualDenseBlock<T> : LayerBase<T>
             offset += count;
         }
     }
+
+    private Vector<T>? _pendingParameters;
 
     /// <inheritdoc />
     public override void ResetState()

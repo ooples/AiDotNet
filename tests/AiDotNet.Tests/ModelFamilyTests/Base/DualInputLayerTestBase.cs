@@ -178,6 +178,63 @@ public abstract class DualInputLayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
+
+        // Drive lazy-shape resolution + weight allocation by running a
+        // dual-input probe Forward against PrimaryInputShape /
+        // SecondaryInputShape. Without this, lazy layers (TransformerDecoder,
+        // CrossAttention, etc.) report ParameterCount = 0 because their
+        // weights resolve only on the first Forward call. The reflection
+        // probe handles both the params-Tensor[] dispatch and the
+        // (Tensor, Tensor) overload that some dual-input layers expose.
+        var primary = CreateRandomTensor(PrimaryInputShape);
+        var secondary = CreateRandomTensor(SecondaryInputShape, seed: 77);
+        bool probed = false;
+
+        // Try the params-Tensor[] overload (DecoderLayer style) first.
+        // Only set `probed = true` when Invoke RETURNS (so a thrown
+        // exception during the underlying Forward doesn't lock out the
+        // remaining fallbacks).
+        try
+        {
+            var paramsForward = layer.GetType().GetMethod(
+                "Forward",
+                new[] { typeof(Tensor<double>[]) });
+            if (paramsForward is not null)
+            {
+                paramsForward.Invoke(layer, new object[] { new[] { primary, secondary } });
+                probed = true;
+            }
+        }
+        catch { /* fall through to next probe */ }
+
+        // Try the (Tensor, Tensor) overload (TransformerDecoderLayer style).
+        if (!probed)
+        {
+            try
+            {
+                var dualForward = layer.GetType().GetMethod(
+                    "Forward",
+                    new[] { typeof(Tensor<double>), typeof(Tensor<double>) });
+                if (dualForward is not null)
+                {
+                    dualForward.Invoke(layer, new object[] { primary, secondary });
+                    probed = true;
+                }
+            }
+            catch { /* fall through */ }
+        }
+
+        // Last resort: the single-input Forward declared by ILayer<T>.
+        // Many dual-input layers expose a single-input Forward that
+        // delegates to (input, input), which still drives the lazy
+        // resolution chain. Always run this even if a previous probe
+        // returned, because the layer's internal computation may have
+        // thrown after EnsureInitialized but before sub-layers reached
+        // their own first Forward — and the ParameterCount-vs-
+        // GetParameters invariant requires the full chain to be live.
+        try { layer.Forward(primary); }
+        catch { /* fall through */ }
+
         int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 
@@ -198,6 +255,15 @@ public abstract class DualInputLayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
+
+        // Probe Forward(primary) so lazy layers materialise their weights
+        // before the roundtrip — same rationale as the parameter-count probe.
+        using (var probe = new Tensor<double>(PrimaryInputShape))
+        {
+            for (int i = 0; i < probe.Length; i++) probe[i] = 0.01 * (i + 1);
+            try { layer.Forward(probe); } catch { }
+        }
+
         if (layer.ParameterCount == 0) return;
 
         var original = layer.GetParameters();

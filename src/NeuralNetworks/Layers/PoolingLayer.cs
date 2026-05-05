@@ -39,7 +39,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Pooling)]
 [LayerTask(LayerTask.DownSampling)]
 [LayerTask(LayerTask.SpatialProcessing)]
-[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "1, 4, 4, 2, 2")]
+[LayerProperty(IsTrainable = false, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "1, 1, 4, 4", TestConstructorArgs = "2, 2")]
 public class PoolingLayer<T> : LayerBase<T>
 {
     /// <summary>
@@ -213,13 +213,50 @@ public class PoolingLayer<T> : LayerBase<T>
     /// stride 2 would produce a 14×14 output.
     /// </para>
     /// </remarks>
-    public PoolingLayer(int inputDepth, int inputHeight, int inputWidth, int poolSize, int stride, PoolingType type = PoolingType.Max)
-        : base(CalculateInputShape(inputDepth, inputHeight, inputWidth),
-               CalculateOutputShape(inputDepth, CalculateOutputDimension(inputHeight, poolSize, stride), CalculateOutputDimension(inputWidth, poolSize, stride)))
+    /// <summary>
+    /// Lazy ctor — input depth/height/width come from the first <see cref="Forward"/>
+    /// call's input tensor (<see cref="OnFirstForward"/>); only the pool/stride/type
+    /// hyperparameters are needed at construction.
+    /// </summary>
+    public PoolingLayer(int poolSize, int stride, PoolingType type = PoolingType.Max)
+        : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
+        if (poolSize <= 0) throw new ArgumentOutOfRangeException(nameof(poolSize), "poolSize must be positive.");
+        if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride), "stride must be positive.");
+
         PoolSize = poolSize;
         Stride = stride;
         Type = type;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Reads input.Shape to resolve [C, H, W] (or [B, C, H, W] when batched),
+    /// computes output spatial dims via the pool/stride formula, and locks in
+    /// the layer's input/output shapes. Idempotent — runs only on the first
+    /// Forward call (subsequent calls short-circuit via IsShapeResolved).
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        // Accept rank-3 [C, H, W] (unbatched) or rank-4 [B, C, H, W] (batched).
+        // PoolingLayer's existing forward path normalizes either via
+        // _originalInputShape — we mirror that here for shape resolution.
+        var s = input._shape;
+        int inputDepth, inputHeight, inputWidth;
+        if (s.Length == 3) { inputDepth = s[0]; inputHeight = s[1]; inputWidth = s[2]; }
+        else if (s.Length == 4) { inputDepth = s[1]; inputHeight = s[2]; inputWidth = s[3]; }
+        else
+        {
+            throw new ArgumentException(
+                $"PoolingLayer requires rank-3 [C, H, W] or rank-4 [B, C, H, W] input; got rank {s.Length}.",
+                nameof(input));
+        }
+
+        int outH = CalculateOutputDimension(inputHeight, PoolSize, Stride);
+        int outW = CalculateOutputDimension(inputWidth, PoolSize, Stride);
+        ResolveShapes(
+            new[] { inputDepth, inputHeight, inputWidth },
+            new[] { inputDepth, outH, outW });
     }
 
     /// <summary>
@@ -285,6 +322,10 @@ public class PoolingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy contract — flip IsShapeResolved on the first forward so
+        // chain-walkers and tests see the resolved input/output shapes.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
         _originalInputShape = input._shape;
 
