@@ -1915,17 +1915,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     && outputs.Length > 0 && outputs[0] is Tensor<T>
                     && _model is INeuralNetwork<T> nn)
                 {
-                    // BUILDER-OPTIMIZER PLUMBING (closes review-comment #1265.f03A):
+                    // BUILDER-OPTIMIZER PLUMBING (closes review-comment #1265.f03A
+                    // and #1265.hNaM):
                     // pre-wire the builder's configured optimizer onto the model
                     // so nn.Train resolves to it via GetOrCreateBaseOptimizer.
                     // Without this, nn.Train would lazy-construct a default Adam
                     // and silently drop AiModelBuilder.ConfigureOptimizer settings
                     // (custom AdamW, Lion, attached LR scheduler, hyperparameter
-                    // overrides). We only set when the configured optimizer is
-                    // actually gradient-based (the only kind tape-based Train
-                    // can use); non-gradient optimizers fall through to the
-                    // model's own default. Done once per epoch outer-loop and
-                    // re-set inside the batch loop is a no-op (same instance).
+                    // overrides).
+                    //
+                    // Cast scope: `is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>`
+                    // — only succeeds when the builder is parameterized as
+                    // <T, Tensor<T>, Tensor<T>>, which is the canonical setup
+                    // for NN training. For builders parameterized on other
+                    // TInput/TOutput types but somehow still streaming Tensor<T>
+                    // samples through to a NN model, the cast falls through and
+                    // nn.Train uses the model's own default optimizer. That edge
+                    // case is logically inconsistent (the configured optimizer
+                    // operates in a different value-space than the model takes
+                    // gradients in) and is not supported.
+                    //
+                    // Done at the top of the batch handler; re-setting on
+                    // subsequent batches is a no-op (same instance).
                     if (_optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gboTrain
                         && nn is NeuralNetworks.NeuralNetworkBase<T> nnBaseForOpt)
                     {

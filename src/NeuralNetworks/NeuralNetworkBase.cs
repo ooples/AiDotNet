@@ -3322,13 +3322,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (inputs.Length != targets.Length)
             throw new ArgumentException($"inputs.Length ({inputs.Length}) must equal targets.Length ({targets.Length}).");
 
-        // Single-sample fast path: avoid the stack copy and dispatch through
-        // Train, which auto-promotes the batch dim itself via NormalizeBatchDim.
-        if (inputs.Length == 1)
-        {
-            Train(inputs[0], targets[0]);
-            return;
-        }
+        // No single-sample fast path: a one-element TrainBatched still adds
+        // the batch dimension via the same stack-and-dispatch flow as a
+        // multi-sample call. Previously the fast path delegated to
+        // Train(inputs[0], targets[0]) on the assumption the override
+        // would call NormalizeBatchDim itself, but Transformer.Train and
+        // similar overrides do not — they pass the (unbatched) sample
+        // straight into TrainWithTape, which reaches Layers with a rank
+        // one-lower than what a 2+ sample call produces. Reaching layers
+        // with a different rank for B=1 vs B≥2 is a class of bug that
+        // bites only when callers happen to feed a single-element batch
+        // (e.g. last batch of an uneven epoch). Stacking the unit batch
+        // here keeps the layer pipeline rank-stable.
 
         // Validate consistent shapes across the batch — concrete element-shape
         // mismatch is a programming error and the resulting concat would fail

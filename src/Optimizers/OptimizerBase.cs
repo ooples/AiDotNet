@@ -1703,18 +1703,26 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return RequireModel().Clone();
         }
 
-        // When the model already has initialized parameters (e.g., a neural network
-        // constructed with Xavier/He init, or any model that has been warm-started),
-        // the user has already chosen an initialization scheme and the clone
-        // inherits that scheme via DeepCopy / serialize-deserialize. Overwriting
-        // those parameters with data-derived uniform random values from feature
-        // ranges (e.g., [0, 255] for byte input) is appropriate for uninitialized
-        // linear models (where the parameter space is the feature space) but
-        // catastrophic for neural networks (where weight magnitudes ~1/√fanIn,
-        // not feature_max). Fix: skip the data-derived randomization and return
-        // a clone that preserves the user's init. The optimizer will refine it
-        // from there.
-        if (InterfaceGuard.Parameterizable(RequireModel()).ParameterCount > 0)
+        // For neural networks, the constructor's Xavier/He/etc. initializer
+        // has already populated weight magnitudes proportional to 1/√fanIn —
+        // exactly the scale the layers expect. Re-randomizing those weights
+        // from training-data feature ranges (e.g. [0, 255] for byte input,
+        // or [0, 1] for normalized features) replaces well-chosen initial
+        // weights with values orders of magnitude too large or too small,
+        // and the optimizer cannot recover from that starting point in
+        // any reasonable budget. Closes #1267.
+        //
+        // SCOPE: This skip is NN-specific. Population-based meta-optimizers
+        // (PSO, Differential Evolution, Genetic Algorithm) call
+        // InitializeRandomSolution repeatedly to seed N diverse candidates
+        // at the START of optimization — for non-NN parametric models
+        // (linear regression, polynomial regression, classical optimizers
+        // operating in feature space) the data-derived random init IS the
+        // right behavior. Gating on `model is INeuralNetwork<T>` (rather
+        // than the previous broader `ParameterCount > 0` test) preserves
+        // PSO/DE diversity for non-NN models while keeping the #1267 fix
+        // for neural networks.
+        if (RequireModel() is AiDotNet.Interfaces.INeuralNetwork<T>)
         {
             return RequireModel().Clone();
         }

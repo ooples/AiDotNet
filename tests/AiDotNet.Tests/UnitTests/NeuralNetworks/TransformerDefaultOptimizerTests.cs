@@ -45,21 +45,50 @@ public class TransformerDefaultOptimizerTests
     [Fact]
     public void Deserialize_MissingOptimizer_FallsBackToAdam_NotGradientDescent()
     {
-        // Build a Transformer with no optimizer (so the wire format will not
-        // carry one), serialize, then deserialize on a fresh instance and
-        // assert the deserialized optimizer is Adam — NOT the legacy
-        // GradientDescentOptimizer fallback that issue #1264 reported.
-        var src = new Transformer<float>(MakeArch(), optimizer: null);
+        // Directly exercise DeserializeNetworkSpecificData's null-optimizer
+        // fallback path. A naive Serialize → Deserialize round-trip never
+        // reaches the fallback because Serialize always writes the
+        // optimizer's type-name (so DeserializeInterface returns the
+        // serialized optimizer, not null). To actually verify the fix
+        // for #1264, hand-build a BinaryReader stream where the optimizer
+        // field carries an empty type-name (the wire format that means
+        // "no optimizer"), and confirm the fallback constructs Adam with
+        // the Vaswani 2017 hyperparameters — NOT the legacy
+        // GradientDescentOptimizer that the issue reported.
+        var arch = MakeArch();
 
-        // The public Serialize/Deserialize round-trip uses byte[] (not
-        // BinaryReader/Writer); the per-network DeserializeNetworkSpecificData
-        // hook still receives a BinaryReader internally, which is what the
-        // PR's null-fallback fix lives in.
-        var bytes = src.Serialize();
-        var dst = new Transformer<float>(MakeArch(), optimizer: null);
-        dst.Deserialize(bytes);
+        // The Transformer-specific DeserializeNetworkSpecificData expects
+        // (in order): 5 int32s, 1 double for dropout, then two
+        // DeserializeInterface payloads (loss function, optimizer) where
+        // each payload is a single length-prefixed string. Empty string
+        // → null → fallback path.
+        using var ms = new System.IO.MemoryStream();
+        using (var w = new System.IO.BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            w.Write(2);  // numHeads
+            w.Write(1);  // numEncoderLayers
+            w.Write(0);  // numDecoderLayers
+            w.Write(4);  // maxSequenceLength (matches MakeArch)
+            w.Write(8);  // vocabularySize (matches MakeArch)
+            w.Write(0.1);  // dropoutRate
+            w.Write(string.Empty);  // loss function: null sentinel
+            w.Write(string.Empty);  // optimizer:    null sentinel ← exercises fallback
+        }
+        ms.Position = 0;
 
-        var optimizerName = GetOptimizerName(dst);
+        var transformer = new Transformer<float>(arch, optimizer: null);
+        using (var r = new System.IO.BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            // Invoke the protected method via reflection. The PR's null-
+            // optimizer fallback lives directly inside this method.
+            var method = typeof(Transformer<float>).GetMethod(
+                "DeserializeNetworkSpecificData",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.NotNull(method);
+            method!.Invoke(transformer, new object[] { r });
+        }
+
+        var optimizerName = GetOptimizerName(transformer);
         Assert.Contains("Adam", optimizerName);
         Assert.DoesNotContain("GradientDescent", optimizerName);
     }
