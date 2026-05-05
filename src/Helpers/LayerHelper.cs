@@ -1707,15 +1707,30 @@ public static class LayerHelper<T>
         // Apply a freshly-seeded init strategy to a layer if reproducibility
         // was requested. No-op when randomSeed wasn't set (preserves
         // backward-compatible behaviour for users who don't request
-        // reproducibility).
+        // reproducibility), AND no-op when the layer already has its own
+        // strategy assigned (e.g., a Dense layer with ReLU activation
+        // defaults to He init, MultiHeadAttention has Xavier-uniform via
+        // SimdRandom — overwriting those with the EagerInitializationStrategy's
+        // hardcoded Xavier-normal would silently change the layer's
+        // initialization policy and break the layer's per-activation
+        // tuning). Closes review-comment #1270.vhmn.
+        //
+        // Note: this leaves the seed-driven determinism gap for layers
+        // that DO have their own strategy — those layers will still
+        // initialize from their own RNG (often non-seeded SimdRandom).
+        // Closing that gap end-to-end requires layer-side changes to
+        // accept a seed parameter through their existing init strategy
+        // (so each layer's hardcoded init algo runs with a seeded RNG
+        // instead of being replaced wholesale). Tracked as a follow-up.
         ILayer<T> Wire(ILayer<T> layer)
         {
-            if (seedRng is not null && layer is NeuralNetworks.Layers.LayerBase<T> baseLayer)
-            {
-                int layerSeed = seedRng.Next();
-                baseLayer.InitializationStrategy =
-                    new Initialization.EagerInitializationStrategy<T>(new Random(layerSeed));
-            }
+            if (seedRng is null) return layer;
+            if (layer is not NeuralNetworks.Layers.LayerBase<T> baseLayer) return layer;
+            if (baseLayer.InitializationStrategy is not null) return layer;
+
+            int layerSeed = seedRng.Next();
+            baseLayer.InitializationStrategy =
+                new Initialization.EagerInitializationStrategy<T>(new Random(layerSeed));
             return layer;
         }
 

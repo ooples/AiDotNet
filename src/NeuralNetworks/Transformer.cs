@@ -175,9 +175,40 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     internal override void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
         base.SetBaseTrainOptimizer(optimizer);
+        // The previous version only updated _optimizer when the new
+        // optimizer was non-null, leaving the field pointing at the
+        // OLD optimizer when a caller cleared the base slot. That made
+        // GetModelMetadata / SerializeNetworkSpecificData report the
+        // stale optimizer instead of "no optimizer configured" — exactly
+        // the staleness the override is supposed to prevent. Mirror the
+        // base's null-clears-the-slot semantic by falling back to the
+        // ctor-supplied default optimizer (so subsequent training calls
+        // still have something usable) rather than holding onto a stale
+        // reference. Closes review-comment #1270.vhmE.
         if (optimizer is not null)
         {
             _optimizer = optimizer;
+        }
+        else
+        {
+            // null = "reset to default". Reconstruct the same Vaswani-2017
+            // recipe the ctor would build (Adam β₁=0.9, β₂=0.98, ε=1e-9
+            // + NoamSchedule on _transformerArchitecture.ModelDimension /
+            // WarmupSteps, stepped per batch). Mirrors the deserialization
+            // fallback at line 794-806 so behaviour is consistent across
+            // the two "no caller-supplied optimizer" entry points.
+            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = 1e-3,
+                    Beta2 = 0.98,
+                    Epsilon = 1e-9,
+                    LearningRateScheduler = new LearningRateSchedulers.NoamSchedule(
+                        modelDimension: _transformerArchitecture.ModelDimension,
+                        warmupSteps: _transformerArchitecture.WarmupSteps),
+                    SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                });
         }
     }
 
@@ -227,7 +258,14 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         if (optimizer is null)
         {
             // Vaswani 2017 §5.3 hyperparameters, applied AS A RECIPE
-            // (β₁=0.9, β₂=0.98, ε=1e-9, lr=base · NoamSchedule(d_model)).
+            // (β₁=0.9, β₂=0.98, ε=1e-9). When the NoamSchedule is attached
+            // below, GradientBasedOptimizerBase uses the scheduler's
+            // CurrentLearningRate AS THE ABSOLUTE LR for each step
+            // (InitialLearningRate=1e-3 acts only as the base ctor's
+            // positive-lr-guard sentinel — it is bypassed entirely once a
+            // scheduler is present). Effective LR per batch equals
+            // NoamSchedule(t) directly, NOT InitialLearningRate × NoamSchedule(t).
+            // Closes review-comment #1270.vhm-.
             //
             // β₂=0.98 (not the library default 0.999) is paired with the
             // inverse-sqrt warmup schedule below: the small β₂ tracks

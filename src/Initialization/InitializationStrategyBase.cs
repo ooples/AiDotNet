@@ -31,6 +31,18 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected readonly Random Random;
 
     /// <summary>
+    /// Read-only accessor for the seeded RNG instance. Lets layers that
+    /// don't go through the strategy's <c>InitializeXavier</c> / <c>InitializeHe</c>
+    /// helpers (e.g. <c>EmbeddingLayer</c>'s <c>SimdRandom</c>-based fill,
+    /// or any layer that drives a hardware-specialized batched RNG)
+    /// derive a deterministic seed from the same underlying generator.
+    /// Returns the same instance the strategy itself uses, so a layer
+    /// can pull <c>Random.Next()</c> to seed its own SIMD RNG without
+    /// changing the framework-level reproducibility contract.
+    /// </summary>
+    public Random RandomGenerator => Random;
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="InitializationStrategyBase{T}"/> class
     /// using the framework's default thread-safe non-deterministic RNG. Use the
     /// other overload when reproducibility is required.

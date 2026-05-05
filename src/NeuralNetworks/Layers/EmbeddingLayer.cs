@@ -407,12 +407,26 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Initialize embedding tensor with small random values using Engine operations
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
 
-        // Initialize with SimdRandom: random [0,1] → shift to [-0.5, 0.5] → scale.
-        // For double/float, write directly to avoid NumOps.FromDouble virtual dispatch
-        // on every element (23M elements for BERT vocab). The embedding tensor was
-        // already allocated by the constructor; reuse it in place rather than allocating
-        // a second tensor that shadows the original reference.
-        var rng = new SimdRandom();
+        // Honour an architecture-supplied seed via InitializationStrategy:
+        // when LayerHelper.Wire (driven by TransformerArchitecture.RandomSeed)
+        // assigns an EagerInitializationStrategy carrying a System.Random
+        // built from a seed, derive a SimdRandom seed from one Next() call
+        // on that RNG so the embedding fill is deterministic too. Without
+        // this hook the architecture's RandomSeed flowed into every other
+        // weighted layer's init but EmbeddingLayer kept generating
+        // process-wide-counter-seeded SimdRandom values, breaking the
+        // reproducibility contract specifically for embedding weights —
+        // surfaced in review-comment #1270.vhmx. Falls back to the
+        // existing default SimdRandom() when no strategy was wired in.
+        SimdRandom rng;
+        if (InitializationStrategy is Initialization.InitializationStrategyBase<T> baseStrategy)
+        {
+            rng = new SimdRandom(baseStrategy.RandomGenerator.Next());
+        }
+        else
+        {
+            rng = new SimdRandom();
+        }
         var span = _embeddingTensor.Data.Span;
         int total = span.Length;
         if (total == 0) return; // zero-sized embedding (no vocab or zero dim): nothing to fill
