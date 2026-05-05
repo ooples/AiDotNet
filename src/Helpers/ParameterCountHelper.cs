@@ -74,13 +74,20 @@ public static class ParameterCountHelper
             throw new System.InvalidOperationException(
                 $"Parameter count ({parameterCount:N0}) exceeds int32 capacity " +
                 $"({int.MaxValue:N0}); cannot allocate a flat Vector<T>-backed " +
-                $"parameter buffer this large. For models above this threshold, " +
-                $"either enable weight streaming via " +
-                $"AiModelBuilder.ConfigureWeightStreaming(...) (so parameters " +
-                $"are loaded on demand from disk and never materialized as a " +
-                $"single flat vector) or split the model across multiple " +
-                $"network instances. The stack trace identifies the call site " +
-                $"that hit the limit.");
+                $"parameter buffer this large. The flat-Vector path used by " +
+                $"GetParameters / SetParameters / per-instance parameter " +
+                $"materialization is bounded to int.MaxValue elements. To run " +
+                $"a model this large, split the architecture across multiple " +
+                $"network instances (each below the limit) and route the " +
+                $"per-shard parameter vectors through the shard's " +
+                $"GetParameters / SetParameters path. " +
+                $"Note: weight streaming (AiModelBuilder.ConfigureWeightStreaming) " +
+                $"does NOT bypass this limit — it pages tensor data to disk but " +
+                $"the flat parameter-vector materialization path is still " +
+                $"int-bounded. Streaming addresses RAM pressure during forward, " +
+                $"not the int.MaxValue ceiling on the flat-Vector size. The " +
+                $"stack trace identifies the call site that hit the limit. " +
+                $"Closes review-comment #1271.yAXI.");
         }
 
         return (int)parameterCount;

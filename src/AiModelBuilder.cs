@@ -5357,8 +5357,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             && config.ThresholdParameters is long t
             && t <= 0)
         {
+            // ParamName points at the specific property whose value is
+            // invalid (ThresholdParameters), not just the outer config
+            // wrapper, so IDE error squiggles / debugger paramName lookup
+            // highlights the exact field the caller mis-set.
+            // Closes review-comment #1271.yAYQ.
             throw new ArgumentOutOfRangeException(
-                nameof(config),
+                $"{nameof(config)}.{nameof(WeightStreamingConfig.ThresholdParameters)}",
                 t,
                 "WeightStreamingConfig.ThresholdParameters must be positive when set " +
                 "(it is the parameter-count threshold above which auto-detect engages " +
