@@ -1701,7 +1701,7 @@ public static class LayerHelper<T>
         //      forward / parameter access would tear the RNG state and break
         //      determinism. Per-layer RNGs eliminate the shared-state hazard.
         Random? seedRng = architecture.RandomSeed.HasValue
-            ? new Random(architecture.RandomSeed.Value)
+            ? RandomHelper.CreateSeededRandom(architecture.RandomSeed.Value)
             : null;
 
         // Apply a freshly-seeded init strategy to a layer if reproducibility
@@ -1730,7 +1730,8 @@ public static class LayerHelper<T>
 
             int layerSeed = seedRng.Next();
             baseLayer.InitializationStrategy =
-                new Initialization.EagerInitializationStrategy<T>(new Random(layerSeed));
+                new Initialization.EagerInitializationStrategy<T>(
+                    RandomHelper.CreateSeededRandom(layerSeed));
             return layer;
         }
 

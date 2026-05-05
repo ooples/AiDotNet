@@ -564,7 +564,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 Random random;
                 if (InitializationStrategy is Initialization.InitializationStrategyBase<T> baseStrategy)
                 {
-                    random = new Random(baseStrategy.RandomGenerator.Next());
+                    random = RandomHelper.CreateSeededRandom(baseStrategy.RandomGenerator.Next());
                 }
                 else
                 {
@@ -734,7 +734,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 Random random;
                 if (InitializationStrategy is Initialization.InitializationStrategyBase<T> baseStrategy)
                 {
-                    random = new Random(baseStrategy.RandomGenerator.Next());
+                    random = RandomHelper.CreateSeededRandom(baseStrategy.RandomGenerator.Next());
                 }
                 else
                 {
