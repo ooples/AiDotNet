@@ -2981,33 +2981,87 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <para>
     /// Layers with zero trainable tensors (Activation, Dropout, Reshape,
     /// Add, Concat, …) skip the materialize/release dance — there's no
-    /// weight tensor to page. The prefetch loop still walks them so
-    /// downstream layers get their prefetch budget; <c>upcoming</c>
-    /// effectively counts only weighted layers.
+    /// weight tensor to page. They also DON'T consume prefetch budget:
+    /// the prefetch advance walks past weightless layers via
+    /// <see cref="FindNextWeightedLayerAfter"/> so a sequence of weightless
+    /// ops between two conv blocks doesn't shrink the effective
+    /// lookahead.
     /// </para>
     /// </remarks>
     private const int StreamingPrefetchWindow = 2;
 
+    /// <summary>
+    /// Returns the index of the <paramref name="stepsAhead"/>th weighted
+    /// layer (one with at least one non-empty trainable tensor) at or
+    /// after <paramref name="fromIndex"/>. Returns <c>Layers.Count</c>
+    /// (i.e. past the end) when fewer than <paramref name="stepsAhead"/>
+    /// weighted layers remain. Used by the streaming forward loop's
+    /// prefetch advance to avoid spending lookahead budget on weightless
+    /// layers (review-comment #1271.rRxc).
+    /// </summary>
+    private int FindNextWeightedLayerAfter(int fromIndex, int stepsAhead)
+    {
+        if (stepsAhead <= 0) return fromIndex;
+        int weightedFound = 0;
+        for (int idx = fromIndex + 1; idx < Layers.Count; idx++)
+        {
+            if (LayerHasWeights(idx))
+            {
+                weightedFound++;
+                if (weightedFound == stepsAhead) return idx;
+            }
+        }
+        return Layers.Count;
+    }
+
+    /// <summary>
+    /// True iff the layer at <paramref name="layerIndex"/> exposes at
+    /// least one non-empty trainable tensor. Distinguishes weighted
+    /// layers (Dense, Convolutional, Embedding, MultiHeadAttention, ...)
+    /// from weightless ones (Activation, Dropout, Reshape, Add, Concat).
+    /// </summary>
+    private bool LayerHasWeights(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count) return false;
+        if (Layers[layerIndex] is not LayerBase<T> layer) return false;
+        foreach (var tensor in layer.GetTrainableParameters())
+        {
+            if (tensor is not null && tensor.Length > 0) return true;
+        }
+        return false;
+    }
+
     private Tensor<T> PredictEagerStreaming(Tensor<T> input)
     {
-        // Pre-flight: kick off prefetch for the first W layers so the
-        // first layer's weights are warm by the time we hit Forward.
-        // Without this, every Predict call eats one cold disk read on
-        // layer 0 even when the pool has plenty of headroom.
-        for (int j = 0; j < StreamingPrefetchWindow && j < Layers.Count; j++)
+        // Pre-flight: prefetch the first W *weighted* layers so the
+        // first weighted layer's weights are warm by the time we hit
+        // Forward. Walk weighted-only so a model that opens with a
+        // weightless head (e.g., Reshape → Conv → ...) doesn't burn
+        // prefetch budget on the no-op.
+        int primeStart = LayerHasWeights(0) ? 0 : FindNextWeightedLayerAfter(-1, 1);
+        int primed = 0;
+        for (int j = primeStart; j < Layers.Count && primed < StreamingPrefetchWindow; j++)
         {
+            if (!LayerHasWeights(j)) continue;
             PrefetchLayerWeights(j);
+            primed++;
         }
 
         var current = input;
         for (int i = 0; i < Layers.Count; i++)
         {
             // Slide the prefetch window forward: by the time we're
-            // computing layer i, layers i..i+W-1 should be in the pool;
-            // start fetching layer i+W now so it's ready when layer i+1
-            // begins. The pre-flight loop above primed i=0; this call
-            // covers i+W for every subsequent layer.
-            int prefetchTarget = i + StreamingPrefetchWindow;
+            // computing layer i, the next W *weighted* layers ahead of
+            // us should be in the pool. Walk forward skipping weightless
+            // layers (Dropout, Activation, Reshape, Add, Concat) which
+            // have nothing to fetch — those don't consume the prefetch
+            // budget. Without this, a model with sparse weighted layers
+            // (e.g., a ConvBlock followed by 3 weightless ops, then
+            // another ConvBlock) would eat its prefetch lookahead on
+            // no-ops, leaving the next real conv unprefetched and
+            // forcing a cold disk read on the critical path. Closes
+            // review-comment #1271.rRxc.
+            int prefetchTarget = FindNextWeightedLayerAfter(i, StreamingPrefetchWindow);
             if (prefetchTarget < Layers.Count)
             {
                 PrefetchLayerWeights(prefetchTarget);
@@ -3111,22 +3165,48 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (Layers[layerIndex] is not LayerBase<T> layer) return NoOpDisposable.Instance;
         var tensors = layer.GetTrainableParameters();
         if (tensors is null || tensors.Count == 0) return NoOpDisposable.Instance;
-        // Filter out empty placeholder tensors — lazy layers may still
-        // have 0×0 tensors registered before first forward, which the
-        // pool can't materialize. Filtering avoids a registry-side throw
-        // on the empty case.
-        var live = new List<Tensor<T>>(tensors.Count);
+
+        // Fast path — common case after first forward: all trainable
+        // tensors are non-empty, so pass the layer's own
+        // IReadOnlyList<Tensor<T>> directly to MaterializeScope without
+        // copying into a fresh List<Tensor<T>>. This is the path a
+        // 100-layer model takes on every steady-state forward, and was
+        // previously allocating one List<Tensor<T>> per layer per call
+        // (review-comment #1271.rRxy). Probe once before deciding to
+        // copy — for the typical 2-4 trainable tensors per layer the
+        // probe is a few-element loop with branch-prediction-friendly
+        // early exit.
+        bool needsFilter = false;
+        int materializableCount = 0;
         for (int i = 0; i < tensors.Count; i++)
         {
-            if (tensors[i] is null || tensors[i].Length == 0) continue;
-            live.Add(tensors[i]);
+            var t = tensors[i];
+            if (t is null || t.Length == 0)
+            {
+                needsFilter = true;
+            }
+            else
+            {
+                materializableCount++;
+            }
         }
-        if (live.Count == 0) return NoOpDisposable.Instance;
-        // MaterializeScope is a nested type, not a method — instantiating
-        // it pins the supplied tensors in the streaming pool until
-        // Dispose. Constructor takes IEnumerable<Tensor<T>>; passing the
-        // List<Tensor<T>> directly satisfies that contract without
-        // copying.
+        if (materializableCount == 0) return NoOpDisposable.Instance;
+        if (!needsFilter)
+        {
+            return new WeightRegistry.MaterializeScope<T>(tensors);
+        }
+
+        // Slow path — at least one tensor is empty (lazy placeholder
+        // pre-first-forward). Build a filtered list. This branch only
+        // triggers during the first-forward materialization phase; once
+        // weights are concrete the fast path takes over.
+        var live = new List<Tensor<T>>(materializableCount);
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            var t = tensors[i];
+            if (t is null || t.Length == 0) continue;
+            live.Add(t);
+        }
         return new WeightRegistry.MaterializeScope<T>(live);
     }
 

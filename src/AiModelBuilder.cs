@@ -2113,7 +2113,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             HybridGraphRetriever = _hybridGraphRetriever,
             LoRAConfiguration = _loraConfiguration,
             AgentConfig = _agentConfig,
-            MemoryConfig = _memoryConfig
+            MemoryConfig = _memoryConfig,
+            // Weight-streaming telemetry — set on every result-build path
+            // (supervised batch, AutoML, RL) so the streaming-data-loader
+            // path doesn't silently miss the report when the
+            // user trained a streaming-eligible model via the streaming
+            // loader. Closes review-comment #1271.s-Nc.
+            WeightStreamingReport = BuildWeightStreamingReport()
         };
 
         var nnResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));

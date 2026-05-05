@@ -2982,7 +2982,16 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Hyperparameters = Hyperparameters,
             TrainingMetricsHistory = TrainingMetricsHistory,
             // Interpretability - preserve across clones
-            InterpretabilityOptions = InterpretabilityOptions
+            InterpretabilityOptions = InterpretabilityOptions,
+            // Weight-streaming telemetry — preserved verbatim across
+            // parameter updates: streaming engagement is a property of
+            // the model architecture (and the WeightRegistry singleton
+            // it registered with), not of the parameter vector. A
+            // WithParameters call doesn't load or unload weights from
+            // the streaming pool — it routes new flat-vector parameters
+            // through the existing registry — so the original report
+            // remains accurate. Closes review-comment #1271.rT-I.
+            WeightStreamingReport = WeightStreamingReport
         };
 
         return new AiModelResult<T, TInput, TOutput>(options);
@@ -4898,6 +4907,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 AgentConfig = deserializedObject.AgentConfig;
                 AgentRecommendation = deserializedObject.AgentRecommendation;
                 DeploymentConfiguration = deserializedObject.DeploymentConfiguration;
+                // Weight-streaming telemetry — preserve through deserialize so
+                // a saved-and-loaded result keeps the report that was produced
+                // when the model was first built. Closes review-comment
+                // #1271.rT-I (data-loss bug: was being silently dropped).
+                WeightStreamingReport = deserializedObject.WeightStreamingReport;
 
                 // Reset transient runtime state (will be reinitialized lazily)
                 JitCompiledFunction = null;
