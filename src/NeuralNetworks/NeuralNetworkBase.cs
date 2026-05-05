@@ -3020,8 +3020,42 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 current = Layers[i].Forward(current);
             }
+
+            // Post-Forward: lazy layers (Transformer's MultiHeadAttention,
+            // lazy ConvolutionalLayer, etc.) materialize their weight
+            // tensors on first Forward — before the call those tensors
+            // had Length == 0 and were silently skipped by
+            // RegisterTrainableTensorsWithWeightRegistry's
+            // `tensor.Length == 0` guard, after the call they're real
+            // parameter buffers that the streaming pool MUST be tracking
+            // or eviction / prefetch would never see them. Re-register
+            // this layer's tensors after its forward completes. The
+            // per-layer helper skips zero-length tensors (still-lazy
+            // weights stay skipped) and is idempotent on already-
+            // registered tensors (the registry's RegisterWeight upserts
+            // by tensor reference). Closes review-comment #1271.rT-V.
+            RegisterLayerTrainableTensorsWithWeightRegistry(i);
         }
         return current;
+    }
+
+    /// <summary>
+    /// Registers a single layer's trainable tensors with the weight
+    /// registry. Per-layer counterpart to
+    /// <see cref="RegisterTrainableTensorsWithWeightRegistry"/> — used
+    /// during streaming forward to pick up tensors that materialized on
+    /// the layer's first Forward call (review-comment #1271.rT-V).
+    /// </summary>
+    private void RegisterLayerTrainableTensorsWithWeightRegistry(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count) return;
+        if (Layers[layerIndex] is not LayerBase<T> layer) return;
+        foreach (var tensor in layer.GetTrainableParameters())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            tensor.Lifetime = _registrationLifetime;
+            WeightRegistry.RegisterWeight(tensor);
+        }
     }
 
     /// <summary>
