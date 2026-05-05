@@ -41,7 +41,30 @@ internal class Conv2D<T>
             (Interfaces.IActivationFunction<T>?)null);
     }
 
-    public Tensor<T> Forward(Tensor<T> input) => _layer.Forward(input);
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        // Validate runtime input channel count matches the shim's
+        // construction-time _inChannels. The underlying lazy
+        // ConvolutionalLayer infers in-channels from input.Shape on
+        // first Forward — if the caller passes a tensor whose channel
+        // dim doesn't match what the shim was built for, the layer
+        // resolves to the runtime count and the shim's later
+        // Weights/Bias slicing (which uses the construction-time
+        // _inChannels) silently misaligns. Throw loud rather than
+        // ship corrupted weight inspections.
+        if (input.Shape.Length >= 2)
+        {
+            int runtimeChannels = input.Shape[1]; // NCHW
+            if (runtimeChannels != _inChannels)
+                throw new ArgumentException(
+                    $"Conv2D shim was constructed for inChannels={_inChannels} but input has " +
+                    $"{runtimeChannels} channels along axis 1 (NCHW). The shim's parameter slicing " +
+                    $"depends on the construction-time channel count; reconstruct the shim with the " +
+                    $"correct inChannels or reshape the input.",
+                    nameof(input));
+        }
+        return _layer.Forward(input);
+    }
 
     public long GetParameterCount() => _layer.ParameterCount;
 
@@ -103,7 +126,29 @@ internal class Dense<T>
         _layer = new DenseLayer<T>(outDim, (Interfaces.IActivationFunction<T>?)null);
     }
 
-    public Tensor<T> Forward(Tensor<T> input) => _layer.Forward(input);
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        // Validate runtime input feature size against the shim's
+        // construction-time _inDim. DenseLayer<T> can resize its weight
+        // matrix when the runtime feature dim differs (lazy resize via
+        // shape resolution); the shim's Weights/Bias slicing uses the
+        // construction-time _inDim, so a runtime-resize would silently
+        // reshape the underlying matrix and break the shim's
+        // serialization / inspection contract. Validate input.Shape[^1]
+        // (last dim = features for any rank ≥ 1) and throw on mismatch.
+        if (input.Shape.Length >= 1)
+        {
+            int runtimeFeatures = input.Shape[input.Shape.Length - 1];
+            if (runtimeFeatures != _inDim)
+                throw new ArgumentException(
+                    $"Dense shim was constructed for inDim={_inDim} but input has " +
+                    $"{runtimeFeatures} features along the last axis. The shim's parameter " +
+                    $"slicing depends on the construction-time inDim; reconstruct the shim " +
+                    $"with the correct inDim or reshape the input.",
+                    nameof(input));
+        }
+        return _layer.Forward(input);
+    }
 
     public long GetParameterCount() => _layer.ParameterCount;
 
@@ -124,7 +169,12 @@ internal class Dense<T>
             int wlen = _inDim * _outDim;
             var arr = new T[wlen];
             for (int i = 0; i < wlen; i++) arr[i] = p[i];
-            return new Tensor<T>(new[] { _outDim, _inDim }, new Vector<T>(arr));
+            // Match DenseLayer's underlying weight shape [inputSize, outputSize]
+            // (see DenseLayer.cs:434 — TensorAllocator.Rent<T>([inputSize, outputSize])).
+            // Returning [_outDim, _inDim] without transposing the flat data
+            // would mis-shape the matrix for any caller that reads .Weights
+            // expecting the layer's native layout.
+            return new Tensor<T>(new[] { _inDim, _outDim }, new Vector<T>(arr));
         }
     }
 

@@ -114,6 +114,41 @@ public static class OnnxExporter
         // were lazy; batch axis (rank-4 first dim) is always symbolic for
         // detection / vision deployments.
         var effectiveInputShape = inputShape ?? InferInputShape(layers) ?? new[] { 1, 1 };
+
+        // Validate caller-supplied inputShape: BuildAxisSpec converts
+        // each dim to an ONNX dim_value (concrete) unless an axis is
+        // explicitly marked symbolic. Negative entries (e.g. -1 used as
+        // a "dynamic" sentinel by other framework conventions) emit
+        // invalid fixed dims that downstream ONNX runtimes reject; a
+        // CHW shape passed instead of NCHW omits the batch axis and
+        // mis-aligns dim_param assignments. Reject loud here so the
+        // caller fixes the shape rather than discovers a corrupt
+        // exported graph at inference time.
+        for (int i = 0; i < effectiveInputShape.Length; i++)
+        {
+            if (effectiveInputShape[i] <= 0)
+                throw new ArgumentException(
+                    $"OnnxExporter requires concrete positive input dims for axis {i}; got " +
+                    $"{effectiveInputShape[i]}. Use a warm-up forward to resolve lazy axes " +
+                    "before export, or pass an explicit positive shape to the inputShape " +
+                    "parameter (axes that should be symbolic in the exported graph are " +
+                    "marked via the architecture's HasDynamicSpatialDims, not via -1 here).",
+                    nameof(inputShape));
+        }
+        // Vision exports require a batch axis (NCHW). If the caller
+        // passes rank-3 [C,H,W], BuildAxisSpec would mark axis 0 as the
+        // "batch" symbolic dim — but it's actually the channel axis,
+        // and downstream consumers expect NCHW. Auto-prefix a batch
+        // dim of 1 with a clear log so the caller knows the shape was
+        // adjusted.
+        if (effectiveInputShape.Length == 3 && HasDynamicSpatialAxes(model))
+        {
+            var prefixed = new int[4];
+            prefixed[0] = 1;
+            Array.Copy(effectiveInputShape, 0, prefixed, 1, 3);
+            effectiveInputShape = prefixed;
+        }
+
         var inputAxes = BuildAxisSpec(model, effectiveInputShape, isInput: true);
 
         var inputName = "input";

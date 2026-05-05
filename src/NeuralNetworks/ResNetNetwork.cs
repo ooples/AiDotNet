@@ -269,9 +269,12 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         var layers = new List<ILayer<T>>();
         var config = _configuration;
 
-        int currentHeight = config.InputHeight;
-        int currentWidth = config.InputWidth;
-        // currentChannels removed — lazy layers (#1209) infer it from input.Shape.
+        // currentHeight/Width/Channels tracking removed — lazy layers
+        // (#1209) infer all spatial + channel dims from input.Shape on
+        // first Forward, so the running tally was never read after the
+        // 5-line drop in #1209's earlier pass. Re-add it only if a
+        // future stage genuinely needs to size something at construction
+        // time (which lazy ctors deliberately removed the need for).
 
         // Stage 0: Initial convolution (conv1)
         // 7x7 conv, 64, stride 2
@@ -281,9 +284,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             stride: 2,
             padding: 3,
             activationFunction: new ActivationFunctions.IdentityActivation<T>()));
-
-        currentHeight /= 2;
-        currentWidth /= 2;
 
         // Batch normalization after conv1
         layers.Add(new BatchNormalizationLayer<T>());
@@ -296,9 +296,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         layers.Add(new MaxPoolingLayer<T>(
             poolSize: 3,
             stride: 2));
-
-        currentHeight = (currentHeight - 1) / 2 + 1; // Ceiling division for pool output
-        currentWidth = (currentWidth - 1) / 2 + 1;
 
         // Get block configuration for this variant
         int[] blockCounts = config.BlockCounts;
@@ -329,13 +326,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                     outChannels: stageBaseChannels * expansion,
                     stride: stride,
                     zeroInitResidual: config.ZeroInitResidual));
-            }
-
-            // Track only spatial dims for downstream pool / fc sizing.
-            if (stride == 2)
-            {
-                currentHeight /= 2;
-                currentWidth /= 2;
             }
 
             // Remaining blocks in stage (stride 1, no channel change)
