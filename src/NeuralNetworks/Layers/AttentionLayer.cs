@@ -195,7 +195,15 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </para>
     /// </remarks>
     public override long ParameterCount =>
-        _attentionSize * _inputSize * 3 + _inputSize * _attentionSize; // Wq, Wk, Wv, Wo
+        // _inputSize stays sentinel -1 until OnFirstForward resolves it from the
+        // input tensor; before that point we can't predict the parameter count
+        // (unlike layers whose input dim is given to the ctor). Return 0 in the
+        // unresolved state — the alternative `_attentionSize * -1 * 3 +
+        // -1 * _attentionSize` produces a negative count that breaks
+        // ParameterCount-non-negative invariants.
+        _inputSize > 0
+            ? (long)_attentionSize * _inputSize * 3 + (long)_inputSize * _attentionSize  // Wq, Wk, Wv, Wo
+            : 0L;
 
     public override void SetParameters(Vector<T> parameters)
     {

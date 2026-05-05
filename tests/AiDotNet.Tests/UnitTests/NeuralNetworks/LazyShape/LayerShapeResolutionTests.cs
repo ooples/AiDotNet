@@ -66,13 +66,26 @@ public class LayerShapeResolutionTests
     }
 
     [Fact]
-    public void Conv_GetParameters_BeforeForward_Throws()
+    public void Conv_GetParameters_BeforeForward_ReturnsEmpty()
     {
-        // Per PyTorch UninitializedParameter semantics, a lazy layer that has
-        // not yet seen any input must reject GetParameters / SetParameters /
-        // ParameterCount calls — its weight shape is not yet known.
+        // Lazy contract: a layer that hasn't seen its first input has no
+        // weights yet, but GetParameters / ParameterCount must remain
+        // safely callable so chain-walkers (optimizers, exporters,
+        // composite SetParameters slicers) can compose with lazy children
+        // without first having to drive a forward. Returning an empty
+        // vector — and a 0 ParameterCount — is the documented contract.
         var conv = new ConvolutionalLayer<double>(outputDepth: 8, kernelSize: 3);
-        Assert.Throws<InvalidOperationException>(() => conv.GetParameters());
+        var pre = conv.GetParameters();
+        Assert.Equal(0, pre.Length);
+        Assert.Equal(0, conv.ParameterCount);
+
+        // After first Forward, weights are allocated and GetParameters
+        // returns the real flat parameter vector.
+        var input = new Tensor<double>(new[] { 1, 4, 8, 8 });
+        conv.Forward(input);
+        var post = conv.GetParameters();
+        Assert.True(post.Length > 0);
+        Assert.Equal(post.Length, conv.ParameterCount);
     }
 
     [Fact]

@@ -55,7 +55,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Residual)]
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4, 8, 8")]
+[LayerProperty(IsTrainable = true, ExpectedInputRank = 3, Cost = ComputeCost.High, TestInputShape = "4, 8, 8", TestConstructorArgs = "4, 4")]
 public class RRDBLayer<T> : LayerBase<T>
 {
     #region Fields
@@ -154,12 +154,10 @@ public class RRDBLayer<T> : LayerBase<T>
     public RRDBLayer(
         int numFeatures = 64,
         int growthChannels = 32,
-        int inputHeight = 64,
-        int inputWidth = 64,
         double residualScale = 0.2)
         : base(
-            [numFeatures, inputHeight, inputWidth],
-            [numFeatures, inputHeight, inputWidth])
+            [numFeatures, -1, -1],
+            [numFeatures, -1, -1])
     {
         if (numFeatures <= 0)
             throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be positive.");
@@ -172,17 +170,62 @@ public class RRDBLayer<T> : LayerBase<T>
         _growthChannels = growthChannels;
         _residualScale = residualScale;
 
-        // Create 3 Residual Dense Blocks
+        // Create 3 Residual Dense Blocks — they're lazy-spatial too, so
+        // their own input H/W get filled in on first Forward.
         _rdbBlocks = new ResidualDenseBlock<T>[3];
         for (int i = 0; i < 3; i++)
         {
             _rdbBlocks[i] = new ResidualDenseBlock<T>(
                 numFeatures: numFeatures,
                 growthChannels: growthChannels,
-                inputHeight: inputHeight,
-                inputWidth: inputWidth,
-                residualScale: residualScale); // Each RDB also uses the same residual scale
+                residualScale: residualScale);
             RegisterSubLayer(_rdbBlocks[i]);
+        }
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves spatial dims from <c>input.Shape</c>, drives each inner
+    /// RDB's lazy resolution by the same shape (channels stay constant),
+    /// and locks the layer's input/output shapes.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inChannels, inH, inW;
+        if (s.Length == 3) { inChannels = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inChannels = s[1]; inH = s[2]; inW = s[3]; }
+        else
+            throw new ArgumentException(
+                $"RRDBLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+        if (inChannels != _numFeatures)
+            throw new ArgumentException(
+                $"RRDBLayer expected {_numFeatures} input channels, got {inChannels}.",
+                nameof(input));
+
+        foreach (var block in _rdbBlocks)
+        {
+            block.ResolveFromShape(new[] { _numFeatures, inH, inW });
+            block.SetTrainingMode(IsTrainingMode);
+        }
+
+        ResolveShapes(
+            new[] { _numFeatures, inH, inW },
+            new[] { _numFeatures, inH, inW });
+
+        // Replay any Deserialize-buffered parameters now that inner RDBs are resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            int offset = 0;
+            foreach (var rdb in _rdbBlocks)
+            {
+                int count = rdb.GetParameters().Length;
+                rdb.SetParameters(pending.SubVector(offset, count));
+                offset += count;
+            }
         }
     }
 
@@ -198,6 +241,8 @@ public class RRDBLayer<T> : LayerBase<T>
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // Pass through 3 Residual Dense Blocks sequentially
@@ -228,6 +273,15 @@ public class RRDBLayer<T> : LayerBase<T>
             throw new InvalidOperationException("GPU backend unavailable.");
 
         var input = inputs[0];
+
+        // Mirror Forward()'s lazy-resolution gate. OnFirstForward
+        // resolves _rdbBlocks' inner shape and replays buffered
+        // _pendingParameters; without this guard a GPU-first execution
+        // dispatches to inner RDBs whose internal weights are still 0×0,
+        // and the GPU forward reads zero-length buffers (silent wrong
+        // output) or crashes on a kernel arg-check.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         var shape = input._shape;
 
         // Cache input for backward pass
@@ -336,6 +390,14 @@ public class RRDBLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        // Pre-Forward: each inner RDB's shape is unresolved. Buffer
+        // and replay from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
         int offset = 0;
         foreach (var rdb in _rdbBlocks)
         {
@@ -344,6 +406,8 @@ public class RRDBLayer<T> : LayerBase<T>
             offset += count;
         }
     }
+
+    private Vector<T>? _pendingParameters;
 
     /// <inheritdoc />
     public override void ResetState()

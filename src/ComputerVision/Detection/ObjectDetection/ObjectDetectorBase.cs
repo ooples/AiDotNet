@@ -1,5 +1,5 @@
-using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.Necks;
+using AiDotNet.Interfaces;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.ComputerVision.Weights;
 using AiDotNet.LossFunctions;
@@ -35,9 +35,13 @@ public abstract class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     protected readonly ObjectDetectionOptions<T> Options;
 
     /// <summary>
-    /// The backbone network for feature extraction.
+    /// The backbone network for feature extraction. Typed against the
+    /// <see cref="IDetectionBackbone{T}"/> contract (NeuralNetworkBase + multi-scale
+    /// feature provider) instead of any concrete base class so any backbone that
+    /// satisfies the contract — ResNet, CSPDarknet, EfficientNet, SwinTransformer,
+    /// or a future custom implementation — can plug in.
     /// </summary>
-    protected BackboneBase<T>? Backbone { get; set; }
+    protected IDetectionBackbone<T>? Backbone { get; set; }
 
     /// <summary>
     /// The neck module for feature fusion.
@@ -48,7 +52,7 @@ public abstract class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// Gets the backbone network, throwing if not initialized.
     /// </summary>
     /// <exception cref="InvalidOperationException">Thrown when backbone has not been initialized.</exception>
-    protected BackboneBase<T> EnsureBackbone =>
+    protected IDetectionBackbone<T> EnsureBackbone =>
         Backbone ?? throw new InvalidOperationException(
             $"{GetType().Name}: Backbone not initialized. Ensure the model is properly constructed.");
 

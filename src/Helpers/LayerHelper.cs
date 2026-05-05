@@ -1610,11 +1610,10 @@ public static class LayerHelper<T>
             // Encoder layers
             yield return new DenseLayer<T>(flatInputSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
 
-            // Pooling layer to reduce dimensions
+            // Pooling layer to reduce dimensions. Lazy ctor — input dims
+            // resolve from the first forward pass; only pool/stride/type
+            // need to be known at construction.
             yield return new PoolingLayer<T>(
-                inputDepth: inputDepth,
-                inputHeight: inputHeight,
-                inputWidth: inputWidth,
                 poolSize: 2,
                 stride: 2,
                 type: PoolingType.Average
@@ -4659,28 +4658,28 @@ public static class LayerHelper<T>
         {
             int numLayersInBlock = blockLayers[i];
 
-            // Add Dense Block
+            // Add Dense Block. Lazy ctor — the block's input channel
+            // count resolves from runtime input shape; the helper tracks
+            // currentChannels itself instead of asking the block, since
+            // OutputChannels stays at -1 until first Forward fires.
             var denseBlock = new DenseBlock<T>(
-                inputChannels: currentChannels,
                 numLayers: numLayersInBlock,
-                growthRate: configuration.GrowthRate,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth);
+                growthRate: configuration.GrowthRate);
 
             yield return denseBlock;
-            currentChannels = denseBlock.OutputChannels;
+            // DenseNet growth: each inner layer adds growthRate channels.
+            currentChannels = currentChannels + numLayersInBlock * configuration.GrowthRate;
 
-            // Add Transition (except after the last block)
+            // Add Transition (except after the last block). Lazy ctor —
+            // input channel count is resolved from runtime input shape;
+            // the helper computes the post-transition channel count itself.
             if (i < blockLayers.Length - 1)
             {
                 var transition = new TransitionLayer<T>(
-                    inputChannels: currentChannels,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     compressionFactor: configuration.CompressionFactor);
 
                 yield return transition;
-                currentChannels = transition.OutputChannels;
+                currentChannels = (int)(currentChannels * configuration.CompressionFactor);
                 currentHeight /= 2;
                 currentWidth /= 2;
             }
@@ -4776,10 +4775,7 @@ public static class LayerHelper<T>
 
             // First block in each stage may have stride > 1
             yield return new InvertedResidualBlock<T>(
-                inChannels: currentChannels,
                 outChannels: scaledOutChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 expansionRatio: expansion,
                 stride: stride,
                 useSE: true,
@@ -4795,10 +4791,7 @@ public static class LayerHelper<T>
             for (int i = 1; i < scaledNumLayers; i++)
             {
                 yield return new InvertedResidualBlock<T>(
-                    inChannels: currentChannels,
                     outChannels: currentChannels,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     expansionRatio: expansion,
                     stride: 1,
                     useSE: true,
@@ -4898,10 +4891,7 @@ public static class LayerHelper<T>
 
             // First block in each stage may have stride > 1
             yield return new InvertedResidualBlock<T>(
-                inChannels: currentChannels,
                 outChannels: scaledOutChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 expansionRatio: expansion,
                 stride: stride,
                 useSE: false,
@@ -4916,10 +4906,7 @@ public static class LayerHelper<T>
             for (int i = 1; i < numBlocks; i++)
             {
                 yield return new InvertedResidualBlock<T>(
-                    inChannels: currentChannels,
                     outChannels: currentChannels,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     expansionRatio: expansion,
                     stride: 1,
                     useSE: false,
@@ -5015,10 +5002,7 @@ public static class LayerHelper<T>
         foreach (var block in blockConfigs)
         {
             yield return new InvertedResidualBlock<T>(
-                inChannels: currentChannels,
                 outChannels: block.outChannels,
-                inputHeight: currentHeight,
-                inputWidth: currentWidth,
                 expansionRatio: block.expansion,
                 stride: block.stride,
                 useSE: block.useSE,
@@ -9339,11 +9323,8 @@ public static class LayerHelper<T>
         int patchSize,
         int mlpRatio)
     {
-        // Stage 0: Patch embedding
+        // Stage 0: Patch embedding (lazy on input H/W and channel count).
         yield return new SwinPatchEmbeddingLayer<T>(
-            imageHeight,
-            imageWidth,
-            inputChannels,
             patchSize,
             embedDim);
 
@@ -29980,30 +29961,33 @@ public static class LayerHelper<T>
         int channels = 3, int height = 64, int width = 64,
         int numFeatures = 64, int scaleFactor = 4,
         int numResidualBlocks = 30, int numPropagations = 2,
-        int numLevels = 5, int deformGroups = 8, int growthChannels = 32)
+        int numLevels = 5, int deformGroups = 8, int growthChannels = 32,
+        double residualScale = 0.2)
     {
-        // SPyNet flow estimator
-        yield return new SpyNetLayer<T>(height, width, channels, numLevels: numLevels);
+        // SPyNet flow estimator (lazy on spatial dims and per-frame channels).
+        yield return new SpyNetLayer<T>(numLevels: numLevels);
 
         // Feature extraction
         yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
 
-        // Residual blocks
+        // Residual blocks. residualScale is the BasicVSR++ paper default (0.2);
+        // callers tuning the architecture can override to balance gradient
+        // flow vs. final residual contribution at higher block counts.
         for (int i = 0; i < numResidualBlocks; i++)
         {
             yield return new ResidualDenseBlock<T>(
                 numFeatures: numFeatures, growthChannels: growthChannels,
-                inputHeight: height, inputWidth: width, residualScale: 0.2);
+                residualScale: residualScale);
         }
 
         // Deformable alignment modules for each propagation
         for (int i = 0; i < numPropagations; i++)
         {
             yield return new DeformableConvolutionalLayer<T>(
-                height, width, numFeatures * 2, numFeatures,
+                outputChannels: numFeatures,
                 kernelSize: 3, padding: 1, deformGroups: deformGroups);
             yield return new DeformableConvolutionalLayer<T>(
-                height, width, numFeatures * 2, numFeatures,
+                outputChannels: numFeatures,
                 kernelSize: 3, padding: 1, deformGroups: deformGroups);
             yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);
             yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1);

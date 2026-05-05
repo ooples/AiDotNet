@@ -14,7 +14,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [LayerCategory(LayerCategory.Convolution)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4, 4, 4, 4")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, ChangesShape = true, ExpectedInputRank = 4, TestInputShape = "2, 4, 4, 4", TestConstructorArgs = "4")]
 internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtras<T>
 {
     private readonly BatchNormalizationLayer<T> _bn1;
@@ -56,12 +56,23 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     /// </summary>
     protected override bool SupportsGpuExecution => true;
 
-    public DenseBlockLayer(int inputChannels, int growthRate, int height, int width, double bnMomentum = 0.1)
-        : base([inputChannels, height, width], [growthRate, height, width])
+    /// <summary>
+    /// Lazy ctor — input depth/height/width come from the first
+    /// <see cref="Forward"/> call (<see cref="OnFirstForward"/>); only
+    /// growthRate/bnMomentum are required at construction. The conv
+    /// kernel shapes that depend on input channels (1×1 bottleneck) are
+    /// allocated against the resolved <c>_inputChannels</c> in
+    /// <see cref="OnFirstForward"/>.
+    /// </summary>
+    public DenseBlockLayer(int growthRate, double bnMomentum = 0.1)
+        : base([-1, -1, -1], [growthRate, -1, -1])
     {
+        if (growthRate <= 0) throw new ArgumentOutOfRangeException(nameof(growthRate));
+
+        _inputChannels = -1; // resolved in OnFirstForward
+        _growthRate = growthRate;
         _relu = new ReLUActivation<T>();
 
-        // Bottleneck layer: 1x1 conv to reduce channels (4 * growthRate is standard)
         int bottleneckChannels = 4 * growthRate;
 
         _bn1 = new BatchNormalizationLayer<T>();
@@ -71,7 +82,6 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>());
-
         _bn2 = new BatchNormalizationLayer<T>();
         _conv3x3 = new ConvolutionalLayer<T>(
             outputDepth: growthRate,
@@ -84,19 +94,74 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
         RegisterSubLayer(_conv1x1);
         RegisterSubLayer(_bn2);
         RegisterSubLayer(_conv3x3);
+    }
 
-        // Eagerly resolve sub-layer shapes so ParameterCount reflects real weights
-        // immediately (lazy Conv/BN return 0 otherwise, causing SetParameters
-        // dispatch-by-slice to silently skip them — same dispatch bug e0c78b820
-        // fixed for ResNet's BottleneckBlock).
-        _bn1.ResolveFromShape(new[] { 1, inputChannels, height, width });
-        _conv1x1.ResolveFromShape(new[] { inputChannels, height, width });
+    // Non-readonly: lazy ctor leaves _inputChannels = -1 until
+    // OnFirstForward resolves it from the runtime input tensor.
+    private int _inputChannels;
+    private readonly int _growthRate;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves H/W from input.Shape and propagates to all sub-layers
+    /// via ResolveShapesOnly so ParameterCount reports the real weight
+    /// count before any sub-layer's first Forward fires.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int channels, height, width;
+        if (s.Length == 3) { channels = s[0]; height = s[1]; width = s[2]; }
+        else if (s.Length == 4) { channels = s[1]; height = s[2]; width = s[3]; }
+        else
+            throw new ArgumentException(
+                $"DenseBlockLayer requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+
+        _inputChannels = channels;
+        int bottleneckChannels = 4 * _growthRate;
+        // Use ResolveFromShape (not ResolveShapesOnly) because we may
+        // need to apply buffered Deserialize params below — that requires
+        // weights already allocated so GetParameters().Length is correct.
+        // RNG state cost is the same: weights get allocated either now
+        // or on each sub-layer's first Forward; total draws are identical.
+        _bn1.ResolveFromShape(new[] { 1, _inputChannels, height, width });
+        _conv1x1.ResolveFromShape(new[] { _inputChannels, height, width });
         _bn2.ResolveFromShape(new[] { 1, bottleneckChannels, height, width });
         _conv3x3.ResolveFromShape(new[] { bottleneckChannels, height, width });
+
+        ResolveShapes(
+            new[] { _inputChannels, height, width },
+            new[] { _growthRate, height, width });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before sub-layer shapes were resolved.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
+
+        // Replay BN running-state extras buffered by
+        // ILayerSerializationExtras.SetExtraParameters before _bn1/_bn2
+        // were sized. Without this the running mean/var stay at zeros and
+        // inference for the loaded checkpoint diverges from the original.
+        if (_pendingExtraParameters is not null)
+        {
+            var pendingExtras = _pendingExtraParameters;
+            _pendingExtraParameters = null;
+            ApplyExtraParametersUnsafe(pendingExtras);
+        }
     }
 
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Lazy gate — OnFirstForward resolves _inputChannels and replays
+        // any Deserialize-buffered parameters before sub-layer Forwards
+        // run with their (possibly stale-from-init) weights.
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // BN/Conv expect [N, C, H, W] format. Add batch dim if 3D [C, H, W].
@@ -138,6 +203,16 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
             throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
 
         var input = inputs[0];
+
+        // Mirror Forward()'s lazy-resolution gate. Without this, a layer
+        // whose first execution lands on the GPU path runs ForwardGpu
+        // against unresolved sub-layer shapes (and skips the
+        // _pendingParameters / _pendingExtraParameters replay above) —
+        // the BN running stats stay at zero, weights stay random, and
+        // checkpointed inference produces wrong output. OnFirstForward
+        // resolves shapes + replays buffered params before any sub-
+        // layer's first GPU forward runs.
+        if (!IsShapeResolved) OnFirstForward(input);
 
         // BN1 → ReLU → Conv1x1
         var bn1Output = _bn1.ForwardGpu(input);
@@ -192,6 +267,22 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     }
 
     public override void SetParameters(Vector<T> parameters)
+    {
+        // Pre-Forward: sub-layers' shapes haven't been resolved, so
+        // their GetParameters().Length is wrong. Buffer and replay
+        // from OnFirstForward.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+
+        ApplyParameters(parameters);
+    }
+
+    private Vector<T>? _pendingParameters;
+
+    private void ApplyParameters(Vector<T> parameters)
     {
         int offset = 0;
 
@@ -260,6 +351,30 @@ internal partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExt
     }
 
     void ILayerSerializationExtras<T>.SetExtraParameters(Vector<T> extraParameters)
+    {
+        // Buffer until OnFirstForward resolves shapes when arriving pre-
+        // resolution: _bn1 / _bn2 keep 0-length running-mean/var arrays
+        // until their own ResolveFromShape runs, so SetExtraParameters
+        // would either throw on the SubVector cut or silently fail to
+        // populate. The pending-extras buffer mirrors _pendingParameters
+        // (#11 fix) for the BN running stats — without this, DenseNet
+        // serialize→deserialize loses BN state and inference diverges.
+        if (!IsShapeResolved)
+        {
+            _pendingExtraParameters = extraParameters;
+            return;
+        }
+        ApplyExtraParametersUnsafe(extraParameters);
+    }
+
+    /// <summary>
+    /// Buffer for ILayerSerializationExtras.SetExtraParameters when
+    /// called pre-OnFirstForward. Replayed inside OnFirstForward once
+    /// _bn1 / _bn2 have their running-state arrays sized.
+    /// </summary>
+    private Vector<T>? _pendingExtraParameters;
+
+    private void ApplyExtraParametersUnsafe(Vector<T> extraParameters)
     {
         int offset = 0;
         if (_bn1 is ILayerSerializationExtras<T> e1)

@@ -91,37 +91,79 @@ public static class OnnxExporter
 
         // Lazy-shape contract (issue #1209): layers constructed PyTorch-LazyConv2d-style
         // resolve their input/output dims from the actual input on the first Forward.
-        // ONNX export requires concrete shapes — symbolic-axis ONNX is tracked as a
-        // follow-up under issue #1211. Until then, callers must run a warm-up forward
-        // (Predict / EncodeImage / etc.) so every layer reports IsShapeResolved=true
-        // before exporting; otherwise we'd serialize -1 placeholder dims that produce
-        // an unrunnable ONNX graph.
+        // Layer weight tensors still need concrete shapes (allocated on the warm-up
+        // forward), but the GRAPH-LEVEL input/output declarations now support symbolic
+        // axes (issue #1211) so a single exported ONNX file runs at any (batch, H, W)
+        // a downstream runtime feeds it.
         foreach (var layer in layers)
         {
-            // ILayer<T> closed-generic — read IsShapeResolved via reflection since
-            // GetLayers returns object instances from a non-generic property.
             var isResolvedProp = layer.GetType().GetProperty("IsShapeResolved");
             if (isResolvedProp is not null && isResolvedProp.GetValue(layer) is bool resolved && !resolved)
             {
                 throw new InvalidOperationException(
-                    $"Cannot export to ONNX: layer '{layer.GetType().Name}' has unresolved shape. " +
+                    $"Cannot export to ONNX: layer '{layer.GetType().Name}' has unresolved weight shapes. " +
                     "Run a warm-up forward pass (model.Predict / EncodeImage / etc.) on a representative input " +
-                    "so every layer resolves its dims before calling Export. Symbolic-axis ONNX export is tracked under issue #1211.");
+                    "so every layer materialises its weight tensors before calling Export. The exported graph's " +
+                    "input/output dims will still be symbolic (#1211) for axes that were dynamic at construction.");
             }
         }
 
-        // Determine input shape
+        // Determine input shape (concrete values from the warm-up trace) plus
+        // which axes were originally dynamic — those become dim_param in the
+        // exported graph. Architecture.HasDynamicSpatialDims = true means H/W
+        // were lazy; batch axis (rank-4 first dim) is always symbolic for
+        // detection / vision deployments.
         var effectiveInputShape = inputShape ?? InferInputShape(layers) ?? new[] { 1, 1 };
 
-        // Create input
-        var inputName = "input";
-        builder.AddInput(inputName, effectiveInputShape);
+        // Validate caller-supplied inputShape: BuildAxisSpec converts
+        // each dim to an ONNX dim_value (concrete) unless an axis is
+        // explicitly marked symbolic. Negative entries (e.g. -1 used as
+        // a "dynamic" sentinel by other framework conventions) emit
+        // invalid fixed dims that downstream ONNX runtimes reject; a
+        // CHW shape passed instead of NCHW omits the batch axis and
+        // mis-aligns dim_param assignments. Reject loud here so the
+        // caller fixes the shape rather than discovers a corrupt
+        // exported graph at inference time.
+        for (int i = 0; i < effectiveInputShape.Length; i++)
+        {
+            if (effectiveInputShape[i] <= 0)
+                throw new ArgumentException(
+                    $"OnnxExporter requires concrete positive input dims for axis {i}; got " +
+                    $"{effectiveInputShape[i]}. Use a warm-up forward to resolve lazy axes " +
+                    "before export, or pass an explicit positive shape to the inputShape " +
+                    "parameter (axes that should be symbolic in the exported graph are " +
+                    "marked via the architecture's HasDynamicSpatialDims, not via -1 here).",
+                    nameof(inputShape));
+        }
+        // Vision exports require a batch axis (NCHW). If the caller
+        // passes rank-3 [C,H,W], BuildAxisSpec would mark axis 0 as the
+        // "batch" symbolic dim — but it's actually the channel axis,
+        // and downstream consumers expect NCHW.
+        //
+        // Auto-prefix on rank-3 regardless of HasDynamicSpatialAxes:
+        //   - dynamic-spatial models: prefix lets the caller pass [C,H,W]
+        //     and have BuildAxisSpec mark the new axis 0 as symbolic batch.
+        //   - fixed-spatial models: prefix still recovers a usable shape
+        //     and BuildAxisSpec labels axis 0 as a unit batch (or symbolic
+        //     batch if the model's architecture allows it). Without the
+        //     prefix, the rank-3 path would propagate a nonsense
+        //     channel-as-batch axis through BuildAxisSpec and produce a
+        //     graph that fails consumer validation.
+        if (effectiveInputShape.Length == 3)
+        {
+            var prefixed = new int[4];
+            prefixed[0] = 1;
+            Array.Copy(effectiveInputShape, 0, prefixed, 1, 3);
+            effectiveInputShape = prefixed;
+        }
 
-        // Track the current tensor name flowing through the graph
+        var inputAxes = BuildAxisSpec(model, effectiveInputShape, isInput: true);
+
+        var inputName = "input";
+        builder.AddInput(inputName, inputAxes);
+
         string currentTensorName = inputName;
         int nodeIndex = 0;
-
-        // Process each layer
         foreach (var layer in layers)
         {
             var outputName = ExportLayer(layer, currentTensorName, nodeIndex, builder, numOps);
@@ -132,11 +174,60 @@ public static class OnnxExporter
             }
         }
 
-        // Create output
         var outputShape = InferOutputShape(layers, effectiveInputShape);
-        builder.AddOutput(currentTensorName, outputShape);
+        var outputAxes = BuildAxisSpec(model, outputShape, isInput: false);
+        builder.AddOutput(currentTensorName, outputAxes);
 
         return builder.Build();
+    }
+
+    /// <summary>
+    /// Builds the per-axis spec for an input or output tensor, marking axes as
+    /// symbolic (<c>dim_param</c>) where the source model declared them dynamic
+    /// at construction. Convention:
+    /// <list type="bullet">
+    ///   <item>rank-4 axis 0 (batch) → symbolic <c>"batch"</c>.</item>
+    ///   <item>rank-4 axes 2/3 (H/W) → symbolic <c>"H"</c>/<c>"W"</c> when the model's
+    ///         architecture reports <c>HasDynamicSpatialDims</c> true.</item>
+    ///   <item>all other axes → concrete <c>dim_value</c>.</item>
+    /// </list>
+    /// </summary>
+    private static OnnxAxisSpec[] BuildAxisSpec<T, TInput, TOutput>(
+        IFullModel<T, TInput, TOutput> model,
+        int[] shape,
+        bool isInput)
+    {
+        bool dynamicSpatial = HasDynamicSpatialAxes(model);
+        var spec = new OnnxAxisSpec[shape.Length];
+        for (int i = 0; i < shape.Length; i++)
+        {
+            // Rank-4 NCHW: axis 0 = batch, axis 1 = channels, axis 2 = H, axis 3 = W.
+            if (shape.Length == 4 && i == 0)
+            {
+                spec[i] = OnnxAxisSpec.Symbolic("batch");
+            }
+            else if (shape.Length == 4 && (i == 2 || i == 3) && dynamicSpatial)
+            {
+                spec[i] = OnnxAxisSpec.Symbolic(i == 2 ? "H" : "W");
+            }
+            else
+            {
+                spec[i] = OnnxAxisSpec.Fixed(shape[i]);
+            }
+        }
+        return spec;
+    }
+
+    private static bool HasDynamicSpatialAxes<T, TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
+    {
+        // Reflection rather than a hard cast — IFullModel doesn't expose
+        // Architecture, but every NeuralNetworkBase-derived model does.
+        var archProp = model.GetType().GetProperty("Architecture");
+        if (archProp is null) return false;
+        var arch = archProp.GetValue(model);
+        if (arch is null) return false;
+        var dynProp = arch.GetType().GetProperty("HasDynamicSpatialDims");
+        return dynProp is not null && dynProp.GetValue(arch) is bool b && b;
     }
 
     private static List<object> GetLayers<T, TInput, TOutput>(IFullModel<T, TInput, TOutput> model)
@@ -398,7 +489,12 @@ public static class OnnxExporter
 /// Internal builder for constructing ONNX model bytes.
 /// Uses protobuf wire format for ONNX serialization.
 /// </summary>
-internal class OnnxModelBuilder
+/// <summary>
+/// Low-level builder for ONNX protobuf graphs. Promoted to public under
+/// issue #1211 so callers wiring up symbolic-axis input/output specs (via
+/// <see cref="OnnxAxisSpec"/>) can drive the wire format directly.
+/// </summary>
+public class OnnxModelBuilder
 {
     private readonly List<byte> _graphBytes = new();
     private readonly List<byte> _initializerBytes = new();
@@ -418,14 +514,35 @@ internal class OnnxModelBuilder
 
     public void AddInput(string name, int[] shape)
     {
+        var spec = ToFixedSpec(shape);
+        var valueInfo = CreateValueInfo(name, spec);
+        _inputBytes.AddRange(CreateField(FieldInput, valueInfo));
+    }
+
+    public void AddInput(string name, OnnxAxisSpec[] shape)
+    {
         var valueInfo = CreateValueInfo(name, shape);
         _inputBytes.AddRange(CreateField(FieldInput, valueInfo));
     }
 
     public void AddOutput(string name, int[] shape)
     {
+        var spec = ToFixedSpec(shape);
+        var valueInfo = CreateValueInfo(name, spec);
+        _outputBytes.AddRange(CreateField(FieldOutput, valueInfo));
+    }
+
+    public void AddOutput(string name, OnnxAxisSpec[] shape)
+    {
         var valueInfo = CreateValueInfo(name, shape);
         _outputBytes.AddRange(CreateField(FieldOutput, valueInfo));
+    }
+
+    private static OnnxAxisSpec[] ToFixedSpec(int[] shape)
+    {
+        var spec = new OnnxAxisSpec[shape.Length];
+        for (int i = 0; i < shape.Length; i++) spec[i] = OnnxAxisSpec.Fixed(shape[i]);
+        return spec;
     }
 
     public void AddInitializer(string name, float[] data)
@@ -552,7 +669,7 @@ internal class OnnxModelBuilder
         return modelBytes.ToArray();
     }
 
-    private static byte[] CreateValueInfo(string name, int[] shape)
+    private static byte[] CreateValueInfo(string name, OnnxAxisSpec[] shape)
     {
         var bytes = new List<byte>();
         bytes.AddRange(CreateStringField(1, name)); // name
@@ -564,12 +681,22 @@ internal class OnnxModelBuilder
         var tensorTypeBytes = new List<byte>();
         tensorTypeBytes.AddRange(CreateVarintField(1, 1)); // elem_type = FLOAT
 
-        // shape (field 2 of TensorTypeProto)
+        // shape (field 2 of TensorTypeProto). Per the ONNX TensorShapeProto.Dimension
+        // contract, each axis is one-of dim_value (field 1, int64) OR dim_param
+        // (field 2, string). dim_param produces a symbolic axis usable by ONNX
+        // Runtime / OpenVINO / TensorRT for arbitrary-shape inference (#1211).
         var shapeBytes = new List<byte>();
-        foreach (var dim in shape)
+        foreach (var axis in shape)
         {
             var dimBytes = new List<byte>();
-            dimBytes.AddRange(CreateVarintField(1, dim)); // dim_value
+            if (axis.SymbolicName is not null)
+            {
+                dimBytes.AddRange(CreateStringField(2, axis.SymbolicName)); // dim_param
+            }
+            else
+            {
+                dimBytes.AddRange(CreateVarintField(1, axis.FixedDim)); // dim_value
+            }
             shapeBytes.AddRange(CreateField(1, dimBytes.ToArray())); // dim
         }
         tensorTypeBytes.AddRange(CreateField(2, shapeBytes.ToArray()));

@@ -1,7 +1,14 @@
-﻿using System.IO;
+using System.IO;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.Backbones;
@@ -11,17 +18,6 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> EfficientNet is a family of models that were designed
-/// using neural architecture search to find the optimal balance between width, depth,
-/// and resolution. It achieves state-of-the-art accuracy with significantly fewer
-/// parameters than other architectures.</para>
-///
-/// <para>Key features:
-/// - MBConv (Mobile Inverted Bottleneck) blocks
-/// - Squeeze-and-Excitation for channel attention
-/// - Compound scaling for width, depth, and resolution
-/// </para>
-///
 /// <para>Reference: Tan et al., "EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", ICML 2019</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
@@ -33,55 +29,63 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     "https://arxiv.org/abs/1905.11946",
     Year = 2019,
     Authors = "Mingxing Tan, Quoc V. Le")]
-public class EfficientNet<T> : BackboneBase<T>
+public class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
-    private readonly Conv2D<T> _stem;
+    private readonly ConvolutionalLayer<T> _stem;
     private readonly List<MBConvBlock<T>> _blocks;
     private readonly EfficientNetVariant _variant;
     private readonly int _stemChannels;
     private readonly int _inChannels;
-
-    /// <inheritdoc/>
-    public override string Name => $"EfficientNet-{_variant}";
-
-    /// <inheritdoc/>
-    public override IReadOnlyList<int> OutputChannels { get; }
-
-    /// <inheritdoc/>
-    public override IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
-
-    /// <summary>
-    /// Indices of blocks that produce output features (P2, P3, P4, P5).
-    /// </summary>
     private readonly int[] _featureIndices;
+    /// <summary>
+    /// Activation throughout the network. Defaults to Swish per the EfficientNet
+    /// paper (mathematically identical to SiLU); callers can override.
+    /// </summary>
+    private readonly IActivationFunction<T> _activation;
+
+    public bool IsFrozen { get; private set; }
+    public string Name => $"EfficientNet-{_variant}";
+    public IReadOnlyList<int> OutputChannels { get; }
+    public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
     /// Creates a new EfficientNet backbone.
     /// </summary>
     /// <param name="variant">EfficientNet variant (B0-B7).</param>
     /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
-    public EfficientNet(EfficientNetVariant variant = EfficientNetVariant.B0, int inChannels = 3)
+    /// <param name="activation">
+    /// Activation throughout stem + MBConv + SE blocks. <c>null</c> resolves
+    /// to the EfficientNet paper default <see cref="SwishActivation{T}"/>.
+    /// </param>
+    public EfficientNet(
+        EfficientNetVariant variant = EfficientNetVariant.B0,
+        int inChannels = 3,
+        IActivationFunction<T>? activation = null)
+        : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.ImageClassification,
+                channels: inChannels,
+                outputSize: 1),
+              new MeanSquaredErrorLoss<T>())
     {
         _variant = variant;
         _inChannels = inChannels;
+        _activation = activation ?? new SwishActivation<T>();
         _blocks = new List<MBConvBlock<T>>();
 
-        // Get scaling factors for variant
         var (widthMult, depthMult) = GetScalingFactors(variant);
 
-        // Base block configurations: (expand_ratio, channels, num_blocks, stride, kernel_size)
         var blockConfigs = new[]
         {
-            (1, 16, 1, 1, 3),   // Stage 1
-            (6, 24, 2, 2, 3),   // Stage 2 - P2
-            (6, 40, 2, 2, 5),   // Stage 3 - P3
-            (6, 80, 3, 2, 3),   // Stage 4
-            (6, 112, 3, 1, 5),  // Stage 5
-            (6, 192, 4, 2, 5),  // Stage 6 - P4
-            (6, 320, 1, 1, 3),  // Stage 7 - P5
+            (1, 16, 1, 1, 3),
+            (6, 24, 2, 2, 3),
+            (6, 40, 2, 2, 5),
+            (6, 80, 3, 2, 3),
+            (6, 112, 3, 1, 5),
+            (6, 192, 4, 2, 5),
+            (6, 320, 1, 1, 3),
         };
 
-        // Calculate scaled channels
         _stemChannels = ScaleChannels(32, widthMult);
         OutputChannels = new[]
         {
@@ -91,16 +95,8 @@ public class EfficientNet<T> : BackboneBase<T>
             ScaleChannels(320, widthMult)
         };
 
-        // Stem convolution
-        _stem = new Conv2D<T>(
-            inChannels: inChannels,
-            outChannels: _stemChannels,
-            kernelSize: 3,
-            stride: 2,
-            padding: 1
-        );
+        _stem = new ConvolutionalLayer<T>(_stemChannels, kernelSize: 3, stride: 2, padding: 1);
 
-        // Build MBConv blocks
         int currentChannels = _stemChannels;
         var featureIndicesList = new List<int>();
         int blockIdx = 0;
@@ -116,192 +112,180 @@ public class EfficientNet<T> : BackboneBase<T>
                 int blockStride = i == 0 ? stride : 1;
                 int blockInChannels = i == 0 ? currentChannels : scaledChannels;
 
-                _blocks.Add(new MBConvBlock<T>(
-                    inChannels: blockInChannels,
-                    outChannels: scaledChannels,
-                    kernelSize: kernelSize,
-                    stride: blockStride,
-                    expandRatio: expandRatio,
-                    useSE: true
-                ));
-
+                _blocks.Add(new MBConvBlock<T>(blockInChannels, scaledChannels, kernelSize, blockStride, expandRatio, useSE: true, activation: _activation));
                 blockIdx++;
             }
-
             currentChannels = scaledChannels;
 
-            // Mark feature output stages (indices 1, 2, 5, 6 -> P2, P3, P4, P5)
             if (stageIdx == 1 || stageIdx == 2 || stageIdx == 5 || stageIdx == 6)
-            {
                 featureIndicesList.Add(blockIdx - 1);
-            }
         }
 
         _featureIndices = featureIndicesList.ToArray();
     }
 
-    /// <summary>
-    /// Gets the scaling factors for each EfficientNet variant.
-    /// </summary>
-    private static (double width, double depth) GetScalingFactors(EfficientNetVariant variant)
+    private static (double width, double depth) GetScalingFactors(EfficientNetVariant variant) => variant switch
     {
-        return variant switch
-        {
-            EfficientNetVariant.B0 => (1.0, 1.0),
-            EfficientNetVariant.B1 => (1.0, 1.1),
-            EfficientNetVariant.B2 => (1.1, 1.2),
-            EfficientNetVariant.B3 => (1.2, 1.4),
-            EfficientNetVariant.B4 => (1.4, 1.8),
-            EfficientNetVariant.B5 => (1.6, 2.2),
-            EfficientNetVariant.B6 => (1.8, 2.6),
-            EfficientNetVariant.B7 => (2.0, 3.1),
-            _ => (1.0, 1.0)
-        };
-    }
+        EfficientNetVariant.B0 => (1.0, 1.0),
+        EfficientNetVariant.B1 => (1.0, 1.1),
+        EfficientNetVariant.B2 => (1.1, 1.2),
+        EfficientNetVariant.B3 => (1.2, 1.4),
+        EfficientNetVariant.B4 => (1.4, 1.8),
+        EfficientNetVariant.B5 => (1.6, 2.2),
+        EfficientNetVariant.B6 => (1.8, 2.6),
+        EfficientNetVariant.B7 => (2.0, 3.1),
+        _ => (1.0, 1.0)
+    };
 
-    /// <summary>
-    /// Scales channel count and rounds to nearest multiple of 8.
-    /// </summary>
     private static int ScaleChannels(int channels, double multiplier)
     {
         int scaled = (int)(channels * multiplier);
-        // Round to nearest multiple of 8
         return Math.Max(8, ((scaled + 4) / 8) * 8);
     }
 
-    /// <summary>
-    /// Scales depth and rounds up.
-    /// </summary>
-    private static int ScaleDepth(int depth, double multiplier)
-    {
-        return (int)Math.Ceiling(depth * multiplier);
-    }
+    private static int ScaleDepth(int depth, double multiplier) => (int)Math.Ceiling(depth * multiplier);
 
-    /// <inheritdoc/>
-    public override List<Tensor<T>> ExtractFeatures(Tensor<T> input)
+    public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         var features = new List<Tensor<T>>();
-
-        // Stem
         var x = _stem.Forward(input);
-        x = ApplySwish(x);
-
-        // Blocks
+        x = _activation.Activate(x);
         for (int i = 0; i < _blocks.Count; i++)
         {
             x = _blocks[i].Forward(x);
-
-            // Collect features at marked indices
-            if (_featureIndices.Contains(i))
-            {
-                features.Add(x);
-            }
+            if (_featureIndices.Contains(i)) features.Add(x);
         }
-
         return features;
     }
 
-    /// <inheritdoc/>
-    public override long GetBackboneParameterCount()
+    public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
+
+    /// <summary>
+    /// Sum across stem + every MBConv block. Inherited
+    /// <c>NeuralNetworkBase&lt;T&gt;.GetParameterCount()</c> delegates to this
+    /// virtual property, satisfying the <see cref="IDetectionBackbone{T}"/> contract.
+    /// </summary>
+    public override long ParameterCount
     {
-        long count = _stem.GetParameterCount();
-        foreach (var block in _blocks)
+        get
         {
-            count += block.GetParameterCount();
+            long count = _stem.ParameterCount;
+            foreach (var block in _blocks) count += block.GetParameterCount();
+            return count;
         }
-        return count;
     }
 
-    /// <inheritdoc/>
-    public override void WriteParameters(BinaryWriter writer)
+    public void WriteParameters(BinaryWriter writer)
     {
-        // Write configuration
         writer.Write((int)_variant);
         writer.Write(_blocks.Count);
         writer.Write(_featureIndices.Length);
-        foreach (int idx in _featureIndices)
-        {
-            writer.Write(idx);
-        }
-
-        // Write stem
-        _stem.WriteParameters(writer);
-
-        // Write blocks
-        foreach (var block in _blocks)
-        {
-            block.WriteParameters(writer);
-        }
+        foreach (int idx in _featureIndices) writer.Write(idx);
+        BackboneSerialization.WriteLayerParameters(writer, _stem);
+        foreach (var block in _blocks) block.WriteParameters(writer);
     }
 
-    /// <inheritdoc/>
-    public override void ReadParameters(BinaryReader reader)
+    public void ReadParameters(BinaryReader reader)
     {
-        // Read and verify configuration
         var variant = (EfficientNetVariant)reader.ReadInt32();
         int blockCount = reader.ReadInt32();
         int featureIndexCount = reader.ReadInt32();
         var featureIndices = new int[featureIndexCount];
-        for (int i = 0; i < featureIndexCount; i++)
-        {
-            featureIndices[i] = reader.ReadInt32();
-        }
+        for (int i = 0; i < featureIndexCount; i++) featureIndices[i] = reader.ReadInt32();
 
         if (variant != _variant)
-        {
             throw new InvalidOperationException($"EfficientNet variant mismatch: expected {_variant}, got {variant}.");
-        }
-
         if (blockCount != _blocks.Count)
-        {
             throw new InvalidOperationException($"EfficientNet block count mismatch: expected {_blocks.Count}, got {blockCount}.");
-        }
-
-        // Validate feature indices match
         if (featureIndexCount != _featureIndices.Length)
-        {
-            throw new InvalidOperationException(
-                $"EfficientNet feature index count mismatch: expected {_featureIndices.Length}, got {featureIndexCount}.");
-        }
-
+            throw new InvalidOperationException($"EfficientNet feature index count mismatch: expected {_featureIndices.Length}, got {featureIndexCount}.");
         for (int i = 0; i < featureIndexCount; i++)
-        {
             if (featureIndices[i] != _featureIndices[i])
-            {
-                throw new InvalidOperationException(
-                    $"EfficientNet feature index mismatch at position {i}: expected {_featureIndices[i]}, got {featureIndices[i]}.");
-            }
-        }
+                throw new InvalidOperationException($"EfficientNet feature index mismatch at position {i}: expected {_featureIndices[i]}, got {featureIndices[i]}.");
 
-        // Read stem
-        _stem.ReadParameters(reader);
-
-        // Read blocks
-        foreach (var block in _blocks)
-        {
-            block.ReadParameters(reader);
-        }
+        BackboneSerialization.ReadLayerParameters(reader, _stem);
+        foreach (var block in _blocks) block.ReadParameters(reader);
     }
 
-    private Tensor<T> ApplySwish(Tensor<T> x)
+    public virtual void Freeze() => IsFrozen = true;
+    public virtual void Unfreeze() => IsFrozen = false;
+    public (int Height, int Width) GetExpectedInputSize() => (640, 640);
+
+    public override Tensor<T> Predict(Tensor<T> input)
     {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = NumOps.ToDouble(x[i]);
-            double swish = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = NumOps.FromDouble(swish);
-        }
-        return result;
+        var features = ExtractFeatures(input);
+        if (features.Count == 0)
+            throw new InvalidOperationException(
+                $"{GetType().Name}.ExtractFeatures returned no feature maps.");
+        return features[features.Count - 1];
     }
+
+    protected override void InitializeLayers() { }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer) => WriteParameters(writer);
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader) => ReadParameters(reader);
 
     /// <inheritdoc />
     /// <remarks>
-    /// Constructs a fresh EfficientNet with the same variant and input-channel
-    /// configuration. All internal MBConvBlock and Conv2D layers are freshly allocated.
+    /// Constructs a fresh EfficientNet with the same variant and input-channel configuration.
     /// </remarks>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
-        => new EfficientNet<T>(_variant, _inChannels);
+        => new EfficientNet<T>(_variant, _inChannels, _activation);
+
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
+    {
+        Name = Name,
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            ["BackboneName"] = Name,
+            ["OutputChannels"] = OutputChannels,
+            ["Strides"] = Strides
+        }
+    };
+
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: detection backbones train as part of a parent detector.");
+
+    public override Vector<T> GetParameters() =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not expose a flat parameter vector. Use WriteParameters/ReadParameters.");
+
+    public override void SetParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not accept a flat parameter vector. Use ReadParameters.");
+
+    public override void UpdateParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: backbones do not accept a flat parameter update vector.");
+
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
+        throw new NotSupportedException(
+            $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Round-trips the parameter binary stream through a fresh
+    /// <see cref="CreateNewInstance"/> so internal Conv / BN / SE blocks and
+    /// their tensor buffers are independent copies — see ResNet.DeepCopy.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
+    {
+        var copy = (EfficientNet<T>)CreateNewInstance();
+        using var ms = new MemoryStream();
+        using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            WriteParameters(writer);
+        }
+        ms.Position = 0;
+        using (var reader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            copy.ReadParameters(reader);
+        }
+        return copy;
+    }
+
+    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
 }
 
 /// <summary>
@@ -332,193 +316,96 @@ public enum EfficientNetVariant
 /// </summary>
 internal class MBConvBlock<T>
 {
-    private readonly INumericOperations<T> _numOps;
-    private readonly Conv2D<T>? _expand;
-    private readonly Conv2D<T> _depthwise;
+    private readonly ConvolutionalLayer<T>? _expand;
+    private readonly ConvolutionalLayer<T> _depthwise;
     private readonly SqueezeExcitation<T>? _se;
-    private readonly Conv2D<T> _project;
+    private readonly ConvolutionalLayer<T> _project;
     private readonly bool _useResidual;
     private readonly int _inChannels;
     private readonly int _outChannels;
     private readonly int _expandRatio;
 
-    public MBConvBlock(int inChannels, int outChannels, int kernelSize, int stride, int expandRatio, bool useSE)
+    private readonly IActivationFunction<T> _activation;
+
+    public MBConvBlock(int inChannels, int outChannels, int kernelSize, int stride, int expandRatio, bool useSE, IActivationFunction<T> activation)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         _inChannels = inChannels;
         _outChannels = outChannels;
         _expandRatio = expandRatio;
         _useResidual = inChannels == outChannels && stride == 1;
+        _activation = activation;
 
         int hiddenDim = inChannels * expandRatio;
 
-        // Expansion phase (if expand ratio > 1)
         if (expandRatio != 1)
-        {
-            _expand = new Conv2D<T>(
-                inChannels: inChannels,
-                outChannels: hiddenDim,
-                kernelSize: 1,
-                stride: 1,
-                padding: 0
-            );
-        }
+            _expand = new ConvolutionalLayer<T>(hiddenDim, kernelSize: 1, stride: 1, padding: 0);
 
-        // Depthwise convolution
         int padding = (kernelSize - 1) / 2;
-        _depthwise = new Conv2D<T>(
-            inChannels: hiddenDim,
-            outChannels: hiddenDim,
-            kernelSize: kernelSize,
-            stride: stride,
-            padding: padding
-        );
+        _depthwise = new ConvolutionalLayer<T>(hiddenDim, kernelSize: kernelSize, stride: stride, padding: padding);
 
-        // Squeeze-and-Excitation
         if (useSE)
         {
             int seChannels = Math.Max(1, inChannels / 4);
-            _se = new SqueezeExcitation<T>(hiddenDim, seChannels);
+            _se = new SqueezeExcitation<T>(hiddenDim, seChannels, activation);
         }
 
-        // Projection phase
-        _project = new Conv2D<T>(
-            inChannels: hiddenDim,
-            outChannels: outChannels,
-            kernelSize: 1,
-            stride: 1,
-            padding: 0
-        );
+        _project = new ConvolutionalLayer<T>(outChannels, kernelSize: 1, stride: 1, padding: 0);
     }
 
     public Tensor<T> Forward(Tensor<T> input)
     {
         var x = input;
 
-        // Expansion
         if (_expand is not null)
         {
             x = _expand.Forward(x);
-            x = ApplySwish(x);
+            x = _activation.Activate(x);
         }
 
-        // Depthwise conv
         x = _depthwise.Forward(x);
-        x = ApplySwish(x);
+        x = _activation.Activate(x);
 
-        // Squeeze-and-Excitation
-        if (_se is not null)
-        {
-            x = _se.Forward(x);
-        }
+        if (_se is not null) x = _se.Forward(x);
 
-        // Projection
         x = _project.Forward(x);
 
-        // Residual connection
-        if (_useResidual)
-        {
-            for (int i = 0; i < x.Length; i++)
-            {
-                x[i] = _numOps.Add(x[i], input[i]);
-            }
-        }
+        if (_useResidual) x = BackboneOps<T>.AddResidual(x, input);
 
         return x;
     }
 
     public long GetParameterCount()
     {
-        long count = 0;
-        int hiddenDim = _inChannels * _expandRatio;
-
-        // Expansion conv (1x1)
-        if (_expandRatio != 1)
-        {
-            count += _inChannels * hiddenDim;
-        }
-
-        // Depthwise conv (approx 3x3 per channel)
-        count += hiddenDim * 9;
-
-        // SE layers
-        if (_se is not null)
-        {
-            int seChannels = Math.Max(1, _inChannels / 4);
-            count += hiddenDim * seChannels + seChannels * hiddenDim;
-        }
-
-        // Projection conv (1x1)
-        count += hiddenDim * _outChannels;
-
+        long count = (_expand?.ParameterCount ?? 0) + _depthwise.ParameterCount + _project.ParameterCount;
+        if (_se is not null) count += _se.GetParameterCount();
         return count;
     }
 
     public void WriteParameters(BinaryWriter writer)
     {
-        // Write configuration
-        writer.Write(_expandRatio != 1);
+        writer.Write(_expand is not null);
         writer.Write(_se is not null);
-
-        // Write expand conv
-        if (_expand is not null)
-        {
-            _expand.WriteParameters(writer);
-        }
-
-        // Write depthwise conv
-        _depthwise.WriteParameters(writer);
-
-        // Write SE
-        if (_se is not null)
-        {
-            _se.WriteParameters(writer);
-        }
-
-        // Write project conv
-        _project.WriteParameters(writer);
+        if (_expand is not null) BackboneSerialization.WriteLayerParameters(writer, _expand);
+        BackboneSerialization.WriteLayerParameters(writer, _depthwise);
+        if (_se is not null) _se.WriteParameters(writer);
+        BackboneSerialization.WriteLayerParameters(writer, _project);
     }
 
     public void ReadParameters(BinaryReader reader)
     {
         bool hasExpand = reader.ReadBoolean();
         bool hasSE = reader.ReadBoolean();
-
         if (hasExpand != (_expand is not null))
-        {
             throw new InvalidOperationException("MBConvBlock expand configuration mismatch.");
-        }
         if (hasSE != (_se is not null))
-        {
             throw new InvalidOperationException("MBConvBlock SE configuration mismatch.");
-        }
-
-        if (_expand is not null)
-        {
-            _expand.ReadParameters(reader);
-        }
-
-        _depthwise.ReadParameters(reader);
-
-        if (_se is not null)
-        {
-            _se.ReadParameters(reader);
-        }
-
-        _project.ReadParameters(reader);
+        if (_expand is not null) BackboneSerialization.ReadLayerParameters(reader, _expand);
+        BackboneSerialization.ReadLayerParameters(reader, _depthwise);
+        if (_se is not null) _se.ReadParameters(reader);
+        BackboneSerialization.ReadLayerParameters(reader, _project);
     }
 
-    private Tensor<T> ApplySwish(Tensor<T> x)
-    {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            double swish = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = _numOps.FromDouble(swish);
-        }
-        return result;
-    }
+    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
 }
 
 /// <summary>
@@ -527,81 +414,77 @@ internal class MBConvBlock<T>
 internal class SqueezeExcitation<T>
 {
     private readonly INumericOperations<T> _numOps;
-    private readonly Dense<T> _fc1;
-    private readonly Dense<T> _fc2;
-    private readonly int _channels;
+    private readonly DenseLayer<T> _fc1;
+    private readonly DenseLayer<T> _fc2;
+    private readonly IActivationFunction<T> _activation;
 
-    public SqueezeExcitation(int channels, int reducedChannels)
+    public SqueezeExcitation(int channels, int reducedChannels, IActivationFunction<T> activation)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        _channels = channels;
-        _fc1 = new Dense<T>(channels, reducedChannels);
-        _fc2 = new Dense<T>(reducedChannels, channels);
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _activation = activation;
+        _fc1 = new DenseLayer<T>(reducedChannels, (Interfaces.IActivationFunction<T>?)null);
+        _fc2 = new DenseLayer<T>(channels, (Interfaces.IActivationFunction<T>?)null);
     }
 
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // input: [batch, channels, height, width]
         int batch = input.Shape[0];
         int channels = input.Shape[1];
         int height = input.Shape[2];
         int width = input.Shape[3];
 
-        // Global average pooling
-        var squeezed = new Tensor<T>(new[] { batch, channels, 1 });
+        // Global average pool → [batch, channels]
+        var squeezed = new Tensor<T>(new[] { batch, channels });
         for (int n = 0; n < batch; n++)
         {
             for (int c = 0; c < channels; c++)
             {
                 double sum = 0;
                 for (int h = 0; h < height; h++)
-                {
                     for (int w = 0; w < width; w++)
-                    {
                         sum += _numOps.ToDouble(input[n, c, h, w]);
-                    }
-                }
-                squeezed[n, c, 0] = _numOps.FromDouble(sum / (height * width));
+                squeezed[n, c] = _numOps.FromDouble(sum / (height * width));
             }
         }
 
-        // Excitation: FC -> Swish -> FC -> Sigmoid
         var excited = _fc1.Forward(squeezed);
-        excited = ApplySwish(excited);
+        excited = _activation.Activate(excited);
         excited = _fc2.Forward(excited);
+        // Per EfficientNet paper, the SE channel-attention gate ALWAYS uses
+        // sigmoid (not the configurable backbone activation) — the gate must
+        // be in [0,1] to act as a multiplicative attention mask.
         excited = ApplySigmoid(excited);
 
-        // Scale input channels
         var output = new Tensor<T>(input._shape);
         for (int n = 0; n < batch; n++)
         {
             for (int c = 0; c < channels; c++)
             {
-                T scale = excited[n, c, 0];
+                T scale = excited[n, c];
                 for (int h = 0; h < height; h++)
-                {
                     for (int w = 0; w < width; w++)
-                    {
                         output[n, c, h, w] = _numOps.Multiply(input[n, c, h, w], scale);
-                    }
-                }
             }
         }
 
         return output;
     }
 
-    private Tensor<T> ApplySwish(Tensor<T> x)
+    public long GetParameterCount() => _fc1.ParameterCount + _fc2.ParameterCount;
+
+    public void WriteParameters(BinaryWriter writer)
     {
-        var result = new Tensor<T>(x._shape);
-        for (int i = 0; i < x.Length; i++)
-        {
-            double val = _numOps.ToDouble(x[i]);
-            double swish = val * (1.0 / (1.0 + Math.Exp(-val)));
-            result[i] = _numOps.FromDouble(swish);
-        }
-        return result;
+        BackboneSerialization.WriteLayerParameters(writer, _fc1);
+        BackboneSerialization.WriteLayerParameters(writer, _fc2);
     }
+
+    public void ReadParameters(BinaryReader reader)
+    {
+        BackboneSerialization.ReadLayerParameters(reader, _fc1);
+        BackboneSerialization.ReadLayerParameters(reader, _fc2);
+    }
+
+    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
 
     private Tensor<T> ApplySigmoid(Tensor<T> x)
     {
@@ -609,21 +492,8 @@ internal class SqueezeExcitation<T>
         for (int i = 0; i < x.Length; i++)
         {
             double val = _numOps.ToDouble(x[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-val));
-            result[i] = _numOps.FromDouble(sigmoid);
+            result[i] = _numOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
         }
         return result;
-    }
-
-    public void WriteParameters(BinaryWriter writer)
-    {
-        _fc1.WriteParameters(writer);
-        _fc2.WriteParameters(writer);
-    }
-
-    public void ReadParameters(BinaryReader reader)
-    {
-        _fc1.ReadParameters(reader);
-        _fc2.ReadParameters(reader);
     }
 }

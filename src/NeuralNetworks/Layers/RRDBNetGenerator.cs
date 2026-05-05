@@ -106,6 +106,16 @@ public class RRDBNetGenerator<T> : LayerBase<T>
     private readonly int _numFeatures;
 
     /// <summary>
+    /// Number of input channels (3 for RGB).
+    /// </summary>
+    private readonly int _inputChannels;
+
+    /// <summary>
+    /// Number of output channels (3 for RGB).
+    /// </summary>
+    private readonly int _outputChannels;
+
+    /// <summary>
     /// Upscaling factor (2 or 4).
     /// </summary>
     private readonly int _scale;
@@ -187,8 +197,6 @@ public class RRDBNetGenerator<T> : LayerBase<T>
     /// </para>
     /// </remarks>
     public RRDBNetGenerator(
-        int inputHeight,
-        int inputWidth,
         int inputChannels = 3,
         int outputChannels = 3,
         int numFeatures = 64,
@@ -197,8 +205,8 @@ public class RRDBNetGenerator<T> : LayerBase<T>
         int scale = 4,
         double residualScale = 0.2)
         : base(
-            [inputChannels, inputHeight, inputWidth],
-            [outputChannels, inputHeight * scale, inputWidth * scale])
+            [inputChannels, -1, -1],
+            [outputChannels, -1, -1])
     {
         if (scale != 2 && scale != 4)
             throw new ArgumentOutOfRangeException(nameof(scale), "Scale must be 2 or 4.");
@@ -209,6 +217,8 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
         _numFeatures = numFeatures;
         _scale = scale;
+        _inputChannels = inputChannels;
+        _outputChannels = outputChannels;
         _leakyReLU = new LeakyReLUActivation<T>(0.2);
 
         // Initial convolution: inputChannels → numFeatures
@@ -219,15 +229,13 @@ public class RRDBNetGenerator<T> : LayerBase<T>
             padding: 1,
             activationFunction: null);
 
-        // RRDB blocks
+        // RRDB blocks — lazy on spatial dims, channels are constant.
         _rrdbBlocks = new RRDBLayer<T>[numRRDBBlocks];
         for (int i = 0; i < numRRDBBlocks; i++)
         {
             _rrdbBlocks[i] = new RRDBLayer<T>(
                 numFeatures: numFeatures,
                 growthChannels: growthChannels,
-                inputHeight: inputHeight,
-                inputWidth: inputWidth,
                 residualScale: residualScale);
         }
 
@@ -239,30 +247,22 @@ public class RRDBNetGenerator<T> : LayerBase<T>
             padding: 1,
             activationFunction: null);
 
-        // Upsampling: for 4x scale, we need 2 stages of 2x upsampling
-        // Each stage: Conv (numFeatures → numFeatures * 4) + PixelShuffle(2) + LeakyReLU
+        // Upsampling: for 4x scale, we need 2 stages of 2x upsampling.
+        // Each stage: Conv (numFeatures → numFeatures × 4) + PixelShuffle(2) + LeakyReLU.
         int numUpsampleStages = scale == 4 ? 2 : 1;
         _upsampleConvs = new ConvolutionalLayer<T>[numUpsampleStages];
         _pixelShuffleLayers = new PixelShuffleLayer<T>[numUpsampleStages];
 
-        int currentHeight = inputHeight;
-        int currentWidth = inputWidth;
-
         for (int i = 0; i < numUpsampleStages; i++)
         {
-            // Conv: numFeatures → numFeatures * 4 (for 2x PixelShuffle)
             _upsampleConvs[i] = new ConvolutionalLayer<T>(
-                outputDepth: numFeatures * 4, // 4x channels for 2x spatial upscale
+                outputDepth: numFeatures * 4,
                 kernelSize: 3,
                 stride: 1,
                 padding: 1,
                 activationFunction: null);
 
-            // PixelShuffle: 2x upscaling
             _pixelShuffleLayers[i] = new PixelShuffleLayer<T>(upscaleFactor: 2);
-
-            currentHeight *= 2;
-            currentWidth *= 2;
         }
 
         // HR convolution (after upsampling)
@@ -290,6 +290,71 @@ public class RRDBNetGenerator<T> : LayerBase<T>
         foreach (var ps in _pixelShuffleLayers) RegisterSubLayer(ps);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Resolves spatial dims from <c>input.Shape</c>, drives each sub-
+    /// layer's lazy resolution along the well-known channel layout
+    /// (numFeatures throughout, except the final 3-channel projection),
+    /// and locks the layer's input/output shapes.
+    /// </remarks>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        var s = input._shape;
+        int inChannels, inH, inW;
+        if (s.Length == 3) { inChannels = s[0]; inH = s[1]; inW = s[2]; }
+        else if (s.Length == 4) { inChannels = s[1]; inH = s[2]; inW = s[3]; }
+        else
+            throw new ArgumentException(
+                $"RRDBNetGenerator requires rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {s.Length}.",
+                nameof(input));
+        if (inChannels != _inputChannels)
+            throw new ArgumentException(
+                $"RRDBNetGenerator expected {_inputChannels} input channels, got {inChannels}.",
+                nameof(input));
+
+        _convFirst.ResolveFromShape(new[] { _inputChannels, inH, inW });
+        foreach (var block in _rrdbBlocks)
+            block.ResolveFromShape(new[] { _numFeatures, inH, inW });
+        _trunkConv.ResolveFromShape(new[] { _numFeatures, inH, inW });
+
+        int currentH = inH;
+        int currentW = inW;
+        for (int i = 0; i < _upsampleConvs.Length; i++)
+        {
+            _upsampleConvs[i].ResolveFromShape(new[] { _numFeatures, currentH, currentW });
+            _pixelShuffleLayers[i].ResolveFromShape(new[] { _numFeatures * 4, currentH, currentW });
+            currentH *= 2;
+            currentW *= 2;
+        }
+
+        _hrConv.ResolveFromShape(new[] { _numFeatures, currentH, currentW });
+        _convLast.ResolveFromShape(new[] { _numFeatures, currentH, currentW });
+
+        // Propagate training mode to every freshly-allocated sub-layer.
+        _convFirst.SetTrainingMode(IsTrainingMode);
+        _trunkConv.SetTrainingMode(IsTrainingMode);
+        _hrConv.SetTrainingMode(IsTrainingMode);
+        _convLast.SetTrainingMode(IsTrainingMode);
+        foreach (var block in _rrdbBlocks) block.SetTrainingMode(IsTrainingMode);
+        foreach (var conv in _upsampleConvs) conv.SetTrainingMode(IsTrainingMode);
+        foreach (var ps in _pixelShuffleLayers) ps.SetTrainingMode(IsTrainingMode);
+
+        ResolveShapes(
+            new[] { _inputChannels, inH, inW },
+            new[] { _outputChannels, currentH, currentW });
+
+        // Replay parameters that arrived via Deserialize → SetParameters
+        // before any sub-layer's shape was resolved. With every sub-
+        // layer now reporting a real GetParameters().Length, the
+        // SubVector cuts in ApplyParameters land on the right data.
+        if (_pendingParameters is not null)
+        {
+            var pending = _pendingParameters;
+            _pendingParameters = null;
+            ApplyParameters(pending);
+        }
+    }
+
     #endregion
 
     #region Forward Pass
@@ -297,6 +362,8 @@ public class RRDBNetGenerator<T> : LayerBase<T>
     /// <inheritdoc />
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        if (!IsShapeResolved) OnFirstForward(input);
+
         _lastInput = input;
 
         // Initial feature extraction
@@ -432,6 +499,31 @@ public class RRDBNetGenerator<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
+    {
+        // Buffer until OnFirstForward resolves shapes when arriving pre-
+        // resolution: every sub-layer (_convFirst, _rrdbBlocks[i],
+        // _trunkConv, _upsampleConvs[i], _hrConv, _convLast) reports
+        // GetParameters().Length == 0 before OnFirstForward, so the
+        // SubVector cuts below all consume zero bytes and the parameters
+        // get silently dropped — a deserialized RRDBNet checkpoint
+        // would inference with random weights instead of the loaded
+        // values. Replay in OnFirstForward once shapes are resolved.
+        if (!IsShapeResolved)
+        {
+            _pendingParameters = parameters;
+            return;
+        }
+        ApplyParameters(parameters);
+    }
+
+    /// <summary>
+    /// Buffer for SetParameters when called pre-OnFirstForward. Replayed
+    /// in OnFirstForward once every sub-layer reports a real
+    /// GetParameters().Length.
+    /// </summary>
+    private Vector<T>? _pendingParameters;
+
+    private void ApplyParameters(Vector<T> parameters)
     {
         int offset = 0;
 

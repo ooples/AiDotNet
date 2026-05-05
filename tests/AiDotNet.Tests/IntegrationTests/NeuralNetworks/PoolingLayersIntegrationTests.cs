@@ -254,7 +254,7 @@ public class PoolingLayersIntegrationTests
         int inputWidth = 8;
         int poolSize = 2;
         int stride = 2;
-        var layer = new PoolingLayer<float>(inputDepth, inputHeight, inputWidth, poolSize, stride, PoolingType.Max);
+        var layer = new PoolingLayer<float>(poolSize, stride, PoolingType.Max);
         var input = CreateRandomTensor<float>([inputDepth, inputHeight, inputWidth]);
 
         // Act
@@ -273,7 +273,7 @@ public class PoolingLayersIntegrationTests
         int inputWidth = 8;
         int poolSize = 2;
         int stride = 2;
-        var layer = new PoolingLayer<float>(inputDepth, inputHeight, inputWidth, poolSize, stride, PoolingType.Average);
+        var layer = new PoolingLayer<float>(poolSize, stride, PoolingType.Average);
         var input = CreateRandomTensor<float>([inputDepth, inputHeight, inputWidth]);
 
         // Act
@@ -288,7 +288,7 @@ public class PoolingLayersIntegrationTests
     public async Task PoolingLayer_Clone_CreatesIndependentCopy()
     {
         // Arrange
-        var original = new PoolingLayer<float>(3, 8, 8, 2, 2, PoolingType.Max);
+        var original = new PoolingLayer<float>(2, 2, PoolingType.Max);
         var input = CreateRandomTensor<float>([3, 8, 8]);
         var originalOutput = original.Forward(input);
 

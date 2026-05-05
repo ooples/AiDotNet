@@ -428,6 +428,52 @@ public abstract class LayerTestBase
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
 
+        // Drive lazy-shape resolution + weight allocation by running a
+        // single Forward against InputShape. Without this, layers that
+        // defer weight allocation to OnFirstForward (#1209) report
+        // ParameterCount = 0 — which is correct lazy semantics, but
+        // the invariant we're testing (count == GetParameters().Length
+        // and >0 for trainable) requires the layer to be in its
+        // "post first forward" state to be meaningful.
+        using (var probeInput = new Tensor<double>(InputShape))
+        {
+            // Fill with non-zero values — some layer Forward paths take
+            // shortcuts on all-zero input (e.g. attention with zero
+            // weights producing NaN softmax) that prevent OnFirstForward
+            // from running. A small deterministic ramp avoids those
+            // shortcuts without coupling to RNG state.
+            for (int i = 0; i < probeInput.Length; i++)
+                probeInput[i] = 0.01 * (i + 1);
+
+            try { layer.Forward(probeInput); }
+            catch
+            {
+                // Single-input Forward failed — for dual-input layers
+                // (DecoderLayer / TransformerDecoderLayer expecting
+                // encoder output alongside decoder input) try the
+                // params-based overload via reflection. The interface
+                // only declares Forward(Tensor<T>); subclasses that
+                // accept multiple tensors expose Forward(params Tensor<T>[]).
+                try
+                {
+                    var paramsForward = layer.GetType().GetMethod(
+                        "Forward",
+                        new[] { typeof(Tensor<double>[]) });
+                    paramsForward?.Invoke(layer, new object[] { new[] { probeInput, probeInput } });
+                }
+                catch
+                {
+                    // All probe shapes failed — the invariant still
+                    // validates whatever state the ctor produced.
+                    // Layers that can't be probed this way should
+                    // override CreateLayer to return a pre-initialized
+                    // instance.
+                }
+            }
+        }
+
+        // ParameterCount widened to long in #1244; cast for comparison
+        // against Vector<double>.Length which is int-bounded.
         int count = (int)layer.ParameterCount;
         var parameters = layer.GetParameters();
 
@@ -452,7 +498,19 @@ public abstract class LayerTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var layer = CreateLayer();
-        if (layer.ParameterCount == 0) return; // Skip for non-trainable layers
+
+        // Probe Forward to drive lazy-shape resolution + weight allocation.
+        // Without this, lazy layers (#1209) report ParameterCount = 0 and the
+        // roundtrip below would skip — which is correct lazy semantics, but
+        // the invariant we're testing only has meaning post-resolution.
+        using (var probeInput = new Tensor<double>(InputShape))
+        {
+            for (int i = 0; i < probeInput.Length; i++)
+                probeInput[i] = 0.01 * (i + 1);
+            try { layer.Forward(probeInput); } catch { }
+        }
+
+        if (layer.ParameterCount == 0) return; // Genuinely non-trainable layers.
 
         var original = layer.GetParameters();
         var modified = new Vector<double>(original.Length);

@@ -269,9 +269,12 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
         var layers = new List<ILayer<T>>();
         var config = _configuration;
 
-        int currentHeight = config.InputHeight;
-        int currentWidth = config.InputWidth;
-        int currentChannels = config.InputChannels;
+        // currentHeight/Width/Channels tracking removed — lazy layers
+        // (#1209) infer all spatial + channel dims from input.Shape on
+        // first Forward, so the running tally was never read after the
+        // 5-line drop in #1209's earlier pass. Re-add it only if a
+        // future stage genuinely needs to size something at construction
+        // time (which lazy ctors deliberately removed the need for).
 
         // Stage 0: Initial convolution (conv1)
         // 7x7 conv, 64, stride 2
@@ -281,10 +284,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             stride: 2,
             padding: 3,
             activationFunction: new ActivationFunctions.IdentityActivation<T>()));
-
-        currentHeight /= 2;
-        currentWidth /= 2;
-        currentChannels = 64;
 
         // Batch normalization after conv1
         layers.Add(new BatchNormalizationLayer<T>());
@@ -298,16 +297,15 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             poolSize: 3,
             stride: 2));
 
-        currentHeight = (currentHeight - 1) / 2 + 1; // Ceiling division for pool output
-        currentWidth = (currentWidth - 1) / 2 + 1;
-
         // Get block configuration for this variant
         int[] blockCounts = config.BlockCounts;
         int[] baseChannels = config.BaseChannels;
         int expansion = config.Expansion;
 
-        // Stage 1-4: Residual blocks
-        int inChannels = 64;
+        // Stage 1-4: Residual blocks. BasicBlock / BottleneckBlock are lazy
+        // on input channels (#1209) — they read in-channel count from the
+        // forward tensor. The local `inChannels` running tally is no longer
+        // needed since the lazy ctors don't accept an inChannels arg.
         for (int stageIdx = 0; stageIdx < 4; stageIdx++)
         {
             int stageBaseChannels = baseChannels[stageIdx];
@@ -318,31 +316,17 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             if (config.UsesBottleneck)
             {
                 layers.Add(new BottleneckBlock<T>(
-                    inChannels: inChannels,
                     baseChannels: stageBaseChannels,
                     stride: stride,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     zeroInitResidual: config.ZeroInitResidual));
             }
             else
             {
                 layers.Add(new BasicBlock<T>(
-                    inChannels: inChannels,
                     outChannels: stageBaseChannels * expansion,
                     stride: stride,
-                    inputHeight: currentHeight,
-                    inputWidth: currentWidth,
                     zeroInitResidual: config.ZeroInitResidual));
             }
-
-            // Update dimensions
-            if (stride == 2)
-            {
-                currentHeight /= 2;
-                currentWidth /= 2;
-            }
-            inChannels = stageBaseChannels * expansion;
 
             // Remaining blocks in stage (stride 1, no channel change)
             for (int blockIdx = 1; blockIdx < numBlocks; blockIdx++)
@@ -350,22 +334,16 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
                 if (config.UsesBottleneck)
                 {
                     layers.Add(new BottleneckBlock<T>(
-                        inChannels: inChannels,
-                        baseChannels: stageBaseChannels,
-                        stride: 1,
-                        inputHeight: currentHeight,
-                        inputWidth: currentWidth,
-                        zeroInitResidual: config.ZeroInitResidual));
+                    baseChannels: stageBaseChannels,
+                    stride: 1,
+                    zeroInitResidual: config.ZeroInitResidual));
                 }
                 else
                 {
                     layers.Add(new BasicBlock<T>(
-                        inChannels: inChannels,
-                        outChannels: stageBaseChannels * expansion,
-                        stride: 1,
-                        inputHeight: currentHeight,
-                        inputWidth: currentWidth,
-                        zeroInitResidual: config.ZeroInitResidual));
+                    outChannels: stageBaseChannels * expansion,
+                    stride: 1,
+                    zeroInitResidual: config.ZeroInitResidual));
                 }
             }
         }

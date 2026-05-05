@@ -308,23 +308,28 @@ public class MobileNetTests
     [Fact(Timeout = 120000)]
     public async Task InvertedResidualBlock_Construction_CreatesValidBlock()
     {
-        // Arrange & Act
+        await Task.Yield();
+        // Arrange & Act — lazy ctor: only outChannels/expansionRatio/
+        // stride/useSE are known up front; InChannels resolves on first
+        // Forward via OnFirstForward(input).
         var block = new InvertedResidualBlock<double>(
-            inChannels: 32,
             outChannels: 64,
-            inputHeight: 16,
-            inputWidth: 16,
             expansionRatio: 6,
             stride: 2,
             useSE: false);
 
-        // Assert
+        // Pre-Forward: inChannels is still the -1 sentinel.
         Assert.NotNull(block);
-        Assert.Equal(32, block.InChannels);
+        Assert.Equal(-1, block.InChannels);
         Assert.Equal(64, block.OutChannels);
         Assert.Equal(6, block.ExpansionRatio);
         Assert.Equal(2, block.Stride);
         Assert.True(block.SupportsTraining);
+
+        // After first Forward: InChannels is resolved from input.Shape[1].
+        var input = new Tensor<double>([1, 32, 8, 8]);
+        block.Forward(input);
+        Assert.Equal(32, block.InChannels);
     }
 
     [Fact(Timeout = 120000)]
@@ -332,10 +337,7 @@ public class MobileNetTests
     {
         // Arrange & Act
         var block = new InvertedResidualBlock<double>(
-            inChannels: 64,
             outChannels: 96,
-            inputHeight: 8,
-            inputWidth: 8,
             expansionRatio: 6,
             stride: 1,
             useSE: true,
@@ -351,10 +353,7 @@ public class MobileNetTests
     {
         // Arrange
         var block = new InvertedResidualBlock<double>(
-            inChannels: 32,
             outChannels: 32,
-            inputHeight: 8,
-            inputWidth: 8,
             expansionRatio: 6,
             stride: 1,
             useSE: false);
@@ -380,10 +379,7 @@ public class MobileNetTests
     {
         // Arrange
         var block = new InvertedResidualBlock<double>(
-            inChannels: 32,
             outChannels: 64,
-            inputHeight: 16,
-            inputWidth: 16,
             expansionRatio: 6,
             stride: 2,
             useSE: false);

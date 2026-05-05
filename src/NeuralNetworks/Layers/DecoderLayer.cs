@@ -193,6 +193,52 @@ public class DecoderLayer<T> : LayerBase<T>
 
         var inputShape = input.Shape.ToArray();
         ResolveShapes(inputShape, inputShape);
+
+        // Propagate the resolved per-sample feature shape to lazy
+        // sub-layers so ParameterCount reflects the real total before
+        // their own first Forward fires. Without this, sub-attention /
+        // FFN / norm layers keep their -1 sentinels and report 0 even
+        // after the parent's OnFirstForward — and the
+        // ParameterCount-vs-GetParameters invariant fails for
+        // architectures that query counts before training (the typical
+        // "report model size at construction" path).
+        var perSampleShape = new[] { inputSize };
+        var perSampleSeqShape = rank >= 2
+            ? new[] { input.Shape[rank - 2], inputSize }
+            : perSampleShape;
+        foreach (var sub in GetSubLayers())
+        {
+            if (sub is LayerBase<T> lb && !lb.IsShapeResolved)
+            {
+                // Try the [seq, features] shape first; if the sub-layer
+                // is rank-strict (e.g. wants exactly rank-2 features),
+                // fall back to the [features] shape. Catch ONLY
+                // ArgumentException — that's the documented contract
+                // failure for shape mismatch. NRE, OOM, configuration
+                // bugs etc. must propagate so a real problem isn't
+                // hidden behind a silent skip that leaves the sub-layer
+                // with -1 sentinel and breaks downstream Forward.
+                try
+                {
+                    lb.ResolveShapesOnly(perSampleSeqShape);
+                }
+                catch (ArgumentException)
+                {
+                    try
+                    {
+                        lb.ResolveShapesOnly(perSampleShape);
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Sub-layer genuinely needs a richer shape we
+                        // don't have here (e.g., expects [B, S, F] not
+                        // [S, F]). Leaving it unresolved is better than
+                        // forcing a wrong shape — first Forward will
+                        // resolve it correctly via OnFirstForward.
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
