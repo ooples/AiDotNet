@@ -187,8 +187,16 @@ public class LazySpatialLayerTests
         var pool = new PoolingLayer<double>(poolSize: 2, stride: 2, type: PoolingType.Max);
         var o1 = pool.Forward(Ramp(new[] { 1, 4, 16, 16 }));
         var o2 = pool.Forward(Ramp(new[] { 1, 4, 32, 32 }));
-        Assert.Equal(new[] { 1, 4, 8, 8 }, o1.Shape);
-        Assert.Equal(new[] { 1, 4, 16, 16 }, o2.Shape);
+        // Compare per-axis to avoid the net471 TensorShape vs int[] type
+        // mismatch — Tensor<T>.Shape is TensorShape on net471 (no implicit
+        // IEnumerable<int> conversion) but int[] on net10. Indexing works
+        // identically on both targets.
+        Assert.Equal(4, o1.Shape.Length);
+        Assert.Equal(1, o1.Shape[0]); Assert.Equal(4, o1.Shape[1]);
+        Assert.Equal(8, o1.Shape[2]); Assert.Equal(8, o1.Shape[3]);
+        Assert.Equal(4, o2.Shape.Length);
+        Assert.Equal(1, o2.Shape[0]); Assert.Equal(4, o2.Shape[1]);
+        Assert.Equal(16, o2.Shape[2]); Assert.Equal(16, o2.Shape[3]);
     }
 
     [Fact]
