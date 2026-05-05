@@ -36,11 +36,16 @@ async function stubLicenseRows(
     profiles: { full_name: 'Fixture Owner', email: 'fixture@example.com' },
   };
   await page.route('**/rest/v1/license_keys**', async (route) => {
-    if (route.request().method() !== 'GET') {
-      // Pass through non-GETs (or 204 the preflight) so updateLicenseStatus
-      // and similar mutations aren't masked by the stub. The admin/licenses
-      // tests don't mutate, but a future test could.
-      await route.fulfill({ status: 204 });
+    const method = route.request().method();
+    // Stub GETs (the read path that loads the table). For everything else
+    // — POST, PATCH, DELETE, OPTIONS preflight — let the request continue
+    // to the real network so a future test that exercises a mutation
+    // (suspend, revoke, reactivate) sees the genuine response and can
+    // assert on real failure modes. Synthesizing a 204 for non-GETs would
+    // mask those failures and produce false-green tests.
+    // Closes review-comment #1268.h3tm.
+    if (method !== 'GET') {
+      await route.continue();
       return;
     }
     await route.fulfill({
@@ -237,7 +242,7 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     expect(stub.requests[0].body).toEqual({ license_id: expectedId });
   });
 
-  test('resend button shows "failed" + tooltip carrying the server message on a 422', async ({ page }) => {
+  test('resend button shows "failed" with the server message visible inline on a 422', async ({ page }) => {
     const stub = await stubResend(page, {
       status: 422,
       body: {
@@ -258,13 +263,57 @@ test.describe('Admin — licenses copy + resend buttons', () => {
 
     await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
 
-    // The handler embeds the server message into the title attribute on
-    // the inner <span>, so the admin sees WHICH failure category fired
-    // (no_recipient → 422) on hover without opening devtools.
-    const failedSpan = firstResend.locator('span[title]').first();
-    await expect(failedSpan).toHaveAttribute('title', /customer_email/i, { timeout: 5_000 });
+    // Server message is rendered inline as visible text inside a
+    // role="alert" span so it's accessible to keyboard, touch, and
+    // screen-reader users (review-comment #1268.h3tx / .h3t6 — the
+    // previous tooltip-only placement was inaccessible).
+    const alertText = firstResend.locator('[role="alert"]');
+    await expect(alertText).toBeVisible({ timeout: 5_000 });
+    await expect(alertText).toContainText('customer_email');
 
     expect(stub.requests).toHaveLength(1);
+  });
+
+  test('resend dismiss button restores the original label on click and is keyboard-accessible', async ({ page }) => {
+    // PR #1268 review-comment #h3uM: pin the new dismiss interaction.
+    // Before this PR, failure auto-reverted via setTimeout and there was
+    // no dismiss control; this test ensures (a) the dismiss button
+    // appears on failure, (b) clicking it restores the idle label,
+    // (c) the dismiss control is a real <button> (not a clickable
+    // <span>), and (d) it carries an aria-label so assistive technology
+    // can identify it.
+    await stubResend(page, {
+      status: 500,
+      body: { success: false, error: 'send_failed', message: 'Resend provider returned 503.' },
+    });
+    page.on('dialog', (d) => d.accept());
+
+    await stubLicenseRows(page);
+    await page.goto('/admin/licenses/');
+    await expect(page.locator('#active-count')).not.toHaveText('--', { timeout: 15_000 });
+
+    const firstResend = page.locator('.resend-email-btn').first();
+    const originalLabel = (await firstResend.textContent() ?? '').trim();
+    await firstResend.click();
+
+    // Failure renders.
+    await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
+
+    // Dismiss control is a real <button> (not a clickable <span>) with
+    // a screen-reader-friendly aria-label.
+    const dismiss = firstResend.locator('button.resend-dismiss');
+    await expect(dismiss).toBeVisible();
+    await expect(dismiss).toHaveAttribute('type', 'button');
+    await expect(dismiss).toHaveAttribute('aria-label', /dismiss/i);
+
+    // Clicking dismiss clears the failure state and restores the
+    // pre-click label so the operator can retry.
+    await dismiss.click();
+    await expect(firstResend).not.toContainText(/failed/i, { timeout: 2_000 });
+    // The button text returns to whatever was originally there. The
+    // original label is short ("resend") so equality is fine.
+    const restored = (await firstResend.textContent() ?? '').trim();
+    expect(restored).toBe(originalLabel);
   });
 
   test('resend button makes no request when the admin cancels the confirm dialog', async ({ page }) => {
@@ -273,6 +322,8 @@ test.describe('Admin — licenses copy + resend buttons', () => {
       // Same preflight filter as stubResend — without it, a CORS OPTIONS
       // request from the browser would set invoked=true even when the
       // user dismissed the confirm and the actual POST never fired.
+      // Stub functions endpoint preflights with 204 so we never count
+      // them; this is the resend endpoint, not the rest/v1 stub.
       if (route.request().method() !== 'POST') {
         await route.fulfill({ status: 204 });
         return;

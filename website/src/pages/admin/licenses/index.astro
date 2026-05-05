@@ -565,6 +565,43 @@ const productsJson = JSON.stringify(PRODUCTS);
       attachHandlers();
     }
 
+    /**
+     * Renders the resend button's failure state — both the error-result
+     * branch (server returned a non-2xx) and the exception branch (network
+     * threw before a response arrived) flow through here so the markup,
+     * dismiss wiring, and accessibility attributes stay in lockstep.
+     *
+     * Accessibility notes:
+     *   - The actionable server message is rendered as visible inline
+     *     text wrapped in <span role="alert" aria-live="polite"> so screen
+     *     readers announce it on append. The previous tooltip-only
+     *     placement was inaccessible to keyboard, touch, and assistive
+     *     technology users (review-comment #1268.h3tx / .h3t6).
+     *   - Dismiss is a real <button> with type="button" and aria-label so
+     *     it's focusable, keyboard-activatable (Enter/Space), and screen-
+     *     reader-discoverable. The <span> + click-handler version was
+     *     mouse-only (review-comment #1268.h3uC).
+     *   - Refactored out of the call-site so future changes to the failure
+     *     markup (label text, dismiss UX) don't drift between the
+     *     error-result and exception branches (review-comment
+     *     #1268.h3uQ / .h3ua).
+     */
+    function renderResendFailure(btn: Element, orig: string, serverMsg: string | undefined): void {
+      const messageBlock = serverMsg
+        ? `<span role="alert" aria-live="polite" class="ml-2 text-xs text-red-600 dark:text-red-400">${escapeHtml(serverMsg)}</span>`
+        : '';
+      btn.innerHTML =
+        `<span class="text-red-500">failed</span>${messageBlock}`
+        + ` <button type="button" class="resend-dismiss text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer ml-1" aria-label="Dismiss failure message">✕</button>`;
+      const dismiss = btn.querySelector('.resend-dismiss');
+      if (dismiss) {
+        dismiss.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          btn.innerHTML = orig;
+        });
+      }
+    }
+
     function attachHandlers() {
       const tbody = document.getElementById('licenses-body');
       if (!tbody) return;
@@ -717,40 +754,14 @@ const productsJson = JSON.stringify(PRODUCTS);
                 // generic "failed" label.
               }
               console.error('Resend failed:', { error, serverMsg });
-              // Persistent failure label: include both the visible "failed"
-              // text AND a click-to-dismiss "✕" so the operator can clear
-              // the message manually after reading it. The tooltip carries
-              // the actionable server message.
-              const escapedMsg = serverMsg ? escapeHtml(serverMsg) : '';
-              btn.innerHTML = serverMsg
-                ? `<span class="text-red-500" title="${escapedMsg}">failed</span>`
-                  + ` <span class="resend-dismiss text-xs text-slate-400 cursor-pointer hover:text-slate-600" title="Dismiss">✕</span>`
-                : `<span class="text-red-500">failed</span>`
-                  + ` <span class="resend-dismiss text-xs text-slate-400 cursor-pointer hover:text-slate-600" title="Dismiss">✕</span>`;
-              // Click-to-dismiss restores the original label so the operator
-              // can retry without a page reload.
-              const dismiss = btn.querySelector('.resend-dismiss');
-              if (dismiss) {
-                dismiss.addEventListener('click', (ev) => {
-                  ev.stopPropagation();
-                  btn.innerHTML = orig;
-                });
-              }
+              renderResendFailure(btn, orig, serverMsg);
             } else {
               btn.innerHTML = '<span class="text-green-500">sent</span>';
               succeeded = true;
             }
           } catch (err) {
             console.error('Resend invoke threw:', err);
-            btn.innerHTML = '<span class="text-red-500">failed</span>'
-              + ` <span class="resend-dismiss text-xs text-slate-400 cursor-pointer hover:text-slate-600" title="Dismiss">✕</span>`;
-            const dismiss = btn.querySelector('.resend-dismiss');
-            if (dismiss) {
-              dismiss.addEventListener('click', (ev) => {
-                ev.stopPropagation();
-                btn.innerHTML = orig;
-              });
-            }
+            renderResendFailure(btn, orig, undefined);
           } finally {
             // Always release the in-flight guard so the operator can
             // retry on transient failures without reloading the page.

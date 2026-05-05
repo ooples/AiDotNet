@@ -67,29 +67,44 @@ export interface LicenseEmailInput {
   tier: string;
   /** Product slug as stored in the `license_product` enum (aidotnet, harmonic_engine, …). */
   product: string;
+  /**
+   * Human-readable product name used in the email subject, headings,
+   * paragraph copy, and signature. Callers are responsible for providing
+   * this — typically by resolving the product slug against their own
+   * product registry (admin UI's PRODUCTS array, a DB lookup, etc.).
+   * If omitted, a best-effort fallback derives a display name from the
+   * slug by capitalizing the first character of each underscore-delimited
+   * token (`harmonic_engine` → `Harmonic Engine`). The fallback is
+   * intentionally NOT a hardcoded brand-specific map — that approach
+   * created multiple sources of truth and silently misbranded any
+   * unmapped slug. If the rendered display name looks wrong, the call
+   * site should pass an explicit `productDisplayName`.
+   */
+  productDisplayName?: string;
   isExisting?: boolean;
 }
 
 /**
- * Maps the `license_product` enum slug to a human-readable display name
- * for use in email subjects, headings, and signature lines. Keep this
- * aligned with the PRODUCTS array in
- * website/src/pages/admin/licenses/index.astro and the enum migration in
- * website/supabase/migrations/20260419000000_add_product_to_license_keys.sql.
- *
- * Used by both renderText() and renderHtml() so the entire email — subject,
- * heading, body text, signature — refers to the same brand. Without this
- * map, the subject said "Welcome to Harmonic Engine" while the body still
- * said "Your AiDotNet license key" and the signature still said "— The
- * AiDotNet team", which is the inconsistency review-comment #1256.hteC
- * called out.
+ * Best-effort slug→display fallback used when the caller didn't pass an
+ * explicit `productDisplayName`. Capitalizes the first character of each
+ * underscore-delimited token so `harmonic_engine` → `Harmonic Engine`,
+ * `aidotnet` → `Aidotnet`. The capitalization is generic, not
+ * brand-aware (we used to have a hardcoded `aidotnet→AiDotNet` /
+ * `harmonic_engine→Harmonic Engine` map but the reviewer correctly
+ * flagged it as a duplicate source of truth alongside the admin UI's
+ * PRODUCTS array and the `license_product` enum migration; callers
+ * passing the display name explicitly is the single-source-of-truth
+ * fix). For pretty branding, pass `productDisplayName` from the call
+ * site's product registry.
  */
-function productDisplayName(slug: string | undefined | null): string {
-  switch ((slug ?? "").trim().toLowerCase()) {
-    case "aidotnet": return "AiDotNet";
-    case "harmonic_engine": return "Harmonic Engine";
-    default: return "AiDotNet"; // safe fallback for unknown / future slugs
-  }
+function fallbackDisplayNameFromSlug(slug: string | undefined | null): string {
+  const cleaned = (slug ?? "").trim();
+  if (cleaned.length === 0) return "Product";
+  return cleaned
+    .split("_")
+    .filter((part) => part.length > 0)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
 }
 
 export interface LicenseEmailResult {
@@ -121,9 +136,10 @@ export async function sendLicenseKeyEmail(input: LicenseEmailInput): Promise<Lic
 
   // Resolve the display name once and thread it through subject + body
   // so every surface (heading, paragraph copy, signature) uses the same
-  // brand. The `product` field is a slug — productDisplayName() maps
-  // it to "AiDotNet" / "Harmonic Engine" / etc.
-  const productName = productDisplayName(input.product);
+  // brand. Callers SHOULD pass `productDisplayName` explicitly from
+  // their product registry (admin UI / DB / static config); if they
+  // don't, fall back to a generic capitalized form of the slug.
+  const productName = (input.productDisplayName?.trim()) || fallbackDisplayNameFromSlug(input.product);
   const subject = input.isExisting
     ? `Your ${productName} ${input.tier} license key`
     : `Welcome to ${productName} — your ${input.tier} license key`;
@@ -192,7 +208,7 @@ function renderText(i: LicenseEmailInput, accountUrl: string, productName: strin
     `You can always view, copy, or revoke this key at:`,
     `  ${accountUrl}`,
     ``,
-    `Product: ${i.product}`,
+    `Product: ${productName}`,
     `Tier: ${i.tier}`,
     ``,
     `If you didn't request this license, please reply to this email so we can revoke it.`,
@@ -209,7 +225,7 @@ function renderHtml(i: LicenseEmailInput, accountUrl: string, productName: strin
 <html>
 <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #0f172a; max-width: 560px; margin: 0 auto; padding: 24px;">
   <h2 style="margin-top: 0;">Your ${safeProductName} ${escapeHtml(i.tier)} license key</h2>
-  <p>${verb} ${safeProductName} <strong>${escapeHtml(i.tier)}</strong> license key for the <strong>${escapeHtml(i.product)}</strong> product:</p>
+  <p>${verb} <strong>${safeProductName}</strong> <strong>${escapeHtml(i.tier)}</strong> license key:</p>
   <pre style="background: #0f172a; color: #f1f5f9; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px;"><code>AIDOTNET_LICENSE_KEY=${escapeHtml(i.licenseKey)}</code></pre>
   <p><strong>Quick start:</strong></p>
   <ul>
