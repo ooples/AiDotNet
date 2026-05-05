@@ -280,8 +280,11 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     // no dismiss control; this test ensures (a) the dismiss button
     // appears on failure, (b) clicking it restores the idle label,
     // (c) the dismiss control is a real <button> (not a clickable
-    // <span>), and (d) it carries an aria-label so assistive technology
-    // can identify it.
+    // <span>), and (d) it is reachable AND activatable from the
+    // keyboard (tab to focus, Enter or Space to activate) — review-
+    // comment #1268.iCxY/g/k/o flagged that earlier revisions only
+    // checked attributes, which would let a regression that broke
+    // keyboard reach (display:none focus, tabindex=-1, etc.) pass.
     await stubResend(page, {
       status: 500,
       body: { success: false, error: 'send_failed', message: 'Resend provider returned 503.' },
@@ -300,20 +303,47 @@ test.describe('Admin — licenses copy + resend buttons', () => {
     await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
 
     // Dismiss control is a real <button> (not a clickable <span>) with
-    // a screen-reader-friendly aria-label.
-    const dismiss = firstResend.locator('button.resend-dismiss');
+    // a screen-reader-friendly aria-label. The dismiss is rendered as a
+    // SIBLING of the resend button (button-within-button is invalid
+    // markup), so locate it via the resend button's parent rather than
+    // as a descendant of the resend button.
+    const resendRow = firstResend.locator('xpath=..');
+    const dismiss = resendRow.locator('> button.resend-dismiss');
     await expect(dismiss).toBeVisible();
     await expect(dismiss).toHaveAttribute('type', 'button');
     await expect(dismiss).toHaveAttribute('aria-label', /dismiss/i);
 
-    // Clicking dismiss clears the failure state and restores the
-    // pre-click label so the operator can retry.
-    await dismiss.click();
+    // Real keyboard reachability: tab from the resend button to the
+    // dismiss control (it should be the very next focusable element in
+    // DOM order since it's an immediate sibling). If anything along
+    // the way regresses (tabindex=-1, hidden, focusable: false), this
+    // expect-focus assertion fails and locks down the regression.
+    await firstResend.focus();
+    await page.keyboard.press('Tab');
+    await expect(dismiss).toBeFocused();
+
+    // Real keyboard activation: pressing Enter on a focused <button>
+    // fires a click event. Without a proper <button> element (e.g., if
+    // someone regresses back to a clickable <span>), Enter would do
+    // nothing and the failure state would remain — catching that is
+    // the whole point of this assertion.
+    await page.keyboard.press('Enter');
     await expect(firstResend).not.toContainText(/failed/i, { timeout: 2_000 });
     // The button text returns to whatever was originally there. The
     // original label is short ("resend") so equality is fine.
     const restored = (await firstResend.textContent() ?? '').trim();
     expect(restored).toBe(originalLabel);
+
+    // Sanity: a second failure → dismiss cycle, this time using Space
+    // (the OTHER conventional button-activation key). A regression that
+    // bound a keypress handler to Enter only would fail here.
+    await firstResend.click();
+    await expect(firstResend).toContainText(/failed/i, { timeout: 5_000 });
+    const dismiss2 = resendRow.locator('> button.resend-dismiss');
+    await expect(dismiss2).toBeVisible();
+    await dismiss2.focus();
+    await page.keyboard.press('Space');
+    await expect(firstResend).not.toContainText(/failed/i, { timeout: 2_000 });
   });
 
   test('resend button makes no request when the admin cancels the confirm dialog', async ({ page }) => {

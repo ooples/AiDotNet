@@ -8,7 +8,8 @@
 //
 // Adding a product means three coordinated changes:
 //   1. Add the slug to the enum (new migration: ALTER TYPE … ADD VALUE).
-//   2. Add an entry here.
+//   2. Add the slug + display name to PRODUCT_DISPLAY_NAMES below
+//      (and the corresponding `ProductSlug` union literal).
 //   3. Add an entry in the admin Astro PRODUCTS array.
 //
 // Until the runtime gap can be closed (e.g., by emitting both files from
@@ -18,37 +19,90 @@
 // to ship its own private slug→display map, which the reviewer flagged
 // in PR #1268.
 
+/**
+ * Compile-time-checked union of every supported `license_product` enum
+ * slug. Adding a new product requires extending this union AND the
+ * `PRODUCT_DISPLAY_NAMES` registry below — TypeScript will refuse to
+ * compile if the two drift apart, which is the whole point of the union.
+ *
+ * Callers that hold a slug from a typed source (constant, env var,
+ * stripe-webhook config) should use `ProductSlug` directly so a typo is
+ * caught at build time instead of at runtime via
+ * `resolveProductDisplayName` throwing on the unknown slug.
+ */
+export type ProductSlug = "aidotnet" | "harmonic_engine";
+
 export interface ProductInfo {
   /** The `license_product` enum slug stored in the DB. */
-  slug: string;
+  slug: ProductSlug;
   /** Human-readable display name used in email subject/body/signature. */
   displayName: string;
 }
 
 /**
+ * Slug → display-name registry. The `Record<ProductSlug, string>` type
+ * forces this object to have an entry for every member of `ProductSlug` —
+ * forgetting one is a TypeScript error, not a silent runtime fallback to
+ * a generic capitalized form.
+ */
+const PRODUCT_DISPLAY_NAMES: Readonly<Record<ProductSlug, string>> = {
+  aidotnet: "AiDotNet",
+  harmonic_engine: "Harmonic Engine",
+};
+
+/**
  * Edge-function product registry. Keep aligned with the admin UI's
  * PRODUCTS array and the `license_product` Postgres enum.
  */
-export const PRODUCTS: ReadonlyArray<ProductInfo> = [
-  { slug: "aidotnet", displayName: "AiDotNet" },
-  { slug: "harmonic_engine", displayName: "Harmonic Engine" },
-];
+export const PRODUCTS: ReadonlyArray<ProductInfo> =
+  (Object.keys(PRODUCT_DISPLAY_NAMES) as ProductSlug[]).map((slug) => ({
+    slug,
+    displayName: PRODUCT_DISPLAY_NAMES[slug],
+  }));
 
 /**
- * Looks up the human-readable product name for a `license_product` slug.
- * Returns `undefined` for unknown slugs so the caller can decide whether
- * to fall back to a generic display name (preserving "ship something
- * sensible") or warn (preserving "fail loudly on unknown product").
+ * Type guard — narrows an arbitrary string (e.g., a Postgres row value
+ * read at runtime) to the `ProductSlug` union. Returns false for
+ * unknown slugs so the caller can decide how to handle drift between
+ * the DB enum and this registry.
+ */
+export function isProductSlug(value: unknown): value is ProductSlug {
+  return typeof value === "string" && (value in PRODUCT_DISPLAY_NAMES);
+}
+
+/**
+ * Resolves a product slug to its display name. Throws on unknown slugs
+ * because misbranding a customer-facing email is a programmer error
+ * (the slug got into the DB enum without being added to this registry)
+ * — failing fast surfaces it during local testing instead of shipping
+ * a customer email titled "Welcome to Some_New_Product".
  *
- * `sendLicenseKeyEmail` callers should resolve this and pass it as
- * `productDisplayName` so the entire email — subject, heading, body
- * paragraph, signature — uses the same brand name.
+ * For tolerant lookups (e.g., a logging path that should never throw)
+ * use `isProductSlug` + `PRODUCT_DISPLAY_NAMES[slug]` directly.
+ */
+export function resolveProductDisplayName(slug: string | null | undefined): string {
+  const cleaned = (slug ?? "").trim().toLowerCase();
+  if (cleaned.length === 0) {
+    throw new Error("resolveProductDisplayName: product slug is required (got empty/missing).");
+  }
+  if (!isProductSlug(cleaned)) {
+    throw new Error(
+      `resolveProductDisplayName: '${cleaned}' is not a known product slug. ` +
+      "Add it to PRODUCT_DISPLAY_NAMES in products.ts and ensure the " +
+      "license_product enum migration covers it.",
+    );
+  }
+  return PRODUCT_DISPLAY_NAMES[cleaned];
+}
+
+/**
+ * Tolerant variant — returns `undefined` for unknown slugs instead of
+ * throwing. Retained for callers that intentionally want a soft lookup
+ * (e.g., a logging or analytics path where misbranding is preferable to
+ * a 500). For email/subject building, use `resolveProductDisplayName`.
  */
 export function lookupProductDisplayName(slug: string | undefined | null): string | undefined {
   const cleaned = (slug ?? "").trim().toLowerCase();
   if (cleaned.length === 0) return undefined;
-  for (const p of PRODUCTS) {
-    if (p.slug === cleaned) return p.displayName;
-  }
-  return undefined;
+  return isProductSlug(cleaned) ? PRODUCT_DISPLAY_NAMES[cleaned] : undefined;
 }

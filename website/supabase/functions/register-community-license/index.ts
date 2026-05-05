@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
-import { lookupProductDisplayName } from "../_shared/products.ts";
+import { type ProductSlug } from "../_shared/products.ts";
 
 // Default matches the production origin the marketing site actually serves from.
 // Override via the ALLOWED_ORIGIN function secret for staging / preview envs.
@@ -18,7 +18,7 @@ const corsHeaders = {
 // have their own issuance paths. Keeping these as named constants avoids
 // string drift between the lookup and insert paths and makes
 // product-specific changes a one-liner.
-const COMMUNITY_PRODUCT = "aidotnet" as const;
+const COMMUNITY_PRODUCT: ProductSlug = "aidotnet";
 // Key prefix that the AiDotNet client library parses. See
 // LicenseValidator.IsServerValidatedKeyFormat in src/Helpers/LicenseValidator.cs:
 // ≥4 dash-delimited segments, segment[0]=="AIDN", last segment is ≥8 hex chars.
@@ -201,7 +201,6 @@ serve(async (req: Request) => {
         licenseKey,
         tier: COMMUNITY_TIER,
         product: COMMUNITY_PRODUCT,
-        productDisplayName: lookupProductDisplayName(COMMUNITY_PRODUCT),
         isExisting: false,
       });
     } else {
