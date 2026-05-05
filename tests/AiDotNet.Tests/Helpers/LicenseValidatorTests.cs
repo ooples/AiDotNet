@@ -101,6 +101,9 @@ public class LicenseValidatorTests
         Assert.Same(first, cached);
     }
 
+#if !NET471
+    // ValidateAsync only exists on net10+ (the LicenseValidator source has
+    // its async path under `#if !NET471`). Gate the test to match.
     [Fact(Timeout = 60000)]
     public async Task OfflineMode_ServerValidatedKey_AsyncPath_IsRejected()
     {
@@ -116,6 +119,7 @@ public class LicenseValidatorTests
         Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
         Assert.Contains("aidn.{id}.{signature}", result.Message);
     }
+#endif
 
     [Fact(Timeout = 60000)]
     public async Task DefaultServerUrl_IsSet()
