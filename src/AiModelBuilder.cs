@@ -3072,44 +3072,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // This is required for InitializeRandomSolution to access model.ParameterCount
             finalOptimizer.SetModel(model);
 
-            // BUG FIX (closes ooples/AiDotNet#1267 root cause): for neural networks,
-            // finalOptimizer.Optimize uses the OUTER clone-evaluate-select hyperparameter
-            // loop — it never invokes the tape-based training path that actually trains
-            // attention / FFN / embedding weights. The OptimizationResult.BestSolution
-            // it returns is a fresh clone whose weights are at their initial zero/Xavier
-            // state — NOT the trained model. Test reproducer at
-            // tests/.../AiModelBuilderFacadePredictParityTests showed direct vs facade
-            // L2 maxDiff of 0.555 (facade always returns uniform softmax output).
-            //
-            // Correct neural-network path: directly invoke model.Train(batch) which
-            // routes through TrainWithTape → Optimizer.Step(TapeStepContext) → real
-            // gradient updates. Then construct an OptimizationResult with the trained
-            // model as BestSolution.
-            if (model is INeuralNetwork<T> nn && optimizationInputData.XTrain is Tensor<T> xTrainTensor && optimizationInputData.YTrain is Tensor<T> yTrainTensor)
-            {
-                var nnEpochs = (finalOptimizer as Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput>)?.GetOptions()?.MaxIterations ?? 100;
-                for (int epoch = 0; epoch < nnEpochs; epoch++)
-                {
-                    nn.Train(xTrainTensor, yTrainTensor);
-                }
-                // Build optimizationResult with the trained model as BestSolution.
-                // SelectedFeatureIndices is the identity mapping (we trained on all
-                // features); the test invariant relies on this being identity so
-                // ApplySelectedFeaturesForPrediction skips slicing.
-                int featureCount = (xTrainTensor.Rank > 0) ? xTrainTensor.Shape[xTrainTensor.Rank - 1] : 1;
-                optimizationResult = new OptimizationResult<T, TInput, TOutput>
-                {
-                    BestSolution = model,
-                    SelectedFeatureIndices = Enumerable.Range(0, featureCount).ToList(),
-                    Iterations = nnEpochs,
-                    BestFitnessScore = nn.GetLastLoss(),
-                };
-            }
-            else
-            {
-                // Optimize the final model on the full training set
-                optimizationResult = finalOptimizer.Optimize(optimizationInputData);
-            }
+            // Optimize the final model on the full training set
+            optimizationResult = finalOptimizer.Optimize(optimizationInputData);
         }
 
         var trainingEndTime = DateTime.UtcNow;

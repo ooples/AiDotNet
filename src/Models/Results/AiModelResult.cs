@@ -1817,11 +1817,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public TOutput Predict(TInput newData)
     {
-        if (Model is null)
+        if (Model == null)
         {
             throw new InvalidOperationException("Model is not initialized.");
         }
-        var model = Model;  // local non-null alias so downstream branches don't trip nullable analysis
 
         // Bridge builder-configured JIT compilation flags into this thread's
         // TensorCodecOptions so CompiledModelCache engages correctly.
@@ -1874,7 +1873,14 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // BUG FIX (closes #1267): for neural-network models, ensure inference
         // mode is active before any prediction path. AiModelBuilder.BuildAsync
-        // leaves the model in training mode after the final epoch.
+        // leaves the model in training-mode after the final epoch (so dropout,
+        // batch-norm running stats, attention masking, etc. were all in their
+        // training configurations). Calling Model.Predict directly without
+        // toggling SetTrainingMode(false) means dropout masks remain active
+        // and outputs are randomized, producing apparent uniform/zero
+        // predictions even though the underlying weights are trained.
+        // The direct Transformer.Predict path consumers explicitly call
+        // SetTrainingMode(false); the facade path was the broken case.
         if (Model is NeuralNetworks.NeuralNetworkBase<T> nnForInference)
         {
             nnForInference.SetTrainingMode(false);
@@ -1899,7 +1905,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 else
                 {
                     // Fallback to the wrapped model if type mismatch occurs
-                    normalizedPredictions = model.Predict(normalizedNewData);
+                    normalizedPredictions = Model.Predict(normalizedNewData);
                 }
 
                 return PreprocessingInfo?.IsTargetFitted == true
@@ -1919,13 +1925,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             else
             {
                 // Fallback to model if JIT result is unexpected
-                normalizedPredictions = model.Predict(normalizedNewData);
+                normalizedPredictions = Model.Predict(normalizedNewData);
             }
         }
         else
         {
             // NORMAL PATH: Use model's standard prediction
-            normalizedPredictions = model.Predict(normalizedNewData);
+            normalizedPredictions = Model.Predict(normalizedNewData);
         }
 
         var denormalized = PreprocessingInfo?.IsTargetFitted == true
