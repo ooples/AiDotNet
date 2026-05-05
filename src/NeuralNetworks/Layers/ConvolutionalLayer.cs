@@ -1467,11 +1467,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
                     $"Cannot infer inputDepth for ConvolutionalLayer from {parameters.Length} parameters " +
                     $"(outputDepth={OutputDepth}, kernelSize={KernelSize}).");
             // Convolutional layers need a 3D inputShape [C, H, W]; H/W can't be
-            // derived from the parameter vector alone. ResolveFromShape with
-            // dummy spatial dims = 1 — kernels and biases only depend on
-            // inputDepth/outputDepth/kernelSize, so spatial dims here are
-            // immaterial for SetParameters.
-            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
+            // derived from the parameter vector alone. Use spatial dims =
+            // KernelSize so OnFirstForward's "input spatial dims must be
+            // >= kernelSize" guard passes — kernels and biases only depend
+            // on inputDepth/outputDepth/kernelSize, so the actual spatial
+            // dims used here are immaterial for SetParameters. Using 1×1
+            // would fail the guard for any kernelSize>1.
+            ResolveFromShape(new[] { candidateInputDepth, KernelSize, KernelSize });
         }
 
         EnsureInitialized();

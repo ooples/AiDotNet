@@ -282,14 +282,25 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         _numPatchesWidth = _imageWidth / _patchSize;
         _numPatches = _numPatchesHeight * _numPatchesWidth;
 
-        int patchDim = _channels * _patchSize * _patchSize;
-        _projectionWeights = AllocateLazyWeight([patchDim, _embeddingDim]);
-        _projectionBias = AllocateLazyWeight([_embeddingDim]);
+        // Only allocate + initialize weights if SetParameters / Deserialize
+        // hasn't already done so. The serialize/deserialize round-trip
+        // path: fresh layer → Deserialize → SetParameters allocates and
+        // fills _projectionWeights with the saved values → first Forward
+        // runs OnFirstForward → without this guard, OnFirstForward would
+        // overwrite the loaded weights with new Xavier-init values and
+        // the test's "outputs match after roundtrip" assertion would
+        // fail.
+        if (_projectionWeights.Shape[0] == 0)
+        {
+            int patchDim = _channels * _patchSize * _patchSize;
+            _projectionWeights = AllocateLazyWeight([patchDim, _embeddingDim]);
+            _projectionBias = AllocateLazyWeight([_embeddingDim]);
 
-        InitializeParameters();
+            InitializeParameters();
 
-        RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
+            RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
+        }
 
         ResolveShapes(
             new[] { _channels, _imageHeight, _imageWidth },
@@ -502,6 +513,35 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if weights aren't allocated yet (placeholder Length 0),
+        // infer the input channel count from the parameter vector.
+        // Layout: projectionWeights [channels*patchSize², embeddingDim] +
+        // projectionBias [embeddingDim]. Total = embeddingDim *
+        // (channels*patchSize² + 1). We allocate the projection tensors
+        // directly with the inferred channels, but leave image H/W
+        // unresolved so OnFirstForward picks them up from the actual
+        // input on first Forward — this is what makes
+        // Serialize_Deserialize_ShouldPreserveBehavior work even when
+        // the test re-runs Forward with a different image size.
+        if (_projectionWeights.Shape[0] == 0)
+        {
+            int patchArea = _patchSize * _patchSize;
+            int divisor = _embeddingDim * patchArea;
+            int candidateChannels = (parameters.Length - _embeddingDim) / divisor;
+            if (candidateChannels <= 0
+                || _embeddingDim * (candidateChannels * patchArea + 1) != parameters.Length)
+            {
+                throw new ArgumentException(
+                    $"Cannot infer channel count for PatchEmbeddingLayer from {parameters.Length} parameters " +
+                    $"(patchSize={_patchSize}, embeddingDim={_embeddingDim}).");
+            }
+            _channels = candidateChannels;
+            _projectionWeights = new Tensor<T>([candidateChannels * patchArea, _embeddingDim]);
+            _projectionBias = new Tensor<T>([_embeddingDim]);
+            RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
+        }
+
         int totalParams = _projectionWeights.Shape[0] * _projectionWeights.Shape[1] + _projectionBias.Shape[0];
 
         if (parameters.Length != totalParams)

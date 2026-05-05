@@ -26,7 +26,13 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_ZeroInput_ReturnsBias()
     {
+        // Lazy ctor; resolve from input shape so biases are allocated
+        // before reading them. The original test called GetBiases on
+        // a placeholder tensor (Length=0), making the comparison loop
+        // a no-op vacuously pass — but Forward then crashed because
+        // input shape didn't match unresolved layer state.
         var layer = new DenseLayer<double>(2);
+        layer.ResolveFromShape(new[] { 3 });
         var biases = layer.GetBiases();
 
         var input = new Tensor<double>(new[] { 0.0, 0.0, 0.0 }, [3]);
@@ -43,7 +49,10 @@ public class LayerMathematicalTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_ParameterCount()
     {
+        // Lazy ctor; resolve from input shape (10) so weights are
+        // materialized before reading ParameterCount.
         var layer = new DenseLayer<double>(5);
+        layer.ResolveFromShape(new[] { 10 });
         Assert.Equal(55, (int)layer.ParameterCount); // 10*5 + 5
     }
 

@@ -1351,9 +1351,23 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override void Deserialize(BinaryReader reader)
     {
+        // Lazy ctor: if shape isn't resolved, peek at the saved weights
+        // length to recover inputSize (= wLen / outputSize) and resolve
+        // before EnsureInitialized tries to allocate with a -1 sentinel.
+        // We use ReadInt32 + UnreadInt32 trick — simpler: read wLen first,
+        // then resolve, then read the weight values.
+        int wLen = reader.ReadInt32();
+        if (!IsShapeResolved)
+        {
+            int outputSize = OutputShape[0];
+            if (outputSize > 0 && wLen > 0 && wLen % outputSize == 0)
+            {
+                int inferredInput = wLen / outputSize;
+                ResolveFromShape(new[] { inferredInput });
+            }
+        }
         EnsureInitialized();
         // Read weights IN PLACE to preserve engine's persistent tensor reference
-        int wLen = reader.ReadInt32();
         var wSpan = _weights.Data.Span;
         for (int i = 0; i < Math.Min(wLen, _weights.Length); i++)
             wSpan[i] = NumOps.FromDouble(reader.ReadDouble());

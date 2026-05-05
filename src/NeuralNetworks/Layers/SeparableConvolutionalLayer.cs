@@ -827,6 +827,27 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if shape isn't resolved (placeholders with Length 0),
+        // infer inputDepth from the param vector. Param layout:
+        //   depthwise: inputDepth * kernelSize²
+        //   pointwise: inputDepth * outputDepth
+        //   biases: outputDepth
+        //   total = inputDepth * (kernelSize² + outputDepth) + outputDepth
+        if (!IsShapeResolved)
+        {
+            int kernelArea = _kernelSize * _kernelSize;
+            int divisor = kernelArea + _outputDepth;
+            int candidateInputDepth = (parameters.Length - _outputDepth) / divisor;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * divisor + _outputDepth != parameters.Length)
+            {
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for SeparableConvolutionalLayer from {parameters.Length} parameters " +
+                    $"(outputDepth={_outputDepth}, kernelSize={_kernelSize}).");
+            }
+            ResolveFromShape(new[] { 1, _kernelSize, _kernelSize, candidateInputDepth });
+        }
+
         int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
 
         if (parameters.Length != totalParams)

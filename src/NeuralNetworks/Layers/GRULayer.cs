@@ -1473,6 +1473,23 @@ public partial class GRULayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if shape isn't resolved (placeholder W/U/b tensors
+        // with Length 0), infer inputSize from the param vector. Layout:
+        //   3*W[hiddenSize, inputSize] + 3*U[hiddenSize, hiddenSize] + 3*b[hiddenSize]
+        //   = 3*hiddenSize*(inputSize + hiddenSize + 1)
+        // → inputSize = total/(3*hiddenSize) - hiddenSize - 1.
+        if (!IsShapeResolved && _hiddenSize > 0)
+        {
+            int divisor = 3 * _hiddenSize;
+            if (parameters.Length % divisor == 0)
+            {
+                int candidateInput = parameters.Length / divisor - _hiddenSize - 1;
+                if (candidateInput > 0)
+                {
+                    ResolveFromShape(new[] { candidateInput });
+                }
+            }
+        }
         // Bulk copy from parameter vector into tensor storage — avoids per-element SetFlat calls
         int idx = 0;
         parameters.Slice(idx, _Wz.Length).AsSpan().CopyTo(_Wz.Data.Span); idx += _Wz.Length;

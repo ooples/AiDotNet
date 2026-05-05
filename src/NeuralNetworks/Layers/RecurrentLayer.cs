@@ -831,12 +831,30 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if not initialized but params have content, infer
+        // inputSize from the param vector. Layout:
+        //   inputWeights [hiddenSize, inputSize] + hiddenWeights [hiddenSize, hiddenSize] + biases [hiddenSize]
+        //   = hiddenSize * (inputSize + hiddenSize + 1)
+        // → inputSize = total/hiddenSize - hiddenSize - 1
+        if (!_isInitialized && parameters.Length > 0 && _hiddenSize > 0)
+        {
+            if (parameters.Length % _hiddenSize == 0)
+            {
+                int candidateInput = parameters.Length / _hiddenSize - _hiddenSize - 1;
+                if (candidateInput > 0)
+                {
+                    ResolveFromShape(new[] { candidateInput });
+                }
+            }
+        }
+
         if (!_isInitialized && parameters.Length > 0)
         {
             throw new InvalidOperationException(
                 $"RecurrentLayer.SetParameters({parameters.Length}) called before the lazy " +
-                $"input width was resolved. Call ResolveFromShape(...) or run a Forward(input) " +
-                $"pass first so the layer can allocate weight tensors of the correct shape.");
+                $"input width was resolved, and inference from {parameters.Length} parameters with " +
+                $"hiddenSize={_hiddenSize} did not yield a valid inputSize. Call ResolveFromShape(...) " +
+                "or run a Forward(input) pass first so the layer can allocate weight tensors of the correct shape.");
         }
 
         int inputWeightsSize = _inputWeights.Length;
