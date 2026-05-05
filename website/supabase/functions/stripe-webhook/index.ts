@@ -1,14 +1,20 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
+import { sendLicenseKeyEmail } from "../_shared/email.ts";
 
 // Product this webhook issues licenses for. All Stripe products created
 // for aidotnet.dev route through here; Harmonic Engine (and any future
 // products) will get their own webhook + edge function path.
 const WEBHOOK_PRODUCT = "aidotnet" as const;
-// Key prefix must match what the client library parses; see
-// website/src/pages/admin/licenses/index.astro's PRODUCTS list.
-const WEBHOOK_PREFIX = "aidn" as const;
+// Key prefix that the AiDotNet client library parses for online-validated
+// keys. See LicenseValidator.IsServerValidatedKeyFormat in src/Helpers/
+// LicenseValidator.cs of this repo: keys must split into ≥4 dash-delimited
+// segments starting with "AIDN" and end with ≥8 hex chars. The dotted
+// `aidn.{id}.{sig}` form is also accepted by the library, but only with a
+// real HMAC signature against a build key the webhook doesn't have access
+// to — so the dash form is the only viable issuance path here.
+const WEBHOOK_PREFIX = "AIDN-PROD" as const;
 
 // Per-tier activation caps. Keeping them in one map so bumping a tier's
 // cap doesn't require hunting through the handlers.
@@ -215,10 +221,18 @@ async function handleCheckoutCompleted(
     return;
   }
 
-  // Generate a fresh {prefix}.{12rand}.{16rand} key.
-  const keyPart1 = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
-  const keyPart2 = crypto.randomUUID().replace(/-/g, "").substring(0, 16);
-  const licenseKey = `${WEBHOOK_PREFIX}.${keyPart1}.${keyPart2}`;
+  // Generate a fresh AIDN-PROD-{TIER_UPPER}-{32hex} key. Format must
+  // satisfy LicenseValidator.IsServerValidatedKeyFormat in the AiDotNet
+  // client library: ≥4 dash-delimited segments, segment[0]=="AIDN", last
+  // segment is ≥8 hex chars. Empirically verified that
+  // `AIDN-PROD-PROFESSIONAL-{32hex}` validates end-to-end through the
+  // online validate-license edge function path.
+  //
+  // Previous format (`aidn.{id}.{sig}`) was rejected by the client
+  // library because the dotted form requires HMAC-SHA256 signing against
+  // a build key the webhook does not have access to. See ooples/AiDotNet#1262.
+  const keyHex = crypto.randomUUID().replace(/-/g, "");
+  const licenseKey = `${WEBHOOK_PREFIX}-${tier.toUpperCase()}-${keyHex}`;
 
   const { error: insertError } = await client
     .from("license_keys")
@@ -240,6 +254,29 @@ async function handleCheckoutCompleted(
   }
 
   console.log(`Issued ${tier} license ${licenseKey.substring(0, 12)}... for user ${userId}`);
+
+  // Best-effort key delivery email. The license row above is the source
+  // of truth — failure here is logged but never thrown so a flaky email
+  // transport doesn't block license issuance (Stripe would retry the
+  // event and we'd then hit the duplicate-active short-circuit above).
+  // Recipient address is taken from session.customer_details.email,
+  // which Stripe collects as part of every checkout.
+  const recipient = session.customer_details?.email;
+  if (recipient) {
+    await sendLicenseKeyEmail({
+      to: recipient,
+      licenseKey,
+      tier,
+      product: WEBHOOK_PRODUCT,
+      isExisting: false,
+    });
+  } else {
+    console.warn(
+      `License ${licenseKey.substring(0, 12)}... issued for user ${userId} but `
+      + `no recipient email on the Stripe session (session.customer_details.email empty). `
+      + `User must retrieve the key from /account/licenses.`,
+    );
+  }
 }
 
 /**

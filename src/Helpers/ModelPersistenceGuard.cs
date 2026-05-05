@@ -342,11 +342,30 @@ internal static class ModelPersistenceGuard
                 }
                 else
                 {
-                    // Env var or file — offline-only validation (format/signature check, no server call)
-                    keyConfig = new AiDotNetLicenseKey(licenseKey)
+                    // Env var or file — route by key format. The validator does
+                    // NOT auto-detect: ServerUrl=null always means "use the
+                    // default server URL" regardless of key format. We have to
+                    // choose explicitly here:
+                    //   - HMAC-signed `aidn.{id}.{sig}` keys → ServerUrl="" so
+                    //     the validator's offline-only branch verifies the key
+                    //     locally against the build key (no network needed).
+                    //   - Server-validated `AIDN-PROD-*`/`AIDN-DEV-*` keys →
+                    //     ServerUrl=null so the validator hits the default
+                    //     license-server endpoint. These carry no signature
+                    //     the SDK can verify locally; the server is the only
+                    //     source of truth for valid-vs-revoked status.
+                    // Picking the wrong branch here is a behavioral regression:
+                    // a signed key would suddenly require network reachability,
+                    // and an AIDN-* key would be rejected outright by the
+                    // offline-only signed-key gate.
+                    //
+                    // Construct first so AiDotNetLicenseKey's Guard.NotNullOrWhiteSpace
+                    // runs on the raw string before anything else inspects it.
+                    keyConfig = new AiDotNetLicenseKey(licenseKey);
+                    if (LicenseValidator.IsSignedKeyFormat(licenseKey))
                     {
-                        ServerUrl = string.Empty // explicit empty = offline-only mode
-                    };
+                        keyConfig.ServerUrl = string.Empty;
+                    }
                 }
 
                 _validator = new LicenseValidator(keyConfig);

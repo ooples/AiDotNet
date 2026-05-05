@@ -54,8 +54,77 @@ public class LicenseValidatorTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task OfflineMode_ServerValidatedKey_IsRejected()
+    {
+        // Closes the security gap from PR #1256 review: server-validated
+        // AIDN-PROD-* keys carry no cryptographic signature the SDK can
+        // verify locally. Offline-only mode (ServerUrl="") MUST reject
+        // them so a leaked key can't be used air-gapped.
+        await Task.Yield();
+        var key = new AiDotNetLicenseKey("AIDN-PROD-COMMUNITY-1234567890ABCDEF1234567890ABCDEF")
+        {
+            ServerUrl = string.Empty // offline-only
+        };
+
+        var validator = new LicenseValidator(key);
+        var result = validator.Validate();
+
+        Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
+        Assert.Contains("aidn.{id}.{signature}", result.Message);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task OfflineMode_ServerValidatedKey_RejectionIsCached()
+    {
+        // PR #1256 second-pass review: the sync path's offline-only
+        // rejection branch must populate _cached just like ValidateAsync()
+        // does. Otherwise CachedResult is null after a validation attempt
+        // and repeated Validate() calls allocate a fresh Invalid result
+        // each time, both of which diverge from the established caching
+        // contract (and from the async path).
+        await Task.Yield();
+        var key = new AiDotNetLicenseKey("AIDN-PROD-COMMUNITY-1234567890ABCDEF1234567890ABCDEF")
+        {
+            ServerUrl = string.Empty
+        };
+
+        var validator = new LicenseValidator(key);
+        var first = validator.Validate();
+        var second = validator.Validate();
+
+        var cached = validator.CachedResult;
+        Assert.NotNull(cached);
+        Assert.Equal(LicenseKeyStatus.Invalid, cached.Status);
+        // Reference equality: both calls return the cached instance,
+        // and the cached instance is the one returned by Validate().
+        Assert.Same(first, second);
+        Assert.Same(first, cached);
+    }
+
+#if !NET471
+    // ValidateAsync only exists on net10+ (the LicenseValidator source has
+    // its async path under `#if !NET471`). Gate the test to match.
+    [Fact(Timeout = 60000)]
+    public async Task OfflineMode_ServerValidatedKey_AsyncPath_IsRejected()
+    {
+        // Same gate on the async path as the sync path.
+        var key = new AiDotNetLicenseKey("AIDN-PROD-PRO-1234567890ABCDEF1234567890ABCDEF12")
+        {
+            ServerUrl = string.Empty
+        };
+
+        var validator = new LicenseValidator(key);
+        var result = await validator.ValidateAsync();
+
+        Assert.Equal(LicenseKeyStatus.Invalid, result.Status);
+        Assert.Contains("aidn.{id}.{signature}", result.Message);
+    }
+#endif
+
+    [Fact(Timeout = 60000)]
     public async Task DefaultServerUrl_IsSet()
     {
+        await Task.Yield();
         Assert.False(string.IsNullOrWhiteSpace(LicenseValidator.DefaultServerUrl));
         Assert.Contains("supabase.co", LicenseValidator.DefaultServerUrl);
         Assert.Contains("validate-license", LicenseValidator.DefaultServerUrl);

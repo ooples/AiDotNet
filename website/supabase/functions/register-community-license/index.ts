@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { sendLicenseKeyEmail } from "../_shared/email.ts";
 
 // Default matches the production origin the marketing site actually serves from.
 // Override via the ALLOWED_ORIGIN function secret for staging / preview envs.
@@ -17,7 +18,13 @@ const corsHeaders = {
 // string drift between the lookup and insert paths and makes
 // product-specific changes a one-liner.
 const COMMUNITY_PRODUCT = "aidotnet" as const;
-const COMMUNITY_PREFIX = "aidn" as const;
+// Key prefix that the AiDotNet client library parses. See
+// LicenseValidator.IsServerValidatedKeyFormat in src/Helpers/LicenseValidator.cs:
+// ≥4 dash-delimited segments, segment[0]=="AIDN", last segment is ≥8 hex chars.
+// The dotted `aidn.{id}.{sig}` form is also accepted but requires HMAC-SHA256
+// signing against a build key this function does not have access to — so the
+// dash form is the only viable issuance path here. See ooples/AiDotNet#1262.
+const COMMUNITY_PREFIX = "AIDN-PROD" as const;
 const COMMUNITY_TIER = "community" as const;
 // Unique partial index name that enforces at-most-one active license per
 // (user, product, tier). See migration
@@ -119,12 +126,13 @@ serve(async (req: Request) => {
       );
     }
 
-    // Generate a new license key: {prefix}.{12-char-random}.{16-char-random}.
-    // Prefix comes from COMMUNITY_PREFIX so the client library can classify
-    // the key by string alone without a DB round-trip.
-    const keyPart1 = crypto.randomUUID().replace(/-/g, "").substring(0, 12);
-    const keyPart2 = crypto.randomUUID().replace(/-/g, "").substring(0, 16);
-    const licenseKey = `${COMMUNITY_PREFIX}.${keyPart1}.${keyPart2}`;
+    // Generate a fresh AIDN-PROD-COMMUNITY-{32hex} key. Format must satisfy
+    // LicenseValidator.IsServerValidatedKeyFormat in the AiDotNet client
+    // library: ≥4 dash-delimited segments, segment[0]=="AIDN", last segment
+    // is ≥8 hex chars. Empirically verified that `AIDN-PROD-{TIER}-{32hex}`
+    // validates end-to-end through the online validate-license path.
+    const keyHex = crypto.randomUUID().replace(/-/g, "");
+    const licenseKey = `${COMMUNITY_PREFIX}-${COMMUNITY_TIER.toUpperCase()}-${keyHex}`;
 
     // Insert the new community license. The at-most-one-active partial
     // unique index (migration 20260419000000) guarantees atomicity: if a
@@ -179,6 +187,25 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ success: false, error: "server_error", message: "Failed to create license. Please try again." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Best-effort key delivery email. The license row above is the source
+    // of truth; failure to email is logged but never thrown so a flaky
+    // transport doesn't reject a successful issuance (the user already has
+    // the key in the response body and on /account/licenses).
+    if (user.email) {
+      await sendLicenseKeyEmail({
+        to: user.email,
+        licenseKey,
+        tier: COMMUNITY_TIER,
+        product: COMMUNITY_PRODUCT,
+        isExisting: false,
+      });
+    } else {
+      console.warn(
+        `Community license ${licenseKey.substring(0, 12)}... issued for user ${user.id} `
+        + `but no email on profile — user must retrieve key from /account/licenses.`,
       );
     }
 

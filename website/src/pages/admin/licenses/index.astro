@@ -531,9 +531,24 @@ const productsJson = JSON.stringify(PRODUCTS);
           actions = '<span class="text-xs text-slate-400">--</span>';
         }
 
+        // The admin-resend-license-email edge function refuses to re-send
+        // anything except active licenses (it returns 409 for suspended,
+        // expired, revoked, etc. — see functions/admin-resend-license-email/
+        // index.ts:113). Hide the button on every non-active row so the
+        // operator doesn't get a UI affordance for an action the backend
+        // will refuse. Reactivation flows reactivate the license first
+        // (status -> active), then resend; they don't bypass this check.
+        const showResend = l.status === 'active';
+        const resendButton = showResend
+          ? `<button class="resend-email-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Re-send the license-key email to the customer">resend</button>`
+          : '';
         return `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
           <td class="py-3 px-4">
-            <button class="activations-btn font-mono text-xs text-brand-blue hover:underline" data-id="${l.id}" title="View activations">${escapeHtml(keyPreview)}</button>
+            <div class="flex items-center gap-2">
+              <button class="copy-key-btn font-mono text-xs text-slate-700 dark:text-slate-200 hover:text-brand-blue transition-colors" data-id="${l.id}" title="Click to copy the full license key to the clipboard">${escapeHtml(keyPreview)}</button>
+              ${resendButton}
+              <button class="activations-btn text-xs text-slate-400 hover:text-brand-blue transition-colors" data-id="${l.id}" title="View activations">activations</button>
+            </div>
           </td>
           <td class="py-3 px-4">${productBadge(l.product)}</td>
           <td class="py-3 px-4 text-slate-700 dark:text-slate-300">${escapeHtml(l.ownerName || 'Unknown')}${l.ownerEmail && l.ownerEmail !== l.ownerName ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.ownerEmail)}</span>` : ''}${l.organization_name ? `<br><span class="text-xs text-slate-400">${escapeHtml(l.organization_name)}</span>` : ''}</td>
@@ -583,6 +598,134 @@ const productsJson = JSON.stringify(PRODUCTS);
           const id = (btn as HTMLElement).dataset.id;
           if (!id) return;
           await showActivations(id);
+        });
+      });
+
+      // Copy-key button: writes the FULL license key (not the truncated
+      // preview) to the clipboard. The full key is looked up from the
+      // in-memory `allLicenses` array via data-id rather than embedded in
+      // the DOM via data-key — keeps sensitive strings out of HTML and
+      // shrinks the rendered table on large license sets.
+      tbody.querySelectorAll('.copy-key-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          const license = allLicenses.find(l => l.id === id);
+          if (!license) {
+            console.error('Copy: license row not found in memory for id', id);
+            alert('Could not find the license to copy. Refresh the page and try again.');
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(license.license_key);
+            // Click-safe revert: capture the ORIGINAL label once per
+            // burst (only on the first click in a series of rapid
+            // clicks — subsequent clicks would otherwise overwrite the
+            // cache with the temporary 'copied' span). Cancel any
+            // in-flight revert from a previous click so its delayed
+            // callback doesn't fire after a newer click already
+            // refreshed the label. Net effect: N clicks in any 1.5s
+            // window all revert exactly once, to the real preview.
+            const el = btn as HTMLElement;
+            if (el.dataset.originalLabel === undefined) {
+              el.dataset.originalLabel = btn.innerHTML;
+            }
+            const existingId = el.dataset.revertTimeoutId;
+            if (existingId !== undefined) {
+              clearTimeout(Number.parseInt(existingId, 10));
+            }
+            btn.innerHTML = '<span class="text-green-500">copied</span>';
+            const newId = window.setTimeout(() => {
+              btn.innerHTML = el.dataset.originalLabel ?? '';
+              delete el.dataset.originalLabel;
+              delete el.dataset.revertTimeoutId;
+            }, 1500);
+            el.dataset.revertTimeoutId = String(newId);
+          } catch (err) {
+            console.error('Clipboard copy failed:', err);
+            alert(
+              'Copy failed — your browser blocked clipboard access. '
+              + 'Check site permissions for clipboard, try a different browser, '
+              + 'or run this page over HTTPS (clipboard API requires secure context).',
+            );
+          }
+        });
+      });
+
+      // Re-send email button: calls the admin-resend-license-email edge
+      // function which re-issues a key-delivery email to the customer's
+      // address on file. Used when the original Stripe-checkout email was
+      // dropped (no Resend key configured at the time, recipient bounced,
+      // or transport hiccupped). The license itself is unchanged — only
+      // the email is re-sent.
+      tbody.querySelectorAll('.resend-email-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = (btn as HTMLElement).dataset.id;
+          if (!id) return;
+          // Rapid re-click guard: bail if a previous click on this same
+          // button is still in flight. Without the dataset flag, an
+          // impatient operator clicking 3× would fire 3 send requests
+          // before any of them returned, deliver 3 emails to the
+          // customer, AND race-overwrite the button's innerHTML state.
+          const buttonEl = btn as HTMLButtonElement;
+          if (buttonEl.dataset.inFlight === 'true') return;
+          buttonEl.dataset.inFlight = 'true';
+          buttonEl.disabled = true;
+          if (!confirm('Re-send the license-key email to the customer?')) {
+            delete buttonEl.dataset.inFlight;
+            buttonEl.disabled = false;
+            return;
+          }
+          const orig = btn.innerHTML;
+          btn.innerHTML = '<span class="text-slate-400">sending...</span>';
+          try {
+            const { data, error } = await supabase.functions.invoke('admin-resend-license-email', {
+              body: { license_id: id },
+            });
+            // Distinguish server-side vs transport-side failures so admins
+            // can see WHICH category fired (config, malformed recipient,
+            // upstream send) instead of an opaque "failed". The edge
+            // function returns a `message` field on every non-2xx; surface
+            // it so the operator gets actionable detail without opening
+            // the network tab.
+            if (error) {
+              // Supabase JS sets `data` to null on non-2xx and stashes
+              // the actual Response on `error.context`. The edge function
+              // returns `message` in the body — read it from there, not
+              // from `data` (which never has it in the error path).
+              // Wrap in try/catch because error.context may be missing
+              // (network error before the response was received) or the
+              // body may not be JSON.
+              let serverMsg: string | undefined;
+              try {
+                const ctx = (error as { context?: Response }).context;
+                if (ctx && typeof ctx.json === 'function') {
+                  const body = await ctx.json();
+                  if (body && typeof body.message === 'string') {
+                    serverMsg = body.message;
+                  }
+                }
+              } catch {
+                // Body wasn't JSON / context missing — fall through to
+                // generic "failed" label.
+              }
+              console.error('Resend failed:', { error, serverMsg });
+              btn.innerHTML = serverMsg
+                ? `<span class="text-red-500" title="${escapeHtml(serverMsg)}">failed</span>`
+                : '<span class="text-red-500">failed</span>';
+            } else {
+              btn.innerHTML = '<span class="text-green-500">sent</span>';
+            }
+          } catch (err) {
+            console.error('Resend invoke threw:', err);
+            btn.innerHTML = '<span class="text-red-500">failed</span>';
+          } finally {
+            // Always release the in-flight guard so the operator can
+            // retry on transient failures without reloading the page.
+            delete buttonEl.dataset.inFlight;
+            buttonEl.disabled = false;
+          }
+          setTimeout(() => { btn.innerHTML = orig; }, 2500);
         });
       });
     }
