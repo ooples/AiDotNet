@@ -2562,29 +2562,41 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     squeezed[i] = output.Shape[i + 1];
                 output = output.Reshape(squeezed);
             }
-            return output;
-        }
-        finally
-        {
-            if (wasTraining) SetTrainingMode(true);
 
-            // Mark first-forward-completed and run the auto-detect retry.
+            // Mark first-forward-completed and run the auto-detect retry
+            // ONLY on a successful forward. The previous version did this
+            // in `finally`, which fired even when PredictEager threw; on
+            // a lazy model that flipped _firstForwardCompleted=true with
+            // ParameterCount still at 0 (the placeholder weights weren't
+            // materialized because forward failed), so the next forward
+            // call's auto-detect saw "already past first forward" and
+            // skipped the retry path that's the WHOLE POINT of this
+            // logic. Closes review-comment #1271.s-Ng.
+            //
             // For lazy networks (Transformer / MultiHeadAttention) the
-            // pre-forward attempt above saw ParameterCount=0 and bailed
-            // without finalizing; now that PredictEager has materialized
-            // the placeholder weights, ParameterCount returns the real
-            // value and the threshold comparison can engage streaming
-            // for the NEXT call. The first call of an above-threshold
-            // lazy model still runs in eager mode — engaging streaming
-            // mid-forward would require a more invasive
-            // RegisterTrainableParameter-time hook (filed as a follow-up).
-            // Eager networks finalized in the pre-forward call above so
-            // this is a no-op for them.
+            // pre-forward attempt at the top of Predict saw
+            // ParameterCount=0 and bailed without finalizing; now that
+            // PredictEager has materialized the placeholder weights,
+            // ParameterCount returns the real value and the threshold
+            // comparison can engage streaming for the NEXT call. The
+            // first call of an above-threshold lazy model still runs in
+            // eager mode — engaging streaming mid-forward would require
+            // a more invasive RegisterTrainableParameter-time hook
+            // (filed as a follow-up). Eager networks finalized in the
+            // pre-forward call so this is a no-op for them.
             if (!_firstForwardCompleted)
             {
                 _firstForwardCompleted = true;
                 TryAutoEnableWeightStreaming();
             }
+            return output;
+        }
+        finally
+        {
+            // Restore the training-mode flag regardless of whether
+            // PredictEager threw — that's a state restore, not a
+            // success-only side effect, so it stays in finally.
+            if (wasTraining) SetTrainingMode(true);
         }
     }
 

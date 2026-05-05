@@ -1,4 +1,5 @@
 using System.IO;
+using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -14,30 +15,34 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.WeightStreaming;
 /// model's parameter count crosses the threshold. Pins:
 ///   - Below threshold: no auto-streaming (zero overhead for small models).
 ///   - Above threshold: streaming enabled, <c>WeightStreamingAutoDetected</c>
-///     is true, <c>_weightLifetimeConfigured</c> flips to true.
+///     is true after explicit <c>TryAutoEnableWeightStreaming</c> call.
 ///   - <c>DisableAutoStreaming()</c> opts out even when above threshold.
-///   - The check is idempotent — repeated Predict / EnsureArchitectureInitialized
-///     calls don't re-pay the ParameterCount walk.
+///   - The check is idempotent — repeated <c>TryAutoEnableWeightStreaming</c>
+///     calls don't re-pay the <c>ParameterCount</c> walk.
 ///
-/// To test the threshold branch without actually allocating 10B parameters,
-/// the test fixture override <see cref="ParameterCount"/> on a stub network
-/// to report a synthetic value above the configured threshold. The threshold
-/// itself is read from <c>AIDOTNET_STREAMING_THRESHOLD_PARAMS</c> at process
-/// start, so we set it to a small value via env var BEFORE the type loads
-/// (in a static ctor on the fixture).
+/// To test the threshold branch deterministically without the global
+/// <c>AIDOTNET_STREAMING_THRESHOLD_PARAMS</c> env var (which is read once
+/// at type load and would race across test classes), each test uses
+/// <see cref="NeuralNetworkBase{T}.ApplyAutoDetectThresholdOverride"/> to
+/// install a per-instance threshold appropriate to the scenario. The
+/// stub network exposes the protected base-class internal so the tests
+/// can drive it.
 /// </summary>
 public class AutoDetectWeightStreamingTests
 {
     /// <summary>
-    /// Stub network that lets the test set ParameterCount directly.
-    /// The base TryAutoEnableWeightStreaming reads ParameterCount and
-    /// compares to the static threshold; overriding the property is the
-    /// least-invasive way to drive a deterministic above/below check
-    /// without inflating real layer weights.
+    /// Stub network that lets the test set ParameterCount directly AND
+    /// counts how many times the property's getter has been read. The
+    /// counter is the lever we use to assert the auto-detect path is
+    /// idempotent — re-pay would show up as multiple ParameterCount
+    /// reads on the second / third <c>TryAutoEnableWeightStreaming</c>
+    /// call. Overriding is the least-invasive way to drive a deterministic
+    /// above/below-threshold check without inflating real layer weights.
     /// </summary>
     private sealed class FixedParamCountNetwork : NeuralNetworkBase<float>
     {
         private readonly long _fixedCount;
+        private long _parameterCountReads;
 
         public FixedParamCountNetwork(long fixedCount)
             : base(lossFunction: new MeanSquaredErrorLoss<float>(), maxGradNorm: 1.0)
@@ -50,18 +55,32 @@ public class AutoDetectWeightStreamingTests
             Layers.Add(new DenseLayer<float>(outputSize: 1));
         }
 
-        public override long ParameterCount => _fixedCount;
+        public override long ParameterCount
+        {
+            get
+            {
+                Interlocked.Increment(ref _parameterCountReads);
+                return _fixedCount;
+            }
+        }
+
+        public long ParameterCountReadCount => Interlocked.Read(ref _parameterCountReads);
+
+        /// <summary>
+        /// Test-only accessor — the base's <c>ApplyAutoDetectThresholdOverride</c>
+        /// is internal and visible to AiDotNetTests via InternalsVisibleTo,
+        /// but expose it as a public method here so test bodies don't have
+        /// to know about that internal-visibility detail.
+        /// </summary>
+        public void SetThresholdForTest(long thresholdParams) =>
+            ApplyAutoDetectThresholdOverride(thresholdParams);
 
         protected override void InitializeLayers() { /* layer added in ctor */ }
-
         public override void UpdateParameters(Vector<float> parameters) { /* not exercised */ }
-
         public override ModelMetadata<float> GetModelMetadata()
             => new() { Name = "FixedParamCountNetwork" };
-
         protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
         protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
-
         protected override IFullModel<float, Tensor<float>, Tensor<float>> CreateNewInstance()
             => new FixedParamCountNetwork(_fixedCount);
     }
@@ -69,59 +88,108 @@ public class AutoDetectWeightStreamingTests
     [Fact]
     public void BelowThreshold_AutoStreaming_DoesNotEngage()
     {
-        // 1B params is well below the 10B default threshold. Auto-detect
-        // should run, see we're under, and leave streaming disabled.
+        // 1B params with a 10B threshold — well below. Explicit
+        // TryAutoEnableWeightStreaming call exercises the auto-detect
+        // path (the ctor doesn't, since the env var read happens once at
+        // type load and we want determinism). Auto-detect should see
+        // we're under threshold and leave streaming disabled.
         var net = new FixedParamCountNetwork(fixedCount: 1_000_000_000L);
+        net.SetThresholdForTest(10_000_000_000L);
+        net.TryAutoEnableWeightStreaming();
         Assert.False(net.WeightStreamingAutoDetected,
             "1B-param model should be below the 10B threshold and stay eager.");
+        Assert.False(net.IsWeightStreamingActive,
+            "Below-threshold models must not have streaming active.");
+    }
+
+    [Fact]
+    public void AboveThreshold_AutoStreaming_Engages()
+    {
+        // 50B params with a 10B threshold — above. Explicit
+        // TryAutoEnableWeightStreaming call should engage streaming.
+        // This is the positive counterpart to BelowThreshold above —
+        // without it the test class only exercises the negative branch
+        // and a regression that breaks above-threshold engagement would
+        // silently pass.
+        var net = new FixedParamCountNetwork(fixedCount: 50_000_000_000L);
+        net.SetThresholdForTest(10_000_000_000L);
+        net.TryAutoEnableWeightStreaming();
+        Assert.True(net.WeightStreamingAutoDetected,
+            "50B-param model with 10B threshold should auto-engage streaming.");
+        Assert.True(net.IsWeightStreamingActive,
+            "Streaming must be reported active after auto-detect engages.");
     }
 
     [Fact]
     public void DisableAutoStreaming_PreventsEngagementEvenAboveThreshold()
     {
-        // Construct the model and immediately opt out, then trigger a
-        // Predict call to exercise the lazy retry. Auto-detect must
-        // honor the opt-out.
+        // Opt out BEFORE the auto-detect runs. A 50B-param model with
+        // 10B threshold would normally engage streaming; the opt-out
+        // must veto that. Closes review-comment #1271.rRy1 / .rT-j
+        // (test previously had no assertions and would pass even if
+        // DisableAutoStreaming silently regressed to a no-op).
         var net = new FixedParamCountNetwork(fixedCount: 50_000_000_000L);
-        // Note: the eager ctor path may have already auto-enabled streaming
-        // since we report 50B params. To make this assertion meaningful,
-        // we have to flip the opt-out BEFORE the ctor runs auto-detect.
-        // In the real builder/options flow, the user sets this via
-        // PredictionModelBuilder.ConfigureWeightStreaming(disabled: true)
-        // BEFORE constructing the network. We can't replicate that exact
-        // flow from a stub ctor, so this test asserts the contract:
-        // calling DisableAutoStreaming on a fresh instance flips
-        // WeightStreamingAutoDetected to false even if the ctor's
-        // internal call would otherwise have enabled it.
+        net.SetThresholdForTest(10_000_000_000L);
         net.DisableAutoStreaming();
-        // The ctor already attempted; what we're really pinning here is
-        // that the user-facing surface stays consistent — a follow-up call
-        // to TryAutoEnableWeightStreaming won't reverse the opt-out.
         net.TryAutoEnableWeightStreaming();
-        // No assertion on WeightStreamingAutoDetected directly — the eager
-        // ctor may have engaged streaming before opt-out was called, and
-        // ConfigureWeightLifetime mutates a process-wide singleton we
-        // can't safely tear down within a test. The contract we DO pin
-        // is that DisableAutoStreaming + TryAutoEnableWeightStreaming
-        // doesn't throw and doesn't loop.
-        // Defer the full opt-out behavior pin to the
-        // PredictionModelBuilder integration test which can stage the
-        // flag before the ctor runs (#186 follow-up task).
+        Assert.False(net.WeightStreamingAutoDetected,
+            "DisableAutoStreaming must veto auto-detect even when ParameterCount " +
+            "exceeds the threshold — that's the whole point of the opt-out.");
+        Assert.False(net.IsWeightStreamingActive,
+            "Opt-out must keep streaming inactive on the auto-detect path.");
     }
 
     [Fact]
     public void Idempotent_RepeatedCalls_DoNotRePayParameterCountWalk()
     {
-        // The first call sets the attempted flag; subsequent calls early-
-        // return on `_streamingAutoDetectAttempted`. We verify by calling
-        // TryAutoEnableWeightStreaming a few times in a row and asserting
-        // it doesn't throw and the observable state stays stable.
-        var net = new FixedParamCountNetwork(fixedCount: 1_000_000_000L);
-        bool firstResult = net.WeightStreamingAutoDetected;
+        // Auto-detect uses the `_streamingAutoDetectFinalized` flag (per
+        // NeuralNetworkBase.TryAutoEnableWeightStreaming) to early-return
+        // on subsequent calls. Closes review-comment #1271.rT-u (previous
+        // assertion only checked boolean stability — could pass even if
+        // ParameterCount was re-walked every call).
+        //
+        // We use the above-threshold scenario because that path finalizes
+        // unconditionally on first run (lines 3727-3737 of
+        // NeuralNetworkBase.cs). Below-threshold finalization is gated
+        // on `_firstForwardCompleted` to support lazy models that report
+        // 0 params pre-forward, so it would NOT short-circuit a direct
+        // TryAutoEnableWeightStreaming() call without first going through
+        // Predict — that's the right production behaviour, just not what
+        // this idempotency test is pinning. Above-threshold gives us a
+        // clean "finalized = no re-walk" assertion.
+        //
+        // Lever: ParameterCountReadCount on the stub. Auto-detect reads
+        // ParameterCount EXACTLY once when it runs to completion on the
+        // above-threshold path; the 2nd, 3rd, 4th calls must short-circuit
+        // on the finalized flag and read 0 additional times.
+        var net = new FixedParamCountNetwork(fixedCount: 50_000_000_000L);
+        net.SetThresholdForTest(10_000_000_000L);
+
+        // Measure deltas around the auto-detect call only (the stub's
+        // ctor / layer-add may have read ParameterCount for unrelated
+        // reasons before we got here).
+        long readsBeforeAutoDetect = net.ParameterCountReadCount;
+
+        net.TryAutoEnableWeightStreaming();
+        long readsAfterFirstCall = net.ParameterCountReadCount;
+        long firstCallDelta = readsAfterFirstCall - readsBeforeAutoDetect;
+        Assert.True(firstCallDelta >= 1,
+            "First TryAutoEnableWeightStreaming call must read ParameterCount " +
+            "at least once (otherwise auto-detect skipped its decision).");
+        Assert.True(net.WeightStreamingAutoDetected,
+            "50B-param model with 10B threshold should engage on the first call.");
+
+        // Subsequent calls must short-circuit BEFORE reading ParameterCount.
         net.TryAutoEnableWeightStreaming();
         net.TryAutoEnableWeightStreaming();
         net.TryAutoEnableWeightStreaming();
-        Assert.Equal(firstResult, net.WeightStreamingAutoDetected);
+        long totalReadsAfter4Calls = net.ParameterCountReadCount;
+        long subsequentDelta = totalReadsAfter4Calls - readsAfterFirstCall;
+
+        Assert.Equal(0L, subsequentDelta);
+        // And the observable result stays stable across the idempotent
+        // calls — auto-detect doesn't oscillate.
+        Assert.True(net.WeightStreamingAutoDetected);
     }
 
     [Fact]

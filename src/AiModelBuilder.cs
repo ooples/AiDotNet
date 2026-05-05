@@ -2387,6 +2387,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // pre-AutoML _model (often null), so the AutoML-chosen model would
             // otherwise miss the user's UseGradientCheckpointing=true setting.
             ApplyGradientCheckpointingFromMemoryConfig();
+            // Same for weight-streaming config: BuildAsync's earlier call ran
+            // against the pre-AutoML _model. After AutoML picks bestModel,
+            // the user's WeightStreamingConfig (Enabled override or per-instance
+            // ThresholdParameters) needs to flow through to the new model
+            // instance or auto-detect on the first forward will use the
+            // env-var / default threshold instead of the configured one.
+            // Closes review-comment #1271.s-NU.
+            ApplyWeightStreamingConfig();
 
             var searchEndedUtc = DateTimeOffset.UtcNow;
             autoMLSummary = CreateAutoMLRunSummary(searchStartedUtc, searchEndedUtc);
@@ -3636,6 +3644,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 var (selectedAgent, summary) = SelectRLAgentWithAutoML(_rlOptions);
                 _model = (IFullModel<T, TInput, TOutput>)selectedAgent;
                 autoMLSummary = summary;
+                // RL AutoML reassigns _model to whichever agent was selected.
+                // Re-apply weight-streaming config (mirrors the supervised
+                // AutoML path above) so the user's per-instance threshold /
+                // Enabled override flows to the actual training instance.
+                // Closes review-comment #1271.s-NU.
+                ApplyWeightStreamingConfig();
             }
             else
             {
@@ -5326,6 +5340,26 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <inheritdoc/>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureWeightStreaming(WeightStreamingConfig? config = null)
     {
+        // Validate at the boundary: a non-positive ThresholdParameters
+        // would silently be ignored by ApplyWeightStreamingConfig (the
+        // `custom > 0` guard there). Surface the error here instead so
+        // the caller sees the typo / misconfiguration loudly at the
+        // ConfigureWeightStreaming call site rather than as a "why isn't
+        // streaming engaging?" mystery later. Closes review-comment
+        // #1271.s-Ne.
+        if (config is not null
+            && config.ThresholdParameters is long t
+            && t <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(config),
+                t,
+                "WeightStreamingConfig.ThresholdParameters must be positive when set " +
+                "(it is the parameter-count threshold above which auto-detect engages " +
+                "streaming). Pass null on the property to use the env-var / default " +
+                "threshold, or pass a positive value (e.g. 1_000_000_000L for 1B " +
+                "params) to override per-instance.");
+        }
         // Stash for application during BuildAsync. Stored as the typed
         // nullable config so a subsequent call to this method without a
         // config (i.e. user changed their mind) clears prior intent and
@@ -5343,29 +5377,6 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </summary>
     private WeightStreamingConfig? _weightStreamingConfig;
 
-    /// <summary>
-    /// Applies <see cref="_weightStreamingConfig"/> to the constructed
-    /// neural-network model. Called from BuildAsync immediately after
-    /// the model is set up so the config takes effect before any
-    /// Predict / Train call. Three cases:
-    /// <list type="bullet">
-    /// <item><c>_weightStreamingConfig == null</c> — no-op; the model's
-    /// own ctor-time auto-detect (with the env-var or 10B default
-    /// threshold) decides whether to stream.</item>
-    /// <item><c>config.Enabled == false</c> — calls
-    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.DisableAutoStreaming"/>
-    /// so the next Predict's lazy-retry path doesn't re-engage. If the
-    /// ctor's eager path already engaged (because we're at extreme
-    /// scale and the model is trained from scratch in the builder),
-    /// this is a documented edge case — we don't tear down a process-
-    /// wide WeightRegistry config that other models may share.</item>
-    /// <item><c>config.Enabled == true</c> — calls
-    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ConfigureWeightLifetime"/>
-    /// directly with default <c>GpuOffloadOptions</c>, forcing streaming
-    /// on regardless of size. Useful for integration tests that need
-    /// predictable streaming behavior on small models.</item>
-    /// </list>
-    /// </summary>
     /// <summary>
     /// Constructs a <see cref="WeightStreamingReport"/> from the model's
     /// streaming state if streaming was engaged (auto-detect or explicit
@@ -5452,6 +5463,33 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         };
     }
 
+    /// <summary>
+    /// Applies <see cref="_weightStreamingConfig"/> to the constructed
+    /// neural-network model. Called from BuildAsync immediately after
+    /// the model is set up so the config takes effect before any
+    /// Predict / Train call. Cases:
+    /// <list type="bullet">
+    /// <item><c>_weightStreamingConfig == null</c> — no-op; the model's
+    /// own ctor-time auto-detect (with the env-var or 10B default
+    /// threshold) decides whether to stream.</item>
+    /// <item><c>config.ThresholdParameters</c> set — applied via
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ApplyAutoDetectThresholdOverride"/>
+    /// regardless of <c>Enabled</c>'s value, so a custom threshold drives
+    /// the auto-detect comparison on the upcoming first-forward retry.</item>
+    /// <item><c>config.Enabled == false</c> — calls
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.DisableAutoStreaming"/>
+    /// so the next Predict's lazy-retry path doesn't re-engage. If the
+    /// ctor's eager path already engaged (because we're at extreme
+    /// scale and the model is trained from scratch in the builder),
+    /// this is a documented edge case — we don't tear down a process-
+    /// wide WeightRegistry config that other models may share.</item>
+    /// <item><c>config.Enabled == true</c> — calls
+    /// <see cref="NeuralNetworks.NeuralNetworkBase{T}.ConfigureWeightLifetime"/>
+    /// directly with default <c>GpuOffloadOptions</c>, forcing streaming
+    /// on regardless of size. Useful for integration tests that need
+    /// predictable streaming behavior on small models.</item>
+    /// </list>
+    /// </summary>
     private void ApplyWeightStreamingConfig()
     {
         if (_weightStreamingConfig is null) return;

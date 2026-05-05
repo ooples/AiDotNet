@@ -1233,13 +1233,32 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <para>The streaming activity report is available on
     /// <c>AiModelResult.WeightStreamingReport</c> after the build
     /// completes (null when streaming wasn't engaged).</para>
-    /// <para>Example:</para>
+    /// <para>Examples:</para>
     /// <code>
-    /// var result = await builder
-    ///     .ConfigureModel(myLargeModel)
-    ///     .ConfigureWeightStreaming() // explicit opt-in even on small models
+    /// // Auto-detect (default) — engages only if ParameterCount &gt;= threshold.
+    /// // Calling ConfigureWeightStreaming() with no argument is the SAME as
+    /// // not calling it at all (both pass null = auto-detect). It is NOT an
+    /// // explicit opt-in — to force streaming on small models, pass a
+    /// // populated config with Enabled = true (see next example).
+    /// var auto = await builder.ConfigureModel(myLargeModel).BuildAsync();
+    ///
+    /// // Force streaming on (e.g. for integration tests, or to verify the
+    /// // streaming path on a small model where auto-detect wouldn't engage).
+    /// var forced = await builder
+    ///     .ConfigureModel(mySmallModel)
+    ///     .ConfigureWeightStreaming(new WeightStreamingConfig { Enabled = true })
     ///     .BuildAsync();
-    /// var report = result.WeightStreamingReport;
+    /// var report = forced.WeightStreamingReport;
+    ///
+    /// // Override the auto-detect threshold (per-instance) without forcing.
+    /// // ApplyWeightStreamingConfig in AiModelBuilder calls
+    /// // NeuralNetworkBase.ApplyAutoDetectThresholdOverride(N), so this
+    /// // populated config DOES change the comparison the model uses
+    /// // when its first-forward auto-detect runs.
+    /// var lowered = await builder
+    ///     .ConfigureModel(myMediumModel)
+    ///     .ConfigureWeightStreaming(new WeightStreamingConfig { ThresholdParameters = 1_000_000_000L })
+    ///     .BuildAsync();
     /// </code>
     /// </remarks>
     /// <param name="config">The streaming configuration. Pass null to
