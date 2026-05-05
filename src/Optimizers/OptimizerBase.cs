@@ -1703,6 +1703,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return RequireModel().Clone();
         }
 
+        // When the model already has initialized parameters (e.g., a neural network
+        // constructed with Xavier/He init, or any model that has been warm-started),
+        // the user has already chosen an initialization scheme and the clone
+        // inherits that scheme via DeepCopy / serialize-deserialize. Overwriting
+        // those parameters with data-derived uniform random values from feature
+        // ranges (e.g., [0, 255] for byte input) is appropriate for uninitialized
+        // linear models (where the parameter space is the feature space) but
+        // catastrophic for neural networks (where weight magnitudes ~1/√fanIn,
+        // not feature_max). Fix: skip the data-derived randomization and return
+        // a clone that preserves the user's init. The optimizer will refine it
+        // from there.
+        if (InterfaceGuard.Parameterizable(RequireModel()).ParameterCount > 0)
+        {
+            return RequireModel().Clone();
+        }
+
         // Compute lower and upper bounds from the training data
         // Following GitHub Copilot's suggestion: compute min/max from the data
         Vector<T> lowerBounds;
