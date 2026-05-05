@@ -348,7 +348,34 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// <param name="vocabularySize">The size of the vocabulary for text-based tasks. Defaults to 0.</param>
     /// <param name="usePositionalEncoding">Whether to use positional encoding. Defaults to true.</param>
     /// <param name="temperature">The temperature parameter for text generation. Defaults to 1.0.</param>
+    /// <param name="sequencePooling">
+    /// How to collapse the sequence dimension when producing model output.
+    /// <c>null</c> defers to a sensible default per <c>TaskType</c>:
+    /// token-input architectures (<c>vocabularySize &gt; 0</c>) get
+    /// <c>SequencePoolingMode.LastToken</c> (matches the GPT / Llama /
+    /// Mistral output-head convention), continuous-input architectures get
+    /// <c>SequencePoolingMode.MeanPool</c> (correct for document-level
+    /// classification). Pass an explicit value to override.
+    /// </param>
     /// <param name="layers">Optional custom layers for the network. Defaults to null.</param>
+    /// <param name="warmupSteps">
+    /// Number of warmup steps for the Vaswani 2017 Noam learning-rate
+    /// schedule used by the Transformer's default Adam-with-Noam
+    /// optimizer. LR ramps linearly from a tiny value to peak across
+    /// the first <paramref name="warmupSteps"/> batches, then decays as
+    /// t<sup>-0.5</sup>. Defaults to 4000 (paper-canonical). For
+    /// training budgets too small to warm up over (under ~100 steps),
+    /// drop the schedule entirely and use a constant LR.
+    /// </param>
+    /// <param name="randomSeed">
+    /// Optional seed for deterministic layer-weight initialization.
+    /// When provided, every weighted layer in the constructed network
+    /// receives a per-layer seed derived from this value (see
+    /// <c>LayerHelper</c>'s seeded-RNG plumbing) so identical seeds
+    /// produce identical initial weight tensors. Defaults to <c>null</c>
+    /// — uses the framework's secure non-deterministic RNG, suitable
+    /// for production training.
+    /// </param>
     /// <param name="rbmLayers">Optional Restricted Boltzmann Machine layers for the network. Defaults to null.</param>
     /// <remarks>
     /// <para>

@@ -57,15 +57,27 @@ public class OnnxSymbolicAxisRuntimeTests
     {
         // Build a minimal ONNX graph manually:
         //   input[batch, 3, H, W]  →  ReLU  →  output[batch, 3, H, W]
-        // batch / H / W are dim_param ("batch" / "H" / "W"); the channel
-        // axis stays a concrete dim_value=3.
+        // The three symbolic-axis names are deliberately long sentinel
+        // strings (NOT the framework-default "batch" / "H" / "W") so the
+        // wire-format assertion below is unambiguous: any single-letter
+        // dim_param like "H" or "W" could appear by chance in protobuf
+        // binary as a 1-byte UTF-8 character; sentinels of 30+ ASCII
+        // characters cannot. Closes review-comment #1269.pQdo's concern
+        // about substring scans being too weak. (The actual ORT
+        // inference at three different shapes below is the strongest
+        // proof — but the wire-format assertions also need to be
+        // independently meaningful so a regression that breaks the
+        // wire emission while ORT still tolerates it gets caught.)
+        const string BatchSentinel = "DYNAMIC_BATCH_AXIS_SENTINEL_TEST";
+        const string HeightSentinel = "DYNAMIC_HEIGHT_AXIS_SENTINEL_TEST";
+        const string WidthSentinel = "DYNAMIC_WIDTH_AXIS_SENTINEL_TEST";
         var builder = new OnnxModelBuilder();
         var inputAxes = new[]
         {
-            OnnxAxisSpec.Symbolic("batch"),
+            OnnxAxisSpec.Symbolic(BatchSentinel),
             OnnxAxisSpec.Fixed(3),
-            OnnxAxisSpec.Symbolic("H"),
-            OnnxAxisSpec.Symbolic("W"),
+            OnnxAxisSpec.Symbolic(HeightSentinel),
+            OnnxAxisSpec.Symbolic(WidthSentinel),
         };
         builder.AddInput("input", inputAxes);
         builder.AddRelu("input", "output");
@@ -74,11 +86,17 @@ public class OnnxSymbolicAxisRuntimeTests
         var onnxBytes = builder.Build();
         Assert.True(onnxBytes.Length > 0);
 
-        // Sanity: every symbolic name should round-trip through the wire.
-        var asString = System.Text.Encoding.UTF8.GetString(onnxBytes);
-        Assert.Contains("batch", asString);
-        Assert.Contains("H", asString);
-        Assert.Contains("W", asString);
+        // Wire format for ONNX TensorShapeProto.Dimension's dim_param field
+        // (field tag 2, length-delimited UTF-8 string): each symbolic name
+        // appears in the bytes preceded by a varint-encoded length byte. We
+        // assert the EXACT length-prefixed pattern so a partial-string
+        // accident in unrelated binary is caught: the length byte has to
+        // match exactly. With 32-character sentinels the probability of a
+        // false positive is effectively zero — the only way these byte
+        // sequences appear is if the dim_param emission produced them.
+        AssertLengthPrefixedStringInBytes(onnxBytes, BatchSentinel);
+        AssertLengthPrefixedStringInBytes(onnxBytes, HeightSentinel);
+        AssertLengthPrefixedStringInBytes(onnxBytes, WidthSentinel);
 
         // Hand the exported bytes to ORT and run inference at THREE
         // different shapes through the SAME session. If the dim_param
@@ -178,10 +196,62 @@ public class OnnxSymbolicAxisRuntimeTests
         // and report HasDynamicSpatialDims=true. If the probe regresses
         // back to property-only lookup, none of these symbolic names
         // appear in the wire bytes (axes get emitted as fixed dims).
-        var asString = System.Text.Encoding.UTF8.GetString(onnxBytes);
-        Assert.Contains("batch", asString);
-        Assert.Contains("H", asString);
-        Assert.Contains("W", asString);
+        // Use the protobuf length-prefixed-string pattern (varint length +
+        // utf-8 name) rather than naive substring scan so single-letter
+        // axis names like "H" / "W" are matched only when they appear
+        // with the framework-emitted length prefix in front of them —
+        // not when 'H' or 'W' appear as 1-byte ASCII anywhere else in
+        // the protobuf binary by chance. Closes review-comment #1269.pQdo.
+        AssertLengthPrefixedStringInBytes(onnxBytes, "batch");
+        AssertLengthPrefixedStringInBytes(onnxBytes, "H");
+        AssertLengthPrefixedStringInBytes(onnxBytes, "W");
+    }
+
+    /// <summary>
+    /// Asserts that <paramref name="haystack"/> contains the protobuf
+    /// length-delimited UTF-8 encoding of <paramref name="needle"/>:
+    /// a single varint length byte followed by the UTF-8 bytes of
+    /// <paramref name="needle"/>. Stronger than a naive substring scan
+    /// because it also matches the protobuf framing — random binary
+    /// is extremely unlikely to contain `<exact-length-byte> <name-bytes>`
+    /// in sequence by chance, especially for multi-byte names. For
+    /// names &lt; 128 bytes the varint length is a single byte equal
+    /// to the byte count of the UTF-8 string (the high bit isn't set
+    /// for values 0-127).
+    /// </summary>
+    private static void AssertLengthPrefixedStringInBytes(byte[] haystack, string needle)
+    {
+        var nameBytes = System.Text.Encoding.UTF8.GetBytes(needle);
+        if (nameBytes.Length >= 0x80)
+        {
+            // Multi-byte varint length encoding — not used by any current
+            // test sentinel. Add support if a future test needs it.
+            throw new System.NotSupportedException(
+                $"Test sentinel '{needle}' is {nameBytes.Length} bytes; the assertion " +
+                "helper currently only supports single-byte varint length prefixes. " +
+                "Either shorten the sentinel or extend the helper for multi-byte varints.");
+        }
+        byte lengthPrefix = (byte)nameBytes.Length;
+
+        // Slide a window of length (1 + nameBytes.Length) across the bytes
+        // looking for `lengthPrefix nameBytes[0] nameBytes[1] ...`.
+        for (int start = 0; start <= haystack.Length - 1 - nameBytes.Length; start++)
+        {
+            if (haystack[start] != lengthPrefix) continue;
+            bool match = true;
+            for (int j = 0; j < nameBytes.Length; j++)
+            {
+                if (haystack[start + 1 + j] != nameBytes[j]) { match = false; break; }
+            }
+            if (match) return;
+        }
+        Assert.Fail(
+            $"Could not find protobuf length-prefixed encoding of '{needle}' " +
+            $"({1 + nameBytes.Length} bytes: 0x{lengthPrefix:X2} followed by the UTF-8 " +
+            $"of '{needle}') anywhere in the {haystack.Length}-byte ONNX graph. " +
+            $"This means the symbolic axis was NOT emitted as a dim_param in the " +
+            $"wire format — the axis is being written as a fixed dim_value instead, " +
+            $"contradicting the issue #1211 contract.");
     }
 
     /// <summary>
