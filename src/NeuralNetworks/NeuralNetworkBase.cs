@@ -2698,6 +2698,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 _checkpointLayerFunctions, input, segmentSize);
         }
 
+        // Streaming-aware training forward (#1222 / #185). When weight
+        // streaming is configured, drive the same prefetch + materialize-
+        // scope orchestration the inference path uses (PredictEager →
+        // PredictEagerStreaming, see #184) so a Train() call's forward
+        // pulls weights through the streaming pool with the LRU keeping
+        // them warm into the backward replay. The tape-based backward
+        // accesses the SAME tensor instances the forward read; LRU
+        // recency-of-access is what keeps them resident through the
+        // backward pass, so we don't need a parallel reverse-order
+        // materialize loop here. Verified by inspection: the autodiff
+        // tape stores tensor references, not copies, so a tensor
+        // already pinned by forward's MaterializeScope is the SAME
+        // object the backward-replay reads.
+        if (_weightLifetimeConfigured)
+        {
+            return PredictEagerStreaming(input);
+        }
+
         var current = input;
         foreach (var layer in Layers)
         {
