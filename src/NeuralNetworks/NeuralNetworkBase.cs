@@ -3916,6 +3916,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // any LR scheduler attached to the optimizer (NoamSchedule,
             // LinearWarmupScheduler, CosineAnnealing, etc.) would never
             // tick and the LR would stay pinned at its initial value.
+            // Closes #1270.zKjB (single-source-of-truth helper across
+            // every training entry point).
             StepSchedulerIfSupported(opt);
         }
         finally
@@ -4241,7 +4243,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             // Mirror the OnBatchEnd advance from TrainWithTape via the
             // shared helper so a custom-loss caller and a regular Train
-            // caller see identical scheduler behaviour.
+            // caller see identical scheduler behaviour. Closes #1269.zFt3
+            // (route via shared StepSchedulerIfSupported helper to keep
+            // every training entry point consistent — #1270.zKjB).
             StepSchedulerIfSupported(opt);
 
             return lossValue;

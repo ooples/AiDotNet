@@ -1702,15 +1702,35 @@ public static class LayerHelper<T>
         // Xavier-normal — a behaviour change masquerading as a
         // determinism fix).
         //
-        // RNG ordering: Wire is called in layer-construction order and
-        // pulls one .Next() per layer, so the per-layer seed sequence is
-        // deterministic for a given architecture seed. Concurrent lazy-
-        // init paths each get their own private RNG instance (no shared
-        // mutable state).
+        // Determinism scope: System.Random's internal algorithm is
+        // runtime-specific (the legacy Knuth subtractive on net471,
+        // modern xoshiro256** on .NET Core 6+), so the same seed
+        // produces DIFFERENT sequences across runtimes. The
+        // same-runtime-same-seed determinism is what this contract
+        // provides — cross-runtime determinism would require a stable
+        // PRNG (e.g., a vendored xoshiro256** that runs identically on
+        // net471 and net10), which is tracked separately. Review-
+        // comment #1269.vuR1 flagged this gap; this comment is the
+        // documented scope. Closes #1269.pQdZ.
+        //
+        // RNG ordering / thread-safety: Wire is called in layer-
+        // construction order and pulls one .Next() per layer, so the
+        // per-layer seed sequence is deterministic for a given
+        // architecture seed. System.Random is not thread-safe, and
+        // several layers initialize lazily (e.g. MultiHeadAttention
+        // allocates on first forward / parameter query). Each layer
+        // owns its own private RandomSeed and constructs its own RNG
+        // inside InitializeParameters via
+        // RandomHelper.CreateSeededRandom — so concurrent lazy-init
+        // paths get independent RNG instances and never share mutable
+        // RNG state.
         Random? seedRng = architecture.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(architecture.RandomSeed.Value)
             : null;
 
+        // Apply the per-layer seed when reproducibility was requested.
+        // No-op when randomSeed wasn't set (preserves backward-compatible
+        // behaviour for users who don't request reproducibility).
         ILayer<T> Wire(ILayer<T> layer)
         {
             if (seedRng is null) return layer;

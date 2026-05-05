@@ -222,16 +222,15 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// Setting this to a fixed integer (e.g., <c>0</c> or <c>42</c>) makes
     /// <see cref="LayerHelper{T}.CreateDefaultTransformerLayers"/> derive a
     /// per-layer seed (one <c>seedRng.Next()</c> per constructed layer, in
-    /// declaration order) and assign it to each layer's
-    /// <c>RandomSeed</c> property on <c>LayerBase&lt;T&gt;</c>. Each layer's
-    /// own <c>InitializeParameters</c> reads <c>RandomSeed</c> and uses it
-    /// to build a seeded RNG via
-    /// <c>RandomHelper.CreateSeededRandom</c> — so the layer's natural
-    /// init algorithm (DenseLayer's activation-aware He / LeCun,
-    /// MultiHeadAttention's Xavier-uniform via SimdRandom, EmbeddingLayer's
-    /// small-noise scaled-by-sqrt(d) fill) runs unchanged but with
-    /// reproducible RNG state. This is required for reproducible unit
-    /// tests, multi-seed experiment harnesses, and CI determinism.
+    /// declaration order) and assign it to each layer's <c>RandomSeed</c>
+    /// property on <c>LayerBase&lt;T&gt;</c>. Each layer's own
+    /// <c>InitializeParameters</c> reads <c>RandomSeed</c> and uses it to
+    /// build a seeded RNG via <c>RandomHelper.CreateSeededRandom</c> — so
+    /// the layer's natural init algorithm (DenseLayer's activation-aware
+    /// He / LeCun, MultiHeadAttention's Xavier-uniform via SimdRandom,
+    /// EmbeddingLayer's small-noise scaled-by-sqrt(d) fill) runs unchanged
+    /// but with reproducible RNG state. This is required for reproducible
+    /// unit tests, multi-seed experiment harnesses, and CI determinism.
     /// </para>
     /// <para>
     /// Without a fixed seed, every <c>new Transformer(arch, ...)</c> instance
@@ -494,6 +493,7 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         // instead of bubbling up later as an exception from the
         // NoamSchedule ctor during Transformer construction or training
         // (where the call stack makes the root cause harder to find).
+        // Closes review-comment #1269.vuR5 / .vzGk.
         if (warmupSteps <= 0)
         {
             throw new ArgumentOutOfRangeException(

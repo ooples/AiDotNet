@@ -427,11 +427,17 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Initialize embedding tensor with small random values using Engine operations
         T scale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(1.0), NumOps.FromDouble(embeddingDim)));
 
+        // Initialize with SimdRandom: random [0,1] → shift to [-0.5, 0.5] → scale.
+        // For double/float, write directly to avoid NumOps.FromDouble virtual dispatch
+        // on every element (23M elements for BERT vocab). The embedding tensor was
+        // already allocated by the constructor; reuse it in place rather than allocating
+        // a second tensor that shadows the original reference.
+        //
         // Honour the layer-level deterministic seed when set
         // (LayerBase<T>.RandomSeed is the per-layer-seed mechanism wired
-        // by LayerHelper.Wire from architecture.RandomSeed). Without
-        // this hook, the architecture's RandomSeed wouldn't reach the
-        // embedding fill — closes review-comment #1270.vhmx.
+        // by LayerHelper.Wire from architecture.RandomSeed). Without this
+        // hook, the architecture's RandomSeed wouldn't reach the embedding
+        // fill — closes review-comment #1270.vhmx.
         SimdRandom rng = RandomSeed.HasValue
             ? new SimdRandom(RandomSeed.Value)
             : new SimdRandom();
