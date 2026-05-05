@@ -332,13 +332,26 @@ public class TransformerEndToEndIntegrationTests
         var target = new Tensor<float>([1, vocab]);
         target[0, 1] = 1f;
 
-        // Force lazy-layer materialization on both models with one warm-up
-        // forward+train so subsequent GetParameters() returns the full
-        // post-materialization vector. Without this, the pre-train
-        // GetParameters() returns only the always-eager parameters and we
-        // can't reliably measure parameter movement caused by training.
-        var lowLr = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
-        var highLr = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+        // Use EXPLICIT optimizers (not the Transformer's default Vaswani+Noam
+        // recipe) so this test isolates the SetBaseTrainOptimizer mechanism
+        // from the default-optimizer recipe. The test constructs both models
+        // with a deliberately-tiny LR=1e-5 + no scheduler — at that LR neither
+        // model can converge in 50 steps. We then override highLr's optimizer
+        // via SetBaseTrainOptimizer to a 1000× larger flat LR and verify that
+        // ONLY highLr converges. If SetBaseTrainOptimizer is a no-op (the
+        // bug this test pins), both models would train identically and final
+        // losses would match.
+        var slowOpts = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        {
+            InitialLearningRate = 1e-5,
+        };
+        var lowLr = new Transformer<float>(arch,
+            lossFunction: new CategoricalCrossEntropyLoss<float>(),
+            optimizer: new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, slowOpts));
+        var highLr = new Transformer<float>(arch,
+            lossFunction: new CategoricalCrossEntropyLoss<float>(),
+            optimizer: new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
+                new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-5 }));
         lowLr.SetTrainingMode(true);
         highLr.SetTrainingMode(true);
         lowLr.Train(input, target);
@@ -351,15 +364,15 @@ public class TransformerEndToEndIntegrationTests
         float lowStartLoss = lowLr.GetLastLoss();
         float highStartLoss = highLr.GetLastLoss();
 
-        // Override highLr's training optimizer via the new internal hook.
-        // The override only takes effect for subsequent Train calls.
+        // Override highLr's training optimizer via the internal hook. The
+        // override takes effect for subsequent Train calls; lowLr keeps the
+        // tiny LR=1e-5. After 50 steps highLr should have made meaningful
+        // progress while lowLr's loss has barely moved.
         var aggressiveAdam = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(
             null,
             new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
             {
-                InitialLearningRate = 0.1, // 100x the Vaswani default
-                Beta2 = 0.98,
-                Epsilon = 1e-9,
+                InitialLearningRate = 0.01, // 1000x the slow LR
             });
         highLr.SetBaseTrainOptimizer(aggressiveAdam);
 
@@ -398,6 +411,15 @@ public class TransformerEndToEndIntegrationTests
     // ---- helpers ----
 
     private static TransformerArchitecture<float> MakeArch(int vocab, int ctxLen, int dModel, int dFf, int layers, int heads)
+        // Tests run on tiny budgets (50–5000 steps), so the Vaswani 2017
+        // §5.3 default warmup of 4000 steps would keep the LR effectively
+        // zero throughout most of the test run. Use warmupSteps=10 here so
+        // the schedule actually reaches its peak within the test budget,
+        // and randomSeed=42 so Xavier init is deterministic across runs
+        // (without this, V=256 batched 100-step memorization showed
+        // 12-28% accuracy spread purely from non-deterministic
+        // RandomHelper.ThreadSafeRandom — closes the flake reported on
+        // PR #1265).
         => new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
@@ -409,7 +431,9 @@ public class TransformerEndToEndIntegrationTests
             inputSize: ctxLen,
             outputSize: vocab,
             maxSequenceLength: ctxLen,
-            vocabularySize: vocab);
+            vocabularySize: vocab,
+            warmupSteps: 10,
+            randomSeed: 42);
 
     private static float SoftmaxAndPickClass(Tensor<float> pred, int vocab, int targetClass)
     {

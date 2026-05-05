@@ -191,6 +191,52 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     public int MaxSequenceLength { get; }
 
     /// <summary>
+    /// Gets the number of warmup steps for the default Noam (Vaswani 2017)
+    /// learning-rate schedule attached to the Transformer's default Adam
+    /// optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The Vaswani 2017 §5.3 recipe uses a 4000-step linear warmup followed
+    /// by inverse-sqrt decay. That paper trained for 100k+ steps on WMT
+    /// translation, so 4000 (~4% of total) was a small fraction. For shorter
+    /// training budgets this default keeps the model in warmup forever and
+    /// the LR never reaches its peak — set this to roughly <c>0.1 ·
+    /// total_steps</c> for fine-tuning or short training runs.
+    /// </para>
+    /// <para>
+    /// Ignored when an explicit optimizer is passed to the Transformer
+    /// constructor (the user-supplied optimizer's own scheduler config wins).
+    /// </para>
+    /// </remarks>
+    public int WarmupSteps { get; }
+
+    /// <summary>
+    /// Gets the random seed used to derive deterministic weight initialization
+    /// for this architecture's default layer stack. <c>null</c> means use the
+    /// framework's non-deterministic thread-safe RNG (default — same behaviour
+    /// as before this property was added).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Setting this to a fixed integer (e.g., <c>0</c> or <c>42</c>) makes
+    /// <see cref="LayerHelper{T}.CreateDefaultTransformerLayers"/> wire each
+    /// layer's <c>InitializationStrategy</c> to a seeded
+    /// <see cref="Initialization.EagerInitializationStrategy{T}"/>, so Xavier
+    /// init produces the same weights every run. This is required for
+    /// reproducible unit tests, multi-seed experiment harnesses, and
+    /// CI determinism.
+    /// </para>
+    /// <para>
+    /// Without a fixed seed, every <c>new Transformer(arch, ...)</c> instance
+    /// gets different initial weights drawn from the process-wide thread-safe
+    /// RNG, and small training-budget convergence tests (e.g., V=256 batched
+    /// 100-step memorization) show non-deterministic accuracy across runs.
+    /// </para>
+    /// </remarks>
+    public int? RandomSeed { get; }
+
+    /// <summary>
     /// Gets the size of the vocabulary for text-based tasks.
     /// </summary>
     /// <remarks>
@@ -343,7 +389,9 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         bool usePositionalEncoding = true,
         double temperature = 1.0,
         SequencePoolingMode? sequencePooling = null,
-        List<ILayer<T>>? layers = null)
+        List<ILayer<T>>? layers = null,
+        int warmupSteps = 4000,
+        int? randomSeed = null)
         : base(
             inputType: inputType,
             taskType: taskType,
@@ -362,6 +410,8 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         VocabularySize = vocabularySize;
         UsePositionalEncoding = usePositionalEncoding;
         Temperature = temperature;
+        WarmupSteps = warmupSteps;
+        RandomSeed = randomSeed;
         // Default sequence pooling: token-input architectures (vocabSize > 0)
         // are autoregressive LMs by convention — use the LAST position's
         // hidden state, matching GPT / Llama / Mistral output heads.

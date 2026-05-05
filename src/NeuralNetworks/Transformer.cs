@@ -205,19 +205,33 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // (warmup + inverse-sqrt decay) can pass an explicit optimizer + scheduler.
         if (optimizer is null)
         {
-            // PyTorch / standard Adam defaults: β₁=0.9, β₂=0.999, ε=1e-8,
-            // lr=1e-3. Vaswani 2017 §5.3 used β₂=0.98 / ε=1e-9 as part of
-            // a paired warmup+inverse-sqrt LR schedule (lr_t = d_model^-0.5
-            // · min(t^-0.5, t · warmup^-1.5)). Without that schedule, β₂=0.98
-            // produces too-aggressive second-moment adaptation that slows
-            // convergence on static-batch memorization tasks (issue surfaced
-            // by TrainBatched_V256 reaching only 12% top-1 in 100 steps with
-            // Vaswani β₂; with β₂=0.999 it reaches >50%). Consumers wanting
-            // the Vaswani-2017 schedule can attach it explicitly via the
-            // optimizer constructor.
+            // Vaswani 2017 §5.3 hyperparameters, applied AS A RECIPE
+            // (β₁=0.9, β₂=0.98, ε=1e-9, lr=base · NoamSchedule(d_model)).
+            //
+            // β₂=0.98 (not the library default 0.999) is paired with the
+            // inverse-sqrt warmup schedule below: the small β₂ tracks
+            // attention/embedding gradients that change rapidly during
+            // training, while warmup keeps the early-step LR small enough
+            // that the (still-stabilizing) second-moment estimates don't
+            // produce mis-scaled updates. Applying β₂=0.98 WITHOUT the
+            // schedule is broken — the previous default (β₂=0.999, no
+            // schedule) was a workaround for that mismatch. We now apply
+            // them together so the recipe matches the paper exactly.
+            //
+            // The lazy-init path of NeuralNetworkBase only resolves
+            // ModelDimension after the first forward pass, but the Vaswani
+            // schedule needs d_model upfront to compute its peak LR. The
+            // architecture exposes ModelDimension at construction time, so
+            // we bind the schedule to that value here.
             var defaultAdamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = 1e-3,
+                Beta2 = 0.98,
+                Epsilon = 1e-9,
+                LearningRateScheduler = new LearningRateSchedulers.NoamSchedule(
+                    modelDimension: architecture.ModelDimension,
+                    warmupSteps: architecture.WarmupSteps),
+                SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
             };
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, defaultAdamOpts);
         }
@@ -770,17 +784,25 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         LossFunction = DeserializationHelper.DeserializeInterface<ILossFunction<T>>(reader)
             ?? LossFunction;
 
-        // Match the constructor's default-optimizer policy (Adam, not vanilla SGD).
-        // Stale-on-disk Transformer state-dicts written before this fix didn't
-        // serialize their optimizer; reading null-optimizer back must produce the
-        // same Adam(β₁=0.9, β₂=0.999, ε=1e-8, lr=1e-3) the ctor would, otherwise
-        // the deserialized model silently regresses to non-converging vanilla SGD.
+        // Match the constructor's default-optimizer policy: Vaswani 2017
+        // recipe (β₁=0.9, β₂=0.98, ε=1e-9, lr=1e-3 + NoamSchedule). Stale
+        // state-dicts written before this fix didn't serialize their
+        // optimizer; reading null-optimizer back must produce the SAME
+        // optimizer the ctor would, otherwise the deserialized model silently
+        // regresses to non-converging vanilla SGD or a different (non-paper)
+        // Adam configuration.
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
                 this,
                 new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 {
                     InitialLearningRate = 1e-3,
+                    Beta2 = 0.98,
+                    Epsilon = 1e-9,
+                    LearningRateScheduler = new LearningRateSchedulers.NoamSchedule(
+                        modelDimension: _transformerArchitecture.ModelDimension,
+                        warmupSteps: _transformerArchitecture.WarmupSteps),
+                    SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
                 });
 
         // Keep the base optimizer slot in sync after deserialization too

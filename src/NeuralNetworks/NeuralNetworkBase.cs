@@ -3906,6 +3906,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     Engine.TensorSubtractInPlace(extra, update);
                 }
             }
+
+            // Advance the optimizer's learning-rate scheduler. This was
+            // never being called from the training pipeline — schedulers
+            // configured on optimizers (LinearWarmupScheduler, NoamSchedule,
+            // CosineAnnealing, etc.) silently never stepped, leaving the LR
+            // pinned at its initial value forever. The contract documented
+            // on GradientBasedOptimizerBase.OnBatchEnd is "called at the end
+            // of each training batch"; TrainWithTape is the canonical batch
+            // boundary for tape-based training so it's the right place for
+            // the call. Optimizers that don't derive from
+            // GradientBasedOptimizerBase fall through unchanged.
+            if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
+            {
+                stepped.OnBatchEnd();
+            }
         }
         finally
         {
