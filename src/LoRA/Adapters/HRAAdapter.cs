@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-﻿#pragma warning disable CS0649, CS0414, CS0169
+#pragma warning disable CS0649, CS0414, CS0169
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
 

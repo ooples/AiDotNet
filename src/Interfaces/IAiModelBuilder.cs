@@ -1205,8 +1205,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// Configures weight streaming behavior. When the model's parameter
     /// count exceeds the threshold (default 10B params, ~40 GB at fp32),
     /// AiDotNet auto-pages weights to disk so the model can run on
-    /// machines with less RAM than the raw weight size — closes #1222
-    /// (PaLME 562B OOM). This method overrides the auto-detect.
+    /// machines with less RAM than the raw weight size — addresses most
+    /// of #1222 (PaLM-E 562B OOM). The remaining piece (a Tensors-side
+    /// pinned-host allocator that lets prefetched weights live outside
+    /// the GC heap) is tracked separately; until it lands, very-large
+    /// models still page through managed allocations on the prefetch
+    /// path. This method overrides the auto-detect. Closes review-
+    /// comment #1271.vDO5.
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> Modern foundation models can be

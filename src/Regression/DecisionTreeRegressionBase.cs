@@ -1074,10 +1074,19 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
             return gradients; // Return zeros
         }
 
-        // Distribute samples across parameters
-        int samplesPerParam = Math.Max(1, (sampleGradients.Length + ParameterCountHelper.ToFlatVectorSize(ParameterCount) - 1) / ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // Snapshot the int-narrowed count once. Single call to
+        // ToFlatVectorSize so a >int.MaxValue model fails with the
+        // helper's actionable error here instead of producing a
+        // truncated samplesPerParam from a re-narrowed cast. Loop
+        // bound is also the int snapshot so paramIdx (int) and the
+        // upper bound match types — the previous `paramIdx < ParameterCount`
+        // mixed int and long, which on a >int.MaxValue model would
+        // either silently overflow paramIdx or run past the gradients
+        // array (closes review-comment #1271.vDN-).
+        int paramCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
+        int samplesPerParam = Math.Max(1, (sampleGradients.Length + paramCount - 1) / paramCount);
 
-        for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
+        for (int paramIdx = 0; paramIdx < paramCount; paramIdx++)
         {
             T sum = NumOps.Zero;
             int count = 0;

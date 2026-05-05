@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-﻿using AiDotNet.DecompositionMethods.MatrixDecomposition;
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.Interfaces;
 

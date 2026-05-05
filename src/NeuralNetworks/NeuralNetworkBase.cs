@@ -520,31 +520,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // each layer's IsShapeResolved short-circuit.
         ResolveLazyLayerShapes();
 
-        // Single pass: ResolveLazyLayerShapes above has materialized
-        // every lazy layer reachable from the architecture, so each
-        // layer's GetParameters() now returns its concrete vector — no
-        // need to two-pass to "trigger lazy init via the first pass".
-        // Accumulate as long so the per-layer Length sum can never
-        // silently wrap before the int.MaxValue gate below catches it.
+        // Sum per-layer parameter counts via layer.ParameterCount (cheap
+        // metadata read), NOT via layer.GetParameters().Length (which
+        // forces every layer to materialize and return its full
+        // parameter Vector<T> just to read the Length). The previous
+        // implementation walked Layers TWICE — once to count via
+        // GetParameters().Length, once to actually copy — doubling the
+        // allocation pressure and the per-layer parameter materialization
+        // work for deep models. ResolveLazyLayerShapes above has
+        // already materialized every lazy layer's shape, so
+        // ParameterCount is now safe to read here. Closes review-comment
+        // #1271.uxip. Long accumulator + int.MaxValue gate below
+        // forwards the same overflow protection as before.
         long totalParameterCountLong = 0;
         foreach (var layer in Layers)
         {
-            totalParameterCountLong += layer.GetParameters().Length;
+            totalParameterCountLong += layer.ParameterCount;
         }
-        if (totalParameterCountLong > int.MaxValue)
-        {
-            throw new InvalidOperationException(
-                $"Total parameter count ({totalParameterCountLong:N0}) exceeds " +
-                $"int32 capacity ({int.MaxValue:N0}). The flat-parameter " +
-                $"Vector<T> API cannot represent this many elements in a " +
-                $"single Vector<T>. Walk Layers per-layer and stay in long " +
-                $"arithmetic, or split this architecture across multiple " +
-                $"network instances. Note: ParameterCount itself is now long " +
-                $"and reads correctly at any size; the limit applies only to " +
-                $"the flat-vector materialization path GetParameters / " +
-                $"SetParameters use.");
-        }
-        int totalParameterCount = (int)totalParameterCountLong;
+        int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
         var parameters = new Vector<T>(totalParameterCount);
         var destSpan = parameters.AsWritableSpan();
@@ -2587,6 +2580,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (!_firstForwardCompleted)
             {
                 _firstForwardCompleted = true;
+                // Invalidate the cached ParameterCount before the retry.
+                // The pre-forward auto-detect attempt at the top of
+                // Predict (above) called ParameterCount when lazy
+                // layers still reported 0, populating the cache with
+                // 0. Without this invalidation the post-forward retry
+                // would re-read the SAME cached 0 (because the cache
+                // sticks until layer mutation) and never engage
+                // streaming for the NEXT call — defeating the entire
+                // point of the lazy-layer retry path. Closes review-
+                // comments #1271.uxiB / .vbtb.
+                _cachedParameterCount = null;
                 TryAutoEnableWeightStreaming();
             }
             return output;
@@ -2764,13 +2768,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             result = current;
         }
 
-        // Post-first-forward auto-detect retry (mirrors Predict's finally
-        // block). Lazy training-only networks that never call Predict
-        // (e.g. a fine-tuning loop where forward is always paired with
-        // backward) need this hook to ever engage streaming.
+        // Post-first-forward auto-detect retry (mirrors Predict's path).
+        // Lazy training-only networks that never call Predict (e.g. a
+        // fine-tuning loop where forward is always paired with
+        // backward) need this hook to ever engage streaming. Invalidate
+        // the cached ParameterCount first — the pre-forward attempt may
+        // have populated it with 0 from lazy placeholder layers, and a
+        // retry that reuses the stale cache would never engage. Closes
+        // review-comment #1271.vbtm.
         if (!_firstForwardCompleted)
         {
             _firstForwardCompleted = true;
+            _cachedParameterCount = null;
             TryAutoEnableWeightStreaming();
         }
 

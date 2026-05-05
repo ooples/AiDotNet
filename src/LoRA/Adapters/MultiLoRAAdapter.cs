@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-﻿using System.Globalization;
+using System.Globalization;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;

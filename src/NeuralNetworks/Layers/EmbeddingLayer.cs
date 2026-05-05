@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-﻿using System;
+using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;

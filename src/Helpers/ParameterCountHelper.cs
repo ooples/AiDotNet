@@ -2,7 +2,7 @@ namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Centralizes the int-narrowing guard used wherever a model's <c>long</c>
-/// <c>ParameterCount</c> needs to fit into a flat <see cref="Vector{T}"/>-backed
+/// <c>ParameterCount</c> needs to fit into a flat <see cref="AiDotNet.Tensors.LinearAlgebra.Vector{T}"/>-backed
 /// buffer (which is bounded to <c>int.MaxValue</c> elements).
 /// </summary>
 /// <remarks>

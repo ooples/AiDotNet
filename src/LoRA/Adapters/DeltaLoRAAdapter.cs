@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 

@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;

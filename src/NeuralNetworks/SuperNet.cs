@@ -1,5 +1,5 @@
 using AiDotNet.Helpers;
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -1204,7 +1204,14 @@ namespace AiDotNet.NeuralNetworks
                 ["ModelType"] = "SuperNet (Differentiable Architecture Search)",
                 ["NumNodes"] = _numNodes,
                 ["NumOperations"] = _numOperations,
-                ["ParameterCount"] = ParameterCountHelper.ToFlatVectorSize(ParameterCount),
+                // Dictionary<string, object> can box a long natively;
+                // ToFlatVectorSize is reserved for places that genuinely
+                // need an int (Vector<T> allocation, int-indexed APIs).
+                // Storing the un-narrowed long lets >int.MaxValue
+                // models surface their true count via the
+                // interpretability dictionary without throwing here.
+                // Closes review-comment #1271.vDPV.
+                ["ParameterCount"] = ParameterCount,
                 ["ArchitectureParameterCount"] = _architectureParams.Sum(a => a.Rows * a.Columns),
                 ["WeightParameterCount"] = _weights.Values.Sum(w => w.Length),
                 ["InputSize"] = _inputSize,

@@ -989,10 +989,16 @@ public abstract class AsyncDecisionTreeRegressionBase<T> : IAsyncTreeBasedModel<
             return gradients; // Return zeros
         }
 
-        // Distribute samples across parameters
-        int samplesPerParam = Math.Max(1, (sampleGradients.Length + ParameterCountHelper.ToFlatVectorSize(ParameterCount) - 1) / ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        // Snapshot the int-narrowed count once so the loop bound and
+        // the indexing math share a single type (int) — the previous
+        // `paramIdx < ParameterCount` (int < long) implicit-widened the
+        // comparison but kept paramIdx as int, which on a >int.MaxValue
+        // model would silently overflow paramIdx or run past the
+        // gradients array. Closes review-comment #1271.vDOQ.
+        int paramCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
+        int samplesPerParam = Math.Max(1, (sampleGradients.Length + paramCount - 1) / paramCount);
 
-        for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
+        for (int paramIdx = 0; paramIdx < paramCount; paramIdx++)
         {
             T sum = NumOps.Zero;
             int count = 0;
