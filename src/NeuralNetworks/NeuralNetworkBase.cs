@@ -3364,6 +3364,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // use the legacy per-layer UpdateParameters path
                 var opt = GetOrCreateBaseOptimizer();
                 opt.UpdateParameters(Layers);
+
+                // Advance the optimizer's learning-rate scheduler — the
+                // tape-based branch above does this in TrainWithTape, but
+                // the legacy non-tape path was silently skipping it,
+                // leaving any attached scheduler (LinearWarmupScheduler,
+                // NoamSchedule, CosineAnnealing, etc.) inert and pinning
+                // the LR at its initial value forever. Train()'s call is
+                // the canonical batch boundary for legacy training so
+                // it's the right place to step. Optimizers that don't
+                // derive from GradientBasedOptimizerBase fall through
+                // unchanged. Closes review-comment #1270.yYuK.
+                if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
+                {
+                    stepped.OnBatchEnd();
+                }
             }
         }
         finally
