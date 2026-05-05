@@ -2231,6 +2231,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
             _layerOnlyInitialized = true;
             ResolveLazyLayerShapes();
+            // Eager auto-detect for streaming (#1222 / #183). For models with
+            // non-lazy layer construction (e.g. ResNet, VGG, classical CNNs)
+            // ParameterCount is reliable here and the threshold check fires
+            // immediately. For lazy models (Transformer / MultiHeadAttention),
+            // ParameterCount may report 0 at this point — the first-Predict
+            // call will retry once weights have materialized.
+            TryAutoEnableWeightStreaming();
             return;
         }
 
@@ -2261,6 +2268,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // weight tensors for actually-lazy layers (eager layers
             // short-circuit on their already-resolved IsShapeResolved).
             ResolveLazyLayerShapes();
+            // Eager auto-detect for streaming (#1222 / #183). See note on
+            // the layer-only branch above — this is the parallel call for
+            // architecture-driven models. Both paths converge through
+            // TryAutoEnableWeightStreaming, which is idempotent.
+            TryAutoEnableWeightStreaming();
         }
     }
 
@@ -2476,6 +2488,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // doesn't synchronize a global model state for concurrent inference.
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
+
+        // Lazy auto-detect retry (#1222 / #183). For lazy networks
+        // (Transformer / MultiHeadAttention with 0×0 placeholders), the
+        // ctor's eager check ran before weights materialized and saw
+        // ParameterCount=0 — under threshold. Now that the first forward
+        // is about to run (or has already run if this isn't the first
+        // call), try again. RegisterTrainableTensorsWithWeightRegistry
+        // skips zero-length tensors, so calling this before the forward
+        // walks layers but only acts on already-allocated weights; the
+        // RefreshWeightRegistry inside ConfigureWeightLifetime + tensor
+        // resolution during forward picks up newly-allocated tensors.
+        // No-op once attempted (or once explicitly configured/disabled).
+        TryAutoEnableWeightStreaming();
+
         try
         {
             // Universal batch-dim auto-promotion (mirrors the Train path).
@@ -3164,6 +3190,163 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (tensor is null || tensor.Length == 0) continue;
             WeightRegistry.RegisterWeight(tensor);
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Auto-detect default weight streaming (#1222 / #183)
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Default parameter-count threshold above which weight streaming is
+    /// auto-enabled. 10 billion parameters ≈ 40 GB at fp32 / 20 GB at fp16
+    /// — the point at which consumer GPUs (24 GB max) and most workstation
+    /// systems (32–64 GB RAM) start hitting memory pressure. Models below
+    /// this train eagerly with no streaming overhead. Override per-process
+    /// via the <c>AIDOTNET_STREAMING_THRESHOLD_PARAMS</c> environment
+    /// variable, or per-instance via <see cref="DisableAutoStreaming"/> /
+    /// the explicit <see cref="ConfigureWeightLifetime"/> call.
+    /// </summary>
+    private const long DefaultStreamingThresholdParams = 10_000_000_000L;
+
+    /// <summary>
+    /// Resolved threshold: env-var override if set + parseable, else the
+    /// compiled-in default. Read once at first use rather than per-call so
+    /// the env var is captured at process start (matching the conventions
+    /// of <c>DOTNET_*</c> / <c>ASPNETCORE_*</c> tunables).
+    /// </summary>
+    private static readonly long s_streamingThresholdParams = ResolveStreamingThreshold();
+
+    private static long ResolveStreamingThreshold()
+    {
+        var raw = Environment.GetEnvironmentVariable("AIDOTNET_STREAMING_THRESHOLD_PARAMS");
+        if (!string.IsNullOrWhiteSpace(raw)
+            && long.TryParse(raw.Trim(), System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out long parsed)
+            && parsed > 0)
+        {
+            return parsed;
+        }
+        return DefaultStreamingThresholdParams;
+    }
+
+    /// <summary>
+    /// True once <see cref="TryAutoEnableWeightStreaming"/> has run on this
+    /// instance — guards against re-checking on every Predict call. Set
+    /// regardless of whether streaming was actually enabled (the threshold
+    /// answer is stable per instance once layers are materialized).
+    /// </summary>
+    private bool _streamingAutoDetectAttempted;
+
+    /// <summary>
+    /// True when the user explicitly opted out of auto-streaming for this
+    /// instance via <see cref="DisableAutoStreaming"/> (e.g.
+    /// <c>PredictionModelBuilder.ConfigureWeightStreaming(disabled: true)</c>).
+    /// Honoured by <see cref="TryAutoEnableWeightStreaming"/>.
+    /// </summary>
+    private bool _streamingAutoDetectDisabled;
+
+    /// <summary>
+    /// Opts this model OUT of auto-streaming detection. Useful for tests
+    /// that need predictable in-memory behavior, or for callers who know
+    /// their working set fits in RAM regardless of total parameter count
+    /// (e.g. they only run inference on a fraction of the parameters).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// No effect once <see cref="ConfigureWeightLifetime"/> has been called
+    /// — that's a deliberate explicit opt-IN that takes precedence over
+    /// auto-detect either direction.
+    /// </para>
+    /// </remarks>
+    internal void DisableAutoStreaming() => _streamingAutoDetectDisabled = true;
+
+    /// <summary>
+    /// Returns true iff this instance has had auto-detect successfully
+    /// promote it into streaming mode (vs being explicitly configured by
+    /// the user, or auto-detect deciding the model fits in RAM). Used by
+    /// telemetry / regression tests that need to assert on the auto-detect
+    /// branch having fired.
+    /// </summary>
+    internal bool WeightStreamingAutoDetected => _streamingAutoDetectAttempted
+                                                   && _weightLifetimeConfigured
+                                                   && !_streamingAutoDetectDisabled;
+
+    /// <summary>
+    /// Auto-enables weight streaming if this model's total parameter count
+    /// crosses the threshold AND the user hasn't already opted in or out
+    /// explicitly. Idempotent: subsequent calls are no-ops once the flag
+    /// is set. Both ctor (eager) and first-forward (lazy) call this so
+    /// models with non-lazy layers get streaming early, while models that
+    /// only know their parameter count after first forward (lazy
+    /// MultiHeadAttention / lazy Conv) catch up at that point.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Ctor invocation:</b> ParameterCount may report 0 for fully-lazy
+    /// models in the ctor (placeholders haven't materialized). That's not
+    /// a missed opportunity — it's the right behavior, because the threshold
+    /// is in absolute parameter count and a lazy model legitimately doesn't
+    /// know its size yet. The first-forward call rechecks once weights
+    /// have allocated.
+    /// </para>
+    /// <para>
+    /// <b>Process-wide side effect:</b> like
+    /// <see cref="ConfigureWeightLifetime"/>, this method ultimately calls
+    /// <see cref="WeightRegistry.Configure"/>, which mutates a process-wide
+    /// singleton. The first network in a process to cross the threshold
+    /// installs the offload configuration that every other network will
+    /// see. Multi-model processes that need different policies per model
+    /// must explicitly call <see cref="ConfigureWeightLifetime"/> with
+    /// matched options on each network.
+    /// </para>
+    /// <para>
+    /// Visible to <c>AiDotNet.Tests</c> via <c>InternalsVisibleTo</c> so
+    /// regression tests can assert on the auto-detect branch firing.
+    /// </para>
+    /// </remarks>
+    internal void TryAutoEnableWeightStreaming()
+    {
+        if (_streamingAutoDetectAttempted) return;
+        if (_weightLifetimeConfigured) { _streamingAutoDetectAttempted = true; return; }
+        if (_streamingAutoDetectDisabled) { _streamingAutoDetectAttempted = true; return; }
+
+        long paramCount;
+        try
+        {
+            paramCount = ParameterCount;
+        }
+        catch
+        {
+            // ParameterCount can throw on partially-constructed models
+            // (e.g. a subclass ctor failing before InitializeLayers
+            // completes). Don't propagate from auto-detect — the explicit
+            // ConfigureWeightLifetime entry point stays available for
+            // those models to call later.
+            return;
+        }
+
+        if (paramCount < s_streamingThresholdParams)
+        {
+            // Below threshold: stays eager. Set the attempted flag so the
+            // first-forward path's call doesn't re-pay the ParameterCount
+            // walk on every Predict. If a lazy model's parameter count
+            // grows AFTER the first forward (rare — only happens with
+            // dynamically-added sub-layers), the user can call
+            // ConfigureWeightLifetime explicitly.
+            _streamingAutoDetectAttempted = true;
+            return;
+        }
+
+        // Above threshold: enable streaming with conservative defaults.
+        // The locked design (#1222 weight-streaming v1) calls for LZ4
+        // compression on the disk-backing store and a prefetch window of
+        // W=2 layers. Both live on GpuOffloadOptions; we use the
+        // parameterless ctor so any future field additions inherit the
+        // Tensors-side default rather than getting frozen at the value we
+        // pinned today.
+        var options = new GpuOffloadOptions();
+        ConfigureWeightLifetime(options);
+        _streamingAutoDetectAttempted = true;
     }
 
     /// <summary>
