@@ -376,7 +376,6 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// — uses the framework's secure non-deterministic RNG, suitable
     /// for production training.
     /// </param>
-    /// <param name="rbmLayers">Optional Restricted Boltzmann Machine layers for the network. Defaults to null.</param>
     /// <remarks>
     /// <para>
     /// This constructor initializes a new TransformerArchitecture with the specified parameters, which will

@@ -341,4 +341,135 @@ public class OnnxSymbolicAxisRuntimeTests
         for (int i = 0; i < t.Length; i++) t[i] = 0.001f * (i + 1);
         return t;
     }
+
+    /// <summary>
+    /// Companion to <see cref="OnnxExporter_RealModel_EmitsSymbolicAxes_ViaReflection"/>:
+    /// the activation-only fixture verifies the dim_param emission path
+    /// but never reaches the new GetWeights() / GetBiases() reflection
+    /// fallbacks or the Tensor&lt;T&gt; shape-walking branches in
+    /// <c>OnnxExporter</c>. This test exports a small DenseLayer-bearing
+    /// model so those code paths are actually exercised — without it,
+    /// the reflected weight/bias export added in this PR could silently
+    /// regress and the suite would still go green. Closes review-comment
+    /// #1269.yEOQ. Asserts both that the export produces non-empty bytes
+    /// and that the emitted graph contains a length-prefixed initializer
+    /// name from the DenseLayer (e.g. <c>dense_0_weights</c>), which only
+    /// gets written when the GetWeights() reflection actually returned a
+    /// real Tensor&lt;T&gt; that the exporter walked.
+    /// </summary>
+    [Fact]
+    public void OnnxExporter_WeightBearingLayer_ExportsTensorWeights_ViaReflection()
+    {
+        var model = new TinyDenseNet();
+        Assert.True(model.Layers.Count >= 1);
+
+        // Warm the layer chain so weight tensors are concretized at the
+        // 2D contract DenseLayer expects ([batch, inputFeatures]).
+        var inputShape = new[] { 1, 4 };
+        AdnTensor x = MakeRamp(inputShape);
+        foreach (var layer in model.Layers)
+        {
+            x = layer.Forward(x);
+        }
+
+        var onnxBytes = OnnxExporter.ExportToBytes(model, inputShape);
+        Assert.True(onnxBytes.Length > 0,
+            "OnnxExporter produced an empty graph — the weight-bearing layer's " +
+            "GetWeights() / GetBiases() reflection path likely threw silently " +
+            "or skipped initializer emission.");
+
+        // dense_0_weights is the initializer name OnnxExporter assigns to
+        // the first DenseLayer's weight tensor (see OnnxExporter
+        // dense_{nodeIndex}_weights / _bias). If the GetWeights() reflection
+        // returned null or the Tensor<T>-shape branch failed to walk the
+        // weight tensor, this name never enters the graph and the assertion
+        // helper fails with the protobuf-framing error message.
+        AssertLengthPrefixedNameInBytes(onnxBytes, "dense_0_weights");
+        AssertLengthPrefixedNameInBytes(onnxBytes, "dense_0_bias");
+    }
+
+    /// <summary>
+    /// Asserts that <paramref name="haystack"/> contains the length-delimited
+    /// UTF-8 encoding of <paramref name="needle"/> (single-byte varint length
+    /// + UTF-8 bytes) anywhere in the protobuf wire bytes — used for
+    /// initializer names that don't carry the dim_param 0x12 field tag
+    /// (initializer's <c>name</c> field is a string on TensorProto, encoded
+    /// with field tag 0x42 = (8 &lt;&lt; 3) | 2). We don't anchor on the field
+    /// tag here because some name strings appear in multiple TensorProto
+    /// fields; the length-prefix anchor alone is strong enough for an
+    /// underscore-bearing name like <c>dense_0_weights</c> (no random match
+    /// hazard at this length).
+    /// </summary>
+    private static void AssertLengthPrefixedNameInBytes(byte[] haystack, string needle)
+    {
+        var nameBytes = System.Text.Encoding.UTF8.GetBytes(needle);
+        if (nameBytes.Length >= 0x80)
+        {
+            throw new System.NotSupportedException(
+                $"Test sentinel '{needle}' is {nameBytes.Length} bytes; this " +
+                "helper currently only supports single-byte varint length prefixes.");
+        }
+        byte lengthPrefix = (byte)nameBytes.Length;
+
+        for (int start = 0; start <= haystack.Length - 1 - nameBytes.Length; start++)
+        {
+            if (haystack[start] != lengthPrefix) continue;
+            bool match = true;
+            for (int j = 0; j < nameBytes.Length; j++)
+            {
+                if (haystack[start + 1 + j] != nameBytes[j]) { match = false; break; }
+            }
+            if (match) return;
+        }
+        Assert.Fail(
+            $"Could not find length-prefixed UTF-8 encoding of '{needle}' " +
+            $"(0x{lengthPrefix:X2} followed by the {nameBytes.Length} UTF-8 " +
+            $"bytes of '{needle}') anywhere in the {haystack.Length}-byte ONNX " +
+            $"graph. This means the exporter never wrote an initializer with " +
+            $"this name — the GetWeights() / GetBiases() reflection path or " +
+            $"the Tensor<T> shape-walking branch likely failed silently.");
+    }
+
+    /// <summary>
+    /// Minimal weight-bearing model used by the reflection-path companion
+    /// test. A single DenseLayer (4 → 2) provides a real <c>Tensor&lt;T&gt;</c>
+    /// weight matrix and bias vector that exercise <c>OnnxExporter</c>'s
+    /// GetWeights() / GetBiases() reflection fallbacks and the
+    /// Tensor&lt;T&gt; shape-walking branch when emitting the initializer
+    /// protos.
+    /// </summary>
+    private sealed class TinyDenseNet : NeuralNetworkBase<float>
+    {
+        public TinyDenseNet()
+            : base(new NeuralNetworkArchitecture<float>(
+                    inputType: InputType.OneDimensional,
+                    taskType: NeuralNetworkTaskType.BinaryClassification,
+                    complexity: NetworkComplexity.Simple,
+                    inputSize: 4,
+                    outputSize: 2),
+                  new MeanSquaredErrorLoss<float>())
+        {
+            InitializeLayers();
+        }
+
+        protected override void InitializeLayers()
+        {
+            if (Layers.Count > 0) return;
+            Layers.Add(new DenseLayer<float>(2,
+                activationFunction: (AiDotNet.Interfaces.IActivationFunction<float>)new IdentityActivation<float>()));
+        }
+
+        protected override IFullModel<float, AdnTensor, AdnTensor> CreateNewInstance()
+            => new TinyDenseNet();
+
+        protected override void SerializeNetworkSpecificData(BinaryWriter writer) { }
+        protected override void DeserializeNetworkSpecificData(BinaryReader reader) { }
+
+        public override void UpdateParameters(Vector<float> parameters)
+            => throw new System.NotSupportedException(
+                "TinyDenseNet is an export-only test stub — UpdateParameters is not wired.");
+
+        public override ModelMetadata<float> GetModelMetadata()
+            => new ModelMetadata<float> { Name = "TinyDenseNet" };
+    }
 }

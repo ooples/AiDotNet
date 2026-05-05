@@ -388,12 +388,14 @@ public class TransformerEndToEndIntegrationTests
             $"  low-LR start={lowStartLoss:F4} final={lowFinalLoss:F4}  "
             + $"high-LR start={highStartLoss:F4} final={highFinalLoss:F4}");
 
-        // Behavioral assertion: at LR=0.1, the aggressive Adam should saturate
-        // the 4-class memorization task within 50 steps (final loss ≈ 0). At
-        // LR=1e-3, Adam needs ~5000 steps to reach the same point, so the
-        // low-LR model's final loss still has meaningful magnitude (typically
-        // 0.05-0.5). Asserting a 3x gap between the two final losses is
-        // robust to floating-point noise while still failing loudly if
+        // Behavioral assertion: at LR=0.01 (the aggressive optimizer's
+        // InitialLearningRate at line 375), Adam should make meaningful
+        // progress on the 4-class memorization task within 50 steps. At
+        // LR=1e-5 (the slow optimizer's InitialLearningRate at line 346,
+        // 1000× smaller), Adam barely moves — the low-LR model's final
+        // loss still has meaningful magnitude (typically 0.05-0.5).
+        // Asserting a 3x gap between the two final losses is robust to
+        // floating-point noise while still failing loudly if
         // SetBaseTrainOptimizer were a no-op (both models would train
         // identically and the gap would be ~1x). Magnitudes are small after
         // 50 steps so we add a small absolute floor to avoid divide-by-zero

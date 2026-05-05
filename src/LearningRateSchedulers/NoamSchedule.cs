@@ -90,9 +90,8 @@ public class NoamSchedule : LearningRateSchedulerBase
     /// uses <c>_baseLearningRate</c> as a peak-LR sentinel (to satisfy the
     /// base ctor's positive-LR guard at <c>ComputePeakLr</c>), so the default
     /// <c>Reset()</c> would skip warmup and jump straight to the peak LR on
-    /// any subsequent training run — exactly the regression review-comment
-    /// #1269.xZeb flagged. Override to restore the warmup-start LR (t=1)
-    /// instead, matching the post-ctor state.
+    /// any subsequent training run. Override to restore the warmup-start LR
+    /// (t=1) instead, matching the post-ctor state.
     /// </summary>
     public override void Reset()
     {
