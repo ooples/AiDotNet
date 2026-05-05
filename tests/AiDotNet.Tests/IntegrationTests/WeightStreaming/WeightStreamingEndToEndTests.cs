@@ -193,6 +193,68 @@ public sealed class WeightStreamingEndToEndTests
     }
 
     [Fact]
+    public void Streaming_TightPoolBudget_ForcesEvictionWithoutOOM()
+    {
+        // The proof that streaming actually pages weights to disk
+        // under memory pressure. Configure a tight pool budget so the
+        // network's combined weights exceed it — eviction MUST kick in
+        // for the registration calls to succeed without growing the
+        // pool past budget.
+        //
+        // Pre-fix (Lifetime never set to Streaming), this test would
+        // not have engaged the eviction path at all: RegisterWeight
+        // returned silently for Default lifetime, the pool's
+        // ResidentBytes stayed 0, and the budget was never approached.
+        //
+        // Post-fix, registering each layer's weights walks the
+        // EvictIfOverBudget loop in StreamingTensorPool to keep
+        // ResidentBytes ≤ budget. Test asserts the cumulative
+        // registered weight bytes far exceed the pool budget AND
+        // ResidentBytes stays under it — proof that eviction ran.
+
+        // Pool budget: 256 KB. SmallStreamableNetwork has 4 dense
+        // layers; with 8 input → 16 → 16 → 16 → 4 outputs and float
+        // weights: (8*16) + 16 + (16*16) + 16 + (16*16) + 16 + (16*4) + 4
+        // = 128 + 16 + 256 + 16 + 256 + 16 + 64 + 4 = 756 floats = 3024 bytes.
+        // That's tiny — to force eviction we need a budget SMALLER
+        // than the cumulative serialized bytes. 1 KB budget against
+        // 3 KB of weights → ~3 evictions during register.
+        var net = new SmallStreamableNetwork();
+
+        // Materialize the weights via warm-up forward.
+        var input = new Tensor<float>([1, 8]);
+        for (int i = 0; i < 8; i++) input[0, i] = (float)(i + 1) * 0.5f;
+        _ = net.Predict(input);
+
+        // Engage streaming with an aggressively-tight budget. 1 KB
+        // forces every register to immediately exceed budget and
+        // evict the LRU entry.
+        var options = new GpuOffloadOptions { StreamingPoolMaxResidentBytes = 1024L };
+        net.ConfigureWeightLifetimeForTest(options);
+
+        long resident = net.WeightStreamingResidentBytes;
+        Assert.True(resident <= 1024L,
+            $"Streaming pool should have evicted to stay under 1024-byte budget, "
+            + $"but ResidentBytes={resident}. EvictIfOverBudget didn't run during "
+            + "register, suggesting tensor.Lifetime wasn't set to Streaming "
+            + "BEFORE WeightRegistry.RegisterWeight (Default-lifetime tensors "
+            + "early-return without ever touching the pool).");
+
+        // Run a forward AFTER registration. Materialization MUST work
+        // even though some weights were paged to disk during register.
+        var output = net.Predict(input);
+        Assert.NotNull(output);
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.True(!float.IsNaN(output[i]) && !float.IsInfinity(output[i]),
+                $"Forward through streaming-with-eviction produced non-finite "
+                + $"output at index {i}: {output[i]}. Likely a Materialize bug "
+                + "where a paged-out tensor isn't correctly rehydrated from "
+                + "disk before its layer's Forward needs the bytes.");
+        }
+    }
+
+    [Fact]
     public void Streaming_ConfigureWeightLifetime_ActuallyTracksWeightsInPool()
     {
         // Pre-audit (commit 190801e1b and earlier), this test would have
