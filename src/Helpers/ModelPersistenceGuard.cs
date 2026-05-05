@@ -342,11 +342,15 @@ internal static class ModelPersistenceGuard
                 }
                 else
                 {
-                    // Env var or file — offline-only validation (format/signature check, no server call)
-                    keyConfig = new AiDotNetLicenseKey(licenseKey)
-                    {
-                        ServerUrl = string.Empty // explicit empty = offline-only mode
-                    };
+                    // Env var or file — let the validator pick the right path:
+                    //   - HMAC-signed `aidn.{id}.{sig}` keys: validate offline against build key.
+                    //   - Server-validated `AIDN-PROD-*` keys: hit the default server endpoint.
+                    // Leaving ServerUrl=null routes through the validator's auto-detect logic
+                    // (default URL for online keys, offline path for signed keys). The previous
+                    // code forced ServerUrl="" which made the validator's offline-only branch
+                    // reject AIDN-* keys outright AND, before the offline-mode signed-key gate
+                    // landed, accepted them WITHOUT cryptographic verification — both wrong.
+                    keyConfig = new AiDotNetLicenseKey(licenseKey);
                 }
 
                 _validator = new LicenseValidator(keyConfig);

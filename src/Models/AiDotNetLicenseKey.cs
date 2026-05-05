@@ -36,8 +36,17 @@ public sealed class AiDotNetLicenseKey
 
     /// <summary>
     /// Gets or sets the URL of the license validation server.
-    /// When null, the license operates in offline-only mode (no server validation).
     /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    ///   <item><c>null</c> (default) — the validator uses the built-in
+    ///         <see cref="Helpers.LicenseValidator.DefaultServerUrl"/> for online validation.</item>
+    ///   <item><c>""</c> (explicit empty) — opt into offline-only mode. Only HMAC-signed
+    ///         <c>aidn.{id}.{sig}</c> keys are accepted; <c>AIDN-PROD-*</c> server-validated
+    ///         keys are rejected since the SDK can't cryptographically verify them.</item>
+    ///   <item>Custom URL — online validation against your own license endpoint.</item>
+    /// </list>
+    /// </remarks>
     public string? ServerUrl { get; set; }
 
     /// <summary>
