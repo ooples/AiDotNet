@@ -549,8 +549,16 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
         // Use SimdRandom for vectorized initialization (4x faster than Vector.CreateRandom
-        // which uses LockedRandom with per-element locking)
-        var rng = new SimdRandom();
+        // which uses LockedRandom with per-element locking). Honour the
+        // layer-level deterministic seed (LayerBase<T>.RandomSeed) when set
+        // so attention weights follow the layer-level reproducibility
+        // contract — without this hook, TransformerArchitecture.RandomSeed
+        // wouldn't reach MHA's init and attention weights would be
+        // non-deterministic across runs even with a fixed architecture
+        // seed. Closes review-comment #1270.y2-E.
+        SimdRandom rng = RandomSeed.HasValue
+            ? new SimdRandom(RandomSeed.Value)
+            : new SimdRandom();
         FillTensorRandomScaled(_queryWeights, rng, scale);
         FillTensorRandomScaled(_keyWeights, rng, scale);
         FillTensorRandomScaled(_valueWeights, rng, scale);

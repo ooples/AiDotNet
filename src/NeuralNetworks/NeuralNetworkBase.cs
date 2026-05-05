@@ -3906,6 +3906,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     Engine.TensorSubtractInPlace(extra, update);
                 }
             }
+
+            // Advance the optimizer's learning-rate scheduler. This was
+            // never being called from the training pipeline — schedulers
+            // configured on optimizers (LinearWarmupScheduler, NoamSchedule,
+            // CosineAnnealing, etc.) silently never stepped, leaving the LR
+            // pinned at its initial value forever. The contract documented
+            // on GradientBasedOptimizerBase.OnBatchEnd is "called at the end
+            // of each training batch"; TrainWithTape is the canonical batch
+            // boundary for tape-based training so it's the right place for
+            // the call. Optimizers that don't derive from
+            // GradientBasedOptimizerBase fall through unchanged.
+            if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
+            {
+                stepped.OnBatchEnd();
+            }
         }
         finally
         {
@@ -4227,6 +4242,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 input, input, ComputeForward, RecomputeLoss);
 
             opt.Step(context);
+
+            // Advance the optimizer's learning-rate scheduler. Same hook
+            // as TrainWithTape — without this, a per-batch scheduler
+            // (Noam, LinearWarmupScheduler, CosineAnnealing, etc.)
+            // attached to the optimizer remains inert when callers use
+            // TrainWithCustomLoss instead of the standard Train path,
+            // pinning the LR at its initial value forever. Closes
+            // review-comment #1269.zFt3.
+            if (opt is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
+            {
+                stepped.OnBatchEnd();
+            }
+
             return lossValue;
         }
         finally

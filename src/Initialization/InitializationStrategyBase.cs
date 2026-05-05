@@ -23,17 +23,33 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected readonly INumericOperations<T> NumOps;
 
     /// <summary>
-    /// Thread-safe random number generator.
+    /// Random number generator used for sampling weights. By default this is
+    /// <see cref="RandomHelper.ThreadSafeRandom"/> (non-deterministic across
+    /// process instances) — pass a seeded <see cref="Random"/> to the
+    /// constructor when reproducible initialization is required.
     /// </summary>
     protected readonly Random Random;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="InitializationStrategyBase{T}"/> class.
+    /// Initializes a new instance of the <see cref="InitializationStrategyBase{T}"/> class
+    /// using the framework's default thread-safe non-deterministic RNG. Use the
+    /// other overload when reproducibility is required.
     /// </summary>
     protected InitializationStrategyBase()
+        : this(rng: null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InitializationStrategyBase{T}"/> class
+    /// using the supplied <see cref="Random"/> (for reproducible / seeded
+    /// initialization). Pass <c>null</c> to fall back to the framework's
+    /// default non-deterministic RNG.
+    /// </summary>
+    protected InitializationStrategyBase(Random? rng)
     {
         NumOps = MathHelper.GetNumericOperations<T>();
-        Random = RandomHelper.ThreadSafeRandom;
+        Random = rng ?? RandomHelper.ThreadSafeRandom;
     }
 
     /// <inheritdoc />
@@ -291,7 +307,10 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
             int chunkStart = c * chunkSize;
             int chunkEnd = Math.Min(chunkStart + chunkSize, length);
             if (chunkStart >= chunkEnd) return;
-            var chunkRng = new Random(seeds[c]);
+            // Per-thread seeded RNG goes through RandomHelper to keep
+            // the codebase-wide rule (never construct System.Random
+            // directly) intact even on the parallel-fill path.
+            var chunkRng = RandomHelper.CreateSeededRandom(seeds[c]);
             FillChunkDouble(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), stddev, clipBound, chunkRng);
         });
     }
@@ -363,7 +382,7 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
             int chunkStart = c * chunkSize;
             int chunkEnd = Math.Min(chunkStart + chunkSize, length);
             if (chunkStart >= chunkEnd) return;
-            var chunkRng = new Random(seeds[c]);
+            var chunkRng = RandomHelper.CreateSeededRandom(seeds[c]);
             FillChunkFloat(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), stddev, clipBound, chunkRng);
         });
     }

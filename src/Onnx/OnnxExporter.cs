@@ -222,10 +222,24 @@ public static class OnnxExporter
     {
         // Reflection rather than a hard cast — IFullModel doesn't expose
         // Architecture, but every NeuralNetworkBase-derived model does.
-        var archProp = model.GetType().GetProperty("Architecture");
-        if (archProp is null) return false;
-        var arch = archProp.GetValue(model);
+        // NeuralNetworkBase declares Architecture as a public FIELD (not a
+        // property), so probe BOTH GetField and GetProperty — the original
+        // GetProperty-only path silently returned false for every NN model
+        // and made the symbolic-axis emission no-op even when the
+        // architecture truly was dynamic.
+        var modelType = model.GetType();
+        object? arch = null;
+        var archField = modelType.GetField("Architecture");
+        if (archField is not null) arch = archField.GetValue(model);
+        if (arch is null)
+        {
+            var archProp = modelType.GetProperty("Architecture");
+            if (archProp is null) return false;
+            arch = archProp.GetValue(model);
+        }
         if (arch is null) return false;
+
+        // HasDynamicSpatialDims is a property on NeuralNetworkArchitecture<T>.
         var dynProp = arch.GetType().GetProperty("HasDynamicSpatialDims");
         return dynProp is not null && dynProp.GetValue(arch) is bool b && b;
     }
@@ -369,6 +383,15 @@ public static class OnnxExporter
     {
         var layerType = layer.GetType();
 
+        // Try property accessors first (older custom layers expose Weights /
+        // Bias as direct properties), then fall back to GetWeights() /
+        // GetBiases() method accessors (the LayerBase<T> standard surface
+        // — DenseLayer, FullyConnectedLayer, ConvolutionalLayer, etc. all
+        // expose weights via methods, not properties). The reflection-only
+        // probe was previously failing for the entire layer-method-based
+        // family (closes review-comment #1269.vzGT's underlying cause —
+        // the test couldn't even reach the symbolic-axis assertion path
+        // for a Dense-layer-based test model).
         var weightsProp = layerType.GetProperty("Weights");
         var biasProp = layerType.GetProperty("Bias") ?? layerType.GetProperty("Biases");
 
@@ -379,10 +402,26 @@ public static class OnnxExporter
         {
             weights = ConvertToFloatMatrix(weightsProp.GetValue(layer), numOps);
         }
+        else
+        {
+            var getWeightsMethod = layerType.GetMethod("GetWeights", System.Type.EmptyTypes);
+            if (getWeightsMethod is not null)
+            {
+                weights = ConvertToFloatMatrix(getWeightsMethod.Invoke(layer, null), numOps);
+            }
+        }
 
         if (biasProp is not null)
         {
             bias = ConvertToFloatArray(biasProp.GetValue(layer), numOps);
+        }
+        else
+        {
+            var getBiasesMethod = layerType.GetMethod("GetBiases", System.Type.EmptyTypes);
+            if (getBiasesMethod is not null)
+            {
+                bias = ConvertToFloatArray(getBiasesMethod.Invoke(layer, null), numOps);
+            }
         }
 
         if (weights is null)
@@ -435,6 +474,50 @@ public static class OnnxExporter
             }
         }
 
+        // Tensor<T>: GetBiases() on LayerBase<T> returns Tensor<T>; rank-1
+        // for Dense bias. Same fast-path as the 2D weights branch — pull
+        // the underlying T[] in a single reflection call, then iterate
+        // without per-element reflection. Closes #1269.zFuH for the bias
+        // path too.
+        if (objType.IsGenericType && objType.Name.Contains("Tensor"))
+        {
+            var lengthProp = objType.GetProperty("Length");
+            if (lengthProp is not null)
+            {
+                int length = (int)lengthProp.GetValue(obj)!;
+
+                var getDataArrayMethod = objType.GetMethod("GetDataArray", System.Type.EmptyTypes);
+                if (getDataArrayMethod is not null)
+                {
+                    var raw = getDataArrayMethod.Invoke(obj, null);
+                    if (raw is T[] flat && flat.Length >= length)
+                    {
+                        var result = new float[length];
+                        for (int i = 0; i < length; i++)
+                        {
+                            result[i] = (float)numOps.ToDouble(flat[i]);
+                        }
+                        return result;
+                    }
+                }
+
+                var indexer = objType.GetProperty("Item", new[] { typeof(int) });
+                if (indexer is not null)
+                {
+                    var result = new float[length];
+                    for (int i = 0; i < length; i++)
+                    {
+                        var val = indexer.GetValue(obj, new object[] { i });
+                        if (val is T tval)
+                        {
+                            result[i] = (float)numOps.ToDouble(tval);
+                        }
+                    }
+                    return result;
+                }
+            }
+        }
+
         return null;
     }
 
@@ -456,6 +539,91 @@ public static class OnnxExporter
         }
 
         var objType = obj.GetType();
+
+        // Tensor<T> path: GetWeights() on LayerBase<T> returns Tensor<T>
+        // (rank-2 [outputSize, inputSize] for Dense). Walk the Shape to
+        // confirm rank, read flat data via the int-indexed accessor (the
+        // tensor's row-major iteration order matches the float[,] layout).
+        if (objType.IsGenericType && objType.Name.Contains("Tensor"))
+        {
+            var shapeProp = objType.GetProperty("Shape");
+            if (shapeProp is not null)
+            {
+                var shapeObj = shapeProp.GetValue(obj);
+                int[]? shape = shapeObj as int[];
+                if (shape is null && shapeObj is not null)
+                {
+                    // Tensor<T>.Shape is TensorShape on net471 — pull
+                    // dim count + per-axis size via reflection so this
+                    // works on both target frameworks.
+                    var lengthProp = shapeObj.GetType().GetProperty("Length");
+                    var indexerProp = shapeObj.GetType().GetProperty("Item");
+                    if (lengthProp is not null && indexerProp is not null)
+                    {
+                        int len = (int)lengthProp.GetValue(shapeObj)!;
+                        shape = new int[len];
+                        for (int k = 0; k < len; k++)
+                            shape[k] = (int)indexerProp.GetValue(shapeObj, new object[] { k })!;
+                    }
+                }
+                if (shape is { Length: 2 })
+                {
+                    int rows = shape[0], cols = shape[1];
+                    // Fast path: pull the underlying T[] data array via a
+                    // SINGLE reflection call, then do a tight non-reflective
+                    // copy/cast loop. The previous per-element indexer
+                    // reflection (PropertyInfo.GetValue inside the nested
+                    // loop) made export O(rows × cols) reflection calls —
+                    // for a 4096×4096 attention weight that's 16M reflective
+                    // dispatches and was unusably slow on realistic models.
+                    // Closes review-comment #1269.zFuH.
+                    var getDataArrayMethod = objType.GetMethod("GetDataArray", System.Type.EmptyTypes);
+                    if (getDataArrayMethod is not null)
+                    {
+                        var raw = getDataArrayMethod.Invoke(obj, null);
+                        if (raw is T[] flat && flat.Length >= rows * cols)
+                        {
+                            var result = new float[rows, cols];
+                            int idx = 0;
+                            for (int i = 0; i < rows; i++)
+                            {
+                                for (int j = 0; j < cols; j++)
+                                {
+                                    // numOps.ToDouble already returns double;
+                                    // System.Convert.ToDouble was redundant.
+                                    result[i, j] = (float)numOps.ToDouble(flat[idx++]);
+                                }
+                            }
+                            return result;
+                        }
+                    }
+
+                    // Fallback: per-element indexer if the tensor type
+                    // doesn't expose GetDataArray() (custom Tensor<T>
+                    // implementations from a future version, etc.).
+                    // Slow but correct.
+                    var indexer = objType.GetProperty("Item", new[] { typeof(int) });
+                    if (indexer is not null)
+                    {
+                        var result = new float[rows, cols];
+                        int idx = 0;
+                        for (int i = 0; i < rows; i++)
+                        {
+                            for (int j = 0; j < cols; j++)
+                            {
+                                var val = indexer.GetValue(obj, new object[] { idx++ });
+                                if (val is T tval)
+                                {
+                                    result[i, j] = (float)numOps.ToDouble(tval);
+                                }
+                            }
+                        }
+                        return result;
+                    }
+                }
+            }
+        }
+
         if (objType.IsGenericType && objType.Name.Contains("Matrix"))
         {
             var rowsProp = objType.GetProperty("Rows");

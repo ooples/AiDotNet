@@ -13,6 +13,23 @@ namespace AiDotNet.Initialization;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class EagerInitializationStrategy<T> : InitializationStrategyBase<T>
 {
+    /// <summary>
+    /// Initializes a new instance using the framework's default non-deterministic
+    /// RNG.
+    /// </summary>
+    public EagerInitializationStrategy() : base() { }
+
+    /// <summary>
+    /// Initializes a new instance using the supplied <see cref="Random"/> for
+    /// reproducible weight initialization. Pass a deterministically-seeded
+    /// <see cref="Random"/> to make Xavier/He init produce the same weights
+    /// across runs (e.g., for unit tests, multi-seed experiment harnesses,
+    /// or reproducible benchmarks).
+    /// </summary>
+    /// <param name="rng">Seeded random number generator, or <c>null</c> to
+    /// fall back to the framework's default thread-safe non-deterministic RNG.</param>
+    public EagerInitializationStrategy(Random? rng) : base(rng) { }
+
     /// <inheritdoc />
     public override bool IsLazy => false;
 
