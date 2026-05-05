@@ -412,7 +412,15 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // on every element (23M elements for BERT vocab). The embedding tensor was
         // already allocated by the constructor; reuse it in place rather than allocating
         // a second tensor that shadows the original reference.
-        var rng = new SimdRandom();
+        //
+        // Honour the layer-level deterministic seed when set
+        // (LayerBase<T>.RandomSeed is the per-layer-seed mechanism wired
+        // by LayerHelper.Wire from architecture.RandomSeed). Without this
+        // hook, the architecture's RandomSeed wouldn't reach the embedding
+        // fill — closes review-comment #1270.vhmx.
+        SimdRandom rng = RandomSeed.HasValue
+            ? new SimdRandom(RandomSeed.Value)
+            : new SimdRandom();
         var span = _embeddingTensor.Data.Span;
         int total = span.Length;
         if (total == 0) return; // zero-sized embedding (no vocab or zero dim): nothing to fill
@@ -540,9 +548,15 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 if (_projectionWeights != null)
                     TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
-                // Xavier initialization
+                // Xavier initialization. Honour the layer-level
+                // deterministic seed (LayerBase<T>.RandomSeed) when set
+                // so projection weights follow the same reproducibility
+                // contract as the embedding tensor above. Closes
+                // review-comment #1270.xElw.
+                Random random = RandomSeed.HasValue
+                    ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                    : RandomHelper.CreateSecureRandom();
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
-                var random = RandomHelper.CreateSecureRandom();
                 for (int i = 0; i < _projectionWeights.Length; i++)
                 {
                     _projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
@@ -696,9 +710,15 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 if (_projectionWeights != null)
                     TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
-                // Xavier initialization
+                // Xavier initialization. Honour the layer-level
+                // deterministic seed (LayerBase<T>.RandomSeed) when set
+                // so projection weights follow the same reproducibility
+                // contract as the embedding tensor above. Closes
+                // review-comment #1270.xElw.
+                Random random = RandomSeed.HasValue
+                    ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+                    : RandomHelper.CreateSecureRandom();
                 T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
-                var random = RandomHelper.CreateSecureRandom();
                 for (int i = 0; i < _projectionWeights.Length; i++)
                 {
                     _projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));

@@ -1686,30 +1686,44 @@ public static class LayerHelper<T>
         NeuralNetworkTaskType taskType = architecture.TaskType;
         double temperature = architecture.Temperature;
 
-        // When the architecture specifies a deterministic random seed, derive
-        // a per-layer seeded initialization strategy: build a "seed RNG" from
-        // the architecture seed, then for each layer pull a fresh int from
-        // that seed RNG and construct an EagerInitializationStrategy backed
-        // by its own private System.Random(thatInt). This gives:
-        //   1. Determinism — the seed RNG produces the same sequence of layer
-        //      seeds for a given architecture seed, so the layer stack ends
-        //      up with the exact same weights every run, AS LONG AS THE
-        //      SAME .NET RUNTIME IS IN USE on every run. System.Random's
-        //      internal algorithm is runtime-specific (the legacy Knuth
-        //      subtractive on net471, modern xoshiro256** on .NET Core 6+),
-        //      so the same seed produces DIFFERENT sequences across
-        //      runtimes. The same-runtime-same-seed determinism is what
-        //      this contract provides — cross-runtime determinism would
-        //      require a stable PRNG (e.g., a vendored xoshiro256** that
-        //      runs identically on net471 and net10), which is tracked
-        //      separately. Review-comment #1269.vuR1 flagged this gap;
-        //      this comment is the documented scope. Closes #1269.pQdZ.
-        //   2. Thread-safety — System.Random is not thread-safe, and several
-        //      layers initialize lazily (e.g. MultiHeadAttention allocates on
-        //      first forward / parameter query). With a single shared RNG
-        //      across layers, two lazy-init paths racing in concurrent
-        //      forward / parameter access would tear the RNG state and break
-        //      determinism. Per-layer RNGs eliminate the shared-state hazard.
+        // Layer-level seed plumbing (industry-standard pattern). When the
+        // architecture specifies a deterministic random seed, derive per-
+        // layer seeds from a single seed-RNG and assign each layer's
+        // LayerBase<T>.RandomSeed property. Each layer's own
+        // InitializeParameters reads RandomSeed directly and uses it to
+        // construct a seeded RandomHelper.CreateSeededRandom — so the
+        // layer's natural init algorithm (DenseLayer's activation-aware
+        // He/LeCun, MultiHeadAttention's Xavier-uniform via SimdRandom,
+        // EmbeddingLayer's small-noise scaled-by-sqrt(d) fill) runs
+        // unchanged but with reproducible RNG state. Closes review-
+        // comment #1270.yA1v (the previous Wire override replaced
+        // InitializationStrategy with EagerInitializationStrategy and
+        // silently changed every Dense layer's init from He to
+        // Xavier-normal — a behaviour change masquerading as a
+        // determinism fix).
+        //
+        // Determinism scope: System.Random's internal algorithm is
+        // runtime-specific (the legacy Knuth subtractive on net471,
+        // modern xoshiro256** on .NET Core 6+), so the same seed
+        // produces DIFFERENT sequences across runtimes. The
+        // same-runtime-same-seed determinism is what this contract
+        // provides — cross-runtime determinism would require a stable
+        // PRNG (e.g., a vendored xoshiro256** that runs identically on
+        // net471 and net10), which is tracked separately. Review-
+        // comment #1269.vuR1 flagged this gap; this comment is the
+        // documented scope. Closes #1269.pQdZ.
+        //
+        // RNG ordering / thread-safety: Wire is called in layer-
+        // construction order and pulls one .Next() per layer, so the
+        // per-layer seed sequence is deterministic for a given
+        // architecture seed. System.Random is not thread-safe, and
+        // several layers initialize lazily (e.g. MultiHeadAttention
+        // allocates on first forward / parameter query). Each layer
+        // owns its own private RandomSeed and constructs its own RNG
+        // inside InitializeParameters via
+        // RandomHelper.CreateSeededRandom — so concurrent lazy-init
+        // paths get independent RNG instances and never share mutable
+        // RNG state.
         Random? seedRng = architecture.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(architecture.RandomSeed.Value)
             : null;
@@ -1720,12 +1734,10 @@ public static class LayerHelper<T>
         // reproducibility).
         ILayer<T> Wire(ILayer<T> layer)
         {
-            if (seedRng is not null && layer is NeuralNetworks.Layers.LayerBase<T> baseLayer)
+            if (seedRng is null) return layer;
+            if (layer is NeuralNetworks.Layers.LayerBase<T> baseLayer)
             {
-                int layerSeed = seedRng.Next();
-                baseLayer.InitializationStrategy =
-                    new Initialization.EagerInitializationStrategy<T>(
-                        RandomHelper.CreateSeededRandom(layerSeed));
+                baseLayer.RandomSeed = seedRng.Next();
             }
             return layer;
         }

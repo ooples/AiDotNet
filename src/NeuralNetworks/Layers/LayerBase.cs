@@ -367,6 +367,28 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     public IInitializationStrategy<T>? InitializationStrategy { get; set; }
 
     /// <summary>
+    /// Per-layer deterministic random seed. When set, the layer's
+    /// internal weight-initialization paths (the ones that would
+    /// otherwise call <see cref="RandomHelper.CreateSecureRandom"/> or
+    /// the parameterless <c>SimdRandom()</c> ctor) seed their RNG from
+    /// this value instead, producing reproducible weights for a fixed
+    /// seed. Null = no seeding (use the framework's default secure RNG,
+    /// suitable for production training).
+    /// <para>
+    /// Layer-level seeding (vs an architecture-level shared seed) is
+    /// the industry pattern: each layer derives its own deterministic
+    /// RNG from a per-layer seed value, so concurrent lazy-init paths
+    /// don't share mutable RNG state, and the architecture only has to
+    /// generate per-layer seed integers from its own seed-RNG (one
+    /// .Next() call per layer in construction order). Subclasses with
+    /// their own random init MUST read this property and seed their
+    /// internal RNG via <see cref="RandomHelper.CreateSeededRandom"/>
+    /// when it is non-null.
+    /// </para>
+    /// </summary>
+    public int? RandomSeed { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether this layer has been initialized.
     /// </summary>
     /// <remarks>
