@@ -2,11 +2,12 @@ import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import Stripe from "https://esm.sh/stripe@14.14.0?target=deno";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
+import { type ProductSlug } from "../_shared/products.ts";
 
 // Product this webhook issues licenses for. All Stripe products created
 // for aidotnet.dev route through here; Harmonic Engine (and any future
 // products) will get their own webhook + edge function path.
-const WEBHOOK_PRODUCT = "aidotnet" as const;
+const WEBHOOK_PRODUCT: ProductSlug = "aidotnet";
 // Key prefix that the AiDotNet client library parses for online-validated
 // keys. See LicenseValidator.IsServerValidatedKeyFormat in src/Helpers/
 // LicenseValidator.cs of this repo: keys must split into ≥4 dash-delimited

@@ -279,26 +279,45 @@ internal sealed class LicenseValidator
     }
 
     /// <summary>
-    /// Validates that the license key has the expected format: aidn.{id}.{signature}
-    /// where id is at least 1 character and signature is at least 1 character,
-    /// and both parts contain only alphanumeric characters.
+    /// Returns true if the key is in signed offline format: aidn.{id}.{signature}.
+    /// The id and signature segments are base64url-encoded (RFC 4648 §5):
+    /// alphanumeric plus '-' and '_' (no padding). These keys can be validated
+    /// offline via HMAC (premium/enterprise only).
     /// </summary>
-    /// <summary>
-    /// Returns true if the key is in signed offline format: aidn.{id}.{signature}
-    /// These keys can be validated offline via HMAC (premium/enterprise only).
-    /// </summary>
+    /// <remarks>
+    /// Accepting the base64url URL-safe alphabet matters because signed keys
+    /// elsewhere in the codebase (issuer / Stripe webhook) emit base64url-
+    /// encoded HMAC-SHA256 tags via WebEncoders.Base64UrlEncode — those tags
+    /// routinely contain '-' / '_'. A stricter alphanumeric-only check would
+    /// misclassify those legitimate signed keys as "not signed" and route them
+    /// through online validation instead of the offline HMAC path. Originally
+    /// landed in PR #1256 follow-up.
+    /// </remarks>
     internal static bool IsSignedKeyFormat(string key)
     {
+        if (key is null) return false;
         var parts = key.Split('.');
         if (parts.Length != 3 || parts[0] != "aidn" || parts[1].Length == 0 || parts[2].Length == 0)
             return false;
 
         for (int i = 0; i < parts[1].Length; i++)
-            if (!char.IsLetterOrDigit(parts[1][i])) return false;
+            if (!IsBase64UrlChar(parts[1][i])) return false;
         for (int i = 0; i < parts[2].Length; i++)
-            if (!char.IsLetterOrDigit(parts[2][i])) return false;
+            if (!IsBase64UrlChar(parts[2][i])) return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// Base64url alphabet (RFC 4648 §5): A–Z, a–z, 0–9, '-', '_'. No padding.
+    /// </summary>
+    private static bool IsBase64UrlChar(char c)
+    {
+        return (c >= 'A' && c <= 'Z')
+            || (c >= 'a' && c <= 'z')
+            || (c >= '0' && c <= '9')
+            || c == '-'
+            || c == '_';
     }
 
     /// <summary>

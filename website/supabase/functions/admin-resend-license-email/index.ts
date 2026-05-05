@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { sendLicenseKeyEmail } from "../_shared/email.ts";
+import { isProductSlug } from "../_shared/products.ts";
 
 // Admin-only endpoint that re-sends the license-key email for an existing
 // license_keys row. Used by the Resend button on /admin/licenses when the
@@ -158,6 +159,24 @@ serve(async (req: Request) => {
     }, 422);
   }
 
+  // license.product is `string` from the Supabase row type; narrow to
+  // ProductSlug at this boundary so any DB drift (a row with a slug not
+  // in our typed registry) returns a clean 500 instead of letting the
+  // bad slug flow into sendLicenseKeyEmail and throwing inside the
+  // unguarded resolveProductDisplayName call.
+  if (!isProductSlug(license.product)) {
+    console.error(
+      `admin-resend-license-email: license ${license.id} has unknown product '${license.product}' — `
+      + "DB enum drift or stale registry. Add the slug to PRODUCT_DISPLAY_NAMES in products.ts.",
+    );
+    return json({
+      success: false,
+      error: "unknown_product",
+      message: `License row references product slug '${license.product}' which is not in the email-side registry. `
+        + "This is a server-side issue — the license_product DB enum has drifted ahead of the application. "
+        + "Add the slug to products.ts (PRODUCT_DISPLAY_NAMES) and redeploy.",
+    }, 500);
+  }
   const result = await sendLicenseKeyEmail({
     to: recipient,
     licenseKey: license.license_key,
