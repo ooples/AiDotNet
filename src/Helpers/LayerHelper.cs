@@ -1686,10 +1686,41 @@ public static class LayerHelper<T>
         NeuralNetworkTaskType taskType = architecture.TaskType;
         double temperature = architecture.Temperature;
 
+        // When the architecture specifies a deterministic random seed,
+        // derive a single shared seeded RNG and use it to seed each layer's
+        // initialization strategy. Each layer ends up with its own
+        // EagerInitializationStrategy backed by THIS shared RNG, so the
+        // sequence of weight draws across the entire layer stack is
+        // reproducible (same seed -> same weights every run).
+        //
+        // System.Random is not thread-safe, but layer-stack construction is
+        // synchronous and runs on a single thread, so a single shared
+        // instance is correct here. The downstream training pipeline uses
+        // Adam moments / gradient buffers from a separate path that doesn't
+        // touch this RNG.
+        Random? seedRng = architecture.RandomSeed.HasValue
+            ? new Random(architecture.RandomSeed.Value)
+            : null;
+        Initialization.IInitializationStrategy<T>? sharedInit = seedRng is null
+            ? null
+            : new Initialization.EagerInitializationStrategy<T>(seedRng);
+
+        // Apply the seeded init strategy to a layer if one was configured.
+        // No-op when randomSeed wasn't set (preserves backward-compatible
+        // behaviour for users who don't request reproducibility).
+        ILayer<T> Wire(ILayer<T> layer)
+        {
+            if (sharedInit is not null && layer is NeuralNetworks.Layers.LayerBase<T> baseLayer)
+            {
+                baseLayer.InitializationStrategy = sharedInit;
+            }
+            return layer;
+        }
+
         // Add embedding layer for text input
         if (vocabularySize > 0)
         {
-            yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
+            yield return Wire(new EmbeddingLayer<T>(vocabularySize, modelDimension));
         }
         else
         {
@@ -1698,14 +1729,14 @@ public static class LayerHelper<T>
             int inputSize = architecture.InputSize;
             if (inputSize > 0 && inputSize != modelDimension)
             {
-                yield return new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
+                yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
             }
         }
 
         // Add positional encoding if specified
         if (usePositionalEncoding)
         {
-            yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+            yield return Wire(new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension));
         }
 
         // Add dropout layer after embedding
@@ -1718,11 +1749,11 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Self-attention block
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
-                activationFunction: new IdentityActivation<T>());
+            yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
+                activationFunction: new IdentityActivation<T>()));
 
             // Add normalization
-            yield return new LayerNormalizationLayer<T>();
+            yield return Wire(new LayerNormalizationLayer<T>());
 
             // Add dropout if specified
             if (dropoutRate > 0)
@@ -1731,11 +1762,11 @@ public static class LayerHelper<T>
             }
 
             // Feed-forward network
-            yield return new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
+            yield return Wire(new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>));
+            yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
 
             // Add normalization
-            yield return new LayerNormalizationLayer<T>();
+            yield return Wire(new LayerNormalizationLayer<T>());
 
             // Add dropout if specified
             if (dropoutRate > 0)
@@ -1750,11 +1781,11 @@ public static class LayerHelper<T>
             for (int i = 0; i < numDecoderLayers; i++)
             {
                 // Self-attention block
-                yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
-                    activationFunction: new IdentityActivation<T>());
+                yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
+                    activationFunction: new IdentityActivation<T>()));
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>();
+                yield return Wire(new LayerNormalizationLayer<T>());
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1763,11 +1794,11 @@ public static class LayerHelper<T>
                 }
 
                 // Cross-attention block
-                yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
-                    activationFunction: new IdentityActivation<T>());
+                yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
+                    activationFunction: new IdentityActivation<T>()));
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>();
+                yield return Wire(new LayerNormalizationLayer<T>());
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1776,11 +1807,11 @@ public static class LayerHelper<T>
                 }
 
                 // Feed-forward network
-                yield return new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>);
-                yield return new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
+                yield return Wire(new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>));
+                yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>();
+                yield return Wire(new LayerNormalizationLayer<T>());
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1835,7 +1866,7 @@ public static class LayerHelper<T>
         }
 
         // Add the final projection layer
-        yield return new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+        yield return Wire(new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
 
         // Add the final activation layer based on task type
         switch (taskType)
