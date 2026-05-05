@@ -1693,14 +1693,23 @@ public static class LayerHelper<T>
         // by its own private System.Random(thatInt). This gives:
         //   1. Determinism — the seed RNG produces the same sequence of layer
         //      seeds for a given architecture seed, so the layer stack ends
-        //      up with the exact same weights every run.
+        //      up with the exact same weights every run, AS LONG AS THE
+        //      SAME .NET RUNTIME IS IN USE on every run. System.Random's
+        //      internal algorithm is runtime-specific (the legacy Knuth
+        //      subtractive on net471, modern xoshiro256** on .NET Core 6+),
+        //      so the same seed produces DIFFERENT sequences across
+        //      runtimes. The same-runtime-same-seed determinism is what
+        //      this contract provides — cross-runtime determinism would
+        //      require a stable PRNG (e.g., a vendored xoshiro256** that
+        //      runs identically on net471 and net10), which is tracked
+        //      separately. Review-comment #1269.vuR1 flagged this gap;
+        //      this comment is the documented scope. Closes #1269.pQdZ.
         //   2. Thread-safety — System.Random is not thread-safe, and several
         //      layers initialize lazily (e.g. MultiHeadAttention allocates on
         //      first forward / parameter query). With a single shared RNG
         //      across layers, two lazy-init paths racing in concurrent
         //      forward / parameter access would tear the RNG state and break
         //      determinism. Per-layer RNGs eliminate the shared-state hazard.
-        // Closes review-comment #1269.pQdZ.
         Random? seedRng = architecture.RandomSeed.HasValue
             ? new Random(architecture.RandomSeed.Value)
             : null;
