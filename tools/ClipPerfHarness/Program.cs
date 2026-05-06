@@ -1,0 +1,140 @@
+using System;
+using System.Diagnostics;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.VisionLanguage.Encoders;
+
+namespace AiDotNet.Tools.ClipPerfHarness;
+
+/// <summary>
+/// Stand-alone harness for profiling a single CLIP / Hawk training step
+/// under PerfView / dotnet-trace. Mirrors what the auto-generated invariant
+/// tests do (CreateNetwork → CreateRandomTensor(InputShape) → Train(input,
+/// target) → Predict(input)) but in a process-level entrypoint we can
+/// attach a sampling profiler to.
+///
+/// Usage:
+///   dotnet run -c Release --project tools/ClipPerfHarness -- biomed
+///   dotnet run -c Release --project tools/ClipPerfHarness -- dfn
+///   dotnet run -c Release --project tools/ClipPerfHarness -- hawk
+///
+/// To capture a CPU profile that opens in PerfView:
+///   dotnet-trace collect --providers Microsoft-DotNETCore-SampleProfiler \
+///     --output traces/&lt;mode&gt;-train.nettrace --duration 00:00:30 -- \
+///     dotnet tools/ClipPerfHarness/bin/Release/net10.0/ClipPerfHarness.dll &lt;mode&gt;
+/// </summary>
+internal enum HarnessMode
+{
+    BiomedClip,
+    DfnClip,
+    Hawk,
+}
+
+internal static class Program
+{
+    private static int Main(string[] args)
+    {
+        HarnessMode mode = ParseMode(args);
+
+        var swCtor = Stopwatch.StartNew();
+        NeuralNetworkBase<double> network;
+        var rng = new Random(42);
+        Tensor<double> input;
+
+        switch (mode)
+        {
+            case HarnessMode.Hawk:
+            {
+                // Hawk language model: 1D input [128] (language domain in TestScaffoldGenerator).
+                var arch = new NeuralNetworkArchitecture<double>(
+                    inputType: InputType.OneDimensional,
+                    taskType: NeuralNetworkTaskType.Regression,
+                    inputSize: 128, outputSize: 4);
+                Console.WriteLine($"[mode={mode}] Constructing Hawk language model...");
+                network = new HawkLanguageModel<double>(arch);
+                input = new Tensor<double>(new[] { 128 });
+                for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+                break;
+            }
+            case HarnessMode.DfnClip:
+            case HarnessMode.BiomedClip:
+            {
+                var arch = new NeuralNetworkArchitecture<double>(
+                    inputType: InputType.ThreeDimensional,
+                    taskType: NeuralNetworkTaskType.Regression,
+                    inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4);
+                Console.WriteLine($"[mode={mode}] Constructing CLIP model...");
+                network = mode == HarnessMode.DfnClip
+                    ? new DFNCLIP<double>(arch)
+                    : new BiomedCLIP<double>(arch);
+                input = new Tensor<double>(new[] { 3, 128, 128 });
+                for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+                break;
+            }
+            default:
+                throw new InvalidOperationException($"Unknown harness mode {mode}");
+        }
+        swCtor.Stop();
+        Console.WriteLine($"  ctor: {swCtor.ElapsedMilliseconds} ms");
+
+        // Warm-up forward (matches the EffectiveOutputShape warm-up the
+        // test base does). Pays first-touch lazy-init costs we don't want
+        // to attribute to the training step.
+        Console.WriteLine("[warmup] Predict...");
+        var swWarm = Stopwatch.StartNew();
+        var warmOut = network.Predict(input);
+        swWarm.Stop();
+        Console.WriteLine($"  predict: {swWarm.ElapsedMilliseconds} ms, output rank={warmOut.Rank}, length={warmOut.Length}");
+
+        // Build target with the inferred output shape.
+        var outShape = warmOut.Shape;
+        var outDims = new int[outShape.Length];
+        for (int i = 0; i < outShape.Length; i++) outDims[i] = outShape[i];
+        var target = new Tensor<double>(outDims);
+        for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
+
+        // Single training step — this is what we want to profile.
+        Console.WriteLine("[train] Train(input, target) — attach profiler now if not already attached");
+        var swTrain = Stopwatch.StartNew();
+        network.Train(input, target);
+        swTrain.Stop();
+        Console.WriteLine($"  train step: {swTrain.ElapsedMilliseconds} ms");
+
+        Console.WriteLine("[post] Predict...");
+        var swPost = Stopwatch.StartNew();
+        var postOut = network.Predict(input);
+        swPost.Stop();
+        Console.WriteLine($"  predict: {swPost.ElapsedMilliseconds} ms");
+
+        Console.WriteLine();
+        Console.WriteLine($"SUMMARY [{mode}]:");
+        Console.WriteLine($"  ctor:    {swCtor.ElapsedMilliseconds} ms");
+        Console.WriteLine($"  warm:    {swWarm.ElapsedMilliseconds} ms");
+        Console.WriteLine($"  train:   {swTrain.ElapsedMilliseconds} ms");
+        Console.WriteLine($"  post:    {swPost.ElapsedMilliseconds} ms");
+        Console.WriteLine($"  TOTAL:   {(swCtor.ElapsedMilliseconds + swWarm.ElapsedMilliseconds + swTrain.ElapsedMilliseconds + swPost.ElapsedMilliseconds)} ms");
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Parses the harness mode from a command-line token. Mode names are
+    /// matched case-insensitively against a fixed set of aliases per mode
+    /// — strings only flow through here at process boundary; everything
+    /// downstream uses the <see cref="HarnessMode"/> enum for type safety.
+    /// </summary>
+    private static HarnessMode ParseMode(string[] args)
+    {
+        if (args.Length == 0) return HarnessMode.BiomedClip;
+        string token = args[0].Trim().ToLowerInvariant();
+        return token switch
+        {
+            "hawk" => HarnessMode.Hawk,
+            "dfn" or "dfnclip" or "dfn-clip" => HarnessMode.DfnClip,
+            "biomed" or "biomedclip" or "biomed-clip" => HarnessMode.BiomedClip,
+            _ => throw new ArgumentException(
+                $"Unknown mode '{token}'. Valid modes: biomed, dfn, hawk.", nameof(args)),
+        };
+    }
+}
