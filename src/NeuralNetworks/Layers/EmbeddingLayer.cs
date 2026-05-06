@@ -609,12 +609,27 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             // For continuous input (linear projection): replace last dimension with embeddingDim
             // input[..., inputFeatures] -> output[..., embeddingDim]
-            outputShape = new int[input.Rank];
-            for (int i = 0; i < input.Rank - 1; i++)
+            //
+            // Rank-1 input is special: treating the whole [N] vector as the
+            // "feature dim" and producing rank-1 [embeddingDim] would collapse
+            // the sequence dimension and break downstream sequence-aware
+            // layers (e.g. RealGatedLinearRecurrenceLayer's Forward expects
+            // a rank-2+ tensor with a real sequence axis). Promote to
+            // rank-2 [1, embeddingDim] so the layer pipeline downstream sees
+            // a single-sample sequence rather than a featureless scalar.
+            if (input.Rank == 1)
             {
-                outputShape[i] = input.Shape[i];
+                outputShape = [1, embeddingDim];
             }
-            outputShape[^1] = embeddingDim;
+            else
+            {
+                outputShape = new int[input.Rank];
+                for (int i = 0; i < input.Rank - 1; i++)
+                {
+                    outputShape[i] = input.Shape[i];
+                }
+                outputShape[^1] = embeddingDim;
+            }
         }
         else if (input.Rank == 1)
         {
