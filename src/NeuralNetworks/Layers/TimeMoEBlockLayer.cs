@@ -186,7 +186,12 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
         int idx = 0;
         void Set(ILayer<T> sub)
         {
-            int count = checked((int)sub.ParameterCount);
+            // Use the centralized ParameterCountHelper so a sublayer count
+            // above int.MaxValue surfaces with the actionable
+            // "split the architecture or use streaming" message used
+            // everywhere else in the codebase, rather than a generic
+            // OverflowException at the (int) cast.
+            int count = ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
             if (count == 0) return;
             sub.SetParameters(parameters.Slice(idx, count));
             idx += count;

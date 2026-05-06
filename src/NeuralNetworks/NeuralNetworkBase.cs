@@ -3787,8 +3787,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         get
         {
-            try { return WeightRegistry.GetStreamingReport().ResidentBytes; }
-            catch { return 0; }
+            // Narrow the catch to the documented failure modes for the
+            // streaming-pool report: schema mismatches surface as
+            // InvalidOperationException, transient-state inconsistencies as
+            // InvalidOperationException, and a deliberately-disposed pool
+            // would surface as ObjectDisposedException. Any OTHER exception
+            // (NRE, OOM, real bugs) propagates so we don't hide it behind
+            // a 0-byte return that looks like "streaming inactive". The
+            // caller (a test or telemetry emitter) is best positioned to
+            // decide whether to skip / fail.
+            try
+            {
+                return WeightRegistry.GetStreamingReport().ResidentBytes;
+            }
+            catch (ObjectDisposedException) { return 0; }
+            catch (InvalidOperationException) { return 0; }
         }
     }
 
@@ -3901,14 +3914,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             paramCount = ParameterCount;
         }
-        catch
+        catch (Exception ex) when (
+            ex is InvalidOperationException ||
+            ex is OverflowException ||
+            ex is NullReferenceException)
         {
-            // ParameterCount can throw on partially-constructed models
-            // (e.g. a subclass ctor failing before InitializeLayers
-            // completes). Don't propagate from auto-detect — the explicit
-            // ConfigureWeightLifetime entry point stays available for
-            // those models to call later. Don't finalize either: we
-            // want to retry once the model is fully built.
+            // ParameterCount can throw on partially-constructed models in
+            // these specific ways:
+            //   - InvalidOperationException: subclass ctor failing before
+            //     InitializeLayers completes (most common).
+            //   - OverflowException: int sum wraps mid-property; the
+            //     caller can fix it but we shouldn't crash auto-detect.
+            //   - NullReferenceException: a sublayer field is still null
+            //     during partial construction.
+            // Other exceptions (real bugs, GPU faults, etc.) propagate so
+            // they aren't hidden behind a silent skip. Don't finalize
+            // either: we want to retry once the model is fully built.
+            // Surface to System.Diagnostics so telemetry pipelines can see
+            // that auto-detect bailed.
+            System.Diagnostics.Debug.WriteLine(
+                $"[NeuralNetworkBase] WeightStreaming auto-detect deferred — " +
+                $"ParameterCount threw {ex.GetType().Name}: {ex.Message}");
             return;
         }
 

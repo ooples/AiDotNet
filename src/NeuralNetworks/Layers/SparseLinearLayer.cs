@@ -527,9 +527,19 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
                         $"SparseLinearLayer.Deserialize: column index {savedCols[i]} at slot {i} is outside [0, {InputFeatures}). " +
                         "Stream is from an incompatible model.");
             }
+            // Replace _weights with a fresh SparseTensor matching the saved
+            // sparsity pattern. Re-register so GetTrainableParameters
+            // (used by tape mode and parameter walks) returns the new
+            // instance. We deliberately don't UnregisterTrainableParameter
+            // on the old reference here because Engine.UnregisterPersistentTensor
+            // calls Contiguous() which throws on sparse tensors —
+            // sparse-aware unregistration is tracked in the Tensors repo.
+            // Deserialize is pre-training, so no ParameterBuffer view
+            // aliases the old _weights at this point.
             _weights = new SparseTensor<T>(
                 OutputFeatures, InputFeatures,
                 savedRows, savedCols, new T[nnz]);
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         }
         base.Deserialize(reader);
     }

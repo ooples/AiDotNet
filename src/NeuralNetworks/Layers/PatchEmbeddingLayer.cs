@@ -302,6 +302,21 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         // overwrite the loaded weights with new Xavier-init values and
         // the test's "outputs match after roundtrip" assertion would
         // fail.
+        // If _projectionWeights are already loaded (via SetParameters /
+        // Deserialize), validate that the patch-dim that the runtime input
+        // implies matches what the loaded matrix is sized for. Otherwise
+        // matmul fails later with an opaque shape error.
+        int expectedPatchDim = _channels * _patchSize * _patchSize;
+        if (_projectionWeights.Shape[0] != 0 && _projectionWeights.Shape[0] != expectedPatchDim)
+        {
+            throw new InvalidOperationException(
+                $"PatchEmbeddingLayer._projectionWeights were loaded for patchDim=" +
+                $"{_projectionWeights.Shape[0]} but first Forward implies patchDim=" +
+                $"{expectedPatchDim} (channels={_channels}, patchSize={_patchSize}). " +
+                "The serialized weights came from a model with different channel count " +
+                "or patch size — recreate the layer for the new shape.");
+        }
+
         if (_projectionWeights.Shape[0] == 0)
         {
             int patchDim = _channels * _patchSize * _patchSize;

@@ -459,8 +459,36 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         // eliminate. Copy the engine-generated random data into the
         // existing storage so the tensor identity is preserved.
         // Closes review-comment #1271.7BoE.
-        var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
-        randomKernels.AsSpan().CopyTo(_kernels.AsWritableSpan());
+        // Fill _kernels in place WITHOUT allocating a full-size temporary.
+        // The previous Engine.TensorRandomUniformRange call materializes a
+        // second tensor at the kernel's full shape (e.g. on a 64-channel
+        // 512-channel 3×3×3 conv that's already 1.4M+ floats) and then
+        // copies it across — doubling peak GC at first-forward exactly
+        // where this PR is trying to bound it. Use an in-place SimdRandom
+        // fill into the existing storage instead.
+        var rng = new SimdRandom();
+        var dst = _kernels.AsWritableSpan();
+        int total = dst.Length;
+        if (total > 0)
+        {
+            T low = NumOps.Negate(scale);
+            T range = NumOps.Multiply(NumOps.FromDouble(2.0), scale);
+            const int batchSize = 4096;
+            var tempBuf = new double[Math.Min(total, batchSize)];
+            int offset = 0;
+            while (offset < total)
+            {
+                int chunk = Math.Min(batchSize, total - offset);
+                rng.NextDoubles(tempBuf.AsSpan(0, chunk));
+                for (int j = 0; j < chunk; j++)
+                {
+                    // tempBuf[j] is in [0, 1). Map to [low, low+range) = [-scale, scale).
+                    var t = NumOps.FromDouble(tempBuf[j]);
+                    dst[offset + j] = NumOps.Add(low, NumOps.Multiply(t, range));
+                }
+                offset += chunk;
+            }
+        }
 
         // Initialize biases to zero (same in-place pattern).
         Engine.TensorFill(_biases, NumOps.Zero);

@@ -463,7 +463,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Gets the weight-streaming activity report from the underlying
     /// <c>WeightRegistry</c> if streaming was engaged during the build
-    /// (whether explicitly via <see cref="AiDotNet.IWeightStreamingCapableBuilder{T,TInput,TOutput}.ConfigureWeightStreaming"/>
+    /// (whether explicitly via <see cref="AiDotNet.AiModelBuilder{T,TInput,TOutput}.ConfigureWeightStreaming"/>
     /// or auto-detected from parameter count). Null when streaming
     /// stayed off (the common case for models that fit in RAM). Issue
     /// #1222 task #186.
