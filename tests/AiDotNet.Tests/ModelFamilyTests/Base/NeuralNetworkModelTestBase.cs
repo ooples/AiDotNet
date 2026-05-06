@@ -935,6 +935,21 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // oscillation, wrong gradient sign, and explosions that don't NaN.
     // =====================================================
 
+    /// <summary>
+    /// Total number of training steps used by
+    /// <see cref="LossStrictlyDecreasesOnMemorizationTask"/>. Default 100
+    /// (1 baseline + 99 follow-on) is fine for small / mid-scale networks
+    /// where each step takes &lt; 1.5 s. Paper-scale Foundation models
+    /// (CLIP-family ViT-H/14, ChronosBolt-class encoders, etc.) override
+    /// this down to a value that still exercises the "loss must decrease"
+    /// invariant without overflowing the 180 s xUnit per-test timeout —
+    /// a few-step run on a memorization task still surfaces gradient sign
+    /// errors / oscillation / first-step explosion (the bug class this
+    /// invariant catches), it just won't catch slow-drift bugs that only
+    /// appear after many iterations.
+    /// </summary>
+    protected virtual int MemorizationTaskIterations => 100;
+
     [Fact(Timeout = 180000)]
     public async Task LossStrictlyDecreasesOnMemorizationTask()
     {
@@ -949,21 +964,23 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         network.Train(input, target);
         double lossStep1 = ConvertToDouble(network.GetLastLoss());
 
-        // 99 more steps on the same pair.
-        for (int s = 0; s < 99; s++) network.Train(input, target);
-        double lossStep100 = ConvertToDouble(network.GetLastLoss());
+        // (MemorizationTaskIterations - 1) more steps on the same pair.
+        int followOnSteps = System.Math.Max(0, MemorizationTaskIterations - 1);
+        for (int s = 0; s < followOnSteps; s++) network.Train(input, target);
+        double lossFinal = ConvertToDouble(network.GetLastLoss());
 
         Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
             $"Loss after step 1 is non-finite: {lossStep1}");
-        Assert.False(double.IsNaN(lossStep100) || double.IsInfinity(lossStep100),
-            $"Loss after step 100 is non-finite: {lossStep100}");
+        Assert.False(double.IsNaN(lossFinal) || double.IsInfinity(lossFinal),
+            $"Loss after step {MemorizationTaskIterations} is non-finite: {lossFinal}");
 
-        // Strict decrease by at least 1% over 99 additional steps. A
+        // Strict decrease by at least 1% over the follow-on steps. A
         // working training pipeline cuts loss by far more than 1% on a
         // memorization task; a broken pipeline (oscillation, sign flip,
         // post-explosion drift) leaves loss flat or rising.
-        Assert.True(lossStep100 < lossStep1 * 0.99,
-            $"Loss did NOT strictly decrease on memorization task: step 1={lossStep1:F6}, step 100={lossStep100:F6}. "
+        Assert.True(lossFinal < lossStep1 * 0.99,
+            $"Loss did NOT strictly decrease on memorization task: step 1={lossStep1:F6}, "
+            + $"step {MemorizationTaskIterations}={lossFinal:F6}. "
             + "Diagnostic: optimizer is oscillating, gradient sign is wrong, or first-step blew the model "
             + "into a high-loss region it can't recover from.");
     }

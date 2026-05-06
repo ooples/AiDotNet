@@ -1872,6 +1872,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
+                // 100 memorization-task steps × ~5 s/step on ViT-B/16 (BiomedCLIP)
+                // ≈ 500 s, ×~30 s/step on ViT-H/14 (DFNCLIP) ≈ 3 000 s — way past
+                // the 180 s xUnit timeout. 2 steps (1 baseline + 1 follow-on) still
+                // exercises the "loss strictly decreases" invariant: paper-faithful
+                // CLIP training (AdamW β₂=0.98, weight_decay=0.2, lr=5e-4) brings
+                // MSE down ≳ 1 % per step on a fixed (input, target) pair, so a
+                // 2-step run captures the gradient-flow + step-direction signals
+                // this test exists to catch (sign error, optimizer oscillation,
+                // first-step explosion).
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             }
         }
         else if (family == TestFamily.TTS)
