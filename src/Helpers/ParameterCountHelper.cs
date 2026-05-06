@@ -41,7 +41,7 @@ namespace AiDotNet.Helpers;
 /// flat-Vector limit ever changes.
 /// </para>
 /// </remarks>
-public static class ParameterCountHelper
+internal static class ParameterCountHelper
 {
     /// <summary>
     /// Narrows a <see cref="long"/> parameter count to <see cref="int"/> for
@@ -59,7 +59,7 @@ public static class ParameterCountHelper
     /// and model splitting as the supported escape hatches; the call-site
     /// is identified by the stack trace.
     /// </exception>
-    public static int ToFlatVectorSize(long parameterCount)
+    internal static int ToFlatVectorSize(long parameterCount)
     {
         if (parameterCount < 0)
         {
@@ -86,8 +86,7 @@ public static class ParameterCountHelper
                 $"the flat parameter-vector materialization path is still " +
                 $"int-bounded. Streaming addresses RAM pressure during forward, " +
                 $"not the int.MaxValue ceiling on the flat-Vector size. The " +
-                $"stack trace identifies the call site that hit the limit. " +
-                $"Closes review-comment #1271.yAXI.");
+                $"stack trace identifies the call site that hit the limit.");
         }
 
         return (int)parameterCount;

@@ -483,12 +483,18 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         int inputDimension = _linearWeights.Shape[1];
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (outputDimension + inputDimension)));
 
-        _linearWeights = Engine.TensorMultiplyScalar(
+        // Copy initialization data into the EXISTING lazy-allocated
+        // tensors in place — replacing them would discard the
+        // AllocateLazyWeight registration. Closes #1271.7Bob.
+        var linearInit = Engine.TensorMultiplyScalar(
             new Tensor<T>(_linearWeights._shape, Vector<T>.CreateRandom(_linearWeights.Length, -0.5, 0.5)),
             scale);
-        _gateWeights = Engine.TensorMultiplyScalar(
+        linearInit.AsSpan().CopyTo(_linearWeights.AsWritableSpan());
+
+        var gateInit = Engine.TensorMultiplyScalar(
             new Tensor<T>(_gateWeights._shape, Vector<T>.CreateRandom(_gateWeights.Length, -0.5, 0.5)),
             scale);
+        gateInit.AsSpan().CopyTo(_gateWeights.AsWritableSpan());
 
         _linearBias.Fill(NumOps.Zero);
         _gateBias.Fill(NumOps.Zero);

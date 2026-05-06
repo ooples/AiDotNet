@@ -956,7 +956,11 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // VECTORIZED: Initialize weights and biases (Xavier/Glorot initialization)
+        // VECTORIZED: Initialize weights and biases (Xavier/Glorot initialization).
+        // Critical: COPY into the existing lazy-allocated tensors in
+        // place — replacing the field references would discard the
+        // AllocateLazyWeight registration from EnsureInitialized.
+        // Closes review-comment #1271.7BpD.
         int hiddenSize = _inputWeights.Shape[0];
         int inputSize = _inputWeights.Shape[1];
 
@@ -964,21 +968,23 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         T hiddenScale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (hiddenSize + hiddenSize))));
         T half = NumOps.FromDouble(0.5);
 
-        // Generate random input weights: (random - 0.5) * scale
+        // Generate random input weights: (random - 0.5) * scale, copy in place.
         var inputRandom = Tensor<T>.CreateRandom(_inputWeights.Length, 1).Reshape(_inputWeights._shape);
         var inputHalf = new Tensor<T>(_inputWeights._shape);
         inputHalf.Fill(half);
         var inputCentered = Engine.TensorSubtract(inputRandom, inputHalf);
-        _inputWeights = Engine.TensorMultiplyScalar(inputCentered, inputScale);
+        var inputFinal = Engine.TensorMultiplyScalar(inputCentered, inputScale);
+        inputFinal.AsSpan().CopyTo(_inputWeights.AsWritableSpan());
 
-        // Generate random hidden weights: (random - 0.5) * scale
+        // Generate random hidden weights: (random - 0.5) * scale, copy in place.
         var hiddenRandom = Tensor<T>.CreateRandom(_hiddenWeights.Length, 1).Reshape(_hiddenWeights._shape);
         var hiddenHalf = new Tensor<T>(_hiddenWeights._shape);
         hiddenHalf.Fill(half);
         var hiddenCentered = Engine.TensorSubtract(hiddenRandom, hiddenHalf);
-        _hiddenWeights = Engine.TensorMultiplyScalar(hiddenCentered, hiddenScale);
+        var hiddenFinal = Engine.TensorMultiplyScalar(hiddenCentered, hiddenScale);
+        hiddenFinal.AsSpan().CopyTo(_hiddenWeights.AsWritableSpan());
 
-        // Initialize biases to zero (standard practice per Elman 1990)
+        // Initialize biases to zero (already in-place via Fill).
         _biases.Fill(NumOps.Zero);
     }
 

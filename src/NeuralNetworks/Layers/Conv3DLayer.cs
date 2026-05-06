@@ -451,11 +451,18 @@ public partial class Conv3DLayer<T> : LayerBase<T>
             NumOps.FromDouble(2.0),
             NumOps.FromDouble(fanIn)));
 
-        // Initialize kernels in [-scale, scale] range
-        _kernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
+        // Fill the EXISTING lazy-allocated tensors in place. Replacing
+        // them with new instances would throw away the
+        // AllocateLazyWeight registration that OnFirstForward set up
+        // (registry, streaming-pool tracking, GC handle pinning) and
+        // recreate the first-forward peak this PR is supposed to
+        // eliminate. Copy the engine-generated random data into the
+        // existing storage so the tensor identity is preserved.
+        // Closes review-comment #1271.7BoE.
+        var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
+        randomKernels.AsSpan().CopyTo(_kernels.AsWritableSpan());
 
-        // Initialize biases to zero
-        _biases = new Tensor<T>(_biases._shape);
+        // Initialize biases to zero (same in-place pattern).
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 

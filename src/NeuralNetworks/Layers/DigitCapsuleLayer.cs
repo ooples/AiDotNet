@@ -456,15 +456,18 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>
         // Calculate total elements for flat tensor initialization
         int totalElements = _inputCapsules * _numClasses * _inputCapsuleDimension * _outputCapsuleDimension;
 
-        // Create flat random tensor [0, 1] directly as 1D, shift to [-0.5, 0.5], scale
+        // Create flat random tensor [0, 1] directly as 1D, shift to [-0.5, 0.5], scale.
         var randomTensor = Tensor<T>.CreateRandom(totalElements);
         var halfTensor = new Tensor<T>([totalElements]);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
-        // Copy to weights tensor - reshape maintains the same underlying data
-        _weights = scaled.Reshape(_weights._shape);
+        // Copy into the EXISTING lazy-allocated _weights tensor in
+        // place — Reshape returns a new tensor view, so the original
+        // assignment-via-Reshape would have discarded the
+        // AllocateLazyWeight registration. Closes #1271.7BoP.
+        scaled.AsSpan().CopyTo(_weights.AsWritableSpan());
 
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
