@@ -309,6 +309,28 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
+        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) ONCE per forward.
+        // Previously this was recomputed inside the (t, bi, d) triple-nested
+        // loop — for foundation-scale recDim=256 + 4 layers + tape replay,
+        // that's millions of redundant exp/log/softplus invocations and
+        // _decayParam[d] indexer calls per train step. Lift the loop-
+        // invariant computation out and cache the result as a plain double[]
+        // so the inner loop only does a constant-time array read per (bi, d).
+        var baseDecayCache = new double[_recurrenceDimension];
+        for (int d = 0; d < _recurrenceDimension; d++)
+        {
+            double cVal = NumOps.ToDouble(_decayParam[d]);
+            // Numerically stable softplus: for large x, softplus(x) ≈ x.
+            double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
+            baseDecayCache[d] = Math.Exp(-softplusC);
+        }
+
+        // Cache the inner-loop NumOps reference once. Each NumOps property
+        // access on the layer instance goes through interface dispatch even
+        // when the JIT could devirtualize, so binding it locally lets the
+        // tight loop call ToDouble / FromDouble directly.
+        var numOps = NumOps;
+
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);
@@ -318,29 +340,26 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             // Value projection
             var v_t = Engine.TensorMatMul(x_t, _valueProjectionWeights);
 
-            // Compute decay: a_t = r_t * exp(-softplus(c))
+            // Compute decay: a_t = r_t * baseDecay (precomputed above).
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _recurrenceDimension; d++)
                 {
-                    double cVal = NumOps.ToDouble(_decayParam[d]);
-                    // Numerically stable softplus: for large x, softplus(x) ≈ x
-                    double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
-                    double baseDecay = Math.Exp(-softplusC);
-                    double rVal = NumOps.ToDouble(r_t[new[] { bi, d }]);
+                    double baseDecay = baseDecayCache[d];
+                    double rVal = numOps.ToDouble(r_t[new[] { bi, d }]);
                     double a = rVal * baseDecay;
 
                     // Magnitude-preserving: sqrt(1 - a^2)
                     double sqrtFactor = Math.Sqrt(Math.Max(0, 1.0 - a * a));
 
-                    double iVal = NumOps.ToDouble(i_t[new[] { bi, d }]);
-                    double vVal = NumOps.ToDouble(v_t[new[] { bi, d }]);
-                    double hPrev = NumOps.ToDouble(h[new[] { bi, d }]);
+                    double iVal = numOps.ToDouble(i_t[new[] { bi, d }]);
+                    double vVal = numOps.ToDouble(v_t[new[] { bi, d }]);
+                    double hPrev = numOps.ToDouble(h[new[] { bi, d }]);
 
                     // h_t = a * h_{t-1} + sqrt(1 - a^2) * (i * v)
                     double hNew = a * hPrev + sqrtFactor * (iVal * vVal);
-                    h[new[] { bi, d }] = NumOps.FromDouble(hNew);
-                    allDecay[new[] { bi, t, d }] = NumOps.FromDouble(a);
+                    h[new[] { bi, d }] = numOps.FromDouble(hNew);
+                    allDecay[new[] { bi, t, d }] = numOps.FromDouble(a);
                 }
             }
 
