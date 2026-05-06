@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -33,17 +34,10 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an IDEFICS3 model for state-of-the-art 8B document understanding
-/// // with SigLIP + perceiver + Llama 3.1 trained on Docmatix data
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new IDEFICS3&lt;double&gt;(architecture, "idefics3.onnx");
-///
-/// // Training mode with native layers
 /// var trainModel = new IDEFICS3&lt;double&gt;(architecture, new IDEFICS3Options());
 /// </code>
 /// </example>
@@ -58,26 +52,78 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ResearchPaper("Building and better understanding vision-language models: insights and future directions", "https://arxiv.org/abs/2408.12637", Year = 2024, Authors = "Laurencon et al.")]
 public class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
-    private readonly IDEFICS3Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly IDEFICS3Options _options;
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
-    private int _visionLayerEnd; private int _perceiverLayerEnd;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
-    public IDEFICS3(NeuralNetworkArchitecture<T> architecture, string modelPath, IDEFICS3Options? options = null) : base(architecture) { _options = options ?? new IDEFICS3Options(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public IDEFICS3(NeuralNetworkArchitecture<T> architecture, IDEFICS3Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new IDEFICS3Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    private readonly List<ILayer<T>> _perceiverLayers = new List<ILayer<T>>();
+    private readonly List<ILayer<T>> _decoderLayers = new List<ILayer<T>>();
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim;
+    public IDEFICS3(NeuralNetworkArchitecture<T> architecture, string modelPath, IDEFICS3Options? options = null) : base(architecture)
+    {
+        _options = options ?? new IDEFICS3Options();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public IDEFICS3(NeuralNetworkArchitecture<T> architecture, IDEFICS3Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new IDEFICS3Options();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        foreach (var l in Layers) c = l.Forward(c);
+        return L2Normalize(c);
+    }
 
     /// <summary>
-    /// Generates text using IDEFICS3's SigLIP + perceiver + Llama 3.1 architecture.
-    /// IDEFICS3 (Laurencon et al., 2024) builds on IDEFICS2 with:
-    /// (1) SigLIP vision encoder with native resolution sub-image splitting,
-    /// (2) Perceiver pooling with enhanced capacity for document understanding,
-    /// (3) Llama 3.1 decoder backbone for improved reasoning capabilities,
-    /// (4) Trained on Docmatix dataset for state-of-the-art document QA,
-    /// (5) All training exclusively on open datasets for full reproducibility.
+    /// Generates text using IDEFICS3's SigLIP+Llama-3.1 architecture trained on Docmatix.
+    /// IDEFICS3 (Laurencon et al., 2024) iterates on IDEFICS2 with:
+    /// (1) Llama 3.1 decoder backbone (replaces Mistral-7B) for stronger language modeling,
+    /// (2) Trained on Docmatix dataset for document QA — state-of-the-art document VLM,
+    /// (3) Same SigLIP-SO400M + perceiver pooling pipeline as IDEFICS2 for efficiency,
+    /// (4) Native resolution sub-image splitting preserved for high-res documents.
     /// </summary>
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
     {
@@ -85,31 +131,20 @@ public class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        // Step 1: SigLIP vision encoder with sub-image splitting
         var visionOut = p;
-        for (int i = 0; i < _visionLayerEnd; i++)
-            visionOut = Layers[i].Forward(visionOut);
+        foreach (var l in Layers) visionOut = l.Forward(visionOut);
 
-        // Step 2: Enhanced perceiver pooling
         var perceiverOut = visionOut;
-        for (int i = _visionLayerEnd; i < _perceiverLayerEnd; i++)
-            perceiverOut = Layers[i].Forward(perceiverOut);
+        foreach (var l in _perceiverLayers) perceiverOut = l.Forward(perceiverOut);
 
-        // Step 3: Tokenize prompt
         Tensor<T>? promptTokens = null;
-        if (prompt is not null)
-            promptTokens = TokenizeText(prompt);
+        if (prompt is not null) promptTokens = TokenizeText(prompt);
 
-        // Step 4: Concatenate perceiver output with prompt tokens
-        // IDEFICS3 uses cross-attention in Llama 3.1 decoder layers
         var decoderInput = perceiverOut;
-        if (promptTokens is not null)
-            decoderInput = perceiverOut.ConcatenateTensors(promptTokens);
+        if (promptTokens is not null) decoderInput = perceiverOut.ConcatenateTensors(promptTokens);
 
-        // Step 5: Llama 3.1 decoder
         var output = decoderInput;
-        for (int i = _perceiverLayerEnd; i < Layers.Count; i++)
-            output = Layers[i].Forward(output);
+        foreach (var l in _decoderLayers) output = l.Forward(output);
 
         return output;
     }
@@ -117,30 +152,142 @@ public class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _visionLayerEnd = Layers.Count / 3; _perceiverLayerEnd = Layers.Count * 2 / 3; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultPerceiverResamplerLayers(_options.VisionDim, _options.PerceiverDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumPerceiverLayers, _options.NumDecoderLayers, _options.NumLatents, _options.NumHeads, _options.NumPerceiverHeads, _options.DropoutRate)); ComputePerceiverBoundaries(); }
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        int pBlockSize = _options.DropoutRate > 0 ? 8 : 7;
+        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
+        int pProj = _options.VisionDim != _options.PerceiverDim ? 1 : 0;
+        int perceiverLayerEnd = visionLayerEnd + pProj + _options.NumPerceiverLayers * pBlockSize;
+
+        var allLayers = LayerHelper<T>.CreateDefaultPerceiverResamplerLayers(
+            _options.VisionDim, _options.PerceiverDim, _options.DecoderDim,
+            _options.NumVisionLayers, _options.NumPerceiverLayers, _options.NumDecoderLayers,
+            _options.NumLatents, _options.NumHeads, _options.NumPerceiverHeads,
+            _options.DropoutRate);
+
+        int idx = 0;
+        foreach (var layer in allLayers)
+        {
+            if (idx < visionLayerEnd) Layers.Add(layer);
+            else if (idx < perceiverLayerEnd) _perceiverLayers.Add(layer);
+            else _decoderLayers.Add(layer);
+            idx++;
+        }
+
+        RegisterAuxiliaryEncoderStream(_perceiverLayers);
+        RegisterAuxiliaryEncoderStream(_decoderLayers);
     }
 
-    private void ComputePerceiverBoundaries()
+    private Tensor<T> TokenizeText(string text)
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _visionLayerEnd = 1 + _options.NumVisionLayers * lpb;
-        int perceiverProj = _options.VisionDim != _options.PerceiverDim ? 1 : 0;
-        int pLpb = _options.DropoutRate > 0 ? 8 : 7;
-        _perceiverLayerEnd = _visionLayerEnd + perceiverProj + _options.NumPerceiverLayers * pLpb;
+        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
     }
 
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = PreprocessImage(input);
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try { TrainWithTape(PreprocessImage(input), expected); }
+        finally { SetTrainingMode(false); }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateAuxiliaryStreamTrainableLayers();
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "IDEFICS3-Native" : "IDEFICS3-ONNX", Description = "IDEFICS3: Building and better understanding vision-language models (Laurencon et al., 2024)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumPerceiverLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "IDEFICS3"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.PerceiverDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumPerceiverLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.PerceiverDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumPerceiverLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new IDEFICS3<T>(Architecture, mp, _options); return new IDEFICS3<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(IDEFICS3<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "IDEFICS3-Native" : "IDEFICS3-ONNX",
+            Description = "IDEFICS3: Building and better understanding vision-language models (Laurencon et al., 2024)",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumPerceiverLayers + _options.NumDecoderLayers
+        };
+        m.AdditionalInfo["Architecture"] = "IDEFICS3";
+        m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString();
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.PerceiverDim);
+        writer.Write(_options.DecoderDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumPerceiverLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumHeads);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.PerceiverDim = reader.ReadInt32();
+        _options.DecoderDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumPerceiverLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new IDEFICS3<T>(Architecture, mp, _options);
+        return new IDEFICS3<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(IDEFICS3<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }
