@@ -1686,10 +1686,65 @@ public static class LayerHelper<T>
         NeuralNetworkTaskType taskType = architecture.TaskType;
         double temperature = architecture.Temperature;
 
+        // Layer-level seed plumbing (industry-standard pattern). When the
+        // architecture specifies a deterministic random seed, derive per-
+        // layer seeds from a single seed-RNG and assign each layer's
+        // LayerBase<T>.RandomSeed property. Each layer's own
+        // InitializeParameters reads RandomSeed directly and uses it to
+        // construct a seeded RandomHelper.CreateSeededRandom — so the
+        // layer's natural init algorithm (DenseLayer's activation-aware
+        // He/LeCun, MultiHeadAttention's Xavier-uniform via SimdRandom,
+        // EmbeddingLayer's small-noise scaled-by-sqrt(d) fill) runs
+        // unchanged but with reproducible RNG state. Closes review-
+        // comment #1270.yA1v (the previous Wire override replaced
+        // InitializationStrategy with EagerInitializationStrategy and
+        // silently changed every Dense layer's init from He to
+        // Xavier-normal — a behaviour change masquerading as a
+        // determinism fix).
+        //
+        // Determinism scope: System.Random's internal algorithm is
+        // runtime-specific (the legacy Knuth subtractive on net471,
+        // modern xoshiro256** on .NET Core 6+), so the same seed
+        // produces DIFFERENT sequences across runtimes. The
+        // same-runtime-same-seed determinism is what this contract
+        // provides — cross-runtime determinism would require a stable
+        // PRNG (e.g., a vendored xoshiro256** that runs identically on
+        // net471 and net10), which is tracked separately. Review-
+        // comment #1269.vuR1 flagged this gap; this comment is the
+        // documented scope. Closes #1269.pQdZ.
+        //
+        // RNG ordering / thread-safety: Wire is called in layer-
+        // construction order and pulls one .Next() per layer, so the
+        // per-layer seed sequence is deterministic for a given
+        // architecture seed. System.Random is not thread-safe, and
+        // several layers initialize lazily (e.g. MultiHeadAttention
+        // allocates on first forward / parameter query). Each layer
+        // owns its own private RandomSeed and constructs its own RNG
+        // inside InitializeParameters via
+        // RandomHelper.CreateSeededRandom — so concurrent lazy-init
+        // paths get independent RNG instances and never share mutable
+        // RNG state.
+        Random? seedRng = architecture.RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(architecture.RandomSeed.Value)
+            : null;
+
+        // Apply the per-layer seed when reproducibility was requested.
+        // No-op when randomSeed wasn't set (preserves backward-compatible
+        // behaviour for users who don't request reproducibility).
+        ILayer<T> Wire(ILayer<T> layer)
+        {
+            if (seedRng is null) return layer;
+            if (layer is NeuralNetworks.Layers.LayerBase<T> baseLayer)
+            {
+                baseLayer.RandomSeed = seedRng.Next();
+            }
+            return layer;
+        }
+
         // Add embedding layer for text input
         if (vocabularySize > 0)
         {
-            yield return new EmbeddingLayer<T>(vocabularySize, modelDimension);
+            yield return Wire(new EmbeddingLayer<T>(vocabularySize, modelDimension));
         }
         else
         {
@@ -1698,14 +1753,14 @@ public static class LayerHelper<T>
             int inputSize = architecture.InputSize;
             if (inputSize > 0 && inputSize != modelDimension)
             {
-                yield return new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
+                yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
             }
         }
 
         // Add positional encoding if specified
         if (usePositionalEncoding)
         {
-            yield return new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension);
+            yield return Wire(new PositionalEncodingLayer<T>(maxSequenceLength, modelDimension));
         }
 
         // Add dropout layer after embedding
@@ -1718,11 +1773,11 @@ public static class LayerHelper<T>
         for (int i = 0; i < numEncoderLayers; i++)
         {
             // Self-attention block
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
-                activationFunction: new IdentityActivation<T>());
+            yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
+                activationFunction: new IdentityActivation<T>()));
 
             // Add normalization
-            yield return new LayerNormalizationLayer<T>();
+            yield return Wire(new LayerNormalizationLayer<T>());
 
             // Add dropout if specified
             if (dropoutRate > 0)
@@ -1731,11 +1786,11 @@ public static class LayerHelper<T>
             }
 
             // Feed-forward network
-            yield return new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
+            yield return Wire(new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>));
+            yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
 
             // Add normalization
-            yield return new LayerNormalizationLayer<T>();
+            yield return Wire(new LayerNormalizationLayer<T>());
 
             // Add dropout if specified
             if (dropoutRate > 0)
@@ -1750,11 +1805,11 @@ public static class LayerHelper<T>
             for (int i = 0; i < numDecoderLayers; i++)
             {
                 // Self-attention block
-                yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
-                    activationFunction: new IdentityActivation<T>());
+                yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
+                    activationFunction: new IdentityActivation<T>()));
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>();
+                yield return Wire(new LayerNormalizationLayer<T>());
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1763,11 +1818,11 @@ public static class LayerHelper<T>
                 }
 
                 // Cross-attention block
-                yield return new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads), 
-                    activationFunction: new IdentityActivation<T>());
+                yield return Wire(new MultiHeadAttentionLayer<T>(numHeads, (modelDimension) / (numHeads),
+                    activationFunction: new IdentityActivation<T>()));
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>();
+                yield return Wire(new LayerNormalizationLayer<T>());
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1776,11 +1831,11 @@ public static class LayerHelper<T>
                 }
 
                 // Feed-forward network
-                yield return new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>);
-                yield return new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>);
+                yield return Wire(new DenseLayer<T>(feedForwardDimension, new ReLUActivation<T>() as IActivationFunction<T>));
+                yield return Wire(new DenseLayer<T>(modelDimension, new IdentityActivation<T>() as IActivationFunction<T>));
 
                 // Add normalization
-                yield return new LayerNormalizationLayer<T>();
+                yield return Wire(new LayerNormalizationLayer<T>());
 
                 // Add dropout if specified
                 if (dropoutRate > 0)
@@ -1835,7 +1890,7 @@ public static class LayerHelper<T>
         }
 
         // Add the final projection layer
-        yield return new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+        yield return Wire(new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
 
         // Add the final activation layer based on task type
         switch (taskType)

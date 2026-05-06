@@ -382,6 +382,26 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     }
 
     /// <summary>
+    /// Lazy-initializes the continuous-input projection weights with Xavier
+    /// scaling. Honours the layer-level deterministic seed
+    /// (<see cref="LayerBase{T}.RandomSeed"/>) when set so projection
+    /// weights follow the same reproducibility contract as the embedding
+    /// tensor. Shared by both CPU and GPU forward paths to keep the two
+    /// init policies in lock-step (closes review-comment #1270.yLf-).
+    /// </summary>
+    private void InitializeProjectionWeights(Tensor<T> projectionWeights, int inputFeatures, int embeddingDim)
+    {
+        Random random = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : RandomHelper.CreateSecureRandom();
+        T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
+        for (int i = 0; i < projectionWeights.Length; i++)
+        {
+            projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
+        }
+    }
+
+    /// <summary>
     /// Initializes the embedding tensor with small random values.
     /// </summary>
     /// <remarks>
@@ -419,7 +439,15 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // on every element (23M elements for BERT vocab). The embedding tensor was
         // already allocated by the constructor; reuse it in place rather than allocating
         // a second tensor that shadows the original reference.
-        var rng = new SimdRandom();
+        //
+        // Honour the layer-level deterministic seed when set
+        // (LayerBase<T>.RandomSeed is the per-layer-seed mechanism wired
+        // by LayerHelper.Wire from architecture.RandomSeed). Without this
+        // hook, the architecture's RandomSeed wouldn't reach the embedding
+        // fill — closes review-comment #1270.vhmx.
+        SimdRandom rng = RandomSeed.HasValue
+            ? new SimdRandom(RandomSeed.Value)
+            : new SimdRandom();
         var span = _embeddingTensor.Data.Span;
         int total = span.Length;
         if (total == 0) return; // zero-sized embedding (no vocab or zero dim): nothing to fill
@@ -547,13 +575,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 if (_projectionWeights != null)
                     TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
-                // Xavier initialization
-                T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
-                var random = RandomHelper.CreateSecureRandom();
-                for (int i = 0; i < _projectionWeights.Length; i++)
-                {
-                    _projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-                }
+                InitializeProjectionWeights(_projectionWeights, inputFeatures, embeddingDim);
             }
 
             // Flatten input to 2D [total_samples, inputFeatures] for projection
@@ -703,13 +725,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                 if (_projectionWeights != null)
                     TensorAllocator.Return(_projectionWeights);
                 _projectionWeights = TensorAllocator.Rent<T>([inputFeatures, embeddingDim]);
-                // Xavier initialization
-                T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
-                var random = RandomHelper.CreateSecureRandom();
-                for (int i = 0; i < _projectionWeights.Length; i++)
-                {
-                    _projectionWeights.SetFlat(i, NumOps.Multiply(scale, NumOps.FromDouble(random.NextDouble() * 2 - 1)));
-                }
+                InitializeProjectionWeights(_projectionWeights, inputFeatures, embeddingDim);
             }
 
             // Flatten input to 2D [totalSamples, inputFeatures] for projection

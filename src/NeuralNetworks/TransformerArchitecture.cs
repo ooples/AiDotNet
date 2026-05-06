@@ -191,6 +191,63 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     public int MaxSequenceLength { get; }
 
     /// <summary>
+    /// Gets the number of warmup steps for the default Noam (Vaswani 2017)
+    /// learning-rate schedule attached to the Transformer's default Adam
+    /// optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The Vaswani 2017 §5.3 recipe uses a 4000-step linear warmup followed
+    /// by inverse-sqrt decay. That paper trained for 100k+ steps on WMT
+    /// translation, so 4000 (~4% of total) was a small fraction. For shorter
+    /// training budgets this default keeps the model in warmup forever and
+    /// the LR never reaches its peak — set this to roughly <c>0.1 ·
+    /// total_steps</c> for fine-tuning or short training runs.
+    /// </para>
+    /// <para>
+    /// Ignored when an explicit optimizer is passed to the Transformer
+    /// constructor (the user-supplied optimizer's own scheduler config wins).
+    /// </para>
+    /// </remarks>
+    public int WarmupSteps { get; }
+
+    /// <summary>
+    /// Gets the random seed used to derive deterministic weight initialization
+    /// for this architecture's default layer stack. <c>null</c> means use the
+    /// framework's non-deterministic thread-safe RNG (default — same behaviour
+    /// as before this property was added).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Setting this to a fixed integer (e.g., <c>0</c> or <c>42</c>) makes
+    /// <see cref="LayerHelper{T}.CreateDefaultTransformerLayers"/> derive a
+    /// per-layer seed (one <c>seedRng.Next()</c> per constructed layer, in
+    /// declaration order) and assign it to each layer's <c>RandomSeed</c>
+    /// property on <c>LayerBase&lt;T&gt;</c>. Each layer's own
+    /// <c>InitializeParameters</c> reads <c>RandomSeed</c> and uses it to
+    /// build a seeded RNG via <c>RandomHelper.CreateSeededRandom</c> — so
+    /// the layer's natural init algorithm (DenseLayer's activation-aware
+    /// He / LeCun, MultiHeadAttention's Xavier-uniform via SimdRandom,
+    /// EmbeddingLayer's small-noise scaled-by-sqrt(d) fill) runs unchanged
+    /// but with reproducible RNG state. This is required for reproducible
+    /// unit tests, multi-seed experiment harnesses, and CI determinism.
+    /// </para>
+    /// <para>
+    /// Without a fixed seed, every <c>new Transformer(arch, ...)</c> instance
+    /// gets different initial weights drawn from the process-wide thread-safe
+    /// RNG, and small training-budget convergence tests (e.g., V=256 batched
+    /// 100-step memorization) show non-deterministic accuracy across runs.
+    /// </para>
+    /// <para>
+    /// Determinism scope: <see cref="System.Random"/>'s internal algorithm is
+    /// runtime-specific (legacy Knuth subtractive on net471, modern
+    /// xoshiro256** on .NET 6+). Same-runtime + same-seed produces identical
+    /// weights; cross-runtime determinism is not provided.
+    /// </para>
+    /// </remarks>
+    public int? RandomSeed { get; }
+
+    /// <summary>
     /// Gets the size of the vocabulary for text-based tasks.
     /// </summary>
     /// <remarks>
@@ -302,8 +359,36 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// <param name="vocabularySize">The size of the vocabulary for text-based tasks. Defaults to 0.</param>
     /// <param name="usePositionalEncoding">Whether to use positional encoding. Defaults to true.</param>
     /// <param name="temperature">The temperature parameter for text generation. Defaults to 1.0.</param>
+    /// <param name="sequencePooling">
+    /// How to collapse the sequence dimension when producing model output.
+    /// <c>null</c> defers to a sensible default per <c>TaskType</c>:
+    /// token-input architectures (<c>vocabularySize &gt; 0</c>) get
+    /// <c>SequencePoolingMode.LastToken</c> (matches the GPT / Llama /
+    /// Mistral output-head convention), continuous-input architectures get
+    /// <c>SequencePoolingMode.MeanPool</c> (correct for document-level
+    /// classification). Pass an explicit value to override.
+    /// </param>
     /// <param name="layers">Optional custom layers for the network. Defaults to null.</param>
-    /// <param name="rbmLayers">Optional Restricted Boltzmann Machine layers for the network. Defaults to null.</param>
+    /// <param name="warmupSteps">
+    /// Number of warmup steps for the Vaswani 2017 Noam learning-rate
+    /// schedule used by the Transformer's default Adam-with-Noam
+    /// optimizer (β₁=0.9, β₂=0.98, ε=1e-9). LR ramps linearly from a
+    /// tiny value to peak across the first <paramref name="warmupSteps"/>
+    /// batches, then decays as t<sup>-0.5</sup>. Defaults to 4000
+    /// (paper-canonical). For training budgets too small to warm up
+    /// over (under ~100 steps), drop the schedule entirely and use a
+    /// constant LR — the constructor rejects values ≤ 0 with
+    /// <c>ArgumentOutOfRangeException</c>.
+    /// </param>
+    /// <param name="randomSeed">
+    /// Optional seed for deterministic layer-weight initialization.
+    /// When provided, every weighted layer in the constructed network
+    /// receives a per-layer seed derived from this value (see
+    /// <c>LayerHelper</c>'s seeded-RNG plumbing) so identical seeds
+    /// produce identical initial weight tensors. Defaults to <c>null</c>
+    /// — uses the framework's secure non-deterministic RNG, suitable
+    /// for production training.
+    /// </param>
     /// <remarks>
     /// <para>
     /// This constructor initializes a new TransformerArchitecture with the specified parameters, which will
@@ -326,6 +411,55 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// that matter for what you'll be using it for.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Binary-compatible overload preserving the pre-PR-#1270 ctor signature.
+    /// Forwards to the canonical ctor with the new <c>warmupSteps</c> and
+    /// <c>randomSeed</c> parameters defaulted (4000, null), matching the
+    /// behaviour callers would see if they upgraded source-only. Closes
+    /// review-comment #1270.yYt1 (binary-breaking change to the
+    /// already-public constructor signature).
+    /// </summary>
+    public TransformerArchitecture(
+        InputType inputType,
+        NeuralNetworkTaskType taskType,
+        int numEncoderLayers,
+        int numDecoderLayers,
+        int numHeads,
+        int modelDimension,
+        int feedForwardDimension,
+        NetworkComplexity complexity,
+        int inputSize,
+        int outputSize,
+        double dropoutRate,
+        int maxSequenceLength,
+        int vocabularySize,
+        bool usePositionalEncoding,
+        double temperature,
+        SequencePoolingMode? sequencePooling,
+        List<ILayer<T>>? layers)
+        : this(
+            inputType: inputType,
+            taskType: taskType,
+            numEncoderLayers: numEncoderLayers,
+            numDecoderLayers: numDecoderLayers,
+            numHeads: numHeads,
+            modelDimension: modelDimension,
+            feedForwardDimension: feedForwardDimension,
+            complexity: complexity,
+            inputSize: inputSize,
+            outputSize: outputSize,
+            dropoutRate: dropoutRate,
+            maxSequenceLength: maxSequenceLength,
+            vocabularySize: vocabularySize,
+            usePositionalEncoding: usePositionalEncoding,
+            temperature: temperature,
+            sequencePooling: sequencePooling,
+            layers: layers,
+            warmupSteps: 4000,
+            randomSeed: null)
+    {
+    }
+
     public TransformerArchitecture(
         InputType inputType,
         NeuralNetworkTaskType taskType,
@@ -343,7 +477,9 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         bool usePositionalEncoding = true,
         double temperature = 1.0,
         SequencePoolingMode? sequencePooling = null,
-        List<ILayer<T>>? layers = null)
+        List<ILayer<T>>? layers = null,
+        int warmupSteps = 4000,
+        int? randomSeed = null)
         : base(
             inputType: inputType,
             taskType: taskType,
@@ -352,6 +488,21 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
             outputSize: outputSize,
             layers: layers)
     {
+        // Validate warmupSteps at the architecture boundary so a 0/negative
+        // value fails immediately and is attributed to this parameter,
+        // instead of bubbling up later as an exception from the
+        // NoamSchedule ctor during Transformer construction or training
+        // (where the call stack makes the root cause harder to find).
+        // Closes review-comment #1269.vuR5 / .vzGk.
+        if (warmupSteps <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(warmupSteps),
+                warmupSteps,
+                "warmupSteps must be positive — the Vaswani 2017 Noam schedule has no defined behavior for non-positive warmup. " +
+                "For a budget too small to warm up over (less than ~100 steps), drop the schedule entirely and use a constant LR.");
+        }
+
         NumEncoderLayers = numEncoderLayers;
         NumDecoderLayers = numDecoderLayers;
         NumHeads = numHeads;
@@ -362,6 +513,8 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
         VocabularySize = vocabularySize;
         UsePositionalEncoding = usePositionalEncoding;
         Temperature = temperature;
+        WarmupSteps = warmupSteps;
+        RandomSeed = randomSeed;
         // Default sequence pooling: token-input architectures (vocabSize > 0)
         // are autoregressive LMs by convention — use the LAST position's
         // hidden state, matching GPT / Llama / Mistral output heads.

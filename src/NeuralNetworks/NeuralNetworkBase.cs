@@ -4164,9 +4164,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             else
             {
                 // Fallback for networks without ITrainableLayer layers:
-                // use the legacy per-layer UpdateParameters path
+                // use the legacy per-layer UpdateParameters path. Step
+                // the scheduler at the batch boundary via the shared
+                // helper so all training entry points keep the same
+                // OnBatchEnd contract. Closes #1270.yYuK.
                 var opt = GetOrCreateBaseOptimizer();
                 opt.UpdateParameters(Layers);
+                StepSchedulerIfSupported(opt);
             }
         }
         finally
@@ -4709,6 +4713,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     Engine.TensorSubtractInPlace(extra, update);
                 }
             }
+
+            // Advance the optimizer's learning-rate scheduler at the
+            // tape-batch boundary via the shared helper. Without this,
+            // any LR scheduler attached to the optimizer (NoamSchedule,
+            // LinearWarmupScheduler, CosineAnnealing, etc.) would never
+            // tick and the LR would stay pinned at its initial value.
+            // Closes #1270.zKjB (single-source-of-truth helper across
+            // every training entry point).
+            StepSchedulerIfSupported(opt);
         }
         finally
         {
@@ -5030,6 +5043,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 input, input, ComputeForward, RecomputeLoss);
 
             opt.Step(context);
+
+            // Mirror the OnBatchEnd advance from TrainWithTape via the
+            // shared helper so a custom-loss caller and a regular Train
+            // caller see identical scheduler behaviour. Closes #1269.zFt3
+            // (route via shared StepSchedulerIfSupported helper to keep
+            // every training entry point consistent — #1270.zKjB).
+            StepSchedulerIfSupported(opt);
+
             return lossValue;
         }
         finally
@@ -5045,6 +5066,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
         return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    }
+
+    /// <summary>
+    /// Advances the optimizer's learning-rate scheduler at a training-batch
+    /// boundary. Single source of truth for the OnBatchEnd contract — every
+    /// training entry point (legacy <c>Train</c>, <see cref="TrainWithTape"/>,
+    /// <c>TrainWithCustomLoss</c>) routes through this helper so all paths
+    /// keep identical scheduler-step semantics. Optimizers that don't derive
+    /// from <see cref="Optimizers.GradientBasedOptimizerBase{T, TInput, TOutput}"/>
+    /// are silently ignored — that's the documented contract on
+    /// <c>OnBatchEnd</c>: only gradient-based optimizers carry an LR
+    /// scheduler. Closes review-comment #1270.zKjB.
+    /// </summary>
+    /// <param name="optimizer">The optimizer that just finished a batch.</param>
+    private static void StepSchedulerIfSupported(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> stepped)
+        {
+            stepped.OnBatchEnd();
+        }
     }
 
     /// <summary>
@@ -5064,14 +5105,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// will then re-create the lazy default).
     /// </param>
     /// <remarks>
-    /// Subclasses that maintain a separate private optimizer field (e.g.
-    /// <see cref="Transformer{T}"/>'s <c>_optimizer</c>) are responsible for
-    /// keeping that field in sync if they want their <c>Train</c> override to
-    /// honor builder overrides — typically by routing their override through
-    /// <see cref="GetOrCreateBaseOptimizer"/> rather than reading the private
-    /// field directly.
+    /// Virtual so subclasses that maintain a separate private optimizer
+    /// field (e.g. <see cref="Transformer{T}"/>'s <c>_optimizer</c>) can
+    /// override and keep that field in sync. Without the override, the
+    /// subclass field becomes stale after the first builder-driven
+    /// <see cref="SetBaseTrainOptimizer"/> call — and any path that still
+    /// reads the subclass field (metadata, serialization, custom training
+    /// shortcuts) silently reports / persists the wrong optimizer.
     /// </remarks>
-    internal void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
         _baseTrainOptimizer = optimizer;
     }

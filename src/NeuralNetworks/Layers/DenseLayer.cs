@@ -504,18 +504,31 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // `InitializationStrategy is null`, so the inner null-check that
         // used to wrap this block was redundant. Activation-driven init
         // still applies here unconditionally.
+        // Honour the layer-level deterministic seed: when
+        // LayerBase<T>.RandomSeed is set, the strategy's internal RNG
+        // is seeded from it so the He / LeCun fallback fills are
+        // reproducible. Closes review-comment #1270 (layer-level seed
+        // industry-standard pattern).
+        Random? seededRng = RandomSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
+            : null;
+
         switch (ResolveDefaultInitKind())
         {
             case DefaultInitKind.LeCun:
             {
-                var lecun = new Initialization.LeCunInitializationStrategy<T>();
+                var lecun = seededRng is not null
+                    ? new Initialization.LeCunInitializationStrategy<T>(seededRng)
+                    : new Initialization.LeCunInitializationStrategy<T>();
                 lecun.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
                 lecun.InitializeBiases(_biases);
                 return;
             }
             case DefaultInitKind.He:
             {
-                var heInit = new Initialization.HeInitializationStrategy<T>();
+                var heInit = seededRng is not null
+                    ? new Initialization.HeInitializationStrategy<T>(seededRng)
+                    : new Initialization.HeInitializationStrategy<T>();
                 heInit.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
                 heInit.InitializeBiases(_biases);
                 return;
