@@ -593,10 +593,17 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         // very large models. In-place mutation preserves the registration.
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputDepth * _kernelSize * _kernelSize + _outputDepth * _upscaleFactor * _upscaleFactor)));
 
+        // Generate scaled random values via the engine (vectorized) and
+        // copy into the EXISTING _kernels tensor's storage so we preserve
+        // the AllocateLazyWeight registration in the streaming pool.
+        // The double-allocation here (Vector + temporary tensor + dest)
+        // is a known limitation: a destination-aware engine API would
+        // write directly into the registered tensor. Tracked in
+        // AiDotNet.Tensors, not blocking on this PR.
         var randVec = Vector<T>.CreateRandom(_kernels.Length, -0.5, 0.5);
-        var dst = _kernels.Data.Span;
-        for (int i = 0; i < _kernels.Length; i++)
-            dst[i] = NumOps.Multiply(randVec[i], scale);
+        var randTensor = new Tensor<T>(_kernels._shape, randVec);
+        var scaled = Engine.TensorMultiplyScalar(randTensor, scale);
+        scaled.AsSpan().CopyTo(_kernels.Data.Span);
 
         _biases.Fill(NumOps.Zero);
     }

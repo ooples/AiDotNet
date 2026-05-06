@@ -577,6 +577,15 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
             (int[])_weights.RowIndices.Clone(),
             (int[])_weights.ColumnIndices.Clone(),
             newValues);
+        // Re-register the new sparse instance so GetTrainableParameters
+        // (used by tape-mode optimizers and parameter walks) returns the
+        // updated reference. The OLD _weights stays in the engine's
+        // persistent-tensor registry because Engine.UnregisterPersistentTensor
+        // calls Contiguous() which throws on sparse tensors — sparse-aware
+        // unregistration is tracked in the Tensors repo. Pre-training
+        // SetParameters is the only call site, so no ParameterBuffer
+        // view aliases the old reference yet.
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
 
         // Restore biases in place — _biases is a dense Tensor<T> and supports
         // direct indexer writes.
