@@ -1600,7 +1600,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             FewShotExampleSelector = null,
             PromptAnalyzer = null,
             PromptCompressor = null,
-            MemoryConfig = _memoryConfig
+            MemoryConfig = _memoryConfig,
+            // Mirror the supervised / AutoML / RL result builders: surface
+            // the streaming report when the inference-only model is itself
+            // a NeuralNetworkBase that auto-detected (or the caller forced)
+            // streaming. Inference-only builds still benefit from streaming
+            // for very large models served read-only, so the telemetry
+            // shouldn't go missing on this path.
+            WeightStreamingReport = BuildWeightStreamingReport(),
         };
 
         var programSynthesisResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
