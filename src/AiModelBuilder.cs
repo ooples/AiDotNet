@@ -2378,14 +2378,41 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 }
             }
 
-            // Run AutoML search to find the best model
-            var bestModel = await _autoMLModel.SearchAsync(
-                autoMLXTrain,
-                autoMLYTrain,
-                autoMLXVal,
-                autoMLYVal,
-                _autoMLModel.TimeLimit,
-                CancellationToken.None);
+            // Wire the per-candidate hook so the user's WeightStreamingConfig
+            // (force-on, force-off, or threshold override) applies to every
+            // candidate the search instantiates — not just the post-search
+            // winner. Without this, large neural candidates run with the
+            // env-var/default threshold during the search itself, so a 562B
+            // model can OOM during candidate evaluation even though the
+            // caller configured force-on streaming. Subscribe BEFORE
+            // SearchAsync, unsubscribe AFTER (search-scoped) so the hook
+            // doesn't leak into a follow-up SearchAsync on the same
+            // _autoMLModel instance with a different builder's config.
+            void OnAutoMLCandidate(IFullModel<T, TInput, TOutput> candidate)
+            {
+                if (candidate is NeuralNetworks.NeuralNetworkBase<T> nnCandidate)
+                {
+                    ApplyWeightStreamingConfigTo(nnCandidate);
+                }
+            }
+            _autoMLModel.OnCandidateCreated += OnAutoMLCandidate;
+
+            IFullModel<T, TInput, TOutput> bestModel;
+            try
+            {
+                // Run AutoML search to find the best model
+                bestModel = await _autoMLModel.SearchAsync(
+                    autoMLXTrain,
+                    autoMLYTrain,
+                    autoMLXVal,
+                    autoMLYVal,
+                    _autoMLModel.TimeLimit,
+                    CancellationToken.None);
+            }
+            finally
+            {
+                _autoMLModel.OnCandidateCreated -= OnAutoMLCandidate;
+            }
 
             _model = bestModel;
             // Re-apply checkpointing config now that AutoML has selected the
@@ -5513,8 +5540,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </summary>
     private void ApplyWeightStreamingConfig()
     {
-        if (_weightStreamingConfig is null) return;
         if (_model is not NeuralNetworks.NeuralNetworkBase<T> nnBase) return;
+        ApplyWeightStreamingConfigTo(nnBase);
+    }
+
+    /// <summary>
+    /// Applies the builder's <see cref="_weightStreamingConfig"/> to a
+    /// specific neural-network instance. Used both for the build's
+    /// final <c>_model</c> and for AutoML candidate models (the latter
+    /// via the <see cref="AutoML.AutoMLModelBase{T,TInput,TOutput}.OnCandidateCreated"/>
+    /// hook so candidates respect the user's threshold / force-on /
+    /// force-off intent during the search itself, not just the winner).
+    /// </summary>
+    /// <remarks>
+    /// Idempotent: no-op when <see cref="_weightStreamingConfig"/> is
+    /// null. Safe to call multiple times against the same instance —
+    /// the post-search apply against the final model and the
+    /// per-candidate apply during the search both flow through here.
+    /// </remarks>
+    private void ApplyWeightStreamingConfigTo(NeuralNetworks.NeuralNetworkBase<T> nnBase)
+    {
+        if (_weightStreamingConfig is null) return;
+        if (nnBase is null) return;
 
         // Per-instance threshold override: applied BEFORE we route to
         // any of the explicit-on / explicit-off / null branches because

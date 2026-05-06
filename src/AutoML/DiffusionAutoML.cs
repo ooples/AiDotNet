@@ -295,7 +295,7 @@ namespace AiDotNet.AutoML
                     try
                     {
                         // Create and evaluate model
-                        var model = await CreateModelAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), parameters);
+                        var model = await CreateModelWithHookAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), parameters);
 
                         // Train model if training data provided
                         if (inputs.Shape[0] > 0)
@@ -333,7 +333,7 @@ namespace AiDotNet.AutoML
                 {
                     // Create a default model if no successful trials
                     var defaultParams = GetDefaultParameters();
-                    BestModel = await CreateModelAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), defaultParams);
+                    BestModel = await CreateModelWithHookAsync(typeof(NeuralNetworks.NeuralNetworkBase<T>), defaultParams);
                     BestConfig = DiffusionTrialConfig<T>.FromDictionary(defaultParams);
                 }
 
