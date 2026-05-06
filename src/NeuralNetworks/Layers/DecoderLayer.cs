@@ -171,21 +171,35 @@ public class DecoderLayer<T> : LayerBase<T>
         base.Deserialize(reader);
     }
 
+    /// <summary>
+    /// Returns <see cref="_feedForward2"/> if it has been constructed; throws
+    /// <see cref="InvalidOperationException"/> with the calling member's name
+    /// otherwise. The Forward / ForwardGpu paths route through
+    /// EnsureInitializedFromInput → OnFirstForward, which materializes
+    /// <see cref="_feedForward2"/>; every other public entry point that
+    /// dereferences it (parameter accessors, optimizer-step callbacks,
+    /// state-reset hooks) goes through this helper so a fresh instance
+    /// fails fast with an actionable message instead of NullReferenceException.
+    /// </summary>
+    private FeedForwardLayer<T> RequireResolvedFeedForward2(string caller)
+    {
+        return _feedForward2 ?? throw new InvalidOperationException(
+            $"DecoderLayer.{caller} was called before the layer's shape was resolved " +
+            $"(_feedForward2 is null). The lazy ctor defers _feedForward2 construction " +
+            $"until OnFirstForward sees the real input. Run a Forward pass once, or " +
+            $"deserialize into a fresh unresolved instance (which calls ResolveFromShape " +
+            $"and triggers OnFirstForward), before invoking parameter / optimizer / " +
+            $"state-reset entry points.");
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
-        // _feedForward2 is created lazily in OnFirstForward, so at this point
-        // it must already be non-null (Deserialize triggers ResolveFromShape →
-        // OnFirstForward; direct calls into SetParameters from outside the
-        // tape happen only after the layer has seen a forward). Silently
-        // treating it as a no-op would advance idx for the trailing norms
-        // as if ff2 had consumed zero bytes, misaligning the slice and
-        // corrupting the loaded state. Throw instead.
-        if (_feedForward2 is null)
-            throw new InvalidOperationException(
-                "DecoderLayer.SetParameters was called before _feedForward2 was constructed. " +
-                "Construct via Deserialize (which calls ResolveFromShape) or run a Forward " +
-                "pass first so OnFirstForward can create _feedForward2 with the input-derived " +
-                "shape.");
+        // _feedForward2 is created lazily in OnFirstForward. SetParameters
+        // dereferences it when slicing the parameter vector — a null
+        // reference would silently advance idx for the trailing norms as
+        // if ff2 had consumed zero bytes, misaligning the slice and
+        // corrupting the loaded state. Throw via the shared helper.
+        var ff2 = RequireResolvedFeedForward2(nameof(SetParameters));
 
         // Validate parameters length up front so a malformed vector throws
         // BEFORE we partially mutate any sublayer. Use ParameterCountHelper
@@ -194,7 +208,7 @@ public class DecoderLayer<T> : LayerBase<T>
         // a silent OverflowException at the (int) cast.
         long expectedTotal =
             _selfAttention.ParameterCount + _crossAttention.ParameterCount +
-            _feedForward1.ParameterCount + _feedForward2.ParameterCount +
+            _feedForward1.ParameterCount + ff2.ParameterCount +
             _norm1.ParameterCount + _norm2.ParameterCount + _norm3.ParameterCount;
         if (parameters.Length != expectedTotal)
         {
@@ -211,23 +225,25 @@ public class DecoderLayer<T> : LayerBase<T>
             layer.SetParameters(parameters.Slice(idx, c));
             idx += c;
         }
-        Set(_selfAttention); Set(_crossAttention); Set(_feedForward1); Set(_feedForward2);
+        Set(_selfAttention); Set(_crossAttention); Set(_feedForward1); Set(ff2);
         Set(_norm1); Set(_norm2); Set(_norm3);
     }
 
     public override Vector<T> GetParameterGradients()
     {
+        var ff2 = RequireResolvedFeedForward2(nameof(GetParameterGradients));
         return Vector<T>.Concatenate(
             _selfAttention.GetParameterGradients(), _crossAttention.GetParameterGradients(),
-            _feedForward1.GetParameterGradients(), _feedForward2.GetParameterGradients(),
+            _feedForward1.GetParameterGradients(), ff2.GetParameterGradients(),
             _norm1.GetParameterGradients(), _norm2.GetParameterGradients(), _norm3.GetParameterGradients());
     }
 
     public override void ClearGradients()
     {
+        var ff2 = RequireResolvedFeedForward2(nameof(ClearGradients));
         base.ClearGradients();
         _selfAttention.ClearGradients(); _crossAttention.ClearGradients();
-        _feedForward1.ClearGradients(); _feedForward2.ClearGradients();
+        _feedForward1.ClearGradients(); ff2.ClearGradients();
         _norm1.ClearGradients(); _norm2.ClearGradients(); _norm3.ClearGradients();
     }
 
@@ -623,10 +639,11 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
+        var ff2 = RequireResolvedFeedForward2(nameof(UpdateParameters));
         _selfAttention.UpdateParameters(learningRate);
         _crossAttention.UpdateParameters(learningRate);
         _feedForward1.UpdateParameters(learningRate);
-        _feedForward2.UpdateParameters(learningRate);
+        ff2.UpdateParameters(learningRate);
         _norm1.UpdateParameters(learningRate);
         _norm2.UpdateParameters(learningRate);
         _norm3.UpdateParameters(learningRate);
@@ -644,11 +661,12 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParametersGpu(IGpuOptimizerConfig config)
     {
+        var ff2 = RequireResolvedFeedForward2(nameof(UpdateParametersGpu));
         // Update parameters for each sub-layer using GPU optimizer
         _selfAttention.UpdateParametersGpu(config);
         _crossAttention.UpdateParametersGpu(config);
         _feedForward1.UpdateParametersGpu(config);
-        _feedForward2.UpdateParametersGpu(config);
+        ff2.UpdateParametersGpu(config);
         _norm1.UpdateParametersGpu(config);
         _norm2.UpdateParametersGpu(config);
         _norm3.UpdateParametersGpu(config);
@@ -666,11 +684,12 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        var ff2 = RequireResolvedFeedForward2(nameof(GetParameters));
         // Use Vector<T>.Concatenate for efficient parameter collection
         var selfAttnParams = _selfAttention.GetParameters();
         var crossAttnParams = _crossAttention.GetParameters();
         var ff1Params = _feedForward1.GetParameters();
-        var ff2Params = _feedForward2.GetParameters();
+        var ff2Params = ff2.GetParameters();
         var norm1Params = _norm1.GetParameters();
         var norm2Params = _norm2.GetParameters();
         var norm3Params = _norm3.GetParameters();
@@ -695,11 +714,12 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        var ff2 = RequireResolvedFeedForward2(nameof(UpdateParameters));
         int index = 0;
         index = UpdateComponentParameters(_selfAttention, parameters, index);
         index = UpdateComponentParameters(_crossAttention, parameters, index);
         index = UpdateComponentParameters(_feedForward1, parameters, index);
-        index = UpdateComponentParameters(_feedForward2, parameters, index);
+        index = UpdateComponentParameters(ff2, parameters, index);
         index = UpdateComponentParameters(_norm1, parameters, index);
         index = UpdateComponentParameters(_norm2, parameters, index);
         UpdateComponentParameters(_norm3, parameters, index);
@@ -741,6 +761,14 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </remarks>
     public override void ResetState()
     {
+        // A fresh DecoderLayer that has never been forwarded has no state to
+        // clear in _feedForward2 — the lazy ctor defers its construction
+        // until OnFirstForward sees the real input. ResetState is a benign
+        // "clean slate" operation, so an unresolved _feedForward2 is a no-op
+        // here, not a fail-fast condition (unlike the parameter / optimizer
+        // entry points, which would silently corrupt slicing). Calling
+        // ResetState before the first Forward is a canonical pattern (e.g.
+        // LayerTestBase.Forward_DifferentInputs_ShouldProduceDifferentOutputs).
         _lastInput = null;
         _lastEncoderOutput = null;
         _gpuDecoderInput = null;
@@ -752,7 +780,7 @@ public class DecoderLayer<T> : LayerBase<T>
         _selfAttention.ResetState();
         _crossAttention.ResetState();
         _feedForward1.ResetState();
-        _feedForward2.ResetState();
+        _feedForward2?.ResetState();
         _norm1.ResetState();
         _norm2.ResetState();
         _norm3.ResetState();
@@ -806,12 +834,18 @@ public class DecoderLayer<T> : LayerBase<T>
     /// in the decoder layer by summing the parameter counts of all its components. This is useful for
     /// understanding the complexity of the layer and for certain optimization techniques.</para>
     /// </remarks>
-    public override long ParameterCount =>
-        _selfAttention.ParameterCount +
-        _crossAttention.ParameterCount +
-        _feedForward1.ParameterCount + _feedForward2.ParameterCount +
-        _norm1.ParameterCount +
-        _norm2.ParameterCount +
-        _norm3.ParameterCount;
+    public override long ParameterCount
+    {
+        get
+        {
+            var ff2 = RequireResolvedFeedForward2(nameof(ParameterCount));
+            return _selfAttention.ParameterCount +
+                _crossAttention.ParameterCount +
+                _feedForward1.ParameterCount + ff2.ParameterCount +
+                _norm1.ParameterCount +
+                _norm2.ParameterCount +
+                _norm3.ParameterCount;
+        }
+    }
 
 }
