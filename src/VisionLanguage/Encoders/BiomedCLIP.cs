@@ -111,7 +111,25 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         _options = options ?? new BiomedCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful CLIP training (Radford et al. 2021 §5.1, §A.1):
+        // AdamW with β₁=0.9, β₂=0.98, ε=1e-6, weight_decay=0.2,
+        // base learning rate = 5e-4. Default Adam at lr=1e-3 without
+        // warmup oscillates on paper-scale ViT-B/16 — Training_ShouldReduceLoss
+        // saw loss diverge from 1.249 → 1.801 over 30 unscheduled steps
+        // because the first-step Adam update overshoots before the moments
+        // stabilize. Paper-faithful lr=5e-4 with AdamW's decoupled weight
+        // decay keeps the trajectory monotonically decreasing in MSE under
+        // the test framework's default fixed-target regression contract.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 5e-4,
+                Beta1 = 0.9,
+                Beta2 = 0.98,
+                Epsilon = 1e-6,
+                WeightDecay = 0.2,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -257,8 +275,10 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             // PatchEmbeddingLayer is now Layers[0]; the tape-based training
             // loop walks the full vision graph (NCHW image → patch-embed →
             // transformer → projection) end-to-end so gradients flow back
-            // through the patch-embed conv too.
-            TrainWithTape(input, expected);
+            // through the patch-embed conv too. Pass our paper-faithful
+            // AdamW optimizer (β₂=0.98, weight_decay=0.2, lr=5e-4) instead
+            // of the base class's default Adam (lr=1e-3) — see ctor for why.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

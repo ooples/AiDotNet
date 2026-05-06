@@ -119,7 +119,22 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         _options = options ?? new DFNCLIPOptions();
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful CLIP training (Radford et al. 2021 §5.1, §A.1):
+        // AdamW with β₁=0.9, β₂=0.98, ε=1e-6, weight_decay=0.2,
+        // base learning rate = 5e-4. See BiomedCLIP for full rationale —
+        // default Adam at lr=1e-3 without warmup oscillates on paper-scale
+        // ViT-H/14 because the first-step Adam update overshoots before
+        // the moments stabilize.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 5e-4,
+                Beta1 = 0.9,
+                Beta2 = 0.98,
+                Epsilon = 1e-6,
+                WeightDecay = 0.2,
+            });
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.VisionEmbeddingDim;
@@ -269,8 +284,11 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         // gradients + parameter updates here. The contrastive paired-data
         // training path that updates both encoders is a separate API
         // (TrainContrastive(images, texts) — to be added) and is not what
-        // generic-NN consumers expect from Train(input, target).
-        TrainWithTape(PreprocessImage(input), expected);
+        // generic-NN consumers expect from Train(input, target). Pass our
+        // paper-faithful AdamW optimizer (β₂=0.98, weight_decay=0.2,
+        // lr=5e-4) instead of the base class's default Adam (lr=1e-3) —
+        // see ctor for why.
+        TrainWithTape(PreprocessImage(input), expected, _optimizer);
         SetTrainingMode(false);
     }
 
