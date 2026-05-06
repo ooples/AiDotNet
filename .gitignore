@@ -406,3 +406,9 @@ _playground_test/
 
 # Playwright MCP browser session scratch logs
 .playwright-mcp/
+
+# Local profiler artifacts (PerfView captures, dotnet-trace nettrace +
+# speedscope JSON). These are session-specific and only useful on the
+# machine that captured them.
+/traces/
+/tools/PerfView/

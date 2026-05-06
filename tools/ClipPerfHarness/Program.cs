@@ -109,6 +109,25 @@ internal static class Program
         }
         long swTrainTotal = 0;
         for (int s = 0; s < 5; s++) swTrainTotal += trainStepMs[s];
+
+        // Sub-phase break-down for steady-state cost: forward (Predict)
+        // versus full Train (forward + backward + optimizer step). Helps
+        // pin down whether the remaining time is dominated by backward
+        // (gradient computation through the LM head) or by the optimizer
+        // path. Adam fast-path is now SIMD-fused (4.4× steady-state
+        // speedup measured on Hawk under net10), so anything still
+        // hot is upstream of the optimizer.
+        Console.WriteLine("[bench] sub-phase break-down (10 reps each)");
+        var swP = Stopwatch.StartNew();
+        for (int i = 0; i < 10; i++) _ = network.Predict(input);
+        swP.Stop();
+        Console.WriteLine($"  predict x10: {swP.ElapsedMilliseconds} ms total ({swP.ElapsedMilliseconds / 10.0:F1} ms/iter)");
+        var swT = Stopwatch.StartNew();
+        for (int i = 0; i < 10; i++) network.Train(input, target);
+        swT.Stop();
+        Console.WriteLine($"  train   x10: {swT.ElapsedMilliseconds} ms total ({swT.ElapsedMilliseconds / 10.0:F1} ms/iter)");
+        long backwardEstimateMs = (swT.ElapsedMilliseconds - swP.ElapsedMilliseconds) / 10;
+        Console.WriteLine($"  ==> backward+optimizer estimate: {backwardEstimateMs} ms/iter");
         var swTrain = Stopwatch.StartNew();
         swTrain.Stop();
         // Recreate the field used by SUMMARY (sum of all 5 step times).
