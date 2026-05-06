@@ -112,6 +112,18 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
     /// <summary>
     /// Gradients for projection weights calculated during backward pass.
     /// </summary>
+    /// <summary>
+    /// True once SetParameters has populated _projectionBias (or
+    /// _projectionWeights) with caller-provided values. OnFirstForward
+    /// reads this to decide whether to skip Xavier re-initialization on
+    /// already-loaded tensors. Without it, the bias-only SetParameters
+    /// path (parameters.Length == _embeddingDim) writes the bias and then
+    /// the next Forward's OnFirstForward calls InitializeParameters which
+    /// resets BOTH weights AND bias to fresh random values, silently
+    /// discarding the loaded bias.
+    /// </summary>
+    private bool _paramsLoadedViaSetParameters;
+
     private Tensor<T>? _projectionWeightsGradient;
 
     /// <summary>
@@ -294,9 +306,30 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         {
             int patchDim = _channels * _patchSize * _patchSize;
             _projectionWeights = AllocateLazyWeight([patchDim, _embeddingDim]);
-            _projectionBias = AllocateLazyWeight([_embeddingDim]);
+            // _projectionBias may already hold caller-provided values from a
+            // bias-only SetParameters round-trip (parameters.Length ==
+            // _embeddingDim). In that case the ctor-allocated bias tensor
+            // at shape [_embeddingDim] still has the loaded values; do NOT
+            // replace it with a fresh AllocateLazyWeight, and do NOT
+            // re-Xavier-init it below. Only the weights need allocating
+            // and initializing.
+            bool biasAlreadyLoaded = _paramsLoadedViaSetParameters;
+            if (!biasAlreadyLoaded)
+            {
+                _projectionBias = AllocateLazyWeight([_embeddingDim]);
+            }
 
-            InitializeParameters();
+            if (biasAlreadyLoaded)
+            {
+                // Initialize only the freshly-allocated weights; preserve
+                // the loaded bias values verbatim.
+                int patchDimForInit = _channels * _patchSize * _patchSize;
+                InitializeLayerWeights(_projectionWeights, patchDimForInit, _embeddingDim);
+            }
+            else
+            {
+                InitializeParameters();
+            }
 
             RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
@@ -549,8 +582,15 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
                         $"(patchSize={_patchSize}, embeddingDim={_embeddingDim}).");
                 }
                 _channels = candidateChannels;
-                _projectionWeights = new Tensor<T>([candidateChannels * patchArea, _embeddingDim]);
-                _projectionBias = new Tensor<T>([_embeddingDim]);
+                // Route allocation through AllocateLazyWeight so that when
+                // streaming is engaged on the parent network, the new weight
+                // tensor lands in the streaming pool (with LRU eviction
+                // pre-empting the GC byte[] arrival) instead of bypassing
+                // it via plain `new Tensor<T>(...)`. This keeps the PR's
+                // peak-managed-memory invariant intact for deserialize /
+                // SetParameters paths on large models.
+                _projectionWeights = AllocateLazyWeight([candidateChannels * patchArea, _embeddingDim]);
+                _projectionBias = AllocateLazyWeight([_embeddingDim]);
                 RegisterTrainableParameter(_projectionWeights, PersistentTensorRole.Weights);
                 RegisterTrainableParameter(_projectionBias, PersistentTensorRole.Biases);
             }
@@ -581,6 +621,13 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>
         // Invalidate GPU cache after parameter updates
         Engine.InvalidatePersistentTensor(_projectionWeights);
         Engine.InvalidatePersistentTensor(_projectionBias);
+
+        // Mark that caller-provided values are now in flight so OnFirstForward
+        // doesn't overwrite them with fresh Xavier init. Set unconditionally
+        // (not gated on parameters.Length) so any SetParameters call that
+        // makes it past the totalParams check is treated as a real load,
+        // not just the bias-only special case.
+        _paramsLoadedViaSetParameters = true;
     }
 
     /// <summary>

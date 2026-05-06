@@ -484,13 +484,13 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     public override void Deserialize(BinaryReader reader)
     {
         int nnz = reader.ReadInt32();
-        var rows = _weights.RowIndices;
-        var cols = _weights.ColumnIndices;
-        // Number of non-zeros must match between save+load — _weights
-        // was constructed with same sparsity ratio, so nnz should align.
-        // If it doesn't, we can't restore positions correctly.
         if (nnz == _weights.NonZeroCount)
         {
+            // Same sparsity pattern shape — overwrite the existing index
+            // arrays in place. SetParameters (called via base.Deserialize)
+            // then reconstructs _weights cloning these positions.
+            var rows = _weights.RowIndices;
+            var cols = _weights.ColumnIndices;
             for (int i = 0; i < nnz; i++)
             {
                 rows[i] = reader.ReadInt32();
@@ -499,9 +499,37 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         }
         else
         {
-            // Skip the saved indices to keep stream position consistent
-            // for base.Deserialize, but don't apply them.
-            for (int i = 0; i < nnz; i++) { reader.ReadInt32(); reader.ReadInt32(); }
+            // Saved layer used a different sparsity ratio than the freshly-
+            // constructed layer. Silently skipping the indices and falling
+            // through to SetParameters would load values into the WRONG
+            // CSR positions, silently corrupting the model. Instead,
+            // reconstruct _weights with the saved sparsity pattern and
+            // zero-init values; SetParameters will then write the saved
+            // values into the matching positions.
+            var savedRows = new int[nnz];
+            var savedCols = new int[nnz];
+            for (int i = 0; i < nnz; i++)
+            {
+                savedRows[i] = reader.ReadInt32();
+                savedCols[i] = reader.ReadInt32();
+            }
+            // Validate indices fall inside the layer's known dimensions —
+            // a stream from an incompatible model shouldn't silently land
+            // out-of-range values that would crash later at Forward time.
+            for (int i = 0; i < nnz; i++)
+            {
+                if (savedRows[i] < 0 || savedRows[i] >= OutputFeatures)
+                    throw new InvalidDataException(
+                        $"SparseLinearLayer.Deserialize: row index {savedRows[i]} at slot {i} is outside [0, {OutputFeatures}). " +
+                        "Stream is from an incompatible model.");
+                if (savedCols[i] < 0 || savedCols[i] >= InputFeatures)
+                    throw new InvalidDataException(
+                        $"SparseLinearLayer.Deserialize: column index {savedCols[i]} at slot {i} is outside [0, {InputFeatures}). " +
+                        "Stream is from an incompatible model.");
+            }
+            _weights = new SparseTensor<T>(
+                OutputFeatures, InputFeatures,
+                savedRows, savedCols, new T[nnz]);
         }
         base.Deserialize(reader);
     }

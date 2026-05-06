@@ -117,4 +117,15 @@ public sealed class WeightStreamingReport
     /// 1.5–2.0×.
     /// </summary>
     public double CompressionRatio { get; init; }
+
+    /// <summary>
+    /// Non-null when the streaming-pool counters could not be read at
+    /// report-build time (e.g. Tensors-side schema drift, transient pool
+    /// inconsistency). The other counter fields stay at default values
+    /// when this is set so dashboards can distinguish "no streaming
+    /// activity" (counters legitimately zero) from "failed to read
+    /// counters" (counters zero because of an error). Null on the
+    /// happy path.
+    /// </summary>
+    public string? CountersUnavailableReason { get; init; }
 }

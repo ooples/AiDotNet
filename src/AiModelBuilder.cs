@@ -5438,6 +5438,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // entire build at reporting time.
         long diskReads = 0, evictions = 0, prefetchHit = 0, prefetchMiss = 0, prefetchIssue = 0, residentBytes = 0;
         double compressionRatio = 1.0;
+        string? countersUnavailableReason = null;
         try
         {
             var pool = WeightRegistry.GetStreamingReport();
@@ -5449,7 +5450,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             residentBytes = pool.ResidentBytes;
             compressionRatio = pool.CompressionRatio;
         }
-        catch { /* leave counters at default 0/1.0 */ }
+        catch (Exception ex)
+        {
+            // Capture the reason so dashboards can distinguish "no streaming
+            // activity" (counters legitimately zero) from "failed to read
+            // counters" (an actual runtime mismatch / pool error). Counters
+            // stay at their defaults so the StreamingEnabled + AutoDetected
+            // fields still tell the caller streaming is on.
+            countersUnavailableReason = $"{ex.GetType().Name}: {ex.Message}";
+        }
 
         // Effective threshold: per-instance override beats env-var beats
         // compiled default. Match the precedence used by the auto-detect
@@ -5471,6 +5480,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             PrefetchMissCount = prefetchMiss,
             ResidentBytes = residentBytes,
             CompressionRatio = compressionRatio,
+            CountersUnavailableReason = countersUnavailableReason,
         };
     }
 
