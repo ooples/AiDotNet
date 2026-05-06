@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.VisionLanguage;
@@ -204,6 +206,65 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// Gets the default loss function for this model.
     /// </summary>
     public override ILossFunction<T> DefaultLossFunction => LossFunction;
+
+    // --- Dual-stream layer split (CLIP / SigLIP / BLIP / etc.) ---
+    //
+    // CLIP-style models concatenate vision-encoder + text-encoder layers into
+    // a single LayerHelper.CreateDefaultOpenCLIPLayers() output. Walking that
+    // sequentially is incorrect: visionEmbeddingDim ≠ textEmbeddingDim in the
+    // OpenCLIP defaults, so vision-projection output mismatches text-encoder
+    // input on the first text-encoder MultiHeadAttention. This base provides
+    // the storage + accessors so subclasses' Predict / Train walk the vision
+    // stack only, and EncodeText walks the text stack independently — mirrors
+    // PyTorch / HuggingFace CLIPModel where vision_model and text_model are
+    // separate nn.Modules instead of one concatenated list.
+
+    /// <summary>
+    /// Text-encoder layers, walked by <c>EncodeText</c> in subclasses.
+    /// Lives outside <see cref="NeuralNetworkBase{T}.Layers"/> so the inherited
+    /// forward / TrainWithTape paths operate on the vision-only stack.
+    /// Surface to streaming-pool / weight-registry by overriding
+    /// <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/> in the
+    /// concrete subclass (e.g. via <see cref="EnumerateTextEncoderTrainableLayers"/>).
+    /// </summary>
+    protected readonly List<ILayer<T>> TextEncoderLayers = new List<ILayer<T>>();
+
+    /// <summary>
+    /// Splits an OpenCLIP-shaped layer factory output (vision pre-norm +
+    /// N×vision-block + vision-projection + text pre-norm + N×text-block +
+    /// text-projection) into the model's <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// list (vision portion) and <see cref="TextEncoderLayers"/> (text portion).
+    /// </summary>
+    /// <param name="allLayers">The combined factory output to split.</param>
+    /// <param name="visionLayerCount">Count of vision-portion layers; for the
+    /// standard OpenCLIP / SigLIP factory this is
+    /// <c>2 + numVisionLayers × blockSize</c> where <c>blockSize = 5</c> at
+    /// dropoutRate = 0 and <c>6</c> with dropout (the +2 is the pre-norm and
+    /// the projection head).</param>
+    protected void SplitDualStreamLayers(IEnumerable<ILayer<T>> allLayers, int visionLayerCount)
+    {
+        if (allLayers is null) throw new System.ArgumentNullException(nameof(allLayers));
+        if (visionLayerCount < 0)
+            throw new System.ArgumentOutOfRangeException(nameof(visionLayerCount), "visionLayerCount must be ≥ 0.");
+
+        int idx = 0;
+        foreach (var layer in allLayers)
+        {
+            if (idx < visionLayerCount) Layers.Add(layer);
+            else TextEncoderLayers.Add(layer);
+            idx++;
+        }
+    }
+
+    /// <summary>
+    /// Helper for subclasses overriding <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/>
+    /// to surface their <see cref="TextEncoderLayers"/> to the base weight-registry walker.
+    /// </summary>
+    protected IEnumerable<LayerBase<T>?> EnumerateTextEncoderTrainableLayers()
+    {
+        foreach (var layer in TextEncoderLayers)
+            if (layer is LayerBase<T> lb) yield return lb;
+    }
 
     /// <summary>
     /// Disposes of resources used by this model.
