@@ -246,6 +246,18 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(EffectiveOutputShape, rng);
 
+        // Materialize lazy-initialized parameter tensors via a warmup
+        // forward pass BEFORE snapshotting. Lazy layers (LayerNormalization
+        // gamma/beta, MultiHeadAttention's lazy weight banks, etc.) carry
+        // length-0 trainable tensors until the first real Forward triggers
+        // EnsureInitializedFromInput; without this warmup the snapshot
+        // captures empty arrays and the post-Train compare iterates zero
+        // values, falsely reporting "no parameters changed".
+        network.SetTrainingMode(false);
+        try { network.Predict(input); }
+        catch (InvalidOperationException) { /* eval-mode-incompatible — tolerated */ }
+        network.SetTrainingMode(true);
+
         // Bounded sampling of parameter chunks (the first up to 4 chunks,
         // up to 1024 values each = ≤ 4096 doubles ≈ 32 KB) avoids a full
         // flat-snapshot — on paper-scale CLIP-family models the flat
@@ -257,7 +269,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // If gradients flow only in tail chunks but not the head, that's
         // still a real bug and the snapshot would catch zero changes here
         // — surfacing the bug as a failing assertion is the right outcome.
-        const int MaxSampledChunks = 4;
+        const int MaxSampledChunks = 32;
         const int MaxValuesPerChunk = 1024;
         var snapshots = new System.Collections.Generic.List<double[]>();
         foreach (var chunk in network.GetParameterChunks())
@@ -797,11 +809,21 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(EffectiveOutputShape, rng);
 
+        // Materialize lazy-initialized parameter tensors via a warmup
+        // forward pass — see Training_ShouldChangeParameters for the
+        // rationale. Without this, the snapshot captures pre-allocation
+        // length-0 chunks and the post-Train compare iterates zero
+        // values, falsely reporting "no parameters changed".
+        network.SetTrainingMode(false);
+        try { network.Predict(input); }
+        catch (InvalidOperationException) { /* eval-mode-incompatible — tolerated */ }
+        network.SetTrainingMode(true);
+
         // Bounded sampling — see Training_ShouldChangeParameters for the
         // rationale. On paper-scale models the full snapshot OOMs; the
         // invariant ("at least one parameter changed and none are NaN/Inf")
         // is preserved by sampling the first few chunks at fixed width.
-        const int MaxSampledChunks = 4;
+        const int MaxSampledChunks = 32;
         const int MaxValuesPerChunk = 1024;
         var snapshots = new System.Collections.Generic.List<double[]>();
         foreach (var chunk in network.GetParameterChunks())
