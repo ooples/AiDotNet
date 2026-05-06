@@ -394,8 +394,8 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
         // jumped to the peak LR on Reset() instead of restoring the
         // warmup-start.
 
-        [Fact(Timeout = 60000)]
-        public async Task NoamSchedule_InitialLR_IsWarmupStart_NotPeak()
+        [Fact]
+        public void NoamSchedule_InitialLR_IsWarmupStart_NotPeak()
         {
             // d_model=512, warmup=4000, factor=1 — paper-canonical Vaswani recipe.
             var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: 4000);
@@ -413,11 +413,10 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             Assert.Equal(expectedStart, scheduler.CurrentLearningRate, 12);
             Assert.True(scheduler.CurrentLearningRate < peak / 100,
                 "Initial LR should be much smaller than peak (warmup-start, not peak).");
-            await Task.CompletedTask;
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task NoamSchedule_FirstTwoSteps_GiveDistinctLRs()
+        [Fact]
+        public void NoamSchedule_FirstTwoSteps_GiveDistinctLRs()
         {
             // Original bug (review-comment o_xq): the ctor pre-set
             // ComputeLearningRate(1) AND the first Step() also computed
@@ -433,11 +432,10 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             // During warmup, lr is monotonically increasing.
             Assert.True(afterStep1 > initial);
             Assert.True(afterStep2 > afterStep1);
-            await Task.CompletedTask;
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task NoamSchedule_StepsToWarmupBoundary_HitsPeak()
+        [Fact]
+        public void NoamSchedule_StepsToWarmupBoundary_HitsPeak()
         {
             int warmup = 100;
             var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: warmup);
@@ -450,11 +448,10 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
 
             double peak = scheduler.BaseLearningRate;
             Assert.Equal(peak, scheduler.CurrentLearningRate, 10);
-            await Task.CompletedTask;
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task NoamSchedule_PostWarmup_DecaysAsInverseSqrt()
+        [Fact]
+        public void NoamSchedule_PostWarmup_DecaysAsInverseSqrt()
         {
             int warmup = 100;
             var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: warmup);
@@ -477,11 +474,10 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             double ratio = lrAt800 / lrAt400;
             double expectedRatio = Math.Sqrt(401.0 / 801.0);
             Assert.Equal(expectedRatio, ratio, 6);
-            await Task.CompletedTask;
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task NoamSchedule_Reset_RestoresWarmupStart_NotPeak()
+        [Fact]
+        public void NoamSchedule_Reset_RestoresWarmupStart_NotPeak()
         {
             var scheduler = new NoamSchedule(modelDimension: 512, warmupSteps: 4000);
             double initialLr = scheduler.CurrentLearningRate;
@@ -501,17 +497,15 @@ namespace AiDotNetTests.UnitTests.LearningRateSchedulers
             // currentLR to peak and the next training run would skip warmup.
             Assert.Equal(0, scheduler.CurrentStep);
             Assert.Equal(initialLr, scheduler.CurrentLearningRate, 12);
-            await Task.CompletedTask;
         }
 
-        [Fact(Timeout = 60000)]
-        public async Task NoamSchedule_ZeroOrNegativeWarmup_Throws()
+        [Fact]
+        public void NoamSchedule_ZeroOrNegativeWarmup_Throws()
         {
             Assert.Throws<ArgumentException>(() => new NoamSchedule(modelDimension: 512, warmupSteps: 0));
             Assert.Throws<ArgumentException>(() => new NoamSchedule(modelDimension: 512, warmupSteps: -1));
             Assert.Throws<ArgumentException>(() => new NoamSchedule(modelDimension: 0, warmupSteps: 4000));
             Assert.Throws<ArgumentException>(() => new NoamSchedule(modelDimension: 512, warmupSteps: 4000, factor: 0));
-            await Task.CompletedTask;
         }
 
         #endregion

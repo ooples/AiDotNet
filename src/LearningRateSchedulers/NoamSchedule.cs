@@ -49,6 +49,26 @@ public class NoamSchedule : LearningRateSchedulerBase
     private readonly int _warmupSteps;
     private readonly double _factor;
 
+    // Pre-computed step-invariant factors so ComputeLearningRate's per-batch
+    // cost is two Math.Sqrt calls + a couple of multiplies, instead of three
+    // Math.Pow calls. Math.Pow with non-integer exponents is materially
+    // slower than Math.Sqrt on every modern .NET runtime (Pow goes through
+    // exp(y · ln(x)); Sqrt has a dedicated SSE/AVX intrinsic). The schedule
+    // fires once per batch, so even a few hundred ns saved per step adds up
+    // across long training runs. Closes review-comment #1270.zzwx.
+    //
+    // _modelDimensionInvSqrt = d_model^(-0.5)            — paper's lr scale.
+    // _warmupInvPow15        = warmup^(-1.5)             — paper's t · w^-1.5
+    //                                                       term coefficient.
+    // _scaledModelInvSqrt    = factor · d_model^(-0.5)   — multiplied into
+    //                                                       the final return.
+    // _scaledWarmupTerm      = _scaledModelInvSqrt · warmup^(-1.5)
+    //                                                     — coefficient on
+    //                                                       the linear (t · ...)
+    //                                                       branch of the min.
+    private readonly double _scaledModelInvSqrt;
+    private readonly double _scaledWarmupTerm;
+
     /// <summary>
     /// Initializes a new Noam schedule (Vaswani 2017 inverse-sqrt with linear warmup).
     /// </summary>
@@ -72,6 +92,13 @@ public class NoamSchedule : LearningRateSchedulerBase
         _modelDimension = modelDimension;
         _warmupSteps = warmupSteps;
         _factor = factor;
+
+        // Pre-compute the step-invariant coefficients. d_model^(-0.5) is
+        // 1/sqrt(d_model); warmup^(-1.5) is 1/(warmup · sqrt(warmup)).
+        double modelInvSqrt = 1.0 / Math.Sqrt(modelDimension);
+        double warmupInvPow15 = 1.0 / ((double)warmupSteps * Math.Sqrt(warmupSteps));
+        _scaledModelInvSqrt = factor * modelInvSqrt;
+        _scaledWarmupTerm = _scaledModelInvSqrt * warmupInvPow15;
 
         // Step 0 (before any Step() call) maps to t=1 (warmup-start) under
         // the t=step+1 convention (industry-standard, matching tensor2tensor
@@ -119,9 +146,16 @@ public class NoamSchedule : LearningRateSchedulerBase
         // onto t=1; this branch always had t=step+1 so the cherry-pick
         // preserves the existing fix).
         int t = step < 0 ? 1 : step + 1;
-        double arg1 = Math.Pow(t, -0.5);
-        double arg2 = t * Math.Pow(_warmupSteps, -1.5);
-        return _factor * Math.Pow(_modelDimension, -0.5) * Math.Min(arg1, arg2);
+        // Paper formula: lr(t) = factor · d_model^(-0.5) · min(t^(-0.5), t · warmup^(-1.5))
+        // Pre-multiply factor · d_model^(-0.5) into both branches so the per-
+        // step cost is one Math.Sqrt + a couple of multiplies, vs. three
+        // Math.Pow calls in the original. arg1Branch = scaledModelInvSqrt /
+        // sqrt(t); arg2Branch = (scaledModelInvSqrt · warmupInvPow15) · t.
+        // The min and the t-branch crossover happen at t = warmup, exactly
+        // matching the paper. Closes review-comment #1270.zzwx.
+        double arg1Branch = _scaledModelInvSqrt / Math.Sqrt(t);
+        double arg2Branch = _scaledWarmupTerm * t;
+        return Math.Min(arg1Branch, arg2Branch);
     }
 
     /// <summary>
