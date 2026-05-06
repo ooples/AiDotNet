@@ -128,25 +128,6 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     }
 
     /// <summary>
-    /// Override the layer-stack starting shape so lazy
-    /// <see cref="LayerNormalizationLayer{T}"/> / <see cref="DenseLayer{T}"/>
-    /// resolve to the post-patch-embed channel dim instead of the raw NCHW
-    /// spatial dim. See <see cref="BiomedCLIP{T}"/> override for full
-    /// rationale — same patch-grid math
-    /// (<c>patchSize = max(1, imageSize / 16)</c>,
-    /// <c>tokens = (imageSize / patchSize)²</c>) and same OpenCLIP layer
-    /// stack downstream of <see cref="PatchEmbedHelper.TokenizeImageNCHWToBSC"/>.
-    /// </summary>
-    protected override int[]? TryGetArchitectureInputShape()
-    {
-        int imageSize = _options.ImageSize;
-        if (imageSize <= 0) return base.TryGetArchitectureInputShape();
-        int patchSize = System.Math.Max(1, imageSize / 16);
-        int tokens = (imageSize / patchSize) * (imageSize / patchSize);
-        return new[] { 1, tokens, _options.VisionEmbeddingDim };
-    }
-
-    /// <summary>
     /// Aligns <c>_options.ImageSize</c> with <c>Architecture.InputHeight</c> when
     /// the architecture declares an explicit square spatial extent. The paper-
     /// faithful default (224) is fine when the architecture leaves H/W unset
