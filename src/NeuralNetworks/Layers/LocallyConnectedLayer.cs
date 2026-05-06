@@ -491,27 +491,28 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Xavier initialization for weights using vectorized operations
+        // Xavier initialization for weights using vectorized engine ops.
+        // Critical: copy the result into the EXISTING lazy-allocated
+        // _weights tensor in place — replacing the field reference would
+        // discard the AllocateLazyWeight registration that EnsureInitialized
+        // set up (engine persistent-tensor list + streaming-pool tracking).
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize * _inputChannels + _outputChannels)));
         T half = NumOps.FromDouble(0.5);
 
-        // Generate random values [0, 1) and transform to [-0.5, 0.5] * scale
         int totalElements = _weights.Length;
         var randomTensor = Tensor<T>.CreateRandom(totalElements, 1); // [0, 1]
 
-        // Create tensor filled with 0.5 for subtraction
         var halfTensor = new Tensor<T>([totalElements]);
         halfTensor.Fill(half);
 
-        // Transform to [-0.5, 0.5] * scale using Engine ops
+        // Transform to [-0.5, 0.5] * scale using Engine ops (vectorized).
         var centeredTensor = Engine.TensorSubtract(randomTensor.Reshape([totalElements]), halfTensor);
         var scaledTensor = Engine.TensorMultiplyScalar(centeredTensor, scale);
 
-        // Assign the scaled tensor to weights (preserving shape)
-        // Note: Array.Copy to _weights.ToArray() creates a temporary copy, not updating _weights
-        _weights = scaledTensor.Reshape(_weights._shape);
+        scaledTensor.AsSpan().CopyTo(_weights.Data.Span);
 
-        // Initialize biases to zero
+        // Initialize biases to zero (in-place — _biases.Fill writes
+        // directly into existing storage).
         _biases.Fill(NumOps.Zero);
     }
 
@@ -812,8 +813,17 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             throw new InvalidOperationException("UpdateParameters called before Backward. Gradients are null.");
         }
 
-        _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
+        // Compute updated weights/biases via engine ops (vectorized /
+        // GPU-aware), then copy IN PLACE into the existing tensors so
+        // we preserve the AllocateLazyWeight registration. Replacing
+        // the field references with the engine output tensors would
+        // orphan the registered instances mid-training, leaking handles
+        // and breaking streaming bookkeeping every optimizer step.
+        var updatedWeights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
+        var updatedBiases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
+
+        updatedWeights.AsSpan().CopyTo(_weights.Data.Span);
+        updatedBiases.AsSpan().CopyTo(_biases.Data.Span);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);
