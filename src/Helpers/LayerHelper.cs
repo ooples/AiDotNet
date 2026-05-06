@@ -1728,10 +1728,9 @@ public static class LayerHelper<T>
             ? RandomHelper.CreateSeededRandom(architecture.RandomSeed.Value)
             : null;
 
-        // Apply a freshly-seeded init strategy to a layer if reproducibility
-        // was requested. No-op when randomSeed wasn't set (preserves
-        // backward-compatible behaviour for users who don't request
-        // reproducibility).
+        // Apply the per-layer seed when reproducibility was requested.
+        // No-op when randomSeed wasn't set (preserves backward-compatible
+        // behaviour for users who don't request reproducibility).
         ILayer<T> Wire(ILayer<T> layer)
         {
             if (seedRng is null) return layer;

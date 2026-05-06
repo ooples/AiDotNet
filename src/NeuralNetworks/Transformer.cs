@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
@@ -161,6 +162,64 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     /// <summary>
+    /// Overrides the base hook so any caller of <see cref="NeuralNetworkBase{T}.SetBaseTrainOptimizer"/>
+    /// — typically <c>AiModelBuilder.ConfigureOptimizer</c> — also updates
+    /// the subclass-private <see cref="_optimizer"/> field. Without this
+    /// override, the field stayed pinned to whatever was constructed in
+    /// the ctor, while training routed through the base optimizer slot —
+    /// so <see cref="GetModelMetadata"/> and <see cref="SerializeNetworkSpecificData"/>
+    /// (which read <see cref="_optimizer"/>) would report and persist the
+    /// stale ctor optimizer instead of the live training one. The current
+    /// effective optimizer is now the single source of truth for both
+    /// reads and writes.
+    /// </summary>
+    internal override void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+    {
+        // Resolve to the effective optimizer (null = reset to Vaswani
+        // default), then route the SAME reference through both the base
+        // slot AND _optimizer. Closes review-comments #1270.vhmE
+        // (null-path leaving _optimizer stale) and .xEmL (null-path
+        // leaving base slot null while _optimizer held the new instance,
+        // so a subsequent Train() call's GetOrCreateBaseOptimizer would
+        // lazy-create a THIRD optimizer instance — three-way divergence).
+        // Single-source-of-truth: the same instance is _optimizer AND
+        // _baseTrainOptimizer (via base.SetBaseTrainOptimizer), so all
+        // read paths (GetModelMetadata / SerializeNetworkSpecificData /
+        // GetOrCreateBaseOptimizer) see the same current optimizer.
+        var effective = optimizer ?? CreateDefaultVaswaniOptimizer();
+        base.SetBaseTrainOptimizer(effective);
+        _optimizer = effective;
+    }
+
+    /// <summary>
+    /// Constructs the Vaswani 2017 §5.3 default optimizer recipe used
+    /// throughout this class — Adam (β₁=0.9, β₂=0.98, ε=1e-9, lr=1e-3
+    /// sentinel) wrapped around a NoamSchedule bound to this instance's
+    /// ModelDimension / WarmupSteps and stepped per batch. Single
+    /// implementation called from the constructor's null-optimizer
+    /// branch, the SetBaseTrainOptimizer null-reset path, and the
+    /// deserialization fallback. Closes review-comment #1270.xEmP
+    /// (the recipe was previously duplicated across all three call
+    /// sites — drift between them was a real risk every time the
+    /// recipe needed to evolve).
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultVaswaniOptimizer()
+    {
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-3,
+                Beta2 = 0.98,
+                Epsilon = 1e-9,
+                LearningRateScheduler = new NoamSchedule(
+                    modelDimension: _transformerArchitecture.ModelDimension,
+                    warmupSteps: _transformerArchitecture.WarmupSteps),
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            });
+    }
+
+    /// <summary>
     /// Creates a new Transformer neural network with the specified architecture.
     /// </summary>
     /// <param name="architecture">
@@ -206,10 +265,17 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         if (optimizer is null)
         {
             // Vaswani 2017 §5.3 hyperparameters, applied AS A RECIPE
-            // (β₁=0.9, β₂=0.98, ε=1e-9, lr=base · NoamSchedule(d_model)).
+            // (β₁=0.9, β₂=0.98, ε=1e-9). When the NoamSchedule is attached
+            // below, GradientBasedOptimizerBase uses the scheduler's
+            // CurrentLearningRate AS THE ABSOLUTE LR for each step
+            // (InitialLearningRate=1e-3 acts only as the base ctor's
+            // positive-lr-guard sentinel — it is bypassed entirely once a
+            // scheduler is present). Effective LR per batch equals
+            // NoamSchedule(t) directly, NOT InitialLearningRate × NoamSchedule(t).
+            // Closes review-comment #1270.vhm-.
             //
             // β₂=0.98 (not the library default 0.999) is paired with the
-            // inverse-sqrt warmup schedule below: the small β₂ tracks
+            // inverse-sqrt warmup schedule: the small β₂ tracks
             // attention/embedding gradients that change rapidly during
             // training, while warmup keeps the early-step LR small enough
             // that the (still-stabilizing) second-moment estimates don't
@@ -218,22 +284,11 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
             // schedule) was a workaround for that mismatch. We now apply
             // them together so the recipe matches the paper exactly.
             //
-            // The lazy-init path of NeuralNetworkBase only resolves
-            // ModelDimension after the first forward pass, but the Vaswani
-            // schedule needs d_model upfront to compute its peak LR. The
-            // architecture exposes ModelDimension at construction time, so
-            // we bind the schedule to that value here.
-            var defaultAdamOpts = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = 1e-3,
-                Beta2 = 0.98,
-                Epsilon = 1e-9,
-                LearningRateScheduler = new LearningRateSchedulers.NoamSchedule(
-                    modelDimension: architecture.ModelDimension,
-                    warmupSteps: architecture.WarmupSteps),
-                SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-            };
-            _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, defaultAdamOpts);
+            // Recipe construction lives in CreateDefaultVaswaniOptimizer
+            // (see below). All three callers — ctor / SetBaseTrainOptimizer
+            // null-reset / Deserialize fallback — go through the same helper
+            // so the recipe can't drift between sites. Closes #1270.xEmP.
+            _optimizer = CreateDefaultVaswaniOptimizer();
         }
         else
         {
@@ -791,19 +846,12 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         // optimizer the ctor would, otherwise the deserialized model silently
         // regresses to non-converging vanilla SGD or a different (non-paper)
         // Adam configuration.
+        // Recipe construction routes through the same helper as the ctor
+        // and the SetBaseTrainOptimizer null-reset path so a future
+        // Vaswani-recipe change can't silently miss the deserialization
+        // fallback. Closes #1270.xEmP.
         _optimizer = DeserializationHelper.DeserializeInterface<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>(reader)
-            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = 1e-3,
-                    Beta2 = 0.98,
-                    Epsilon = 1e-9,
-                    LearningRateScheduler = new LearningRateSchedulers.NoamSchedule(
-                        modelDimension: _transformerArchitecture.ModelDimension,
-                        warmupSteps: _transformerArchitecture.WarmupSteps),
-                    SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-                });
+            ?? CreateDefaultVaswaniOptimizer();
 
         // Keep the base optimizer slot in sync after deserialization too
         // — Train() now resolves through GetOrCreateBaseOptimizer, so a

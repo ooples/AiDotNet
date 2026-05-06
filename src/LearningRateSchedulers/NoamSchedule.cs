@@ -10,9 +10,21 @@ namespace AiDotNet.LearningRateSchedulers;
 /// <code>
 ///   lr(t) = factor · d_model^(-0.5) · min(t^(-0.5), t · warmup^(-1.5))
 /// </code>
-/// where t is the 1-indexed training step. The schedule rises linearly during
-/// the warmup phase (steps 1 .. warmup), peaks at step = warmup with value
-/// <c>factor · d_model^(-0.5) · warmup^(-0.5)</c>, then decays as t^(-0.5).
+/// where t is the 1-indexed training step from the paper. Peaks at t = warmup
+/// with value <c>factor · d_model^(-0.5) · warmup^(-0.5)</c>, then decays as
+/// t^(-0.5).
+/// </para>
+/// <para>
+/// Step-counter convention (matches PyTorch / HuggingFace transformer
+/// schedulers): the library's <see cref="LearningRateSchedulerBase._currentStep"/>
+/// is incremented at end-of-batch and represents "batches completed so far"
+/// (0-based). The Noam paper's t is 1-based, so this scheduler maps
+/// <c>t = step + 1</c> internally:
+/// <list type="bullet">
+///   <item>Before any Step() call, <c>_currentStep = 0</c> ⇒ <c>t = 1</c> ⇒ warmup-start LR.</item>
+///   <item>Batch N reads the LR that was set by the (N-1)th Step() call ⇒ lr(t=N) ⇒ <c>t = step + 1</c> with <c>step = N-1</c>.</item>
+///   <item>Reset restores the warmup-start LR (NOT <c>_baseLearningRate</c>, which we use as a peak-LR sentinel for the base ctor's positive guard).</item>
+/// </list>
 /// </para>
 /// <para>
 /// This schedule pairs with Adam β₁=0.9, β₂=0.98, ε=1e-9 (the Vaswani 2017
@@ -36,6 +48,26 @@ public class NoamSchedule : LearningRateSchedulerBase
     private readonly int _modelDimension;
     private readonly int _warmupSteps;
     private readonly double _factor;
+
+    // Pre-computed step-invariant factors so ComputeLearningRate's per-batch
+    // cost is two Math.Sqrt calls + a couple of multiplies, instead of three
+    // Math.Pow calls. Math.Pow with non-integer exponents is materially
+    // slower than Math.Sqrt on every modern .NET runtime (Pow goes through
+    // exp(y · ln(x)); Sqrt has a dedicated SSE/AVX intrinsic). The schedule
+    // fires once per batch, so even a few hundred ns saved per step adds up
+    // across long training runs. Closes review-comment #1270.zzwx.
+    //
+    // _modelDimensionInvSqrt = d_model^(-0.5)            — paper's lr scale.
+    // _warmupInvPow15        = warmup^(-1.5)             — paper's t · w^-1.5
+    //                                                       term coefficient.
+    // _scaledModelInvSqrt    = factor · d_model^(-0.5)   — multiplied into
+    //                                                       the final return.
+    // _scaledWarmupTerm      = _scaledModelInvSqrt · warmup^(-1.5)
+    //                                                     — coefficient on
+    //                                                       the linear (t · ...)
+    //                                                       branch of the min.
+    private readonly double _scaledModelInvSqrt;
+    private readonly double _scaledWarmupTerm;
 
     /// <summary>
     /// Initializes a new Noam schedule (Vaswani 2017 inverse-sqrt with linear warmup).
@@ -61,12 +93,21 @@ public class NoamSchedule : LearningRateSchedulerBase
         _warmupSteps = warmupSteps;
         _factor = factor;
 
-        // Step 0 (before any Step() call) — start at the paper's t=1 value,
-        // not the base/peak LR. Otherwise the first Train() call before the
-        // scheduler is stepped would use the peak LR, contradicting the
-        // "warmup from tiny" semantic. ComputeLearningRate maps the
-        // 0-indexed framework step to the paper's 1-indexed t via t=step+1,
-        // so step=0 → paper's t=1.
+        // Pre-compute the step-invariant coefficients. d_model^(-0.5) is
+        // 1/sqrt(d_model); warmup^(-1.5) is 1/(warmup · sqrt(warmup)).
+        double modelInvSqrt = 1.0 / Math.Sqrt(modelDimension);
+        double warmupInvPow15 = 1.0 / ((double)warmupSteps * Math.Sqrt(warmupSteps));
+        _scaledModelInvSqrt = factor * modelInvSqrt;
+        _scaledWarmupTerm = _scaledModelInvSqrt * warmupInvPow15;
+
+        // Step 0 (before any Step() call) maps to t=1 (warmup-start) under
+        // the t=step+1 convention (industry-standard, matching tensor2tensor
+        // and Hugging Face / PyTorch warmup schedulers driven from a
+        // 0-indexed step counter). Without this override, the base ctor
+        // leaves _currentLearningRate at _baseLearningRate (which we set to
+        // the peak LR via ComputePeakLr to satisfy the base's positive-LR
+        // guard) — causing the very first batch to use the peak LR instead
+        // of the tiny warmup-start value.
         _currentLearningRate = ComputeLearningRate(0);
     }
 
@@ -77,36 +118,53 @@ public class NoamSchedule : LearningRateSchedulerBase
     public int ModelDimension => _modelDimension;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <c>step</c> here is the library's "batches completed so far" counter
+    /// (0-based), matching the value that <see cref="LearningRateSchedulerBase.Step"/>
+    /// passes in after its post-batch increment. Internally we map to the
+    /// paper's 1-indexed t via <c>t = step + 1</c>:
+    /// <list type="bullet">
+    ///   <item><c>step = 0</c> (no batches yet, ctor) → <c>t = 1</c> (warmup-start)</item>
+    ///   <item><c>step = warmup_steps - 1</c> → <c>t = warmup_steps</c> (peak)</item>
+    ///   <item><c>step = N</c> → <c>t = N + 1</c> (LR for the (N+1)th batch)</item>
+    /// </list>
+    /// Negative <c>step</c> is clamped to <c>t = 1</c> (the warmup-start
+    /// value), keeping the formula away from a non-positive t that would
+    /// produce <c>0^(-0.5) = ∞</c> or a negative <c>arg2</c> multiplier.
+    /// The base class never passes a negative step at runtime; this guard
+    /// is purely defensive against deserialized state.
+    /// </remarks>
     protected override double ComputeLearningRate(int step)
     {
-        // Vaswani 2017 uses 1-indexed steps; LearningRateSchedulerBase
-        // exposes 0-indexed _currentStep (count of completed batches:
-        // 0 before the first batch, 1 after batch 0 ends, ...).
-        // Map step → paper's t via t = step + 1 so:
-        //   - ctor / Reset: step=0 → t=1 (batch 0's LR)
-        //   - after batch 0's OnBatchEnd: step=1 → t=2 (batch 1's LR)
-        //   - after batch N's OnBatchEnd: step=N+1 → t=N+2 (batch N+1's LR)
-        // The previous `step <= 0 ? 1 : step` collapsed step=0 and
-        // step=1 onto t=1, so batches 0 and 1 used identical LRs and
-        // the entire warmup/decay curve was shifted by one step
-        // (closes review-comment #1269.yuXt). This matches the
-        // tensor2tensor reference implementation's `global_step + 1`
-        // and the Hugging Face / PyTorch convention for warmup
-        // schedulers driven from a 0-indexed step counter.
-        int t = step + 1;
-        double arg1 = Math.Pow(t, -0.5);
-        double arg2 = t * Math.Pow(_warmupSteps, -1.5);
-        return _factor * Math.Pow(_modelDimension, -0.5) * Math.Min(arg1, arg2);
+        // Industry-standard mapping (tensor2tensor / Hugging Face /
+        // PyTorch): the framework's 0-indexed step → paper's 1-indexed t
+        // via t = step + 1. The negative-step clamp is defensive — base
+        // class never passes a negative step, but if a deserialized state
+        // ever did, 0^(-0.5) = ∞ would otherwise leak through. Closes
+        // review-comment #1269.yuXt (PR #1269 had the older
+        // `step <= 0 ? 1 : step` mapping that collapsed steps 0 and 1
+        // onto t=1; this branch always had t=step+1 so the cherry-pick
+        // preserves the existing fix).
+        int t = step < 0 ? 1 : step + 1;
+        // Paper formula: lr(t) = factor · d_model^(-0.5) · min(t^(-0.5), t · warmup^(-1.5))
+        // Pre-multiply factor · d_model^(-0.5) into both branches so the per-
+        // step cost is one Math.Sqrt + a couple of multiplies, vs. three
+        // Math.Pow calls in the original. arg1Branch = scaledModelInvSqrt /
+        // sqrt(t); arg2Branch = (scaledModelInvSqrt · warmupInvPow15) · t.
+        // The min and the t-branch crossover happen at t = warmup, exactly
+        // matching the paper. Closes review-comment #1270.zzwx.
+        double arg1Branch = _scaledModelInvSqrt / Math.Sqrt(t);
+        double arg2Branch = _scaledWarmupTerm * t;
+        return Math.Min(arg1Branch, arg2Branch);
     }
 
     /// <summary>
     /// Restores the scheduler to its initial state. The base implementation
     /// would set <c>_currentLearningRate = _baseLearningRate</c>, but Noam
     /// uses <c>_baseLearningRate</c> as a peak-LR sentinel (to satisfy the
-    /// base ctor's positive-LR guard at <c>ComputePeakLr</c>), so the default
-    /// <c>Reset()</c> would skip warmup and jump straight to the peak LR on
-    /// any subsequent training run. Override to restore the warmup-start LR
-    /// (t=1) instead, matching the post-ctor state.
+    /// base ctor's positive-LR guard), so the default Reset would skip
+    /// warmup on resume. Override to restore the warmup-start LR (t=1)
+    /// instead — matching the post-ctor state.
     /// </summary>
     public override void Reset()
     {

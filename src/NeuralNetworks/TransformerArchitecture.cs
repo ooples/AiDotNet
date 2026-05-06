@@ -372,11 +372,13 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// <param name="warmupSteps">
     /// Number of warmup steps for the Vaswani 2017 Noam learning-rate
     /// schedule used by the Transformer's default Adam-with-Noam
-    /// optimizer. LR ramps linearly from a tiny value to peak across
-    /// the first <paramref name="warmupSteps"/> batches, then decays as
-    /// t<sup>-0.5</sup>. Defaults to 4000 (paper-canonical). For
-    /// training budgets too small to warm up over (under ~100 steps),
-    /// drop the schedule entirely and use a constant LR.
+    /// optimizer (β₁=0.9, β₂=0.98, ε=1e-9). LR ramps linearly from a
+    /// tiny value to peak across the first <paramref name="warmupSteps"/>
+    /// batches, then decays as t<sup>-0.5</sup>. Defaults to 4000
+    /// (paper-canonical). For training budgets too small to warm up
+    /// over (under ~100 steps), drop the schedule entirely and use a
+    /// constant LR — the constructor rejects values ≤ 0 with
+    /// <c>ArgumentOutOfRangeException</c>.
     /// </param>
     /// <param name="randomSeed">
     /// Optional seed for deterministic layer-weight initialization.
@@ -409,6 +411,55 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// that matter for what you'll be using it for.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Binary-compatible overload preserving the pre-PR-#1270 ctor signature.
+    /// Forwards to the canonical ctor with the new <c>warmupSteps</c> and
+    /// <c>randomSeed</c> parameters defaulted (4000, null), matching the
+    /// behaviour callers would see if they upgraded source-only. Closes
+    /// review-comment #1270.yYt1 (binary-breaking change to the
+    /// already-public constructor signature).
+    /// </summary>
+    public TransformerArchitecture(
+        InputType inputType,
+        NeuralNetworkTaskType taskType,
+        int numEncoderLayers,
+        int numDecoderLayers,
+        int numHeads,
+        int modelDimension,
+        int feedForwardDimension,
+        NetworkComplexity complexity,
+        int inputSize,
+        int outputSize,
+        double dropoutRate,
+        int maxSequenceLength,
+        int vocabularySize,
+        bool usePositionalEncoding,
+        double temperature,
+        SequencePoolingMode? sequencePooling,
+        List<ILayer<T>>? layers)
+        : this(
+            inputType: inputType,
+            taskType: taskType,
+            numEncoderLayers: numEncoderLayers,
+            numDecoderLayers: numDecoderLayers,
+            numHeads: numHeads,
+            modelDimension: modelDimension,
+            feedForwardDimension: feedForwardDimension,
+            complexity: complexity,
+            inputSize: inputSize,
+            outputSize: outputSize,
+            dropoutRate: dropoutRate,
+            maxSequenceLength: maxSequenceLength,
+            vocabularySize: vocabularySize,
+            usePositionalEncoding: usePositionalEncoding,
+            temperature: temperature,
+            sequencePooling: sequencePooling,
+            layers: layers,
+            warmupSteps: 4000,
+            randomSeed: null)
+    {
+    }
+
     public TransformerArchitecture(
         InputType inputType,
         NeuralNetworkTaskType taskType,
