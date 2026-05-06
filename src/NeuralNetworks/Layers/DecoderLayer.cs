@@ -112,10 +112,37 @@ public class DecoderLayer<T> : LayerBase<T>
     /// </summary>
     public override bool SupportsTraining => true;
 
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist resolved InputSize so Deserialize can re-resolve the
+        // lazily-constructed _feedForward2 (which is null until
+        // OnFirstForward sees the real input). Without this, a fresh
+        // DecoderLayer hits NullReferenceException at SetParameters
+        // when slicing into a non-existent _feedForward2.
+        writer.Write(InputSize);
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        int savedInputSize = reader.ReadInt32();
+        if (!IsShapeResolved && savedInputSize > 0)
+        {
+            ResolveFromShape(new[] { savedInputSize });
+        }
+        base.Deserialize(reader);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int idx = 0;
-        void Set(ILayer<T> layer) { int c = (int)layer.ParameterCount; layer.SetParameters(parameters.Slice(idx, c)); idx += c; }
+        void Set(ILayer<T> layer)
+        {
+            if (layer is null) return;
+            int c = (int)layer.ParameterCount;
+            layer.SetParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
         Set(_selfAttention); Set(_crossAttention); Set(_feedForward1); Set(_feedForward2);
         Set(_norm1); Set(_norm2); Set(_norm3);
     }

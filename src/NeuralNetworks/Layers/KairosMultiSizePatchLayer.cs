@@ -173,6 +173,31 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Composite SetParameters: route by sublayer GetParameters counts
+        // to match the GetParameters layout 1:1. The default LayerBase
+        // SetParameters checks parameters.Length == ParameterCount, but
+        // composite ParameterCount sums sublayer counts and can drift
+        // from GetParameters().Length.
+        int idx = 0;
+        void Set(ILayer<T> sub)
+        {
+            int count = sub.GetParameters().Length;
+            if (count == 0) return;
+            sub.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_router);
+        foreach (var emb in _patchEmbeddings) Set(emb);
+        if (idx != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"KairosMultiSizePatchLayer expected {idx} parameters across sublayers, got {parameters.Length}.");
+        }
+    }
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         var parts = new List<Vector<T>> { _router.GetParameters() };
