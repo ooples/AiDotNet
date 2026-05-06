@@ -191,23 +191,36 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
             }
         }
 
-        // Composite SetParameters: route by sublayer GetParameters counts
-        // to match the GetParameters layout 1:1.
+        // Validate full parameters length up front so a malformed vector
+        // throws BEFORE we partially mutate any sublayer.
+        long expectedTotal = _router.ParameterCount;
+        for (int k = 0; k < _patchEmbeddings.Count; k++)
+        {
+            expectedTotal += _patchEmbeddings[k].ParameterCount;
+        }
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"KairosMultiSizePatchLayer expected {expectedTotal} parameters across sublayers, " +
+                $"got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // Composite SetParameters: route by sublayer ParameterCount (cheap
+        // O(1) integer) rather than GetParameters().Length, which would
+        // materialize a full flattened copy of every sublayer just to read
+        // its width — for the router + every patch-size embedding this
+        // doubles load-time allocations on a deserialize round-trip.
         int idx = 0;
         void Set(ILayer<T> sub)
         {
-            int count = sub.GetParameters().Length;
+            int count = checked((int)sub.ParameterCount);
             if (count == 0) return;
             sub.SetParameters(parameters.Slice(idx, count));
             idx += count;
         }
         Set(_router);
         foreach (var emb in _patchEmbeddings) Set(emb);
-        if (idx != parameters.Length)
-        {
-            throw new ArgumentException(
-                $"KairosMultiSizePatchLayer expected {idx} parameters across sublayers, got {parameters.Length}.");
-        }
     }
 
     /// <inheritdoc/>

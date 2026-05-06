@@ -130,6 +130,17 @@ public class DecoderLayer<T> : LayerBase<T>
         {
             ResolveFromShape(new[] { savedInputSize });
         }
+        else if (IsShapeResolved && savedInputSize > 0 && savedInputSize != InputSize)
+        {
+            // Already-resolved instance with a mismatched persisted input
+            // size — silently loading would assign weights for a different
+            // (inputSize, …) factorization and produce garbage on first
+            // Forward. Fail fast with an actionable message.
+            throw new InvalidDataException(
+                $"DecoderLayer.Deserialize: saved InputSize ({savedInputSize}) does not match " +
+                $"the already-resolved layer's InputSize ({InputSize}). Recreate the layer to " +
+                $"match the saved shape, or load into a fresh (unresolved) instance.");
+        }
         base.Deserialize(reader);
     }
 
@@ -149,10 +160,27 @@ public class DecoderLayer<T> : LayerBase<T>
                 "pass first so OnFirstForward can create _feedForward2 with the input-derived " +
                 "shape.");
 
+        // Validate parameters length up front so a malformed vector throws
+        // BEFORE we partially mutate any sublayer. Use ParameterCountHelper
+        // so the int-narrowing failure mode (>int.MaxValue) gets the same
+        // actionable message used elsewhere in the codebase rather than
+        // a silent OverflowException at the (int) cast.
+        long expectedTotal =
+            _selfAttention.ParameterCount + _crossAttention.ParameterCount +
+            _feedForward1.ParameterCount + _feedForward2.ParameterCount +
+            _norm1.ParameterCount + _norm2.ParameterCount + _norm3.ParameterCount;
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"DecoderLayer expected {expectedTotal} parameters across sublayers, " +
+                $"got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int idx = 0;
         void Set(ILayer<T> layer)
         {
-            int c = (int)layer.ParameterCount;
+            int c = ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount);
             layer.SetParameters(parameters.Slice(idx, c));
             idx += c;
         }

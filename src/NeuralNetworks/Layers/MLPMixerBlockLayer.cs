@@ -174,12 +174,19 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
         if (!_channelMlpExpand.IsShapeResolved) _channelMlpExpand.ResolveFromShape(new[] { _hiddenDim });
         if (!_channelMlpContract.IsShapeResolved) _channelMlpContract.ResolveFromShape(new[] { chanExpanded });
 
-        // Composite SetParameters: route by sublayer GetParameters counts
-        // to match the GetParameters layout 1:1.
+        // Composite SetParameters: route by sublayer ParameterCount (cheap
+        // O(1) integer) rather than GetParameters().Length, which would
+        // materialize a full flattened copy of every sublayer just to read
+        // its width — doubling load-time allocations on deep mixer stacks
+        // and eagerly materializing tensors that should stay on the lazy/
+        // streamable path. The sublayer types here (LayerNormalization,
+        // DenseLayer) maintain ParameterCount == GetParameters().Length
+        // once IsShapeResolved is true (the ResolveFromShape calls above
+        // guarantee that here).
         int idx = 0;
         void Set(ILayer<T> sub)
         {
-            int count = sub.GetParameters().Length;
+            int count = checked((int)sub.ParameterCount);
             if (count == 0) return;
             sub.SetParameters(parameters.Slice(idx, count));
             idx += count;
