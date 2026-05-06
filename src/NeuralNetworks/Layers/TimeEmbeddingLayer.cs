@@ -132,23 +132,44 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
         var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int offset = 0;
 
-        void CopyOrSkip(Tensor<T>? grad, int expectedLength)
+        void CopyOrSkip(Tensor<T>? grad, int expectedLength, string slotName)
         {
-            if (grad != null && grad.Length == expectedLength)
+            if (grad is null)
             {
-                var flat = grad.ToVector();
-                for (int i = 0; i < expectedLength; i++)
-                    result[offset + i] = flat[i];
+                // Legitimately missing — pre-Backward call, or this slot
+                // was cleared via ClearGradients. Leave as zeros so
+                // length-stability is preserved without masking errors.
+                offset += expectedLength;
+                return;
             }
-            // null or shape mismatch: leave the slot as zeros (the caller
-            // can detect missing gradients via ClearGradients telemetry).
+
+            if (grad.Length != expectedLength)
+            {
+                // Non-null but wrong size: the backward pass produced a
+                // gradient that doesn't fit this slot. Silently zeroing
+                // would hide the corruption and leave the optimizer
+                // applying half-zeroed updates. Fail fast with the slot
+                // name and shapes so the failure points at the right
+                // backward path; ClearGradients telemetry would otherwise
+                // miss this case.
+                throw new InvalidOperationException(
+                    $"TimeEmbeddingLayer.GetParameterGradients: gradient slot '{slotName}' has " +
+                    $"length {grad.Length} but parameter slot expects {expectedLength}. " +
+                    "This indicates a backward-pass bug producing a mis-shaped gradient — " +
+                    "investigate the corresponding Backward call rather than continuing with " +
+                    "a zeroed slot. Use ClearGradients() to reset all slots if intentional.");
+            }
+
+            var flat = grad.ToVector();
+            for (int i = 0; i < expectedLength; i++)
+                result[offset + i] = flat[i];
             offset += expectedLength;
         }
 
-        CopyOrSkip(_linear1WeightsGradient, _linear1Weights.Length);
-        CopyOrSkip(_linear1BiasGradient, _linear1Bias.Length);
-        CopyOrSkip(_linear2WeightsGradient, _linear2Weights.Length);
-        CopyOrSkip(_linear2BiasGradient, _linear2Bias.Length);
+        CopyOrSkip(_linear1WeightsGradient, _linear1Weights.Length, nameof(_linear1WeightsGradient));
+        CopyOrSkip(_linear1BiasGradient, _linear1Bias.Length, nameof(_linear1BiasGradient));
+        CopyOrSkip(_linear2WeightsGradient, _linear2Weights.Length, nameof(_linear2WeightsGradient));
+        CopyOrSkip(_linear2BiasGradient, _linear2Bias.Length, nameof(_linear2BiasGradient));
         return result;
     }
 
