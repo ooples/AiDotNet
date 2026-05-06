@@ -266,6 +266,64 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
             if (layer is LayerBase<T> lb) yield return lb;
     }
 
+    // --- Auxiliary-stream support (BLIP-2 / Q-Former / fusion VL models) ---
+    //
+    // Triple-stream architectures (vision encoder → Q-Former → decoder, or
+    // vision + text + cross-modal fusion bridge) need MORE than the dual-stream
+    // split. Subclasses register additional streams via
+    // <see cref="RegisterAuxiliaryEncoderStream"/>; the base's auxiliary
+    // enumerator walks them all so the inherited GetExtraTrainableLayers /
+    // streaming-pool / weight-registry hooks stay correct without per-subclass
+    // boilerplate.
+
+    private readonly List<List<ILayer<T>>> _auxiliaryEncoderStreams = new List<List<ILayer<T>>>();
+
+    /// <summary>
+    /// Registers an auxiliary encoder stream that lives outside
+    /// <see cref="NeuralNetworkBase{T}.Layers"/>. The base does NOT walk these
+    /// in <c>Predict</c> / <c>TrainWithTape</c>; subclasses use them in their
+    /// own forward methods (e.g. <c>GenerateFromImage</c> for Q-Former models,
+    /// <c>FuseVisionAndText</c> for BridgeTower-style fusion). Registered
+    /// streams are surfaced through
+    /// <see cref="EnumerateAuxiliaryStreamTrainableLayers"/> so subclasses can
+    /// override <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/>
+    /// to yield from auxiliary + text streams in one call.
+    /// </summary>
+    /// <param name="stream">A non-null stream to register. Adds a reference,
+    /// not a copy — subsequent mutations to <paramref name="stream"/> are
+    /// visible.</param>
+    protected void RegisterAuxiliaryEncoderStream(List<ILayer<T>> stream)
+    {
+        if (stream is null) throw new System.ArgumentNullException(nameof(stream));
+        _auxiliaryEncoderStreams.Add(stream);
+    }
+
+    /// <summary>
+    /// Iterates the registered auxiliary streams (Q-Former, decoder, fusion
+    /// bridge, etc.) yielding each layer's <see cref="LayerBase{T}"/> view.
+    /// Use alongside <see cref="EnumerateTextEncoderTrainableLayers"/> when
+    /// the subclass owns BOTH a text encoder and additional streams.
+    /// </summary>
+    protected IEnumerable<LayerBase<T>?> EnumerateAuxiliaryStreamTrainableLayers()
+    {
+        foreach (var stream in _auxiliaryEncoderStreams)
+            foreach (var layer in stream)
+                if (layer is LayerBase<T> lb) yield return lb;
+    }
+
+    /// <summary>
+    /// Combined helper that yields trainable-layer references for both the
+    /// dual-stream <see cref="TextEncoderLayers"/> and any registered
+    /// auxiliary streams. Most subclasses override
+    /// <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/> to return
+    /// this directly.
+    /// </summary>
+    protected IEnumerable<LayerBase<T>?> EnumerateAllAuxiliaryTrainableLayers()
+    {
+        foreach (var l in EnumerateTextEncoderTrainableLayers()) yield return l;
+        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers()) yield return l;
+    }
+
     /// <summary>
     /// Disposes of resources used by this model.
     /// </summary>
