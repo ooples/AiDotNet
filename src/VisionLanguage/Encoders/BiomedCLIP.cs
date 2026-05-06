@@ -120,31 +120,6 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     }
 
     /// <summary>
-    /// Override the layer-stack starting shape so lazy
-    /// <see cref="LayerNormalizationLayer{T}"/> / <see cref="DenseLayer{T}"/>
-    /// resolve to the post-patch-embed channel dim instead of the raw
-    /// NCHW spatial dim. Predict / Train pipe the input through
-    /// <see cref="TokenizeIfNCHW"/> first, transforming
-    /// <c>[B, 3, ImageSize, ImageSize]</c> → <c>[B, (ImageSize/patchSize)², VisionEmbeddingDim]</c>;
-    /// <see cref="NeuralNetworkBase{T}.Layers"/> never sees raw NCHW.
-    /// Without this override, <c>ResolveLazyLayerShapes</c> propagates
-    /// <c>[1, 3, 128, 128]</c> through the layer chain and the pre-norm
-    /// LN binds gamma to last-dim 128 — then the first real Forward
-    /// (with the tokenized last-dim 768) raises <c>ArgumentException</c>
-    /// from <c>CpuEngine.LayerNorm</c>. Patch grid matches
-    /// <see cref="PatchEmbedHelper.TokenizeImageNCHWToBSC"/>:
-    /// <c>patchSize = max(1, imageSize / 16)</c>.
-    /// </summary>
-    protected override int[]? TryGetArchitectureInputShape()
-    {
-        int imageSize = _options.ImageSize;
-        if (imageSize <= 0) return base.TryGetArchitectureInputShape();
-        int patchSize = System.Math.Max(1, imageSize / 16);
-        int tokens = (imageSize / patchSize) * (imageSize / patchSize);
-        return new[] { 1, tokens, _options.VisionEmbeddingDim };
-    }
-
-    /// <summary>
     /// Aligns <c>_options.ImageSize</c> with <c>Architecture.InputHeight</c> when
     /// the architecture declares an explicit square spatial extent. Same
     /// rationale as DFNCLIP — a CI-fast architecture at 128×128 must drive
@@ -215,6 +190,23 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
             return;
         }
 
+        // ViT patch embedding (Dosovitskiy et al. 2021 §3.1) as Layers[0]:
+        // turns NCHW image input into [B, num_patches, visionEmbeddingDim].
+        // Putting the patch-embed inside Layers (matching DFNCLIP and the
+        // rest of the OpenCLIP-style encoders) means the base class's
+        // Predict / Train / GetNamedLayerActivations / ResolveLazyLayerShapes
+        // / Serialize / Clone all walk the full vision graph by default —
+        // no per-method override needed to teach them about the
+        // tokenization step. patchSize = max(1, imageSize / 16) matches
+        // PatchEmbedHelper.TokenizeImageNCHWToBSC so a CI-fast 128² and a
+        // paper-faithful 224² architecture both produce the same
+        // downstream token rank.
+        int patchSize = System.Math.Max(1, _options.ImageSize / 16);
+        Layers.Add(new PatchEmbeddingLayer<T>(
+            patchSize: patchSize,
+            embeddingDim: _options.VisionEmbeddingDim,
+            expectedInputChannels: 3));
+
         // Split OpenCLIP factory output: vision portion → Layers, text → _textEncoderLayers.
         // Block size = 5 layers (or 6 with dropout). Vision block count = 2 + N×blockSize
         // (pre-norm + N transformer blocks + projection); text the same.
@@ -239,26 +231,21 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     }
 
     /// <summary>
-    /// Vision-only forward: patch-embeds an NCHW image into [B, S, C] tokens and
-    /// walks <see cref="NeuralNetworkBase{T}.Layers"/>. The text-encoder stack
-    /// is reachable through <see cref="EncodeText"/>; the contrastive image-text
-    /// path through <see cref="ComputeSimilarity"/>.
+    /// Vision-only forward: walks <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// (patch embedding → vision transformer → vision projection) on the
+    /// preprocessed image. The text-encoder stack is reachable through
+    /// <see cref="EncodeText"/>; the contrastive image-text path goes
+    /// through <see cref="ComputeSimilarity"/> / <see cref="ZeroShotClassify"/>.
     /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
         SetTrainingMode(false);
-        var c = TokenizeIfNCHW(input);
-        foreach (var l in Layers) c = l.Forward(c);
-        return c;
+        var current = input;
+        foreach (var l in Layers) current = l.Forward(current);
+        return current;
     }
-
-    private ConvolutionalLayer<T>? _patchEmbed;
-
-    private Tensor<T> TokenizeIfNCHW(Tensor<T> input) =>
-        PatchEmbedHelper.TokenizeImageNCHWToBSC(
-            input, _options.VisionEmbeddingDim, _options.ImageSize, ref _patchEmbed, Engine);
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
@@ -267,13 +254,11 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         SetTrainingMode(true);
         try
         {
-            // Tokenize NCHW image inputs the same way Predict does so the
-            // tape-based training loop sees the patch-embedded BSC sequence
-            // the encoder layer stack actually expects. Without this, callers
-            // (and the model-family invariant tests) that pass an NCHW image
-            // would either crash on the first encoder layer's shape check or
-            // train against zero gradients flowing through a wrong-shape path.
-            TrainWithTape(TokenizeIfNCHW(input), expected);
+            // PatchEmbeddingLayer is now Layers[0]; the tape-based training
+            // loop walks the full vision graph (NCHW image → patch-embed →
+            // transformer → projection) end-to-end so gradients flow back
+            // through the patch-embed conv too.
+            TrainWithTape(input, expected);
         }
         finally
         {
@@ -284,121 +269,29 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     }
 
     /// <summary>
-    /// Surfaces _patchEmbed and the text-encoder stack to the base
-    /// weight-registry walker so their trainable tensors land in the
-    /// streaming pool when ConfigureWeightLifetime is called.
+    /// Surfaces the text-encoder stack to the base weight-registry walker
+    /// (streaming-offload / weight-pool hooks) without extending the flat
+    /// parameter APIs (GetParameters / ParameterCount / SetParameters) —
+    /// those keep the SCOPE CONTRACT (= Layers only, which now includes
+    /// the vision patch-embed too) so flat-vector consumers don't
+    /// accidentally double-count.
     /// </summary>
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
     {
-        yield return _patchEmbed;
         foreach (var layer in _textEncoderLayers)
             if (layer is LayerBase<T> lb) yield return lb;
-    }
-
-    // _patchEmbed lives outside Layers but is trainable in native mode. Override
-    // ParameterCount / GetParameters / SetParameters / UpdateParameters together
-    // so all four agree on the layout: _patchEmbed slice first, then Layers in
-    // order. Without this, the optimizer reads N params via GetParameters and
-    // hands back N to UpdateParameters — but UpdateParameters consumes
-    // _patchEmbed.ParameterCount extra slots from the front, shifting every
-    // Layer's slice and corrupting weights.
-    public override long ParameterCount =>
-        (_patchEmbed?.ParameterCount ?? 0) +
-        (int)Layers.Sum(l => l.ParameterCount);
-
-    public override Vector<T> GetParameters()
-    {
-        var perLayer = Layers.Select(l => l.GetParameters()).ToList();
-        int patchLen = (int)(_patchEmbed?.ParameterCount ?? 0);
-        int total = patchLen + perLayer.Sum(p => p.Length);
-        var result = new Vector<T>(total);
-        int idx = 0;
-        if (patchLen > 0)
-        {
-            var patchParams = _patchEmbed!.GetParameters();
-            for (int i = 0; i < patchParams.Length; i++) result[idx++] = patchParams[i];
-        }
-        foreach (var p in perLayer)
-        {
-            for (int i = 0; i < p.Length; i++) result[idx++] = p[i];
-        }
-        return result;
-    }
-
-    public override void SetParameters(Vector<T> parameters)
-    {
-        // If the saved parameter vector includes patch-embed weights but
-        // this instance hasn't seen an image input yet (so _patchEmbed is
-        // still null), construct it on-demand so the slice layout matches
-        // the saved vector. Without this, deserialize / Clone-from-saved
-        // after a vision-mode train silently drops the patch-embed slice
-        // and leaves _patchEmbed null — the next image forward would then
-        // re-create it with random weights.
-        EnsurePatchEmbedForParameterVector(parameters.Length);
-
-        int idx = 0;
-        if (_patchEmbed is not null)
-        {
-            int pc = checked((int)_patchEmbed.ParameterCount);
-            if (pc > 0)
-            {
-                _patchEmbed.SetParameters(parameters.Slice(idx, pc));
-                idx += pc;
-            }
-        }
-        foreach (var l in Layers)
-        {
-            int c = checked((int)l.ParameterCount);
-            l.SetParameters(parameters.Slice(idx, c));
-            idx += c;
-        }
-        // Verify every parameter element was consumed so trailing values
-        // (serialization version drift, mis-saved vectors) fail loudly
-        // instead of silently being ignored.
-        if (idx != parameters.Length)
-            throw new ArgumentException(
-                $"Parameter length mismatch in {nameof(SetParameters)}: consumed {idx}, " +
-                $"got {parameters.Length}. Check for serialization version drift.",
-                nameof(parameters));
     }
 
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
-        EnsurePatchEmbedForParameterVector(parameters.Length);
         int idx = 0;
-        if (_patchEmbed is not null)
+        foreach (var l in Layers)
         {
-            int pc = checked((int)_patchEmbed.ParameterCount);
-            if (pc > 0)
-            {
-                _patchEmbed.UpdateParameters(parameters.Slice(idx, pc));
-                idx += pc;
-            }
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
         }
-        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
-        if (idx != parameters.Length)
-            throw new ArgumentException(
-                $"Parameter length mismatch in {nameof(UpdateParameters)}: consumed {idx}, " +
-                $"got {parameters.Length}. Check for serialization version drift.",
-                nameof(parameters));
-    }
-
-    /// <summary>
-    /// Lazily creates _patchEmbed when the incoming parameter vector is
-    /// longer than the layer-sum, indicating the saved model was trained
-    /// in vision mode. Builds it by running a probe NCHW tensor through
-    /// the helper, which constructs and weight-allocates the conv. Idempotent.
-    /// </summary>
-    private void EnsurePatchEmbedForParameterVector(int paramVectorLength)
-    {
-        if (_patchEmbed is not null) return;
-        int layerSum = 0;
-        foreach (var l in Layers) layerSum += (int)l.ParameterCount;
-        if (paramVectorLength <= layerSum) return;
-
-        var probe = new Tensor<T>(new[] { 1, 3, _options.ImageSize, _options.ImageSize });
-        TokenizeIfNCHW(probe);
     }
 
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
@@ -472,12 +365,13 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
 
     /// <summary>
     /// Vision encoder forward (patch embedding + transformer + projection).
-    /// Walks <see cref="NeuralNetworkBase{T}.Layers"/> after tokenizing NCHW
-    /// input. Used by <see cref="EncodeImage"/>.
+    /// Walks <see cref="NeuralNetworkBase{T}.Layers"/> end-to-end on NCHW
+    /// input — Layers[0] is now the <see cref="PatchEmbeddingLayer{T}"/>.
+    /// Used by <see cref="EncodeImage"/>.
     /// </summary>
     private Tensor<T> ForwardVisionEncoder(Tensor<T> input)
     {
-        var c = TokenizeIfNCHW(input);
+        var c = input;
         foreach (var layer in Layers) c = layer.Forward(c);
         return c;
     }
@@ -506,11 +400,6 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
         {
             OnnxImageEncoder?.Dispose();
             OnnxTextEncoder?.Dispose();
-            // _patchEmbed lives outside Layers (so it doesn't get disposed by the
-            // base class's Layers walker). Dispose it here so the conv weights
-            // and any registered tensors are released alongside the rest of the
-            // encoder when the model is disposed.
-            if (_patchEmbed is IDisposable pe) pe.Dispose();
         }
         base.Dispose(disposing);
     }
