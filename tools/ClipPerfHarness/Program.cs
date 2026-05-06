@@ -94,12 +94,26 @@ internal static class Program
         var target = new Tensor<double>(outDims);
         for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
 
-        // Single training step — this is what we want to profile.
-        Console.WriteLine("[train] Train(input, target) — attach profiler now if not already attached");
+        // Train 5 steps in a row — first step pays compile cost, subsequent
+        // steps replay the compiled plan. This matches the test's invariant
+        // pattern: warm probe + N training iterations + verification predict.
+        Console.WriteLine("[train] Train(input, target) — first step + 4 replays");
+        var trainStepMs = new long[5];
+        for (int s = 0; s < 5; s++)
+        {
+            var sw = Stopwatch.StartNew();
+            network.Train(input, target);
+            sw.Stop();
+            trainStepMs[s] = sw.ElapsedMilliseconds;
+            Console.WriteLine($"  train step {s}: {trainStepMs[s]} ms");
+        }
+        long swTrainTotal = 0;
+        for (int s = 0; s < 5; s++) swTrainTotal += trainStepMs[s];
         var swTrain = Stopwatch.StartNew();
-        network.Train(input, target);
         swTrain.Stop();
-        Console.WriteLine($"  train step: {swTrain.ElapsedMilliseconds} ms");
+        // Recreate the field used by SUMMARY (sum of all 5 step times).
+        // This keeps the summary line meaningful: total training wall-clock.
+        var trainTotalField = swTrainTotal;
 
         Console.WriteLine("[post] Predict...");
         var swPost = Stopwatch.StartNew();
@@ -111,9 +125,9 @@ internal static class Program
         Console.WriteLine($"SUMMARY [{mode}]:");
         Console.WriteLine($"  ctor:    {swCtor.ElapsedMilliseconds} ms");
         Console.WriteLine($"  warm:    {swWarm.ElapsedMilliseconds} ms");
-        Console.WriteLine($"  train:   {swTrain.ElapsedMilliseconds} ms");
+        Console.WriteLine($"  train:   {trainTotalField} ms (5 steps, per-step {string.Join("/", trainStepMs)})");
         Console.WriteLine($"  post:    {swPost.ElapsedMilliseconds} ms");
-        Console.WriteLine($"  TOTAL:   {(swCtor.ElapsedMilliseconds + swWarm.ElapsedMilliseconds + swTrain.ElapsedMilliseconds + swPost.ElapsedMilliseconds)} ms");
+        Console.WriteLine($"  TOTAL:   {(swCtor.ElapsedMilliseconds + swWarm.ElapsedMilliseconds + trainTotalField + swPost.ElapsedMilliseconds)} ms");
 
         return 0;
     }
