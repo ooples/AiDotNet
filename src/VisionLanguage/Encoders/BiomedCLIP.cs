@@ -120,6 +120,31 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     }
 
     /// <summary>
+    /// Override the layer-stack starting shape so lazy
+    /// <see cref="LayerNormalizationLayer{T}"/> / <see cref="DenseLayer{T}"/>
+    /// resolve to the post-patch-embed channel dim instead of the raw
+    /// NCHW spatial dim. Predict / Train pipe the input through
+    /// <see cref="TokenizeIfNCHW"/> first, transforming
+    /// <c>[B, 3, ImageSize, ImageSize]</c> → <c>[B, (ImageSize/patchSize)², VisionEmbeddingDim]</c>;
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> never sees raw NCHW.
+    /// Without this override, <c>ResolveLazyLayerShapes</c> propagates
+    /// <c>[1, 3, 128, 128]</c> through the layer chain and the pre-norm
+    /// LN binds gamma to last-dim 128 — then the first real Forward
+    /// (with the tokenized last-dim 768) raises <c>ArgumentException</c>
+    /// from <c>CpuEngine.LayerNorm</c>. Patch grid matches
+    /// <see cref="PatchEmbedHelper.TokenizeImageNCHWToBSC"/>:
+    /// <c>patchSize = max(1, imageSize / 16)</c>.
+    /// </summary>
+    protected override int[]? TryGetArchitectureInputShape()
+    {
+        int imageSize = _options.ImageSize;
+        if (imageSize <= 0) return base.TryGetArchitectureInputShape();
+        int patchSize = System.Math.Max(1, imageSize / 16);
+        int tokens = (imageSize / patchSize) * (imageSize / patchSize);
+        return new[] { 1, tokens, _options.VisionEmbeddingDim };
+    }
+
+    /// <summary>
     /// Aligns <c>_options.ImageSize</c> with <c>Architecture.InputHeight</c> when
     /// the architecture declares an explicit square spatial extent. Same
     /// rationale as DFNCLIP — a CI-fast architecture at 128×128 must drive
