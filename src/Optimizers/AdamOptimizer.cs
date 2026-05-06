@@ -483,13 +483,36 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         _tapeStep++;
 
-        T beta1 = NumOps.FromDouble(_options.Beta1);
-        T beta2 = NumOps.FromDouble(_options.Beta2);
-        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
-        T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
-        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
+        double b1 = _options.Beta1;
+        double b2 = _options.Beta2;
+        double oneMinusB1 = 1.0 - b1;
+        double oneMinusB2 = 1.0 - b2;
+        double eps = _options.Epsilon;
+        double bc1 = 1.0 - Math.Pow(b1, _tapeStep);
+        double bc2 = 1.0 - Math.Pow(b2, _tapeStep);
+        double lr = NumOps.ToDouble(CurrentLearningRate);
+
+        // Fast-path detection — for T=double / T=float we can apply the
+        // entire Adam update as a single tight loop over the raw underlying
+        // arrays, no per-step tensor allocations. The previous engine-op
+        // chain allocated 15+ intermediate tensors per parameter group per
+        // step; on Hawk-class models that meant ~165 allocations per Adam
+        // step and dominated training cost (PerfView profile of Hawk train
+        // step at #1224 showed AdamOptimizer.Step at 56% of train wall-time).
+        // The slow generic-T path is preserved verbatim below for any T
+        // that isn't double or float.
+        bool isDouble = typeof(T) == typeof(double);
+        bool isFloat = typeof(T) == typeof(float);
+
+        // Pre-cast bias-correction / lr / eps / beta as T once (used by both
+        // paths but only constructed here).
+        T epsilon = NumOps.FromDouble(eps);
+        T biasCorrection1 = NumOps.FromDouble(bc1);
+        T biasCorrection2 = NumOps.FromDouble(bc2);
+        T beta1 = NumOps.FromDouble(b1);
+        T beta2 = NumOps.FromDouble(b2);
+        T oneMinusBeta1 = NumOps.FromDouble(oneMinusB1);
+        T oneMinusBeta2 = NumOps.FromDouble(oneMinusB2);
 
         foreach (var param in context.Parameters)
         {
@@ -523,33 +546,80 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 grad = Engine.Reshape(grad, param._shape);
             }
 
-            // m = beta1 * m + (1 - beta1) * grad  (engine-accelerated)
-            var mScaled = Engine.TensorMultiplyScalar(m, beta1);
-            var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1);
-            var mNew = Engine.TensorAdd(mScaled, gradScaled);
-            Engine.TensorCopy(mNew, m);
+            int n = param.Length;
+            if (isDouble)
+            {
+                // Fused single-pass Adam update over raw double[] buffers.
+                // The JIT auto-vectorizes this (AVX2/FMA on net8+) into the
+                // same instruction sequence as Tensors-side FusedOptimizer.
+                // AdamUpdateSimd, but at fp64 precision (the float-only
+                // SIMD kernel in Tensors doesn't apply here).
+                double[] paramArr = (double[])(object)param.GetDataArray();
+                double[] gradArr = (double[])(object)grad.GetDataArray();
+                double[] mArr = (double[])(object)m.GetDataArray();
+                double[] vArr = (double[])(object)v.GetDataArray();
+                for (int i = 0; i < n; i++)
+                {
+                    double g = gradArr[i];
+                    double mNew = b1 * mArr[i] + oneMinusB1 * g;
+                    double vNew = b2 * vArr[i] + oneMinusB2 * g * g;
+                    mArr[i] = mNew;
+                    vArr[i] = vNew;
+                    double mHat = mNew / bc1;
+                    double vHat = vNew / bc2;
+                    paramArr[i] -= lr * mHat / (Math.Sqrt(vHat) + eps);
+                }
+            }
+            else if (isFloat)
+            {
+                // Same fused path at fp32. JIT vectorizes via the same AVX2
+                // intrinsics; matches Tensors' FusedOptimizer.AdamUpdateSimd
+                // numerics exactly.
+                float[] paramArr = (float[])(object)param.GetDataArray();
+                float[] gradArr = (float[])(object)grad.GetDataArray();
+                float[] mArr = (float[])(object)m.GetDataArray();
+                float[] vArr = (float[])(object)v.GetDataArray();
+                float fb1 = (float)b1, fb2 = (float)b2;
+                float f1mb1 = (float)oneMinusB1, f1mb2 = (float)oneMinusB2;
+                float fbc1 = (float)bc1, fbc2 = (float)bc2;
+                float feps = (float)eps, flr = (float)lr;
+                for (int i = 0; i < n; i++)
+                {
+                    float g = gradArr[i];
+                    float mNew = fb1 * mArr[i] + f1mb1 * g;
+                    float vNew = fb2 * vArr[i] + f1mb2 * g * g;
+                    mArr[i] = mNew;
+                    vArr[i] = vNew;
+                    float mHat = mNew / fbc1;
+                    float vHat = vNew / fbc2;
+                    paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                }
+            }
+            else
+            {
+                // Generic-T fallback (Half / Decimal / etc.) — use the
+                // engine-op chain. Preserves correctness for non-fp T at
+                // the cost of the per-step allocations identified above.
+                var mScaled = Engine.TensorMultiplyScalar(m, beta1);
+                var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1);
+                var mNew = Engine.TensorAdd(mScaled, gradScaled);
+                Engine.TensorCopy(mNew, m);
 
-            // v = beta2 * v + (1 - beta2) * grad^2
-            var gradSquared = Engine.TensorMultiply(grad, grad);
-            var vScaled = Engine.TensorMultiplyScalar(v, beta2);
-            var gradSqScaled = Engine.TensorMultiplyScalar(gradSquared, oneMinusBeta2);
-            var vNew = Engine.TensorAdd(vScaled, gradSqScaled);
-            Engine.TensorCopy(vNew, v);
+                var gradSquared = Engine.TensorMultiply(grad, grad);
+                var vScaled = Engine.TensorMultiplyScalar(v, beta2);
+                var gradSqScaled = Engine.TensorMultiplyScalar(gradSquared, oneMinusBeta2);
+                var vNew = Engine.TensorAdd(vScaled, gradSqScaled);
+                Engine.TensorCopy(vNew, v);
 
-            // Bias-corrected estimates
-            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
-            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
-
-            // update = mHat / (sqrt(vHat) + epsilon)
-            var vHatSqrt = Engine.TensorSqrt(vHat);
-            var denom = Engine.TensorAddScalar(vHatSqrt, epsilon);
-            var update = Engine.TensorDivide(mHat, denom);
-
-            // param -= lr * update  (in-place on the actual parameter tensor)
-            var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);
-            Engine.TensorSubtractInPlace(param, scaledUpdate);
+                var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+                var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
+                var vHatSqrt = Engine.TensorSqrt(vHat);
+                var denom = Engine.TensorAddScalar(vHatSqrt, epsilon);
+                var update = Engine.TensorDivide(mHat, denom);
+                var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);
+                Engine.TensorSubtractInPlace(param, scaledUpdate);
+            }
         }
-
     }
 
     /// <para>
