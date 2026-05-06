@@ -565,56 +565,126 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             // reads through any view of the same slice.
             if (isDouble)
             {
-                // Cast T-tensors to double-tensors via object box. T is
-                // statically double here (isDouble guard), but the C#
-                // generic constraint set on this class doesn't include
-                // `unmanaged`, so MemoryMarshal.Cast<T, double> is
-                // unavailable. The reference cast is zero-cost — Tensor<T>
-                // and Tensor<double> are the same runtime type when T==double.
-                var paramD = (Tensor<double>)(object)param;
-                var gradD = (Tensor<double>)(object)grad;
-                var mD = (Tensor<double>)(object)m;
-                var vD = (Tensor<double>)(object)v;
-                System.Span<double> paramSpan = paramD.AsWritableSpan();
-                System.ReadOnlySpan<double> gradSpan = gradD.AsSpan();
-                System.Span<double> mSpan = mD.AsWritableSpan();
-                System.Span<double> vSpan = vD.AsWritableSpan();
-                for (int i = 0; i < n; i++)
+                // Hybrid fast-path: when the parameter tensor is stored at
+                // offset 0 with full storage length (the common case for
+                // models that don't go through ParameterBuffer<T> aliasing
+                // — every model whose layers own their weight tensors
+                // outright), GetLiveBackingArrayOrNull returns the live
+                // backing array and we run the original raw-array Adam
+                // loop the JIT auto-vectorizes most aggressively. When
+                // the tensor is a non-zero-offset view (CLIP-family vision
+                // encoders go through GetOrCreateParameterBuffer which
+                // hands out per-parameter views as slices into a single
+                // contiguous ParameterBuffer<T> at non-zero offsets), the
+                // fast array path returns null and we fall back to
+                // AsWritableSpan which correctly slices into the buffer
+                // at the right offset. Both paths execute the same
+                // numerics — only the destination of writes differs.
+                double[]? paramArr = (double[]?)(object?)param.GetLiveBackingArrayOrNull();
+                double[]? gradArr = (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
+                double[]? mArr = (double[]?)(object?)m.GetLiveBackingArrayOrNull();
+                double[]? vArr = (double[]?)(object?)v.GetLiveBackingArrayOrNull();
+                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null)
                 {
-                    double g = gradSpan[i];
-                    double mNew = b1 * mSpan[i] + oneMinusB1 * g;
-                    double vNew = b2 * vSpan[i] + oneMinusB2 * g * g;
-                    mSpan[i] = mNew;
-                    vSpan[i] = vNew;
-                    double mHat = mNew / bc1;
-                    double vHat = vNew / bc2;
-                    paramSpan[i] -= lr * mHat / (Math.Sqrt(vHat) + eps);
+                    for (int i = 0; i < n; i++)
+                    {
+                        double g = gradArr[i];
+                        double mNew = b1 * mArr[i] + oneMinusB1 * g;
+                        double vNew = b2 * vArr[i] + oneMinusB2 * g * g;
+                        mArr[i] = mNew;
+                        vArr[i] = vNew;
+                        double mHat = mNew / bc1;
+                        double vHat = vNew / bc2;
+                        paramArr[i] -= lr * mHat / (Math.Sqrt(vHat) + eps);
+                    }
+                }
+                else
+                {
+                    // Buffer-aliased view path. Use ref-T arithmetic via
+                    // MemoryMarshal + Unsafe.Add to avoid Span<T>'s
+                    // per-iteration bounds check while still slicing into
+                    // the real backing storage at the right offset (so
+                    // mutations land on the buffer).
+                    var paramD = (Tensor<double>)(object)param;
+                    var gradD = (Tensor<double>)(object)grad;
+                    var mD = (Tensor<double>)(object)m;
+                    var vD = (Tensor<double>)(object)v;
+                    System.Span<double> paramSpan = paramD.AsWritableSpan();
+                    System.ReadOnlySpan<double> gradSpan = gradD.AsSpan();
+                    System.Span<double> mSpan = mD.AsWritableSpan();
+                    System.Span<double> vSpan = vD.AsWritableSpan();
+                    ref double paramR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(paramSpan);
+                    ref double gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
+                    ref double mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
+                    ref double vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
+                    for (int i = 0; i < n; i++)
+                    {
+                        double g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
+                        double mPrev = System.Runtime.CompilerServices.Unsafe.Add(ref mR, i);
+                        double vPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vR, i);
+                        double mNew = b1 * mPrev + oneMinusB1 * g;
+                        double vNew = b2 * vPrev + oneMinusB2 * g * g;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
+                        double mHat = mNew / bc1;
+                        double vHat = vNew / bc2;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
+                            lr * mHat / (Math.Sqrt(vHat) + eps);
+                    }
                 }
             }
             else if (isFloat)
             {
-                var paramF = (Tensor<float>)(object)param;
-                var gradF = (Tensor<float>)(object)grad;
-                var mF = (Tensor<float>)(object)m;
-                var vF = (Tensor<float>)(object)v;
-                System.Span<float> paramSpan = paramF.AsWritableSpan();
-                System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
-                System.Span<float> mSpan = mF.AsWritableSpan();
-                System.Span<float> vSpan = vF.AsWritableSpan();
+                float[]? paramArr = (float[]?)(object?)param.GetLiveBackingArrayOrNull();
+                float[]? gradArr = (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
+                float[]? mArr = (float[]?)(object?)m.GetLiveBackingArrayOrNull();
+                float[]? vArr = (float[]?)(object?)v.GetLiveBackingArrayOrNull();
                 float fb1 = (float)b1, fb2 = (float)b2;
                 float f1mb1 = (float)oneMinusB1, f1mb2 = (float)oneMinusB2;
                 float fbc1 = (float)bc1, fbc2 = (float)bc2;
                 float feps = (float)eps, flr = (float)lr;
-                for (int i = 0; i < n; i++)
+                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null)
                 {
-                    float g = gradSpan[i];
-                    float mNew = fb1 * mSpan[i] + f1mb1 * g;
-                    float vNew = fb2 * vSpan[i] + f1mb2 * g * g;
-                    mSpan[i] = mNew;
-                    vSpan[i] = vNew;
-                    float mHat = mNew / fbc1;
-                    float vHat = vNew / fbc2;
-                    paramSpan[i] -= flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                    for (int i = 0; i < n; i++)
+                    {
+                        float g = gradArr[i];
+                        float mNew = fb1 * mArr[i] + f1mb1 * g;
+                        float vNew = fb2 * vArr[i] + f1mb2 * g * g;
+                        mArr[i] = mNew;
+                        vArr[i] = vNew;
+                        float mHat = mNew / fbc1;
+                        float vHat = vNew / fbc2;
+                        paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                    }
+                }
+                else
+                {
+                    var paramF = (Tensor<float>)(object)param;
+                    var gradF = (Tensor<float>)(object)grad;
+                    var mF = (Tensor<float>)(object)m;
+                    var vF = (Tensor<float>)(object)v;
+                    System.Span<float> paramSpan = paramF.AsWritableSpan();
+                    System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
+                    System.Span<float> mSpan = mF.AsWritableSpan();
+                    System.Span<float> vSpan = vF.AsWritableSpan();
+                    ref float paramR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(paramSpan);
+                    ref float gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
+                    ref float mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
+                    ref float vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
+                    for (int i = 0; i < n; i++)
+                    {
+                        float g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
+                        float mPrev = System.Runtime.CompilerServices.Unsafe.Add(ref mR, i);
+                        float vPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vR, i);
+                        float mNew = fb1 * mPrev + f1mb1 * g;
+                        float vNew = fb2 * vPrev + f1mb2 * g * g;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
+                        float mHat = mNew / fbc1;
+                        float vHat = vNew / fbc2;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
+                            flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                    }
                 }
             }
             else
