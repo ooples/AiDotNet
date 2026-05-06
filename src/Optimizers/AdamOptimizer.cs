@@ -547,52 +547,74 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             }
 
             int n = param.Length;
+            // Buffer-aliased parameter views (NeuralNetworkBase wires every
+            // trainable layer's weight tensor as a slice into a shared
+            // ParameterBuffer<T> at non-zero _storageOffset) cannot use
+            // GetDataArray() — for non-zero-offset tensors that path falls
+            // back to ToArray() and returns a COPY, so an in-place
+            // mutation on the returned array silently throws away every
+            // Adam update and the buffer (the actual single source of
+            // truth) never sees the new weights. Symptom on BiomedCLIP /
+            // DFNCLIP / any model that goes through GetOrCreateParameterBuffer:
+            // train completes with non-zero loss but
+            // GradientFlow_ShouldBeNonZeroAndFinite reports "no parameters
+            // changed" because the post-Train chunk read returns the same
+            // pre-Train values. AsWritableSpan() returns a writable Span
+            // sliced at the correct offset into the live storage; mutations
+            // through it land on the buffer and are visible to subsequent
+            // reads through any view of the same slice.
             if (isDouble)
             {
-                // Fused single-pass Adam update over raw double[] buffers.
-                // The JIT auto-vectorizes this (AVX2/FMA on net8+) into the
-                // same instruction sequence as Tensors-side FusedOptimizer.
-                // AdamUpdateSimd, but at fp64 precision (the float-only
-                // SIMD kernel in Tensors doesn't apply here).
-                double[] paramArr = (double[])(object)param.GetDataArray();
-                double[] gradArr = (double[])(object)grad.GetDataArray();
-                double[] mArr = (double[])(object)m.GetDataArray();
-                double[] vArr = (double[])(object)v.GetDataArray();
+                // Cast T-tensors to double-tensors via object box. T is
+                // statically double here (isDouble guard), but the C#
+                // generic constraint set on this class doesn't include
+                // `unmanaged`, so MemoryMarshal.Cast<T, double> is
+                // unavailable. The reference cast is zero-cost — Tensor<T>
+                // and Tensor<double> are the same runtime type when T==double.
+                var paramD = (Tensor<double>)(object)param;
+                var gradD = (Tensor<double>)(object)grad;
+                var mD = (Tensor<double>)(object)m;
+                var vD = (Tensor<double>)(object)v;
+                System.Span<double> paramSpan = paramD.AsWritableSpan();
+                System.ReadOnlySpan<double> gradSpan = gradD.AsSpan();
+                System.Span<double> mSpan = mD.AsWritableSpan();
+                System.Span<double> vSpan = vD.AsWritableSpan();
                 for (int i = 0; i < n; i++)
                 {
-                    double g = gradArr[i];
-                    double mNew = b1 * mArr[i] + oneMinusB1 * g;
-                    double vNew = b2 * vArr[i] + oneMinusB2 * g * g;
-                    mArr[i] = mNew;
-                    vArr[i] = vNew;
+                    double g = gradSpan[i];
+                    double mNew = b1 * mSpan[i] + oneMinusB1 * g;
+                    double vNew = b2 * vSpan[i] + oneMinusB2 * g * g;
+                    mSpan[i] = mNew;
+                    vSpan[i] = vNew;
                     double mHat = mNew / bc1;
                     double vHat = vNew / bc2;
-                    paramArr[i] -= lr * mHat / (Math.Sqrt(vHat) + eps);
+                    paramSpan[i] -= lr * mHat / (Math.Sqrt(vHat) + eps);
                 }
             }
             else if (isFloat)
             {
-                // Same fused path at fp32. JIT vectorizes via the same AVX2
-                // intrinsics; matches Tensors' FusedOptimizer.AdamUpdateSimd
-                // numerics exactly.
-                float[] paramArr = (float[])(object)param.GetDataArray();
-                float[] gradArr = (float[])(object)grad.GetDataArray();
-                float[] mArr = (float[])(object)m.GetDataArray();
-                float[] vArr = (float[])(object)v.GetDataArray();
+                var paramF = (Tensor<float>)(object)param;
+                var gradF = (Tensor<float>)(object)grad;
+                var mF = (Tensor<float>)(object)m;
+                var vF = (Tensor<float>)(object)v;
+                System.Span<float> paramSpan = paramF.AsWritableSpan();
+                System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
+                System.Span<float> mSpan = mF.AsWritableSpan();
+                System.Span<float> vSpan = vF.AsWritableSpan();
                 float fb1 = (float)b1, fb2 = (float)b2;
                 float f1mb1 = (float)oneMinusB1, f1mb2 = (float)oneMinusB2;
                 float fbc1 = (float)bc1, fbc2 = (float)bc2;
                 float feps = (float)eps, flr = (float)lr;
                 for (int i = 0; i < n; i++)
                 {
-                    float g = gradArr[i];
-                    float mNew = fb1 * mArr[i] + f1mb1 * g;
-                    float vNew = fb2 * vArr[i] + f1mb2 * g * g;
-                    mArr[i] = mNew;
-                    vArr[i] = vNew;
+                    float g = gradSpan[i];
+                    float mNew = fb1 * mSpan[i] + f1mb1 * g;
+                    float vNew = fb2 * vSpan[i] + f1mb2 * g * g;
+                    mSpan[i] = mNew;
+                    vSpan[i] = vNew;
                     float mHat = mNew / fbc1;
                     float vHat = vNew / fbc2;
-                    paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                    paramSpan[i] -= flr * mHat / ((float)Math.Sqrt(vHat) + feps);
                 }
             }
             else
