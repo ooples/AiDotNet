@@ -414,7 +414,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// </summary>
         public override Vector<T> GetParameters()
         {
-            var parameters = new Vector<T>((int)ParameterCount);
+            var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
             int index = 0;
 
             foreach (var layer in _graphLayers)

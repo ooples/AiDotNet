@@ -742,6 +742,51 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </remarks>
     public ProfileReport? ProfilingReport { get; set; }
 
+    /// <summary>
+    /// Weight-streaming activity report from the underlying
+    /// <c>WeightRegistry</c> if streaming engaged during the build
+    /// (issue #1222 task #186). Null when streaming stayed off (the
+    /// common case for models that fit in RAM).
+    /// </summary>
+    /// <value>
+    /// A <see cref="AiDotNet.Deployment.Configuration.WeightStreamingReport"/>
+    /// snapshot of the streaming pool state at result-construction time
+    /// (disk read count, eviction count, prefetch hit/miss/issue counts,
+    /// resident-bytes high-water, compression ratio, the effective
+    /// threshold that drove the engagement decision, and a flag
+    /// distinguishing auto-detected from user-forced engagement). Null
+    /// when streaming wasn't engaged for this build — most callers can
+    /// treat null as "model fit in RAM, no streaming overhead paid".
+    /// </value>
+    /// <remarks>
+    /// <para>Forwarded to <c>AiModelResult.WeightStreamingReport</c> via
+    /// the options ctor so callers can inspect streaming behaviour:
+    /// disk-read counts, eviction counts, prefetch hit/miss ratio.</para>
+    /// <para><b>For Beginners:</b> Big language and vision models can
+    /// have so many parameters (think tens of billions) that they don't
+    /// fit in your computer's RAM all at once. AiDotNet's "weight
+    /// streaming" feature solves this by keeping the model on disk and
+    /// loading only the parts it needs for each layer's computation,
+    /// then evicting them when memory gets full. This property tells
+    /// you whether streaming was used and how busy it was during the
+    /// build:</para>
+    /// <list type="bullet">
+    /// <item>If null: the model is small enough to live in RAM, no
+    /// streaming was needed (zero overhead paid).</item>
+    /// <item>If non-null: streaming engaged. Look at the report's
+    /// counters to understand cost — high disk-read counts mean
+    /// frequent paging from disk; high prefetch-miss counts mean the
+    /// pool's window-size was too small for the model's access pattern;
+    /// high eviction count is normal for models well above the
+    /// threshold and just means the pool is doing its job.</item>
+    /// </list>
+    /// <para>You usually don't set this directly — the
+    /// <c>AiModelBuilder</c> populates it automatically when streaming
+    /// engages (auto-detect) or when you explicitly opt in via
+    /// <c>ConfigureWeightStreaming(new WeightStreamingConfig { Enabled = true })</c>.</para>
+    /// </remarks>
+    public AiDotNet.Deployment.Configuration.WeightStreamingReport? WeightStreamingReport { get; set; }
+
     // ============================================================================
     // Training Infrastructure Properties
     // ============================================================================

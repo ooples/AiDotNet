@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -803,7 +804,7 @@ public class NBEATSModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedCount = (int)ParameterCount;
+        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(

@@ -494,8 +494,8 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
 
         InputChannels = c;
         int weightSize = c * SpiralLength;
-        _weights = new Tensor<T>([OutputChannels, weightSize]);
-        _biases = new Tensor<T>([OutputChannels]);
+        _weights = AllocateLazyWeight([OutputChannels, weightSize]);
+        _biases = AllocateLazyWeight([OutputChannels]);
         InitializeWeights();
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
@@ -541,11 +541,13 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
             NumOps.FromDouble(2.0),
             NumOps.FromDouble(fanIn)));
 
-        // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
+        // Fill the EXISTING lazy-allocated tensors in place — keeps
+        // the AllocateLazyWeight registration intact. Closes review-
+        // comment #1271.7BpS.
+        var randomWeights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
+        randomWeights.AsSpan().CopyTo(_weights.AsWritableSpan());
 
-        // Initialize biases to zero
-        _biases = new Tensor<T>(_biases._shape);
+        // Initialize biases to zero (in-place).
         Engine.TensorFill(_biases, NumOps.Zero);
 
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);

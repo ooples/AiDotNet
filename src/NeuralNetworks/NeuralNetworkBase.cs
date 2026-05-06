@@ -298,7 +298,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Cached parameter count to avoid repeated Sum() calculations.
     /// Null when invalid (layers modified).
     /// </summary>
-    private int? _cachedParameterCount;
+    private long? _cachedParameterCount;
 
     /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).
@@ -520,17 +520,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // each layer's IsShapeResolved short-circuit.
         ResolveLazyLayerShapes();
 
-        // Single pass: ResolveLazyLayerShapes above has materialized
-        // every lazy layer reachable from the architecture, so each
-        // layer's GetParameters() now returns its concrete vector — no
-        // need to two-pass to "trigger lazy init via the first pass".
-        int totalParameterCount = 0;
+        // Sum per-layer parameter counts via layer.ParameterCount (cheap
+        // metadata read), NOT via layer.GetParameters().Length (which
+        // forces every layer to materialize and return its full
+        // parameter Vector<T> just to read the Length). The previous
+        // implementation walked Layers TWICE — once to count via
+        // GetParameters().Length, once to actually copy — doubling the
+        // allocation pressure and the per-layer parameter materialization
+        // work for deep models. ResolveLazyLayerShapes above has
+        // already materialized every lazy layer's shape, so
+        // ParameterCount is now safe to read here. Closes review-comment
+        // #1271.uxip. Long accumulator + int.MaxValue gate below
+        // forwards the same overflow protection as before.
+        long totalParameterCountLong = 0;
         foreach (var layer in Layers)
         {
-            totalParameterCount += layer.GetParameters().Length;
+            totalParameterCountLong += layer.ParameterCount;
         }
+        int totalParameterCount = ParameterCountHelper.ToFlatVectorSize(totalParameterCountLong);
 
-        var parameters = new Vector<T>((int)(totalParameterCount));
+        var parameters = new Vector<T>(totalParameterCount);
         var destSpan = parameters.AsWritableSpan();
 
         int currentIndex = 0;
@@ -1825,31 +1834,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // pre-Forward query work as designed.
                 ResolveLazyLayerShapes();
 
-                // Accumulate as long so the addition itself doesn't overflow
-                // under the checked Linq Sum overload introduced in .NET 7+.
-                // If the total exceeds int.MaxValue we MUST fail fast: the
-                // rest of the flat-parameter int-indexed API
-                // (GetParameters / SetParameters / GetAllLayerInfo) cannot
-                // represent that many elements as a single Vector<T>, so
-                // returning a saturated int here would silently mis-slice
-                // the parameter buffer downstream. Callers hitting this
-                // limit either need to walk Layers themselves and stay in
-                // long arithmetic, or split the model across instances.
+                // Sum the per-layer counts in long throughout — both the
+                // accumulator and the cache are long, so this getter returns
+                // the genuine count even for >2.1B-parameter models. The
+                // public signature has been long since PR #1244 (#1237);
+                // this is the matching internal storage migration that
+                // unblocks weight-streaming auto-detect on PaLM-E-class
+                // models (#1271 / #1222) where ParameterCount is the input
+                // to the threshold check. Consumers of the flat-Vector<T>
+                // parameter API (GetParameters / SetParameters /
+                // GetAllLayerInfo) STILL cannot represent more than
+                // int.MaxValue elements in a single Vector<T> — that
+                // invariant is enforced at THOSE call sites, where the
+                // throw is actionable, rather than blocking every read of
+                // the count itself (e.g. weight-streaming auto-detect,
+                // model-metadata reporting, telemetry).
                 long total = 0L;
                 for (int i = 0; i < Layers.Count; i++)
                 {
                     total += Layers[i].ParameterCount;
                 }
-                if (total > int.MaxValue)
-                {
-                    throw new InvalidOperationException(
-                        $"Total parameter count ({total:N0}) exceeds int32 capacity " +
-                        $"({int.MaxValue:N0}). The flat-parameter API in NeuralNetworkBase " +
-                        $"cannot represent this many parameters as a single Vector<T>. Walk " +
-                        $"Layers per-layer and accumulate in long, or split this " +
-                        $"architecture across multiple network instances.");
-                }
-                _cachedParameterCount = (int)total;
+                _cachedParameterCount = total;
             }
             return _cachedParameterCount.Value;
         }
@@ -2231,6 +2236,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
             _layerOnlyInitialized = true;
             ResolveLazyLayerShapes();
+            // Eager auto-detect for streaming (#1222 / #183). For models with
+            // non-lazy layer construction (e.g. ResNet, VGG, classical CNNs)
+            // ParameterCount is reliable here and the threshold check fires
+            // immediately. For lazy models (Transformer / MultiHeadAttention),
+            // ParameterCount may report 0 at this point — the first-Predict
+            // call will retry once weights have materialized.
+            TryAutoEnableWeightStreaming();
             return;
         }
 
@@ -2261,6 +2273,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // weight tensors for actually-lazy layers (eager layers
             // short-circuit on their already-resolved IsShapeResolved).
             ResolveLazyLayerShapes();
+            // Eager auto-detect for streaming (#1222 / #183). See note on
+            // the layer-only branch above — this is the parallel call for
+            // architecture-driven models. Both paths converge through
+            // TryAutoEnableWeightStreaming, which is idempotent.
+            TryAutoEnableWeightStreaming();
         }
     }
 
@@ -2476,6 +2493,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // doesn't synchronize a global model state for concurrent inference.
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
+
+        // Pre-forward auto-detect attempt (#1222 / #183). Catches eager
+        // networks (ResNet/VGG/CNN) whose ParameterCount is reliable as
+        // soon as InitializeLayers ran. For lazy networks (Transformer,
+        // MultiHeadAttention with 0×0 placeholders) ParameterCount is 0
+        // here, so this is a no-op and the post-forward retry below
+        // catches them once their weights have materialized through the
+        // first PredictEager call. Idempotent once finalized.
+        TryAutoEnableWeightStreaming();
+
         try
         {
             // Universal batch-dim auto-promotion (mirrors the Train path).
@@ -2528,10 +2555,51 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     squeezed[i] = output.Shape[i + 1];
                 output = output.Reshape(squeezed);
             }
+
+            // Mark first-forward-completed and run the auto-detect retry
+            // ONLY on a successful forward. The previous version did this
+            // in `finally`, which fired even when PredictEager threw; on
+            // a lazy model that flipped _firstForwardCompleted=true with
+            // ParameterCount still at 0 (the placeholder weights weren't
+            // materialized because forward failed), so the next forward
+            // call's auto-detect saw "already past first forward" and
+            // skipped the retry path that's the WHOLE POINT of this
+            // logic. Closes review-comment #1271.s-Ng.
+            //
+            // For lazy networks (Transformer / MultiHeadAttention) the
+            // pre-forward attempt at the top of Predict saw
+            // ParameterCount=0 and bailed without finalizing; now that
+            // PredictEager has materialized the placeholder weights,
+            // ParameterCount returns the real value and the threshold
+            // comparison can engage streaming for the NEXT call. The
+            // first call of an above-threshold lazy model still runs in
+            // eager mode — engaging streaming mid-forward would require
+            // a more invasive RegisterTrainableParameter-time hook
+            // (filed as a follow-up). Eager networks finalized in the
+            // pre-forward call so this is a no-op for them.
+            if (!_firstForwardCompleted)
+            {
+                _firstForwardCompleted = true;
+                // Invalidate the cached ParameterCount before the retry.
+                // The pre-forward auto-detect attempt at the top of
+                // Predict (above) called ParameterCount when lazy
+                // layers still reported 0, populating the cache with
+                // 0. Without this invalidation the post-forward retry
+                // would re-read the SAME cached 0 (because the cache
+                // sticks until layer mutation) and never engage
+                // streaming for the NEXT call — defeating the entire
+                // point of the lazy-layer retry path. Closes review-
+                // comments #1271.uxiB / .vbtb.
+                _cachedParameterCount = null;
+                TryAutoEnableWeightStreaming();
+            }
             return output;
         }
         finally
         {
+            // Restore the training-mode flag regardless of whether
+            // PredictEager threw — that's a state restore, not a
+            // success-only side effect, so it stays in finally.
             if (wasTraining) SetTrainingMode(true);
         }
     }
@@ -2672,12 +2740,50 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 _checkpointLayerFunctions, input, segmentSize);
         }
 
-        var current = input;
-        foreach (var layer in Layers)
+        // Streaming-aware training forward (#1222 / #185). When weight
+        // streaming is configured, drive the same prefetch + materialize-
+        // scope orchestration the inference path uses (PredictEager →
+        // PredictEagerStreaming, see #184) so a Train() call's forward
+        // pulls weights through the streaming pool with the LRU keeping
+        // them warm into the backward replay. The tape-based backward
+        // accesses the SAME tensor instances the forward read; LRU
+        // recency-of-access is what keeps them resident through the
+        // backward pass, so we don't need a parallel reverse-order
+        // materialize loop here. Verified by inspection: the autodiff
+        // tape stores tensor references, not copies, so a tensor
+        // already pinned by forward's MaterializeScope is the SAME
+        // object the backward-replay reads.
+        Tensor<T> result;
+        if (_weightLifetimeConfigured)
         {
-            current = layer.Forward(current);
+            result = PredictEagerStreaming(input);
         }
-        return current;
+        else
+        {
+            var current = input;
+            foreach (var layer in Layers)
+            {
+                current = layer.Forward(current);
+            }
+            result = current;
+        }
+
+        // Post-first-forward auto-detect retry (mirrors Predict's path).
+        // Lazy training-only networks that never call Predict (e.g. a
+        // fine-tuning loop where forward is always paired with
+        // backward) need this hook to ever engage streaming. Invalidate
+        // the cached ParameterCount first — the pre-forward attempt may
+        // have populated it with 0 from lazy placeholder layers, and a
+        // retry that reuses the stale cache would never engage. Closes
+        // review-comment #1271.vbtm.
+        if (!_firstForwardCompleted)
+        {
+            _firstForwardCompleted = true;
+            _cachedParameterCount = null;
+            TryAutoEnableWeightStreaming();
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -2839,10 +2945,297 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </summary>
     protected virtual Tensor<T> PredictEager(Tensor<T> input)
     {
+        // Hot path: no streaming configured — every layer's weights are
+        // already resident in RAM, so the simple foreach-and-forward loop
+        // matches the pre-#1222 behavior bit-for-bit. Adding the streaming
+        // orchestration overhead unconditionally would penalize every
+        // small / mid model that fits in memory without help.
+        if (!_weightLifetimeConfigured)
+        {
+            var c = input;
+            foreach (var layer in Layers)
+                c = layer.Forward(c);
+            return c;
+        }
+
+        // Streaming path (#1222 / #184): prefetch ahead by W=2 layers,
+        // materialize the active layer's weights for the duration of its
+        // forward, then release so the LRU pool can evict if memory is
+        // tight. This keeps the working set bounded by ~3 layers' worth
+        // of weights regardless of total model size — the difference
+        // between OOM-ing on a 562B PaLM-E and running through.
+        return PredictEagerStreaming(input);
+    }
+
+    /// <summary>
+    /// Streaming-aware forward path used when
+    /// <see cref="ConfigureWeightLifetime"/> has been called (whether
+    /// explicitly or via the auto-detect threshold). Walks layers
+    /// sequentially while:
+    ///   1. Prefetching weights for the next <c>W = StreamingPrefetchWindow</c>
+    ///      layers asynchronously while the current layer's forward runs;
+    ///   2. Materializing the current layer's weights inside an
+    ///      <c>IDisposable</c> scope so they stay resident during forward;
+    ///   3. Releasing the scope after forward so the LRU pool can evict
+    ///      the layer's weights when memory pressure demands.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The prefetch window is fixed at W=2 per the locked v1 design — one
+    /// layer being computed, two layers' worth of weights paging in
+    /// behind it. Larger windows would amortize disk-read latency better
+    /// but require correspondingly larger pool capacity to avoid
+    /// thrashing.
+    /// </para>
+    /// <para>
+    /// Layers with zero trainable tensors (Activation, Dropout, Reshape,
+    /// Add, Concat, …) skip the materialize/release dance — there's no
+    /// weight tensor to page. They also DON'T consume prefetch budget:
+    /// the prefetch advance walks past weightless layers via
+    /// <see cref="FindNextWeightedLayerAfter"/> so a sequence of weightless
+    /// ops between two conv blocks doesn't shrink the effective
+    /// lookahead.
+    /// </para>
+    /// </remarks>
+    private const int StreamingPrefetchWindow = 2;
+
+    /// <summary>
+    /// Returns the index of the <paramref name="stepsAhead"/>th weighted
+    /// layer (one with at least one non-empty trainable tensor) at or
+    /// after <paramref name="fromIndex"/>. Returns <c>Layers.Count</c>
+    /// (i.e. past the end) when fewer than <paramref name="stepsAhead"/>
+    /// weighted layers remain. Used by the streaming forward loop's
+    /// prefetch advance to avoid spending lookahead budget on weightless
+    /// layers (review-comment #1271.rRxc).
+    /// </summary>
+    private int FindNextWeightedLayerAfter(int fromIndex, int stepsAhead)
+    {
+        if (stepsAhead <= 0) return fromIndex;
+        int weightedFound = 0;
+        for (int idx = fromIndex + 1; idx < Layers.Count; idx++)
+        {
+            if (LayerHasWeights(idx))
+            {
+                weightedFound++;
+                if (weightedFound == stepsAhead) return idx;
+            }
+        }
+        return Layers.Count;
+    }
+
+    /// <summary>
+    /// True iff the layer at <paramref name="layerIndex"/> exposes at
+    /// least one non-empty trainable tensor. Distinguishes weighted
+    /// layers (Dense, Convolutional, Embedding, MultiHeadAttention, ...)
+    /// from weightless ones (Activation, Dropout, Reshape, Add, Concat).
+    /// </summary>
+    private bool LayerHasWeights(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count) return false;
+        if (Layers[layerIndex] is not LayerBase<T> layer) return false;
+        foreach (var tensor in layer.GetTrainableParameters())
+        {
+            if (tensor is not null && tensor.Length > 0) return true;
+        }
+        return false;
+    }
+
+    private Tensor<T> PredictEagerStreaming(Tensor<T> input)
+    {
+        // Pre-flight: prefetch the first W *weighted* layers so the
+        // first weighted layer's weights are warm by the time we hit
+        // Forward. Walk weighted-only so a model that opens with a
+        // weightless head (e.g., Reshape → Conv → ...) doesn't burn
+        // prefetch budget on the no-op.
+        int primeStart = LayerHasWeights(0) ? 0 : FindNextWeightedLayerAfter(-1, 1);
+        int primed = 0;
+        for (int j = primeStart; j < Layers.Count && primed < StreamingPrefetchWindow; j++)
+        {
+            if (!LayerHasWeights(j)) continue;
+            PrefetchLayerWeights(j);
+            primed++;
+        }
+
         var current = input;
-        foreach (var layer in Layers)
-            current = layer.Forward(current);
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            // Slide the prefetch window forward: by the time we're
+            // computing layer i, the next W *weighted* layers ahead of
+            // us should be in the pool. Walk forward skipping weightless
+            // layers (Dropout, Activation, Reshape, Add, Concat) which
+            // have nothing to fetch — those don't consume the prefetch
+            // budget. Without this, a model with sparse weighted layers
+            // (e.g., a ConvBlock followed by 3 weightless ops, then
+            // another ConvBlock) would eat its prefetch lookahead on
+            // no-ops, leaving the next real conv unprefetched and
+            // forcing a cold disk read on the critical path. Closes
+            // review-comment #1271.rRxc.
+            int prefetchTarget = FindNextWeightedLayerAfter(i, StreamingPrefetchWindow);
+            if (prefetchTarget < Layers.Count)
+            {
+                PrefetchLayerWeights(prefetchTarget);
+            }
+
+            // Materialize this layer's weights for the duration of its
+            // forward. The scope's IDisposable release is what allows
+            // the LRU pool to evict if memory pressure builds.
+            using (BeginLayerMaterializeScope(i))
+            {
+                current = Layers[i].Forward(current);
+            }
+
+            // Post-Forward: lazy layers (Transformer's MultiHeadAttention,
+            // lazy ConvolutionalLayer, etc.) materialize their weight
+            // tensors on first Forward — before the call those tensors
+            // had Length == 0 and were silently skipped by
+            // RegisterTrainableTensorsWithWeightRegistry's
+            // `tensor.Length == 0` guard, after the call they're real
+            // parameter buffers that the streaming pool MUST be tracking
+            // or eviction / prefetch would never see them. Re-register
+            // this layer's tensors after its forward completes. The
+            // per-layer helper skips zero-length tensors (still-lazy
+            // weights stay skipped) and is idempotent on already-
+            // registered tensors (the registry's RegisterWeight upserts
+            // by tensor reference). Closes review-comment #1271.rT-V.
+            RegisterLayerTrainableTensorsWithWeightRegistry(i);
+        }
         return current;
+    }
+
+    /// <summary>
+    /// Registers a single layer's trainable tensors with the weight
+    /// registry. Per-layer counterpart to
+    /// <see cref="RegisterTrainableTensorsWithWeightRegistry"/> — used
+    /// during streaming forward to pick up tensors that materialized on
+    /// the layer's first Forward call (review-comment #1271.rT-V).
+    /// </summary>
+    private void RegisterLayerTrainableTensorsWithWeightRegistry(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count) return;
+        if (Layers[layerIndex] is not LayerBase<T> layer) return;
+        foreach (var tensor in layer.GetTrainableParameters())
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            // Already-registered tensors (StreamingPoolHandle >= 0)
+            // must be skipped: re-entering the streaming branch of
+            // RegisterWeight would call SerializeToBytes on a tensor
+            // whose storage was already dropped, throwing
+            // ArgumentOutOfRangeException from AsSpan(). Idempotency
+            // gate.
+            if (tensor.StreamingPoolHandle >= 0) continue;
+            tensor.Lifetime = _registrationLifetime;
+            WeightRegistry.RegisterWeight(tensor);
+        }
+    }
+
+    /// <summary>
+    /// Hook into <c>WeightRegistry.PrefetchAsyncMany</c> for the given
+    /// layer's trainable tensors. No-op for layers without weights
+    /// (Activation, Dropout, …) and for tensors that are already
+    /// resident in the pool — the registry's own short-circuit handles
+    /// the common case where streaming was enabled but the working set
+    /// is small enough to keep everything resident.
+    /// </summary>
+    /// <remarks>
+    /// Issued fire-and-forget — the returned Task isn't awaited because
+    /// the next layer's forward begins as soon as this one's weights
+    /// are materialized, and prefetching N+1's weights while computing
+    /// N is exactly the parallelism we want. If the prefetch hasn't
+    /// finished by the time layer N+1 needs its weights,
+    /// MaterializeScope will block briefly until it completes —
+    /// equivalent to a synchronous read but without serializing every
+    /// disk-read with every forward.
+    /// </remarks>
+    private void PrefetchLayerWeights(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count) return;
+        if (Layers[layerIndex] is not LayerBase<T> layer) return;
+        var tensors = layer.GetTrainableParameters();
+        if (tensors is null) return;
+        foreach (var tensor in tensors)
+        {
+            if (tensor is null || tensor.Length == 0) continue;
+            // PrefetchAsync is the per-tensor entry point and returns
+            // void (the registry's async-internally fire-and-forget
+            // contract — no Task to await from the caller). We loop
+            // over tensors rather than calling PrefetchAsyncMany so a
+            // future lazy-yield enumerator doesn't materialize the
+            // whole list just to prefetch it.
+            WeightRegistry.PrefetchAsync(tensor);
+        }
+    }
+
+    /// <summary>
+    /// Returns an <see cref="IDisposable"/> that pins the given layer's
+    /// trainable tensors as resident in the streaming pool for the scope's
+    /// lifetime. Disposing the scope releases the pin, allowing the LRU
+    /// pool to evict if other layers' weights need the slot.
+    /// </summary>
+    /// <remarks>
+    /// For weight-less layers this returns a no-op disposable so the
+    /// caller's <c>using</c> block doesn't need to special-case rank-0
+    /// trainable parameter sets.
+    /// </remarks>
+    private IDisposable BeginLayerMaterializeScope(int layerIndex)
+    {
+        if (Layers[layerIndex] is not LayerBase<T> layer) return NoOpDisposable.Instance;
+        var tensors = layer.GetTrainableParameters();
+        if (tensors is null || tensors.Count == 0) return NoOpDisposable.Instance;
+
+        // Fast path — common case after first forward: all trainable
+        // tensors are non-empty, so pass the layer's own
+        // IReadOnlyList<Tensor<T>> directly to MaterializeScope without
+        // copying into a fresh List<Tensor<T>>. This is the path a
+        // 100-layer model takes on every steady-state forward, and was
+        // previously allocating one List<Tensor<T>> per layer per call
+        // (review-comment #1271.rRxy). Probe once before deciding to
+        // copy — for the typical 2-4 trainable tensors per layer the
+        // probe is a few-element loop with branch-prediction-friendly
+        // early exit.
+        bool needsFilter = false;
+        int materializableCount = 0;
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            var t = tensors[i];
+            if (t is null || t.Length == 0)
+            {
+                needsFilter = true;
+            }
+            else
+            {
+                materializableCount++;
+            }
+        }
+        if (materializableCount == 0) return NoOpDisposable.Instance;
+        if (!needsFilter)
+        {
+            return new WeightRegistry.MaterializeScope<T>(tensors);
+        }
+
+        // Slow path — at least one tensor is empty (lazy placeholder
+        // pre-first-forward). Build a filtered list. This branch only
+        // triggers during the first-forward materialization phase; once
+        // weights are concrete the fast path takes over.
+        var live = new List<Tensor<T>>(materializableCount);
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            var t = tensors[i];
+            if (t is null || t.Length == 0) continue;
+            live.Add(t);
+        }
+        return new WeightRegistry.MaterializeScope<T>(live);
+    }
+
+    /// <summary>
+    /// Returned in place of a real materialize scope when there's nothing
+    /// to materialize (weight-less layer, or layer with only empty
+    /// placeholder tensors). Lets the caller's <c>using</c> block stay
+    /// uniform across both branches.
+    /// </summary>
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public static readonly NoOpDisposable Instance = new();
+        public void Dispose() { }
     }
 
     /// <summary>
@@ -3082,8 +3475,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         else
             WeightRegistry.Configure(options, allocator);
         _weightLifetimeConfigured = true;
+        // Pick the per-tensor lifetime to apply: GpuOffload when the user
+        // wired in a real GPU offload allocator, Streaming otherwise (the
+        // disk-backed pool path PaLM-E and other foundation-scale models
+        // need). Without this, RegisterTrainableTensorsWithWeightRegistry
+        // would call WeightRegistry.RegisterWeight on every layer's tensors
+        // — but those tensors keep their default Lifetime=Default, and
+        // RegisterWeight's switch early-returns for Default. Result before
+        // this fix: ConfigureWeightLifetime was completely inert for
+        // streaming, the pool tracked nothing, and PaLM-E OOMed exactly
+        // as if streaming were never configured. Setting the lifetime
+        // BEFORE the register loop is what makes the pool actually
+        // start tracking weights.
+        _registrationLifetime = allocator is null
+            ? WeightLifetime.Streaming
+            : WeightLifetime.GpuOffload;
         RegisterTrainableTensorsWithWeightRegistry();
     }
+
+    /// <summary>
+    /// Per-instance lifetime applied by
+    /// <see cref="RegisterTrainableTensorsWithWeightRegistry"/> to every
+    /// trainable tensor it walks. Set in <see cref="ConfigureWeightLifetime"/>
+    /// based on whether the user wired in a real GPU offload allocator
+    /// (→ GpuOffload) or just the disk-backed streaming path (→ Streaming).
+    /// Stays <see cref="WeightLifetime.Default"/> until explicitly set, so
+    /// pre-streaming-configuration register calls (rare; mostly defensive)
+    /// remain inert.
+    /// </summary>
+    private WeightLifetime _registrationLifetime = WeightLifetime.Default;
 
     /// <summary>
     /// True once <see cref="ConfigureWeightLifetime"/> has been called on this
@@ -3127,12 +3547,45 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected void RegisterTrainableTensorsWithWeightRegistry()
     {
+        // Propagate the streaming-allocator hint to every layer BEFORE
+        // we walk their tensors. When a lazy layer's OnFirstForward later
+        // calls AllocateLazyWeight, it'll route through
+        // WeightRegistry.AllocateStreaming so the pool pre-evicts
+        // competing weights to disk before the new GC byte[] lands.
+        // Without this propagation, layers default to plain
+        // `new Tensor<T>(shape)` and the peak-GC-heap reduction the
+        // streaming pool was built for never fires for lazy models like
+        // PaLM-E. _registrationLifetime is set to Streaming or GpuOffload;
+        // the GpuOffload path doesn't need pool pre-eviction (allocation
+        // goes to the pinned-host allocator, not the GC heap), so we
+        // only enable the streaming-allocator hint for Streaming.
+        bool useStreamingAlloc = _registrationLifetime == WeightLifetime.Streaming;
+
         for (int i = 0; i < Layers.Count; i++)
         {
             if (Layers[i] is not LayerBase<T> layer) continue;
+            layer.UseStreamingAllocator = useStreamingAlloc;
             foreach (var tensor in layer.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
+                // Already-registered tensors (StreamingPoolHandle >= 0
+                // from a prior RegisterWeight) MUST be skipped on the
+                // refresh pass: a re-register would re-enter the
+                // streaming branch, hit SerializeToBytes on a tensor
+                // whose storage was already dropped by the first
+                // register's DropStorageForStreaming, and throw
+                // ArgumentOutOfRangeException from AsSpan(). Idempotency
+                // gate.
+                if (tensor.StreamingPoolHandle >= 0) continue;
+                // CRITICAL: set Lifetime BEFORE RegisterWeight. The
+                // registry's switch early-returns for Lifetime=Default,
+                // so without this assignment every register call is a
+                // silent no-op and the streaming pool never tracks the
+                // tensor. _registrationLifetime is set in
+                // ConfigureWeightLifetime to Streaming (disk-backed) or
+                // GpuOffload (pinned-host) based on whether the user
+                // wired in a real GPU offload allocator.
+                tensor.Lifetime = _registrationLifetime;
                 WeightRegistry.RegisterWeight(tensor);
             }
         }
@@ -3147,9 +3600,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
+            extra.UseStreamingAllocator = useStreamingAlloc;
             foreach (var tensor in extra.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Length == 0) continue;
+                if (tensor.StreamingPoolHandle >= 0) continue;
+                tensor.Lifetime = _registrationLifetime;
                 WeightRegistry.RegisterWeight(tensor);
             }
         }
@@ -3162,8 +3618,355 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var tensor in GetExtraTrainableTensors())
         {
             if (tensor is null || tensor.Length == 0) continue;
+            // Skip tensors that already have a streaming-pool handle.
+            // RefreshWeightRegistry can fire after the model is already
+            // streaming (e.g. when Predict re-syncs its extra-tensor
+            // surface), and re-registering an already-streamed raw tensor
+            // tries to AsSpan() its dropped storage and throws — same
+            // failure mode the layer-backed branches already guard against.
+            if (tensor.StreamingPoolHandle >= 0) continue;
+            tensor.Lifetime = _registrationLifetime;
             WeightRegistry.RegisterWeight(tensor);
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Auto-detect default weight streaming (#1222 / #183)
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Default parameter-count threshold above which weight streaming is
+    /// auto-enabled. 10 billion parameters ≈ 40 GB at fp32 / 20 GB at fp16
+    /// — the point at which consumer GPUs (24 GB max) and most workstation
+    /// systems (32–64 GB RAM) start hitting memory pressure. Models below
+    /// this train eagerly with no streaming overhead. Override per-process
+    /// via the <c>AIDOTNET_STREAMING_THRESHOLD_PARAMS</c> environment
+    /// variable, or per-instance via <see cref="DisableAutoStreaming"/> /
+    /// the explicit <see cref="ConfigureWeightLifetime"/> call.
+    /// </summary>
+    private const long DefaultStreamingThresholdParams = 10_000_000_000L;
+
+    /// <summary>
+    /// Public-readable view of the auto-detect threshold for telemetry
+    /// callers (e.g. <c>AiModelBuilder.BuildWeightStreamingReport</c>).
+    /// Reflects the effective value (env-var override applied if present
+    /// at process start, else the compiled default 10B). Per-instance
+    /// overrides via <c>WeightStreamingConfig.ThresholdParameters</c> are
+    /// not visible here — callers that need the per-instance value
+    /// should consult the config they passed in.
+    /// </summary>
+    internal static long DefaultStreamingThresholdParamsForReport => s_streamingThresholdParams;
+
+    /// <summary>
+    /// Resolved threshold: env-var override if set + parseable, else the
+    /// compiled-in default. Read once at first use rather than per-call so
+    /// the env var is captured at process start (matching the conventions
+    /// of <c>DOTNET_*</c> / <c>ASPNETCORE_*</c> tunables).
+    /// </summary>
+    private static readonly long s_streamingThresholdParams = ResolveStreamingThreshold();
+
+    private static long ResolveStreamingThreshold()
+    {
+        var raw = Environment.GetEnvironmentVariable("AIDOTNET_STREAMING_THRESHOLD_PARAMS");
+        if (!string.IsNullOrWhiteSpace(raw)
+            && long.TryParse(raw.Trim(), System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out long parsed)
+            && parsed > 0)
+        {
+            return parsed;
+        }
+        return DefaultStreamingThresholdParams;
+    }
+
+    /// <summary>
+    /// True once auto-detect has FINALIZED on this instance. Distinct from
+    /// "attempted once" because lazy models legitimately need a second
+    /// look after the first forward materializes their placeholder weights
+    /// — the ctor's pre-forward attempt sees ParameterCount=0 (placeholders)
+    /// and would otherwise latch a "below threshold, never retry" state.
+    ///
+    /// Finalized when:
+    ///   * Auto-detect engaged (ConfigureWeightLifetime called → stream
+    ///     mode active for the model's lifetime).
+    ///   * Explicit ConfigureWeightLifetime by user code outside auto-detect.
+    ///   * User opted out via DisableAutoStreaming.
+    ///   * Post-first-forward retry ran AND model is still under threshold
+    ///     (so the parameter count is now reliable).
+    /// </summary>
+    private bool _streamingAutoDetectFinalized;
+
+    /// <summary>
+    /// Set to true ONLY when the auto-detect path itself called
+    /// <see cref="ConfigureWeightLifetime"/> (vs the user calling it
+    /// explicitly via <see cref="ConfigureWeightLifetime"/> or
+    /// <c>ConfigureWeightStreaming(Enabled: true)</c>). Drives the
+    /// <c>WeightStreamingReport.AutoDetected</c> telemetry field —
+    /// dashboards distinguishing "framework caught a too-big model" from
+    /// "user explicitly opted in" rely on this flag.
+    /// </summary>
+    private bool _streamingEngagedByAutoDetect;
+
+    /// <summary>
+    /// True after this network's first <see cref="Predict"/> or
+    /// <see cref="ForwardForTraining"/> call has completed. Used by the
+    /// auto-detect retry to know whether ParameterCount is reliable
+    /// (placeholders materialize during the first forward, so post-first-
+    /// forward the count reflects actual allocated weights).
+    /// </summary>
+    private bool _firstForwardCompleted;
+
+    /// <summary>
+    /// True when the user explicitly opted out of auto-streaming for this
+    /// instance via <see cref="DisableAutoStreaming"/> (e.g.
+    /// <c>PredictionModelBuilder.ConfigureWeightStreaming(disabled: true)</c>).
+    /// Honoured by <see cref="TryAutoEnableWeightStreaming"/>.
+    /// </summary>
+    private bool _streamingAutoDetectDisabled;
+
+    /// <summary>
+    /// Per-instance threshold override applied by
+    /// <see cref="ApplyAutoDetectThresholdOverride"/> when the user passes
+    /// <c>WeightStreamingConfig.ThresholdParameters</c>. Null falls back
+    /// to <see cref="s_streamingThresholdParams"/>.
+    /// </summary>
+    private long? _streamingThresholdOverride;
+
+    /// <summary>
+    /// Opts this model OUT of auto-streaming detection. Useful for tests
+    /// that need predictable in-memory behavior, or for callers who know
+    /// their working set fits in RAM regardless of total parameter count
+    /// (e.g. they only run inference on a fraction of the parameters).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// No effect once <see cref="ConfigureWeightLifetime"/> has been called
+    /// — that's a deliberate explicit opt-IN that takes precedence over
+    /// auto-detect either direction.
+    /// </para>
+    /// </remarks>
+    internal void DisableAutoStreaming() => _streamingAutoDetectDisabled = true;
+
+    /// <summary>
+    /// Sets a per-instance threshold for auto-detect. Used by
+    /// <c>AiModelBuilder.ConfigureWeightStreaming(config)</c> so a caller's
+    /// <c>WeightStreamingConfig.ThresholdParameters</c> actually drives the
+    /// per-instance auto-detect comparison.
+    /// </summary>
+    internal void ApplyAutoDetectThresholdOverride(long thresholdParams)
+    {
+        if (thresholdParams > 0) _streamingThresholdOverride = thresholdParams;
+    }
+
+    /// <summary>
+    /// Returns true iff streaming was engaged by auto-detect on THIS
+    /// instance (vs. the user explicitly forcing it on via
+    /// <see cref="ConfigureWeightLifetime"/> /
+    /// <c>ConfigureWeightStreaming(Enabled: true)</c>). Used by
+    /// <see cref="WeightStreamingReport.AutoDetected"/> so operator
+    /// dashboards can distinguish framework-engaged from user-requested
+    /// streaming.
+    /// </summary>
+    internal bool WeightStreamingAutoDetected => _streamingEngagedByAutoDetect;
+
+    /// <summary>
+    /// True when the model is currently in streaming mode for ANY reason
+    /// (auto-detect or explicit). Drives the public-facing "is streaming?"
+    /// query the report DTO surfaces as <c>StreamingEnabled</c>.
+    /// </summary>
+    internal bool IsWeightStreamingActive => _weightLifetimeConfigured;
+
+    /// <summary>
+    /// Live read of the streaming pool's resident-bytes counter. Used by
+    /// tests that need to verify the pool is actually tracking weights
+    /// (ResidentBytes > 0 after ConfigureWeightLifetime → register flow
+    /// engaged correctly; ResidentBytes == 0 → registration was a no-op,
+    /// likely because Lifetime wasn't set to Streaming pre-RegisterWeight).
+    /// Returns 0 when streaming isn't configured at all.
+    /// </summary>
+    internal long WeightStreamingResidentBytes
+    {
+        get
+        {
+            // Narrow the catch to the documented failure modes for the
+            // streaming-pool report: schema mismatches surface as
+            // InvalidOperationException, transient-state inconsistencies as
+            // InvalidOperationException, and a deliberately-disposed pool
+            // would surface as ObjectDisposedException. Any OTHER exception
+            // (NRE, OOM, real bugs) propagates so we don't hide it behind
+            // a 0-byte return that looks like "streaming inactive". The
+            // caller (a test or telemetry emitter) is best positioned to
+            // decide whether to skip / fail.
+            try
+            {
+                return WeightRegistry.GetStreamingReport().ResidentBytes;
+            }
+            catch (ObjectDisposedException) { return 0; }
+            catch (InvalidOperationException) { return 0; }
+        }
+    }
+
+    /// <summary>
+    /// Forces the process-wide WeightRegistry into a clean state — drops
+    /// all registered entries, disposes the streaming pool, clears any
+    /// offload allocator. ONLY for tests that need to exercise multiple
+    /// streaming-configured networks in the same test process: the
+    /// registry is a singleton and Configure() throws when there are
+    /// live entries from a prior test, so tests must reset between
+    /// configurations to avoid leaking state.
+    /// </summary>
+    /// <remarks>
+    /// Production code should never call this — resetting mid-flight
+    /// breaks every tensor whose StreamingPoolHandle was assigned from
+    /// the disposed pool. Even within tests, only call between
+    /// fully-finished test runs (after Predict / Train completes), not
+    /// mid-forward.
+    /// </remarks>
+    internal static void ResetWeightStreamingForTests()
+    {
+        // Don't swallow — WeightRegistry.Reset() mutates a process-wide
+        // singleton, and a silent failure leaves the next test running
+        // against contaminated state (live pool entries, leaked handles).
+        // The caller (test code) is best positioned to decide whether to
+        // skip / fail the test; we surface the original exception with a
+        // wrapping note so the failure points at the right place.
+        try
+        {
+            WeightRegistry.Reset();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "ResetWeightStreamingForTests: WeightRegistry.Reset() failed. " +
+                "The next test will run against a contaminated singleton — fix " +
+                "the underlying pool error rather than ignoring it.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Auto-enables weight streaming if this model's total parameter count
+    /// crosses the threshold AND the user hasn't already opted in or out
+    /// explicitly. Idempotent: subsequent calls are no-ops once the flag
+    /// is set. Both ctor (eager) and first-forward (lazy) call this so
+    /// models with non-lazy layers get streaming early, while models that
+    /// only know their parameter count after first forward (lazy
+    /// MultiHeadAttention / lazy Conv) catch up at that point.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Ctor invocation:</b> ParameterCount may report 0 for fully-lazy
+    /// models in the ctor (placeholders haven't materialized). That's not
+    /// a missed opportunity — it's the right behavior, because the threshold
+    /// is in absolute parameter count and a lazy model legitimately doesn't
+    /// know its size yet. The first-forward call rechecks once weights
+    /// have allocated.
+    /// </para>
+    /// <para>
+    /// <b>Process-wide side effect:</b> like
+    /// <see cref="ConfigureWeightLifetime"/>, this method ultimately calls
+    /// <see cref="WeightRegistry.Configure"/>, which mutates a process-wide
+    /// singleton. The first network in a process to cross the threshold
+    /// installs the offload configuration that every other network will
+    /// see. Multi-model processes that need different policies per model
+    /// must explicitly call <see cref="ConfigureWeightLifetime"/> with
+    /// matched options on each network.
+    /// </para>
+    /// <para>
+    /// Visible to <c>AiDotNet.Tests</c> via <c>InternalsVisibleTo</c> so
+    /// regression tests can assert on the auto-detect branch firing.
+    /// </para>
+    /// </remarks>
+    internal void TryAutoEnableWeightStreaming()
+    {
+        if (_streamingAutoDetectFinalized) return;
+        if (_weightLifetimeConfigured)
+        {
+            // User opted in explicitly via ConfigureWeightLifetime. Catch
+            // up the registry with any lazy weights that materialized
+            // since then — without this, layers whose OnFirstForward
+            // allocated via AllocateLazyWeight + AllocateStreaming would
+            // hold their reservations forever (RegisterWeight never
+            // runs on them, so the bytes stay on the GC heap and the
+            // pool's _reservedBytes drifts up). Idempotent: tensors
+            // already registered are skipped by the Length==0 / handle>=0
+            // gates inside RegisterTrainableTensorsWithWeightRegistry.
+            //
+            // Only finalize auto-detect AFTER first forward — otherwise
+            // the pre-forward call (from EnsureLayersInitialized) would
+            // latch the flag before lazy layers materialize, and the
+            // post-forward retry hook at line 2747 would early-return
+            // on `if (_streamingAutoDetectFinalized) return`, skipping
+            // the registry refresh that picks up the just-materialized
+            // weights. Tests
+            // Streaming_LazyLayer_RoutesAllocationThroughPool_OnFirstForward
+            // pin this flow; without the gate, ResidentBytes stays 0
+            // for explicitly-configured-streaming + lazy-layer flows.
+            if (_firstForwardCompleted)
+            {
+                RefreshWeightRegistry();
+                _streamingAutoDetectFinalized = true;
+            }
+            return;
+        }
+        if (_streamingAutoDetectDisabled) { _streamingAutoDetectFinalized = true; return; }
+
+        long paramCount;
+        try
+        {
+            paramCount = ParameterCount;
+        }
+        catch (Exception ex) when (
+            ex is InvalidOperationException ||
+            ex is OverflowException ||
+            ex is NullReferenceException)
+        {
+            // ParameterCount can throw on partially-constructed models in
+            // these specific ways:
+            //   - InvalidOperationException: subclass ctor failing before
+            //     InitializeLayers completes (most common).
+            //   - OverflowException: int sum wraps mid-property; the
+            //     caller can fix it but we shouldn't crash auto-detect.
+            //   - NullReferenceException: a sublayer field is still null
+            //     during partial construction.
+            // Other exceptions (real bugs, GPU faults, etc.) propagate so
+            // they aren't hidden behind a silent skip. Don't finalize
+            // either: we want to retry once the model is fully built.
+            // Surface to System.Diagnostics so telemetry pipelines can see
+            // that auto-detect bailed.
+            System.Diagnostics.Debug.WriteLine(
+                $"[NeuralNetworkBase] WeightStreaming auto-detect deferred — " +
+                $"ParameterCount threw {ex.GetType().Name}: {ex.Message}");
+            return;
+        }
+
+        long threshold = _streamingThresholdOverride ?? s_streamingThresholdParams;
+
+        if (paramCount < threshold)
+        {
+            // Below threshold. For lazy models (Transformer, etc.),
+            // ParameterCount may legitimately report 0 here because
+            // weights haven't materialized yet. We DON'T finalize on
+            // the pre-forward call — the post-first-forward retry will
+            // re-check with materialized weights. Once we've seen the
+            // first forward, the count is stable and we can safely
+            // latch off.
+            if (_firstForwardCompleted)
+            {
+                _streamingAutoDetectFinalized = true;
+            }
+            return;
+        }
+
+        // Above threshold: enable streaming with conservative defaults.
+        // The locked design (#1222 weight-streaming v1) calls for LZ4
+        // compression on the disk-backing store and a prefetch window of
+        // W=2 layers. Both live on GpuOffloadOptions; we use the
+        // parameterless ctor so any future field additions inherit the
+        // Tensors-side default rather than getting frozen at the value we
+        // pinned today.
+        var options = new GpuOffloadOptions();
+        ConfigureWeightLifetime(options);
+        _streamingEngagedByAutoDetect = true;
+        _streamingAutoDetectFinalized = true;
     }
 
     /// <summary>
@@ -5841,7 +6644,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             throw new ArgumentNullException(nameof(parameters));
         }
 
-        int totalParameterCount = (int)ParameterCount;
+        // ParameterCount is long; SetParameters takes a flat Vector<T> whose
+        // Length is int. Guard at this boundary: if the model's true
+        // parameter count exceeds int.MaxValue the caller can't even
+        // construct a Vector<T> big enough to feed in, so report which
+        // limit was hit clearly instead of silently truncating.
+        long totalParameterCountLong = ParameterCount;
+        if (totalParameterCountLong > int.MaxValue)
+        {
+            throw new InvalidOperationException(
+                $"Model parameter count ({totalParameterCountLong:N0}) exceeds " +
+                $"int32 capacity ({int.MaxValue:N0}); the flat-vector " +
+                $"SetParameters path cannot accept a model this large. Walk " +
+                $"Layers per-layer and call SetParameters on each, or split " +
+                $"this architecture across multiple network instances.");
+        }
+        int totalParameterCount = (int)totalParameterCountLong;
         if (parameters.Length != totalParameterCount)
         {
             throw new ArgumentException($"Expected {totalParameterCount} parameters, got {parameters.Length}");

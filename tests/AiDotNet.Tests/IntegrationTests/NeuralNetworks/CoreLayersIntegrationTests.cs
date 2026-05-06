@@ -113,10 +113,13 @@ public class CoreLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_Clone_CreatesIndependentCopy()
     {
-        // Arrange
+        // Arrange — lazy ctor takes only outputSize. Resolve from shape
+        // before Clone so the source layer's weights are materialized
+        // and Clone has something to copy.
         int inputSize = 16;
         int outputSize = 8;
         var original = new DenseLayer<float>(outputSize);
+        original.ResolveFromShape(new[] { inputSize });
         var input = Create2DInput(2, inputSize);
 
         // Act
@@ -135,10 +138,12 @@ public class CoreLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_SetAndGetWeights_WorksCorrectly()
     {
-        // Arrange
+        // Arrange — lazy ctor; resolve from input shape so weight tensors
+        // are allocated before SetParameter writes into them.
         int inputSize = 8;
         int outputSize = 4;
         var layer = new DenseLayer<float>(outputSize);
+        layer.ResolveFromShape(new[] { inputSize });
         var newWeights = CreateRandomTensor([inputSize, outputSize], 99);
 
         // Act - Use SetParameter from IWeightLoadable instead of protected SetWeights
@@ -156,10 +161,12 @@ public class CoreLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_ParameterCount_ReturnsCorrectValue()
     {
-        // Arrange
+        // Arrange — lazy ctor; resolve from input shape so weights
+        // are materialized before reading ParameterCount.
         int inputSize = 64;
         int outputSize = 32;
         var layer = new DenseLayer<float>(outputSize);
+        layer.ResolveFromShape(new[] { inputSize });
 
         // Act
         int paramCount = (int)layer.ParameterCount;
@@ -203,7 +210,9 @@ public class CoreLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_L2Regularization_ComputesAuxiliaryLoss()
     {
-        // Arrange
+        // Arrange — lazy ctor; resolve from input shape so weights are
+        // allocated before computing L2 over them. With 0×0 placeholder
+        // weights, the L2 sum would be 0 and the test would fail.
         int inputSize = 16;
         int outputSize = 8;
         var layer = new DenseLayer<float>(outputSize)
@@ -212,6 +221,7 @@ public class CoreLayersIntegrationTests
             Regularization = RegularizationType.L2,
             L2Strength = 0.01f
         };
+        layer.ResolveFromShape(new[] { inputSize });
 
         // Act
         var loss = layer.ComputeAuxiliaryLoss();
@@ -285,9 +295,10 @@ public class CoreLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConvolutionalLayer_Clone_CreatesIndependentCopy()
     {
-        // Arrange
-        // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
+        // Arrange — lazy ctor: (outputDepth, kernelSize, stride, padding).
+        // Resolve from input shape so weights materialize before Clone.
         var layer = new ConvolutionalLayer<float>(4, 3, 1, 1);
+        layer.ResolveFromShape(new[] { 1, 8, 8 });
         var input = Create4DInput(1, 1, 8, 8);
 
         // Act
@@ -306,12 +317,14 @@ public class CoreLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConvolutionalLayer_ParameterCount_ReturnsCorrectValue()
     {
-        // Arrange
-        // Constructor: (inputDepth, inputHeight, inputWidth, outputDepth, kernelSize, stride, padding)
+        // Arrange — lazy ctor (outputDepth, kernelSize, stride, padding).
+        // Resolve from input shape so kernels/biases materialize before
+        // ParameterCount read.
         int inputChannels = 3;
         int outputChannels = 16;
         int kernelSize = 3;
         var layer = new ConvolutionalLayer<float>(outputChannels, kernelSize, 1, 1);
+        layer.ResolveFromShape(new[] { inputChannels, 8, 8 });
 
         // Act
         int paramCount = (int)layer.ParameterCount;

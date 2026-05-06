@@ -1,4 +1,5 @@
-﻿using System;
+using AiDotNet.Helpers;
+using System;
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -336,7 +337,13 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         {
             if (_embeddingInitialized) return;
 
-            _embeddingTensor = new Tensor<T>([_vocabularySize, _embeddingDimension]);
+            // Streaming-aware allocation: PaLM-E-scale models have
+            // vocab × embed embedding matrices in the multi-GB range
+            // (e.g. 256K × 8192 fp32 = 8 GB). Routing through
+            // AllocateLazyWeight lets the streaming pool pre-evict
+            // before the GC byte[] lands. Falls back to plain
+            // new Tensor<T>(shape) for non-streaming models.
+            _embeddingTensor = AllocateLazyWeight([_vocabularySize, _embeddingDimension]);
             InitializeParameters();
             RegisterTrainableParameter(_embeddingTensor, PersistentTensorRole.Embeddings);
             _embeddingInitialized = true;
@@ -1144,7 +1151,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Both null: no backward has been run yet, return all-zero vector
         if (_embeddingGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         // Discrete embedding mode: return embedding gradients (+ projection if present)
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy

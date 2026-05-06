@@ -649,8 +649,59 @@ public class BidirectionalLayer<T> : LayerBase<T>
     /// An error is thrown if the input vector doesn't have the expected number of parameters.
     /// </para>
     /// </remarks>
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist the inner forward-layer's resolved input shape so
+        // Deserialize can cascade ResolveFromShape to both wrapped
+        // layers. The wrapper itself doesn't track its own input shape
+        // (no OnFirstForward override), so we read it from the inner
+        // layer that DOES track it (post-Forward).
+        var fwdInputShape = _forwardLayer.GetInputShape();
+        int rank = fwdInputShape?.Length ?? 0;
+        bool hasValid = rank > 0 && fwdInputShape != null
+            && System.Array.TrueForAll(fwdInputShape, d => d > 0);
+        writer.Write(hasValid);
+        if (hasValid)
+        {
+            writer.Write(rank);
+            for (int i = 0; i < rank; i++) writer.Write(fwdInputShape![i]);
+        }
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        bool hasValid = reader.ReadBoolean();
+        if (hasValid)
+        {
+            int rank = reader.ReadInt32();
+            var savedInput = new int[rank];
+            for (int i = 0; i < rank; i++) savedInput[i] = reader.ReadInt32();
+            // Cascade input shape directly to the wrapped layers.
+            // BidirectionalLayer doesn't override OnFirstForward, so its
+            // own ResolveFromShape is a no-op for inner-layer state; we
+            // must call inner ResolveFromShape explicitly.
+            if (!_forwardLayer.IsShapeResolved) _forwardLayer.ResolveFromShape(savedInput);
+            if (!_backwardLayer.IsShapeResolved) _backwardLayer.ResolveFromShape(savedInput);
+        }
+        base.Deserialize(reader);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if inner layers aren't shape-resolved, derive their
+        // input shape from this wrapper's resolved input shape.
+        if (parameters.Length > 0 && IsShapeResolved && !_forwardLayer.IsShapeResolved)
+        {
+            var wrapperInput = GetInputShape();
+            if (wrapperInput != null && wrapperInput.Length > 0
+                && System.Array.TrueForAll(wrapperInput, d => d > 0))
+            {
+                _forwardLayer.ResolveFromShape(wrapperInput);
+                _backwardLayer.ResolveFromShape(wrapperInput);
+            }
+        }
+
         var forwardParams = _forwardLayer.GetParameters();
         var backwardParams = _backwardLayer.GetParameters();
 

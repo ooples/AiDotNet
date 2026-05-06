@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -152,7 +153,7 @@ public class DoRAAdapter<T> : LoRAAdapterBase<T>
         DecomposeWeights();
 
         // Update parameters to include magnitude
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromComponents();
     }
 

@@ -1,4 +1,5 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -130,8 +131,11 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int baseCount = (int)base.ParameterCount; // Base layer + LoRA layer
-            int deltaCount = _deltaWeights.Rows * _deltaWeights.Columns;
+            // long throughout — base layer + LoRA layer + delta weights
+            // can sum past int.MaxValue on foundation-model scales.
+            // Closes #1271.7BnX.
+            long baseCount = base.ParameterCount;
+            long deltaCount = (long)_deltaWeights.Rows * _deltaWeights.Columns;
             return baseCount + deltaCount;
         }
     }
@@ -338,7 +342,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public override Vector<T> GetParameters()
     {
         Vector<T> baseParams = base.GetParameters(); // Base layer + LoRA layer
-        Vector<T> allParams = new Vector<T>((int)ParameterCount);
+        Vector<T> allParams = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         int idx = 0;
 
@@ -413,7 +417,7 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public override Vector<T> GetParameterGradients()
     {
         Vector<T> baseGrads = base.GetParameterGradients(); // Base layer + LoRA layer gradients
-        Vector<T> allGrads = new Vector<T>((int)ParameterCount);
+        Vector<T> allGrads = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         int idx = 0;
 

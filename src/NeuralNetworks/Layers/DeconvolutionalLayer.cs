@@ -378,8 +378,8 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         int outH = (h - 1) * Stride - 2 * Padding + KernelSize;
         int outW = (w - 1) * Stride - 2 * Padding + KernelSize;
 
-        _kernels = new Tensor<T>([c, OutputDepth, KernelSize, KernelSize]);
-        _biases = new Tensor<T>([OutputDepth]);
+        _kernels = AllocateLazyWeight([c, OutputDepth, KernelSize, KernelSize]);
+        _biases = AllocateLazyWeight([OutputDepth]);
         InitializeParameters();
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);

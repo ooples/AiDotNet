@@ -163,6 +163,51 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Lazy ctor: sublayers may be in placeholder shape state. Resolve them
+        // from known constants (hiddenDim) before slicing parameters. MHA
+        // requires rank>=2 (sequence + features), so we synthesize a length-1
+        // sequence shape; weight count depends only on hiddenDim regardless.
+        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape(new[] { _hiddenDim });
+        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape(new[] { _hiddenDim });
+        if (!_selfAttention.IsShapeResolved) _selfAttention.ResolveFromShape(new[] { 1, _hiddenDim });
+        if (!_moe.IsShapeResolved) _moe.ResolveFromShape(new[] { _hiddenDim });
+
+        // Use sub.ParameterCount (cheap O(1) integer) rather than
+        // sub.GetParameters().Length (which materializes a full flattened
+        // copy of every sublayer just to discover its width — that copy
+        // is multi-billion entries on the MoE branch in PaLM-E-scale runs
+        // and silently inflates peak memory during deserialize). The
+        // sublayer types here (LayerNormalization, MultiHeadAttention,
+        // MixtureOfExperts) all maintain the invariant
+        // ParameterCount == GetParameters().Length once IsShapeResolved is
+        // true, which the ResolveFromShape calls above guarantee.
+        int idx = 0;
+        void Set(ILayer<T> sub)
+        {
+            // Use the centralized ParameterCountHelper so a sublayer count
+            // above int.MaxValue surfaces with the actionable
+            // "split the architecture or use streaming" message used
+            // everywhere else in the codebase, rather than a generic
+            // OverflowException at the (int) cast.
+            int count = ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
+            if (count == 0) return;
+            sub.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_norm1);
+        Set(_selfAttention);
+        Set(_norm2);
+        Set(_moe);
+        if (idx != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"TimeMoEBlockLayer expected {idx} parameters across sublayers, got {parameters.Length}.");
+        }
+    }
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         var parts = new List<Vector<T>>

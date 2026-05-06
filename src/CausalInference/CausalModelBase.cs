@@ -589,7 +589,7 @@ public abstract class CausalModelBase<T> : ICausalModel<T>, IModelShape
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Causal models typically don't use standard gradient computation
-        return new Vector<T>((int)ParameterCount);
+        return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
     }
 
     /// <summary>

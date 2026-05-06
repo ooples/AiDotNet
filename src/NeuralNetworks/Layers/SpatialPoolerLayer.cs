@@ -271,7 +271,11 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         }
 
         InputSize = inputSize;
-        InitializeConnections();
+        // Only initialize Connections if they weren't already loaded via SetParameters
+        // (e.g., during deserialization). Otherwise we'd overwrite the loaded weights
+        // with fresh random values.
+        if (Connections.Shape.Length < 2 || Connections.Shape[0] == 0)
+            InitializeConnections();
         RegisterBuffer(Connections, nameof(Connections), PersistentTensorRole.Weights);
 
         ResolveShapes(new[] { inputSize }, new[] { ColumnCount });
@@ -681,7 +685,17 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != InputSize * ColumnCount)
+        // Lazy ctor: InputSize stays at -1 until first Forward resolves it
+        // from the input tensor. If still unresolved at Deserialize time,
+        // infer InputSize from the param vector (parameters.Length must
+        // be a positive multiple of ColumnCount).
+        if (InputSize <= 0 && ColumnCount > 0 && parameters.Length > 0
+            && parameters.Length % ColumnCount == 0)
+        {
+            InputSize = parameters.Length / ColumnCount;
+        }
+
+        if (InputSize <= 0 || parameters.Length != InputSize * ColumnCount)
         {
             throw new ArgumentException($"Expected {InputSize * ColumnCount} parameters, but got {parameters.Length}");
         }

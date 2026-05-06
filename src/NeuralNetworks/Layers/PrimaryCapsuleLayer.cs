@@ -434,8 +434,8 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
 
         int outputChannels = _capsuleChannels * _capsuleDimension;
         int inputSize = _inputChannels * _kernelSize * _kernelSize;
-        _convWeights = new Tensor<T>([outputChannels, inputSize]);
-        _convBias = new Tensor<T>([outputChannels]);
+        _convWeights = AllocateLazyWeight([outputChannels, inputSize]);
+        _convBias = AllocateLazyWeight([outputChannels]);
         InitializeParameters();
         _isInitialized = true;
     }
@@ -471,17 +471,21 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>
         int cols = _convWeights.Shape[1];
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
 
-        // Initialize weights with scaled random values using Engine operations
+        // Initialize weights with scaled random values using Engine
+        // operations. Critical: copy the result into the EXISTING
+        // lazy-allocated _convWeights tensor in place — replacing it
+        // would discard the AllocateLazyWeight registration that the
+        // ctor set up. Closes review-comment #1271.7Bo8.
         var randomTensor = Tensor<T>.CreateRandom(rows, cols);
         var halfTensor = new Tensor<T>([rows, cols]);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-        _convWeights = Engine.TensorMultiplyScalar(shifted, scale);
+        var scaled = Engine.TensorMultiplyScalar(shifted, scale);
+        scaled.AsSpan().CopyTo(_convWeights.AsWritableSpan());
 
-        // Initialize bias to zero using Fill
+        // Initialize bias to zero using Fill (already in place).
         _convBias.Fill(NumOps.Zero);
 
-        // Register after all reassignments so references are to final tensors
         RegisterTrainableParameter(_convWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_convBias, PersistentTensorRole.Biases);
     }

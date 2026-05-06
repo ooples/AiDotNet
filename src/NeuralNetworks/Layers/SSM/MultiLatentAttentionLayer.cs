@@ -443,7 +443,7 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -473,7 +473,7 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_compressWeightsGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_compressWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_compressWeightsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_compressBiasGradient?.ToArray() ?? Array.Empty<T>()),

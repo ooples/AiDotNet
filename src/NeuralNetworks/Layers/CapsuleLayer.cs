@@ -215,7 +215,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
         int inputCapsules = input.Shape[rank - 2];
         int inputDimension = input.Shape[rank - 1];
-        _transformationMatrix = new Tensor<T>([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
+        _transformationMatrix = AllocateLazyWeight([inputCapsules, inputDimension, _numCapsules, _capsuleDimension]);
         InitializeParameters();
         RegisterTrainableParameter(_transformationMatrix, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
@@ -814,6 +814,38 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             ? new Vector<T>(_biasGradient.ToArray())
             : new Vector<T>(_bias.Length);
         return Vector<T>.Concatenate(matGrad, biasGrad);
+    }
+
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist resolved input capsule structure so Deserialize can
+        // re-resolve the 4-D transformation matrix shape. The matrix
+        // layout [inputCapsules, inputDimension, _numCapsules, _capsuleDimension]
+        // can't be uniquely inferred from param count alone (multiple
+        // (inputCapsules, inputDimension) pairs satisfy any total).
+        var inputShape = GetInputShape();
+        bool hasShape = inputShape != null && inputShape.Length >= 2
+            && System.Array.TrueForAll(inputShape, d => d > 0);
+        writer.Write(hasShape);
+        if (hasShape)
+        {
+            writer.Write(inputShape!.Length);
+            for (int i = 0; i < inputShape.Length; i++) writer.Write(inputShape[i]);
+        }
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        bool hasShape = reader.ReadBoolean();
+        if (hasShape)
+        {
+            int rank = reader.ReadInt32();
+            var savedInput = new int[rank];
+            for (int i = 0; i < rank; i++) savedInput[i] = reader.ReadInt32();
+            if (!IsShapeResolved) ResolveFromShape(savedInput);
+        }
+        base.Deserialize(reader);
     }
 
     public override void SetParameters(Vector<T> parameters)

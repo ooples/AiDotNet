@@ -368,50 +368,60 @@ public class Phase2GateTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task DenseLayer_EagerInit_IsInitializedImmediately()
+    public async Task DenseLayer_EagerInit_IsInitializedAfterShapeResolution()
     {
+        // Lazy ctor takes only outputSize; the input dimension comes from
+        // first Forward (or ResolveFromShape). Eager init strategy controls
+        // *how* weights are filled with random values once allocated, not
+        // *whether* allocation happens at ctor time. After ResolveFromShape
+        // the layer should be fully initialized.
         var layer = new DenseLayer<float>(50,
             initializationStrategy: InitializationStrategies<float>.Eager);
+        layer.ResolveFromShape(new[] { 100 });
 
         Assert.True(layer.IsInitialized);
     }
 
     [Fact(Timeout = 60000)]
-    public async Task DenseLayer_DefaultInit_IsInitializedImmediately()
+    public async Task DenseLayer_DefaultInit_IsInitializedAfterShapeResolution()
     {
+        // Default init strategy + lazy ctor → weights materialize on
+        // ResolveFromShape (or first Forward), not at ctor time.
         var layer = new DenseLayer<float>(50);
+        layer.ResolveFromShape(new[] { 100 });
 
         Assert.True(layer.IsInitialized);
     }
 
     [Fact(Timeout = 60000)]
-    public async Task DenseLayer_LazyInit_ConstructsFaster()
+    public async Task DenseLayer_LazyInit_DefersAllocationUntilShapeResolution()
     {
-        const int inputSize = 1000;
+        // After the #1209/#1218 lazy-shape migration, BOTH `Eager` and
+        // `Lazy` strategies go through the same lazy ctor — both defer
+        // tensor allocation until shape resolution. The strategy now
+        // only controls weight-fill timing, not allocation timing. The
+        // original "lazy is faster than eager construction" assertion
+        // no longer holds because both ctors take the same fast path.
+        // What we CAN verify: neither strategy materializes weights at
+        // ctor time, and both materialize on ResolveFromShape.
         const int outputSize = 1000;
-        const int iterations = 100;
 
-        // Measure eager construction time
-        var swEager = Stopwatch.StartNew();
-        for (int i = 0; i < iterations; i++)
-        {
-            var layer = new DenseLayer<float>(outputSize,
-                initializationStrategy: InitializationStrategies<float>.Eager);
-        }
-        swEager.Stop();
+        var lazyLayer = new DenseLayer<float>(outputSize,
+            initializationStrategy: InitializationStrategies<float>.Lazy);
+        var eagerLayer = new DenseLayer<float>(outputSize,
+            initializationStrategy: InitializationStrategies<float>.Eager);
 
-        // Measure lazy construction time
-        var swLazy = Stopwatch.StartNew();
-        for (int i = 0; i < iterations; i++)
-        {
-            var layer = new DenseLayer<float>(outputSize,
-                initializationStrategy: InitializationStrategies<float>.Lazy);
-        }
-        swLazy.Stop();
+        // Pre-shape-resolution: neither layer reports initialized.
+        Assert.False(lazyLayer.IsInitialized,
+            "Lazy ctor must defer initialization until ResolveFromShape / first Forward.");
+        Assert.False(eagerLayer.IsInitialized,
+            "Lazy ctor + Eager strategy still defers initialization until shape is known.");
 
-        // Lazy should be significantly faster (at least 2x)
-        Assert.True(swLazy.ElapsedMilliseconds < swEager.ElapsedMilliseconds,
-            $"Lazy ({swLazy.ElapsedMilliseconds}ms) should be faster than Eager ({swEager.ElapsedMilliseconds}ms)");
+        // Post-shape-resolution: both layers initialize.
+        lazyLayer.ResolveFromShape(new[] { 1000 });
+        eagerLayer.ResolveFromShape(new[] { 1000 });
+        Assert.True(lazyLayer.IsInitialized);
+        Assert.True(eagerLayer.IsInitialized);
     }
 
     [Fact(Timeout = 60000)]
@@ -491,20 +501,25 @@ public class Phase2GateTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task ConvolutionalLayer_EagerInit_IsInitializedImmediately()
+    public async Task ConvolutionalLayer_EagerInit_IsInitializedAfterShapeResolution()
     {
+        // Lazy ctor — input depth/height/width come from first Forward
+        // (or ResolveFromShape). Eager init strategy controls *how*
+        // weights are filled, not *whether* allocation happens at ctor.
         var layer = new ConvolutionalLayer<float>(
             outputDepth: 16, kernelSize: 3,
             initializationStrategy: InitializationStrategies<float>.Eager);
+        layer.ResolveFromShape(new[] { 3, 32, 32 });
 
         Assert.True(layer.IsInitialized);
     }
 
     [Fact(Timeout = 60000)]
-    public async Task ConvolutionalLayer_DefaultInit_IsInitializedImmediately()
+    public async Task ConvolutionalLayer_DefaultInit_IsInitializedAfterShapeResolution()
     {
         var layer = new ConvolutionalLayer<float>(
             outputDepth: 16, kernelSize: 3);
+        layer.ResolveFromShape(new[] { 3, 32, 32 });
 
         Assert.True(layer.IsInitialized);
     }

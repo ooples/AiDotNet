@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -377,9 +378,9 @@ public partial class RBMLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "RBMLayer cannot initialize until OnFirstForward has resolved the visible-unit count from input shape.");
 
-        _weights = new Tensor<T>([_hiddenUnits, _visibleUnits]);
-        _visibleBiases = new Tensor<T>([_visibleUnits]);
-        _hiddenBiases = new Tensor<T>([_hiddenUnits]);
+        _weights = AllocateLazyWeight([_hiddenUnits, _visibleUnits]);
+        _visibleBiases = AllocateLazyWeight([_visibleUnits]);
+        _hiddenBiases = AllocateLazyWeight([_hiddenUnits]);
         InitializeParameters();
         _isInitialized = true;
     }
@@ -444,21 +445,28 @@ public partial class RBMLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Initialize biases to zero
+        // Initialize biases to zero (in-place — keeps lazy registration).
         _visibleBiases.Fill(NumOps.Zero);
         _hiddenBiases.Fill(NumOps.Zero);
 
         // Xavier/Glorot uniform initialization (Glorot & Bengio, 2010):
         // U(-a, a) where a = sqrt(6 / (fan_in + fan_out))
-        // This ensures Var(W) = 2 / (fan_in + fan_out) for uniform distributions,
-        // keeping sigmoid activations in the linear regime while preserving gradient flow.
+        // This ensures Var(W) = 2 / (fan_in + fan_out) for uniform
+        // distributions, keeping sigmoid activations in the linear
+        // regime while preserving gradient flow.
+        //
+        // Critical: copy the result into the EXISTING lazy-allocated
+        // _weights tensor in place rather than reassigning it —
+        // reassignment would discard the AllocateLazyWeight registration
+        // from the lazy ctor's EnsureInitialized path. Closes review-
+        // comment #1271.7BpA.
         double a = Math.Sqrt(6.0 / (_visibleUnits + _hiddenUnits));
         var randomTensor = Tensor<T>.CreateRandom(_hiddenUnits, _visibleUnits);
-        // Map [0,1] uniform to [-a, a]
         var scaledTensor = Engine.TensorMultiplyScalar(randomTensor, NumOps.FromDouble(2.0 * a));
         var shiftTensor = new Tensor<T>([_hiddenUnits, _visibleUnits]);
         shiftTensor.Fill(NumOps.FromDouble(a));
-        _weights = Engine.TensorSubtract(scaledTensor, shiftTensor);
+        var finalWeights = Engine.TensorSubtract(scaledTensor, shiftTensor);
+        finalWeights.AsSpan().CopyTo(_weights.AsWritableSpan());
 
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_visibleBiases, PersistentTensorRole.Biases);
@@ -1023,7 +1031,7 @@ public partial class RBMLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_weightsGradient == null || _visibleBiasesGradient == null || _hiddenBiasesGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_weightsGradient.ToArray()),
             new Vector<T>(_visibleBiasesGradient.ToArray()),

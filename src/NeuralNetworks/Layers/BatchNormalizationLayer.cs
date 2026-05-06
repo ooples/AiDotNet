@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -443,10 +444,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // Apply deferred ZeroInitGamma if requested before shape resolution.
         T gammaInit = _zeroInitGammaPending ? NumOps.Zero : NumOps.One;
         _zeroInitGammaPending = false;
-        _gamma = Tensor<T>.CreateDefault([numFeatures], gammaInit);
-        _beta = new Tensor<T>([numFeatures]);
-        _runningMean = new Tensor<T>([numFeatures]);
-        _runningVariance = Tensor<T>.CreateDefault([numFeatures], NumOps.One);
+        // Norm-layer params are channel-sized (small) — streaming-pool
+        // pre-eviction barely moves the needle here, but we route through
+        // AllocateLazyWeight for consistency with the rest of the
+        // streaming-aware layers and to keep the contract simple. Then
+        // fill gamma with the deferred init value (zero-init for
+        // post-residual BN, one-init otherwise) and runningVariance with 1.
+        _gamma = AllocateLazyWeight([numFeatures]);
+        _gamma.Fill(gammaInit);
+        _beta = AllocateLazyWeight([numFeatures]);
+        _runningMean = AllocateLazyWeight([numFeatures]);
+        _runningVariance = AllocateLazyWeight([numFeatures]);
+        _runningVariance.Fill(NumOps.One);
 
         RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
         RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
@@ -1002,7 +1011,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     public override Vector<T> GetParameterGradients()
     {
         if (_gammaGradient == null || _betaGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
     }
 

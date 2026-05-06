@@ -1,4 +1,5 @@
-﻿using AiDotNet.Extensions;
+using AiDotNet.Helpers;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -148,9 +149,10 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
                 return base.ParameterCount;
             }
 
-            // Only the layer scaling factor is unique to this layer
-            int tiedLoraParams = 1; // Single scaling factor
-            int baseParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
+            // long throughout — base layer can be > int.MaxValue on
+            // foundation models. Closes #1271.7Bnn.
+            long tiedLoraParams = 1L; // Single scaling factor
+            long baseParams = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
             return baseParams + tiedLoraParams;
         }
     }
@@ -255,7 +257,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
         _isInitialized = true;
 
         // Reallocate Parameters to the reduced size (just scaling factor + base if not frozen)
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         // Update parameter vector with the scaling factor
         UpdateParametersFromScaling();
@@ -629,7 +631,7 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromScaling()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer gradients if not frozen

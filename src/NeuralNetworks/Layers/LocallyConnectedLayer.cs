@@ -458,8 +458,8 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         _outputHeight = (h - _kernelSize) / _stride + 1;
         _outputWidth = (w - _kernelSize) / _stride + 1;
 
-        _weights = new Tensor<T>([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
-        _biases = new Tensor<T>([_outputChannels]);
+        _weights = AllocateLazyWeight([_outputHeight, _outputWidth, _outputChannels, _kernelSize, _kernelSize, _inputChannels]);
+        _biases = AllocateLazyWeight([_outputChannels]);
         InitializeParameters();
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
@@ -491,27 +491,28 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeParameters()
     {
-        // Xavier initialization for weights using vectorized operations
+        // Xavier initialization for weights using vectorized engine ops.
+        // Critical: copy the result into the EXISTING lazy-allocated
+        // _weights tensor in place — replacing the field reference would
+        // discard the AllocateLazyWeight registration that EnsureInitialized
+        // set up (engine persistent-tensor list + streaming-pool tracking).
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize * _inputChannels + _outputChannels)));
         T half = NumOps.FromDouble(0.5);
 
-        // Generate random values [0, 1) and transform to [-0.5, 0.5] * scale
         int totalElements = _weights.Length;
         var randomTensor = Tensor<T>.CreateRandom(totalElements, 1); // [0, 1]
 
-        // Create tensor filled with 0.5 for subtraction
         var halfTensor = new Tensor<T>([totalElements]);
         halfTensor.Fill(half);
 
-        // Transform to [-0.5, 0.5] * scale using Engine ops
+        // Transform to [-0.5, 0.5] * scale using Engine ops (vectorized).
         var centeredTensor = Engine.TensorSubtract(randomTensor.Reshape([totalElements]), halfTensor);
         var scaledTensor = Engine.TensorMultiplyScalar(centeredTensor, scale);
 
-        // Assign the scaled tensor to weights (preserving shape)
-        // Note: Array.Copy to _weights.ToArray() creates a temporary copy, not updating _weights
-        _weights = scaledTensor.Reshape(_weights._shape);
+        scaledTensor.AsSpan().CopyTo(_weights.Data.Span);
 
-        // Initialize biases to zero
+        // Initialize biases to zero (in-place — _biases.Fill writes
+        // directly into existing storage).
         _biases.Fill(NumOps.Zero);
     }
 
@@ -812,8 +813,17 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             throw new InvalidOperationException("UpdateParameters called before Backward. Gradients are null.");
         }
 
-        _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
-        _biases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
+        // Compute updated weights/biases via engine ops (vectorized /
+        // GPU-aware), then copy IN PLACE into the existing tensors so
+        // we preserve the AllocateLazyWeight registration. Replacing
+        // the field references with the engine output tensors would
+        // orphan the registered instances mid-training, leaking handles
+        // and breaking streaming bookkeeping every optimizer step.
+        var updatedWeights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightGradients, learningRate));
+        var updatedBiases = Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(_biasGradients, learningRate));
+
+        updatedWeights.AsSpan().CopyTo(_weights.Data.Span);
+        updatedBiases.AsSpan().CopyTo(_biases.Data.Span);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);
@@ -901,6 +911,31 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
         _biasGradients = null;
     }
 
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist resolved input shape so Deserialize can re-resolve before
+        // SetParameters lands. The 6-D weight tensor's shape can't be uniquely
+        // inferred from parameter count alone (outputH×outputW×outputC×k²×inputC
+        // + outputC has multiple solutions), so we serialize the input shape
+        // explicitly. base.Serialize then writes the parameter vector.
+        writer.Write(_inputHeight);
+        writer.Write(_inputWidth);
+        writer.Write(_inputChannels);
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        int inH = reader.ReadInt32();
+        int inW = reader.ReadInt32();
+        int inC = reader.ReadInt32();
+        if (!IsShapeResolved && inH > 0 && inW > 0 && inC > 0)
+        {
+            ResolveFromShape(new[] { inH, inW, inC });
+        }
+        base.Deserialize(reader);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int totalParams = _weights.Length + _biases.Length;
@@ -909,14 +944,14 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Split parameters into weights and biases using Vector.Slice
+        // Copy IN PLACE into existing tensor storage. Replacing the field
+        // refs via `Tensor<T>.FromVector` would leave the engine's persistent-
+        // tensor registry pointing at the old _weights/_biases objects
+        // (allocated via ResolveFromShape during Deserialize), so subsequent
+        // training/streaming would silently follow stale references.
         int weightsLength = _weights.Length;
-        var weightsVector = parameters.Slice(0, weightsLength);
-        var biasesVector = parameters.Slice(weightsLength, _biases.Length);
-
-        // Convert vectors to tensors and assign
-        _weights = Tensor<T>.FromVector(weightsVector, _weights._shape);
-        _biases = Tensor<T>.FromVector(biasesVector, _biases._shape);
+        parameters.AsSpan().Slice(0, weightsLength).CopyTo(_weights.Data.Span);
+        parameters.AsSpan().Slice(weightsLength, _biases.Length).CopyTo(_biases.Data.Span);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);

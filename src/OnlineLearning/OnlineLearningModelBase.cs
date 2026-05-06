@@ -416,9 +416,25 @@ public abstract class OnlineLearningModelBase<T> : IOnlineLearningModel<T>, IMod
     /// <summary>
     /// Computes gradients for the given input and target.
     /// </summary>
+    /// <remarks>
+    /// Derived online-learning models must override this method to return real
+    /// gradients. The default base implementation throws because silently
+    /// returning a zero vector would let callers (e.g., gradient-based
+    /// optimizers, gradient-norm metrics) proceed as if training were happening
+    /// while no real gradient signal flowed through. Online learners that
+    /// genuinely don't expose gradients (e.g., closed-form streaming SGD inside
+    /// PartialFit) should still override this with an explicit
+    /// <c>NotSupportedException</c> message describing the constraint, rather
+    /// than relying on the silent-zero default.
+    /// </remarks>
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        return new Vector<T>((int)ParameterCount);
+        throw new NotSupportedException(
+            $"{GetType().Name}.ComputeGradients was not overridden. Online-learning models " +
+            "must provide a real gradient implementation here — the base method previously " +
+            "returned a zero vector, which silently masks missing training behavior. If this " +
+            "model legitimately handles updates inside PartialFit and exposes no gradient API, " +
+            "override ComputeGradients to throw a more specific NotSupportedException.");
     }
 
     /// <summary>

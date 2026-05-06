@@ -321,9 +321,9 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 $"MemoryWriteLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
         int inputDimension = input.Shape[rank - 1];
-        _queryWeights = new Tensor<T>([inputDimension, _memoryDimension]);
-        _keyWeights = new Tensor<T>([inputDimension, _memoryDimension]);
-        _valueWeights = new Tensor<T>([inputDimension, _memoryDimension]);
+        _queryWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
+        _keyWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
+        _valueWeights = AllocateLazyWeight([inputDimension, _memoryDimension]);
         InitializeParameters();
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
@@ -964,7 +964,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null ||
             _outputWeightsGradient == null || _outputBiasGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_queryWeightsGradient.ToArray()),
             new Vector<T>(_keyWeightsGradient.ToArray()),

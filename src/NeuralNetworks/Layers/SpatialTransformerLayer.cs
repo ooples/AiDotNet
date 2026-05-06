@@ -469,7 +469,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _inputHeight = input.Shape[rank - 2];
         _inputWidth = input.Shape[rank - 1];
 
-        _localizationWeights1 = new Tensor<T>([_inputHeight * _inputWidth, 32]);
+        _localizationWeights1 = AllocateLazyWeight([_inputHeight * _inputWidth, 32]);
         InitializeParameters();
         RegisterTrainableParameter(_localizationWeights1, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_localizationBias1, PersistentTensorRole.Biases);
@@ -988,6 +988,29 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _localizationBias2Gradient = null;
     }
 
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist resolved input H/W so Deserialize can re-resolve. The
+        // 230-param fixed tail (W2/b2 = 32*6+6 = 198 + 32) leaves the
+        // remaining params for W1[H*W, 32] + b1[32] = 32*(H*W + 1).
+        // Inferring H*W from total alone is doable but fails when the
+        // test re-runs Forward at the actual H/W expected by Forward.
+        writer.Write(_inputHeight);
+        writer.Write(_inputWidth);
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        int inH = reader.ReadInt32();
+        int inW = reader.ReadInt32();
+        if (!IsShapeResolved && inH > 0 && inW > 0)
+        {
+            ResolveFromShape(new[] { inH, inW });
+        }
+        base.Deserialize(reader);
+    }
+
     public override void SetParameters(Vector<T> parameters)
     {
         int w1Size = _localizationWeights1.Shape[0] * _localizationWeights1.Shape[1];
@@ -1001,26 +1024,24 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
+        // Copy IN PLACE into the existing tensor storage so we preserve
+        // the engine's persistent-tensor registration. Replacing the field
+        // references with `Tensor<T>.FromVector(...)` would leave the
+        // registry pointing at the old tensors, causing stale GPU-cached
+        // weights and breaking streaming bookkeeping.
         int index = 0;
-
-        // Set localization weights1 using Tensor<T>.FromVector with slice
-        var w1Params = parameters.Slice(index, w1Size);
+        parameters.AsSpan().Slice(index, w1Size).CopyTo(_localizationWeights1.Data.Span);
         index += w1Size;
-        _localizationWeights1 = Tensor<T>.FromVector(w1Params).Reshape([_localizationWeights1.Shape[0], _localizationWeights1.Shape[1]]);
-
-        // Set localization bias1
-        var b1Params = parameters.Slice(index, b1Size);
+        parameters.AsSpan().Slice(index, b1Size).CopyTo(_localizationBias1.Data.Span);
         index += b1Size;
-        _localizationBias1 = Tensor<T>.FromVector(b1Params);
-
-        // Set localization weights2
-        var w2Params = parameters.Slice(index, w2Size);
+        parameters.AsSpan().Slice(index, w2Size).CopyTo(_localizationWeights2.Data.Span);
         index += w2Size;
-        _localizationWeights2 = Tensor<T>.FromVector(w2Params).Reshape([_localizationWeights2.Shape[0], _localizationWeights2.Shape[1]]);
+        parameters.AsSpan().Slice(index, b2Size).CopyTo(_localizationBias2.Data.Span);
 
-        // Set localization bias2
-        var b2Params = parameters.Slice(index, b2Size);
-        _localizationBias2 = Tensor<T>.FromVector(b2Params);
+        Engine.InvalidatePersistentTensor(_localizationWeights1);
+        Engine.InvalidatePersistentTensor(_localizationBias1);
+        Engine.InvalidatePersistentTensor(_localizationWeights2);
+        Engine.InvalidatePersistentTensor(_localizationBias2);
     }
 
     /// <summary>

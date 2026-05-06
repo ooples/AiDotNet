@@ -214,10 +214,14 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task FeedForwardLayer_ParameterCount_ReturnsCorrectValue()
     {
-        // Arrange
+        // Arrange — lazy ctor takes only outputSize; inputSize comes from
+        // first Forward (or ResolveFromShape). ParameterCount is naturally
+        // 0 before shape resolution, so we eagerly resolve from a known
+        // input shape before asserting the count.
         int inputSize = 64;
         int outputSize = 32;
         var layer = new FeedForwardLayer<float>(outputSize, (IActivationFunction<float>?)null);
+        layer.ResolveFromShape(new[] { inputSize });
 
         // Act
         int paramCount = (int)layer.ParameterCount;
@@ -1451,10 +1455,14 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_ParameterCount_IsCorrect()
     {
-        // Arrange
+        // Arrange — lazy ctor takes only outputSize; inputSize comes from
+        // first Forward (or ResolveFromShape). ParameterCount is naturally
+        // 0 before shape resolution, so we eagerly resolve from a known
+        // input shape before asserting the count.
         int inputSize = 64;
         int outputSize = 32;
         var layer = new DenseLayer<float>(outputSize, (IActivationFunction<float>?)null);
+        layer.ResolveFromShape(new[] { inputSize });
 
         // Act
         int paramCount = (int)layer.ParameterCount;
@@ -2076,13 +2084,17 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConvolutionalLayer_ParameterCount_IsPositive()
     {
-        // Arrange
+        // Arrange — lazy ctor takes only outputDepth + kernelSize; the
+        // input channel/height/width come from the first Forward (or
+        // ResolveFromShape). ParameterCount is naturally 0 before shape
+        // resolution, so we eagerly resolve from a known input shape.
         int inputDepth = 3;
         int inputHeight = 16;
         int inputWidth = 16;
         int outputDepth = 8;
         int kernelSize = 3;
         var layer = new ConvolutionalLayer<float>(outputDepth, kernelSize);
+        layer.ResolveFromShape(new[] { inputDepth, inputHeight, inputWidth });
 
         // Act
         int paramCount = (int)layer.ParameterCount;

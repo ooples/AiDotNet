@@ -153,7 +153,11 @@ public partial class HyenaLayer<T> : LayerBase<T>
     {
         get
         {
-            int count = 0;
+            // Accumulate in long: a high-order Hyena (order >= 2) over a
+            // long sequence has filter networks whose weight tensors
+            // individually approach int.MaxValue; summing in int can wrap
+            // before ToFlatVectorSize sees the value.
+            long count = 0;
 
             // Input projections: (order + 1) x (weights + bias)
             for (int i = 0; i <= _order; i++)
@@ -545,7 +549,7 @@ public partial class HyenaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -556,7 +560,7 @@ public partial class HyenaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameterGradients()
     {
-        var result = new Vector<T>((int)ParameterCount);
+        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
 
         // Input projections — same order as GetAllTensors()

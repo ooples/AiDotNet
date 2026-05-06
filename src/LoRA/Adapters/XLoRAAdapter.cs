@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -122,14 +123,17 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int expertParams = 0;
+            // long throughout — N experts × per-expert params can sum
+            // past int.MaxValue, especially for mixture-of-experts at
+            // foundation-model scales. Closes #1271.7Bnq.
+            long expertParams = 0L;
             for (int i = 0; i < _experts.Length; i++)
             {
-                expertParams += (int)(_experts[i].ParameterCount);
+                expertParams += _experts[i].ParameterCount;
             }
 
-            int gatingParams = checked((int)_gatingNetwork.ParameterCount);
-            int baseParams = _freezeBaseLayer ? (int)(0) : (int)_baseLayer.ParameterCount;
+            long gatingParams = _gatingNetwork.ParameterCount;
+            long baseParams = _freezeBaseLayer ? 0L : _baseLayer.ParameterCount;
 
             return baseParams + expertParams + gatingParams;
         }
@@ -211,7 +215,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
         _gatingNetwork = new DenseLayer<T>(numberOfExperts, (IVectorActivationFunction<T>)new SoftmaxActivation<T>());
 
         // Update parameter vector to include all experts and gating network
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromLayers();
     }
 
@@ -435,7 +439,7 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

@@ -1252,7 +1252,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllParameterTensors())
         {
@@ -1267,7 +1267,7 @@ public partial class RWKV7Block<T> : LayerBase<T>
     {
         var allParams = GetAllParameterTensors();
         var allGrads = GetAllGradientTensors();
-        var result = new Vector<T>((int)ParameterCount);
+        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
 
         for (int i = 0; i < allParams.Length; i++)

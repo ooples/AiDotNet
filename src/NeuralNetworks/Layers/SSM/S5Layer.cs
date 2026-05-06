@@ -161,7 +161,10 @@ public partial class S5Layer<T> : LayerBase<T>
     /// Gets the total number of trainable parameters.
     /// </summary>
     public override long ParameterCount =>
-        _aReal.Length + _aImag.Length +
+        // Cast the first term to long so the sum widens to 64-bit before any
+        // addend can wrap — twelve tensor lengths in 32-bit math will
+        // overflow on large state-space configs.
+        (long)_aReal.Length + _aImag.Length +
         _bReal.Length + _bImag.Length +
         _cReal.Length + _cImag.Length +
         _dParam.Length + _logDelta.Length +
@@ -988,7 +991,7 @@ public partial class S5Layer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -1019,7 +1022,7 @@ public partial class S5Layer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_aRealGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_aRealGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_aRealGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_aImagGradient?.ToArray() ?? Array.Empty<T>()),

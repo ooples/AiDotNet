@@ -1914,7 +1914,7 @@ public class Blip2NeuralNetwork<T> : NeuralNetworkBase<T>, IBlip2Model<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        int expectedCount = (int)ParameterCount;
+        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (gradients.Length != expectedCount)
         {
             throw new ArgumentException(

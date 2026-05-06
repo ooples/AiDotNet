@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
@@ -127,10 +128,14 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int ttParams = 0;
+            // Promote to long BEFORE the per-core multiplication so a
+            // sufficiently-large rank × shape doesn't wrap. The TT-core
+            // product can be arbitrarily large for big factorizations.
+            // Closes #1271.7Bnd.
+            long ttParams = 0L;
             for (int k = 0; k < _numCores; k++)
             {
-                ttParams += _ttRanks[k] * _coreShapes[k] * _ttRanks[k + 1];
+                ttParams += (long)_ttRanks[k] * _coreShapes[k] * _ttRanks[k + 1];
             }
 
             // Add base layer parameters if not frozen
@@ -215,7 +220,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
         InitializeTTCores();
 
         // Update parameter vector
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromCores();
     }
 
@@ -741,7 +746,7 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromCores()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

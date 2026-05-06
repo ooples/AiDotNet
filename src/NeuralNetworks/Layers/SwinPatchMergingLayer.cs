@@ -196,6 +196,13 @@ public class SwinPatchMergingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: sublayers may be in placeholder shape state. Resolve from
+        // known constants — _norm sees the concatenated 4×inputDim features and
+        // _reduction projects 4×inputDim → 2×inputDim.
+        int concatDim = _inputDim * 4;
+        if (!_norm.IsShapeResolved) _norm.ResolveFromShape(new[] { concatDim });
+        if (!_reduction.IsShapeResolved) _reduction.ResolveFromShape(new[] { concatDim });
+
         int normCount = checked((int)_norm.ParameterCount);
         int reductionCount = checked((int)_reduction.ParameterCount);
 

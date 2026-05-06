@@ -29,7 +29,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Transformer)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, Cost = ComputeCost.Medium, TestInputShape = "4, 8", TestConstructorArgs = "4, 8, 2")]
+[LayerProperty(IsTrainable = true, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "4, 8, 2")]
 public class MLPMixerBlockLayer<T> : LayerBase<T>
 {
     private readonly int _numPatches;
@@ -157,6 +157,51 @@ public class MLPMixerBlockLayer<T> : LayerBase<T>
             offset += p.Length;
         }
         return new Vector<T>(combined);
+    }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Lazy ctor: sublayers start with placeholder shapes. Resolve them
+        // from known constants (numPatches, hiddenDim, expansion factors).
+        int tempExpanded = _numPatches * _expansionFactor;
+        int chanExpanded = _hiddenDim * _expansionFactor;
+
+        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape(new[] { _hiddenDim });
+        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape(new[] { _hiddenDim });
+        if (!_temporalMlpExpand.IsShapeResolved) _temporalMlpExpand.ResolveFromShape(new[] { _numPatches });
+        if (!_temporalMlpContract.IsShapeResolved) _temporalMlpContract.ResolveFromShape(new[] { tempExpanded });
+        if (!_channelMlpExpand.IsShapeResolved) _channelMlpExpand.ResolveFromShape(new[] { _hiddenDim });
+        if (!_channelMlpContract.IsShapeResolved) _channelMlpContract.ResolveFromShape(new[] { chanExpanded });
+
+        // Composite SetParameters: route by sublayer ParameterCount (cheap
+        // O(1) integer) rather than GetParameters().Length, which would
+        // materialize a full flattened copy of every sublayer just to read
+        // its width — doubling load-time allocations on deep mixer stacks
+        // and eagerly materializing tensors that should stay on the lazy/
+        // streamable path. The sublayer types here (LayerNormalization,
+        // DenseLayer) maintain ParameterCount == GetParameters().Length
+        // once IsShapeResolved is true (the ResolveFromShape calls above
+        // guarantee that here).
+        int idx = 0;
+        void Set(ILayer<T> sub)
+        {
+            int count = checked((int)sub.ParameterCount);
+            if (count == 0) return;
+            sub.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_norm1);
+        Set(_temporalMlpExpand);
+        Set(_temporalMlpContract);
+        Set(_norm2);
+        Set(_channelMlpExpand);
+        Set(_channelMlpContract);
+        if (idx != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"MLPMixerBlockLayer expected {idx} parameters across sublayers, got {parameters.Length}.");
+        }
     }
 
     /// <inheritdoc/>

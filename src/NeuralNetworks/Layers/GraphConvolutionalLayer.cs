@@ -1208,7 +1208,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         if (_weightsGradient == null || _biasGradient == null)
         {
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
 
         return Vector<T>.Concatenate(

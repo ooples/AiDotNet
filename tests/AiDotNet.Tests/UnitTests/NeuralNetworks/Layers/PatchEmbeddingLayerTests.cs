@@ -24,21 +24,24 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         }
 
         [Fact(Timeout = 120000)]
-        public async Task Constructor_WithNonDivisibleHeight_ThrowsArgumentException()
+        public async Task ResolveFromShape_WithNonDivisibleHeight_ThrowsArgumentException()
         {
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new PatchEmbeddingLayer<double>(
-                patchSize: 8,
-                embeddingDim: 64));
+            // Lazy ctor only takes patchSize + embeddingDim — image
+            // dimensions come at OnFirstForward / ResolveFromShape, so the
+            // divisibility check moves to that boundary.
+            var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
+            // [channels, height=33 (not divisible by 8), width=32]
+            Assert.Throws<ArgumentException>(() =>
+                layer.ResolveFromShape(new[] { 3, 33, 32 }));
         }
 
         [Fact(Timeout = 120000)]
-        public async Task Constructor_WithNonDivisibleWidth_ThrowsArgumentException()
+        public async Task ResolveFromShape_WithNonDivisibleWidth_ThrowsArgumentException()
         {
-            // Act & Assert
-            Assert.Throws<ArgumentException>(() => new PatchEmbeddingLayer<double>(
-                patchSize: 8,
-                embeddingDim: 64));
+            var layer = new PatchEmbeddingLayer<double>(patchSize: 8, embeddingDim: 64);
+            // [channels, height=32, width=33 (not divisible by 8)]
+            Assert.Throws<ArgumentException>(() =>
+                layer.ResolveFromShape(new[] { 3, 32, 33 }));
         }
 
         [Fact(Timeout = 120000)]
@@ -89,10 +92,12 @@ namespace AiDotNetTests.UnitTests.NeuralNetworks.Layers
         [Fact(Timeout = 120000)]
         public async Task GetParameters_ReturnsAllParameters()
         {
-            // Arrange
+            // Arrange — lazy ctor; resolve with channels=3 + a divisible
+            // image so weights materialize before reading parameters.
             var layer = new PatchEmbeddingLayer<double>(
                 patchSize: 4,
                 embeddingDim: 32);
+            layer.ResolveFromShape(new[] { 3, 8, 8 });
 
             // Act
             var parameters = layer.GetParameters();

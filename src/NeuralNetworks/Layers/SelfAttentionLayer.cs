@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -1130,7 +1131,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     public override Vector<T> GetParameterGradients()
     {
         if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_queryWeightsGradient.ToArray()),
             new Vector<T>(_keyWeightsGradient.ToArray()),
@@ -1421,10 +1422,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         {
             if (_isInitialized) return;
 
-            _queryWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
-            _keyWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
-            _valueWeights = new Tensor<T>([_embeddingDimension, _embeddingDimension]);
-            _outputBias = new Tensor<T>([_embeddingDimension]);
+            _queryWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _keyWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _valueWeights = AllocateLazyWeight([_embeddingDimension, _embeddingDimension]);
+            _outputBias = AllocateLazyWeight([_embeddingDimension]);
 
             if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
             {

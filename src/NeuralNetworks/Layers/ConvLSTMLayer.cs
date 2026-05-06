@@ -1577,7 +1577,7 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_gradients == null || _gradients.Count == 0)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         T[] GetGrad(string key, int length)
         {
