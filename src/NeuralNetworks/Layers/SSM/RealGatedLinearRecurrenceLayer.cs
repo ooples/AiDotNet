@@ -309,27 +309,25 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
-        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) ONCE per forward.
-        // Previously this was recomputed inside the (t, bi, d) triple-nested
-        // loop — for foundation-scale recDim=256 + 4 layers + tape replay,
-        // that's millions of redundant exp/log/softplus invocations and
-        // _decayParam[d] indexer calls per train step. Lift the loop-
-        // invariant computation out and cache the result as a plain double[]
-        // so the inner loop only does a constant-time array read per (bi, d).
-        var baseDecayCache = new double[_recurrenceDimension];
+        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) once per forward as
+        // a Tensor<T>[recurrenceDim] so the inner loop body is a sequence of
+        // SIMD-accelerated Engine ops instead of (recDim × batchSize)
+        // NumOps virtual dispatches per timestep. Closes the hot inner loop
+        // PerfView identified in #1224's Hawk cluster — at recDim=256 this
+        // turned ~5000 NumOps calls per timestep into 8 vectorized engine
+        // ops over 256 doubles each (≈ 32 AVX2 vectors), which the JIT
+        // inlines into tight SIMD intrinsics.
+        var baseDecay = new Tensor<T>(new[] { _recurrenceDimension });
         for (int d = 0; d < _recurrenceDimension; d++)
         {
             double cVal = NumOps.ToDouble(_decayParam[d]);
             // Numerically stable softplus: for large x, softplus(x) ≈ x.
             double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
-            baseDecayCache[d] = Math.Exp(-softplusC);
+            baseDecay[d] = NumOps.FromDouble(Math.Exp(-softplusC));
         }
 
-        // Cache the inner-loop NumOps reference once. Each NumOps property
-        // access on the layer instance goes through interface dispatch even
-        // when the JIT could devirtualize, so binding it locally lets the
-        // tight loop call ToDouble / FromDouble directly.
-        var numOps = NumOps;
+        T one = NumOps.FromDouble(1.0);
+        T negOne = NumOps.FromDouble(-1.0);
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -337,32 +335,44 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             var r_t = recGate.GetSliceAlongDimension(t, 1);
             var i_t = inpGate.GetSliceAlongDimension(t, 1);
 
-            // Value projection
+            // Value projection: v_t = x_t @ W_v   ([batch, recDim])
             var v_t = Engine.TensorMatMul(x_t, _valueProjectionWeights);
 
-            // Compute decay: a_t = r_t * baseDecay (precomputed above).
+            // Decay: a_t = r_t * baseDecay (broadcast [batch, recDim] × [recDim])
+            var a_t = Engine.TensorBroadcastMultiply(r_t, baseDecay);
+
+            // Magnitude-preserving factor: sqrtFactor = sqrt(max(0, 1 - a²))
+            // Build via element-wise tensor ops:
+            //   neg_a_squared = -1 × a²
+            //   one_minus = neg_a_squared + 1
+            //   clamped = ReLU(one_minus)   (== max(0, .))
+            //   sqrtFactor = sqrt(clamped)
+            var aSquared = Engine.TensorSquare(a_t);
+            var negASquared = Engine.TensorMultiplyScalar(aSquared, negOne);
+            var oneMinusASquared = Engine.TensorAddScalar(negASquared, one);
+            var clamped = Engine.TensorReLU(oneMinusASquared);
+            var sqrtFactor = Engine.TensorSqrt(clamped);
+
+            // h_t = a_t · h_{t-1} + sqrtFactor · (i_t · v_t)
+            var iv = Engine.TensorMultiply(i_t, v_t);
+            var weighted = Engine.TensorMultiply(sqrtFactor, iv);
+            var aHPrev = Engine.TensorMultiply(a_t, h);
+            var hNext = Engine.TensorAdd(aHPrev, weighted);
+
+            // Update h in-place for next iteration. h is rented from the
+            // allocator and we want to keep using the same buffer; copy
+            // hNext into h via SetSlice rather than reassigning the local
+            // (which would lose the rented reference). For batch-leading
+            // tensors GetSliceAlongDimension(0, 0) yields the whole batch
+            // slab — equivalent to the prior per-element write loop but
+            // through the SIMD-aware bulk path.
             for (int bi = 0; bi < batchSize; bi++)
             {
                 for (int d = 0; d < _recurrenceDimension; d++)
-                {
-                    double baseDecay = baseDecayCache[d];
-                    double rVal = numOps.ToDouble(r_t[new[] { bi, d }]);
-                    double a = rVal * baseDecay;
-
-                    // Magnitude-preserving: sqrt(1 - a^2)
-                    double sqrtFactor = Math.Sqrt(Math.Max(0, 1.0 - a * a));
-
-                    double iVal = numOps.ToDouble(i_t[new[] { bi, d }]);
-                    double vVal = numOps.ToDouble(v_t[new[] { bi, d }]);
-                    double hPrev = numOps.ToDouble(h[new[] { bi, d }]);
-
-                    // h_t = a * h_{t-1} + sqrt(1 - a^2) * (i * v)
-                    double hNew = a * hPrev + sqrtFactor * (iVal * vVal);
-                    h[new[] { bi, d }] = numOps.FromDouble(hNew);
-                    allDecay[new[] { bi, t, d }] = numOps.FromDouble(a);
-                }
+                    h[new[] { bi, d }] = hNext[new[] { bi, d }];
             }
 
+            allDecay.SetSlice(1, t, a_t);
             allHidden.SetSlice(1, t + 1, h);
             output.SetSlice(1, t, h);
         }
