@@ -408,7 +408,12 @@ _playground_test/
 .playwright-mcp/
 
 # Local profiler artifacts (PerfView captures, dotnet-trace nettrace +
-# speedscope JSON). These are session-specific and only useful on the
-# machine that captured them.
-/traces/
+# speedscope JSON, ClipPerfHarness build outputs). These are session-
+# specific and only useful on the machine that captured them. Use
+# unanchored `traces/` so trace artifacts dropped in any subdirectory
+# (not just the repo root) are also excluded — `dotnet-trace collect`
+# can write into the working dir of the dotnet host process, which may
+# be a tools/<harness>/ subfolder when the harness is invoked from
+# there.
+traces/
 /tools/PerfView/
