@@ -950,6 +950,23 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// </summary>
     protected virtual int MemorizationTaskIterations => 100;
 
+    /// <summary>
+    /// Multiplicative threshold applied to the baseline loss in
+    /// <see cref="LossStrictlyDecreasesOnMemorizationTask"/>:
+    /// the assertion is <c>lossFinal &lt; lossStep1 * threshold</c>.
+    /// Default 0.99 (i.e. ≥ 1 % decrease) is calibrated for the default
+    /// 100-step run on small / mid-scale networks where the optimizer has
+    /// plenty of room to drive the loss down. Paper-scale models running
+    /// only a few memorization steps at the conservative paper learning
+    /// rate (CLIP-family AdamW lr=5e-4) won't shed 1 % per step but still
+    /// must show monotonic decrease — they override this to a value
+    /// closer to 1.0 so the invariant catches the same bug class
+    /// (gradient sign error, oscillation, first-step explosion → loss
+    /// flat or rising) without false-failing on legitimately small
+    /// per-step decreases.
+    /// </summary>
+    protected virtual double MemorizationTaskLossThreshold => 0.99;
+
     [Fact(Timeout = 180000)]
     public async Task LossStrictlyDecreasesOnMemorizationTask()
     {
@@ -974,11 +991,13 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         Assert.False(double.IsNaN(lossFinal) || double.IsInfinity(lossFinal),
             $"Loss after step {MemorizationTaskIterations} is non-finite: {lossFinal}");
 
-        // Strict decrease by at least 1% over the follow-on steps. A
-        // working training pipeline cuts loss by far more than 1% on a
-        // memorization task; a broken pipeline (oscillation, sign flip,
-        // post-explosion drift) leaves loss flat or rising.
-        Assert.True(lossFinal < lossStep1 * 0.99,
+        // Strict decrease by the configured threshold (default 1 % over
+        // the follow-on steps; relaxed for paper-scale models that take
+        // only a few steps at conservative paper learning rates). A
+        // working training pipeline drives the loss down monotonically
+        // on a memorization task; a broken pipeline (oscillation, sign
+        // flip, post-explosion drift) leaves loss flat or rising.
+        Assert.True(lossFinal < lossStep1 * MemorizationTaskLossThreshold,
             $"Loss did NOT strictly decrease on memorization task: step 1={lossStep1:F6}, "
             + $"step {MemorizationTaskIterations}={lossFinal:F6}. "
             + "Diagnostic: optimizer is oscillating, gradient sign is wrong, or first-step blew the model "
