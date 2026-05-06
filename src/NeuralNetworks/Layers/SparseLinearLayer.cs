@@ -463,6 +463,49 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         return new Vector<T>(paramArray);
     }
 
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist sparsity pattern (CSR row/col indices) so Deserialize
+        // can restore values into the SAME positions. Without this, a
+        // fresh layer's randomly-generated sparsity pattern places the
+        // saved values at different positions than the original, and
+        // Forward outputs diverge.
+        writer.Write(_weights.NonZeroCount);
+        var rows = _weights.RowIndices;
+        var cols = _weights.ColumnIndices;
+        for (int i = 0; i < _weights.NonZeroCount; i++)
+        {
+            writer.Write(rows[i]);
+            writer.Write(cols[i]);
+        }
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        int nnz = reader.ReadInt32();
+        var rows = _weights.RowIndices;
+        var cols = _weights.ColumnIndices;
+        // Number of non-zeros must match between save+load — _weights
+        // was constructed with same sparsity ratio, so nnz should align.
+        // If it doesn't, we can't restore positions correctly.
+        if (nnz == _weights.NonZeroCount)
+        {
+            for (int i = 0; i < nnz; i++)
+            {
+                rows[i] = reader.ReadInt32();
+                cols[i] = reader.ReadInt32();
+            }
+        }
+        else
+        {
+            // Skip the saved indices to keep stream position consistent
+            // for base.Deserialize, but don't apply them.
+            for (int i = 0; i < nnz; i++) { reader.ReadInt32(); reader.ReadInt32(); }
+        }
+        base.Deserialize(reader);
+    }
+
     /// <summary>
     /// Sets all trainable parameters from a single vector.
     /// </summary>

@@ -681,7 +681,17 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        if (parameters.Length != InputSize * ColumnCount)
+        // Lazy ctor: InputSize stays at -1 until first Forward resolves it
+        // from the input tensor. If still unresolved at Deserialize time,
+        // infer InputSize from the param vector (parameters.Length must
+        // be a positive multiple of ColumnCount).
+        if (InputSize <= 0 && ColumnCount > 0 && parameters.Length > 0
+            && parameters.Length % ColumnCount == 0)
+        {
+            InputSize = parameters.Length / ColumnCount;
+        }
+
+        if (InputSize <= 0 || parameters.Length != InputSize * ColumnCount)
         {
             throw new ArgumentException($"Expected {InputSize * ColumnCount} parameters, but got {parameters.Length}");
         }

@@ -163,6 +163,33 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Layer-base SetParameters checks parameters.Length == ParameterCount,
+        // but composite ParameterCount sums sublayer counts which can drift
+        // from GetParameters().Length when sublayers (e.g., MoE router) hold
+        // params not counted by ParameterCount. Route by sublayer GetParameters
+        // counts to match the GetParameters layout 1:1.
+        int idx = 0;
+        void Set(ILayer<T> sub)
+        {
+            int count = sub.GetParameters().Length;
+            if (count == 0) return;
+            sub.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_norm1);
+        Set(_selfAttention);
+        Set(_norm2);
+        Set(_moe);
+        if (idx != parameters.Length)
+        {
+            throw new ArgumentException(
+                $"TimeMoEBlockLayer expected {idx} parameters across sublayers, got {parameters.Length}.");
+        }
+    }
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         var parts = new List<Vector<T>>
