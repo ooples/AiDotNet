@@ -161,7 +161,10 @@ public partial class S5Layer<T> : LayerBase<T>
     /// Gets the total number of trainable parameters.
     /// </summary>
     public override long ParameterCount =>
-        _aReal.Length + _aImag.Length +
+        // Cast the first term to long so the sum widens to 64-bit before any
+        // addend can wrap — twelve tensor lengths in 32-bit math will
+        // overflow on large state-space configs.
+        (long)_aReal.Length + _aImag.Length +
         _bReal.Length + _bImag.Length +
         _cReal.Length + _cImag.Length +
         _dParam.Length + _logDelta.Length +

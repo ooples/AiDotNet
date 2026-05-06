@@ -3618,6 +3618,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         foreach (var tensor in GetExtraTrainableTensors())
         {
             if (tensor is null || tensor.Length == 0) continue;
+            // Skip tensors that already have a streaming-pool handle.
+            // RefreshWeightRegistry can fire after the model is already
+            // streaming (e.g. when Predict re-syncs its extra-tensor
+            // surface), and re-registering an already-streamed raw tensor
+            // tries to AsSpan() its dropped storage and throws — same
+            // failure mode the layer-backed branches already guard against.
+            if (tensor.StreamingPoolHandle >= 0) continue;
             tensor.Lifetime = _registrationLifetime;
             WeightRegistry.RegisterWeight(tensor);
         }
@@ -3803,8 +3810,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     internal static void ResetWeightStreamingForTests()
     {
-        try { WeightRegistry.Reset(); }
-        catch { /* best-effort; nothing else we can do here */ }
+        // Don't swallow — WeightRegistry.Reset() mutates a process-wide
+        // singleton, and a silent failure leaves the next test running
+        // against contaminated state (live pool entries, leaked handles).
+        // The caller (test code) is best positioned to decide whether to
+        // skip / fail the test; we surface the original exception with a
+        // wrapping note so the failure points at the right place.
+        try
+        {
+            WeightRegistry.Reset();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                "ResetWeightStreamingForTests: WeightRegistry.Reset() failed. " +
+                "The next test will run against a contaminated singleton — fix " +
+                "the underlying pool error rather than ignoring it.", ex);
+        }
     }
 
     /// <summary>

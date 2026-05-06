@@ -174,15 +174,19 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
         if (!_selfAttention.IsShapeResolved) _selfAttention.ResolveFromShape(new[] { 1, _hiddenDim });
         if (!_moe.IsShapeResolved) _moe.ResolveFromShape(new[] { _hiddenDim });
 
-        // Layer-base SetParameters checks parameters.Length == ParameterCount,
-        // but composite ParameterCount sums sublayer counts which can drift
-        // from GetParameters().Length when sublayers (e.g., MoE router) hold
-        // params not counted by ParameterCount. Route by sublayer GetParameters
-        // counts to match the GetParameters layout 1:1.
+        // Use sub.ParameterCount (cheap O(1) integer) rather than
+        // sub.GetParameters().Length (which materializes a full flattened
+        // copy of every sublayer just to discover its width — that copy
+        // is multi-billion entries on the MoE branch in PaLM-E-scale runs
+        // and silently inflates peak memory during deserialize). The
+        // sublayer types here (LayerNormalization, MultiHeadAttention,
+        // MixtureOfExperts) all maintain the invariant
+        // ParameterCount == GetParameters().Length once IsShapeResolved is
+        // true, which the ResolveFromShape calls above guarantee.
         int idx = 0;
         void Set(ILayer<T> sub)
         {
-            int count = sub.GetParameters().Length;
+            int count = checked((int)sub.ParameterCount);
             if (count == 0) return;
             sub.SetParameters(parameters.Slice(idx, count));
             idx += count;

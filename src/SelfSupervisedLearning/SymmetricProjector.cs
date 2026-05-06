@@ -162,7 +162,30 @@ public class SymmetricProjector<T> : IProjectorHead<T>
     public int? HiddenDimension => _hiddenDim;
 
     /// <inheritdoc />
-    public long ParameterCount => ComputeParameterCount();
+    public long ParameterCount => ComputeParameterCountLong();
+
+    private long ComputeParameterCountLong()
+    {
+        // Compute in long to avoid wrap on large hidden / projection dims —
+        // SimCLR-style projectors with 4096-d hidden over 1024-d input land
+        // around 4M params per linear, well inside int range, but 8B-token
+        // self-supervised setups push hidden dims into the tens of thousands
+        // and the int sum used to wrap on the multiplication of the linear-1
+        // weight tensor (input * hidden).
+        long projCount = ((long)_inputDim * _hiddenDim + _hiddenDim) +
+                         ((long)_hiddenDim * 2) +
+                         ((long)_hiddenDim * _projectionDim + _projectionDim) +
+                         ((long)_projectionDim * 2);
+
+        if (!_hasPredictor)
+            return projCount;
+
+        long predCount = ((long)_projectionDim * _predictorHiddenDim + _predictorHiddenDim) +
+                         ((long)_predictorHiddenDim * 2) +
+                         ((long)_predictorHiddenDim * _projectionDim + _projectionDim);
+
+        return projCount + predCount;
+    }
 
     private bool _isTraining = true;
 

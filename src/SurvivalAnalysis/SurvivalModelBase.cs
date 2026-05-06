@@ -669,10 +669,26 @@ public abstract class SurvivalModelBase<T> : ISurvivalModel<T>, IModelShape, IPa
     /// <summary>
     /// Computes gradients for the given input and target.
     /// </summary>
+    /// <remarks>
+    /// Many survival models (Kaplan-Meier, Cox PH on cached log-likelihood
+    /// factorizations, RandomSurvivalForest) genuinely don't expose standard
+    /// gradients. The base method previously returned a zero vector, which
+    /// silently let gradient-based optimizers and gradient-norm metrics
+    /// proceed as if the model were trainable while applying zero updates.
+    /// Derived classes that DO produce gradients (e.g., Deep Cox networks)
+    /// must override this; classes that legitimately don't should override
+    /// it to throw a more specific NotSupportedException naming the
+    /// constraint, rather than relying on the silent-zero default.
+    /// </remarks>
     public virtual Vector<T> ComputeGradients(Matrix<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
-        // Survival models typically don't use standard gradient computation
-        return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        throw new NotSupportedException(
+            $"{GetType().Name}.ComputeGradients was not overridden. Survival models that " +
+            "expose gradients must provide an implementation here. Models that don't expose " +
+            "gradients (e.g., Kaplan-Meier, Cox-PH cached likelihood, survival forests) " +
+            "should override this with a NotSupportedException describing why, rather than " +
+            "leaving the default that previously returned a zero vector and silently let " +
+            "gradient-based optimizers proceed with no real signal.");
     }
 
     /// <summary>

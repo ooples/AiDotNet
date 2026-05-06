@@ -240,6 +240,21 @@ public sealed class WeightStreamingEndToEndTests
             + "BEFORE WeightRegistry.RegisterWeight (Default-lifetime tensors "
             + "early-return without ever touching the pool).");
 
+        // POSITIVE eviction signal: at least one weight must have actually
+        // landed in the pool (resident > 0). resident == 0 also satisfies
+        // the budget assertion above but means registration never touched
+        // the pool — the test would silently pass without proving the
+        // streaming path ran. Assert non-zero so the test fails when the
+        // eviction path is inert.
+        var report = AiDotNet.Tensors.LinearAlgebra.WeightRegistry.GetStreamingReport();
+        Assert.True(resident > 0L || report.EvictionCount > 0,
+            $"TightPoolBudget test passed the budget bound but produced no "
+            + $"positive streaming activity (ResidentBytes={resident}, "
+            + $"EvictionCount={report.EvictionCount}). This means registration "
+            + "never reached the streaming pool and the test was effectively a "
+            + "no-op. Verify tensor.Lifetime = Streaming and that the pool "
+            + "config was applied before RegisterWeight ran.");
+
         // Run a forward AFTER registration. Materialization MUST work
         // even though some weights were paged to disk during register.
         var output = net.Predict(input);

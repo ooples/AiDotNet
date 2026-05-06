@@ -1486,6 +1486,23 @@ public partial class GRULayer<T> : LayerBase<T>
                 int candidateInput = parameters.Length / divisor - _hiddenSize - 1;
                 if (candidateInput > 0)
                 {
+                    // The divisibility check alone can pass for malformed
+                    // vectors that happen to land on a multiple of
+                    // 3*hiddenSize but don't actually correspond to any
+                    // valid (inputSize, hiddenSize) GRU layout. Reverify
+                    // the round-trip count exactly so we reject those
+                    // before they corrupt the resolved shape.
+                    long expectedCount = (long)_hiddenSize * candidateInput * 3 +
+                                         (long)_hiddenSize * _hiddenSize * 3 +
+                                         (long)_hiddenSize * 3;
+                    if (expectedCount != parameters.Length)
+                    {
+                        throw new ArgumentException(
+                            $"Parameter vector length {parameters.Length} does not match GRU layout " +
+                            $"for inferred inputSize={candidateInput}, hiddenSize={_hiddenSize} " +
+                            $"(expected {expectedCount}).",
+                            nameof(parameters));
+                    }
                     ResolveFromShape(new[] { candidateInput });
                 }
             }

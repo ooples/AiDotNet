@@ -1744,26 +1744,32 @@ public class VideoCLIPNeuralNetwork<T> : NeuralNetworkBase<T>, IVideoCLIPModel<T
                 return 0; // ONNX mode doesn't expose parameters
             }
 
-            int count = 0;
+            // Accumulate in long so multi-billion-parameter native models
+            // (PaLM-E-scale captioning heads, large-vocab embeddings, etc.)
+            // don't wrap before reaching ToFlatVectorSize. Sublayer
+            // ParameterCount is already long; the matrix terms multiply two
+            // ints but get promoted via (long) on the first factor.
+            long count = 0;
 
             // Layer lists
-            foreach (var layer in _frameEncoderLayers) count += (int)layer.ParameterCount;
-            foreach (var layer in _temporalEncoderLayers) count += (int)layer.ParameterCount;
-            foreach (var layer in _textEncoderLayers) count += (int)layer.ParameterCount;
-            foreach (var layer in _projectionLayers) count += (int)layer.ParameterCount;
+            foreach (var layer in _frameEncoderLayers) count += layer.ParameterCount;
+            foreach (var layer in _temporalEncoderLayers) count += layer.ParameterCount;
+            foreach (var layer in _textEncoderLayers) count += layer.ParameterCount;
+            foreach (var layer in _projectionLayers) count += layer.ParameterCount;
 
             // Single layers
-            if (_patchEmbedding is not null) count += (int)_patchEmbedding.ParameterCount;
-            if (_textTokenEmbedding is not null) count += (int)_textTokenEmbedding.ParameterCount;
-            if (_videoProjection is not null) count += (int)_videoProjection.ParameterCount;
-            if (_textProjection is not null) count += (int)_textProjection.ParameterCount;
-            if (_captionHead is not null) count += (int)_captionHead.ParameterCount;
+            if (_patchEmbedding is not null) count += _patchEmbedding.ParameterCount;
+            if (_textTokenEmbedding is not null) count += _textTokenEmbedding.ParameterCount;
+            if (_videoProjection is not null) count += _videoProjection.ParameterCount;
+            if (_textProjection is not null) count += _textProjection.ParameterCount;
+            if (_captionHead is not null) count += _captionHead.ParameterCount;
 
-            // Positional embeddings and CLS tokens (these are also parameters)
-            if (_visionClsToken is not null) count += _visionClsToken.Rows * _visionClsToken.Columns;
-            if (_visionPositionalEmbeddings is not null) count += _visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
-            if (_temporalPositionalEmbeddings is not null) count += _temporalPositionalEmbeddings.Rows * _temporalPositionalEmbeddings.Columns;
-            if (_textPositionalEmbeddings is not null) count += _textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
+            // Positional embeddings and CLS tokens (these are also parameters).
+            // Cast the first factor to long so the multiplication is 64-bit.
+            if (_visionClsToken is not null) count += (long)_visionClsToken.Rows * _visionClsToken.Columns;
+            if (_visionPositionalEmbeddings is not null) count += (long)_visionPositionalEmbeddings.Rows * _visionPositionalEmbeddings.Columns;
+            if (_temporalPositionalEmbeddings is not null) count += (long)_temporalPositionalEmbeddings.Rows * _temporalPositionalEmbeddings.Columns;
+            if (_textPositionalEmbeddings is not null) count += (long)_textPositionalEmbeddings.Rows * _textPositionalEmbeddings.Columns;
 
             return count;
         }

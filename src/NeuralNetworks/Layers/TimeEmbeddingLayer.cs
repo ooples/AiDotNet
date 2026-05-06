@@ -123,10 +123,33 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_linear1WeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            _linear1WeightsGradient?.ToVector() ?? new Vector<T>(0), _linear1BiasGradient?.ToVector() ?? new Vector<T>(0),
-            _linear2WeightsGradient?.ToVector() ?? new Vector<T>(0), _linear2BiasGradient?.ToVector() ?? new Vector<T>(0));
+        // Always return a vector of length ParameterCount so callers
+        // (optimizers, gradient-norm reports) see a stable shape regardless
+        // of which gradient tensors have been populated. The previous
+        // concatenation path combined `?? new Vector<T>(0)` for each null
+        // slot, which silently shrunk the result whenever any one gradient
+        // was missing — breaking length-equality checks downstream.
+        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
+        int offset = 0;
+
+        void CopyOrSkip(Tensor<T>? grad, int expectedLength)
+        {
+            if (grad != null && grad.Length == expectedLength)
+            {
+                var flat = grad.ToVector();
+                for (int i = 0; i < expectedLength; i++)
+                    result[offset + i] = flat[i];
+            }
+            // null or shape mismatch: leave the slot as zeros (the caller
+            // can detect missing gradients via ClearGradients telemetry).
+            offset += expectedLength;
+        }
+
+        CopyOrSkip(_linear1WeightsGradient, _linear1Weights.Length);
+        CopyOrSkip(_linear1BiasGradient, _linear1Bias.Length);
+        CopyOrSkip(_linear2WeightsGradient, _linear2Weights.Length);
+        CopyOrSkip(_linear2BiasGradient, _linear2Bias.Length);
+        return result;
     }
 
     public override void ClearGradients()

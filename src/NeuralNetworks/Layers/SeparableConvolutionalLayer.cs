@@ -845,7 +845,15 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
                     $"Cannot infer inputDepth for SeparableConvolutionalLayer from {parameters.Length} parameters " +
                     $"(outputDepth={_outputDepth}, kernelSize={_kernelSize}).");
             }
-            ResolveFromShape(new[] { 1, _kernelSize, _kernelSize, candidateInputDepth });
+            // OnFirstForward accepts both rank-3 [H, W, C] (per-sample) and
+            // rank-4 [B, H, W, C] (batched). Pass the rank-3 per-sample form
+            // here — rank-4 with a placeholder leading 1 makes
+            // candidateInputDepth land in the channel slot only by accident
+            // and breaks unrelated rank-checking paths. We don't have a real
+            // H or W at deserialize time, so we use _kernelSize as a non-zero
+            // sentinel that covers the receptive field without affecting
+            // weight shape.
+            ResolveFromShape(new[] { _kernelSize, _kernelSize, candidateInputDepth });
         }
 
         int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;

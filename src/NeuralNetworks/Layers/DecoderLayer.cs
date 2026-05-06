@@ -135,10 +135,23 @@ public class DecoderLayer<T> : LayerBase<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // _feedForward2 is created lazily in OnFirstForward, so at this point
+        // it must already be non-null (Deserialize triggers ResolveFromShape →
+        // OnFirstForward; direct calls into SetParameters from outside the
+        // tape happen only after the layer has seen a forward). Silently
+        // treating it as a no-op would advance idx for the trailing norms
+        // as if ff2 had consumed zero bytes, misaligning the slice and
+        // corrupting the loaded state. Throw instead.
+        if (_feedForward2 is null)
+            throw new InvalidOperationException(
+                "DecoderLayer.SetParameters was called before _feedForward2 was constructed. " +
+                "Construct via Deserialize (which calls ResolveFromShape) or run a Forward " +
+                "pass first so OnFirstForward can create _feedForward2 with the input-derived " +
+                "shape.");
+
         int idx = 0;
         void Set(ILayer<T> layer)
         {
-            if (layer is null) return;
             int c = (int)layer.ParameterCount;
             layer.SetParameters(parameters.Slice(idx, c));
             idx += c;

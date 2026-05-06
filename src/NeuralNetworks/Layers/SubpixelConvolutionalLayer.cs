@@ -585,13 +585,18 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeWeights()
     {
-        // Xavier initialization
+        // Xavier initialization. Write the scaled random values directly into
+        // the EXISTING _kernels tensor's storage. Replacing the field reference
+        // (e.g., `_kernels = Engine.TensorMultiplyScalar(...)`) drops the
+        // AllocateLazyWeight-registered instance that the streaming pool /
+        // weight registry are tracking, breaking the LRU bookkeeping for
+        // very large models. In-place mutation preserves the registration.
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputDepth * _kernelSize * _kernelSize + _outputDepth * _upscaleFactor * _upscaleFactor)));
 
-        // Vectorized random init in [-0.5, 0.5], scaled by Xavier factor
         var randVec = Vector<T>.CreateRandom(_kernels.Length, -0.5, 0.5);
-        var randTensor = new Tensor<T>(_kernels._shape, randVec);
-        _kernels = Engine.TensorMultiplyScalar(randTensor, scale);
+        var dst = _kernels.Data.Span;
+        for (int i = 0; i < _kernels.Length; i++)
+            dst[i] = NumOps.Multiply(randVec[i], scale);
 
         _biases.Fill(NumOps.Zero);
     }

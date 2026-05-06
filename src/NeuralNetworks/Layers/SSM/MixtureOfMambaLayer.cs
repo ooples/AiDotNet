@@ -151,7 +151,11 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override long ParameterCount =>
-        _routerWeights.Length + _routerBias.Length +
+        // Cast the first term to long so the running sum is evaluated in 64-bit
+        // and never wraps before reaching ToFlatVectorSize. With ten tensors
+        // the implicit int sum can overflow on multi-billion-parameter MoE
+        // configs (router + 4 experts × full hidden² weights).
+        (long)_routerWeights.Length + _routerBias.Length +
         _expertA.Length + _expertB.Length + _expertC.Length + _expertD.Length +
         _outputGateWeights.Length + _outputGateBias.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;

@@ -130,7 +130,10 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
     /// Gets the total number of trainable parameters.
     /// </summary>
     public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
+        // Cast the first term to long so the running sum widens to 64-bit
+        // and never wraps before reaching ToFlatVectorSize on multi-billion-
+        // parameter linear-attention configs.
+        (long)_queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _gateWeights.Length + _gateBias.Length +
         _outputWeights.Length + _outputBias.Length;
 

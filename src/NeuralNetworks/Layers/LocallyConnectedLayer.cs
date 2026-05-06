@@ -934,14 +934,14 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>
             throw new ArgumentException($"Expected {totalParams} parameters, but got {parameters.Length}");
         }
 
-        // Split parameters into weights and biases using Vector.Slice
+        // Copy IN PLACE into existing tensor storage. Replacing the field
+        // refs via `Tensor<T>.FromVector` would leave the engine's persistent-
+        // tensor registry pointing at the old _weights/_biases objects
+        // (allocated via ResolveFromShape during Deserialize), so subsequent
+        // training/streaming would silently follow stale references.
         int weightsLength = _weights.Length;
-        var weightsVector = parameters.Slice(0, weightsLength);
-        var biasesVector = parameters.Slice(weightsLength, _biases.Length);
-
-        // Convert vectors to tensors and assign
-        _weights = Tensor<T>.FromVector(weightsVector, _weights._shape);
-        _biases = Tensor<T>.FromVector(biasesVector, _biases._shape);
+        parameters.AsSpan().Slice(0, weightsLength).CopyTo(_weights.Data.Span);
+        parameters.AsSpan().Slice(weightsLength, _biases.Length).CopyTo(_biases.Data.Span);
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);

@@ -1290,12 +1290,16 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
     {
         get
         {
-            int total = 0;
+            // Accumulate in long; SetAbstraction branches over high-resolution
+            // point clouds can have MLP layers whose individual ParameterCount
+            // approaches int.MaxValue. (int) cast on each addend used to
+            // wrap before the sum widened to long for the property's return.
+            long total = 0;
             foreach (var branch in _branches)
             {
                 foreach (var layer in branch.MlpLayers)
                 {
-                    total += (int)layer.ParameterCount;
+                    total += layer.ParameterCount;
                 }
             }
             return total;
