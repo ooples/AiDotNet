@@ -619,6 +619,16 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: sublayers may be in placeholder shape state. Resolve from
+        // known constants — every Dense/Norm operates on the per-token feature
+        // dim (dim) except _mlpFc2 which contracts back from dim*mlpRatio.
+        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape(new[] { _dim });
+        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape(new[] { _dim });
+        if (!_qkvProj.IsShapeResolved) _qkvProj.ResolveFromShape(new[] { _dim });
+        if (!_outProj.IsShapeResolved) _outProj.ResolveFromShape(new[] { _dim });
+        if (!_mlpFc1.IsShapeResolved) _mlpFc1.ResolveFromShape(new[] { _dim });
+        if (!_mlpFc2.IsShapeResolved) _mlpFc2.ResolveFromShape(new[] { _dim * _mlpRatio });
+
         int offset = 0;
 
         // Norm1

@@ -165,6 +165,15 @@ public class TimeMoEBlockLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: sublayers may be in placeholder shape state. Resolve them
+        // from known constants (hiddenDim) before slicing parameters. MHA
+        // requires rank>=2 (sequence + features), so we synthesize a length-1
+        // sequence shape; weight count depends only on hiddenDim regardless.
+        if (!_norm1.IsShapeResolved) _norm1.ResolveFromShape(new[] { _hiddenDim });
+        if (!_norm2.IsShapeResolved) _norm2.ResolveFromShape(new[] { _hiddenDim });
+        if (!_selfAttention.IsShapeResolved) _selfAttention.ResolveFromShape(new[] { 1, _hiddenDim });
+        if (!_moe.IsShapeResolved) _moe.ResolveFromShape(new[] { _hiddenDim });
+
         // Layer-base SetParameters checks parameters.Length == ParameterCount,
         // but composite ParameterCount sums sublayer counts which can drift
         // from GetParameters().Length when sublayers (e.g., MoE router) hold

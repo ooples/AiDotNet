@@ -235,6 +235,16 @@ public class DecoderLayer<T> : LayerBase<T>
             : perSampleShape;
         foreach (var sub in GetSubLayers())
         {
+            // _feedForward2 receives the OUTPUT of _feedForward1 (last dim =
+            // feedForwardSize), not the parent's input. Resolving it with
+            // perSampleSeqShape locks _inputSize to the parent input size,
+            // and FeedForwardLayer.Forward then triggers EnsureWeightShapeForInput
+            // to grow the matrix on first real Forward — but ParameterCount
+            // before that grow disagrees with the post-Forward count, breaking
+            // SetParameters distribution during Deserialize. Skip ff2 here
+            // and resolve it explicitly below using ff1's resolved output dim.
+            if (object.ReferenceEquals(sub, _feedForward2)) continue;
+
             if (sub is LayerBase<T> lb && !lb.IsShapeResolved)
             {
                 // Try the [seq, features] shape first; if the sub-layer
@@ -264,6 +274,19 @@ public class DecoderLayer<T> : LayerBase<T>
                         // resolve it correctly via OnFirstForward.
                     }
                 }
+            }
+        }
+
+        // Resolve ff2 with its actual input shape: ff1's output last-dim
+        // (feedForwardSize). Use GetOutputShape so we don't need a back-channel
+        // field for feedForwardSize.
+        if (!_feedForward2.IsShapeResolved)
+        {
+            var ff1OutputShape = _feedForward1.GetOutputShape();
+            int ff2InputSize = ff1OutputShape[ff1OutputShape.Length - 1];
+            if (ff2InputSize > 0)
+            {
+                _feedForward2.ResolveShapesOnly(new[] { ff2InputSize });
             }
         }
     }

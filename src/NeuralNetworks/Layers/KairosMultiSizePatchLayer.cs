@@ -175,11 +175,24 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: sublayers (DenseLayer router + DenseLayer embeddings)
+        // start with placeholder shapes. Resolve them from known
+        // constants — the router takes [B, contextLength] and each
+        // embedding takes patchSize-sized input.
+        if (!_router.IsShapeResolved)
+        {
+            _router.ResolveFromShape(new[] { _contextLength });
+        }
+        for (int k = 0; k < _patchEmbeddings.Count; k++)
+        {
+            if (!_patchEmbeddings[k].IsShapeResolved)
+            {
+                _patchEmbeddings[k].ResolveFromShape(new[] { _patchSizes[k] });
+            }
+        }
+
         // Composite SetParameters: route by sublayer GetParameters counts
-        // to match the GetParameters layout 1:1. The default LayerBase
-        // SetParameters checks parameters.Length == ParameterCount, but
-        // composite ParameterCount sums sublayer counts and can drift
-        // from GetParameters().Length.
+        // to match the GetParameters layout 1:1.
         int idx = 0;
         void Set(ILayer<T> sub)
         {

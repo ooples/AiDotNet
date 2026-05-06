@@ -519,15 +519,29 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
 
         int idx = 0;
 
-        // Restore weights (non-zero values only) by mutating
-        // _weights.Values in place. Avoids constructing a new SparseTensor
-        // which would invalidate the trainable-parameter registration.
-        for (int nz = 0; nz < _weights.NonZeroCount; nz++)
+        // SparseTensor.Values is a defensive copy (DataVector.ToArray()), so
+        // writing into it does NOT update the underlying storage. Build the
+        // values array, snapshot CSR positions, and reconstruct the
+        // SparseTensor in place. We assign the new instance to _weights
+        // directly rather than going through SetTrainableParameters, because
+        // the latter calls ClearRegisteredParameters → UnregisterPersistentTensor
+        // → Contiguous() which throws on sparse tensors. Deserialize is
+        // pre-training, so no ParameterBuffer view aliasing is in flight yet.
+        int nnz = _weights.NonZeroCount;
+        var newValues = new T[nnz];
+        for (int nz = 0; nz < nnz; nz++)
         {
-            _weights.Values[nz] = parameters[idx++];
+            newValues[nz] = parameters[idx++];
         }
+        _weights = new SparseTensor<T>(
+            _weights.Rows,
+            _weights.Columns,
+            (int[])_weights.RowIndices.Clone(),
+            (int[])_weights.ColumnIndices.Clone(),
+            newValues);
 
-        // Restore biases in place — same reasoning.
+        // Restore biases in place — _biases is a dense Tensor<T> and supports
+        // direct indexer writes.
         for (int o = 0; o < OutputFeatures; o++)
         {
             _biases[o] = parameters[idx++];

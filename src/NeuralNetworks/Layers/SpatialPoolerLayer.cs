@@ -271,7 +271,11 @@ public class SpatialPoolerLayer<T> : LayerBase<T>
         }
 
         InputSize = inputSize;
-        InitializeConnections();
+        // Only initialize Connections if they weren't already loaded via SetParameters
+        // (e.g., during deserialization). Otherwise we'd overwrite the loaded weights
+        // with fresh random values.
+        if (Connections.Shape.Length < 2 || Connections.Shape[0] == 0)
+            InitializeConnections();
         RegisterBuffer(Connections, nameof(Connections), PersistentTensorRole.Weights);
 
         ResolveShapes(new[] { inputSize }, new[] { ColumnCount });
