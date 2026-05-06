@@ -128,10 +128,14 @@ public class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int ttParams = 0;
+            // Promote to long BEFORE the per-core multiplication so a
+            // sufficiently-large rank × shape doesn't wrap. The TT-core
+            // product can be arbitrarily large for big factorizations.
+            // Closes #1271.7Bnd.
+            long ttParams = 0L;
             for (int k = 0; k < _numCores; k++)
             {
-                ttParams += _ttRanks[k] * _coreShapes[k] * _ttRanks[k + 1];
+                ttParams += (long)_ttRanks[k] * _coreShapes[k] * _ttRanks[k + 1];
             }
 
             // Add base layer parameters if not frozen

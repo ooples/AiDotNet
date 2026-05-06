@@ -131,8 +131,11 @@ public class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int baseCount = (int)base.ParameterCount; // Base layer + LoRA layer
-            int deltaCount = _deltaWeights.Rows * _deltaWeights.Columns;
+            // long throughout — base layer + LoRA layer + delta weights
+            // can sum past int.MaxValue on foundation-model scales.
+            // Closes #1271.7BnX.
+            long baseCount = base.ParameterCount;
+            long deltaCount = (long)_deltaWeights.Rows * _deltaWeights.Columns;
             return baseCount + deltaCount;
         }
     }

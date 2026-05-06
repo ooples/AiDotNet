@@ -125,7 +125,13 @@ public class LoRALayer<T> : LayerBase<T>
     /// <summary>
     /// Gets the total number of trainable parameters (elements in A and B matrices).
     /// </summary>
-    public override long ParameterCount => (_loraA.Rows * _loraA.Columns) + (_loraB.Rows * _loraB.Columns);
+    public override long ParameterCount =>
+        // Promote to long BEFORE the multiplication so a sufficiently
+        // large rank × dim doesn't overflow int32 mid-computation. The
+        // outer return type is already long, but the int*int product
+        // wraps before the implicit widening converts to long. Closes
+        // #1271.7Bnv.
+        ((long)_loraA.Rows * _loraA.Columns) + ((long)_loraB.Rows * _loraB.Columns);
 
     /// <summary>
     /// Gets whether this layer supports training (always true for LoRA).

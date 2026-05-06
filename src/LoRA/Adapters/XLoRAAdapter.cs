@@ -123,14 +123,17 @@ public class XLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int expertParams = 0;
+            // long throughout — N experts × per-expert params can sum
+            // past int.MaxValue, especially for mixture-of-experts at
+            // foundation-model scales. Closes #1271.7Bnq.
+            long expertParams = 0L;
             for (int i = 0; i < _experts.Length; i++)
             {
-                expertParams += (int)(_experts[i].ParameterCount);
+                expertParams += _experts[i].ParameterCount;
             }
 
-            int gatingParams = checked((int)_gatingNetwork.ParameterCount);
-            int baseParams = _freezeBaseLayer ? (int)(0) : (int)_baseLayer.ParameterCount;
+            long gatingParams = _gatingNetwork.ParameterCount;
+            long baseParams = _freezeBaseLayer ? 0L : _baseLayer.ParameterCount;
 
             return baseParams + expertParams + gatingParams;
         }

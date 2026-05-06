@@ -149,9 +149,10 @@ public class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
                 return base.ParameterCount;
             }
 
-            // Only the layer scaling factor is unique to this layer
-            int tiedLoraParams = 1; // Single scaling factor
-            int baseParams = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
+            // long throughout — base layer can be > int.MaxValue on
+            // foundation models. Closes #1271.7Bnn.
+            long tiedLoraParams = 1L; // Single scaling factor
+            long baseParams = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
             return baseParams + tiedLoraParams;
         }
     }

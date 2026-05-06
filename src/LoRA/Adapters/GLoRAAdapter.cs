@@ -90,9 +90,14 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-            int loraCount = _loraLayer != null ? (int)_loraLayer.ParameterCount : 0;
-            int activationCount = _activationAdaptation != null ? (int)_activationAdaptation.ParameterCount : 0;
+            // Sum as long throughout — base layers can have
+            // > int.MaxValue parameters on large foundation models, and
+            // a sufficiently large weight + activation rank could push
+            // the totals past the int boundary even on smaller bases.
+            // Closes #1271.7Bna.
+            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
+            long loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0L;
+            long activationCount = _activationAdaptation != null ? _activationAdaptation.ParameterCount : 0L;
             return baseCount + loraCount + activationCount;
         }
     }
