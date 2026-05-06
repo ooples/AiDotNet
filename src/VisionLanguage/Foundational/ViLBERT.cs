@@ -52,10 +52,15 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ResearchPaper("ViLBERT: Pretraining Task-Agnostic Visiolinguistic Representations for Vision-and-Language Tasks", "https://arxiv.org/abs/1908.02265", Year = 2019, Authors = "Lu et al.")]
 public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
-    private readonly ViLBERTOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly ViLBERTOptions _options;
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
-    private int _visionLayerEnd; private int _textLayerEnd;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    private int _visionLayerEnd;
+    private int _textLayerEnd;
     // Paper-prescribed task-head indices in the Layers list (Lu et al. 2019
     // §4: "we add a small classifier on top" — for every downstream task the
     // paper appends a pooled-token → Dense projection to the output size
@@ -66,8 +71,43 @@ public class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel
     // fusion chain.
     private int _visionHeadStart; private int _textHeadStart;
 
-    public ViLBERT(NeuralNetworkArchitecture<T> architecture, string modelPath, ViLBERTOptions? options = null) : base(architecture) { _options = options ?? new ViLBERTOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.FusionDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public ViLBERT(NeuralNetworkArchitecture<T> architecture, ViLBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ViLBERTOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.FusionDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public ViLBERT(NeuralNetworkArchitecture<T> architecture, string modelPath, ViLBERTOptions? options = null) : base(architecture)
+    {
+        _options = options ?? new ViLBERTOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.FusionDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public ViLBERT(NeuralNetworkArchitecture<T> architecture, ViLBERTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new ViLBERTOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.FusionDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+    }
 
     public int EmbeddingDimension => _options.FusionDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int FusionEmbeddingDim => _options.FusionDim; public int MaxSequenceLength => _options.MaxSequenceLength;
 
