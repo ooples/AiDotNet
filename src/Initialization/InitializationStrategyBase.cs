@@ -172,29 +172,25 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected void HeUniformInitialize(Tensor<T> weights, int fanIn)
     {
         var limit = Math.Sqrt(6.0 / fanIn);
-        var span = weights.Data.Span;
-        var rng = Random;
 
         if (typeof(T) == typeof(double))
         {
-            for (int i = 0; i < span.Length; i++)
-            {
-                double value = rng.NextDouble() * 2 * limit - limit;
-                span[i] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
-            }
+            var rawArr = (double[])(object)weights.GetDataArray();
+            UniformFillDouble(rawArr, 0, weights.Length, limit);
             return;
         }
 
         if (typeof(T) == typeof(float))
         {
-            for (int i = 0; i < span.Length; i++)
-            {
-                float value = (float)(rng.NextDouble() * 2 * limit - limit);
-                span[i] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref value);
-            }
+            var rawArr = (float[])(object)weights.GetDataArray();
+            UniformFillFloat(rawArr, 0, weights.Length, limit);
             return;
         }
 
+        // Generic-T fallback (rare — only hit for custom T like Half / Decimal).
+        // Single-threaded but still through the (locked) shared Random.
+        var span = weights.Data.Span;
+        var rng = Random;
         for (int i = 0; i < span.Length; i++)
             span[i] = NumOps.FromDouble(rng.NextDouble() * 2 * limit - limit);
     }
@@ -215,28 +211,31 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
     protected void HeNormalInitialize(Tensor<T> weights, int fanIn)
     {
         var stddev = Math.Sqrt(2.0 / fanIn);
-        var span = weights.Data.Span;
+        // Match the He / Kaiming convention used by PyTorch's
+        // torch.nn.init.kaiming_normal_: clip to ±2σ to keep extreme tails
+        // out of the initial distribution. Lifted to the parallel
+        // Box-Muller fill helper so foundation-scale weights (e.g. CLIP
+        // FFN at d_model=1280, 4× expansion ⇒ ~6.5M weights per layer)
+        // partition across cores instead of single-threaded through the
+        // (locked) shared RNG.
+        var clipBound = 2.0 * stddev;
 
         if (typeof(T) == typeof(double))
         {
-            for (int i = 0; i < span.Length; i++)
-            {
-                double value = SampleGaussian(0, stddev);
-                span[i] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
-            }
+            var rawArr = (double[])(object)weights.GetDataArray();
+            XavierFillDouble(rawArr, 0, weights.Length, stddev, clipBound);
             return;
         }
 
         if (typeof(T) == typeof(float))
         {
-            for (int i = 0; i < span.Length; i++)
-            {
-                float value = (float)SampleGaussian(0, stddev);
-                span[i] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref value);
-            }
+            var rawArr = (float[])(object)weights.GetDataArray();
+            XavierFillFloat(rawArr, 0, weights.Length, stddev, clipBound);
             return;
         }
 
+        // Generic-T fallback — single-threaded sequential Box-Muller.
+        var span = weights.Data.Span;
         for (int i = 0; i < span.Length; i++)
             span[i] = NumOps.FromDouble(SampleGaussian(0, stddev));
     }
@@ -421,5 +420,87 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
                 havePending = false;
             }
         }
+    }
+
+    /// <summary>
+    /// Parallel uniform fill: fills <paramref name="dst"/>[offset..offset+length]
+    /// with samples from U(-limit, limit). Mirrors the partitioning strategy of
+    /// <see cref="XavierFillDouble"/> so He-uniform / Xavier-uniform large-tensor
+    /// init doesn't single-thread through the (locked) shared
+    /// <see cref="Random"/> — the same per-call cost that surfaced as ~17% of
+    /// CLIP train time before this fix (Monitor.Enter_Slowpath on every
+    /// NextDouble() call across millions of weights).
+    /// </summary>
+    private void UniformFillDouble(double[] dst, int offset, int length, double limit)
+    {
+        if (length == 0) return;
+
+        const int ParallelThreshold = 1 << 18; // 256K doubles ≈ 2 MB
+        int cores = Math.Max(1, Environment.ProcessorCount);
+
+        if (length < ParallelThreshold || cores == 1)
+        {
+            UniformFillChunkDouble(dst.AsSpan(offset, length), limit, Random);
+            return;
+        }
+
+        int chunkSize = (length + cores - 1) / cores;
+        var seeds = new int[cores];
+        for (int c = 0; c < cores; c++) seeds[c] = Random.Next();
+
+        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        {
+            int chunkStart = c * chunkSize;
+            int chunkEnd = Math.Min(chunkStart + chunkSize, length);
+            if (chunkStart >= chunkEnd) return;
+            // Per-thread seeded RNG — System.Random is NOT thread-safe.
+            var chunkRng = RandomHelper.CreateSeededRandom(seeds[c]);
+            UniformFillChunkDouble(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), limit, chunkRng);
+        });
+    }
+
+    private static void UniformFillChunkDouble(Span<double> dst, double limit, Random rng)
+    {
+        double range = 2.0 * limit;
+        for (int i = 0; i < dst.Length; i++)
+            dst[i] = rng.NextDouble() * range - limit;
+    }
+
+    /// <summary>
+    /// Float variant of <see cref="UniformFillDouble"/>. Generates uniforms in
+    /// double precision (Random.NextDouble) and narrows on store.
+    /// </summary>
+    private void UniformFillFloat(float[] dst, int offset, int length, double limit)
+    {
+        if (length == 0) return;
+
+        const int ParallelThreshold = 1 << 18;
+        int cores = Math.Max(1, Environment.ProcessorCount);
+
+        if (length < ParallelThreshold || cores == 1)
+        {
+            UniformFillChunkFloat(dst.AsSpan(offset, length), limit, Random);
+            return;
+        }
+
+        int chunkSize = (length + cores - 1) / cores;
+        var seeds = new int[cores];
+        for (int c = 0; c < cores; c++) seeds[c] = Random.Next();
+
+        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        {
+            int chunkStart = c * chunkSize;
+            int chunkEnd = Math.Min(chunkStart + chunkSize, length);
+            if (chunkStart >= chunkEnd) return;
+            var chunkRng = RandomHelper.CreateSeededRandom(seeds[c]);
+            UniformFillChunkFloat(dst.AsSpan(offset + chunkStart, chunkEnd - chunkStart), limit, chunkRng);
+        });
+    }
+
+    private static void UniformFillChunkFloat(Span<float> dst, double limit, Random rng)
+    {
+        double range = 2.0 * limit;
+        for (int i = 0; i < dst.Length; i++)
+            dst[i] = (float)(rng.NextDouble() * range - limit);
     }
 }
