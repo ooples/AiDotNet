@@ -303,6 +303,7 @@ public class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) { OnnxModel?.Dispose(); }
         base.Dispose(disposing);
     }
 }

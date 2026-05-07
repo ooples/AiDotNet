@@ -305,6 +305,7 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) { OnnxModel?.Dispose(); }
         base.Dispose(disposing);
     }
 }

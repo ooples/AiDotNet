@@ -310,6 +310,7 @@ public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) { OnnxModel?.Dispose(); }
         base.Dispose(disposing);
     }
 }

@@ -332,6 +332,7 @@ public class MiniGPTv2<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing) { OnnxModel?.Dispose(); }
         base.Dispose(disposing);
     }
 }
