@@ -433,6 +433,165 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
+    /// Async wrapper around <see cref="GenerateWithMicroCondition"/> with
+    /// cooperative cancellation between scheduler steps and per-step
+    /// progress reporting. The denoising loop is the longest-running phase
+    /// of SDXL inference (50× UNet forward passes by default), so the
+    /// cancellation check fires at every scheduler step boundary, not
+    /// per-tensor-op.
+    /// </summary>
+    /// <param name="prompt">Text prompt.</param>
+    /// <param name="negativePrompt">Optional negative prompt for CFG guidance.</param>
+    /// <param name="width">Output width (default 1024).</param>
+    /// <param name="height">Output height (default 1024).</param>
+    /// <param name="originalWidth">Source image width for micro-conditioning. Defaults to <paramref name="width"/>.</param>
+    /// <param name="originalHeight">Source image height for micro-conditioning. Defaults to <paramref name="height"/>.</param>
+    /// <param name="cropTop">Crop offset for micro-conditioning.</param>
+    /// <param name="cropLeft">Crop offset for micro-conditioning.</param>
+    /// <param name="numInferenceSteps">Number of denoising steps (default 50).</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale; <c>null</c> uses the model default.</param>
+    /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <param name="progress">Optional per-step progress reporter. Receives the
+    /// number of denoising steps completed (1..numInferenceSteps).</param>
+    /// <param name="cancellationToken">Cancellation token; observed between
+    /// scheduler steps and once before each text-encoder pass.</param>
+    /// <returns>The generated image tensor as <c>[1, 3, height, width]</c> in
+    /// <c>[-1, 1]</c> range (raw VAE-decode output, ready for the same
+    /// post-processing the sync path produces).</returns>
+    /// <remarks>
+    /// <para>
+    /// Implementation cooperates with cancellation by checking the token at
+    /// each scheduler-step boundary and at the entry to text encoding. It
+    /// does NOT cancel mid-step (a partial UNet forward would leave the
+    /// scheduler in an inconsistent state), so worst-case latency from
+    /// cancel-request to actual stop is one scheduler step.
+    /// </para>
+    /// <para>
+    /// Cancellation surfaces as <see cref="System.OperationCanceledException"/>;
+    /// no partial output is returned. Progress reporting is invoked
+    /// synchronously on the calling thread — implementers that need a UI
+    /// thread should wrap the IProgress in <c>Progress&lt;int&gt;</c>.
+    /// </para>
+    /// </remarks>
+    public virtual System.Threading.Tasks.Task<Tensor<T>> GenerateAsync(
+        string prompt,
+        string? negativePrompt = null,
+        int width = DefaultWidth,
+        int height = DefaultHeight,
+        int? originalWidth = null,
+        int? originalHeight = null,
+        int cropTop = 0,
+        int cropLeft = 0,
+        int numInferenceSteps = 50,
+        double? guidanceScale = null,
+        int? seed = null,
+        System.IProgress<int>? progress = null,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        // System.Threading.Tasks.Task.Run keeps the long CPU-bound denoise
+        // loop off the caller's synchronization context (UI / ASP.NET
+        // request) — without it an `await GenerateAsync(...)` from a UI
+        // thread would block the UI for the full ~30 s of inference.
+        return System.Threading.Tasks.Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return GenerateWithMicroConditionCancellable(
+                prompt, negativePrompt, width, height,
+                originalWidth, originalHeight, cropTop, cropLeft,
+                numInferenceSteps, guidanceScale, seed,
+                progress, cancellationToken);
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Cancellable variant of <see cref="GenerateWithMicroCondition"/> shared
+    /// between the sync and async surfaces. Same denoise / decode pipeline
+    /// but with cancellation-token observation at scheduler-step boundaries
+    /// and per-step <see cref="System.IProgress{T}"/> reporting.
+    /// </summary>
+    private Tensor<T> GenerateWithMicroConditionCancellable(
+        string prompt,
+        string? negativePrompt,
+        int width,
+        int height,
+        int? originalWidth,
+        int? originalHeight,
+        int cropTop,
+        int cropLeft,
+        int numInferenceSteps,
+        double? guidanceScale,
+        int? seed,
+        System.IProgress<int>? progress,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (_conditioner1 == null)
+            throw new InvalidOperationException("Text-to-image generation requires a conditioning module.");
+
+        originalWidth ??= width;
+        originalHeight ??= height;
+        var effectiveGuidanceScale = guidanceScale ?? GuidanceScale;
+        var useCFG = effectiveGuidanceScale > 1.0 && _unet.SupportsCFG;
+
+        cancellationToken.ThrowIfCancellationRequested();
+        var promptEmbedding = EncodeTextDual(prompt);
+        Tensor<T>? negativeEmbedding = null;
+        if (useCFG)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            negativeEmbedding = !string.IsNullOrEmpty(negativePrompt)
+                ? EncodeTextDual(negativePrompt ?? string.Empty)
+                : GetUnconditionalEmbeddingDual();
+        }
+
+        var microCond = CreateMicroCondition(
+            originalWidth.Value, originalHeight.Value,
+            cropTop, cropLeft,
+            width, height);
+        promptEmbedding = ApplyMicroCondition(promptEmbedding, microCond);
+        if (negativeEmbedding != null)
+            negativeEmbedding = ApplyMicroCondition(negativeEmbedding, microCond);
+
+        var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
+        var latentWidth = width / SDXL_VAE_SCALE_FACTOR;
+        var latentShape = new[] { 1, SDXL_LATENT_CHANNELS, latentHeight, latentWidth };
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var latents = SampleNoiseTensor(latentShape, rng);
+
+        Scheduler.SetTimesteps(numInferenceSteps);
+
+        int stepIndex = 0;
+        foreach (var timestep in Scheduler.Timesteps)
+        {
+            // Check at the boundary, NOT mid-step — a half-applied UNet
+            // forward would leave the scheduler in an inconsistent state.
+            cancellationToken.ThrowIfCancellationRequested();
+
+            Tensor<T> noisePrediction;
+            if (useCFG && negativeEmbedding != null)
+            {
+                var condPred = _unet.PredictNoise(latents, timestep, promptEmbedding);
+                var uncondPred = _unet.PredictNoise(latents, timestep, negativeEmbedding);
+                noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
+            }
+            else
+            {
+                noisePrediction = _unet.PredictNoise(latents, timestep, promptEmbedding);
+            }
+
+            var latentVector = latents.ToVector();
+            var noiseVector = noisePrediction.ToVector();
+            latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
+            latents = new Tensor<T>(latentShape, latentVector);
+
+            stepIndex++;
+            progress?.Report(stepIndex);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return DecodeFromLatent(latents);
+    }
+
+    /// <summary>
     /// Refines an image using the SDXL refiner model.
     /// </summary>
     /// <param name="image">The base image to refine.</param>
