@@ -134,8 +134,30 @@ public abstract class ContinualLearningTestBase
         using var _arena = TensorArena.Create();
         var strategy1 = CreateStrategy();
         var strategy2 = CreateStrategy();
+
+        // Both networks must start with IDENTICAL weights — the strategy
+        // captures importance / Fisher diagonals during AfterTask using
+        // the network's actual gradients, so two unseeded
+        // CreateMockNetwork() calls (which initialize via
+        // RandomHelper.CreateSecureRandom) produce different importance
+        // values on the same task data. Computing loss on identically
+        // perturbed parameters then yields a ratio that depends on the
+        // *importance* delta, not just the lambda delta — failing the
+        // "loss scales linearly with lambda" invariant for reasons that
+        // have nothing to do with the strategy under test (#1224
+        // Cluster F: MemoryAwareSynapses showed ratio=2.51 instead of
+        // ~2.0 because importance(net1) ≠ importance(net2)). Clone
+        // network1 → network2 so the only differing axis is Lambda.
         var network1 = CreateMockNetwork();
-        var network2 = CreateMockNetwork();
+        INeuralNetwork<double> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
+            network2 = (INeuralNetwork<double>)nn1.Clone();
+        else
+            throw new System.InvalidOperationException(
+                "ComputeLoss_ScalesWithLambda requires a NeuralNetworkBase-derived "
+                + "mock network so weights can be cloned. Override CreateMockNetwork "
+                + "or relax the cast if you need a non-NN backbone.");
+
         var taskData = CreateTestTaskData();
 
         strategy1.Lambda = 100.0;
