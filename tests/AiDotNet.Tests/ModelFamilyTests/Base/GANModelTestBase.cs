@@ -191,16 +191,24 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
 
         var network1 = CreateNetwork();
-        INeuralNetworkModel<double> network2;
-        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
-            network2 = (INeuralNetworkModel<double>)nn1.Clone();
-        else
-            network2 = (INeuralNetworkModel<double>)network1.Clone();
 
         var input = CreateRandomTensor(InputShape, rng1);
         var target = CreateRandomTensor(EffectiveOutputShape, rng1);
         var input2 = CreateRandomTensor(InputShape, rng2);
         var target2 = CreateRandomTensor(EffectiveOutputShape, rng2);
+
+        // Same pre-clone probe rationale as
+        // NeuralNetworkModelTestBase.MoreData_ShouldNotDegrade: bake
+        // any lazy-shape layers from the actual InputShape before
+        // cloning so network2 doesn't inherit unresolved sentinels.
+        try { network1.Predict(input); }
+        catch (System.InvalidOperationException) { /* layer requires training mode for first forward */ }
+
+        INeuralNetworkModel<double> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
+            network2 = (INeuralNetworkModel<double>)nn1.Clone();
+        else
+            network2 = (INeuralNetworkModel<double>)network1.Clone();
 
         int shortIters = MoreDataShortIterations;
         int longIters = MoreDataLongIterations;

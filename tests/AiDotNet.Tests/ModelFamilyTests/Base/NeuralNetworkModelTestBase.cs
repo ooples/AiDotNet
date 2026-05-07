@@ -745,16 +745,31 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // shared-baseline bug. Clone after build so network2 starts
         // from the same weights as network1.
         var network1 = CreateNetwork();
-        INeuralNetworkModel<double> network2;
-        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
-            network2 = (INeuralNetworkModel<double>)nn1.Clone();
-        else
-            network2 = (INeuralNetworkModel<double>)network1.Clone();
 
         var input = CreateRandomTensor(InputShape, rng1);
         var target = CreateRandomTensor(EffectiveOutputShape, rng1);
         var input2 = CreateRandomTensor(InputShape, rng2);
         var target2 = CreateRandomTensor(EffectiveOutputShape, rng2);
+
+        // Run a probe Predict on network1 BEFORE cloning so any lazy
+        // layers (PyTorch-style LazyConv2d / FullyConnectedLayer's lazy
+        // ctor / BatchNormalizationLayer's per-channel resolution) bake
+        // their shape from the actual InputShape rather than from the
+        // architecture's declared shape. CNN models like EfficientNet
+        // construct against ImageNet's 224×224 default but this test
+        // base runs on smaller InputShape (e.g. [3, 64, 64]); without a
+        // pre-clone probe the cloned conv layer captured the
+        // unresolved shape and threw "Expected input depth 1, but got 3"
+        // on its first real Forward (#1224 Cluster F: EfficientNet
+        // MoreData_ShouldNotDegrade).
+        try { network1.Predict(input); }
+        catch (System.InvalidOperationException) { /* layer requires training mode for first forward */ }
+
+        INeuralNetworkModel<double> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
+            network2 = (INeuralNetworkModel<double>)nn1.Clone();
+        else
+            network2 = (INeuralNetworkModel<double>)network1.Clone();
 
         // Train network1 for the "short" iteration count (default 50)
         int shortIters = MoreDataShortIterations;
