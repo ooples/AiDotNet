@@ -62,8 +62,18 @@ public class EuclideanDistance<T> : DistanceMetricBase<T>
                 $"Vectors must have the same length. Got {a.Length} and {b.Length}.");
         }
 
-        var engine = AiDotNetEngine.Current;
-        var diff = (Vector<T>)engine.Subtract(a, b);
-        return engine.DotProduct(diff, diff);
+        // Direct sum-of-squares loop — see VectorHelper.EuclideanDistance
+        // for the rationale (clustering distance computations dispatch to
+        // GPU per call when engine.AutoDetectAndConfigureGpu has switched
+        // backends, which surfaced as the issue #1224 Cluster B regression).
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T sumSq = numOps.Zero;
+        int n = a.Length;
+        for (int i = 0; i < n; i++)
+        {
+            T diffI = numOps.Subtract(a[i], b[i]);
+            sumSq = numOps.Add(sumSq, numOps.Multiply(diffI, diffI));
+        }
+        return sumSq;
     }
 }

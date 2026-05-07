@@ -3067,7 +3067,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Iterations = federatedLearningMetadata.RoundsCompleted
             };
         }
-        else if (model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true })
+        else if (model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true }
+                 || _model is Clustering.Base.ClusteringBase<T>)
         {
             if (_knowledgeDistillationOptions is not null)
             {
@@ -3077,6 +3078,18 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
 
             // DIRECT TRAINING PATH for non-parametric models (TS, density-based clustering, etc.)
+            // and partitioning clustering models (KMeans, BIRCH, GMM, etc.) — clustering's
+            // ClusteringBase reports SupportsParameterInitialization=true (it has cluster
+            // centers / labels / membership matrices that ARE parameters in the
+            // IParameterizable sense), but its train path is the K-means EM loop, not the
+            // outer-optimizer's clone-evaluate-select. Routing it through the regular
+            // optimizer path made BuildAsync run hundreds of iterations of unrelated random
+            // search, never actually call ClusteringBase.Train, take 150+ seconds on 90
+            // samples, then return a fresh-init untrained model whose Predict() throws
+            // "Model must be trained" — exactly the timeout pattern the 25 clustering
+            // Builder_* tests in #1224 Cluster B were hitting. Probe _model (unwrapped)
+            // not the local model variable, mirroring the useFullData check below — the
+            // local may be a distributed-training wrapper.
             // These models use their own internal optimizers and don't benefit from the outer
             // optimizer's clone-evaluate-select loop. Train directly on the full training data.
             // For clustering/density models, train on the full dataset (not the

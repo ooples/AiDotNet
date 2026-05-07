@@ -178,12 +178,27 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     protected virtual T ComputeDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        // Engine.DotProduct is zero-overhead in 0.13.0 — always use it
+        // Direct sum-of-squares loop. The previous Engine.DotProduct call
+        // looked attractive (one helper, one line) but for the per-(sample,
+        // cluster) distance computation in a K-means EM loop it dispatches
+        // to GPU when AiDotNetEngine.AutoDetectAndConfigureGpu has switched
+        // the global engine to a GPU backend — and on small d (typical
+        // clustering data has d ≤ 100) the per-call OpenCL/CUDA dispatch
+        // overhead and tiny-buffer round-trip cost dominate the actual
+        // math, while also exposing a GPU-path correctness issue surfaced
+        // by issue #1224 Cluster B (KMeans through AiModelBuilder
+        // auto-enables GPU and produced all-same-cluster output, ARI=0).
+        // Computing the dot product inline keeps the math on CPU FP64
+        // regardless of engine state, which is what every clustering
+        // distance metric actually wants.
         int d = x.Columns;
-        var diff = new Vector<T>(d);
+        T sumSq = NumOps.Zero;
         for (int j = 0; j < d; j++)
-            diff[j] = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-        return NumOps.Sqrt(Engine.DotProduct(diff, diff));
+        {
+            T diffJ = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diffJ, diffJ));
+        }
+        return NumOps.Sqrt(sumSq);
     }
 
     /// <summary>
@@ -191,11 +206,18 @@ public abstract class ClusteringBase<T> : IClustering<T>, IConfigurableModel<T>,
     /// </summary>
     protected T ComputeSquaredDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
+        // Direct sum-of-squares loop — see ComputeDistance for the rationale
+        // (avoid GPU dispatch overhead + GPU-path correctness regression on
+        // the small-vector dot products K-means EM emits per (sample, cluster,
+        // iteration) tuple).
         int d = x.Columns;
-        var diff = new Vector<T>(d);
+        T sumSq = NumOps.Zero;
         for (int j = 0; j < d; j++)
-            diff[j] = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-        return Engine.DotProduct(diff, diff);
+        {
+            T diffJ = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diffJ, diffJ));
+        }
+        return sumSq;
     }
 
     /// <summary>
