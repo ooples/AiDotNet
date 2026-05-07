@@ -168,8 +168,20 @@ public class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(Architecture.Layers);
-            return;
+            // Qwen2VL has multiple separable trainable streams (vision in
+            // Layers, resampler + decoder as auxiliary streams). A flat caller-
+            // supplied Architecture.Layers list cannot be unambiguously
+            // split because each stream's layer count is encoded in the
+            // model's Options class — this branch would silently leave
+            // the auxiliary streams empty and GenerateFromImage would
+            // degenerate to a vision-only forward. Reject so the caller
+            // either uses the default factory or constructs the streams
+            // explicitly post-construction.
+            throw new System.NotSupportedException(
+                "Custom Architecture.Layers is not supported for Qwen2VL: the model has multiple " +
+                "separable trainable streams (vision, resampler, decoder) and a flat layer list cannot " +
+                "be split unambiguously. Use the default factory (no Architecture.Layers) and " +
+                "override streams post-construction if needed.");
         }
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
@@ -230,6 +242,19 @@ public class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        // Sync the auxiliary streams (resampler / abstractor / decoder /
+        // visual decoder, depending on model) — see OpenFlamingo.UpdateParameters
+        // for full rationale (dual-stream split, GetExtraTrainableLayers
+        // widens the flat parameter vector to include them, so a writeback
+        // that only walks Layers leaves auxiliary streams on stale weights
+        // and the model state silently de-syncs across streams).
+        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
+        {
+            if (l is null) continue;
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
 
     /// <inheritdoc />

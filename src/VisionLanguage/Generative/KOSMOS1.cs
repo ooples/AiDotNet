@@ -226,7 +226,11 @@ public class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected); }
+        // Pass _optimizer through to TrainWithTape so the configured (or
+        // defaulted) AdamW is used instead of the base class's
+        // GetOrCreateBaseOptimizer default Adam at lr=1e-3. See
+        // BridgeTower.Train for full rationale.
+        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
         finally { SetTrainingMode(false); }
     }
 
