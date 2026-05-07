@@ -50,8 +50,10 @@ namespace AiDotNet.NeuralNetworks;
 /// </remarks>
 internal sealed class ChainedCompiledModelHost<T> : IDisposable
 {
-    /// <summary>Per-stage compiled hosts, one per pipeline stage.</summary>
-    private readonly CompiledModelHost<T>[] _stageHosts;
+    /// <summary>Per-stage compiled hosts, one per pipeline stage. Nulled in
+    /// <see cref="Dispose"/> after element disposal so the array reference is
+    /// released for GC.</summary>
+    private CompiledModelHost<T>[]? _stageHosts;
 
     private bool _disposed;
 
@@ -77,8 +79,9 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
         }
     }
 
-    /// <summary>Number of stages the chain was built for.</summary>
-    public int StageCount => _stageHosts.Length;
+    /// <summary>Number of stages the chain was built for. Throws
+    /// <see cref="ObjectDisposedException"/> if the host has been disposed.</summary>
+    public int StageCount => (_stageHosts ?? throw new System.ObjectDisposedException(nameof(ChainedCompiledModelHost<T>))).Length;
 
     /// <summary>
     /// Run the chained forward: stage 0 sees <paramref name="input"/>, each
@@ -100,17 +103,18 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
         if (input is null) throw new System.ArgumentNullException(nameof(input));
         if (versions is null) throw new System.ArgumentNullException(nameof(versions));
         if (stages is null) throw new System.ArgumentNullException(nameof(stages));
-        if (versions.Length != _stageHosts.Length)
+        var hosts = _stageHosts ?? throw new System.ObjectDisposedException(nameof(ChainedCompiledModelHost<T>));
+        if (versions.Length != hosts.Length)
             throw new System.ArgumentException(
-                $"versions length ({versions.Length}) must equal stageCount ({_stageHosts.Length}).",
+                $"versions length ({versions.Length}) must equal stageCount ({hosts.Length}).",
                 nameof(versions));
-        if (stages.Length != _stageHosts.Length)
+        if (stages.Length != hosts.Length)
             throw new System.ArgumentException(
-                $"stages length ({stages.Length}) must equal stageCount ({_stageHosts.Length}).",
+                $"stages length ({stages.Length}) must equal stageCount ({hosts.Length}).",
                 nameof(stages));
 
         var current = input;
-        for (int i = 0; i < _stageHosts.Length; i++)
+        for (int i = 0; i < hosts.Length; i++)
         {
             // Capture per-stage closure variables so the eager-forward lambda
             // sees the right tensor when its host actually invokes it. Without
@@ -119,7 +123,7 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
             // final tensor.
             var stageInput = current;
             var stageFn = stages[i];
-            current = _stageHosts[i].Predict(stageInput, versions[i], () => stageFn(stageInput));
+            current = hosts[i].Predict(stageInput, versions[i], () => stageFn(stageInput));
         }
         return current;
     }
@@ -131,7 +135,7 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
     /// </summary>
     public void InvalidateAll()
     {
-        if (_disposed) return;
+        if (_disposed || _stageHosts is null) return;
         for (int i = 0; i < _stageHosts.Length; i++)
             _stageHosts[i].Invalidate();
     }
@@ -143,7 +147,7 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
     /// </summary>
     public void InvalidateStage(int stageIndex)
     {
-        if (_disposed) return;
+        if (_disposed || _stageHosts is null) return;
         if ((uint)stageIndex >= (uint)_stageHosts.Length)
             throw new System.ArgumentOutOfRangeException(nameof(stageIndex));
         _stageHosts[stageIndex].Invalidate();
@@ -153,7 +157,15 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        for (int i = 0; i < _stageHosts.Length; i++)
-            _stageHosts[i].Dispose();
+        var hosts = _stageHosts;
+        if (hosts is not null)
+        {
+            for (int i = 0; i < hosts.Length; i++)
+                hosts[i].Dispose();
+            // Release the array reference for GC. Subsequent accesses on the
+            // public surface (Predict, StageCount) throw ObjectDisposedException;
+            // InvalidateAll / InvalidateStage no-op via the same null check.
+            _stageHosts = null;
+        }
     }
 }
