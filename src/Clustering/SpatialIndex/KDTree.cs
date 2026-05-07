@@ -431,13 +431,15 @@ public class KDTree<T>
         // GPU when AutoDetectAndConfigureGpu has switched backends and
         // produces wrong values for clustering distance metrics).
         var data = _data ?? throw new InvalidOperationException("KDTree: Data not initialized.");
-        var numOps = MathHelper.GetNumericOperations<T>();
-        T sumSq = numOps.Zero;
+        // Reuse the cached _numOps — re-resolving it through MathHelper inside
+        // this recursive distance hot path adds dictionary-lookup overhead per
+        // call.
+        T sumSq = _numOps.Zero;
         int d = query.Length;
         for (int j = 0; j < d; j++)
         {
-            T diffJ = numOps.Subtract(query[j], data[dataIndex, j]);
-            sumSq = numOps.Add(sumSq, numOps.Multiply(diffJ, diffJ));
+            T diffJ = _numOps.Subtract(query[j], data[dataIndex, j]);
+            sumSq = _numOps.Add(sumSq, _numOps.Multiply(diffJ, diffJ));
         }
         return sumSq;
     }

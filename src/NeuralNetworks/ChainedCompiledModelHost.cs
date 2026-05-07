@@ -53,14 +53,6 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
     /// <summary>Per-stage compiled hosts, one per pipeline stage.</summary>
     private readonly CompiledModelHost<T>[] _stageHosts;
 
-    /// <summary>
-    /// Stable identity strings for each stage, used by the disk plan cache to
-    /// avoid filename collisions between stages of the same model. Per-stage
-    /// suffixed with the stage index when the caller doesn't supply explicit
-    /// names.
-    /// </summary>
-    private readonly string[]? _stageIdentities;
-
     private bool _disposed;
 
     /// <summary>
@@ -78,11 +70,9 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
         if (stageCount < 1)
             throw new System.ArgumentOutOfRangeException(nameof(stageCount), "Need at least 1 stage.");
         _stageHosts = new CompiledModelHost<T>[stageCount];
-        _stageIdentities = modelIdentity is null ? null : new string[stageCount];
         for (int i = 0; i < stageCount; i++)
         {
             string? id = modelIdentity is null ? null : $"{modelIdentity}.stage{i}";
-            if (_stageIdentities is not null) _stageIdentities[i] = id ?? string.Empty;
             _stageHosts[i] = new CompiledModelHost<T>(modelIdentity: id);
         }
     }

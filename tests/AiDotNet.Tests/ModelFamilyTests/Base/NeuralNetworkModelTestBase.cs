@@ -267,8 +267,18 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         }
         catch (InvalidOperationException)
         {
+            // Several VL / diffusion overrides set training-mode to false
+            // INSIDE Predict() (so they always run inference in eval mode).
+            // Calling Predict here in training mode would therefore still
+            // materialize lazy params under eval — the very thing this retry
+            // exists to avoid. Use Train() instead: it goes through the
+            // model's own training-path that respects training mode end-to-end
+            // and is the closest surface to what the actual test step uses.
+            // Wrap in try/catch since this is warmup-only — we don't care if
+            // the loss / gradient signals are noisy on the first step.
             network.SetTrainingMode(true);
-            network.Predict(input);
+            try { network.Train(input, target); }
+            catch (System.Exception) { /* warmup-only; the actual assertion runs below */ }
         }
         network.SetTrainingMode(true);
 
@@ -886,8 +896,18 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         }
         catch (InvalidOperationException)
         {
+            // Several VL / diffusion overrides set training-mode to false
+            // INSIDE Predict() (so they always run inference in eval mode).
+            // Calling Predict here in training mode would therefore still
+            // materialize lazy params under eval — the very thing this retry
+            // exists to avoid. Use Train() instead: it goes through the
+            // model's own training-path that respects training mode end-to-end
+            // and is the closest surface to what the actual test step uses.
+            // Wrap in try/catch since this is warmup-only — we don't care if
+            // the loss / gradient signals are noisy on the first step.
             network.SetTrainingMode(true);
-            network.Predict(input);
+            try { network.Train(input, target); }
+            catch (System.Exception) { /* warmup-only; the actual assertion runs below */ }
         }
         network.SetTrainingMode(true);
 

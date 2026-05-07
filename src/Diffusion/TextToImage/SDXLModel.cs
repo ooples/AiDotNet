@@ -162,6 +162,20 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// The U-Net noise predictor.
     /// </summary>
+    /// <summary>
+    /// Per-instance gate that serializes Generate / GenerateAsync calls.
+    /// Scheduler.SetTimesteps + Scheduler.Timesteps are shared mutable state on
+    /// the model, and the UNet / VAE / text encoders share their own internal
+    /// caches (compiled-plan host, lazy layer-shape resolution, attention KV
+    /// caches, ParameterBuffer slices), so two concurrent Generate calls on the
+    /// same SDXLModel instance can corrupt each other's outputs. The gate
+    /// makes the "one stream per instance" contract explicit. Callers wanting
+    /// true concurrency should instantiate one SDXLModel per stream — that's
+    /// the standard pattern in production diffusion stacks (HuggingFace
+    /// diffusers, ComfyUI).
+    /// </summary>
+    private readonly System.Threading.SemaphoreSlim _generationGate = new System.Threading.SemaphoreSlim(1, 1);
+
     private UNetNoisePredictor<T> _unet;
 
     /// <summary>
@@ -362,74 +376,83 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         if (_conditioner1 == null)
             throw new InvalidOperationException("Text-to-image generation requires a conditioning module.");
 
-        // Default to actual size if not specified
-        originalWidth ??= width;
-        originalHeight ??= height;
-
-        var effectiveGuidanceScale = guidanceScale ?? GuidanceScale;
-        var useCFG = effectiveGuidanceScale > 1.0 && _unet.SupportsCFG;
-
-        // Encode text with dual encoder if available
-        var promptEmbedding = EncodeTextDual(prompt);
-        Tensor<T>? negativeEmbedding = null;
-
-        if (useCFG)
+        // Serialize per-instance — see _generationGate field doc.
+        _generationGate.Wait();
+        try
         {
-            negativeEmbedding = !string.IsNullOrEmpty(negativePrompt)
-                ? EncodeTextDual(negativePrompt ?? string.Empty)
-                : GetUnconditionalEmbeddingDual();
-        }
+            // Default to actual size if not specified
+            originalWidth ??= width;
+            originalHeight ??= height;
 
-        // Create micro-conditioning vector
-        var microCond = CreateMicroCondition(
-            originalWidth.Value, originalHeight.Value,
-            cropTop, cropLeft,
-            width, height);
+            var effectiveGuidanceScale = guidanceScale ?? GuidanceScale;
+            var useCFG = effectiveGuidanceScale > 1.0 && _unet.SupportsCFG;
 
-        // Add micro-conditioning to embeddings
-        promptEmbedding = ApplyMicroCondition(promptEmbedding, microCond);
-        if (negativeEmbedding != null)
-        {
-            negativeEmbedding = ApplyMicroCondition(negativeEmbedding, microCond);
-        }
+            // Encode text with dual encoder if available
+            var promptEmbedding = EncodeTextDual(prompt);
+            Tensor<T>? negativeEmbedding = null;
 
-        // Calculate latent dimensions
-        var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
-        var latentWidth = width / SDXL_VAE_SCALE_FACTOR;
-        var latentShape = new[] { 1, SDXL_LATENT_CHANNELS, latentHeight, latentWidth };
-
-        // Generate initial noise
-        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-        var latents = SampleNoiseTensor(latentShape, rng);
-
-        // Set up scheduler
-        Scheduler.SetTimesteps(numInferenceSteps);
-
-        // Denoising loop
-        foreach (var timestep in Scheduler.Timesteps)
-        {
-            Tensor<T> noisePrediction;
-
-            if (useCFG && negativeEmbedding != null)
+            if (useCFG)
             {
-                var condPred = _unet.PredictNoise(latents, timestep, promptEmbedding);
-                var uncondPred = _unet.PredictNoise(latents, timestep, negativeEmbedding);
-                noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
-            }
-            else
-            {
-                noisePrediction = _unet.PredictNoise(latents, timestep, promptEmbedding);
+                negativeEmbedding = !string.IsNullOrEmpty(negativePrompt)
+                    ? EncodeTextDual(negativePrompt ?? string.Empty)
+                    : GetUnconditionalEmbeddingDual();
             }
 
-            // Scheduler step
-            var latentVector = latents.ToVector();
-            var noiseVector = noisePrediction.ToVector();
-            latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
-            latents = new Tensor<T>(latentShape, latentVector);
-        }
+            // Create micro-conditioning vector
+            var microCond = CreateMicroCondition(
+                originalWidth.Value, originalHeight.Value,
+                cropTop, cropLeft,
+                width, height);
 
-        // Decode to image
-        return DecodeFromLatent(latents);
+            // Add micro-conditioning to embeddings
+            promptEmbedding = ApplyMicroCondition(promptEmbedding, microCond);
+            if (negativeEmbedding != null)
+            {
+                negativeEmbedding = ApplyMicroCondition(negativeEmbedding, microCond);
+            }
+
+            // Calculate latent dimensions
+            var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
+            var latentWidth = width / SDXL_VAE_SCALE_FACTOR;
+            var latentShape = new[] { 1, SDXL_LATENT_CHANNELS, latentHeight, latentWidth };
+
+            // Generate initial noise
+            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+            var latents = SampleNoiseTensor(latentShape, rng);
+
+            // Set up scheduler
+            Scheduler.SetTimesteps(numInferenceSteps);
+
+            // Denoising loop
+            foreach (var timestep in Scheduler.Timesteps)
+            {
+                Tensor<T> noisePrediction;
+
+                if (useCFG && negativeEmbedding != null)
+                {
+                    var condPred = _unet.PredictNoise(latents, timestep, promptEmbedding);
+                    var uncondPred = _unet.PredictNoise(latents, timestep, negativeEmbedding);
+                    noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
+                }
+                else
+                {
+                    noisePrediction = _unet.PredictNoise(latents, timestep, promptEmbedding);
+                }
+
+                // Scheduler step
+                var latentVector = latents.ToVector();
+                var noiseVector = noisePrediction.ToVector();
+                latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
+                latents = new Tensor<T>(latentShape, latentVector);
+            }
+
+            // Decode to image
+            return DecodeFromLatent(latents);
+        }
+        finally
+        {
+            _generationGate.Release();
+        }
     }
 
     /// <summary>
@@ -468,12 +491,17 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// </para>
     /// <para>
     /// Cancellation surfaces as <see cref="System.OperationCanceledException"/>;
-    /// no partial output is returned. Progress reporting is invoked
-    /// synchronously on the calling thread — implementers that need a UI
-    /// thread should wrap the IProgress in <c>Progress&lt;int&gt;</c>.
+    /// no partial output is returned. Progress reporting calls
+    /// <see cref="System.IProgress{T}.Report(T)"/> from the inference thread
+    /// pool worker. Whether the receiver's handler runs on that worker thread
+    /// or is marshaled elsewhere depends on the <see cref="System.IProgress{T}"/>
+    /// implementation — for example, <see cref="System.Progress{T}"/>
+    /// captures the calling <c>SynchronizationContext</c> at construction and
+    /// posts handler invocations to it (so UI callers should construct a
+    /// <c>Progress&lt;int&gt;</c> on the UI thread).
     /// </para>
     /// </remarks>
-    public virtual System.Threading.Tasks.Task<Tensor<T>> GenerateAsync(
+    public virtual async System.Threading.Tasks.Task<Tensor<T>> GenerateAsync(
         string prompt,
         string? negativePrompt = null,
         int width = DefaultWidth,
@@ -488,19 +516,29 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         System.IProgress<int>? progress = null,
         System.Threading.CancellationToken cancellationToken = default)
     {
-        // System.Threading.Tasks.Task.Run keeps the long CPU-bound denoise
-        // loop off the caller's synchronization context (UI / ASP.NET
-        // request) — without it an `await GenerateAsync(...)` from a UI
-        // thread would block the UI for the full ~30 s of inference.
-        return System.Threading.Tasks.Task.Run(() =>
+        // Serialize per-instance — the scheduler and the rest of the inference
+        // pipeline (UNet / VAE / encoders) all carry shared mutable state.
+        await _generationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            return GenerateWithMicroConditionCancellable(
-                prompt, negativePrompt, width, height,
-                originalWidth, originalHeight, cropTop, cropLeft,
-                numInferenceSteps, guidanceScale, seed,
-                progress, cancellationToken);
-        }, cancellationToken);
+            // System.Threading.Tasks.Task.Run keeps the long CPU-bound denoise
+            // loop off the caller's synchronization context (UI / ASP.NET
+            // request) — without it an `await GenerateAsync(...)` from a UI
+            // thread would block the UI for the full ~30 s of inference.
+            return await System.Threading.Tasks.Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return GenerateWithMicroConditionCancellable(
+                    prompt, negativePrompt, width, height,
+                    originalWidth, originalHeight, cropTop, cropLeft,
+                    numInferenceSteps, guidanceScale, seed,
+                    progress, cancellationToken);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _generationGate.Release();
+        }
     }
 
     /// <summary>

@@ -105,6 +105,13 @@ public class LoRALayer<T> : LayerBase<T>
     /// <summary>
     /// Gradients for matrix A computed during backpropagation.
     /// </summary>
+    // Cached Tensor wrappers around _loraA / _loraB so Forward doesn't allocate
+    // a fresh Tensor + int[] shape each call. Invalidated to null whenever the
+    // underlying matrices change — see UpdateMatricesFromParameters and the
+    // gradient-update paths.
+    private Tensor<T>? _loraATensor;
+    private Tensor<T>? _loraBTensor;
+
     private Matrix<T>? _loraAGradient;
 
     /// <summary>
@@ -262,8 +269,11 @@ public class LoRALayer<T> : LayerBase<T>
         // FusedLinear share. Matrix.ToTensor / new Tensor(matrix) is a thin
         // wrapper over the same row-major contiguous storage Matrix<T>
         // already uses — no element copy.
-        Tensor<T> aTensor = new Tensor<T>(new[] { _loraA.Rows, _loraA.Columns }, _loraA.ToVector());
-        Tensor<T> bTensor = new Tensor<T>(new[] { _loraB.Rows, _loraB.Columns }, _loraB.ToVector());
+        // Cache the tensor wrappers so high-frequency Forward calls (e.g.
+        // autoregressive decoding, batch streaming) don't pay the allocation
+        // cost on every invocation. Invalidated when matrices update.
+        Tensor<T> aTensor = _loraATensor ??= new Tensor<T>(new[] { _loraA.Rows, _loraA.Columns }, _loraA.ToVector());
+        Tensor<T> bTensor = _loraBTensor ??= new Tensor<T>(new[] { _loraB.Rows, _loraB.Columns }, _loraB.ToVector());
 
         // (input @ A) @ B * scaling — chained matmuls dispatched through the
         // Engine. For T=float with a base-output tensor available, the
@@ -319,6 +329,11 @@ public class LoRALayer<T> : LayerBase<T>
                 _loraB[i, j] = NumOps.Subtract(_loraB[i, j], update);
             }
         }
+
+        // Invalidate cached tensor wrappers — they snapshot the matrix data
+        // via Matrix.ToVector(), so they must be rebuilt next Forward.
+        _loraATensor = null;
+        _loraBTensor = null;
 
         // Update parameter vector
         UpdateParametersFromMatrices();
@@ -398,6 +413,11 @@ public class LoRALayer<T> : LayerBase<T>
                 _loraB[i, j] = Parameters[idx++];
             }
         }
+
+        // Invalidate cached tensor wrappers — they snapshot the matrix data
+        // via Matrix.ToVector(), so they must be rebuilt next Forward.
+        _loraATensor = null;
+        _loraBTensor = null;
     }
 
     /// <summary>
