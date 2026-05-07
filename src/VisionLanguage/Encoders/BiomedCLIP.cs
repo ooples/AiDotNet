@@ -162,7 +162,14 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxImageEncoder is not null) return L2Normalize(OnnxImageEncoder.Run(p));
+        if (IsOnnxMode)
+        {
+            if (OnnxImageEncoder is null)
+                throw new InvalidOperationException(
+                    "Image encoding in ONNX mode requires a configured image encoder model path. "
+                    + "Provide one via the ONNX-mode constructor or BiomedCLIPOptions.ImageEncoderModelPath.");
+            return L2Normalize(OnnxImageEncoder.Run(p));
+        }
         return L2Normalize(ForwardVisionEncoder(p));
     }
 
@@ -170,7 +177,20 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     {
         ThrowIfDisposed();
         var t = TokenizeText(text);
-        if (IsOnnxMode && OnnxTextEncoder is not null) return L2Normalize(OnnxTextEncoder.Run(t));
+        // Fail fast in ONNX mode when no text encoder is configured. The
+        // ONNX-mode constructor never populates _textEncoderLayers, so the
+        // previous fallback to ForwardTextEncoder ran the un-trained
+        // (empty) text stack and L2-normalized normalized token IDs —
+        // ComputeSimilarity / ZeroShotClassify silently returned garbage
+        // instead of surfacing the configuration error.
+        if (IsOnnxMode)
+        {
+            if (OnnxTextEncoder is null)
+                throw new InvalidOperationException(
+                    "Text encoding in ONNX mode requires a configured text encoder model path. "
+                    + "Set BiomedCLIPOptions.TextEncoderModelPath before constructing the model.");
+            return L2Normalize(OnnxTextEncoder.Run(t));
+        }
         return L2Normalize(ForwardTextEncoder(t));
     }
 
