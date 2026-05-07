@@ -51,6 +51,22 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Qwen2.5-VL Technical Report", "https://arxiv.org/abs/2502.13923", Year = 2025, Authors = "Bai et al.")]
+// QwenVL / Qwen2VL / Qwen25VL / Qwen3VL share the same boilerplate
+// (option field, optimizer / tokenizer caches, _useNativeMode + _disposed
+// flags, resampler + decoder auxiliary streams). Extracting a shared base
+// class is deliberately deferred: each generation has subtly different
+// option types, factory entry points (CreateDefaultQwen2VLLayers,
+// CreateDefaultQwen25VLLayers, CreateDefaultQwen3VLLayers), tokenizer
+// configuration (Qwen3 uses MROPE-aware position encoding the others
+// don't), and forward-path expectations — collapsing them into a single
+// base would either lose those per-generation specifics or push them
+// into virtual hooks that re-introduce the same per-class overrides.
+// The duplication is the cost of keeping each model's public surface
+// readable as a single self-contained file matching the paper that
+// defines it. When a fix has to propagate (as happened with the
+// dual-stream UpdateParameters / Architecture.Layers throw / Train
+// optimizer-wiring fixes in PR #1274), the same change is applied
+// across the four siblings in one commit.
 public class Qwen25VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
     private readonly Qwen25VLOptions _options;

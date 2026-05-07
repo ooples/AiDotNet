@@ -218,12 +218,27 @@ public class QwenVL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         return tokens;
     }
 
+    /// <summary>
+    /// Vision-encoder-only forward: runs the patch-embedding +
+    /// transformer stack in <see cref="NeuralNetworkBase{T}.Layers"/> and
+    /// returns the resulting [B, S, VisionEmbeddingDim] embeddings.
+    /// Mirrors the embedding-extraction surface of the rest of the
+    /// VL family (BiomedCLIP / DFNCLIP / EVACLIP — see #52). For the full
+    /// vision → resampler → decoder generation pipeline use
+    /// <see cref="GenerateFromImage(Tensor{T}, string)"/>; this method is
+    /// the encoder-only fast path callers reach for when they want
+    /// pre-fusion image features (zero-shot retrieval, similarity, etc.).
+    /// </summary>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        SetTrainingMode(false);
+        // Normalize ONNX inputs the same way the native path does — both
+        // EncodeImage / GenerateFromImage and the native Predict call
+        // PreprocessImage. Without this, the ONNX fast path would diverge
+        // silently from native.
         var c = PreprocessImage(input);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(c);
+        SetTrainingMode(false);
         foreach (var l in Layers) c = l.Forward(c);
         return c;
     }
