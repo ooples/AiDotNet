@@ -1907,8 +1907,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
+        else if (family == TestFamily.GraphNN)
+        {
+            // Graph neural networks expect rank-2 [nodes, features] (or rank-3
+            // [batch, nodes, features]). The default rank-1 shape would fail
+            // every Predict immediately with "expects a 2D or 3D tensor."
+            // Feature dim must match each model's configured input dimension —
+            // 128 matches GraphNeuralOperator's parameterless ctor (inputSize=128)
+            // and is the most common default across graph-network defaults
+            // (most embed nodes into a 64-128-d space). Models with different
+            // configured input dims need a manual test class override.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 8, 128 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 128 };");
+        }
         else if (family == TestFamily.NeuralNetwork || family == TestFamily.GAN ||
-                 family == TestFamily.Embedding || family == TestFamily.GraphNN)
+                 family == TestFamily.Embedding)
         {
             // 1D models in families that support InputShape override:
             // match the architecture's inputSize
