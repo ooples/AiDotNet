@@ -178,9 +178,12 @@ public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
-        SetTrainingMode(false);
+        // Normalize ONNX inputs the same way the native path does — both
+        // EncodeImage and the native Predict call PreprocessImage. Without
+        // this, the ONNX fast path would diverge silently from native.
         var c = PreprocessImage(input);
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(c);
+        SetTrainingMode(false);
         foreach (var l in Layers) c = l.Forward(c);
         return c;
     }

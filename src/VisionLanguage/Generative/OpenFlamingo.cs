@@ -197,9 +197,12 @@ public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        SetTrainingMode(false);
+        // Normalize ONNX inputs the same way the native path does — both
+        // EncodeImage and the native Predict call PreprocessImage. Without
+        // this, the ONNX fast path would diverge silently from native.
         var c = PreprocessImage(input);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(c);
+        SetTrainingMode(false);
         foreach (var l in Layers) c = l.Forward(c);
         return c;
     }

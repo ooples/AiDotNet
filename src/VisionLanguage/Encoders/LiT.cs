@@ -196,9 +196,14 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
-        SetTrainingMode(false);
+        // Normalize ONNX inputs the same way the native path does — both
+        // EncodeImage and the native Predict call PreprocessImage. Without
+        // this, the ONNX fast path would diverge silently from native
+        // (different mean/std offsets reach the model on ONNX vs.
+        // native), which is hard to debug.
         var c = PreprocessImage(input);
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(c);
+        SetTrainingMode(false);
         foreach (var layer in Layers) c = layer.Forward(c);
         return c;
     }
