@@ -24102,6 +24102,22 @@ public static class LayerHelper<T>
         int understandingFfnDim = understandingDim * 4;
         int generationFfnDim = generationDim * 4;
 
+        // === Patch Embedding ===
+        // Per Xiao et al. 2024 OmniGen2 §3 (and the underlying ViT-style
+        // vision encoder in Dosovitskiy et al. 2020), raw [B, 3, H, W]
+        // images must be tokenized via a patch embedding before reaching
+        // the multi-head attention blocks — MHA's input dim is visionDim,
+        // not the raw image's spatial dim. Without this layer, a
+        // [3, 128, 128] input flowed straight into the first MHA whose
+        // Q/K/V weights expect visionDim=1024, throwing
+        // "Input embedding dimension (128) does not match weight dimension
+        // (1024)" (#1224 Cluster F: OmniGen2 — 23 / 39 tests blocked).
+        // Standard ViT-Base patch size is 16 (14 in CLIP/DINO; 16 in
+        // OmniGen / OmniGen2's vision encoder per the paper); the patch
+        // count for a 128×128 input at patchSize=16 is 64 tokens.
+        const int patchSize = 16;
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
+
         // === Shared Vision Encoder ===
         yield return new LayerNormalizationLayer<T>();
 
