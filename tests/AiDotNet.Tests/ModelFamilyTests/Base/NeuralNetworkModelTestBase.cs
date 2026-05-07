@@ -189,7 +189,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task Training_ShouldReduceLoss()
+    public virtual async Task Training_ShouldReduceLoss()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
@@ -1156,7 +1156,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         Assert.Equal(expectedLength, output.Length);
     }
 
-    private double ComputeMSE(Tensor<double> output, Tensor<double> target)
+    protected double ComputeMSE(Tensor<double> output, Tensor<double> target)
     {
         double mse = 0;
         int len = Math.Min(output.Length, target.Length);
