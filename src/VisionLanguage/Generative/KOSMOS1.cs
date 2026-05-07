@@ -163,8 +163,20 @@ public class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(Architecture.Layers);
-            return;
+            // KOSMOS1 has two trainable streams (vision in Layers,
+            // causal decoder in _decoderLayers). A flat caller-supplied
+            // Architecture.Layers list can't be unambiguously split — the
+            // decoder layer count is encoded in KOSMOS1Options
+            // (NumDecoderLayers), and this branch would silently leave
+            // _decoderLayers empty so GenerateFromImage returns vision
+            // projection without ever running the autoregressive
+            // decoder. Reject so the caller uses the default factory
+            // path (or overrides streams post-construction).
+            throw new System.NotSupportedException(
+                "Custom Architecture.Layers is not supported for KOSMOS1: the model has two " +
+                "separable trainable streams (vision, causal decoder) and a flat layer list " +
+                "cannot be split unambiguously. Use the default factory (no Architecture.Layers) " +
+                "and override streams post-construction if needed.");
         }
 
         // CreateDefaultCausalMultimodalLayers emits:

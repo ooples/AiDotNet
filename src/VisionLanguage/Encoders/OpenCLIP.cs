@@ -254,12 +254,6 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            // Caller-supplied layer graph: keep historic single-list behaviour.
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
 
         // ViT patch embedding (Dosovitskiy et al. 2021 §3.1) + dual-stream split.
         // Vision encoder lives in Layers, text encoder lives in TextEncoderLayers
@@ -273,8 +267,22 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         int visionLayerCount = 2 + _options.NumVisionLayers * blockSize;
-        SplitDualStreamLayers(
-            LayerHelper<T>.CreateDefaultOpenCLIPLayers(
+
+        // Honour caller-supplied Architecture.Layers via the same
+        // SplitDualStreamLayers split as the default factory produces.
+        // The previous "AddRange + return" branch dropped the entire
+        // text stack on the floor — TextEncoderLayers stayed empty and
+        // EncodeText silently degenerated to walking nothing. Splitting
+        // the supplied list at visionLayerCount keeps the dual-stream
+        // contract: callers must hand us layers in
+        // [vision-pre-norm, N×vision-block, vision-projection,
+        //  text-pre-norm, N×text-block, text-projection] order,
+        // matching the CreateDefaultOpenCLIPLayers convention. Mismatched
+        // counts surface as the assertion inside SplitDualStreamLayers
+        // (see VisionLanguageModelBase) instead of silent breakage.
+        IEnumerable<ILayer<T>> graph = Architecture.Layers is not null && Architecture.Layers.Count > 0
+            ? Architecture.Layers
+            : LayerHelper<T>.CreateDefaultOpenCLIPLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
                 textEmbeddingDim: _options.TextEmbeddingDim,
                 projectionDim: _options.ProjectionDim,
@@ -282,8 +290,8 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
                 numTextLayers: _options.NumTextLayers,
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
-                dropoutRate: _options.DropoutRate),
-            visionLayerCount);
+                dropoutRate: _options.DropoutRate);
+        SplitDualStreamLayers(graph, visionLayerCount);
     }
 
     /// <inheritdoc />
