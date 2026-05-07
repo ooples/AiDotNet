@@ -163,25 +163,15 @@ public class BLIP3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMod
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is TripleStreamArchitecture<T> triple)
         {
-            // BLIP3 has three trainable streams (vision in Layers,
-            // Q-Former in _qFormerLayers, decoder in _decoderLayers).
-            // A flat caller-supplied Architecture.Layers list cannot be
-            // unambiguously split into those three because the Q-Former
-            // and decoder layer counts are encoded in BLIP3Options
-            // (NumQFormerLayers, NumDecoderLayers) — what looks like a
-            // valid graph here would silently leave _qFormerLayers /
-            // _decoderLayers empty and GenerateFromImage would degrade
-            // to a vision-only forward. Reject the input so the caller
-            // either uses the default factory or constructs the streams
-            // explicitly (post-init, by mutating the public stream
-            // accessors before training).
-            throw new System.NotSupportedException(
-                "Custom Architecture.Layers is not supported for BLIP3: the model has three " +
-                "separable trainable streams (vision, Q-Former, decoder) and a flat layer list " +
-                "cannot be split unambiguously. Use the default factory (no Architecture.Layers) " +
-                "and override individual streams after construction if needed.");
+            // Vision encoder, Q-Former, and decoder supplied as named streams.
+            Layers.AddRange(triple.VisionLayers);
+            _qFormerLayers.AddRange(triple.AuxiliaryLayers);
+            _decoderLayers.AddRange(triple.TextOrDecoderLayers);
+            RegisterAuxiliaryEncoderStream(_qFormerLayers);
+            RegisterAuxiliaryEncoderStream(_decoderLayers);
+            return;
         }
 
         // CreateDefaultQFormerGenerativeLayers emits:

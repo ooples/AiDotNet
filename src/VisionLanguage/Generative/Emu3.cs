@@ -154,9 +154,13 @@ public class Emu3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageMode
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is TripleStreamArchitecture<T> triple)
         {
-            Layers.AddRange(Architecture.Layers);
+            Layers.AddRange(triple.VisionLayers);
+            _decoderLayers.AddRange(triple.AuxiliaryLayers);
+            _regressionLayers.AddRange(triple.TextOrDecoderLayers);
+            RegisterAuxiliaryEncoderStream(_decoderLayers);
+            RegisterAuxiliaryEncoderStream(_regressionLayers);
             return;
         }
 

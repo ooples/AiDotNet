@@ -152,22 +152,15 @@ public class IDEFICS3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is TripleStreamArchitecture<T> triple)
         {
-            // IDEFICS3 has multiple separable trainable streams (vision in
-            // Layers, perceiver + decoder as auxiliary streams). A flat caller-
-            // supplied Architecture.Layers list cannot be unambiguously
-            // split because each stream's layer count is encoded in the
-            // model's Options class — this branch would silently leave
-            // the auxiliary streams empty and GenerateFromImage would
-            // degenerate to a vision-only forward. Reject so the caller
-            // either uses the default factory or constructs the streams
-            // explicitly post-construction.
-            throw new System.NotSupportedException(
-                "Custom Architecture.Layers is not supported for IDEFICS3: the model has multiple " +
-                "separable trainable streams (vision, perceiver, decoder) and a flat layer list cannot " +
-                "be split unambiguously. Use the default factory (no Architecture.Layers) and " +
-                "override streams post-construction if needed.");
+            // Vision encoder, perceiver, and decoder supplied as named streams.
+            Layers.AddRange(triple.VisionLayers);
+            _perceiverLayers.AddRange(triple.AuxiliaryLayers);
+            _decoderLayers.AddRange(triple.TextOrDecoderLayers);
+            RegisterAuxiliaryEncoderStream(_perceiverLayers);
+            RegisterAuxiliaryEncoderStream(_decoderLayers);
+            return;
         }
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;

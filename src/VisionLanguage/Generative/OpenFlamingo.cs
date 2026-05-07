@@ -153,23 +153,15 @@ public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is TripleStreamArchitecture<T> triple)
         {
-            // OpenFlamingo has three trainable streams (vision in
-            // Layers, perceiver resampler in _perceiverLayers, decoder
-            // in _decoderLayers). A flat caller-supplied
-            // Architecture.Layers list can't be unambiguously split —
-            // perceiver/decoder counts are encoded in
-            // OpenFlamingoOptions, and this branch would silently leave
-            // _perceiverLayers / _decoderLayers empty so
-            // GenerateFromImage degrades to a vision-only forward.
-            // Reject so the caller uses the default factory (or
-            // overrides streams post-construction).
-            throw new System.NotSupportedException(
-                "Custom Architecture.Layers is not supported for OpenFlamingo: the model has " +
-                "three separable trainable streams (vision, perceiver resampler, decoder) and a " +
-                "flat layer list cannot be split unambiguously. Use the default factory (no " +
-                "Architecture.Layers) and override streams post-construction if needed.");
+            // Vision, perceiver resampler, and decoder supplied as named streams.
+            Layers.AddRange(triple.VisionLayers);
+            _perceiverLayers.AddRange(triple.AuxiliaryLayers);
+            _decoderLayers.AddRange(triple.TextOrDecoderLayers);
+            RegisterAuxiliaryEncoderStream(_perceiverLayers);
+            RegisterAuxiliaryEncoderStream(_decoderLayers);
+            return;
         }
 
         int blockSize = _options.DropoutRate > 0 ? 6 : 5;
