@@ -247,12 +247,27 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
         if (visionLayerCount < 0)
             throw new System.ArgumentOutOfRangeException(nameof(visionLayerCount), "visionLayerCount must be ≥ 0.");
 
-        int idx = 0;
-        foreach (var layer in allLayers)
+        // Materialize once so we can validate before mutating Layers /
+        // TextEncoderLayers. An oversized visionLayerCount that the
+        // previous loop silently accepted (everything piles into Layers,
+        // TextEncoderLayers stays empty) would surface as the same
+        // class of "EncodeText silently degrades" bug the per-encoder
+        // overrides try to prevent — fail fast here so a layer-factory
+        // drift becomes an obvious construction error instead of a
+        // runtime no-op.
+        var layerList = allLayers as IList<ILayer<T>> ?? new List<ILayer<T>>(allLayers);
+        if (visionLayerCount > layerList.Count)
+            throw new System.ArgumentOutOfRangeException(
+                nameof(visionLayerCount),
+                $"visionLayerCount ({visionLayerCount}) exceeds the supplied layer sequence " +
+                $"({layerList.Count}). The supplied factory's layer count and the dual-stream " +
+                "split point have drifted apart — check the OpenCLIP-style block-size / layer-count " +
+                "math against the architecture's NumVisionLayers / DropoutRate.");
+
+        for (int idx = 0; idx < layerList.Count; idx++)
         {
-            if (idx < visionLayerCount) Layers.Add(layer);
-            else TextEncoderLayers.Add(layer);
-            idx++;
+            if (idx < visionLayerCount) Layers.Add(layerList[idx]);
+            else TextEncoderLayers.Add(layerList[idx]);
         }
     }
 

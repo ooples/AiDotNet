@@ -253,9 +253,23 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // EnsureInitializedFromInput; without this warmup the snapshot
         // captures empty arrays and the post-Train compare iterates zero
         // values, falsely reporting "no parameters changed".
+        //
+        // Models whose forward path requires training mode (e.g. layers
+        // that throw InvalidOperationException from a non-training
+        // Predict) get the warmup retried under training mode rather
+        // than being silently skipped — skipping the warmup leaves
+        // those models with the same length-0 snapshot and the same
+        // false "no params changed" report this fix exists to prevent.
         network.SetTrainingMode(false);
-        try { network.Predict(input); }
-        catch (InvalidOperationException) { /* eval-mode-incompatible — tolerated */ }
+        try
+        {
+            network.Predict(input);
+        }
+        catch (InvalidOperationException)
+        {
+            network.SetTrainingMode(true);
+            network.Predict(input);
+        }
         network.SetTrainingMode(true);
 
         // Bounded sampling of parameter chunks (the first up to 4 chunks,
@@ -813,10 +827,19 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // forward pass — see Training_ShouldChangeParameters for the
         // rationale. Without this, the snapshot captures pre-allocation
         // length-0 chunks and the post-Train compare iterates zero
-        // values, falsely reporting "no parameters changed".
+        // values, falsely reporting "no parameters changed". Models
+        // whose forward requires training mode get the warmup retried
+        // there instead of being silently skipped.
         network.SetTrainingMode(false);
-        try { network.Predict(input); }
-        catch (InvalidOperationException) { /* eval-mode-incompatible — tolerated */ }
+        try
+        {
+            network.Predict(input);
+        }
+        catch (InvalidOperationException)
+        {
+            network.SetTrainingMode(true);
+            network.Predict(input);
+        }
         network.SetTrainingMode(true);
 
         // Bounded sampling — see Training_ShouldChangeParameters for the
@@ -894,9 +917,21 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // forward" symptom (InvalidOperationException from layers that
         // refuse a non-training Predict). Swallowing every Exception here
         // would silently mask genuine regressions (NaN, shape errors, OOM)
-        // that this invariant is designed to surface.
-        try { network.Predict(input); }
-        catch (InvalidOperationException) { /* eval-mode-incompatible — tolerated */ }
+        // that this invariant is designed to surface. When the eval-mode
+        // call does throw, retry the warmup in training mode so the
+        // BEFORE L2 measurement reflects materialized params (skipping
+        // it would leave length-0 lazy chunks and the AFTER measurement
+        // would appear to explode — exactly the false-positive this
+        // warmup exists to prevent).
+        try
+        {
+            network.Predict(input);
+        }
+        catch (InvalidOperationException)
+        {
+            network.SetTrainingMode(true);
+            network.Predict(input);
+        }
         network.SetTrainingMode(true);
 
         // Streaming chunk-based L2 to avoid materializing the flat parameter
