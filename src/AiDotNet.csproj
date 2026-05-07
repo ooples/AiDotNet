@@ -80,6 +80,8 @@
 	  <PackageReference Include="TreeSitter.DotNet" />
 	  <PackageReference Include="FftSharp" />
 	  <PackageReference Include="Parquet.Net" />
+	  <!-- Explicit pin to override vulnerable transitive Snappier 1.3.0 (GHSA-pggp-6c3x-2xmx) -->
+	  <PackageReference Include="Snappier" />
 	  <PackageReference Include="YamlDotNet" />
 	</ItemGroup>
 
