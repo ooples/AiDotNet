@@ -292,6 +292,47 @@ public class ReconstructionLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// ReconstructionLayer's own InputShape/OutputShape are concrete from
+    /// construction, so the base <see cref="LayerBase{T}.IsShapeResolved"/>
+    /// returns <c>true</c> immediately — but its three lazy
+    /// <see cref="FullyConnectedLayer{T}"/> sub-layers have unallocated
+    /// weight tensors until the first forward pass routes input through
+    /// them. The Clone / serialize-deserialize round-trip walks
+    /// <c>!IsShapeResolved</c> to decide which layers need
+    /// <see cref="LayerBase{T}.ResolveFromShape"/> before
+    /// <see cref="SetParameters"/> — without this override the sub-FCLs
+    /// stayed at their default <c>[0, 0]</c> weight shapes (parameter
+    /// count = bias only) and SetParameters tried to load 1411344
+    /// trained values into a 2320-slot container, throwing
+    /// <c>ArgumentException</c> from
+    /// <see cref="SetParameters"/> in <c>CapsuleNetwork.Clone_AfterTraining</c>
+    /// and <c>Clone_ShouldProduceIdenticalOutput</c> (#1224 Cluster F).
+    /// Report unresolved when any sub-FCL is unresolved so the
+    /// deserialize loop calls <see cref="OnFirstForward"/> on this layer.
+    /// </summary>
+    public override bool IsShapeResolved =>
+        base.IsShapeResolved && _fc1.IsShapeResolved && _fc2.IsShapeResolved && _fc3.IsShapeResolved;
+
+    /// <summary>
+    /// Resolves the three lazy FCL sub-layers by routing a dummy tensor
+    /// of <see cref="InputShape"/> through them. Each FCL's
+    /// <see cref="FullyConnectedLayer{T}.OnFirstForward"/> allocates its
+    /// weight tensor against the resolved input dim. Idempotent —
+    /// re-runs on already-resolved sub-FCLs are short-circuited by
+    /// <see cref="LayerBase{T}.EnsureInitializedFromInput"/>'s gate.
+    /// </summary>
+    protected override void OnFirstForward(Tensor<T> input)
+    {
+        // Forward through sub-FCLs; their OnFirstForward overrides allocate
+        // weights against the actual resolved input dim. Output of one
+        // sub-layer feeds the next, so each gets the right input shape
+        // without us hardcoding _hidden1Dim/_hidden2Dim assumptions.
+        var x = _fc1.Forward(input);
+        x = _fc2.Forward(x);
+        _ = _fc3.Forward(x);
+    }
+
+    /// <summary>
     /// Performs GPU-accelerated forward pass by chaining through sublayers.
     /// </summary>
     /// <param name="inputs">Input GPU tensors (uses first input).</param>
