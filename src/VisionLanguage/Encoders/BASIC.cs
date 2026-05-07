@@ -199,9 +199,13 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
-        SetTrainingMode(false);
+        // Normalize ONNX inputs the same way the native path and
+        // EncodeImage do — both call PreprocessImage. Without this the
+        // ONNX fast path would diverge silently from native (different
+        // mean / std offsets reach the model), which is hard to debug.
         var current = PreprocessImage(input);
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(current);
+        SetTrainingMode(false);
         foreach (var layer in Layers) current = layer.Forward(current);
         return current;
     }
@@ -219,6 +223,19 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        // After the dual-stream split (vision in Layers, text in
+        // TextEncoderLayers via VisionLanguageModelBase), text encoder
+        // weights live outside Layers but ParameterCount / GetParameters
+        // include them. Apply the trailing parameter slice to the text
+        // stream too — without this, SetParameters-style flows leave the
+        // text encoder on its old weights and the model state silently
+        // de-syncs across the two streams.
+        foreach (var layer in TextEncoderLayers)
         {
             int count = (int)layer.ParameterCount;
             layer.UpdateParameters(parameters.Slice(idx, count));
