@@ -225,7 +225,7 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected); }
+        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
         finally { SetTrainingMode(false); }
     }
 
