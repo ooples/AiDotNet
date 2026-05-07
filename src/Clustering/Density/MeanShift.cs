@@ -325,13 +325,16 @@ public class MeanShift<T> : ClusteringBase<T>
 
         for (int i = 0; i < n; i++)
         {
-            // Compute squared distance using Engine.DotProduct
-            var diff = new Vector<T>(d);
+            // Compute squared distance inline — see ClusteringBase.ComputeDistance
+            // for the rationale (Engine.DotProduct on tiny vectors dispatches
+            // to GPU when AutoDetectAndConfigureGpu has switched backends,
+            // surfaced as the issue #1224 Cluster B regression).
+            T distSq = NumOps.Zero;
             for (int j = 0; j < d; j++)
             {
-                diff[j] = NumOps.Subtract(data[i, j], centerVec[j]);
+                T diffJ = NumOps.Subtract(data[i, j], centerVec[j]);
+                distSq = NumOps.Add(distSq, NumOps.Multiply(diffJ, diffJ));
             }
-            T distSq = Engine.DotProduct(diff, diff);
 
             // Gaussian kernel weight (only within bandwidth)
             if (!NumOps.GreaterThan(distSq, bandwidthSq))
@@ -379,12 +382,13 @@ public class MeanShift<T> : ClusteringBase<T>
             {
                 if (used[j]) continue;
 
-                var mergeDiff = new Vector<T>(d);
+                // Inline sum-of-squares — same rationale as the loop above.
+                T distSq = NumOps.Zero;
                 for (int k = 0; k < d; k++)
                 {
-                    mergeDiff[k] = NumOps.Subtract(centers[i][k], centers[j][k]);
+                    T diffK = NumOps.Subtract(centers[i][k], centers[j][k]);
+                    distSq = NumOps.Add(distSq, NumOps.Multiply(diffK, diffK));
                 }
-                T distSq = Engine.DotProduct(mergeDiff, mergeDiff);
 
                 if (NumOps.LessThan(NumOps.Sqrt(distSq), threshold))
                 {

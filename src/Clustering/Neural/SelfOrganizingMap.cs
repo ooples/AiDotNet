@@ -367,12 +367,16 @@ public class SelfOrganizingMap<T> : ClusteringBase<T>
             for (int c = 0; c < _options.GridWidth; c++)
             {
                 var weightVec = new Vector<T>(FittedWeights[r, c]);
-                var diff = new Vector<T>(d);
+                // Inline sum-of-squares — see ClusteringBase.ComputeDistance for
+                // the rationale (Engine.DotProduct on tiny vectors dispatches
+                // to GPU when AutoDetectAndConfigureGpu has switched backends
+                // and produces wrong values, surfaced as #1224 Cluster B).
+                T dist = NumOps.Zero;
                 for (int j = 0; j < d; j++)
                 {
-                    diff[j] = NumOps.Subtract(sampleVec[j], weightVec[j]);
+                    T diffJ = NumOps.Subtract(sampleVec[j], weightVec[j]);
+                    dist = NumOps.Add(dist, NumOps.Multiply(diffJ, diffJ));
                 }
-                T dist = Engine.DotProduct(diff, diff);
 
                 if (NumOps.LessThan(dist, minDist))
                 {
