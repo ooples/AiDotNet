@@ -360,17 +360,17 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             var hNext = Engine.TensorAdd(aHPrev, weighted);
 
             // Update h in-place for next iteration. h is rented from the
-            // allocator and we want to keep using the same buffer; copy
-            // hNext into h via SetSlice rather than reassigning the local
-            // (which would lose the rented reference). For batch-leading
-            // tensors GetSliceAlongDimension(0, 0) yields the whole batch
-            // slab — equivalent to the prior per-element write loop but
-            // through the SIMD-aware bulk path.
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _recurrenceDimension; d++)
-                    h[new[] { bi, d }] = hNext[new[] { bi, d }];
-            }
+            // allocator and we want to keep using the same buffer; bulk-copy
+            // hNext's full storage into h via Engine.TensorCopy rather than
+            // reassigning the local (which would drop the rented reference).
+            // The previous element-wise write loop allocated 2 fresh int[]
+            // index arrays per (batch, recurrenceDim) pair — at seqLen=1024,
+            // batchSize=16, recurrenceDim=256 that's ~8 million per-call
+            // allocations and erodes the SIMD gains from the gate/output
+            // computation above. Engine.TensorCopy dispatches to the
+            // SIMD-aware bulk path used by ConvLSTMLayer / Bidirectional
+            // and friends.
+            Engine.TensorCopy(hNext, h);
 
             allDecay.SetSlice(1, t, a_t);
             allHidden.SetSlice(1, t + 1, h);
