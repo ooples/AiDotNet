@@ -291,6 +291,14 @@ public class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageM
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing)
+        {
+            // OnnxModel is allocated by the ONNX-mode constructor and
+            // wraps a native ONNX Runtime session — without disposing it
+            // here, repeated create/dispose cycles leak unmanaged session
+            // memory.
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 }
