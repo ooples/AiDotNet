@@ -288,8 +288,11 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         // paper-faithful AdamW optimizer (β₂=0.98, weight_decay=0.2,
         // lr=5e-4) instead of the base class's default Adam (lr=1e-3) —
         // see ctor for why.
-        TrainWithTape(PreprocessImage(input), expected, _optimizer);
-        SetTrainingMode(false);
+        // try/finally so a TrainWithTape throw doesn't leave the model
+        // stuck in training mode (matches the BiomedCLIP / BridgeTower /
+        // METER / BLIP3 Train pattern).
+        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
+        finally { SetTrainingMode(false); }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
