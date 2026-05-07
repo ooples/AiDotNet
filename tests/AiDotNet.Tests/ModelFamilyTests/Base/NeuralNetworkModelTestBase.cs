@@ -286,7 +286,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         const int MaxSampledChunks = 32;
         const int MaxValuesPerChunk = 1024;
         var snapshots = new System.Collections.Generic.List<double[]>();
-        foreach (var chunk in network.GetParameterChunks())
+        foreach (var chunk in EnumerateParameterChunks(network))
         {
             if (snapshots.Count >= MaxSampledChunks) break;
             int n = System.Math.Min(chunk.Length, MaxValuesPerChunk);
@@ -300,7 +300,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         bool anyChanged = false;
         int chunkIdx = 0;
-        foreach (var chunk in network.GetParameterChunks())
+        foreach (var chunk in EnumerateParameterChunks(network))
         {
             if (chunkIdx >= snapshots.Count) break;
             var prev = snapshots[chunkIdx++];
@@ -725,14 +725,31 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task MoreData_ShouldNotDegrade()
+    public virtual async Task MoreData_ShouldNotDegrade()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng1 = ModelTestHelpers.CreateSeededRandom(42);
         var rng2 = ModelTestHelpers.CreateSeededRandom(42);
+
+        // Both networks must start with IDENTICAL initial weights — the
+        // invariant "more training never hurts" only holds when the
+        // baseline is the same model. Two independent CreateNetwork()
+        // calls produced different random inits (layer weight init runs
+        // off RandomHelper.CreateSecureRandom when the architecture has
+        // no seed), so loss(init_A, shortTrain) was being compared
+        // against loss(init_B, longTrain). On stochastic models — GANs,
+        // sigmoid-output Siamese — the init-B-vs-init-A variance can
+        // legitimately swamp the longer-training improvement, producing
+        // intermittent failures that look like flakiness but trace to a
+        // shared-baseline bug. Clone after build so network2 starts
+        // from the same weights as network1.
         var network1 = CreateNetwork();
-        var network2 = CreateNetwork();
+        INeuralNetworkModel<double> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
+            network2 = (INeuralNetworkModel<double>)nn1.Clone();
+        else
+            network2 = (INeuralNetworkModel<double>)network1.Clone();
 
         var input = CreateRandomTensor(InputShape, rng1);
         var target = CreateRandomTensor(EffectiveOutputShape, rng1);
@@ -866,7 +883,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         const int MaxSampledChunks = 32;
         const int MaxValuesPerChunk = 1024;
         var snapshots = new System.Collections.Generic.List<double[]>();
-        foreach (var chunk in network.GetParameterChunks())
+        foreach (var chunk in EnumerateParameterChunks(network))
         {
             if (snapshots.Count >= MaxSampledChunks) break;
             int n = System.Math.Min(chunk.Length, MaxValuesPerChunk);
@@ -880,7 +897,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         bool anyChanged = false;
         int chunkIdx = 0;
         int globalIdx = 0;
-        foreach (var chunk in network.GetParameterChunks())
+        foreach (var chunk in EnumerateParameterChunks(network))
         {
             if (chunkIdx >= snapshots.Count) break;
             var prev = snapshots[chunkIdx++];
@@ -1181,7 +1198,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     private static double SumSquaredChunks(INeuralNetworkModel<double> network)
     {
         double sumSq = 0;
-        foreach (var chunk in network.GetParameterChunks())
+        foreach (var chunk in EnumerateParameterChunks(network))
         {
             int n = chunk.Length;
             for (int i = 0; i < n; i++)
@@ -1192,4 +1209,44 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         }
         return sumSq;
     }
+
+    /// <summary>
+    /// Streams <c>GetParameterChunks()</c> on both .NET Standard 2.1+
+    /// (where the method is reachable through the IParameterizable
+    /// default-interface contract) and .NET Framework 4.7.1 (where
+    /// default interface methods aren't supported, so callers must reach
+    /// the override through the concrete <c>NeuralNetworkBase&lt;T&gt;</c>
+    /// type — see the <c>#if !NETFRAMEWORK</c> guard around
+    /// <c>IParameterizable.GetParameterChunks</c>). Falls back to a
+    /// single-tensor flat snapshot for non-NN <c>INeuralNetworkModel</c>
+    /// implementations on net471 — none exist in-tree today, but keep
+    /// the fallback so the test base stays safe if one is added later
+    /// without a concrete chunk override.
+    /// </summary>
+    protected static System.Collections.Generic.IEnumerable<Tensor<double>> EnumerateParameterChunks(INeuralNetworkModel<double> network)
+    {
+#if !NETFRAMEWORK
+        return network.GetParameterChunks();
+#else
+        return EnumerateParameterChunksLegacy(network);
+#endif
+    }
+
+#if NETFRAMEWORK
+    private static System.Collections.Generic.IEnumerable<Tensor<double>> EnumerateParameterChunksLegacy(INeuralNetworkModel<double> network)
+    {
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nnBase)
+        {
+            foreach (var chunk in nnBase.GetParameterChunks())
+                yield return chunk;
+            yield break;
+        }
+
+        var flat = network.GetParameters();
+        if (flat.Length == 0) yield break;
+        var single = new Tensor<double>(new[] { flat.Length });
+        for (int i = 0; i < flat.Length; i++) single[i] = flat[i];
+        yield return single;
+    }
+#endif
 }
