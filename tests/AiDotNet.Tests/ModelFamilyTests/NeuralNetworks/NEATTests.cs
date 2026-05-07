@@ -28,6 +28,17 @@ public class NEATTests : NeuralNetworkModelTestBase
     protected override int MemorizationTaskIterations => 4;
     protected override double MemorizationTaskLossThreshold => 0.99999;
 
+    // NEAT runs 50 internal evolutionary generations per public Train
+    // call — on a 1-sample memorization task that's enough to drive
+    // the loss to ~1e-4 immediately. The relative-decrease threshold
+    // then reads "lossFinal < ~0 × 0.99999" which the
+    // already-converged loss can't satisfy. Floor at 1e-4: any final
+    // loss below this is treated as a pass. Still catches the
+    // bug class the invariant is designed for (sign errors,
+    // first-step explosion, oscillation that drives loss UP), since
+    // those produce loss far above 1e-4.
+    protected override double MemorizationTaskAbsoluteLossFloor => 1e-4;
+
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new NEAT<double>();
 }

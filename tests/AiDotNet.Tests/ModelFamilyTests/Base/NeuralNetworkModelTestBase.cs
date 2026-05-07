@@ -1019,6 +1019,28 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// </summary>
     protected virtual double MemorizationTaskLossThreshold => 0.99;
 
+    /// <summary>
+    /// Absolute-loss floor under which the memorization invariant
+    /// considers training "converged" and passes regardless of
+    /// the relative-decrease check. Models that memorize a single
+    /// sample to near-zero loss in a single Train call (NEAT runs
+    /// 50 internal generations per public Train; evolutionary
+    /// models in general can collapse loss faster than the
+    /// 0.99× / 0.99999× relative thresholds expect) hit
+    /// <c>lossStep1 ≈ lossFinal ≈ 0</c>, where
+    /// <c>lossFinal &lt; lossStep1 × threshold</c> reduces to
+    /// <c>0 &lt; 0</c> = false even though training succeeded.
+    /// Default <c>0</c> disables the floor (only the relative
+    /// check applies) for backprop-trained networks where
+    /// per-step loss decreases gradually. Models that converge
+    /// in one call override this to a small positive value
+    /// (e.g. <c>1e-4</c>) so the invariant treats sub-floor
+    /// loss as a pass — still catches sign errors / explosion
+    /// / oscillation that drive loss away from zero, just
+    /// doesn't false-fail on legitimate fast convergence.
+    /// </summary>
+    protected virtual double MemorizationTaskAbsoluteLossFloor => 0.0;
+
     [Fact(Timeout = 180000)]
     public virtual async Task LossStrictlyDecreasesOnMemorizationTask()
     {
@@ -1049,7 +1071,13 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // working training pipeline drives the loss down monotonically
         // on a memorization task; a broken pipeline (oscillation, sign
         // flip, post-explosion drift) leaves loss flat or rising.
-        Assert.True(lossFinal < lossStep1 * MemorizationTaskLossThreshold,
+        // Models that converge to a near-zero floor in a single Train
+        // call (evolutionary, kNN-style memorizers) pass at the absolute
+        // floor — the relative-decrease check would mis-fire on
+        // already-converged loss (lossStep1 ≈ lossFinal ≈ 0).
+        bool atFloor = MemorizationTaskAbsoluteLossFloor > 0
+            && lossFinal <= MemorizationTaskAbsoluteLossFloor;
+        Assert.True(atFloor || lossFinal < lossStep1 * MemorizationTaskLossThreshold,
             $"Loss did NOT strictly decrease on memorization task: step 1={lossStep1:F6}, "
             + $"step {MemorizationTaskIterations}={lossFinal:F6}. "
             + "Diagnostic: optimizer is oscillating, gradient sign is wrong, or first-step blew the model "

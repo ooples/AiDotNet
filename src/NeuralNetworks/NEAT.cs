@@ -1126,6 +1126,33 @@ public class NEAT<T> : NeuralNetworkBase<T>
         // The number of generations can be adjusted based on the problem complexity
         int generations = 50;
         EvolvePopulation(fitnessFunction, generations);
+
+        // Re-evaluate the post-evolution best genome and record its loss
+        // as LastLoss. The fitness-function-side LastLoss assignment uses
+        // a reference-equality probe against the pre-generation best,
+        // which silently misses the post-evolution best when the
+        // population reshuffles (every Train call after the first hit
+        // this — LastLoss stayed at its pre-Train value or NumOps.Zero,
+        // producing the misleading "step 1=0.000000, step N=0.000000"
+        // failure on LossStrictlyDecreasesOnMemorizationTask). Recompute
+        // here so the public Train contract surfaces a real per-call loss.
+        var postBest = GetBestGenome();
+        if (postBest.Connections.Count > 0 && trainingData.Count > 0)
+        {
+            T totalErr = NumOps.Zero;
+            foreach (var (sampleInput, sampleExpected) in trainingData)
+            {
+                var act = ActivateGenome(postBest, sampleInput);
+                var pred = new Vector<T>(Architecture.OutputSize);
+                for (int i = 0; i < Architecture.OutputSize; i++)
+                {
+                    int outputNodeId = Architecture.InputSize + i;
+                    pred[i] = act.ContainsKey(outputNodeId) ? act[outputNodeId] : NumOps.Zero;
+                }
+                totalErr = NumOps.Add(totalErr, LossFunction.CalculateLoss(pred, sampleExpected));
+            }
+            LastLoss = NumOps.Divide(totalErr, NumOps.FromDouble(trainingData.Count));
+        }
     }
 
     /// <summary>
@@ -1263,6 +1290,27 @@ public class NEAT<T> : NeuralNetworkBase<T>
         }
 
         return parameters;
+    }
+
+    /// <summary>
+    /// Yields the best genome's connection weights as a single chunk so
+    /// snapshot-based parameter-change probes (Training_ShouldChangeParameters,
+    /// GradientFlow_ShouldBeNonZeroAndFinite) see real evolutionary
+    /// updates. The base <see cref="NeuralNetworkBase{T}.GetParameterChunks"/>
+    /// walks <see cref="Layers"/>, but NEAT populates Layers with a stub
+    /// representation of the best genome and the actual trainable surface
+    /// lives in the genome's <c>Connections</c> list — so the inherited
+    /// chunk walk reported zero changes after Train and produced false
+    /// "no parameters changed" failures (#1224 Cluster F). Yielding a
+    /// genome-derived chunk surfaces the evolutionary delta.
+    /// </summary>
+    public override System.Collections.Generic.IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        var paramVec = GetParameters();
+        if (paramVec.Length == 0) yield break;
+        var chunk = new Tensor<T>(new[] { paramVec.Length });
+        for (int i = 0; i < paramVec.Length; i++) chunk[i] = paramVec[i];
+        yield return chunk;
     }
 
     /// <summary>
