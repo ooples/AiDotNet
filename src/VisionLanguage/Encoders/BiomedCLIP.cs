@@ -278,9 +278,13 @@ public class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
+        // Both paths must see the same preprocessed input: native path forwards
+        // through Layers below, ONNX path runs the same encoder under
+        // OnnxImageEncoder. Skipping PreprocessImage on the ONNX branch makes
+        // the two paths produce different mean/std-offset inputs to the model.
+        var current = PreprocessImage(input);
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(current);
         SetTrainingMode(false);
-        var current = input;
         foreach (var l in Layers) current = l.Forward(current);
         return current;
     }

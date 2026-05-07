@@ -212,9 +212,10 @@ public class MPLUGOwl3<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        SetTrainingMode(false);
+        // Both paths must see the same preprocessed input.
         var c = PreprocessImage(input);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(c);
+        SetTrainingMode(false);
         foreach (var l in Layers) c = l.Forward(c);
         return c;
     }

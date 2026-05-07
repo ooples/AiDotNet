@@ -186,9 +186,10 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
-        SetTrainingMode(false);
+        // Both paths must see the same preprocessed input.
         var c = PreprocessImage(input);
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(c);
+        SetTrainingMode(false);
         foreach (var l in Layers) c = l.Forward(c);
         return c;
     }

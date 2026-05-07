@@ -266,9 +266,11 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
-        SetTrainingMode(false);
+        // Native path normalizes via PreprocessImage; ONNX path must do the
+        // same so the two encoders see identical mean/std-offset inputs.
         var current = PreprocessImage(input);
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(current);
+        SetTrainingMode(false);
         foreach (var layer in Layers)
             current = layer.Forward(current);
         return current;
