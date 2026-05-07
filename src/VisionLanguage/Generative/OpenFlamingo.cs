@@ -220,6 +220,18 @@ public class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        // Sync the auxiliary streams (perceiver, decoder) too. They're
+        // surfaced through GetExtraTrainableLayers below, so the flat
+        // parameter vector includes their slices — writing back only
+        // into Layers leaves perceiver / decoder on stale weights and
+        // GenerateFromImage rolls back to the random init values.
+        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
+        {
+            if (l is null) continue;
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
 
     /// <inheritdoc />
