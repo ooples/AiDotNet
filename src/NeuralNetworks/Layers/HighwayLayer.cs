@@ -917,7 +917,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (_transformWeightsGradient == null || _transformBiasGradient == null ||
             _gateWeightsGradient == null || _gateBiasGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_transformWeightsGradient.ToArray()),
             new Vector<T>(_transformBiasGradient.ToArray()),

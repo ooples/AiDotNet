@@ -538,8 +538,8 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
         _inputDepth = inDepth;
 
         // Allocate kernels/biases against the now-known channel count.
-        _kernels = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = new Tensor<T>([_outputDepth * _upscaleFactor * _upscaleFactor]);
+        _kernels = AllocateLazyWeight([_outputDepth * _upscaleFactor * _upscaleFactor, _inputDepth, _kernelSize, _kernelSize]);
+        _biases = AllocateLazyWeight([_outputDepth * _upscaleFactor * _upscaleFactor]);
         InitializeWeights();
 
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
@@ -585,13 +585,25 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     private void InitializeWeights()
     {
-        // Xavier initialization
+        // Xavier initialization. Write the scaled random values directly into
+        // the EXISTING _kernels tensor's storage. Replacing the field reference
+        // (e.g., `_kernels = Engine.TensorMultiplyScalar(...)`) drops the
+        // AllocateLazyWeight-registered instance that the streaming pool /
+        // weight registry are tracking, breaking the LRU bookkeeping for
+        // very large models. In-place mutation preserves the registration.
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputDepth * _kernelSize * _kernelSize + _outputDepth * _upscaleFactor * _upscaleFactor)));
 
-        // Vectorized random init in [-0.5, 0.5], scaled by Xavier factor
+        // Generate scaled random values via the engine (vectorized) and
+        // copy into the EXISTING _kernels tensor's storage so we preserve
+        // the AllocateLazyWeight registration in the streaming pool.
+        // The double-allocation here (Vector + temporary tensor + dest)
+        // is a known limitation: a destination-aware engine API would
+        // write directly into the registered tensor. Tracked in
+        // AiDotNet.Tensors, not blocking on this PR.
         var randVec = Vector<T>.CreateRandom(_kernels.Length, -0.5, 0.5);
         var randTensor = new Tensor<T>(_kernels._shape, randVec);
-        _kernels = Engine.TensorMultiplyScalar(randTensor, scale);
+        var scaled = Engine.TensorMultiplyScalar(randTensor, scale);
+        scaled.AsSpan().CopyTo(_kernels.Data.Span);
 
         _biases.Fill(NumOps.Zero);
     }

@@ -1,4 +1,5 @@
-﻿using AiDotNet.Extensions;
+using AiDotNet.Helpers;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -565,7 +566,7 @@ public class VeRAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer gradients if not frozen

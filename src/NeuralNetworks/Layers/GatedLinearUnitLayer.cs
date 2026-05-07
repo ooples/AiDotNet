@@ -404,8 +404,8 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
                 $"GatedLinearUnitLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
         int inputDimension = input.Shape[rank - 1];
-        _linearWeights = new Tensor<T>([_outputDimension, inputDimension]);
-        _gateWeights = new Tensor<T>([_outputDimension, inputDimension]);
+        _linearWeights = AllocateLazyWeight([_outputDimension, inputDimension]);
+        _gateWeights = AllocateLazyWeight([_outputDimension, inputDimension]);
         InitializeParameters();
         RegisterTrainableParameter(_linearWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_gateWeights, PersistentTensorRole.Weights);
@@ -483,12 +483,18 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
         int inputDimension = _linearWeights.Shape[1];
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (outputDimension + inputDimension)));
 
-        _linearWeights = Engine.TensorMultiplyScalar(
+        // Copy initialization data into the EXISTING lazy-allocated
+        // tensors in place — replacing them would discard the
+        // AllocateLazyWeight registration. Closes #1271.7Bob.
+        var linearInit = Engine.TensorMultiplyScalar(
             new Tensor<T>(_linearWeights._shape, Vector<T>.CreateRandom(_linearWeights.Length, -0.5, 0.5)),
             scale);
-        _gateWeights = Engine.TensorMultiplyScalar(
+        linearInit.AsSpan().CopyTo(_linearWeights.AsWritableSpan());
+
+        var gateInit = Engine.TensorMultiplyScalar(
             new Tensor<T>(_gateWeights._shape, Vector<T>.CreateRandom(_gateWeights.Length, -0.5, 0.5)),
             scale);
+        gateInit.AsSpan().CopyTo(_gateWeights.AsWritableSpan());
 
         _linearBias.Fill(NumOps.Zero);
         _gateBias.Fill(NumOps.Zero);
@@ -730,6 +736,22 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if shape isn't resolved, infer inputDim from param
+        // vector. Layout: 2*[outDim, inDim] weights + 2*[outDim] biases
+        // = 2*outDim*(inDim + 1) → inDim = total/(2*outDim) - 1.
+        if (!IsShapeResolved && _outputDimension > 0)
+        {
+            int divisor = 2 * _outputDimension;
+            if (parameters.Length % divisor == 0)
+            {
+                int candidateInput = parameters.Length / divisor - 1;
+                if (candidateInput > 0)
+                {
+                    ResolveFromShape(new[] { candidateInput });
+                }
+            }
+        }
+
         int linearWeightsSize = _linearWeights.Shape[0] * _linearWeights.Shape[1];
         int gateWeightsSize = _gateWeights.Shape[0] * _gateWeights.Shape[1];
         int expectedLength = linearWeightsSize + gateWeightsSize +
@@ -786,7 +808,7 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>
     {
         if (_linearWeightsGradient == null || _gateWeightsGradient == null ||
             _linearBiasGradient == null || _gateBiasGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_linearWeightsGradient.ToArray()),
             new Vector<T>(_gateWeightsGradient.ToArray()),

@@ -1201,6 +1201,13 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null);
 
+    // ConfigureWeightStreaming intentionally lives on
+    // IWeightStreamingCapableBuilder<T, TInput, TOutput> (declared at the
+    // bottom of this file) instead of on IAiModelBuilder<T, TInput, TOutput>,
+    // so adding it does not break external implementers of IAiModelBuilder.
+    // The concrete AiModelBuilder<T, TInput, TOutput> implements both
+    // interfaces, so existing fluent call sites continue to compile.
+
     /// <summary>
     /// Controls GPU backend diagnostic output visibility and routing.
     /// Exposes all three controls from github.com/ooples/AiDotNet#1122:
@@ -2537,4 +2544,29 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     /// <returns>The builder instance for method chaining.</returns>
     IAiModelBuilder<T, TInput, TOutput> ConfigureSimilarityMetric(RetrievalAugmentedGeneration.VectorSearch.ISimilarityMetric<T> metric);
 
+}
+
+/// <summary>
+/// Optional companion interface for builders that support PaLM-E-scale weight
+/// streaming. Kept separate from <see cref="IAiModelBuilder{T, TInput, TOutput}"/>
+/// so the introduction of <see cref="ConfigureWeightStreaming"/> does NOT
+/// break external implementers of <c>IAiModelBuilder</c>. Cast a builder to
+/// this interface (or use the concrete <see cref="AiModelBuilder{T, TInput, TOutput}"/>)
+/// to opt into the streaming control surface.
+/// </summary>
+public interface IWeightStreamingCapableBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>
+{
+    /// <summary>
+    /// Configures weight streaming behaviour for the model under
+    /// construction. See the doc block on
+    /// <see cref="AiDotNet.AiModelBuilder{T, TInput, TOutput}.ConfigureWeightStreaming"/>
+    /// for the full behavioural contract — this declaration is the binding
+    /// surface callers should invoke through when they want to remain
+    /// abstract over the builder type.
+    /// </summary>
+    /// <param name="config">The streaming configuration. Pass null to
+    /// reset to default auto-detect behaviour; pass a populated config
+    /// to override.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureWeightStreaming(WeightStreamingConfig? config = null);
 }

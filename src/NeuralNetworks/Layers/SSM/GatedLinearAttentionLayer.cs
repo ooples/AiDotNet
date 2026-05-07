@@ -130,7 +130,10 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
     /// Gets the total number of trainable parameters.
     /// </summary>
     public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
+        // Cast the first term to long so the running sum widens to 64-bit
+        // and never wraps before reaching ToFlatVectorSize on multi-billion-
+        // parameter linear-attention configs.
+        (long)_queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _gateWeights.Length + _gateBias.Length +
         _outputWeights.Length + _outputBias.Length;
 
@@ -353,7 +356,7 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -381,7 +384,7 @@ internal partial class GatedLinearAttentionLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_queryWeightsGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),

@@ -1,4 +1,5 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -402,7 +403,7 @@ public class QALoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

@@ -1,4 +1,5 @@
-﻿using AiDotNet.DecompositionMethods.MatrixDecomposition;
+using AiDotNet.Helpers;
+using AiDotNet.DecompositionMethods.MatrixDecomposition;
 using AiDotNet.Enums.AlgorithmTypes;
 using AiDotNet.Interfaces;
 
@@ -303,7 +304,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
         _initializedFromSVD = false;
 
         // Update parameters to reflect only R matrix
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromR();
     }
 
@@ -787,7 +788,7 @@ public class LoRAXSAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
         for (int i = 0; i < _trainableRGradient.Rows; i++)
         {

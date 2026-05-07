@@ -1493,7 +1493,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
-        var result = new Vector<T>((int)ParameterCount);
+        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
         int rows = _weights.Shape[0];
         int cols = _weights.Shape[1];
@@ -1528,7 +1528,7 @@ public partial class SpikingLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_weightGradients == null || _biasGradients == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         return Vector<T>.Concatenate(
             new Vector<T>(_weightGradients.ToArray()),

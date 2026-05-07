@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Enums;
@@ -431,8 +432,16 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             int inputSize = InputShape[0];
             int outputSize = OutputShape[0];
 
-            _weights = TensorAllocator.Rent<T>([inputSize, outputSize]);
-            _biases = TensorAllocator.Rent<T>([outputSize]);
+            // Streaming-aware allocation: when the parent network has
+            // engaged streaming, route through WeightRegistry.AllocateStreaming
+            // so the pool can pre-evict competing weights to disk before
+            // this allocation hits the GC heap. Otherwise preserve the
+            // existing arena-allocator fast path so non-streaming models
+            // don't pay the pool-lookup overhead.
+            int[] wShape = [inputSize, outputSize];
+            int[] bShape = [outputSize];
+            _weights = AllocateLazyWeight(wShape, () => TensorAllocator.Rent<T>(wShape));
+            _biases = AllocateLazyWeight(bShape, () => TensorAllocator.Rent<T>(bShape));
 
             // Initialize using strategy or default
             if (InitializationStrategy is not null)
@@ -1264,7 +1273,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     {
         if (_weightsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
 
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
@@ -1355,9 +1364,24 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override void Deserialize(BinaryReader reader)
     {
+        // Lazy ctor: if shape isn't resolved, recover inputSize from the
+        // saved weights length (= wLen / outputSize) and resolve before
+        // EnsureInitialized tries to allocate with a -1 sentinel. We
+        // simply read wLen first, then resolve, then read the weight
+        // values — no rewinding needed since wLen is the first int we
+        // consume from the layer's blob.
+        int wLen = reader.ReadInt32();
+        if (!IsShapeResolved)
+        {
+            int outputSize = OutputShape[0];
+            if (outputSize > 0 && wLen > 0 && wLen % outputSize == 0)
+            {
+                int inferredInput = wLen / outputSize;
+                ResolveFromShape(new[] { inferredInput });
+            }
+        }
         EnsureInitialized();
         // Read weights IN PLACE to preserve engine's persistent tensor reference
-        int wLen = reader.ReadInt32();
         var wSpan = _weights.Data.Span;
         for (int i = 0; i < Math.Min(wLen, _weights.Length); i++)
             wSpan[i] = NumOps.FromDouble(reader.ReadDouble());

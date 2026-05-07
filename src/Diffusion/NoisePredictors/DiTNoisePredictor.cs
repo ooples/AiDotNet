@@ -961,7 +961,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // 24 blocks × 1024 hidden ≈ 250 M parameters; 8-byte doubles ⇒
         // 2 GB), the previous List+ToArray pattern peaked at ~3× that
         // size during the doubling and copy, OOMing CI test hosts.
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var result = new Vector<T>(totalParams);
         int offset = 0;
 
@@ -1288,7 +1288,7 @@ public class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // Same pre-allocate-and-fill pattern as GetParameters — see
         // notes there. Avoids List<T> doubling + ToArray() copy on
         // models with hundreds of millions of parameters.
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var result = new Vector<T>(totalParams);
         int offset = 0;
 

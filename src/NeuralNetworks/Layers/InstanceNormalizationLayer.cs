@@ -424,7 +424,7 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     public override Vector<T> GetParameterGradients()
     {
-        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
     }
 

@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Helpers;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -349,7 +350,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_kernelGradients == null || _biasGradients == null) return new Vector<T>((int)ParameterCount);
+        if (_kernelGradients == null || _biasGradients == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(new Vector<T>(_kernelGradients.ToArray()), new Vector<T>(_biasGradients.ToArray()));
     }
 
@@ -498,8 +499,8 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
         int outH = (h + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
         int outW = (w + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
 
-        _kernels = new Tensor<T>([_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
-        _biases = new Tensor<T>([_outputDepth]);
+        _kernels = AllocateLazyWeight([_outputDepth, _inputDepth, _kernelSize, _kernelSize]);
+        _biases = AllocateLazyWeight([_outputDepth]);
         InitializeWeights();
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
@@ -962,6 +963,27 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if shape isn't resolved yet (placeholder _kernels with
+        // Length 0), infer inputDepth from the parameter vector layout
+        // (kernels + biases = inputDepth*outputDepth*kernelSize² + outputDepth)
+        // and call ResolveFromShape with kernelSize as dummy spatial dims.
+        if (!IsShapeResolved)
+        {
+            int kernelArea = _kernelSize * _kernelSize;
+            int candidateInputDepth = (parameters.Length - _outputDepth) / (_outputDepth * kernelArea);
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * _outputDepth * kernelArea + _outputDepth != parameters.Length)
+            {
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for DilatedConvolutionalLayer from {parameters.Length} parameters " +
+                    $"(outputDepth={_outputDepth}, kernelSize={_kernelSize}).");
+            }
+            // Dilated kernel needs spatial dims >= dilation*(kernelSize-1)+1
+            // for the OnFirstForward shape check. Use that as the dummy size.
+            int minSpatial = _dilation * (_kernelSize - 1) + 1;
+            ResolveFromShape(new[] { candidateInputDepth, minSpatial, minSpatial });
+        }
+
         int expectedLength = _kernels.Length + _biases.Length;
         if (parameters.Length != expectedLength)
         {

@@ -1,4 +1,5 @@
-﻿using System;
+using AiDotNet.Helpers;
+using System;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -221,8 +222,10 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
                 return _freezeBaseLayer ? 0 : _baseLayer.ParameterCount;
             }
 
-            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-            return baseCount + (2 * _numBasis);
+            // long throughout — avoid truncation when wrapping a large
+            // foundation-model base layer. Closes #1271.7Bni.
+            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
+            return baseCount + (2L * _numBasis);
         }
     }
 
@@ -522,7 +525,7 @@ public class NOLAAdapter<T> : LoRAAdapterBase<T>
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer gradients if not frozen

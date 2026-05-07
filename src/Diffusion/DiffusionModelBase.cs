@@ -553,13 +553,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
-        return new[] { (int)ParameterCount };
+        return new[] { ParameterCountHelper.ToFlatVectorSize(ParameterCount) };
     }
 
     /// <inheritdoc/>
     public virtual int[] GetOutputShape()
     {
-        return new[] { (int)ParameterCount };
+        return new[] { ParameterCountHelper.ToFlatVectorSize(ParameterCount) };
     }
 
     /// <inheritdoc/>

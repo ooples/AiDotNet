@@ -1210,7 +1210,7 @@ public class LLaVANeuralNetwork<T> : NeuralNetworkBase<T>, ILLaVAModel<T>
             return;
         }
 
-        int expectedCount = (int)ParameterCount;
+        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(

@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+using AiDotNet.Helpers;
+using System.Globalization;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -384,7 +385,7 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
     /// <returns>Vector containing base parameters (if not frozen) and all task adapters' parameters.</returns>
     public override Vector<T> GetParameters()
     {
-        Vector<T> parameters = new Vector<T>((int)ParameterCount);
+        Vector<T> parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Base layer parameters (if not frozen)
@@ -559,11 +560,11 @@ public class MultiLoRAAdapter<T> : LoRAAdapterBase<T>
         // Guard against incomplete initialization
         if (_taskAdapters == null)
         {
-            ParameterGradients = new Vector<T>((int)ParameterCount);
+            ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
             return;
         }
 
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Base layer gradients (if not frozen)

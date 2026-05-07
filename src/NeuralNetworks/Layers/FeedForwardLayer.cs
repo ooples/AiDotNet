@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -305,7 +306,11 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
             // Use SimdRandom for vectorized weight initialization (4x faster than
             // Tensor.CreateRandom which uses LockedRandom with per-element locking).
             // SimdRandom uses AVX2 xoshiro256** to produce 4 doubles per iteration.
-            _weights = new Tensor<T>([_inputSize, _outputSize]);
+            // Streaming-aware allocation: PaLM-E's FFN layers are the
+            // second-largest memory consumer after MHA (4× hidden_size
+            // expansion). Routing through AllocateLazyWeight lets the
+            // pool pre-evict before the new GC byte[] lands.
+            _weights = AllocateLazyWeight([_inputSize, _outputSize]);
             var rng = new SimdRandom();
             var wSpan = _weights.Data.Span;
             int total = wSpan.Length;
@@ -841,7 +846,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_weightsGradient == null || _biasesGradient == null || _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         // Bulk copy from contiguous tensor storage — replaces per-element scalar loops
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weightsGradient.Data),

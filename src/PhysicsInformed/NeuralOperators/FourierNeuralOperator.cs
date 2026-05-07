@@ -551,7 +551,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// </summary>
         public override Vector<T> GetParameters()
         {
-            var parameters = new Vector<T>((int)ParameterCount);
+            var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
             int index = 0;
 
             foreach (var layer in Layers)
@@ -570,7 +570,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         public override Vector<T> GetGradients()
         {
-            var gradients = new Vector<T>((int)ParameterCount);
+            var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
             int index = 0;
 
             foreach (var layer in Layers)
@@ -600,7 +600,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// Fourier layers are registered in the base Layers collection, so no separate sum needed.
         /// </summary>
         public override long ParameterCount =>
-            (int)Layers.Sum(layer => layer.ParameterCount);
+            // Sum<long>; the previous (int) cast wrapped before the
+            // property returned long, defeating ToFlatVectorSize on
+            // multi-billion-parameter operator configs.
+            Layers.Sum(layer => layer.ParameterCount);
 
         /// <summary>
         /// Performs a basic supervised training step using MSE loss.
@@ -1033,7 +1036,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             // Tape-based training computes gradients through GradientTape<T> on
             // each forward call and applies them immediately — no persistent
             // gradient buffers are maintained here.
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
 
         public override void ClearGradients()
@@ -1042,7 +1045,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         }
 
         public override long ParameterCount =>
-            _spectralWeightsReal.Length * 2 + _pointwiseWeights.Length + _pointwiseBias.Length;
+            // Cast first term to long so the sum is 64-bit before any
+            // addend can wrap. Spectral weights for high-resolution
+            // physics solvers can each approach int.MaxValue / 2 alone.
+            (long)_spectralWeightsReal.Length * 2 + _pointwiseWeights.Length + _pointwiseBias.Length;
 
         public override void ResetState()
         {

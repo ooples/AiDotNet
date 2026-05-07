@@ -151,7 +151,11 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
 
     /// <inheritdoc />
     public override long ParameterCount =>
-        _routerWeights.Length + _routerBias.Length +
+        // Cast the first term to long so the running sum is evaluated in 64-bit
+        // and never wraps before reaching ToFlatVectorSize. With ten tensors
+        // the implicit int sum can overflow on multi-billion-parameter MoE
+        // configs (router + 4 experts × full hidden² weights).
+        (long)_routerWeights.Length + _routerBias.Length +
         _expertA.Length + _expertB.Length + _expertC.Length + _expertD.Length +
         _outputGateWeights.Length + _outputGateBias.Length +
         _outputProjectionWeights.Length + _outputProjectionBias.Length;
@@ -532,7 +536,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -561,7 +565,7 @@ public partial class MixtureOfMambaLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_routerWeightsGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_routerWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             new Vector<T>(_routerWeightsGradient?.ToArray() ?? Array.Empty<T>()),
             new Vector<T>(_routerBiasGradient?.ToArray() ?? Array.Empty<T>()),

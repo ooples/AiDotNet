@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -127,7 +128,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// recomputing the count on every access and to provide a stable value
     /// during base class construction before the chain is fully initialized.
     /// </remarks>
-    private int _currentParameterCount;
+    private long _currentParameterCount;
 
     /// <summary>
     /// Gets the total number of adapters in the chain.
@@ -331,15 +332,18 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            // If chain is not yet initialized (during base construction), compute on-the-fly
+            // If chain is not yet initialized (during base construction), compute on-the-fly.
+            // Accumulator is `long` so an arbitrarily-deep chain over a
+            // base layer with > int.MaxValue parameters doesn't truncate
+            // before the helper sees it. Closes #1271.7BnU.
             if (_adapterChain == null || _currentParameterCount == 0)
             {
-                int count = 0;
+                long count = 0L;
 
                 // Add base layer parameters if not frozen and baseLayer exists
                 if (_baseLayer != null && !_freezeBaseLayer)
                 {
-                    count += (int)_baseLayer.ParameterCount;
+                    count += _baseLayer.ParameterCount;
                 }
 
                 // Add unmerged adapter parameters from chain
@@ -349,7 +353,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
                     {
                         if (!_mergedStatus[i])
                         {
-                            count += (int)(_adapterChain[i].ParameterCount);
+                            count += _adapterChain[i].ParameterCount;
                         }
                     }
                 }
@@ -538,15 +542,20 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
 
     /// <summary>
     /// Updates the parameter count based on current frozen status.
+    /// Accumulator is <see cref="long"/> so a base + chain summing past
+    /// int.MaxValue doesn't truncate; the Vector ctor narrows via
+    /// <see cref="ParameterCountHelper.ToFlatVectorSize"/> which throws
+    /// the actionable error if the model is too large for a flat
+    /// parameter vector. Closes #1271.7BnU.
     /// </summary>
     private void UpdateParameterCount()
     {
-        int count = 0;
+        long count = 0L;
 
         // Add base layer parameters if not frozen
         if (!_freezeBaseLayer)
         {
-            count += (int)_baseLayer.ParameterCount;
+            count += _baseLayer.ParameterCount;
         }
 
         // Add unfrozen adapter parameters
@@ -554,16 +563,19 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
         {
             if (!_mergedStatus[i])
             {
-                count += (int)(_adapterChain[i].ParameterCount);
+                count += _adapterChain[i].ParameterCount;
             }
         }
 
         // Update cached parameter count
         _currentParameterCount = count;
 
-        // Reallocate parameter vectors with new size
-        Parameters = new Vector<T>(count);
-        ParameterGradients = new Vector<T>(count);
+        // Reallocate parameter vectors with new size — narrow via the
+        // helper so a >int.MaxValue model fails fast with an actionable
+        // message rather than silently truncating.
+        int flatSize = AiDotNet.Helpers.ParameterCountHelper.ToFlatVectorSize(count);
+        Parameters = new Vector<T>(flatSize);
+        ParameterGradients = new Vector<T>(flatSize);
     }
 
     /// <summary>
@@ -637,7 +649,7 @@ public class ChainLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromChain()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // Pack base layer gradients if not frozen

@@ -113,10 +113,12 @@ public class NeuralNetworkLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DenseLayer_GetParameters_ReturnsWeightsAndBiases()
     {
-        // Arrange
+        // Arrange — lazy ctor; resolve from input shape so weight + bias
+        // tensors are allocated before GetParameters reads them.
         int inputSize = 4;
         int outputSize = 3;
         var layer = new DenseLayer<double>(outputSize);
+        layer.ResolveFromShape(new[] { inputSize });
 
         // Act
         var parameters = layer.GetParameters();
@@ -524,16 +526,20 @@ public class NeuralNetworkLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ConvolutionalLayer_SmallInput_HandlesGracefully()
     {
-        // Arrange - Input smaller than kernel
+        // Arrange — lazy ctor doesn't see input dimensions, so the
+        // input-too-small check moves to OnFirstForward / ResolveFromShape.
         int inputDepth = 1;
         int inputHeight = 2;
         int inputWidth = 2;
         int outputDepth = 1;
         int kernelSize = 3;
 
-        // Act & Assert - input too small for kernel should throw
+        var layer = new ConvolutionalLayer<double>(outputDepth, kernelSize);
+
+        // Act & Assert - resolving with input smaller than kernel must
+        // throw at the shape-resolution boundary.
         Assert.Throws<ArgumentException>(() =>
-            new ConvolutionalLayer<double>(outputDepth, kernelSize));
+            layer.ResolveFromShape(new[] { inputDepth, inputHeight, inputWidth }));
     }
 
     #endregion

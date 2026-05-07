@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -230,7 +231,7 @@ public class TNetLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var parameters = new Vector<T>(totalParams);
         int offset = 0;
 

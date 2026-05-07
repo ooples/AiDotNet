@@ -1,4 +1,5 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
 
@@ -89,9 +90,14 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-            int loraCount = _loraLayer != null ? (int)_loraLayer.ParameterCount : 0;
-            int activationCount = _activationAdaptation != null ? (int)_activationAdaptation.ParameterCount : 0;
+            // Sum as long throughout — base layers can have
+            // > int.MaxValue parameters on large foundation models, and
+            // a sufficiently large weight + activation rank could push
+            // the totals past the int boundary even on smaller bases.
+            // Closes #1271.7Bna.
+            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
+            long loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0L;
+            long activationCount = _activationAdaptation != null ? _activationAdaptation.ParameterCount : 0L;
             return baseCount + loraCount + activationCount;
         }
     }
@@ -145,7 +151,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
         _activationAdaptation = new LoRALayer<T>(inputSize, outputSize, actualActivationRank, activationAlpha);
 
         // Update parameter vector to include activation adaptation
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromLayers();
     }
 
@@ -318,7 +324,7 @@ public class GLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </summary>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

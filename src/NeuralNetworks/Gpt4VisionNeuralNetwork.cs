@@ -1677,7 +1677,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> gradients)
     {
-        int expectedCount = (int)ParameterCount;
+        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (gradients.Length != expectedCount)
         {
             throw new ArgumentException($"Expected {expectedCount} gradients but got {gradients.Length}");
@@ -1707,7 +1707,12 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
             Description = "GPT-4V style vision-language model combining vision encoding with language generation",
             AdditionalInfo = new Dictionary<string, object>
             {
-                ["parameter_count"] = (int)ParameterCount,
+                // Dictionary<string, object> can box a long natively; no
+                // need to narrow. ToFlatVectorSize is reserved for places
+                // that genuinely need an int (Vector<T> alloc, int-indexed
+                // APIs). >int.MaxValue models surface their real count
+                // here. Closes review-comment #1271.vDPu.
+                ["parameter_count"] = ParameterCount,
                 ["layer_count"] = _visionEncoderLayers.Count + _languageModelLayers.Count + _crossAttentionLayers.Count,
                 ["input_shape"] = new int[] { 3, _imageSize, _imageSize },
                 ["output_shape"] = new int[] { _embeddingDimension },

@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -898,7 +899,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
         for (int i = 0; i < _mapWidth * _mapHeight; i++)
         {
@@ -917,7 +918,7 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         // SOM uses competitive learning, not gradient descent.
         // Return a non-zero vector to satisfy gradient flow checks.
         // The actual "gradient" is the weight delta from BMU updates.
-        return new Vector<T>((int)ParameterCount);
+        return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
     }
 
     /// <inheritdoc/>

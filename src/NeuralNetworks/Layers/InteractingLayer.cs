@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
 
@@ -71,7 +72,11 @@ public partial class InteractingLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override long ParameterCount =>
-        _queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
+        // Cast the first term to long so the running sum widens to 64-bit
+        // and never wraps before reaching ToFlatVectorSize. With Q/K/V/O
+        // weight matrices each `embeddingDim × attentionDim` the int sum
+        // can overflow on multi-billion-parameter feature interactors.
+        (long)_queryWeights.Length + _keyWeights.Length + _valueWeights.Length +
         _outputWeights.Length + (_residualWeights?.Length ?? 0);
 
     /// <summary>
@@ -320,7 +325,7 @@ public partial class InteractingLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        int total = (int)ParameterCount;
+        int total = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var result = new Vector<T>(total);
         int offset = 0;
 

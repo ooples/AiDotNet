@@ -307,6 +307,43 @@ namespace AiDotNet.AutoML
         protected abstract Task<IFullModel<T, TInput, TOutput>> CreateModelAsync(Type modelType, Dictionary<string, object> parameters);
 
         /// <summary>
+        /// Fired immediately after each candidate model is instantiated, before
+        /// it is trained or evaluated. Subscribers can mutate the candidate to
+        /// apply build-time configuration (e.g., weight-streaming overrides,
+        /// gradient checkpointing) — the search itself, not just the winner,
+        /// then respects the user's intent. Subscribers receive every candidate
+        /// (winners and losers); side effects on a candidate that the search
+        /// later discards are harmless because the candidate is GC'd.
+        /// </summary>
+        /// <remarks>
+        /// Wired into the candidate-creation path via
+        /// <see cref="CreateModelWithHookAsync"/>. Concrete <see cref="AutoMLModelBase{T, TInput, TOutput}"/>
+        /// derivatives that build candidates internally MUST route through that
+        /// wrapper rather than calling <see cref="CreateModelAsync"/> directly so
+        /// subscribers see every candidate. The base class members in this PR
+        /// (e.g., <see cref="SupervisedAutoMLModelBase{T, TInput, TOutput}"/>) do
+        /// this; external implementations that override search loops should
+        /// follow suit.
+        /// </remarks>
+        public event Action<IFullModel<T, TInput, TOutput>>? OnCandidateCreated;
+
+        /// <summary>
+        /// Calls <see cref="CreateModelAsync"/> and then fires
+        /// <see cref="OnCandidateCreated"/> for the resulting candidate. Use
+        /// this in search loops instead of calling <see cref="CreateModelAsync"/>
+        /// directly so subscribers (e.g., <c>AiModelBuilder.BuildAsync</c>'s
+        /// weight-streaming applicator) see every candidate before it trains.
+        /// </summary>
+        protected async Task<IFullModel<T, TInput, TOutput>> CreateModelWithHookAsync(
+            Type modelType,
+            Dictionary<string, object> parameters)
+        {
+            var candidate = await CreateModelAsync(modelType, parameters);
+            OnCandidateCreated?.Invoke(candidate);
+            return candidate;
+        }
+
+        /// <summary>
         /// Evaluates a model on the validation set
         /// </summary>
         protected virtual async Task<double> EvaluateModelAsync(

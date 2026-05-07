@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
+using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -309,7 +310,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// </summary>
     protected void RebuildParametersAfterDerivedInit()
     {
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromLayers();
     }
 
@@ -557,7 +558,7 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// </remarks>
     private void UpdateParameterGradientsFromLayers()
     {
-        ParameterGradients = new Vector<T>((int)ParameterCount);
+        ParameterGradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         // If base layer is not frozen, pack its gradients first

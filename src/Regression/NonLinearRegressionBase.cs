@@ -1,4 +1,5 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
+using AiDotNet.Autodiff;
 using AiDotNet.Serialization;
 using Newtonsoft.Json;
 
@@ -1132,7 +1133,7 @@ public abstract class NonLinearRegressionBase<T> : INonLinearRegression<T>, ICon
         // For kernel-based models, compute gradients using numerical differentiation
         // This is a simplified implementation - specific algorithms may override with analytical gradients
         var epsilon = NumOps.FromDouble(1e-7);
-        var gradients = new Vector<T>((int)ParameterCount);
+        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         // Compute gradient for each alpha (support vector weight)
         // Use try-finally to ensure state is restored even if exceptions occur

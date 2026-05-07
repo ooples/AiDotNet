@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.Helpers;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -462,6 +463,87 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
         return new Vector<T>(paramArray);
     }
 
+    public override void Serialize(BinaryWriter writer)
+    {
+        // Persist sparsity pattern (CSR row/col indices) so Deserialize
+        // can restore values into the SAME positions. Without this, a
+        // fresh layer's randomly-generated sparsity pattern places the
+        // saved values at different positions than the original, and
+        // Forward outputs diverge.
+        writer.Write(_weights.NonZeroCount);
+        var rows = _weights.RowIndices;
+        var cols = _weights.ColumnIndices;
+        for (int i = 0; i < _weights.NonZeroCount; i++)
+        {
+            writer.Write(rows[i]);
+            writer.Write(cols[i]);
+        }
+        base.Serialize(writer);
+    }
+
+    public override void Deserialize(BinaryReader reader)
+    {
+        int nnz = reader.ReadInt32();
+        if (nnz == _weights.NonZeroCount)
+        {
+            // Same sparsity pattern shape — overwrite the existing index
+            // arrays in place. SetParameters (called via base.Deserialize)
+            // then reconstructs _weights cloning these positions.
+            var rows = _weights.RowIndices;
+            var cols = _weights.ColumnIndices;
+            for (int i = 0; i < nnz; i++)
+            {
+                rows[i] = reader.ReadInt32();
+                cols[i] = reader.ReadInt32();
+            }
+        }
+        else
+        {
+            // Saved layer used a different sparsity ratio than the freshly-
+            // constructed layer. Silently skipping the indices and falling
+            // through to SetParameters would load values into the WRONG
+            // CSR positions, silently corrupting the model. Instead,
+            // reconstruct _weights with the saved sparsity pattern and
+            // zero-init values; SetParameters will then write the saved
+            // values into the matching positions.
+            var savedRows = new int[nnz];
+            var savedCols = new int[nnz];
+            for (int i = 0; i < nnz; i++)
+            {
+                savedRows[i] = reader.ReadInt32();
+                savedCols[i] = reader.ReadInt32();
+            }
+            // Validate indices fall inside the layer's known dimensions —
+            // a stream from an incompatible model shouldn't silently land
+            // out-of-range values that would crash later at Forward time.
+            for (int i = 0; i < nnz; i++)
+            {
+                if (savedRows[i] < 0 || savedRows[i] >= OutputFeatures)
+                    throw new InvalidDataException(
+                        $"SparseLinearLayer.Deserialize: row index {savedRows[i]} at slot {i} is outside [0, {OutputFeatures}). " +
+                        "Stream is from an incompatible model.");
+                if (savedCols[i] < 0 || savedCols[i] >= InputFeatures)
+                    throw new InvalidDataException(
+                        $"SparseLinearLayer.Deserialize: column index {savedCols[i]} at slot {i} is outside [0, {InputFeatures}). " +
+                        "Stream is from an incompatible model.");
+            }
+            // Replace _weights with a fresh SparseTensor matching the saved
+            // sparsity pattern. Re-register so GetTrainableParameters
+            // (used by tape mode and parameter walks) returns the new
+            // instance. We deliberately don't UnregisterTrainableParameter
+            // on the old reference here because Engine.UnregisterPersistentTensor
+            // calls Contiguous() which throws on sparse tensors —
+            // sparse-aware unregistration is tracked in the Tensors repo.
+            // Deserialize is pre-training, so no ParameterBuffer view
+            // aliases the old _weights at this point.
+            _weights = new SparseTensor<T>(
+                OutputFeatures, InputFeatures,
+                savedRows, savedCols, new T[nnz]);
+            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        }
+        base.Deserialize(reader);
+    }
+
     /// <summary>
     /// Sets all trainable parameters from a single vector.
     /// </summary>
@@ -475,15 +557,38 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
 
         int idx = 0;
 
-        // Restore weights (non-zero values only) by mutating
-        // _weights.Values in place. Avoids constructing a new SparseTensor
-        // which would invalidate the trainable-parameter registration.
-        for (int nz = 0; nz < _weights.NonZeroCount; nz++)
+        // SparseTensor.Values is a defensive copy (DataVector.ToArray()), so
+        // writing into it does NOT update the underlying storage. Build the
+        // values array, snapshot CSR positions, and reconstruct the
+        // SparseTensor in place. We assign the new instance to _weights
+        // directly rather than going through SetTrainableParameters, because
+        // the latter calls ClearRegisteredParameters → UnregisterPersistentTensor
+        // → Contiguous() which throws on sparse tensors. Deserialize is
+        // pre-training, so no ParameterBuffer view aliasing is in flight yet.
+        int nnz = _weights.NonZeroCount;
+        var newValues = new T[nnz];
+        for (int nz = 0; nz < nnz; nz++)
         {
-            _weights.Values[nz] = parameters[idx++];
+            newValues[nz] = parameters[idx++];
         }
+        _weights = new SparseTensor<T>(
+            _weights.Rows,
+            _weights.Columns,
+            (int[])_weights.RowIndices.Clone(),
+            (int[])_weights.ColumnIndices.Clone(),
+            newValues);
+        // Re-register the new sparse instance so GetTrainableParameters
+        // (used by tape-mode optimizers and parameter walks) returns the
+        // updated reference. The OLD _weights stays in the engine's
+        // persistent-tensor registry because Engine.UnregisterPersistentTensor
+        // calls Contiguous() which throws on sparse tensors — sparse-aware
+        // unregistration is tracked in the Tensors repo. Pre-training
+        // SetParameters is the only call site, so no ParameterBuffer
+        // view aliases the old reference yet.
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
 
-        // Restore biases in place — same reasoning.
+        // Restore biases in place — _biases is a dense Tensor<T> and supports
+        // direct indexer writes.
         for (int o = 0; o < OutputFeatures; o++)
         {
             _biases[o] = parameters[idx++];
@@ -494,7 +599,7 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         // Match GetParameters layout: non-zero weights (CSR order) + biases
-        var gradients = new Vector<T>((int)ParameterCount);
+        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int idx = 0;
 
         if (_weightsGradient != null)

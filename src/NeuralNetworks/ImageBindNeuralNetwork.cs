@@ -1456,7 +1456,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         if (!_useNativeMode)
         {
             return parameters;
@@ -1535,7 +1535,7 @@ public class ImageBindNeuralNetwork<T> : NeuralNetworkBase<T>, IImageBindModel<T
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
-        int expectedCount = (int)ParameterCount;
+        int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(

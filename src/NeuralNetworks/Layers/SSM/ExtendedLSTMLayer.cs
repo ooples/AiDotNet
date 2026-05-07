@@ -462,7 +462,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         foreach (var tensor in GetAllTensors())
             for (int i = 0; i < tensor.Length; i++)
@@ -492,7 +492,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_inputGateWeightsGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_inputGateWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
         Vector<T> G(Tensor<T>? grad, Tensor<T> param) =>
             grad != null ? new Vector<T>(grad.ToArray()) : new Vector<T>(param.Length);

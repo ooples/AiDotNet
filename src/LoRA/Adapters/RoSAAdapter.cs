@@ -1,4 +1,5 @@
-﻿using AiDotNet.Extensions;
+using AiDotNet.Helpers;
+using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.LoRA.Adapters;
@@ -163,13 +164,16 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
     {
         get
         {
-            int baseCount = _baseLayer != null && !_freezeBaseLayer ? (int)(_baseLayer.ParameterCount) : 0;
-            int loraCount = _loraLayer != null ? (int)_loraLayer.ParameterCount : 0;
-            // CRITICAL: Compute sparse count from layer dimensions when _sparseWeights is null
-            // Returning 0 causes base constructor to allocate too-small buffer
-            int sparseCount = _sparseWeights != null
-                ? (_sparseWeights.Rows * _sparseWeights.Columns)
-                : (GetOutputShape()[0] * GetInputShape()[0]);
+            // long throughout. Sparse weights at full rank == OutputShape
+            // × InputShape can overflow int32 for foundation models with
+            // large hidden dims. Closes #1271.7Bnj.
+            long baseCount = _baseLayer != null && !_freezeBaseLayer ? _baseLayer.ParameterCount : 0L;
+            long loraCount = _loraLayer != null ? _loraLayer.ParameterCount : 0L;
+            // CRITICAL: Compute sparse count from layer dimensions when _sparseWeights is null —
+            // returning 0 causes base constructor to allocate too-small buffer.
+            long sparseCount = _sparseWeights != null
+                ? ((long)_sparseWeights.Rows * _sparseWeights.Columns)
+                : ((long)GetOutputShape()[0] * GetInputShape()[0]);
             return baseCount + loraCount + sparseCount;
         }
     }
@@ -239,7 +243,7 @@ public class RoSAAdapter<T> : LoRAAdapterBase<T>
         PruneSparseWeights();
 
         // Update parameters to include sparse component
-        Parameters = new Vector<T>((int)ParameterCount);
+        Parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         UpdateParametersFromComponents();
     }
 

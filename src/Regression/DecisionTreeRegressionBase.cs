@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Regression;
@@ -1063,20 +1064,35 @@ public abstract class DecisionTreeRegressionBase<T> : ITreeBasedRegression<T>, I
         // In gradient boosting, subsequent trees are fit to these negative gradients
         var sampleGradients = loss.CalculateDerivative(predictions, target);
 
+        // Snapshot the int-narrowed count ONCE — both the Vector<T>
+        // allocation and the loop bound below reuse this single value.
+        // Calling ToFlatVectorSize twice was a real waste (each call
+        // walks the long->int guard) AND opened a race window where the
+        // two calls could disagree if ParameterCount were ever to
+        // change between them. The single call also means a model with
+        // > int.MaxValue parameters fails with the helper's actionable
+        // error message exactly here, instead of producing a truncated
+        // samplesPerParam from a re-narrowed cast. Loop bound is also
+        // the int snapshot so paramIdx (int) and the upper bound match
+        // types — the previous `paramIdx < ParameterCount` mixed int
+        // and long, which on a >int.MaxValue model would either
+        // silently overflow paramIdx or run past the gradients array
+        // (closes review-comment #1271.vDN-, #1271.yWfD).
+        int paramCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
+
         // Map per-sample gradients to per-parameter gradients
         // For decision trees, parameters typically represent leaf values or split thresholds
         // We aggregate sample gradients into ParameterCount buckets
-        var gradients = new Vector<T>((int)ParameterCount);
+        var gradients = new Vector<T>(paramCount);
 
         if (sampleGradients.Length == 0 || ParameterCount == 0)
         {
             return gradients; // Return zeros
         }
 
-        // Distribute samples across parameters
-        int samplesPerParam = Math.Max(1, (sampleGradients.Length + (int)ParameterCount - 1) / (int)ParameterCount);
+        int samplesPerParam = Math.Max(1, (sampleGradients.Length + paramCount - 1) / paramCount);
 
-        for (int paramIdx = 0; paramIdx < ParameterCount; paramIdx++)
+        for (int paramIdx = 0; paramIdx < paramCount; paramIdx++)
         {
             T sum = NumOps.Zero;
             int count = 0;

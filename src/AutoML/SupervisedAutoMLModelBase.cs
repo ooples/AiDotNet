@@ -127,7 +127,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             else
             {
                 // Standard single train/validation split
-                model = await CreateModelAsync(modelType, trialParameters);
+                model = await CreateModelWithHookAsync(modelType, trialParameters);
 
                 cancellationToken.ThrowIfCancellationRequested();
                 model.Train(trainInputs, trainTargets);
@@ -267,7 +267,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
             var (foldValInputs, foldValTargets) = CreateSubset(trainInputs, trainTargets, valIndices);
 
             // Create and train model for this fold
-            var foldModel = await CreateModelAsync(modelType, trialParameters);
+            var foldModel = await CreateModelWithHookAsync(modelType, trialParameters);
             foldModel.Train(foldTrainInputs, foldTrainTargets);
 
             // Evaluate on validation fold
@@ -279,7 +279,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
         double avgScore = foldScores.Average();
 
         // Retrain final model on full training data
-        var finalModel = await CreateModelAsync(modelType, trialParameters);
+        var finalModel = await CreateModelWithHookAsync(modelType, trialParameters);
         finalModel.Train(trainInputs, trainTargets);
 
         return (finalModel, avgScore);
@@ -448,7 +448,7 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
                 IFullModel<T, TInput, TOutput> model;
                 try
                 {
-                    model = await CreateModelAsync(modelType, trial.Parameters);
+                    model = await CreateModelWithHookAsync(modelType, trial.Parameters);
                 }
                 catch (Exception ex) when (IsSkippableEnsemblingException(ex))
                 {

@@ -173,6 +173,57 @@ public class KairosMultiSizePatchLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Lazy ctor: sublayers (DenseLayer router + DenseLayer embeddings)
+        // start with placeholder shapes. Resolve them from known
+        // constants — the router takes [B, contextLength] and each
+        // embedding takes patchSize-sized input.
+        if (!_router.IsShapeResolved)
+        {
+            _router.ResolveFromShape(new[] { _contextLength });
+        }
+        for (int k = 0; k < _patchEmbeddings.Count; k++)
+        {
+            if (!_patchEmbeddings[k].IsShapeResolved)
+            {
+                _patchEmbeddings[k].ResolveFromShape(new[] { _patchSizes[k] });
+            }
+        }
+
+        // Validate full parameters length up front so a malformed vector
+        // throws BEFORE we partially mutate any sublayer.
+        long expectedTotal = _router.ParameterCount;
+        for (int k = 0; k < _patchEmbeddings.Count; k++)
+        {
+            expectedTotal += _patchEmbeddings[k].ParameterCount;
+        }
+        if (parameters.Length != expectedTotal)
+        {
+            throw new ArgumentException(
+                $"KairosMultiSizePatchLayer expected {expectedTotal} parameters across sublayers, " +
+                $"got {parameters.Length}.",
+                nameof(parameters));
+        }
+
+        // Composite SetParameters: route by sublayer ParameterCount (cheap
+        // O(1) integer) rather than GetParameters().Length, which would
+        // materialize a full flattened copy of every sublayer just to read
+        // its width — for the router + every patch-size embedding this
+        // doubles load-time allocations on a deserialize round-trip.
+        int idx = 0;
+        void Set(ILayer<T> sub)
+        {
+            int count = checked((int)sub.ParameterCount);
+            if (count == 0) return;
+            sub.SetParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        Set(_router);
+        foreach (var emb in _patchEmbeddings) Set(emb);
+    }
+
+    /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
         var parts = new List<Vector<T>> { _router.GetParameters() };

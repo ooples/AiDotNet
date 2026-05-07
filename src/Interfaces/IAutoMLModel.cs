@@ -49,6 +49,33 @@ namespace AiDotNet.Interfaces
         int TrialLimit { get; set; }
 
         /// <summary>
+        /// Fired immediately after each candidate model is instantiated, before
+        /// it is trained or evaluated. Subscribers can mutate the candidate to
+        /// apply build-time configuration (e.g., weight-streaming overrides,
+        /// gradient checkpointing) so the search itself, not just the winner,
+        /// respects the user's intent.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Subscribers receive every candidate (winners and losers); side
+        /// effects on candidates that the search later discards are harmless
+        /// because the candidate is GC'd. Implementations MUST raise this
+        /// event from every candidate-creation site in their search loop —
+        /// the canonical wiring is via
+        /// <c>AutoMLModelBase.CreateModelWithHookAsync</c>.
+        /// </para>
+        /// <para>
+        /// <b>Breaking change note:</b> This member was added to the
+        /// <see cref="IAutoMLModel{T,TInput,TOutput}"/> contract in #1271 to
+        /// enable AutoML-aware weight-streaming configuration. External
+        /// implementations of <see cref="IAutoMLModel{T,TInput,TOutput}"/>
+        /// must add a corresponding event member; the in-tree
+        /// <c>AutoMLModelBase</c> already does so.
+        /// </para>
+        /// </remarks>
+        event Action<IFullModel<T, TInput, TOutput>>? OnCandidateCreated;
+
+        /// <summary>
         /// Searches for the best model configuration asynchronously
         /// </summary>
         /// <param name="inputs">Training inputs</param>

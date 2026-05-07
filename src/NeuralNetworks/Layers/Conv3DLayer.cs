@@ -1,5 +1,5 @@
 ﻿#pragma warning disable CS0649, CS0414, CS0169
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -110,7 +110,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameterGradients()
     {
-        if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>((int)ParameterCount);
+        if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(new Vector<T>(_kernelsGradient.ToArray()), new Vector<T>(_biasesGradient.ToArray()));
     }
 
@@ -299,8 +299,8 @@ public partial class Conv3DLayer<T> : LayerBase<T>
         int outH = (h + 2 * Padding - KernelSize) / Stride + 1;
         int outW = (w + 2 * Padding - KernelSize) / Stride + 1;
 
-        _kernels = new Tensor<T>([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
-        _biases = new Tensor<T>([OutputChannels]);
+        _kernels = AllocateLazyWeight([OutputChannels, c, KernelSize, KernelSize, KernelSize]);
+        _biases = AllocateLazyWeight([OutputChannels]);
         InitializeWeights();
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
@@ -451,11 +451,20 @@ public partial class Conv3DLayer<T> : LayerBase<T>
             NumOps.FromDouble(2.0),
             NumOps.FromDouble(fanIn)));
 
-        // Initialize kernels in [-scale, scale] range
-        _kernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
+        // Generate via the engine (vectorized / GPU-aware) and copy into
+        // the EXISTING _kernels tensor's storage so we preserve the
+        // AllocateLazyWeight registration in the streaming pool.
+        // Replacing the field reference (e.g. `_kernels = Engine.TensorRandomUniformRange(...)`)
+        // would orphan the streamed allocation and recreate the
+        // first-forward peak.
+        // The double-allocation here (engine output + destination) is a
+        // known limitation: a destination-aware engine API
+        // (Engine.TensorRandomUniformRangeInto<T>(_kernels, low, high))
+        // would write directly into the registered tensor. Tracked in
+        // the AiDotNet.Tensors repo, not blocking on this PR.
+        var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
+        randomKernels.AsSpan().CopyTo(_kernels.AsWritableSpan());
 
-        // Initialize biases to zero
-        _biases = new Tensor<T>(_biases._shape);
         Engine.TensorFill(_biases, NumOps.Zero);
     }
 
@@ -763,7 +772,9 @@ public partial class Conv3DLayer<T> : LayerBase<T>
                 || candidateInputChannels * kernelVol + OutputChannels != parameters.Length)
                 throw new ArgumentException(
                     $"Cannot infer inputChannels for Conv3DLayer from {parameters.Length} parameters.");
-            ResolveFromShape(new[] { candidateInputChannels, 1, 1, 1 });
+            // Use KernelSize for D/H/W dummy spatial dims so the
+            // OnFirstForward shape check (input dims >= kernel) passes.
+            ResolveFromShape(new[] { candidateInputChannels, KernelSize, KernelSize, KernelSize });
         }
 
         int expected = _kernels.Length + _biases.Length;

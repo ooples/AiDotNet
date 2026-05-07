@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
@@ -1225,7 +1226,7 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var parameters = new Vector<T>(totalParams);
         int offset = 0;
 
@@ -1289,12 +1290,16 @@ internal class SetAbstractionLayer<T> : LayerBase<T>
     {
         get
         {
-            int total = 0;
+            // Accumulate in long; SetAbstraction branches over high-resolution
+            // point clouds can have MLP layers whose individual ParameterCount
+            // approaches int.MaxValue. (int) cast on each addend used to
+            // wrap before the sum widened to long for the property's return.
+            long total = 0;
             foreach (var branch in _branches)
             {
                 foreach (var layer in branch.MlpLayers)
                 {
-                    total += (int)layer.ParameterCount;
+                    total += layer.ParameterCount;
                 }
             }
             return total;

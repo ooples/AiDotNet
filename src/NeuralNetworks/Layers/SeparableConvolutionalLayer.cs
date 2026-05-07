@@ -340,7 +340,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     public override Vector<T> GetParameterGradients()
     {
         if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         return Vector<T>.Concatenate(
             Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
             new Vector<T>(_biasesGradient.ToArray()));
@@ -472,9 +472,9 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
         int outH = (h - _kernelSize + 2 * _padding) / _stride + 1;
         int outW = (w - _kernelSize + 2 * _padding) / _stride + 1;
 
-        _depthwiseKernels = new Tensor<T>([_inputDepth, _kernelSize, _kernelSize, 1]);
-        _pointwiseKernels = new Tensor<T>([_inputDepth, 1, 1, _outputDepth]);
-        _biases = new Tensor<T>([_outputDepth]);
+        _depthwiseKernels = AllocateLazyWeight([_inputDepth, _kernelSize, _kernelSize, 1]);
+        _pointwiseKernels = AllocateLazyWeight([_inputDepth, 1, 1, _outputDepth]);
+        _biases = AllocateLazyWeight([_outputDepth]);
         InitializeParameters();
         RegisterTrainableParameter(_depthwiseKernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_pointwiseKernels, PersistentTensorRole.Weights);
@@ -827,6 +827,35 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if shape isn't resolved (placeholders with Length 0),
+        // infer inputDepth from the param vector. Param layout:
+        //   depthwise: inputDepth * kernelSize²
+        //   pointwise: inputDepth * outputDepth
+        //   biases: outputDepth
+        //   total = inputDepth * (kernelSize² + outputDepth) + outputDepth
+        if (!IsShapeResolved)
+        {
+            int kernelArea = _kernelSize * _kernelSize;
+            int divisor = kernelArea + _outputDepth;
+            int candidateInputDepth = (parameters.Length - _outputDepth) / divisor;
+            if (candidateInputDepth <= 0
+                || candidateInputDepth * divisor + _outputDepth != parameters.Length)
+            {
+                throw new ArgumentException(
+                    $"Cannot infer inputDepth for SeparableConvolutionalLayer from {parameters.Length} parameters " +
+                    $"(outputDepth={_outputDepth}, kernelSize={_kernelSize}).");
+            }
+            // OnFirstForward accepts both rank-3 [H, W, C] (per-sample) and
+            // rank-4 [B, H, W, C] (batched). Pass the rank-3 per-sample form
+            // here — rank-4 with a placeholder leading 1 makes
+            // candidateInputDepth land in the channel slot only by accident
+            // and breaks unrelated rank-checking paths. We don't have a real
+            // H or W at deserialize time, so we use _kernelSize as a non-zero
+            // sentinel that covers the receptive field without affecting
+            // weight shape.
+            ResolveFromShape(new[] { _kernelSize, _kernelSize, candidateInputDepth });
+        }
+
         int totalParams = _depthwiseKernels.Length + _pointwiseKernels.Length + _biases.Length;
 
         if (parameters.Length != totalParams)

@@ -207,6 +207,20 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
 
     public override void SetParameters(Vector<T> parameters)
     {
+        // Lazy ctor: if shape isn't resolved (placeholder _Wq/_Wk/_Wv/_Wo
+        // with Length 0), infer inputSize from the param vector layout.
+        // 4 weight matrices total: Wq/Wk/Wv = [_attentionSize, inputSize]
+        // and Wo = [inputSize, _attentionSize]. So total = 4 * attentionSize
+        // * inputSize → inputSize = total / (4 * attentionSize).
+        if (!IsShapeResolved && _attentionSize > 0)
+        {
+            int divisor = 4 * _attentionSize;
+            int candidateInput = parameters.Length / divisor;
+            if (candidateInput > 0 && candidateInput * divisor == parameters.Length)
+            {
+                ResolveFromShape(new[] { candidateInput });
+            }
+        }
         if (parameters.Length != ParameterCount)
             throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}");
         int wqLen = _Wq.Length;
@@ -338,10 +352,10 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
                 $"AttentionLayer requires rank>=1 input; got rank {rank}.", nameof(input));
 
         _inputSize = input.Shape[rank - 1];
-        _Wq = new Tensor<T>(new[] { _attentionSize, _inputSize });
-        _Wk = new Tensor<T>(new[] { _attentionSize, _inputSize });
-        _Wv = new Tensor<T>(new[] { _attentionSize, _inputSize });
-        _Wo = new Tensor<T>(new[] { _inputSize, _attentionSize });
+        _Wq = AllocateLazyWeight([_attentionSize, _inputSize]);
+        _Wk = AllocateLazyWeight([_attentionSize, _inputSize]);
+        _Wv = AllocateLazyWeight([_attentionSize, _inputSize]);
+        _Wo = AllocateLazyWeight([_inputSize, _attentionSize]);
         InitializeLayerWeights(_Wq, _inputSize, _attentionSize);
         InitializeLayerWeights(_Wk, _inputSize, _attentionSize);
         InitializeLayerWeights(_Wv, _inputSize, _attentionSize);

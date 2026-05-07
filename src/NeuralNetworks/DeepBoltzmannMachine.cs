@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -923,7 +924,7 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         if (Layers.Count > 0)
             return base.GetParameters();
 
-        var parameters = new Vector<T>((int)ParameterCount);
+        var parameters = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         int index = 0;
         for (int i = 0; i < _layerWeights.Count; i++)
         {

@@ -1,4 +1,5 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.Helpers;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Engines;
 using AiDotNet.Initialization;
@@ -834,8 +835,18 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
 
             // Allocate kernels and biases with proper shapes before initializing weights.
             // The lazy path sets _kernels to [0,0,0,0], so we must resize here.
-            _kernels = TensorAllocator.RentUninitialized<T>([OutputDepth, InputDepth, KernelSize, KernelSize]);
-            _biases = new Tensor<T>([OutputDepth]);
+            // Streaming-aware allocation: kernels are the dominant memory
+            // contributor for vision backbones (e.g. ResNet50: 25M params,
+            // largely conv kernels). When the parent network has engaged
+            // streaming, route through AllocateLazyWeight so the pool
+            // pre-evicts before the new GC byte[] lands. The non-streaming
+            // fallback preserves the existing arena fast-path
+            // (TensorAllocator.RentUninitialized) for kernels and the
+            // plain Tensor ctor for the small biases tensor.
+            int[] kShape = [OutputDepth, InputDepth, KernelSize, KernelSize];
+            int[] bShape = [OutputDepth];
+            _kernels = AllocateLazyWeight(kShape, () => TensorAllocator.RentUninitialized<T>(kShape));
+            _biases = AllocateLazyWeight(bShape);
 
             // Initialize weights (fills _kernels and _biases with He-uniform values)
             InitializeWeights();
@@ -1403,7 +1414,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // just to return a zero vector.
         if (_kernelsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
         EnsureInitialized();
 
@@ -1456,11 +1467,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
                     $"Cannot infer inputDepth for ConvolutionalLayer from {parameters.Length} parameters " +
                     $"(outputDepth={OutputDepth}, kernelSize={KernelSize}).");
             // Convolutional layers need a 3D inputShape [C, H, W]; H/W can't be
-            // derived from the parameter vector alone. ResolveFromShape with
-            // dummy spatial dims = 1 — kernels and biases only depend on
-            // inputDepth/outputDepth/kernelSize, so spatial dims here are
-            // immaterial for SetParameters.
-            ResolveFromShape(new[] { candidateInputDepth, 1, 1 });
+            // derived from the parameter vector alone. Use spatial dims =
+            // KernelSize so OnFirstForward's "input spatial dims must be
+            // >= kernelSize" guard passes — kernels and biases only depend
+            // on inputDepth/outputDepth/kernelSize, so the actual spatial
+            // dims used here are immaterial for SetParameters. Using 1×1
+            // would fail the guard for any kernelSize>1.
+            ResolveFromShape(new[] { candidateInputDepth, KernelSize, KernelSize });
         }
 
         EnsureInitialized();

@@ -194,9 +194,12 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "ObliviousDecisionTreeLayer cannot initialize until OnFirstForward has resolved the input dimension from input shape.");
 
-        _featureSelectionWeights = new Tensor<T>([_depth, _inputDim]);
-        _thresholds = new Tensor<T>([_depth]);
-        _leafValues = new Tensor<T>([_numLeaves, _outputDim]);
+        _featureSelectionWeights = AllocateLazyWeight([_depth, _inputDim]);
+        _thresholds = AllocateLazyWeight([_depth]);
+        _leafValues = AllocateLazyWeight([_numLeaves, _outputDim]);
+        // Gradient buffers don't go through the streaming pool — they
+        // mirror the weight shapes but are owned by the autograd tape,
+        // not registered with the pool. Plain new Tensor here.
         _featureSelectionGrad = new Tensor<T>([_depth, _inputDim]);
         _thresholdsGrad = new Tensor<T>([_depth]);
         _leafValuesGrad = new Tensor<T>([_numLeaves, _outputDim]);

@@ -147,9 +147,12 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     {
         get
         {
-            int count = 0;
+            // Accumulate in long so multi-block schedulers (e.g. 64+ Mamba/SSM
+            // blocks each with multi-billion-parameter state) don't wrap
+            // before reaching ToFlatVectorSize.
+            long count = 0;
             foreach (var block in _blocks)
-                count += (int)block.ParameterCount;
+                count += block.ParameterCount;
             foreach (var gamma in _normGammas)
                 count += gamma.Length;
             foreach (var beta in _normBetas)
@@ -365,7 +368,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// <inheritdoc />
     public override Vector<T> GetParameters()
     {
-        int totalParams = (int)ParameterCount;
+        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         var parameters = new Vector<T>(totalParams);
         int index = 0;
 
@@ -388,7 +391,7 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedParams = (int)ParameterCount;
+        int expectedParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
         if (parameters.Length != expectedParams)
             throw new ArgumentException($"Expected {expectedParams} parameters, got {parameters.Length}");
 

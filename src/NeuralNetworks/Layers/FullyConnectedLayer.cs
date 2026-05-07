@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -283,8 +284,8 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
         int inputSize = input.Shape[rank - 1];
         int outputSize = OutputShape[0];
 
-        _weights = new Tensor<T>([outputSize, inputSize]);
-        _biases = new Tensor<T>([outputSize]);
+        _weights = AllocateLazyWeight([outputSize, inputSize]);
+        _biases = AllocateLazyWeight([outputSize]);
         InitializeParameters();
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
@@ -551,7 +552,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>
     {
         if (_weightsGradient == null || _biasesGradient == null)
         {
-            return new Vector<T>((int)ParameterCount);
+            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
 
         int weightCount = _weightsGradient.Shape[0] * _weightsGradient.Shape[1];
