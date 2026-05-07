@@ -750,13 +750,26 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // Perform GPU matrix multiplication: [totalSamples, inputFeatures] @ [inputFeatures, embeddingDim]
             var gpuProjectionOutput = gpuEngine.FusedLinearGpu(input2D, _projectionWeights, null, FusedActivationType.None);
 
-            // Calculate output shape: replace last dimension with embeddingDim
-            int[] outputShape = new int[inputTensor.Rank];
-            for (int i = 0; i < inputTensor.Rank - 1; i++)
+            // Calculate output shape: replace last dimension with embeddingDim.
+            // Mirror Forward's rank-1 promotion so a rank-1 [N] continuous input
+            // produces rank-2 [1, embeddingDim] on both CPU and GPU. Without
+            // this, a downstream sequence-aware layer (e.g. RG-LRU) sees a
+            // rank-1 tensor on GPU and a rank-2 tensor on CPU for the same
+            // input — silent backend skew that breaks shape contracts.
+            int[] outputShape;
+            if (inputTensor.Rank == 1)
             {
-                outputShape[i] = inputTensor.Shape[i];
+                outputShape = [1, embeddingDim];
             }
-            outputShape[^1] = embeddingDim;
+            else
+            {
+                outputShape = new int[inputTensor.Rank];
+                for (int i = 0; i < inputTensor.Rank - 1; i++)
+                {
+                    outputShape[i] = inputTensor.Shape[i];
+                }
+                outputShape[^1] = embeddingDim;
+            }
 
             // Reshape if needed (FusedLinearGpu returns [totalSamples, embeddingDim])
             if (outputShape.Length != 2 || outputShape[0] != totalSamples)
