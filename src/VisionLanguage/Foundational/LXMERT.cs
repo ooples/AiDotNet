@@ -286,6 +286,11 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        // Cross-modality stream is part of the trainable graph (registered
+        // via RegisterAuxiliaryEncoderStream and surfaced through
+        // GetExtraTrainableLayers), so its parameter slices live alongside
+        // the vision encoder's in the flat parameter vector.
+        foreach (var l in _textCrossModalLayers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
     }
 
     /// <inheritdoc />

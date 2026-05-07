@@ -306,14 +306,25 @@ public class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
         }
+        // Text encoder is part of the trainable graph (surfaced via
+        // GetExtraTrainableLayers), so its parameter slices live alongside
+        // the vision encoder's in the flat parameter vector. Walk it here
+        // so flat-vector round-trips don't leave _textEncoderLayers on
+        // stale weights.
+        foreach (var l in _textEncoderLayers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
 
     /// <summary>
     /// Surface the text-encoder stack to streaming-offload / weight-registry
-    /// hooks (NeuralNetworkBase.GetExtraTrainableLayers contract) without
-    /// extending the flat parameter APIs (GetParameters / ParameterCount /
-    /// SetParameters) — those keep the SCOPE CONTRACT (= Layers only) so
-    /// flat-vector consumers don't accidentally double-count.
+    /// hooks (NeuralNetworkBase.GetExtraTrainableLayers contract). Both this
+    /// and UpdateParameters / GetParameters / ParameterCount walk
+    /// Layers + _textEncoderLayers in lockstep so the flat-vector contract
+    /// covers every trainable parameter the model exposes.
     /// </summary>
     protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
     {

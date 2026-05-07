@@ -130,7 +130,19 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     {
         ThrowIfDisposed();
         var t = TokenizeText(text);
-        if (IsOnnxMode && OnnxTextEncoder is not null) return L2Normalize(OnnxTextEncoder.Run(t));
+        if (IsOnnxMode)
+        {
+            // ONNX mode without a configured text encoder would silently fall
+            // through to TextEncoderLayers (empty in ONNX-mode construction)
+            // and return L2-normalized token IDs instead of EVA-CLIP text
+            // embeddings — fail fast so the misconfiguration surfaces at the
+            // call site rather than as silently corrupt similarity scores.
+            if (OnnxTextEncoder is null)
+                throw new InvalidOperationException(
+                    "EVACLIP.EncodeText requires a configured text encoder in ONNX mode. " +
+                    "Provide an ONNX text-encoder model path or use the native (non-ONNX) constructor.");
+            return L2Normalize(OnnxTextEncoder.Run(t));
+        }
         var c = t;
         foreach (var l in TextEncoderLayers) c = l.Forward(c);
         return L2Normalize(c);
