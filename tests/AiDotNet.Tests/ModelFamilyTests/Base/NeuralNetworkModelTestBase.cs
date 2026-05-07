@@ -780,6 +780,23 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // the error on a different random input (overfit check).
     // =====================================================
 
+    /// <summary>
+    /// Multiplicative bound on the trainMSE / testMSE ratio in
+    /// <see cref="TrainingError_ShouldNotExceedTestError"/>: the assertion
+    /// is <c>trainMSE &lt;= testMSE * multiplier + 1e-6</c>. Default 3.0
+    /// is calibrated for regression-output models trained against a
+    /// random target — train MSE should not exceed test MSE by more than
+    /// 3× on a fitting task (the test catches "training increases error"
+    /// pathologies). Models with bounded outputs (sigmoid heads, softmax
+    /// classifiers) trained against arbitrary regression targets in
+    /// [0, 1) saturate near the bound midpoint and produce per-call MSE
+    /// dominated by the random-seed-specific distribution of the target —
+    /// override to a larger value so the assertion catches the bug class
+    /// it's designed for (training-explodes-error regression) without
+    /// false-failing on legitimately-flaky random-target distributions.
+    /// </summary>
+    protected virtual double TrainingErrorMultiplier => 3.0;
+
     [Fact(Timeout = 120000)]
     public async Task TrainingError_ShouldNotExceedTestError()
     {
@@ -800,7 +817,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))
         {
-            Assert.True(trainMSE <= testMSE * 3.0 + 1e-6,
+            Assert.True(trainMSE <= testMSE * TrainingErrorMultiplier + 1e-6,
                 $"Training MSE ({trainMSE:F6}) vastly exceeds test MSE ({testMSE:F6}). " +
                 "Model is not fitting training data.");
         }
