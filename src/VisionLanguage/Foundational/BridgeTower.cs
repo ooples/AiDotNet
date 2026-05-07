@@ -210,7 +210,13 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        try { TrainWithTape(PreprocessImage(input), expected); }
+        // Pass _optimizer (the AdamW the constructor created with the
+        // model's paper-faithful hyperparameters) into TrainWithTape so
+        // the train path actually uses it. Without this the call
+        // dropped through to GetOrCreateBaseOptimizer's default Adam at
+        // lr=1e-3, ignoring whatever the caller configured via the
+        // optimizer ctor parameter.
+        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
         finally { SetTrainingMode(false); }
     }
 
