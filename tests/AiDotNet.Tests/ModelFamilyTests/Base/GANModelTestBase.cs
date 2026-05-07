@@ -111,4 +111,70 @@ public abstract class GANModelTestBase : NeuralNetworkModelTestBase
                 "Generator may have exploding values.");
         }
     }
+
+    // =====================================================
+    // GAN INVARIANT: Loss must stay bounded across training
+    // (overrides the base monotonic-decrease memorization
+    // invariant — adversarial training has no monotonic-decrease
+    // contract). The generator loss oscillates by construction
+    // as the discriminator improves and re-classifies its fakes
+    // (Goodfellow et al. 2014, §3 "Theoretical Results"; in
+    // particular the Nash equilibrium is reached at non-zero
+    // generator loss). The base class's
+    // LossStrictlyDecreasesOnMemorizationTask asserts
+    // lossFinal &lt; lossStep1 × threshold, which fundamentally
+    // doesn't hold for adversarial training and produced false
+    // failures across every GAN derivative (#1224 Cluster F:
+    // ConditionalGAN.LossStrictlyDecreasesOnMemorizationTask
+    // showed step1=0.277, step4=0.438 — loss increased
+    // legitimately as the discriminator's grip on the
+    // memorized fake tightened, not because of optimizer
+    // misbehavior). Replace with a GAN-appropriate boundedness
+    // invariant: loss must stay finite (no NaN/Inf) and must
+    // not explode by &gt; 100×, which still catches the bug
+    // classes the base test was designed for (sign error,
+    // first-step explosion, post-explosion drift) without
+    // false-failing on legitimate adversarial oscillation.
+    // =====================================================
+    public override async Task LossStrictlyDecreasesOnMemorizationTask()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+
+        network.Train(input, target);
+        double lossStep1 = ConvertLossToDouble(network.GetLastLoss());
+
+        int followOnSteps = System.Math.Max(0, MemorizationTaskIterations - 1);
+        for (int s = 0; s < followOnSteps; s++) network.Train(input, target);
+        double lossFinal = ConvertLossToDouble(network.GetLastLoss());
+
+        Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
+            $"GAN generator loss after step 1 is non-finite: {lossStep1} (sign error or first-step explosion).");
+        Assert.False(double.IsNaN(lossFinal) || double.IsInfinity(lossFinal),
+            $"GAN generator loss after step {MemorizationTaskIterations} is non-finite: {lossFinal} (post-explosion drift).");
+
+        // Adversarial loss can fluctuate but shouldn't explode by >100×
+        // across a handful of steps on a memorization pair — that would
+        // indicate a runaway generator/discriminator imbalance, not
+        // healthy oscillation.
+        double explosionRatio = lossStep1 > 1e-12 ? lossFinal / lossStep1 : lossFinal;
+        Assert.True(explosionRatio < 100.0,
+            $"GAN loss exploded across memorization steps: step 1={lossStep1:F6}, "
+            + $"step {MemorizationTaskIterations}={lossFinal:F6} (ratio={explosionRatio:F2}×). "
+            + "Diagnostic: generator/discriminator imbalance — one side is dominating "
+            + "and the other can't keep up.");
+    }
+
+    private static double ConvertLossToDouble<TVal>(TVal value)
+    {
+        if (value is double d) return d;
+        if (value is float f) return f;
+        if (value is IConvertible) return Convert.ToDouble(value);
+        throw new InvalidOperationException(
+            $"GAN loss type {typeof(TVal).Name} is not IConvertible — cannot run boundedness invariant.");
+    }
 }

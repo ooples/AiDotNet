@@ -1020,7 +1020,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     protected virtual double MemorizationTaskLossThreshold => 0.99;
 
     [Fact(Timeout = 180000)]
-    public async Task LossStrictlyDecreasesOnMemorizationTask()
+    public virtual async Task LossStrictlyDecreasesOnMemorizationTask()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
