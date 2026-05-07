@@ -122,30 +122,100 @@ public class LXMERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<
         var visionOut = p;
         foreach (var l in Layers) visionOut = l.Forward(visionOut);
 
-        // Encoder 2 + 3: Language + cross-modality encoders — auxiliary stream
-        var textTokens = TokenizeText(text);
-        var current = textTokens;
-        foreach (var l in _textCrossModalLayers) current = l.Forward(current);
+        // Encoder 2 + 3: Language + cross-modality encoders — auxiliary stream.
+        // The previous implementation walked _textCrossModalLayers with single-
+        // input Forward(current) only, which made every CrossAttentionLayer
+        // fall through to its self-attention fallback (Forward(input) routes
+        // to ForwardCrossAttention(input, input)). The cross-modality stack
+        // therefore never saw the vision features at all — it ran as
+        // text-only self-attention, then visionOut was concatenated to the
+        // result. That defeated the entire LXMERT three-encoder design.
+        //
+        // Run the language portion text-only, then dispatch each cross-modal
+        // block with both modalities so language→vision attends to vision
+        // and vision→language attends to language. Layer order inside the
+        // auxiliary stream matches CreateDefaultCrossModalFusionLayers in
+        // LayerHelper:
+        //   * 0..textProjEnd-1   : text projection (0 or 2 layers)
+        //   * textProjEnd..textEnd-1 : N_text × blockSize  language self-attn blocks
+        //   * textEnd..end       : N_cross × crossBlockSize bidirectional blocks
+        // where blockSize = 5 (or 6 with dropout) and crossBlockSize = 7
+        // (or 8 with dropout).
+        var textState = TokenizeText(text);
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        int crossBlockSize = _options.DropoutRate > 0 ? 8 : 7;
+        int textProjEnd = (_options.TextDim != _options.FusionDim) ? 2 : 0;
+        int textEnd = textProjEnd + _options.NumTextLayers * blockSize;
 
-        return visionOut.ConcatenateTensors(current);
+        // Language encoder + projection: text-only self-attention.
+        for (int i = 0; i < textEnd; i++) textState = _textCrossModalLayers[i].Forward(textState);
+
+        // Cross-modality encoder: bidirectional cross-attention blocks.
+        // Each block layout matches the factory exactly:
+        //   [0] CrossAttention (lang → vision): Forward(textState, visionOut)
+        //   [1] LayerNorm                       on textState
+        //   [2] CrossAttention (vision → lang): Forward(visionOut, textState)
+        //   [3] LayerNorm                       on visionOut
+        //   [4] DenseLayer FFN1                 on textState
+        //   [5] DenseLayer FFN2                 on textState
+        //   [6] LayerNorm                       on textState
+        //   [7] (DropoutLayer)                  on textState (optional)
+        for (int blockStart = textEnd; blockStart < _textCrossModalLayers.Count; blockStart += crossBlockSize)
+        {
+            // Capture the pre-cross-attn streams so the second cross-attn
+            // (vision → lang) gets the original textState, not the post-
+            // language-update one — bidirectional cross-attn in the LXMERT
+            // paper updates both streams from a shared input snapshot.
+            var preText = textState;
+            var preVision = visionOut;
+            // CrossAttentionLayer overrides LayerBase.Forward(params Tensor<T>[])
+            // with the cross-attn-aware [query, context] dispatch — but that
+            // overload lives on LayerBase / CrossAttentionLayer, not on
+            // ILayer<T>. Cast through LayerBase<T> so the params overload
+            // resolves; single-input fallback would re-trigger the self-
+            // attention bug we are fixing.
+            var langToVision = (LayerBase<T>)_textCrossModalLayers[blockStart];
+            var visionToLang = (LayerBase<T>)_textCrossModalLayers[blockStart + 2];
+            textState = langToVision.Forward(preText, preVision);
+            textState = _textCrossModalLayers[blockStart + 1].Forward(textState);
+            visionOut = visionToLang.Forward(preVision, preText);
+            visionOut = _textCrossModalLayers[blockStart + 3].Forward(visionOut);
+            textState = _textCrossModalLayers[blockStart + 4].Forward(textState);
+            textState = _textCrossModalLayers[blockStart + 5].Forward(textState);
+            textState = _textCrossModalLayers[blockStart + 6].Forward(textState);
+            if (crossBlockSize == 8) textState = _textCrossModalLayers[blockStart + 7].Forward(textState);
+        }
+
+        return visionOut.ConcatenateTensors(textState);
     }
 
     public T ComputeMatchingScore(Tensor<T> image, string text)
     {
-        var imageEmb = EncodeImage(image);
-        var textTokens = TokenizeText(text);
-        Tensor<T> textEmb;
+        // Run the full LXMERT three-encoder fusion so the matching score
+        // reflects bidirectional cross-attention. The previous implementation
+        // walked _textCrossModalLayers text-only and then computed cosine
+        // similarity between the vision projection and a text-self-attention
+        // output — neither stream had ever attended to the other, so the
+        // similarity was driven entirely by chance overlap of the random
+        // initial projections. FuseImageText now does the right thing
+        // (cross-attn dispatched with both streams), so reuse it.
         if (IsOnnxMode && OnnxModel is not null)
         {
-            textEmb = L2Normalize(OnnxModel.Run(textTokens));
+            var imageEmb = EncodeImage(image);
+            var textTokens = TokenizeText(text);
+            var textEmb = L2Normalize(OnnxModel.Run(textTokens));
+            return CosineSimilarity(imageEmb, textEmb);
         }
-        else
-        {
-            var c = textTokens;
-            foreach (var l in _textCrossModalLayers) c = l.Forward(c);
-            textEmb = L2Normalize(c);
-        }
-        return CosineSimilarity(imageEmb, textEmb);
+        var fused = FuseImageText(image, text);
+        // FuseImageText concatenates [vision, text] along the last dim;
+        // matching score is the cosine similarity between the two halves.
+        // Split via Tensor<T>.Slice(axis, start, end?) on the trailing axis.
+        int lastDim = fused.Shape[^1];
+        int half = lastDim / 2;
+        int axis = fused.Rank - 1;
+        var visionHalf = fused.Slice(axis, 0, half);
+        var textHalf = fused.Slice(axis, half, lastDim);
+        return CosineSimilarity(L2Normalize(visionHalf), L2Normalize(textHalf));
     }
 
     protected override void InitializeLayers()

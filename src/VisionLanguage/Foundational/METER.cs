@@ -119,29 +119,83 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
         var visionOut = p;
         foreach (var l in Layers) visionOut = l.Forward(visionOut);
 
-        var textTokens = TokenizeText(text);
-        var current = textTokens;
-        foreach (var l in _textCoAttnLayers) current = l.Forward(current);
+        // Run the text stream first, then dispatch each co-attention block
+        // with both modalities so vision→text and text→vision actually
+        // attend to each other. The previous implementation walked
+        // _textCoAttnLayers single-input only, which routed every
+        // CrossAttentionLayer through its self-attention fallback
+        // (Forward(input) = ForwardCrossAttention(input, input)) — the
+        // co-attention encoder degenerated into text self-attention and
+        // visionOut was concatenated to the result without ever entering
+        // the fusion stack. Layer order inside _textCoAttnLayers matches
+        // CreateDefaultDualStreamFusionLayers in LayerHelper:
+        //   * 0..textProjEnd-1   : text pre-norm (1) + optional projection (1)
+        //   * textProjEnd..textEnd-1 : N_text × blockSize text self-attn blocks
+        //   * textEnd..end       : N_fusion × coAttnBlockSize co-attention blocks
+        // where blockSize = 5 (or 6 with dropout) and coAttnBlockSize = 7
+        // (or 8 with dropout).
+        var textState = TokenizeText(text);
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        int coAttnBlockSize = _options.DropoutRate > 0 ? 8 : 7;
+        int textProjEnd = 1 + (_options.TextDim != _options.FusionDim ? 1 : 0);
+        int textEnd = textProjEnd + _options.NumTextLayers * blockSize;
 
-        return visionOut.ConcatenateTensors(current);
+        // Text encoder (pre-norm + projection + N self-attn blocks).
+        for (int i = 0; i < textEnd; i++) textState = _textCoAttnLayers[i].Forward(textState);
+
+        // Co-attention fusion blocks: bidirectional cross-attention between
+        // the two modality streams. Each block layout matches the factory:
+        //   [0] CrossAttention (vision → text): query=visionOut, context=textState
+        //   [1] LayerNorm                       on visionOut
+        //   [2] CrossAttention (text → vision): query=textState, context=visionOut
+        //   [3] LayerNorm                       on textState
+        //   [4] DenseLayer FFN1                 on textState
+        //   [5] DenseLayer FFN2                 on textState
+        //   [6] LayerNorm                       on textState
+        //   [7] (DropoutLayer)                  on textState (optional)
+        for (int blockStart = textEnd; blockStart < _textCoAttnLayers.Count; blockStart += coAttnBlockSize)
+        {
+            var preText = textState;
+            var preVision = visionOut;
+            var visionToText = (LayerBase<T>)_textCoAttnLayers[blockStart];
+            var textToVision = (LayerBase<T>)_textCoAttnLayers[blockStart + 2];
+            visionOut = visionToText.Forward(preVision, preText);
+            visionOut = _textCoAttnLayers[blockStart + 1].Forward(visionOut);
+            textState = textToVision.Forward(preText, preVision);
+            textState = _textCoAttnLayers[blockStart + 3].Forward(textState);
+            textState = _textCoAttnLayers[blockStart + 4].Forward(textState);
+            textState = _textCoAttnLayers[blockStart + 5].Forward(textState);
+            textState = _textCoAttnLayers[blockStart + 6].Forward(textState);
+            if (coAttnBlockSize == 8) textState = _textCoAttnLayers[blockStart + 7].Forward(textState);
+        }
+
+        return visionOut.ConcatenateTensors(textState);
     }
 
     public T ComputeMatchingScore(Tensor<T> image, string text)
     {
-        var imageEmb = EncodeImage(image);
-        var textTokens = TokenizeText(text);
-        Tensor<T> textEmb;
+        // Run the full dual-stream + co-attention fusion so the matching
+        // score reflects bidirectional attention. The previous text-only
+        // walk over _textCoAttnLayers compared the vision projection
+        // against text-self-attention output without either stream
+        // having attended to the other — similarity was driven entirely
+        // by chance overlap of the random initial projections.
         if (IsOnnxMode && OnnxModel is not null)
         {
-            textEmb = L2Normalize(OnnxModel.Run(textTokens));
+            var imageEmb = EncodeImage(image);
+            var textTokens = TokenizeText(text);
+            var textEmb = L2Normalize(OnnxModel.Run(textTokens));
+            return CosineSimilarity(imageEmb, textEmb);
         }
-        else
-        {
-            var c = textTokens;
-            foreach (var l in _textCoAttnLayers) c = l.Forward(c);
-            textEmb = L2Normalize(c);
-        }
-        return CosineSimilarity(imageEmb, textEmb);
+        var fused = FuseImageText(image, text);
+        // FuseImageText concatenates [vision, text] along the last dim;
+        // matching score is the cosine similarity between the two halves.
+        int lastDim = fused.Shape[^1];
+        int half = lastDim / 2;
+        int axis = fused.Rank - 1;
+        var visionHalf = fused.Slice(axis, 0, half);
+        var textHalf = fused.Slice(axis, half, lastDim);
+        return CosineSimilarity(L2Normalize(visionHalf), L2Normalize(textHalf));
     }
 
     protected override void InitializeLayers()
