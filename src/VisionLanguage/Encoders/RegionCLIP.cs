@@ -123,7 +123,19 @@ public class RegionCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLangu
     {
         ThrowIfDisposed();
         var t = TokenizeText(text);
-        if (IsOnnxMode && OnnxTextEncoder is not null) return L2Normalize(OnnxTextEncoder.Run(t));
+        // Fail fast in ONNX mode when no text encoder is configured. The
+        // ONNX-mode constructor never populates TextEncoderLayers, so the
+        // previous fallback ran the empty native stack and L2-normalized
+        // raw token IDs — ComputeSimilarity / ZeroShotClassify silently
+        // returned garbage instead of surfacing the configuration error.
+        if (IsOnnxMode)
+        {
+            if (OnnxTextEncoder is null)
+                throw new InvalidOperationException(
+                    "Text encoding in ONNX mode requires a configured text encoder model path. "
+                    + "Set RegionCLIPOptions.TextEncoderModelPath before constructing the model.");
+            return L2Normalize(OnnxTextEncoder.Run(t));
+        }
         var c = t;
         foreach (var l in TextEncoderLayers) c = l.Forward(c);
         return L2Normalize(c);
