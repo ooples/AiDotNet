@@ -163,9 +163,10 @@ public class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is DualStreamArchitecture<T> dual)
         {
-            Layers.AddRange(Architecture.Layers);
+            Layers.AddRange(dual.VisionLayers);
+            TextEncoderLayers.AddRange(dual.TextLayers);
             return;
         }
 

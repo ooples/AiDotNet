@@ -166,10 +166,10 @@ public class BASIC<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is DualStreamArchitecture<T> dual)
         {
-            // Caller-supplied layer graph: keep historic single-list behaviour.
-            Layers.AddRange(Architecture.Layers);
+            Layers.AddRange(dual.VisionLayers);
+            TextEncoderLayers.AddRange(dual.TextLayers);
             return;
         }
 

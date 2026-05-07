@@ -152,9 +152,13 @@ public class IDEFICS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguage
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is TripleStreamArchitecture<T> triple)
         {
-            Layers.AddRange(Architecture.Layers);
+            Layers.AddRange(triple.VisionLayers);
+            _perceiverLayers.AddRange(triple.AuxiliaryLayers);
+            _decoderLayers.AddRange(triple.TextOrDecoderLayers);
+            RegisterAuxiliaryEncoderStream(_perceiverLayers);
+            RegisterAuxiliaryEncoderStream(_decoderLayers);
             return;
         }
 

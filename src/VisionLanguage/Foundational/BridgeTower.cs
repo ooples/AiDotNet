@@ -155,9 +155,11 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is DualStreamArchitecture<T> dual)
         {
-            Layers.AddRange(Architecture.Layers);
+            Layers.AddRange(dual.VisionLayers);
+            _bridgeFusionLayers.AddRange(dual.TextLayers);
+            RegisterAuxiliaryEncoderStream(_bridgeFusionLayers);
             return;
         }
 

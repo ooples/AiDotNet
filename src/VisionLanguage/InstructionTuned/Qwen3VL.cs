@@ -166,9 +166,13 @@ public class Qwen3VL<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is TripleStreamArchitecture<T> triple)
         {
-            Layers.AddRange(Architecture.Layers);
+            Layers.AddRange(triple.VisionLayers);
+            _resamplerLayers.AddRange(triple.AuxiliaryLayers);
+            _decoderLayers.AddRange(triple.TextOrDecoderLayers);
+            RegisterAuxiliaryEncoderStream(_resamplerLayers);
+            RegisterAuxiliaryEncoderStream(_decoderLayers);
             return;
         }
 

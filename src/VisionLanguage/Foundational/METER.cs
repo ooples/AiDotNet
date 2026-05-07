@@ -201,9 +201,11 @@ public class METER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is DualStreamArchitecture<T> dual)
         {
-            Layers.AddRange(Architecture.Layers);
+            Layers.AddRange(dual.VisionLayers);
+            _textCoAttnLayers.AddRange(dual.TextLayers);
+            RegisterAuxiliaryEncoderStream(_textCoAttnLayers);
             return;
         }
 
