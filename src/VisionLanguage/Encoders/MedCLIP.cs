@@ -198,6 +198,12 @@ public class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguage
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        // Sync the text-encoder stream too — see CLIPA.UpdateParameters
+        // for full rationale (dual-stream split, GetExtraTrainableLayers
+        // widens ParameterCount to include TextEncoderLayers, so a
+        // flat-vector writeback that only walks Layers leaves the text
+        // encoder on stale weights and the streams de-sync).
+        foreach (var l in TextEncoderLayers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
     }
 
     /// <inheritdoc />

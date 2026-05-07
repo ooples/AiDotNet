@@ -242,6 +242,18 @@ public class CLIPA<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
             l.UpdateParameters(parameters.Slice(idx, c));
             idx += c;
         }
+        // Sync the text-encoder stream too. After the dual-stream split
+        // (vision in Layers, text in TextEncoderLayers via
+        // VisionLanguageModelBase + GetExtraTrainableLayers below), the
+        // flat parameter vector includes both streams, but writing back
+        // only into Layers leaves the text encoder on stale weights —
+        // the model state then de-syncs across encoders.
+        foreach (var l in TextEncoderLayers)
+        {
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
     }
 
     /// <inheritdoc />

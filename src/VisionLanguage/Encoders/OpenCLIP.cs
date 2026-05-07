@@ -330,6 +330,18 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
             layer.UpdateParameters(parameters.Slice(idx, count));
             idx += count;
         }
+        // Sync the text-encoder stream too — GetExtraTrainableLayers
+        // (above) surfaces TextEncoderLayers to the base weight-registry
+        // walker, which means ParameterCount / GetParameters include the
+        // text-stream slice. Writing back only into Layers would leave
+        // the text encoder on stale weights and the streams would
+        // de-sync.
+        foreach (var layer in TextEncoderLayers)
+        {
+            int count = checked((int)layer.ParameterCount);
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
     }
 
     /// <inheritdoc />
