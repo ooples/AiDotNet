@@ -815,7 +815,13 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     {
         var hidden = x.Shape[^1];
 
-        // Create broadcastable tensors: [1, 1, hidden]
+        // Create broadcastable tensors: [1, 1, hidden] that NumPy/PyTorch
+        // would auto-broadcast against x's [B, N, hidden]. The plain
+        // Engine.TensorAdd / TensorMultiply require exact shape match;
+        // use the BroadcastAdd / BroadcastMultiply variants which honour
+        // standard right-aligned broadcasting (Esser et al. 2024 §3 AdaLN-Zero
+        // is per-channel: scale + 1 and shift are broadcast across the N
+        // token positions).
         var scaleTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
         var shiftTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
         var scaleSpan = scaleTensor.AsWritableSpan();
@@ -827,14 +833,16 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             shiftSpan[h] = shift[h % shift.Length];
         }
 
-        var scaled = Engine.TensorMultiply<T>(x, scaleTensor);
-        return Engine.TensorAdd<T>(scaled, shiftTensor);
+        var scaled = Engine.TensorBroadcastMultiply(x, scaleTensor);
+        return Engine.TensorBroadcastAdd(scaled, shiftTensor);
     }
 
     private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, T[] gate)
     {
         var hidden = x.Shape[^1];
 
+        // Per-channel gate broadcast across the N token positions — see
+        // ApplyAdaLN for the broadcast rationale.
         var gateTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
         var gateSpan = gateTensor.AsWritableSpan();
         for (int h = 0; h < hidden; h++)
@@ -842,7 +850,7 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             gateSpan[h] = gate[h % gate.Length];
         }
 
-        var gated = Engine.TensorMultiply<T>(residual, gateTensor);
+        var gated = Engine.TensorBroadcastMultiply(residual, gateTensor);
         return Engine.TensorAdd<T>(x, gated);
     }
 
@@ -887,8 +895,11 @@ public class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var kReshaped = ReshapeForHeads(k, batch, keyLen, _numHeads, headDim);
         var vReshaped = ReshapeForHeads(v, batch, keyLen, _numHeads, headDim);
 
-        // Attention scores: Q * K^T using batched matmul
-        var kTransposed = Engine.TensorTranspose<T>(kReshaped);
+        // Attention scores: Q * K^T using batched matmul.
+        // Engine.TensorTranspose only handles rank-2; for rank-3
+        // [B*H, keyLen, headDim] use TensorPermute to swap axes 1 and 2,
+        // producing [B*H, headDim, keyLen] which the batched matmul expects.
+        var kTransposed = Engine.TensorPermute<T>(kReshaped, new[] { 0, 2, 1 });
         var scores = Engine.TensorBatchMatMul<T>(qReshaped, kTransposed);
 
         // Scale
