@@ -68,6 +68,24 @@ public class FlashVSR<T> : VideoSuperResolutionBase<T>
 
     #region Constructors
 
+    /// <summary>
+    /// Creates a FlashVSR model with default architecture (paper-default
+    /// 128x128x3 input, scale x4) in native training mode. This overload
+    /// exists so generated test scaffolds and discovery callers that only
+    /// have access to a parameterless constructor produce a model with a
+    /// fully-populated Layers chain (ParameterCount &gt; 0) instead of an
+    /// ONNX-only stub. Matches the parameterless-ctor pattern used by
+    /// BasicVSRPlusPlus and EDVR.
+    /// </summary>
+    public FlashVSR()
+        : this(new NeuralNetworkArchitecture<T>(
+            inputType: Enums.InputType.ThreeDimensional,
+            taskType: Enums.NeuralNetworkTaskType.Regression,
+            inputHeight: 128, inputWidth: 128, inputDepth: 3,
+            outputSize: 2))
+    {
+    }
+
     /// <summary>Creates a FlashVSR model in ONNX inference mode.</summary>
     public FlashVSR(NeuralNetworkArchitecture<T> architecture, string modelPath, FlashVSROptions? options = null)
         : base(architecture)

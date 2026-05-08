@@ -473,15 +473,23 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Ensure we're in training mode
+        // Tape-based forward+backward+parameter-update path used by every
+        // supervised NeuralNetworkBase consumer. The previous body was an
+        // empty if/else stub that left training as a no-op — Train was being
+        // called but nothing was learning, so LossStrictlyDecreasesOnMemorization
+        // / Training_ShouldChangeParameters / OptimizerStep invariants all
+        // failed with "loss didn't decrease" / "parameters unchanged".
+        // Both temporal and non-temporal occupancy data flow through the same
+        // Layers chain (CreateDefaultOccupancyLayers / CreateDefaultOccupancyTemporalLayers),
+        // so a single TrainWithTape delegation covers both branches.
         SetTrainingMode(true);
-
-        // Process based on temporal configuration
-        if (_includeTemporalData)
+        try
         {
+            TrainWithTape(input, expectedOutput);
         }
-        else
+        finally
         {
+            SetTrainingMode(false);
         }
     }
 
