@@ -3849,6 +3849,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // CreateDefaultTimesNetLayers, so the test's rank-1 input length
             // must match or Reshape→Conv2D fails.
             "TimesNet" => 96,
+            // NHiTSFinance (Challu et al. 2022 §3.2): NHiTSOptions.LookbackWindow
+            // default = 48, ForecastHorizon = 24. Pooling kernels [8, 4, 1] all
+            // divide 48 cleanly so ApplyPoolingTape's reshape contract holds.
+            // Mismatch with the family default of 512 caused TensorSubtract to
+            // see [1, 512] residual vs [1, 48] backcast.
+            "NHiTSFinance" => 48,
             // 512 is the modal paper default across the family.
             _ => 512,
         };
@@ -3906,6 +3912,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // EnsureWeightShapeForInput re-init mid-test, which would break
             // determinism + Clone parity invariants).
             "TimesNet" => "1, 24, 7",
+
+            // NHiTSFinance: NHiTSOptions.ForecastHorizon = 24. Pairs with
+            // GetForecastingPaperContextLength returning 48 for NHiTSFinance
+            // so the lookback window matches the model's configured default.
+            "NHiTSFinance" => "24",
 
             // All others: [B, forecastHorizon]. Common paper defaults 96.
             _ => "96",
