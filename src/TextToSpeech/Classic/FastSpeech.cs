@@ -128,7 +128,24 @@ public class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumEncoderLayers * lpb; }
     protected override Tensor<T> PreprocessText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var enc = _tokenizer.Encode(text); int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength); var t = new Tensor<T>([sl]); for (int i = 0; i < sl; i++) t[i] = NumOps.FromDouble(enc.TokenIds[i]); return t; }
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Force eval mode so Dropout (DropoutRate=0.1 default) doesn't fire
+        // fresh randomness on every Predict call — required for the
+        // SpeakerConsistency invariant. PyTorch / TF idiom: inference disables
+        // training-mode randomization regardless of caller's prior state.
+        bool prev = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+        finally { SetTrainingMode(prev); }
+    }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "FastSpeech-Native" : "FastSpeech-ONNX", Description = "FastSpeech: Fast, Robust and Controllable Text to Speech (Ren et al., 2019)", FeatureCount = _options.HiddenDim, Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "FastSpeech"; return m; }
