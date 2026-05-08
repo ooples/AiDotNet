@@ -124,11 +124,122 @@ public class EMMDiTPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// E-MMDiT (Xie et al. 2024 §3.2 "SANA: Efficient High-Resolution Image
+    /// Synthesis with Linear Diffusion Transformers", building on Esser et al.
+    /// 2024 "Scaling Rectified Flow Transformers") operates on patch TOKENS,
+    /// not raw [B, C, H, W] spatial tensors:
+    ///   * Patchify:   [B, C, H, W] → [B, (H/P)·(W/P), C·P²]    (P = 2 here)
+    ///   * Embed:      [B, N, C·P²] → [B, N, hidden]
+    ///   * N joint blocks at [B, N, hidden]
+    ///   * Project:    [B, N, hidden] → [B, N, C·P²]
+    ///   * Unpatchify: [B, N, C·P²] → [B, C, H, W]
+    /// The previous implementation skipped patchify/unpatchify and ran Dense
+    /// layers on the spatial tensor's last axis — projecting W → patchDim and
+    /// emitting [B, C, H, patchDim] (=4× the latent on the SANA default
+    /// 32×32×32, patchSize=2 → patchDim=128 so output elements = 1·32·32·128 =
+    /// 131072 vs latent 1·32·32·32 = 32768) — exactly the "PredictNoise output
+    /// length does not match the latent/sample length" failure the test
+    /// reported (#1224 Cluster: SANA — 10/10 tests blocked).
+    ///
+    /// Mirrors the MMDiT-X fix in c8483a153.
+    /// </remarks>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
-        var x = _patchEmbed.Forward(noisySample);
+        // Normalize input to rank-4 [B, C, H, W]. Tests pass rank-3 [C, H, W]
+        // as a single sample; promote a leading batch dim of 1.
+        var input4d = noisySample;
+        bool wasUnbatched = false;
+        if (input4d.Rank == 3)
+        {
+            wasUnbatched = true;
+            input4d = input4d.Reshape(new[] { 1, input4d.Shape[0], input4d.Shape[1], input4d.Shape[2] });
+        }
+        if (input4d.Rank != 4)
+            throw new ArgumentException(
+                $"EMMDiTPredictor expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {input4d.Rank}.",
+                nameof(noisySample));
+
+        const int patchSize = 2;  // Fixed: patchDim = inputChannels * 4 = inputChannels * patchSize²
+        int batch = input4d.Shape[0];
+        int channels = input4d.Shape[1];
+        int height = input4d.Shape[2];
+        int width = input4d.Shape[3];
+
+        if (channels != _inputChannels)
+            throw new ArgumentException(
+                $"EMMDiTPredictor configured for {_inputChannels} channels; got {channels}.",
+                nameof(noisySample));
+        if (height % patchSize != 0 || width % patchSize != 0)
+            throw new ArgumentException(
+                $"EMMDiTPredictor requires spatial dims divisible by patchSize ({patchSize}); got {height}×{width}.",
+                nameof(noisySample));
+
+        int patchDim = _inputChannels * patchSize * patchSize;
+        int hPatches = height / patchSize;
+        int wPatches = width / patchSize;
+        int numTokens = hPatches * wPatches;
+
+        // Patchify: [B, C, H, W] → [B, numTokens, patchDim]
+        var tokens = new Tensor<T>(new[] { batch, numTokens, patchDim });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int hp = 0; hp < hPatches; hp++)
+            {
+                for (int wp = 0; wp < wPatches; wp++)
+                {
+                    int tokenIdx = hp * wPatches + wp;
+                    int featIdx = 0;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int p1 = 0; p1 < patchSize; p1++)
+                        {
+                            for (int p2 = 0; p2 < patchSize; p2++)
+                            {
+                                int hSrc = hp * patchSize + p1;
+                                int wSrc = wp * patchSize + p2;
+                                tokens[b, tokenIdx, featIdx++] = input4d[b, c, hSrc, wSrc];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Embed and propagate
+        var x = _patchEmbed.Forward(tokens);
         foreach (var block in _blocks) x = block.Forward(x);
-        return _finalLayer.Forward(x);
+        var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
+
+        // Unpatchify: [B, numTokens, patchDim] → [B, C, H, W]
+        var output = new Tensor<T>(new[] { batch, channels, height, width });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int hp = 0; hp < hPatches; hp++)
+            {
+                for (int wp = 0; wp < wPatches; wp++)
+                {
+                    int tokenIdx = hp * wPatches + wp;
+                    int featIdx = 0;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int p1 = 0; p1 < patchSize; p1++)
+                        {
+                            for (int p2 = 0; p2 < patchSize; p2++)
+                            {
+                                int hDst = hp * patchSize + p1;
+                                int wDst = wp * patchSize + p2;
+                                output[b, c, hDst, wDst] = projected[b, tokenIdx, featIdx++];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (wasUnbatched)
+            output = output.Reshape(new[] { channels, height, width });
+        return output;
     }
 
     /// <inheritdoc />
