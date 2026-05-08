@@ -31548,12 +31548,20 @@ public static class LayerHelper<T>
         int numEncoderLayers = 4,
         int numDecoderLayers = 4,
         int numHeads = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int vocabSize = 256)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
         int decoderFfnDim = hiddenDim * 4;
+
+        // === Phoneme Embedding (Ren et al. 2019 §3.1, FastSpeech Fig. 1) ===
+        // Input is phoneme IDs [seq], embedding maps to [seq, encoderDim]. The
+        // FFT (Feed-Forward Transformer) blocks below operate on embedded
+        // tokens — without this layer, the test's raw mel-spec / token-ID
+        // input fails the first MHA's hidden-dim contract.
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
 
         // === Text Encoder (FFT blocks) ===
         yield return new LayerNormalizationLayer<T>();
@@ -31761,12 +31769,18 @@ public static class LayerHelper<T>
         int numTextEncoderLayers = 6,
         int numLLMLayers = 12,
         int numHeads = 8,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int vocabSize = 256)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int textFfnDim = textEncoderDim * 4;
         int llmFfnDim = llmDim * 4;
+
+        // === Character/Byte Embedding (E2 TTS Eskimez et al. 2024 §3.1) ===
+        // Input is character/byte token IDs [seq], embedded to [seq, textEncoderDim]
+        // before the text encoder's FFT blocks consume them.
+        yield return new EmbeddingLayer<T>(vocabSize, textEncoderDim);
 
         // === Text Encoder ===
         yield return new LayerNormalizationLayer<T>();
@@ -31995,10 +32009,17 @@ public static class LayerHelper<T>
         int numEncoderLayers = 2,
         int numDecoderLayers = 2,
         int numHeads = 4,
-        double dropoutRate = 0.0)
+        double dropoutRate = 0.0,
+        int vocabSize = 256)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+
+        // === Token Embedding ===
+        // Proprietary TTS APIs accept text tokens; the placeholder layer chain
+        // mirrors that contract by embedding token IDs to encoderDim before
+        // the lightweight text encoder.
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
 
         // === Lightweight Text Encoder ===
         yield return new LayerNormalizationLayer<T>();

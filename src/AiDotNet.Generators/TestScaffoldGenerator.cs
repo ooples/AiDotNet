@@ -1908,18 +1908,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (family == TestFamily.TTS)
         {
-            // TTS vocoders (MelGAN family, HiFiGAN, ParallelWaveGAN, etc.)
-            // take a mel-spectrogram of shape [MelChannels=80, T_frames]
-            // per the standard TTS pipeline (mel frames at 24 kHz with
-            // hop_size=300, MelChannels=80 per Yang et al. 2021 §3.1 and
-            // peers). The default vocoder layer stack projects
-            // [T_frames, MelChannels] → [T_frames, hiddenDim=384] → ...
-            // → [T_frames, 1] so the natural network output is
-            // [T_frames, 1] (one waveform sample per mel frame before
-            // PQMF synthesis upsamples to T_frames × HopSize). Use a
-            // short 8-frame mel for smoke-test speed.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 8, 80 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 1 };");
+            // TTS family covers two distinct sub-architectures:
+            //   • Vocoders (HiFi-GAN / MelGAN / ParallelWaveGAN / WaveNet
+            //     etc.): mel-spectrogram → waveform. Input is [T, 80] mel,
+            //     output is [T, 1] per-frame waveform sample.
+            //   • Text-to-mel / End-to-end TTS (FastSpeech / E2 TTS /
+            //     proprietary-API stubs): phoneme/character ID input. Per
+            //     Ren et al. 2019 §3.1 and Eskimez et al. 2024 §3.1 the
+            //     first layer is a phoneme/char embedding, so the test
+            //     supplies rank-1 [seq_len] integer token IDs.
+            // The IsTextToMelTTS class-list keeps the vocoder default
+            // working while routing the text-input models to a paper-
+            // faithful token-ID input shape.
+            if (IsTextToMelTTS(model.ClassName))
+            {
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 80 };");
+            }
+            else
+            {
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8, 80 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 1 };");
+            }
         }
         else if (isAudioModel)
         {
@@ -3784,6 +3794,43 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "HawkLanguageModel" => true,
             "GriffinLanguageModel" => true,
             "RecurrentGemmaLanguageModel" => true,
+            _ => false,
+        };
+    }
+
+    /// <summary>
+    /// Returns true for TTS models whose contract is text/phoneme tokens →
+    /// audio (not the vocoder mel → audio path). These models' first layer
+    /// is a phoneme/character embedding (Ren et al. 2019 §3.1, Eskimez et al.
+    /// 2024 §3.1) and the test scaffold should supply rank-1 [seq] integer
+    /// token IDs rather than the rank-2 [T, 80] mel default.
+    /// </summary>
+    private static bool IsTextToMelTTS(string className)
+    {
+        int tickIdx = className.IndexOf('`');
+        if (tickIdx > 0) className = className.Substring(0, tickIdx);
+        return className switch
+        {
+            // Acoustic models (text → mel): FastSpeech family, AdaSpeech, GlowTTS,
+            // ForwardTacotron, etc. all use CreateDefaultAcousticModelLayers.
+            "FastSpeech" => true,
+            "FastSpeech2" => true,
+            "AdaSpeech" => true,
+            "AdaSpeech2" => true,
+            "AlignTTS" => true,
+            "DeepVoice3" => true,
+            "ForwardTacotron" => true,
+            "GlowTTS" => true,
+            // Codec / flow-matching TTS (E2 TTS, etc.) use CreateDefaultCodecLMLayers.
+            "E2TTS" => true,
+            // Proprietary-API TTS wrappers (text input, API does synthesis).
+            "WellSaidLabs" => true,
+            "ElevenLabsTTS" => true,
+            "AmazonPolly" => true,
+            "AzureNeuralTTS" => true,
+            "GoogleCloudTTS" => true,
+            "Murf" => true,
+            "NVIDIARivaTTS" => true,
             _ => false,
         };
     }
