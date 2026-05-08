@@ -114,6 +114,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "NVLM", "Ovis", "VILA", "VILAU", "PathVLM", "RadFM",
         "QVQ72B", "SkyworkR1V", "SkyworkR1V2",
         "GeoChat", "RSGPT", "SkyEyeGPT",
+
+        // GAN models with non-default latent / image shapes that the generic
+        // GAN-family scaffold ([16] rank-1 input) can't supply correctly.
+        // Manual test classes in ModelFamilyTests/NeuralNetworks supply the
+        // right latent / image shapes via the parameterless ctor's defaults.
+        "DCGAN",
     };
 
     // Attribute metadata names

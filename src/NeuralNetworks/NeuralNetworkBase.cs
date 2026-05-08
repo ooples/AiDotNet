@@ -2108,6 +2108,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (layer is ConvolutionalLayer<T>)
             return true;
 
+        // For generative-image models (DCGAN, VAE decoders, segmentation
+        // upsamplers), the final layer is a transposed convolution that
+        // produces an image-shaped tensor. The activation (typically Tanh
+        // for [-1, 1] image range, or Sigmoid for [0, 1]) is the deconv's
+        // built-in activation, so the output is valid even though the layer
+        // itself is a deconvolution.
+        if (layer is DeconvolutionalLayer<T>)
+            return true;
+
         // Check if the layer has an activation function typically used in output layers
         if (layer is ActivationLayer<T> activationLayer)
         {
