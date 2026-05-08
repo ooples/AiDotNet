@@ -168,6 +168,18 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     }
 
     /// <summary>
+    /// Creates a random target tensor for training-loss tests. Virtual so
+    /// classifier-style families that need integer class-index targets (NER:
+    /// rank-1 [seq] of token-ID labels per Devlin et al. 2019 §3, multi-class
+    /// classification with cross-entropy) can override the default
+    /// continuous-uniform sampling. The default delegates to
+    /// <see cref="CreateRandomTensor"/> for compatibility with regression
+    /// / continuous-target families.
+    /// </summary>
+    protected virtual Tensor<double> CreateRandomTargetTensor(int[] shape, Random rng)
+        => CreateRandomTensor(shape, rng);
+
+    /// <summary>
     /// Creates a constant tensor. Virtual so paper-faithful index-based models can
     /// translate constant scalars into legal token indices instead of out-of-range
     /// floats — the latter would collapse to index 0 under <c>(int)</c> truncation
@@ -196,7 +208,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         // Measure initial loss (MSE)
         var initialOutput = network.Predict(input);
@@ -244,7 +256,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         // Materialize lazy-initialized parameter tensors via a warmup
         // forward pass BEFORE snapshotting. Lazy layers (LayerNormalization
@@ -489,7 +501,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(input, target);
@@ -700,7 +712,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
         network.Train(input, target);
         Assert.NotNull(network.GetModelMetadata());
     }
@@ -757,7 +769,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var network1 = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng1);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng1);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng1);
         var input2 = CreateRandomTensor(InputShape, rng2);
         var target2 = CreateRandomTensor(EffectiveOutputShape, rng2);
 
@@ -847,7 +859,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         for (int i = 0; i < TrainingIterations * 3; i++)
             network.Train(input, target);
@@ -880,7 +892,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         // Materialize lazy-initialized parameter tensors via a warmup
         // forward pass — see Training_ShouldChangeParameters for the
@@ -971,7 +983,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         // Materialize lazy-initialized parameters via a warmup forward
         // pass BEFORE measuring L2. Some layers (LayerNormalization with
@@ -1101,7 +1113,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
         var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(EffectiveOutputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
         // First step establishes the baseline loss.
         network.Train(input, target);
