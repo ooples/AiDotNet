@@ -29,6 +29,7 @@ internal enum HarnessMode
     BiomedClip,
     DfnClip,
     Hawk,
+    Vit,
 }
 
 internal static class Program
@@ -69,6 +70,18 @@ internal static class Program
                     ? new DFNCLIP<double>(arch)
                     : new BiomedCLIP<double>(arch);
                 input = new Tensor<double>(new[] { 3, 128, 128 });
+                for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+                break;
+            }
+            case HarnessMode.Vit:
+            {
+                // VisionTransformer (Dosovitskiy et al. 2021): paper-default
+                // ViT-Base config — 224×224×3 input, 16-px patches, hidden=768,
+                // 12 layers, 12 heads, mlp=3072. Same shape the
+                // VisionTransformerTests fixture uses.
+                Console.WriteLine($"[mode={mode}] Constructing VisionTransformer (ViT-Base, 224x224)...");
+                network = new VisionTransformer<double>();
+                input = new Tensor<double>(new[] { 1, 3, 224, 224 });
                 for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
                 break;
             }
@@ -166,8 +179,9 @@ internal static class Program
             "hawk" => HarnessMode.Hawk,
             "dfn" or "dfnclip" or "dfn-clip" => HarnessMode.DfnClip,
             "biomed" or "biomedclip" or "biomed-clip" => HarnessMode.BiomedClip,
+            "vit" or "visiontransformer" or "vision-transformer" => HarnessMode.Vit,
             _ => throw new ArgumentException(
-                $"Unknown mode '{token}'. Valid modes: biomed, dfn, hawk.", nameof(args)),
+                $"Unknown mode '{token}'. Valid modes: biomed, dfn, hawk, vit.", nameof(args)),
         };
     }
 }
