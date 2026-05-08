@@ -120,6 +120,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Manual test classes in ModelFamilyTests/NeuralNetworks supply the
         // right latent / image shapes via the parameterless ctor's defaults.
         "DCGAN",
+
+        // Models with ctor-required args that the auto-generator emits
+        // NotImplementedException for. Manual test scaffolds in
+        // ModelFamilyTests/NeuralNetworks supply the ctor args explicitly.
+        "AdversarialImageEvaluator",
+        "ODISE",
     };
 
     // Attribute metadata names
