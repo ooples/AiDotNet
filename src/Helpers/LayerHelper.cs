@@ -1499,6 +1499,18 @@ public static class LayerHelper<T>
         // controllerOutput.Shape[1] = controllerDirectOutputSize + interfaceSize
         int controllerOutputSize = controllerSize + interfaceSize;
         yield return new DenseLayer<T>(controllerOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
+
+        // Output projection layer (Graves et al. 2016 §2 eq. 8: y_t = W_y[v_t; r_t^1; ...; r_t^R]).
+        // Takes the concatenation of controller-direct output (controllerSize values) and the
+        // R read vectors (each of length memoryWordSize) and projects to the model's outputSize.
+        // Living in the Layers chain (rather than as a separate Matrix<T> field) is what gives
+        // this projection's parameters tape-aware gradient flow during backward — the prior
+        // implementation built combinedVector via raw C# indexers that broke tape connectivity
+        // back to controllerOutput, so the controller layers never received gradients.
+        // ProcessThroughController walks Layers[0..N-2]; CombineControllerOutputWithReadVectors
+        // calls Layers[N-1].Forward(combinedTensor) for this final projection.
+        int outputProjectionInputSize = controllerSize + readHeads * memoryWordSize;
+        yield return new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>

@@ -879,8 +879,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // Manual NCHW channel-axis concat. For each batch b, layout is
         // [cA channels of A, then cB channels of B], all contiguous in the
         // C × H × W slab. Per-batch stride in the output = totalC * spatial.
-        var aSpan = a.Data.Span;
-        var bSpan = b.Data.Span;
+        // Tensors 0.75.x can hand back non-contiguous views from upstream ops
+        // (Permute / Reshape that share storage with their parent); .Data
+        // throws "Cannot get contiguous Memory from a non-contiguous tensor view"
+        // on those. Force materialization via Contiguous() before the manual
+        // span-copy — for already-contiguous tensors this is a no-op (returns
+        // the same instance).
+        var aContig = a.Contiguous();
+        var bContig = b.Contiguous();
+        var aSpan = aContig.Data.Span;
+        var bSpan = bContig.Data.Span;
         var oSpan = output.Data.Span;
         int outBatchStride = totalC * spatial;
         int aBatchStride = cA * spatial;
