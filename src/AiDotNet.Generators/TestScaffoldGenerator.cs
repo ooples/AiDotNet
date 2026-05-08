@@ -1510,6 +1510,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsMultiLabelClassifierBase)
             return TestFamily.MultiLabelClassifier;
 
+        // === TIER 4 (re-prioritized): Phase C top-level families that are
+        // base-class-derived must be matched BEFORE the task-based Tier 3
+        // catch-all. Causal / Survival / Anomaly all carry a redundant
+        // [ModelTask(Regression)] for typing in the broader pipeline (e.g.
+        // SLearner is a regression-internal CATE estimator), but the
+        // task-based Regression fallback would steal them away from their
+        // proper test bases — leaving the regression-style invariants
+        // (R²-positive, residual-near-zero, etc.) running on models whose
+        // Train(X,Y) contract is "X col 0 = treatment indicator, cols 1..
+        // = covariates" which is incompatible with pure-feature regression
+        // assumptions. ===
+
+        // Priority 14a: Anomaly Detection (was 17a)
+        if (model.ExtendsAnomalyDetectorBase)
+            return TestFamily.AnomalyDetector;
+
+        // Priority 14b: Survival Analysis (was 17b)
+        if (model.ExtendsSurvivalModelBase)
+            return TestFamily.Survival;
+
+        // Priority 14c: Causal Inference (was 17c). MUST come before the
+        // TaskRegression check — SLearner / TLearner / XLearner etc. carry
+        // ModelTask.Regression for pipeline routing but their Train contract
+        // requires augmented [treatment, covariates] input, not pure features.
+        if (model.ExtendsCausalModelBase)
+            return TestFamily.Causal;
+
         // Priority 15: Regression task + Matrix input
         if (model.Tasks.Contains(TaskRegression) && model.UsesMatrixInput)
             return TestFamily.Regression;
@@ -1521,20 +1548,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Priority 17: Clustering task + Matrix input
         if (model.Tasks.Contains(TaskClustering) && model.UsesMatrixInput)
             return TestFamily.Clustering;
-
-        // === TIER 4: Phase C new top-level families ===
-
-        // Priority 17a: Anomaly Detection
-        if (model.ExtendsAnomalyDetectorBase)
-            return TestFamily.AnomalyDetector;
-
-        // Priority 17b: Survival Analysis
-        if (model.ExtendsSurvivalModelBase)
-            return TestFamily.Survival;
-
-        // Priority 17c: Causal Inference
-        if (model.ExtendsCausalModelBase)
-            return TestFamily.Causal;
 
         // Priority 17d: Reinforcement Learning
         if (model.ExtendsRLAgentBase)

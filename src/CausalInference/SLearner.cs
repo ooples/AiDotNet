@@ -237,11 +237,68 @@ public class SLearner<T> : CausalModelBase<T>
     }
 
     /// <summary>
-    /// Standard prediction - returns treatment effect.
+    /// Standard prediction — returns the predicted outcome for each input row.
     /// </summary>
+    /// <remarks>
+    /// <see cref="CausalModelBase{T}.Train(Matrix{T}, Vector{T})"/> splits the
+    /// input matrix into <c>features</c> (columns 1..end) and <c>treatment</c>
+    /// (column 0) before fitting on the joint <c>[features ∥ treatment] → outcome</c>
+    /// regression. The standard <see cref="IFullModel{T,Matrix{T},Vector{T}}.Predict"/>
+    /// contract returns predicted outcomes (so <c>R²</c> / residual / coefficient-sign
+    /// invariants from <c>RegressionModelTestBase</c> are well-defined): walk each row,
+    /// read its treatment from column 0, evaluate <c>bias + Σ_j w_j · feature_j +
+    /// w_treatment · treatment</c>, and return the row's predicted outcome.
+    /// Treatment-effect (CATE) consumers should call
+    /// <see cref="EstimateTreatmentEffect"/> directly.
+    /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        return EstimateTreatmentEffect(input);
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        EnsureFitted();
+
+        // Accept both [N, p+1] (treatment in col 0, covariates 1..) — the
+        // augmented form Train uses — and [N, p] (pure covariates with no
+        // treatment column). The augmented form is what the regression test
+        // bases pass; the pure-features form is what <see cref="EstimateTreatmentEffect"/>
+        // documents and tests like InterceptRecovery_ConstantTarget_ShouldPredictConstant
+        // exercise via the regression base too.
+        bool hasTreatmentCol = input.Columns == NumFeatures + 1;
+        if (!hasTreatmentCol && input.Columns != NumFeatures)
+        {
+            throw new ArgumentException(
+                $"Predict input has {input.Columns} columns but model was trained on " +
+                $"{NumFeatures} covariate(s). Pass either [N, {NumFeatures}] (pure covariates, " +
+                $"treatment defaulted to 0) or [N, {NumFeatures + 1}] (treatment in col 0, " +
+                $"covariates 1..{NumFeatures}).",
+                nameof(input));
+        }
+
+        int n = input.Rows;
+        var result = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            double pred = NumOps.ToDouble(_bias);
+
+            if (hasTreatmentCol)
+            {
+                // Layout: [treatment, covariate_0, covariate_1, ...]. The
+                // covariate weights _weights[0..p-1] map to columns 1..p of
+                // input, and _weights[p] is the treatment weight.
+                for (int j = 0; j < NumFeatures; j++)
+                    pred += NumOps.ToDouble(_weights[j]) * NumOps.ToDouble(input[i, j + 1]);
+                pred += NumOps.ToDouble(_weights[NumFeatures]) * NumOps.ToDouble(input[i, 0]);
+            }
+            else
+            {
+                // Pure covariates with no treatment column — assume control (T=0)
+                // so the user gets the no-treatment outcome prediction.
+                for (int j = 0; j < NumFeatures; j++)
+                    pred += NumOps.ToDouble(_weights[j]) * NumOps.ToDouble(input[i, j]);
+            }
+
+            result[i] = NumOps.FromDouble(pred);
+        }
+        return result;
     }
 
     /// <inheritdoc />
@@ -337,4 +394,36 @@ public class SLearner<T> : CausalModelBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// SLearner's trainable state is the bias scalar and the weight vector
+    /// (covariate weights + treatment weight). Without this hook the
+    /// CausalModelBase serializer only persists NumFeatures + IsFitted, so
+    /// Clone() / SaveModel() / LoadModel() round-trips would create a clone
+    /// with reset weights and Predict would either return the bias-only
+    /// constant or hit an out-of-range when treating NumFeatures as a weight
+    /// index against a length-0 vector.
+    /// </remarks>
+    protected override Dictionary<string, object> GetAdditionalModelData()
+    {
+        var data = base.GetAdditionalModelData();
+        data["Bias"] = NumOps.ToDouble(_bias);
+        var weights = new double[_weights.Length];
+        for (int i = 0; i < _weights.Length; i++) weights[i] = NumOps.ToDouble(_weights[i]);
+        data["Weights"] = weights;
+        return data;
+    }
+
+    /// <inheritdoc />
+    protected override void LoadAdditionalModelData(Newtonsoft.Json.Linq.JObject modelDataObj)
+    {
+        base.LoadAdditionalModelData(modelDataObj);
+        if (modelDataObj["Bias"] is not null)
+            _bias = NumOps.FromDouble(modelDataObj["Bias"]!.ToObject<double>());
+        if (modelDataObj["Weights"] is Newtonsoft.Json.Linq.JArray weightArr)
+        {
+            _weights = new Vector<T>(weightArr.Count);
+            for (int i = 0; i < weightArr.Count; i++)
+                _weights[i] = NumOps.FromDouble(weightArr[i].ToObject<double>());
+        }
+    }
 }
