@@ -4852,7 +4852,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_fusedTrainingDisabled) return false;
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
-        if (typeof(T) != typeof(float))
+        // PR #319 fused-optimizer double-kernel support — paired with the
+        // matching gate drop in CompiledTapeTrainingStep.TryStepWithFusedOptimizer
+        // (line 232 in that file). Both float and double models can now hit
+        // the compile-once-replay-many fast path; other numeric types still
+        // fall through to the eager autograd tape.
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
             return false;
 
         if (!TryMapToFusedOptimizerConfig(
