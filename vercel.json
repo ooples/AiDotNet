@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "name": "aidotnet-playground-api",
-  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = master ] || [ \"$VERCEL_GIT_COMMIT_REF\" = main ]; then exit 1; fi; PREV=\"${VERCEL_GIT_PREVIOUS_SHA:-}\"; CURR=\"${VERCEL_GIT_COMMIT_SHA:-HEAD}\"; if [ -z \"$PREV\" ]; then exit 1; fi; git -C \"$(git rev-parse --show-toplevel)\" diff --quiet \"$PREV\" \"$CURR\" -- 'api/' 'vercel.json' && exit 0 || exit 1",
+  "ignoreCommand": "bash scripts/vercel-ignore-api.sh",
   "functions": {
     "api/execute.ts": {
       "maxDuration": 30,
