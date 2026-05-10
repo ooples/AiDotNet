@@ -64,7 +64,14 @@ public class TimitDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         {
             foreach (string spkDir in Directory.EnumerateDirectories(drDir))
             {
-                foreach (string wav in Directory.EnumerateFiles(spkDir, "*.WAV").Concat(Directory.EnumerateFiles(spkDir, "*.wav")))
+                // Enumerate both case variants then de-dup — on case-insensitive filesystems
+                // (Windows / macOS HFS+) both globs match the same files; on case-sensitive
+                // filesystems (Linux ext4) they match disjoint sets.
+                var wavs = Directory.EnumerateFiles(spkDir, "*.WAV")
+                    .Concat(Directory.EnumerateFiles(spkDir, "*.wav"))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(f => f, StringComparer.Ordinal);
+                foreach (string wav in wavs)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     string txt = Path.ChangeExtension(wav, ".TXT");
