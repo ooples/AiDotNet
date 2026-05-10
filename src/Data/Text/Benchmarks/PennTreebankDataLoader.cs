@@ -48,15 +48,49 @@ public class PennTreebankDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
     private static readonly string DownloadUrl =
         "http://www.fit.vutbr.cz/~imikolov/rnnlm/simple-examples.tgz";
 
-    /// <inheritdoc/>
-    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    private static string SplitFileName(Geometry.DatasetSplit split) => split switch
     {
-        string splitFile = _options.Split switch
-        {
-            Geometry.DatasetSplit.Test => "ptb.test.txt",
-            Geometry.DatasetSplit.Validation => "ptb.valid.txt",
-            _ => "ptb.train.txt"
-        };
+        Geometry.DatasetSplit.Train => "ptb.train.txt",
+        Geometry.DatasetSplit.Test => "ptb.test.txt",
+        Geometry.DatasetSplit.Validation => "ptb.valid.txt",
+        // Reject unknown enum values rather than silently coercing to the
+        // train split — same defensive pattern WikiText-2 / WikiText-103 use.
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(split),
+            split,
+            $"Unsupported {nameof(Geometry.DatasetSplit)} for Penn Treebank (only Train / Validation / Test).")
+    };
+
+    /// <summary>
+    /// Loads the raw, unprocessed text content for the requested PTB split,
+    /// auto-downloading via <see cref="PennTreebankDataLoaderOptions.AutoDownload"/>
+    /// if the file is not already cached. Lets consumers run their own
+    /// tokenizer (BPE, SentencePiece, etc.) instead of the built-in
+    /// whitespace tokenization that <see cref="LoadAsync(CancellationToken)"/>
+    /// applies internally.
+    /// </summary>
+    /// <param name="split">Which PTB split to read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The raw text contents of the requested split file.</returns>
+    /// <remarks>
+    /// Honors the same <see cref="PennTreebankDataLoaderOptions.DataPath"/> and
+    /// <see cref="PennTreebankDataLoaderOptions.AutoDownload"/> options as
+    /// <see cref="LoadAsync(CancellationToken)"/>. Independent of the loader's
+    /// load-state, so it is safe to call without first calling LoadAsync.
+    /// PTB's vocab-from-train convention is irrelevant here — this method
+    /// returns the requested split's raw text regardless of which split's
+    /// vocab the caller would build elsewhere.
+    /// </remarks>
+    public async Task<string> LoadRawTextAsync(
+        Geometry.DatasetSplit split,
+        CancellationToken cancellationToken = default)
+    {
+        string filePath = await EnsureSplitFileAsync(SplitFileName(split), cancellationToken);
+        return await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
+    }
+
+    private async Task<string> EnsureSplitFileAsync(string splitFile, CancellationToken cancellationToken)
+    {
         string filePath = Path.Combine(ResolveDataDir(), splitFile);
 
         if (!File.Exists(filePath) && _options.AutoDownload)
@@ -85,12 +119,17 @@ public class PennTreebankDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
                 $"PTB data not found at {filePath}. {hint}");
         }
 
+        return filePath;
+    }
+
+    /// <inheritdoc/>
+    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    {
+        string filePath = await EnsureSplitFileAsync(SplitFileName(_options.Split), cancellationToken);
+
         // Build the vocabulary from the train split regardless of which split was requested.
         // PTB convention: vocab is fit on ptb.train.txt and reused for valid/test.
-        string trainPath = Path.Combine(ResolveDataDir(), "ptb.train.txt");
-        if (!File.Exists(trainPath))
-            throw new FileNotFoundException(
-                $"PTB train split (vocabulary source) not found at {trainPath}.");
+        string trainPath = await EnsureSplitFileAsync("ptb.train.txt", cancellationToken);
         string trainText = await FilePolyfill.ReadAllTextAsync(trainPath, cancellationToken);
         var trainTokens = TextLoaderHelper.Tokenize(trainText);
         if (trainTokens.Count < 2)
