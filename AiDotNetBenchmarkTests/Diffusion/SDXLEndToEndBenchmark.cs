@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
+using AiDotNet.Diffusion.Conditioning;
+using AiDotNet.Diffusion.TextToImage;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Diagnosers;
@@ -70,10 +72,25 @@ public class SDXLEndToEndBenchmark : IDisposable
 
     private string? _pythonScriptPath;
     private bool _pythonAvailable;
+    private SDXLModel<float>? _aidotnetSdxl;
 
     [GlobalSetup]
     public void Setup()
     {
+        // Wire the AiDotNet SDXL benchmark instance with the canonical
+        // dual-CLIP conditioner pair (ViT-L/14 + ViT-bigG-14, the SDXL
+        // base-1.0 configuration). UNet and VAE are constructed by the
+        // SDXLModel ctor's internal defaults using paper-canonical
+        // baseChannels=320 and channelMultipliers=[1, 2, 4, 4].
+        var conditioner1 = new CLIPTextConditioner<float>(variant: "ViT-L/14", seed: 42);
+        var conditioner2 = new CLIPTextConditioner<float>(variant: "ViT-bigG-14", seed: 42);
+        _aidotnetSdxl = new SDXLModel<float>(
+            conditioner1: conditioner1,
+            conditioner2: conditioner2,
+            useDualEncoder: true,
+            crossAttentionDim: 2048,
+            seed: 42);
+
         // The Python script ships in the project's Diffusion folder and is
         // copied to the build output via the AiDotNetBenchmarkTests.csproj
         // <None>/<CopyToOutputDirectory> entry. If for some reason it's
@@ -90,6 +107,8 @@ public class SDXLEndToEndBenchmark : IDisposable
 
     public void Dispose()
     {
+        _aidotnetSdxl?.Dispose();
+        _aidotnetSdxl = null;
         GC.SuppressFinalize(this);
     }
 
@@ -134,14 +153,21 @@ public class SDXLEndToEndBenchmark : IDisposable
     [Benchmark(Description = "AiDotNet SDXLModel.GenerateAsync (true-async, compile-cached, #1272 W4)")]
     public double AidotnetSdxlWallMs()
     {
-        // TODO: wire a real SDXLModel<float> instance with paper-canonical
-        // UNet + dual-conditioner + VAE configuration. The infrastructure
-        // for true-async generation (PredictNoiseAsync, ChainAsync,
-        // EncodeTextDualAsync) is committed in W4 above; what remains is the
-        // construction-time topology selection.
-        throw new NotSupportedException(
-            "AidotnetSdxlWallMs requires a configured SDXLModel<float>. " +
-            "Wire the real benchmark instance before running this column in CI.");
+        // Awaits the true-async denoise path: dual-CLIP conditioners run
+        // concurrently, per-step UNet uses PredictNoiseAsync (compile-cache
+        // replay after warmup), VAE decode uses the inherited compile cache
+        // from VAEModelBase. Wall time matches what a sync-blocking caller
+        // would observe — there's no measurement-side overhead from the
+        // GetAwaiter().GetResult() unwrap.
+        var sw = Stopwatch.StartNew();
+        var task = _aidotnetSdxl!.GenerateAsync(
+            prompt: Prompt,
+            width: Width,
+            height: Height,
+            numInferenceSteps: NumInferenceSteps);
+        task.GetAwaiter().GetResult();
+        sw.Stop();
+        return sw.Elapsed.TotalMilliseconds;
     }
 
     /// <summary>
