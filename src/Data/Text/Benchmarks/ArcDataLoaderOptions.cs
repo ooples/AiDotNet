@@ -40,4 +40,13 @@ public sealed class ArcDataLoaderOptions
     public int VocabularySize { get; set; } = 16000;
     /// <summary>Optional maximum number of samples to load.</summary>
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MaxSequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSequenceLength), "MaxSequenceLength must be positive.");
+        if (VocabularySize <= 0) throw new ArgumentOutOfRangeException(nameof(VocabularySize), "VocabularySize must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

@@ -39,6 +39,14 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     public MathDataLoader(MathDataLoaderOptions? options = null)
     {
         _options = options ?? new MathDataLoaderOptions();
+        _options.Validate();
+        // MATH ships only train + test directories. Routing Validation to test silently
+        // would invalidate any val/test comparison, so reject the request explicitly.
+        if (_options.Split == Geometry.DatasetSplit.Validation)
+            throw new ArgumentException(
+                "Hendrycks MATH ships only train/test directories — there is no canonical validation split. " +
+                "Use Split() to derive a held-out validation set from train, or set Options.Split = Test/Train explicitly.",
+                nameof(options));
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("math-hendrycks");
     }
 
@@ -54,7 +62,7 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         if (!Directory.Exists(root))
             throw new DirectoryNotFoundException($"MATH not found at {_dataPath}.");
 
-        string splitDir = _options.Split == Geometry.DatasetSplit.Test || _options.Split == Geometry.DatasetSplit.Validation
+        string splitDir = _options.Split == Geometry.DatasetSplit.Test
             ? Path.Combine(root, "test") : Path.Combine(root, "train");
         if (!Directory.Exists(splitDir))
             throw new DirectoryNotFoundException($"MATH split dir not found: {splitDir}");
@@ -74,7 +82,12 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                 cancellationToken.ThrowIfCancellationRequested();
                 string content = await FilePolyfill.ReadAllTextAsync(jsonFile, cancellationToken);
                 JObject obj;
-                try { obj = JObject.Parse(content); } catch { continue; }
+                try { obj = JObject.Parse(content); }
+                catch (Newtonsoft.Json.JsonException ex)
+                {
+                    throw new InvalidDataException(
+                        $"Malformed JSON in MATH file '{jsonFile}'.", ex);
+                }
 
                 if (_options.LevelFilter.HasValue)
                 {
@@ -147,10 +160,13 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, trainIndices), TextLoaderHelper.ExtractTensorBatch(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, valIndices), TextLoaderHelper.ExtractTensorBatch(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, testIndices), TextLoaderHelper.ExtractTensorBatch(labels, testIndices))
         );
     }
 

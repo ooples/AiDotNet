@@ -23,4 +23,13 @@ public sealed class DtdDataLoaderOptions
     /// <summary>Predefined split index (1..10). Default 1.</summary>
     public int SplitIndex { get; set; } = 1;
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (ImageSize <= 0) throw new ArgumentOutOfRangeException(nameof(ImageSize), "ImageSize must be positive.");
+        if (SplitIndex < 1 || SplitIndex > 10) throw new ArgumentOutOfRangeException(nameof(SplitIndex), "SplitIndex must be in [1, 10].");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

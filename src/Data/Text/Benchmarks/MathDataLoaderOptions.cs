@@ -29,4 +29,15 @@ public sealed class MathDataLoaderOptions
     public int MaxSolutionLength { get; set; } = 512;
     public int VocabularySize { get; set; } = 16000;
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MaxProblemLength <= 0) throw new ArgumentOutOfRangeException(nameof(MaxProblemLength), "MaxProblemLength must be positive.");
+        if (MaxSolutionLength <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSolutionLength), "MaxSolutionLength must be positive.");
+        if (VocabularySize <= 0) throw new ArgumentOutOfRangeException(nameof(VocabularySize), "VocabularySize must be positive.");
+        if (LevelFilter is < 1 or > 5) throw new ArgumentOutOfRangeException(nameof(LevelFilter), "LevelFilter must be in [1, 5] when specified.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

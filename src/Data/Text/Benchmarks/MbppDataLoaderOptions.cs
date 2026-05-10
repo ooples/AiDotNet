@@ -29,4 +29,14 @@ public sealed class MbppDataLoaderOptions
     public int VocabularySize { get; set; } = 8000;
     /// <summary>Optional sample cap.</summary>
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MaxPromptLength <= 0) throw new ArgumentOutOfRangeException(nameof(MaxPromptLength), "MaxPromptLength must be positive.");
+        if (MaxSolutionLength <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSolutionLength), "MaxSolutionLength must be positive.");
+        if (VocabularySize <= 0) throw new ArgumentOutOfRangeException(nameof(VocabularySize), "VocabularySize must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

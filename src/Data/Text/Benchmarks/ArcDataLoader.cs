@@ -47,6 +47,7 @@ public class ArcDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
     public ArcDataLoader(ArcDataLoaderOptions? options = null)
     {
         _options = options ?? new ArcDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("arc");
     }
 
@@ -87,13 +88,20 @@ public class ArcDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
         var choices = new List<string[]>();
         var labels = new List<int>();
 
+        int lineNum = 0;
         foreach (string line in await FilePolyfill.ReadAllLinesAsync(filePath, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            lineNum++;
             if (string.IsNullOrWhiteSpace(line)) continue;
             JObject obj;
             try { obj = JObject.Parse(line); }
-            catch { continue; }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                string preview = line.Length > 100 ? line.Substring(0, 100) + "..." : line;
+                throw new InvalidDataException(
+                    $"Malformed JSON in ARC file '{filePath}' at line {lineNum}: {preview}", ex);
+            }
             string? stem = obj["question"]?["stem"]?.ToString();
             var choicesArr = obj["question"]?["choices"] as JArray;
             string? answerKey = obj["answerKey"]?.ToString();

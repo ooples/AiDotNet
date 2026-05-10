@@ -41,6 +41,7 @@ public class DtdDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
     public DtdDataLoader(DtdDataLoaderOptions? options = null)
     {
         _options = options ?? new DtdDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("dtd");
         _imageSize = _options.ImageSize;
     }

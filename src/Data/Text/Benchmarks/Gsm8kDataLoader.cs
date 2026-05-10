@@ -52,49 +52,84 @@ public class Gsm8kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     private static readonly string TestUrl =
         "https://raw.githubusercontent.com/openai/grade-school-math/master/grade_school_math/data/test.jsonl";
 
-    /// <inheritdoc/>
-    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    private async Task<(List<string> Questions, List<string> Answers)> ReadJsonlAsync(string filePath, CancellationToken cancellationToken)
     {
-        bool useTest = _options.Split == Geometry.DatasetSplit.Test
-                    || _options.Split == Geometry.DatasetSplit.Validation;
-        string fileName = useTest ? "test.jsonl" : "train.jsonl";
-        string url = useTest ? TestUrl : TrainUrl;
-        string filePath = Path.Combine(_dataPath, fileName);
-
-        if (!File.Exists(filePath) && _options.AutoDownload)
-        {
-            try
-            {
-                Directory.CreateDirectory(_dataPath);
-                await DatasetDownloader.DownloadFileAsync(url, filePath, cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to download GSM8K from {url}.", ex);
-            }
-        }
-
-        if (!File.Exists(filePath))
-        {
-            throw new FileNotFoundException(
-                $"GSM8K not found at {filePath}. Enable AutoDownload or place manually.");
-        }
-
         var questions = new List<string>();
         var answers = new List<string>();
+        int lineNum = 0;
         foreach (string line in await FilePolyfill.ReadAllLinesAsync(filePath, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            lineNum++;
             if (string.IsNullOrWhiteSpace(line)) continue;
             JObject obj;
             try { obj = JObject.Parse(line); }
-            catch { continue; }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                string preview = line.Length > 100 ? line.Substring(0, 100) + "..." : line;
+                throw new InvalidDataException(
+                    $"Malformed JSONL in GSM8K file '{filePath}' at line {lineNum}: {preview}", ex);
+            }
             string? q = obj["question"]?.ToString();
             string? a = obj["answer"]?.ToString();
             if (string.IsNullOrEmpty(q) || string.IsNullOrEmpty(a)) continue;
             questions.Add(q!);
             answers.Add(a!);
+        }
+        return (questions, answers);
+    }
+
+    private async Task EnsureDownloadedAsync(string filePath, string url, CancellationToken cancellationToken)
+    {
+        if (File.Exists(filePath)) return;
+        if (!_options.AutoDownload)
+            throw new FileNotFoundException(
+                $"GSM8K not found at {filePath}. Enable AutoDownload or place manually.");
+        try
+        {
+            Directory.CreateDirectory(_dataPath);
+            await DatasetDownloader.DownloadFileAsync(url, filePath, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new InvalidOperationException($"Failed to download GSM8K from {url}.", ex);
+        }
+    }
+
+    /// <inheritdoc/>
+    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    {
+        bool useTest = _options.Split == Geometry.DatasetSplit.Test
+                    || _options.Split == Geometry.DatasetSplit.Validation;
+        string trainPath = Path.Combine(_dataPath, "train.jsonl");
+        string requestedPath = useTest ? Path.Combine(_dataPath, "test.jsonl") : trainPath;
+        string requestedUrl = useTest ? TestUrl : TrainUrl;
+
+        // Always materialize train (vocabulary source) and the requested split file.
+        await EnsureDownloadedAsync(trainPath, TrainUrl, cancellationToken);
+        if (useTest) await EnsureDownloadedAsync(requestedPath, requestedUrl, cancellationToken);
+
+        // Build vocabulary from train regardless of which split was requested.
+        // Industry standard: the vocab is fit on train and reused at eval time.
+        var (trainQuestions, trainAnswers) = await ReadJsonlAsync(trainPath, cancellationToken);
+        var trainTexts = new List<string>(trainQuestions.Count * 2);
+        for (int i = 0; i < trainQuestions.Count; i++)
+        {
+            trainTexts.Add(trainQuestions[i]);
+            trainTexts.Add(trainAnswers[i]);
+        }
+        var vocabulary = TextLoaderHelper.BuildVocabulary(trainTexts, trainTexts.Count, _options.VocabularySize);
+
+        // Now read the requested split for actual sample data.
+        List<string> questions, answers;
+        if (useTest)
+        {
+            (questions, answers) = await ReadJsonlAsync(requestedPath, cancellationToken);
+        }
+        else
+        {
+            questions = trainQuestions;
+            answers = trainAnswers;
         }
 
         int totalSamples = questions.Count;
@@ -102,15 +137,6 @@ public class Gsm8kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             totalSamples = _options.MaxSamples.Value;
 
         _sampleCount = totalSamples;
-
-        // Build joint vocabulary from questions + answers
-        var allTexts = new List<string>(totalSamples * 2);
-        for (int i = 0; i < totalSamples; i++)
-        {
-            allTexts.Add(questions[i]);
-            allTexts.Add(answers[i]);
-        }
-        var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int qLen = _options.MaxQuestionLength;
         int aLen = _options.MaxAnswerLength;
@@ -159,10 +185,13 @@ public class Gsm8kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, trainIndices), TextLoaderHelper.ExtractTensorBatch(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, valIndices), TextLoaderHelper.ExtractTensorBatch(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, testIndices), TextLoaderHelper.ExtractTensorBatch(labels, testIndices))
         );
     }
 }

@@ -39,6 +39,13 @@ public class HumanEvalDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
     public HumanEvalDataLoader(HumanEvalDataLoaderOptions? options = null)
     {
         _options = options ?? new HumanEvalDataLoaderOptions();
+        _options.Validate();
+        // HumanEval has no train/val/test split — all 164 problems form the test set.
+        // Reject ambiguous Train/Validation requests rather than silently aliasing them.
+        if (_options.Split != Geometry.DatasetSplit.Test)
+            throw new ArgumentException(
+                "HumanEval has only a Test split (164 problems). Set Options.Split = DatasetSplit.Test or use Split() for synthetic partitions.",
+                nameof(options));
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("humaneval");
     }
 
@@ -67,13 +74,20 @@ public class HumanEvalDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
 
         var prompts = new List<string>();
         var solutions = new List<string>();
+        int lineNum = 0;
         foreach (string line in await FilePolyfill.ReadAllLinesAsync(filePath, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            lineNum++;
             if (string.IsNullOrWhiteSpace(line)) continue;
             JObject obj;
             try { obj = JObject.Parse(line); }
-            catch { continue; }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                string preview = line.Length > 100 ? line.Substring(0, 100) + "..." : line;
+                throw new InvalidDataException(
+                    $"Malformed JSONL in HumanEval file '{filePath}' at line {lineNum}: {preview}", ex);
+            }
             string? p = obj["prompt"]?.ToString();
             string? s = obj["canonical_solution"]?.ToString();
             if (string.IsNullOrEmpty(p) || s is null) continue;

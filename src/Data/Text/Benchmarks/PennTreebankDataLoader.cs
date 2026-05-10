@@ -85,11 +85,28 @@ public class PennTreebankDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
                 $"PTB data not found at {filePath}. {hint}");
         }
 
-        string text = await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
-        var tokens = TextLoaderHelper.Tokenize(text);
-        if (tokens.Count < 2) return;
+        // Build the vocabulary from the train split regardless of which split was requested.
+        // PTB convention: vocab is fit on ptb.train.txt and reused for valid/test.
+        string trainPath = Path.Combine(ResolveDataDir(), "ptb.train.txt");
+        if (!File.Exists(trainPath))
+            throw new FileNotFoundException(
+                $"PTB train split (vocabulary source) not found at {trainPath}.");
+        string trainText = await FilePolyfill.ReadAllTextAsync(trainPath, cancellationToken);
+        var trainTokens = TextLoaderHelper.Tokenize(trainText);
+        if (trainTokens.Count < 2)
+            throw new InvalidDataException(
+                $"PTB train split at {trainPath} is empty or truncated (got {trainTokens.Count} tokens, need ≥ 2).");
+        var vocabulary = TextLoaderHelper.BuildVocabulary(trainTokens, trainTokens.Count, _options.VocabularySize);
 
-        var vocabulary = TextLoaderHelper.BuildVocabulary(tokens, tokens.Count, _options.VocabularySize);
+        // Tokenize the requested split for actual sample data.
+        string text = filePath == trainPath
+            ? trainText
+            : await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
+        var tokens = filePath == trainPath ? trainTokens : TextLoaderHelper.Tokenize(text);
+        if (tokens.Count < 2)
+            throw new InvalidDataException(
+                $"PTB split file at {filePath} is empty or truncated (got {tokens.Count} tokens, need ≥ 2).");
+
         int seqLen = _options.SequenceLength;
         int numSequences = (tokens.Count - 1) / seqLen;
         if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < numSequences)
@@ -148,10 +165,13 @@ public class PennTreebankDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, trainIndices), TextLoaderHelper.ExtractTensorBatch(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, valIndices), TextLoaderHelper.ExtractTensorBatch(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, testIndices), TextLoaderHelper.ExtractTensorBatch(labels, testIndices))
         );
     }
 

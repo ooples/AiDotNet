@@ -82,20 +82,48 @@ public class HellaswagDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         var contexts = new List<string>();
         var endings = new List<string[]>();
         var labels = new List<int>();
+        bool isTestSplit = _options.Split == Geometry.DatasetSplit.Test;
 
+        int lineNum = 0;
         foreach (string line in await FilePolyfill.ReadAllLinesAsync(filePath, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            lineNum++;
             if (string.IsNullOrWhiteSpace(line)) continue;
             JObject obj;
             try { obj = JObject.Parse(line); }
-            catch { continue; }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                string preview = line.Length > 100 ? line.Substring(0, 100) + "..." : line;
+                throw new InvalidDataException(
+                    $"Malformed JSONL in HellaSwag file '{filePath}' at line {lineNum}: {preview}", ex);
+            }
             string? ctx = obj["ctx"]?.ToString() ?? obj["ctx_a"]?.ToString();
             var endingsArr = obj["endings"] as JArray;
             if (string.IsNullOrEmpty(ctx) || endingsArr is null || endingsArr.Count != 4) continue;
             var endingsStrs = new string[4];
             for (int i = 0; i < 4; i++) endingsStrs[i] = endingsArr[i]?.ToString() ?? string.Empty;
-            int label = obj["label"]?.Type == JTokenType.Integer ? obj["label"]!.Value<int>() : 0;
+
+            // Test split: labels are hidden upstream — sentinel -1 → uniform-prior label tensor.
+            // Train/Validation: missing or out-of-range label is a data integrity failure.
+            int label;
+            if (isTestSplit)
+            {
+                label = -1;
+            }
+            else if (obj["label"]?.Type == JTokenType.Integer)
+            {
+                label = obj["label"]!.Value<int>();
+                if (label < 0 || label > 3)
+                    throw new InvalidDataException(
+                        $"Invalid label {label} in HellaSwag file '{filePath}' at line {lineNum}. Expected 0..3.");
+            }
+            else
+            {
+                throw new InvalidDataException(
+                    $"Missing or non-integer label in HellaSwag file '{filePath}' at line {lineNum} for non-test split.");
+            }
+
             contexts.Add(ctx!);
             endings.Add(endingsStrs);
             labels.Add(label);
@@ -118,6 +146,7 @@ public class HellaswagDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         var featuresData = new T[totalSamples * 4 * seqLen];
         var labelsData = new T[totalSamples * 4];
 
+        T uniformPrior = NumOps.FromDouble(0.25);
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -127,8 +156,17 @@ public class HellaswagDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
                 int offset = (i * 4 + e) * seqLen;
                 for (int j = 0; j < seqLen; j++) featuresData[offset + j] = NumOps.FromDouble(tok[j]);
             }
-            int classIdx = Math.Clamp(labels[i], 0, 3);
-            labelsData[i * 4 + classIdx] = NumOps.One;
+            if (isTestSplit)
+            {
+                // Test labels are hidden upstream — emit the uniform prior so consumers
+                // see the documented [0.25, 0.25, 0.25, 0.25] sentinel rather than a false one-hot.
+                int baseIdx = i * 4;
+                for (int c = 0; c < 4; c++) labelsData[baseIdx + c] = uniformPrior;
+            }
+            else
+            {
+                labelsData[i * 4 + labels[i]] = NumOps.One;
+            }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, 4, seqLen });

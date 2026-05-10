@@ -22,4 +22,14 @@ public sealed class TruthfulQaDataLoaderOptions
     public int MaxAnswerLength { get; set; } = 128;
     public int VocabularySize { get; set; } = 16000;
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MaxQuestionLength <= 0) throw new ArgumentOutOfRangeException(nameof(MaxQuestionLength), "MaxQuestionLength must be positive.");
+        if (MaxAnswerLength <= 0) throw new ArgumentOutOfRangeException(nameof(MaxAnswerLength), "MaxAnswerLength must be positive.");
+        if (VocabularySize <= 0) throw new ArgumentOutOfRangeException(nameof(VocabularySize), "VocabularySize must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

@@ -99,7 +99,10 @@ public class WikiText2DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
 
         // Tokenize entire text
         var tokens = TextLoaderHelper.Tokenize(text);
-        if (tokens.Count < 2) return;
+        if (tokens.Count < 2)
+            throw new InvalidDataException(
+                $"WikiText-2 split file at {filePath} is empty or truncated " +
+                $"(got {tokens.Count} tokens, need ≥ 2 for next-token prediction).");
 
         // Build vocabulary
         var vocabulary = TextLoaderHelper.BuildVocabulary(tokens, tokens.Count, _options.VocabularySize);

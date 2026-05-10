@@ -43,6 +43,7 @@ public class TinyStoriesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
     public TinyStoriesDataLoader(TinyStoriesDataLoaderOptions? options = null)
     {
         _options = options ?? new TinyStoriesDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("tinystories");
     }
 
@@ -84,7 +85,10 @@ public class TinyStoriesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
 
         string text = await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
         var tokens = TextLoaderHelper.Tokenize(text);
-        if (tokens.Count < 2) return;
+        if (tokens.Count < 2)
+            throw new InvalidDataException(
+                $"TinyStories split file at {filePath} is empty or truncated " +
+                $"(got {tokens.Count} tokens, need ≥ 2 for next-token prediction).");
 
         var vocabulary = TextLoaderHelper.BuildVocabulary(tokens, tokens.Count, _options.VocabularySize);
         int seqLen = _options.SequenceLength;

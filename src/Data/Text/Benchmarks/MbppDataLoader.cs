@@ -40,6 +40,7 @@ public class MbppDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     public MbppDataLoader(MbppDataLoaderOptions? options = null)
     {
         _options = options ?? new MbppDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("mbpp");
     }
 
@@ -67,12 +68,20 @@ public class MbppDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
 
         var prompts = new List<string>();
         var solutions = new List<string>();
+        int lineNum = 0;
         foreach (string line in await FilePolyfill.ReadAllLinesAsync(filePath, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
+            lineNum++;
             if (string.IsNullOrWhiteSpace(line)) continue;
             JObject obj;
-            try { obj = JObject.Parse(line); } catch { continue; }
+            try { obj = JObject.Parse(line); }
+            catch (Newtonsoft.Json.JsonException ex)
+            {
+                string preview = line.Length > 100 ? line.Substring(0, 100) + "..." : line;
+                throw new InvalidDataException(
+                    $"Malformed JSONL in MBPP file '{filePath}' at line {lineNum}: {preview}", ex);
+            }
             int taskId = obj["task_id"]?.Value<int>() ?? 0;
             // Apply canonical splits per Austin et al. 2021: 11..510 test, 511..600 val, 601..974 train.
             bool include = _options.Split switch

@@ -30,6 +30,14 @@ public class TruthfulQaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     public TruthfulQaDataLoader(TruthfulQaDataLoaderOptions? options = null)
     {
         _options = options ?? new TruthfulQaDataLoaderOptions();
+        _options.Validate();
+        // TruthfulQA ships only the canonical 817-question Test set — every paper
+        // reports 0-shot results on this single split. Reject Train/Validation rather
+        // than silently returning the same data.
+        if (_options.Split != Geometry.DatasetSplit.Test)
+            throw new ArgumentException(
+                "TruthfulQA has only a Test split (817 questions). Set Options.Split = DatasetSplit.Test, or use Split() for synthetic partitions.",
+                nameof(options));
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("truthfulqa");
     }
 
@@ -55,25 +63,27 @@ public class TruthfulQaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         if (!File.Exists(filePath))
             throw new FileNotFoundException($"TruthfulQA not found at {filePath}.");
 
-        var lines = await FilePolyfill.ReadAllLinesAsync(filePath, cancellationToken);
-        if (lines.Length < 2) return;
+        // RFC4180-complete: parse full file as a CSV stream so quoted fields can span newlines.
+        string raw = await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
+        var rows = ParseCsvRfc4180(raw);
+        if (rows.Count < 2)
+            throw new InvalidDataException(
+                $"TruthfulQA.csv at {filePath} contains fewer than 2 rows (header + data).");
 
         // Header: Type,Category,Question,Best Answer,Correct Answers,Incorrect Answers,Source
-        // Find column indices
-        var header = SplitCsvLine(lines[0]);
-        int qIdx = Array.FindIndex(header, h => h.Trim().Equals("Question", StringComparison.OrdinalIgnoreCase));
-        int aIdx = Array.FindIndex(header, h => h.Trim().Equals("Best Answer", StringComparison.OrdinalIgnoreCase));
+        var header = rows[0];
+        int qIdx = header.FindIndex(h => h.Trim().Equals("Question", StringComparison.OrdinalIgnoreCase));
+        int aIdx = header.FindIndex(h => h.Trim().Equals("Best Answer", StringComparison.OrdinalIgnoreCase));
         if (qIdx < 0 || aIdx < 0)
             throw new InvalidDataException("TruthfulQA.csv missing required columns Question/Best Answer.");
 
         var questions = new List<string>();
         var answers = new List<string>();
-        for (int i = 1; i < lines.Length; i++)
+        for (int i = 1; i < rows.Count; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (string.IsNullOrWhiteSpace(lines[i])) continue;
-            var fields = SplitCsvLine(lines[i]);
-            if (fields.Length <= aIdx) continue;
+            var fields = rows[i];
+            if (fields.Count <= aIdx) continue;
             string q = fields[qIdx];
             string a = fields[aIdx];
             if (string.IsNullOrEmpty(q) || string.IsNullOrEmpty(a)) continue;
@@ -133,39 +143,65 @@ public class TruthfulQaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), TextLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, trainIndices), TextLoaderHelper.ExtractTensorBatch(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, valIndices), TextLoaderHelper.ExtractTensorBatch(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(TextLoaderHelper.ExtractTensorBatch(features, testIndices), TextLoaderHelper.ExtractTensorBatch(labels, testIndices))
         );
     }
 
-    /// <summary>RFC4180-compatible CSV row split (handles quoted fields with commas/newlines).</summary>
-    private static string[] SplitCsvLine(string line)
+    /// <summary>
+    /// RFC4180-complete CSV parser: walks the entire input character stream so
+    /// quoted fields may contain commas, CR, LF, and escaped quotes.
+    /// </summary>
+    private static List<List<string>> ParseCsvRfc4180(string input)
     {
-        var fields = new List<string>();
+        var rows = new List<List<string>>();
+        var row = new List<string>();
         var sb = new System.Text.StringBuilder();
         bool inQuotes = false;
-        for (int i = 0; i < line.Length; i++)
+        int i = 0;
+        while (i < input.Length)
         {
-            char c = line[i];
+            char c = input[i];
             if (inQuotes)
             {
                 if (c == '"')
                 {
-                    if (i + 1 < line.Length && line[i + 1] == '"') { sb.Append('"'); i++; }
-                    else inQuotes = false;
+                    if (i + 1 < input.Length && input[i + 1] == '"') { sb.Append('"'); i += 2; continue; }
+                    inQuotes = false;
                 }
                 else sb.Append(c);
+                i++;
             }
             else
             {
-                if (c == '"') inQuotes = true;
-                else if (c == ',') { fields.Add(sb.ToString()); sb.Clear(); }
-                else sb.Append(c);
+                if (c == '"') { inQuotes = true; i++; }
+                else if (c == ',') { row.Add(sb.ToString()); sb.Clear(); i++; }
+                else if (c == '\r')
+                {
+                    row.Add(sb.ToString()); sb.Clear();
+                    rows.Add(row); row = new List<string>();
+                    if (i + 1 < input.Length && input[i + 1] == '\n') i += 2; else i++;
+                }
+                else if (c == '\n')
+                {
+                    row.Add(sb.ToString()); sb.Clear();
+                    rows.Add(row); row = new List<string>();
+                    i++;
+                }
+                else { sb.Append(c); i++; }
             }
         }
-        fields.Add(sb.ToString());
-        return fields.ToArray();
+        // Flush final field/row if input doesn't end with a newline.
+        if (sb.Length > 0 || row.Count > 0)
+        {
+            row.Add(sb.ToString());
+            rows.Add(row);
+        }
+        return rows;
     }
 }
