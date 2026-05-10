@@ -48,8 +48,10 @@
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
     <!-- Serialization and data -->
     <PackageVersion Include="Google.Protobuf" Version="3.34.1" />
+    <PackageVersion Include="MatFileHandler" Version="1.3.0" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageVersion Include="Parquet.Net" Version="5.5.0" />
+    <PackageVersion Include="SharpZipLib" Version="1.4.2" />
     <!-- Pin Snappier to non-vulnerable 1.3.1 (1.3.0 has GHSA-pggp-6c3x-2xmx, transitive via Parquet.Net / Pipelines.Sockets.Unofficial) -->
     <PackageVersion Include="Snappier" Version="1.3.1" />
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
