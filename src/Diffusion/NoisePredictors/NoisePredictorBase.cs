@@ -245,8 +245,11 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
     protected System.Threading.Tasks.ValueTask<Tensor<T>> PredictCompiledAsync(
         Tensor<T> input,
         Func<Tensor<T>> eagerFallback,
-        System.Threading.CancellationToken cancellationToken) =>
-        _compileHost.PredictAsync(input, _layerStructureVersion, eagerFallback, cancellationToken);
+        System.Threading.CancellationToken cancellationToken)
+    {
+        ThrowIfDisposed();
+        return _compileHost.PredictAsync(input, _layerStructureVersion, eagerFallback, cancellationToken);
+    }
 
     /// <summary>
     /// Bump to signal the layer graph has changed — lazy init expanded a tensor,
@@ -516,6 +519,7 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         Tensor<T>? conditioning = null,
         System.Threading.CancellationToken cancellationToken = default)
     {
+        ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
         // Route through the compile host's async path. The compile cache
         // is keyed on (shape, structureVersion); after the first call at
