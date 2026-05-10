@@ -217,10 +217,14 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
         if (_inputConv == null || _meanConv == null || _logVarConv == null)
             throw new InvalidOperationException("Encoder layers not initialized.");
 
-        var x = _inputConv.Forward(image);
-
-        foreach (var layer in _encoderLayers)
-            x = layer.Forward(x);
+        // Route the shared encoder backbone through the compile host (#1272 W1).
+        var x = EncodeCompiled(image, () =>
+        {
+            var y = _inputConv.Forward(image);
+            foreach (var layer in _encoderLayers)
+                y = layer.Forward(y);
+            return y;
+        });
 
         var mean = _meanConv.Forward(x);
         var logVar = _logVarConv.Forward(x);
@@ -234,13 +238,17 @@ public class SDXLVAEModel<T> : VAEModelBase<T>
         if (_postQuantConv == null || _outputConv == null)
             throw new InvalidOperationException("Decoder layers not initialized.");
 
-        var x = _postQuantConv.Forward(latent);
-
-        foreach (var layer in _decoderLayers)
-            x = layer.Forward(x);
-
-        x = _outputConv.Forward(x);
-        return x;
+        // Route the full decoder body through the compile host. This is the
+        // hot path for every SDXL generation — replays a cached compiled plan
+        // on the second + Nth call at the same latent shape. (#1272 W1.)
+        return DecodeCompiled(latent, () =>
+        {
+            var x = _postQuantConv.Forward(latent);
+            foreach (var layer in _decoderLayers)
+                x = layer.Forward(x);
+            x = _outputConv.Forward(x);
+            return x;
+        });
     }
 
     private int CalculateParameterCount()
