@@ -47,8 +47,74 @@ public class Enwik8DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
 
     private static readonly string DownloadUrl = "https://mattmahoney.net/dc/enwik8.zip";
 
-    /// <inheritdoc/>
-    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    private static (long startByte, long endByte) GetSplitByteRange(Geometry.DatasetSplit split) => split switch
+    {
+        Geometry.DatasetSplit.Train => (0L, TrainEnd),
+        Geometry.DatasetSplit.Validation => (TrainEnd, ValEnd),
+        Geometry.DatasetSplit.Test => (ValEnd, TotalSize),
+        // Reject unknown enum values rather than silently coercing to the
+        // train split — same defensive pattern WikiText-2 / WikiText-103 use.
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(split),
+            split,
+            $"Unsupported {nameof(Geometry.DatasetSplit)} for enwik8 (only Train / Validation / Test).")
+    };
+
+    /// <summary>
+    /// Loads the raw, unprocessed UTF-8 text content for the requested enwik8
+    /// split, auto-downloading via <see cref="Enwik8DataLoaderOptions.AutoDownload"/>
+    /// if the file is not already cached. Lets consumers run their own
+    /// tokenizer (BPE byte-level, character-level, etc.) instead of the
+    /// built-in byte-id encoding that <see cref="LoadAsync(CancellationToken)"/>
+    /// applies internally.
+    /// </summary>
+    /// <param name="split">Which enwik8 split to read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The raw UTF-8 text of the split's byte range
+    /// (Train: bytes [0, 90M); Validation: [90M, 95M); Test: [95M, 100M)).
+    /// </returns>
+    /// <remarks>
+    /// Honors the same <see cref="Enwik8DataLoaderOptions.DataPath"/> and
+    /// <see cref="Enwik8DataLoaderOptions.AutoDownload"/> options as
+    /// <see cref="LoadAsync(CancellationToken)"/>. Independent of the loader's
+    /// load-state, so it is safe to call without first calling LoadAsync.
+    /// Decoded as UTF-8 to match the canonical XML dump's encoding; an
+    /// invalid sequence at the byte-range boundary surfaces as a
+    /// replacement char rather than throwing.
+    /// </remarks>
+    public async Task<string> LoadRawTextAsync(
+        Geometry.DatasetSplit split,
+        CancellationToken cancellationToken = default)
+    {
+        string filePath = await EnsureFileAsync(cancellationToken);
+        var (startByte, endByte) = GetSplitByteRange(split);
+
+        long fileSize = new FileInfo(filePath).Length;
+        endByte = Math.Min(endByte, fileSize);
+        if (startByte >= endByte)
+            throw new InvalidDataException($"enwik8 file is shorter than expected ({fileSize} bytes).");
+
+        long byteCount = endByte - startByte;
+        if (byteCount > int.MaxValue)
+            throw new InvalidOperationException(
+                $"enwik8 split byte range ({byteCount}) exceeds int.MaxValue; " +
+                "use the streaming LoadAsync path for slices this large.");
+
+        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        fs.Seek(startByte, SeekOrigin.Begin);
+        var buffer = new byte[(int)byteCount];
+        int totalRead = 0;
+        while (totalRead < buffer.Length)
+        {
+            int read = await fs.ReadAsync(buffer, totalRead, buffer.Length - totalRead, cancellationToken);
+            if (read == 0) break;
+            totalRead += read;
+        }
+        return System.Text.Encoding.UTF8.GetString(buffer, 0, totalRead);
+    }
+
+    private async Task<string> EnsureFileAsync(CancellationToken cancellationToken)
     {
         string filePath = Path.Combine(_dataPath, "enwik8");
         if (!File.Exists(filePath) && _options.AutoDownload)
@@ -70,16 +136,18 @@ public class Enwik8DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             throw new FileNotFoundException(
                 $"enwik8 not found at {filePath}. Enable AutoDownload or place the file manually.");
         }
+        return filePath;
+    }
 
-        // Read the relevant byte range for the requested split.
-        // PTB split bounds: 0..90M train, 90M..95M val, 95M..100M test.
-        long startByte, endByte;
-        switch (_options.Split)
-        {
-            case Geometry.DatasetSplit.Validation: startByte = TrainEnd; endByte = ValEnd; break;
-            case Geometry.DatasetSplit.Test: startByte = ValEnd; endByte = TotalSize; break;
-            default: startByte = 0; endByte = TrainEnd; break;
-        }
+    /// <inheritdoc/>
+    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    {
+        string filePath = await EnsureFileAsync(cancellationToken);
+
+        // Read the relevant byte range for the requested split via the
+        // shared helper so the load and raw-text paths can't drift on
+        // split-bounds semantics.
+        var (startByte, endByte) = GetSplitByteRange(_options.Split);
 
         long fileSize = new FileInfo(filePath).Length;
         endByte = Math.Min(endByte, fileSize);

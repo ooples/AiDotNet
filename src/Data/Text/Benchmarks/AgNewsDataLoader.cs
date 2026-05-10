@@ -43,10 +43,49 @@ public class AgNewsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     private static readonly string DownloadUrl =
         "https://s3.amazonaws.com/fast-ai-nlp/ag_news_csv.tgz";
 
-    /// <inheritdoc/>
-    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    private static string SplitFileName(Geometry.DatasetSplit split) => split switch
     {
-        string splitFile = _options.Split == Geometry.DatasetSplit.Test ? "test.csv" : "train.csv";
+        Geometry.DatasetSplit.Train => "train.csv",
+        Geometry.DatasetSplit.Test => "test.csv",
+        // AG News has no canonical validation split; reject Validation
+        // explicitly and reject any unknown enum value rather than silently
+        // coercing to train (would hide caller mistakes and load wrong data).
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(split),
+            split,
+            $"Unsupported {nameof(Geometry.DatasetSplit)} for AG News (only Train / Test; the dataset has no canonical Validation split — partition Train manually if needed).")
+    };
+
+    /// <summary>
+    /// Loads the raw, unprocessed CSV text content for the requested AG News
+    /// split, auto-downloading via <see cref="AgNewsDataLoaderOptions.AutoDownload"/>
+    /// if the file is not already cached. Lets consumers run their own
+    /// tokenizer (BPE, SentencePiece, etc.) instead of the built-in
+    /// whitespace tokenization that <see cref="LoadAsync(CancellationToken)"/>
+    /// applies internally.
+    /// </summary>
+    /// <param name="split">Which AG News split to read (Train or Test only).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The raw CSV contents of the split file (RFC 4180 with class_index in
+    /// {1..4}, title, description; embedded quotes doubled).
+    /// </returns>
+    /// <remarks>
+    /// Honors the same <see cref="AgNewsDataLoaderOptions.DataPath"/> and
+    /// <see cref="AgNewsDataLoaderOptions.AutoDownload"/> options as
+    /// <see cref="LoadAsync(CancellationToken)"/>. Independent of the loader's
+    /// load-state, so it is safe to call without first calling LoadAsync.
+    /// </remarks>
+    public async Task<string> LoadRawTextAsync(
+        Geometry.DatasetSplit split,
+        CancellationToken cancellationToken = default)
+    {
+        string filePath = await EnsureSplitFileAsync(SplitFileName(split), cancellationToken);
+        return await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
+    }
+
+    private async Task<string> EnsureSplitFileAsync(string splitFile, CancellationToken cancellationToken)
+    {
         string filePath = Path.Combine(ResolveDataDir(), splitFile);
 
         if (!File.Exists(filePath) && _options.AutoDownload)
@@ -69,6 +108,14 @@ public class AgNewsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             throw new FileNotFoundException(
                 $"AG News data not found at {filePath}. Enable AutoDownload or extract manually.");
         }
+
+        return filePath;
+    }
+
+    /// <inheritdoc/>
+    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    {
+        string filePath = await EnsureSplitFileAsync(SplitFileName(_options.Split), cancellationToken);
 
         // CSV: "class_index","title","description"  (1-indexed class_index in [1..4])
         var texts = new List<string>();

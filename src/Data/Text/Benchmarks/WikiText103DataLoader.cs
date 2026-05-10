@@ -52,9 +52,16 @@ public class WikiText103DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
 
     private static string SplitFileName(Geometry.DatasetSplit split) => split switch
     {
+        Geometry.DatasetSplit.Train => "wiki.train.tokens",
         Geometry.DatasetSplit.Test => "wiki.test.tokens",
         Geometry.DatasetSplit.Validation => "wiki.valid.tokens",
-        _ => "wiki.train.tokens"
+        // Reject unknown enum values rather than silently coercing to the
+        // train split — a typo'd cast or a future DatasetSplit member added
+        // upstream would otherwise return wrong data with no diagnostic.
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(split),
+            split,
+            $"Unsupported {nameof(Geometry.DatasetSplit)} for WikiText-103 (only Train / Validation / Test).")
     };
 
     /// <summary>
