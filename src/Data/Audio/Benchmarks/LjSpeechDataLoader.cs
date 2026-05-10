@@ -42,7 +42,20 @@ public class LjSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
     public LjSpeechDataLoader(LjSpeechDataLoaderOptions? options = null)
     {
         _options = options ?? new LjSpeechDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("ljspeech");
+    }
+
+    private static bool IsSafeId(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return false;
+        foreach (char c in id)
+        {
+            if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' ||
+                c == '<' || c == '>' || c == '|' || c == '\0' || c < ' ') return false;
+        }
+        if (id.Contains("..")) return false;
+        return true;
     }
 
     /// <inheritdoc/>
@@ -91,7 +104,25 @@ public class LjSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             if (include) keep.Add(i);
         }
 
-        int totalSamples = keep.Count;
+        // Pre-filter rows whose ID fails safe-filename validation OR whose WAV file is missing.
+        // This keeps features and labels aligned (no zeroed phantom rows) and prevents path
+        // traversal via untrusted metadata IDs.
+        string canonicalWavsDir = Path.GetFullPath(wavsDir);
+        var validRows = new List<int>(keep.Count);
+        foreach (int rowIdx in keep)
+        {
+            string id = ids[rowIdx];
+            if (!IsSafeId(id)) continue;
+            string wavPath = Path.GetFullPath(Path.Combine(wavsDir, id + ".wav"));
+            // Defense in depth: ensure resolved path stays under wavsDir.
+            if (!wavPath.StartsWith(canonicalWavsDir + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
+                !wavPath.StartsWith(canonicalWavsDir + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+                continue;
+            if (!File.Exists(wavPath)) continue;
+            validRows.Add(rowIdx);
+        }
+
+        int totalSamples = validRows.Count;
         if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < totalSamples)
             totalSamples = _options.MaxSamples.Value;
         _sampleCount = totalSamples;
@@ -107,14 +138,11 @@ public class LjSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int rowIdx = keep[i];
-            // Encode text
+            int rowIdx = validRows[i];
             int[] tok = TextLoaderHelper.TokenizeAndEncode(texts[rowIdx], vocabulary, textLen);
             int textOff = i * textLen;
-            for (int j = 0; j < textLen; j++) featuresData[textOff + j] = NumOps.FromDouble(tok[j]);
-            // Decode WAV → labels
-            string wavPath = Path.Combine(wavsDir, ids[rowIdx] + ".wav");
-            if (!File.Exists(wavPath)) continue;
+            for (int j = 0; j < textLen; j++) featuresData[textOff + j] = numOps.FromDouble(tok[j]);
+            string wavPath = Path.GetFullPath(Path.Combine(wavsDir, ids[rowIdx] + ".wav"));
             byte[] wavBytes = File.ReadAllBytes(wavPath);
             AudioLoaderHelper.LoadAudioSamples(wavBytes, labelsData, i * audioLen, audioLen, numOps);
         }
@@ -122,7 +150,6 @@ public class LjSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, textLen });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, audioLen });
         InitializeIndices(totalSamples);
-        await Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -149,10 +176,13 @@ public class LjSpeechDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, trainIndices), AudioLoaderHelper.ExtractTensorBatch(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, valIndices), AudioLoaderHelper.ExtractTensorBatch(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, testIndices), AudioLoaderHelper.ExtractTensorBatch(labels, testIndices))
         );
     }
 

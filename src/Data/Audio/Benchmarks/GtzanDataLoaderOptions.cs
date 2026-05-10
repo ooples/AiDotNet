@@ -25,4 +25,15 @@ public sealed class GtzanDataLoaderOptions
     /// <summary>Train/test split fraction (per-class deterministic). Default 0.8 → 80 train / 20 test per class.</summary>
     public double TrainFraction { get; set; } = 0.8;
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(SampleRate), "SampleRate must be positive.");
+        if (Samples <= 0) throw new ArgumentOutOfRangeException(nameof(Samples), "Samples must be positive.");
+        if (TrainFraction <= 0.0 || TrainFraction >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(TrainFraction), "TrainFraction must be in (0, 1).");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }
