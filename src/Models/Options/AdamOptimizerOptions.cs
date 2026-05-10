@@ -15,6 +15,26 @@ namespace AiDotNet.Models.Options;
 public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Default ctor — overrides the base <see cref="GradientBasedOptimizerOptions{T,TInput,TOutput}.EnableGradientClipping"/>
+    /// default from <c>false</c> to <c>true</c> with <see cref="GradientBasedOptimizerOptions{T,TInput,TOutput}.MaxGradientNorm"/>
+    /// at the canonical PyTorch transformer-training value of <c>1.0</c>.
+    /// Without clipping, Adam's first-step bias correction (biasC1 ≈ 0.1,
+    /// biasC2 ≈ 0.001) creates huge updates on randomly-initialised large
+    /// models — Hawk's 135M-parameter LM diverges from loss 0.43 to 6.97
+    /// over 10 iterations on default LR=1e-3 (issue #1275 acceptance
+    /// criterion 3). The PyTorch convention for transformer training is
+    /// <c>torch.nn.utils.clip_grad_norm_(params, 1.0)</c> after every
+    /// backward; Adam matches that convention by default. Callers who need
+    /// the unclipped behaviour can explicitly set
+    /// <c>EnableGradientClipping = false</c>.
+    /// </summary>
+    public AdamOptimizerOptions()
+    {
+        EnableGradientClipping = true;
+        MaxGradientNorm = 1.0;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
     /// <value>A positive integer, defaulting to 32.</value>
