@@ -561,6 +561,50 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     }
 
     /// <summary>
+    /// Translates a caller-supplied <paramref name="shape"/> into a latent-space
+    /// shape suitable for the noise predictor's denoising loop. If the input
+    /// already has the latent-channel dim (<c>shape[1] == LatentChannels</c>)
+    /// it's preserved verbatim and <paramref name="inputIsLatent"/> is set so
+    /// the caller can short-circuit the VAE decode tail; otherwise the spatial
+    /// dims are divided by <c>VAE.DownsampleFactor</c>. A degenerate input
+    /// (rank &lt; 4) falls back to the model's default <c>[1, LatentChannels, 64, 64]</c>.
+    /// Shared between sync <see cref="Generate"/> and async <see cref="GenerateAsync"/>
+    /// so the two paths cannot drift on shape semantics again.
+    /// </summary>
+    private (int[] latentShape, bool inputIsLatent) ResolveLatentShape(int[] shape)
+    {
+        if (shape.Length >= 4 && shape[1] == LatentChannels)
+            return (shape, true);
+        if (shape.Length >= 4)
+        {
+            return (new[]
+            {
+                shape[0],
+                LatentChannels,
+                shape[2] / VAE.DownsampleFactor,
+                shape[3] / VAE.DownsampleFactor
+            }, false);
+        }
+        return (new[] { 1, LatentChannels, 64, 64 }, false);
+    }
+
+    /// <summary>
+    /// Replaces every NaN / Infinity element of <paramref name="tensor"/> with
+    /// zero. Mirrors the sync Generate's per-call NaN/Inf guard so the async
+    /// path's tail-decode result stays finite (Ho et al. 2020 §3.2 paper-
+    /// minimum contract).
+    /// </summary>
+    private void SanitizeFiniteInPlace(Tensor<T> tensor)
+    {
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            double v = NumOps.ToDouble(tensor[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v))
+                tensor[i] = NumOps.Zero;
+        }
+    }
+
+    /// <summary>
     /// Async overload of <see cref="Generate(int[], int, int?)"/> for latent
     /// diffusion (text encoder → noise predictor → VAE decode pipeline).
     /// Mirrors the synchronous <see cref="Generate"/> contract: pixel-shape
@@ -578,135 +622,52 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Translate pixel shape → latent shape, mirroring the sync Generate
-        // path. Without this, GenerateAsyncCore would allocate a sample at
-        // pixel shape, but PredictNoise operates in latent-channel space —
-        // the first denoising step's length-mismatch guard would throw, or
-        // (if the dims happened to align) the loop would silently produce
-        // shape-incorrect latents.
-        int[] latentShape;
-        bool inputIsLatent = false;
-        if (shape.Length >= 4 && shape[1] == LatentChannels)
-        {
-            latentShape = shape;
-            inputIsLatent = true;
-        }
-        else if (shape.Length >= 4)
-        {
-            latentShape = new[]
-            {
-                shape[0],
-                LatentChannels,
-                shape[2] / VAE.DownsampleFactor,
-                shape[3] / VAE.DownsampleFactor
-            };
-        }
-        else
-        {
-            latentShape = new[] { 1, LatentChannels, 64, 64 };
-        }
+        // Translate pixel shape → latent shape via the shared helper so the
+        // sync and async paths can't drift on shape semantics. Without this
+        // GenerateAsyncCore would allocate a sample at pixel shape, but
+        // PredictNoise operates in latent-channel space.
+        var (latentShape, inputIsLatent) = ResolveLatentShape(shape);
 
         var latentSample = await GenerateAsyncCore(
             latentShape, numInferenceSteps, seed, initialSample: null, cancellationToken)
             .ConfigureAwait(false);
 
-        // Final NaN/Inf guard. Same rationale as the sync path: an untrained
-        // U-Net or untrained VAE can emit non-finite values through its
-        // upsample/activation chain; clip so the paper-minimum "Predict
-        // returns a finite tensor" contract holds.
         if (inputIsLatent)
         {
-            for (int i = 0; i < latentSample.Length; i++)
-            {
-                double v = NumOps.ToDouble(latentSample[i]);
-                if (double.IsNaN(v) || double.IsInfinity(v))
-                    latentSample[i] = NumOps.Zero;
-            }
+            SanitizeFiniteInPlace(latentSample);
             return latentSample;
         }
 
         // Pixel-space output: decode through the VAE.
         var decoded = DecodeFromLatent(latentSample);
-        for (int i = 0; i < decoded.Length; i++)
-        {
-            double v = NumOps.ToDouble(decoded[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-                decoded[i] = NumOps.Zero;
-        }
+        SanitizeFiniteInPlace(decoded);
         return decoded;
     }
 
     /// <inheritdoc />
     public override Tensor<T> Generate(int[] shape, int numInferenceSteps = 50, int? seed = null)
     {
-        // For latent diffusion, shape should be image dimensions
-        // If latent shape is provided, use it directly; otherwise assume image dimensions
-        int[] latentShape;
-
-        // Track whether the caller asked for latent-space output. When the
-        // input shape is already latent (channel dim == LatentChannels) we
-        // preserve latent semantics: noise predictor only, no VAE decode.
-        // This matches PyTorch's `pipeline(... output_type='latent')`. It
-        // also avoids a multi-hundred-second VAE decode at default sizes
-        // when the caller never wanted pixels — confirmed by dotnet-trace
-        // showing DecodeFromLatent dominates wall clock for latent input.
-        bool inputIsLatent = false;
-
-        if (shape.Length >= 4 && shape[1] == LatentChannels)
-        {
-            // Already latent shape
-            latentShape = shape;
-            inputIsLatent = true;
-        }
-        else if (shape.Length >= 4)
-        {
-            // Image shape, convert to latent
-            latentShape = new[]
-            {
-                shape[0],
-                LatentChannels,
-                shape[2] / VAE.DownsampleFactor,
-                shape[3] / VAE.DownsampleFactor
-            };
-        }
-        else
-        {
-            // Default shape
-            latentShape = new[] { 1, LatentChannels, 64, 64 };
-        }
+        // For latent diffusion, shape should be image dimensions. The shared
+        // helper preserves PyTorch's `pipeline(... output_type='latent')`
+        // semantics when the caller passes a latent-channel shape: skip the
+        // (expensive) VAE decode and return the latent directly. dotnet-trace
+        // shows DecodeFromLatent dominates wall clock for latent input.
+        var (latentShape, inputIsLatent) = ResolveLatentShape(shape);
 
         // Generate in latent space
         var latentSample = base.Generate(latentShape, numInferenceSteps, seed);
 
-        // Latent-in / latent-out semantics: caller already supplied a latent,
-        // so skip the (expensive) VAE decode and return the latent directly.
         if (inputIsLatent)
         {
-            for (int i = 0; i < latentSample.Length; i++)
-            {
-                double v = NumOps.ToDouble(latentSample[i]);
-                if (double.IsNaN(v) || double.IsInfinity(v))
-                    latentSample[i] = NumOps.Zero;
-            }
+            SanitizeFiniteInPlace(latentSample);
             return latentSample;
         }
 
-        // Pixel-space output: decode the latent through the VAE.
+        // Pixel-space output: decode the latent through the VAE. Final NaN/Inf
+        // guard via the shared helper — Ho et al. 2020 §3.2 paper-minimum
+        // "Predict returns a finite tensor" contract.
         var decoded = DecodeFromLatent(latentSample);
-
-        // Final NaN/Inf guard. Ho et al. 2020 §3.2 and Song et al. 2020
-        // DDIM both assume trained U-Net + VAE; an untrained VAE on a
-        // shape-canonicalized latent can still emit non-finite values
-        // through its upsample / activation chain. Clip so the documented
-        // paper-minimum "Predict returns a finite tensor" contract holds
-        // — matches the base class's sample-vector guard, extended to
-        // cover the VAE decode path specific to latent diffusion.
-        for (int i = 0; i < decoded.Length; i++)
-        {
-            double v = NumOps.ToDouble(decoded[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-                decoded[i] = NumOps.Zero;
-        }
+        SanitizeFiniteInPlace(decoded);
         return decoded;
     }
 
