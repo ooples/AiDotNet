@@ -205,7 +205,19 @@ namespace AiDotNet.NeuralNetworks
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-            InitializeLayersCore(false);
+            // Only build default TE encoder layers when this IS the TE class.
+            // Subclasses (SGPT, BGE, ColBERT, InstructorEmbedding, SPLADE, SimCSE,
+            // MatryoshkaEmbedding) drive their own layer construction in their
+            // ctor body using their own field values, which aren't set when the
+            // base ctor runs. Calling InitializeLayersCore here for a subclass
+            // would append TE encoder layers AND THEN the subclass ctor would
+            // append its own layers on top — yielding a 2x-stacked network whose
+            // mid-pipeline EmbeddingLayer treats encoder float outputs as token
+            // IDs (e.g. SGPT clone test: cloned.Predict() output collapses to 0).
+            if (GetType() == typeof(TransformerEmbeddingNetwork<T>))
+            {
+                InitializeLayersCore(false);
+            }
         }
 
         #endregion
