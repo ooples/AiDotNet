@@ -27,9 +27,9 @@ public class NsynthDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     public const int NumInstrumentFamilies = 11; // bass, brass, flute, guitar, keyboard, mallet, organ, reed, string, synth_lead, vocal
     private static readonly string[] SplitUrls =
     {
-        "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",
-        "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",
-        "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz",
+        "https://storage.googleapis.com/magentadata/datasets/nsynth/nsynth-train.jsonwav.tar.gz",
+        "https://storage.googleapis.com/magentadata/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",
+        "https://storage.googleapis.com/magentadata/datasets/nsynth/nsynth-test.jsonwav.tar.gz",
     };
 
     private readonly NsynthDataLoaderOptions _options;
@@ -45,7 +45,20 @@ public class NsynthDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     public NsynthDataLoader(NsynthDataLoaderOptions? options = null)
     {
         _options = options ?? new NsynthDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("nsynth");
+    }
+
+    private static bool IsSafeNoteId(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return false;
+        foreach (char c in id)
+        {
+            if (c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' ||
+                c == '<' || c == '>' || c == '|' || c == '\0' || c < ' ') return false;
+        }
+        if (id.Contains("..")) return false;
+        return true;
     }
 
     /// <inheritdoc/>
@@ -75,13 +88,20 @@ public class NsynthDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         // examples.json is a single JSON object: { "<note_str>": {"instrument_family": 0..10, ...}, ... }
         var examples = JObject.Parse(await FilePolyfill.ReadAllTextAsync(examplesPath, cancellationToken));
         var entries = new List<(string Path, int Family)>();
+        string canonicalAudioDir = Path.GetFullPath(audioDir);
         foreach (var prop in examples.Properties())
         {
             cancellationToken.ThrowIfCancellationRequested();
             string noteStr = prop.Name;
             int family = prop.Value["instrument_family"]?.Value<int>() ?? -1;
             if (family < 0 || family >= NumInstrumentFamilies) continue;
-            string wavPath = Path.Combine(audioDir, noteStr + ".wav");
+            // Reject metadata IDs that would let an attacker escape the audio dir
+            // via path separators or '..' segments.
+            if (!IsSafeNoteId(noteStr)) continue;
+            string wavPath = Path.GetFullPath(Path.Combine(audioDir, noteStr + ".wav"));
+            if (!wavPath.StartsWith(canonicalAudioDir + Path.DirectorySeparatorChar, StringComparison.Ordinal) &&
+                !wavPath.StartsWith(canonicalAudioDir + Path.AltDirectorySeparatorChar, StringComparison.Ordinal))
+                continue;
             if (File.Exists(wavPath)) entries.Add((wavPath, family));
         }
 
@@ -107,7 +127,6 @@ public class NsynthDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, N });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumInstrumentFamilies });
         InitializeIndices(totalSamples);
-        await Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -134,10 +153,13 @@ public class NsynthDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, trainIndices), AudioLoaderHelper.ExtractTensorBatch(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, valIndices), AudioLoaderHelper.ExtractTensorBatch(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, testIndices), AudioLoaderHelper.ExtractTensorBatch(labels, testIndices))
         );
     }
 }

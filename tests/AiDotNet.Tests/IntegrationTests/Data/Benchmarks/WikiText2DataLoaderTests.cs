@@ -13,6 +13,24 @@ public class WikiText2DataLoaderTests
         "she sells sea shells by the sea shore. all your base are belong to us. " +
         "i think therefore i am. to be or not to be that is the question.";
 
+    /// <summary>
+    /// Larger fixture used by tests that need ≥ 10 sequences for the Split partitioning
+    /// assertions to be meaningful (each partition rounds to a non-zero count).
+    /// </summary>
+    private static string CreateLargeFixture()
+    {
+        string root = DatasetLoaderTestHelpers.CreateTempDir("wikitext2-large");
+        string sub = Path.Combine(root, "wikitext-2-raw");
+        Directory.CreateDirectory(sub);
+        // Repeat 30× — that gives ~30× the token count of the small Sample, so SequenceLength=4
+        // produces well over 10 sequences regardless of tokenizer choice.
+        string big = string.Join(" ", System.Linq.Enumerable.Repeat(Sample, 30));
+        File.WriteAllText(Path.Combine(sub, "wiki.train.raw"), big);
+        File.WriteAllText(Path.Combine(sub, "wiki.valid.raw"), big);
+        File.WriteAllText(Path.Combine(sub, "wiki.test.raw"), big);
+        return root;
+    }
+
     private static string CreateFixture()
     {
         string root = DatasetLoaderTestHelpers.CreateTempDir("wikitext2");
@@ -75,7 +93,7 @@ public class WikiText2DataLoaderTests
     [Fact]
     public async Task Fixture_SplitProducesNonOverlappingPartitions()
     {
-        string root = CreateFixture();
+        string root = CreateLargeFixture();
         try
         {
             var loader = new WikiText2DataLoader<float>(new WikiText2DataLoaderOptions
@@ -87,14 +105,23 @@ public class WikiText2DataLoaderTests
             });
             await loader.LoadAsync();
             int total = loader.TotalCount;
-            if (total < 10)
-            {
-                // Sample is small — skip the split assertion when partitions would round to zero.
-                return;
-            }
+            // Hard precondition for the assertions below — large fixture must produce ≥ 10 samples.
+            Assert.True(total >= 10, $"CreateLargeFixture must yield ≥10 sequences, got {total}.");
+
             var (train, val, test) = loader.Split(0.6, 0.2, seed: 42);
-            int sum = train.TotalCount + val.TotalCount + test.TotalCount;
-            Assert.Equal(total, sum);
+            int trainN = train.TotalCount, valN = val.TotalCount, testN = test.TotalCount;
+
+            // Conservation: every original sample lands in exactly one partition.
+            Assert.Equal(total, trainN + valN + testN);
+
+            // Each partition must be non-empty for a 0.6/0.2/0.2 split with total ≥ 10.
+            Assert.True(trainN > 0 && valN > 0 && testN > 0,
+                $"All three partitions must be non-empty (got {trainN}/{valN}/{testN}).");
+
+            // Approximate-fraction sanity check: train should be the largest,
+            // val and test roughly equal, none exceeding total.
+            Assert.True(trainN >= valN, "Train partition should be ≥ val under 0.6/0.2 split.");
+            Assert.True(trainN >= testN, "Train partition should be ≥ test under 0.6/0.2 split.");
         }
         finally { DatasetLoaderTestHelpers.TryCleanup(root); }
     }

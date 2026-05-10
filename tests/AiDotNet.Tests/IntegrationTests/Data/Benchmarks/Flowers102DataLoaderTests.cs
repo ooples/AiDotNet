@@ -81,7 +81,7 @@ public class Flowers102DataLoaderTests
     }
 
     [SkippableFact]
-    public async Task Network_AutoDownloadTestSplit()
+    public async Task Network_AutoDownloadValidationSplit()
     {
         Skip.IfNot(DatasetLoaderTestHelpers.IsNetworkTestEnabled,
             "Set AIDOTNET_RUN_DATASET_DOWNLOAD_TESTS=1 to run network tests.");

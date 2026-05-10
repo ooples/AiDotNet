@@ -61,7 +61,10 @@ internal static class DatasetLoaderTestHelpers
     /// </summary>
     public static void AssertShape<T>(Tensor<T> t, params int[] expected)
     {
+        Assert.NotNull(t);
+        Assert.NotNull(expected);
         var actual = t._shape;
+        Assert.NotNull(actual);
         Assert.True(actual.Length == expected.Length,
             $"Expected rank {expected.Length}, got {actual.Length} (shape [{string.Join(",", actual)}])");
         for (int i = 0; i < expected.Length; i++)

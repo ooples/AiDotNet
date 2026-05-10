@@ -46,6 +46,7 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     public Stl10DataLoader(Stl10DataLoaderOptions? options = null)
     {
         _options = options ?? new Stl10DataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("stl10");
     }
 
@@ -82,14 +83,26 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             throw new FileNotFoundException($"STL-10 image binary not found: {xFile}");
 
         byte[] xBytes = File.ReadAllBytes(xFile);
-        int totalSamples = xBytes.Length / PixelsPerImage;
+        int totalImagesInFile = xBytes.Length / PixelsPerImage;
+        int totalSamples = totalImagesInFile;
         if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < totalSamples)
             totalSamples = _options.MaxSamples.Value;
         _sampleCount = totalSamples;
 
+        // For labeled splits the y_file MUST exist; we must not silently fall back
+        // to all-zero labels which would corrupt training metrics.
         byte[]? labelBytes = null;
-        if (!string.IsNullOrEmpty(yFile) && File.Exists(yFile))
+        if (!_options.UseUnlabeled)
+        {
+            if (!File.Exists(yFile))
+                throw new FileNotFoundException(
+                    $"STL-10 label binary not found: {yFile}. " +
+                    "Re-extract stl10_binary.tar.gz or check archive integrity.");
             labelBytes = File.ReadAllBytes(yFile);
+            if (labelBytes.Length < totalImagesInFile)
+                throw new InvalidDataException(
+                    $"STL-10 label binary {yFile} is truncated: got {labelBytes.Length} bytes, expected {totalImagesInFile}.");
+        }
 
         var featuresData = new T[totalSamples * PixelsPerImage];
         var labelsData = new T[totalSamples * NumClasses];
@@ -98,6 +111,7 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         // 96×96 each, stored column-major within the channel. We transpose to
         // (h, w, c) row-major HWC for the output tensor.
         const int Channel = ImageSize * ImageSize;
+        bool normalize = _options.Normalize;
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -112,21 +126,24 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
                         int srcIdx = chSrc + col * ImageSize + row;
                         int dstIdx = dstBase + (row * ImageSize + col) * 3 + c;
                         byte b = xBytes[srcIdx];
-                        featuresData[dstIdx] = NumOps.FromDouble(b / 255.0);
+                        featuresData[dstIdx] = normalize
+                            ? NumOps.FromDouble(b / 255.0)
+                            : NumOps.FromDouble(b);
                     }
             }
-            if (labelBytes is not null && i < labelBytes.Length)
+            if (labelBytes is not null)
             {
                 int label = labelBytes[i] - 1; // STL-10 labels are 1..10
-                if (label >= 0 && label < NumClasses)
-                    labelsData[i * NumClasses + label] = NumOps.One;
+                if (label < 0 || label >= NumClasses)
+                    throw new InvalidDataException(
+                        $"STL-10 {yFile} contains out-of-range label {labelBytes[i]} at index {i}. Expected 1..{NumClasses}.");
+                labelsData[i * NumClasses + label] = NumOps.One;
             }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
         InitializeIndices(totalSamples);
-        await Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -153,10 +170,13 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Take(trainSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Skip(trainSize + valSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, trainIndices), ExtractTensorBatchLocal(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, valIndices), ExtractTensorBatchLocal(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, testIndices), ExtractTensorBatchLocal(labels, testIndices))
         );
     }
 

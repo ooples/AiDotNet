@@ -37,8 +37,11 @@ public class Gsm8kDataLoaderTests
     }
 
     [Fact]
-    public async Task Fixture_MalformedJsonlSkippedNotThrown()
+    public async Task Fixture_MalformedJsonl_ThrowsInvalidData()
     {
+        // Industry standard for data loaders: fail fast on dataset corruption rather than
+        // silently skipping malformed records. The error must include enough context to
+        // locate the problem (line number + truncated content preview).
         string root = DatasetLoaderTestHelpers.CreateTempDir("gsm8k-malformed");
         try
         {
@@ -48,8 +51,9 @@ public class Gsm8kDataLoaderTests
                 "{\"question\": \"OK2\", \"answer\": \"valid2\"}\n");
             var loader = new Gsm8kDataLoader<float>(new Gsm8kDataLoaderOptions
             { DataPath = root, AutoDownload = false, MaxQuestionLength = 8, MaxAnswerLength = 8 });
-            await loader.LoadAsync();
-            Assert.Equal(2, loader.TotalCount); // malformed line skipped
+            var ex = await Assert.ThrowsAsync<InvalidDataException>(async () => await loader.LoadAsync());
+            Assert.Contains("line 2", ex.Message);
+            Assert.Contains("this is not json", ex.Message);
         }
         finally { DatasetLoaderTestHelpers.TryCleanup(root); }
     }

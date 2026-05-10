@@ -127,15 +127,46 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var reader = new MatFileReader(fs);
         var mat = reader.Read();
 
+        // SVHN Format-2: X is uint8 (channel-major HWC), y is uint8 (labels 1..10, where 10 = digit 0).
+        // Accept int8 too — older converters and some scipy.io paths emit int8 for the label tensor.
         IArrayOf<byte>? xArr = null;
-        IArrayOf<sbyte>? yArr = null;
+        byte[]? yData = null;
+        int[]? yDims = null;
         foreach (var v in mat.Variables)
         {
             if (v.Name == "X" && v.Value is IArrayOf<byte> xb) xArr = xb;
-            else if (v.Name == "y" && v.Value is IArrayOf<sbyte> yi) yArr = yi;
+            else if (v.Name == "y")
+            {
+                if (v.Value is IArrayOf<byte> yu)
+                {
+                    yData = yu.Data.ToArray();
+                    yDims = yu.Dimensions;
+                }
+                else if (v.Value is IArrayOf<sbyte> ys)
+                {
+                    yData = ys.Data.Select(x => (byte)x).ToArray();
+                    yDims = ys.Dimensions;
+                }
+                else if (v.Value is IArrayOf<short> yshort)
+                {
+                    yData = yshort.Data.Select(x => (byte)x).ToArray();
+                    yDims = yshort.Dimensions;
+                }
+                else if (v.Value is IArrayOf<int> yint)
+                {
+                    yData = yint.Data.Select(x => (byte)x).ToArray();
+                    yDims = yint.Dimensions;
+                }
+                else if (v.Value is IArrayOf<double> ydbl)
+                {
+                    yData = ydbl.Data.Select(x => (byte)Math.Round(x)).ToArray();
+                    yDims = ydbl.Dimensions;
+                }
+            }
         }
-        if (xArr is null || yArr is null)
-            throw new InvalidDataException($"{path} missing required SVHN variables X (uint8) and y (int8).");
+        if (xArr is null || yData is null)
+            throw new InvalidDataException(
+                $"{path} missing required SVHN variables X (uint8) and y (uint8/int8/int/double).");
 
         // Dimensions are (h=32, w=32, c=3, n=N) for X; (n, 1) for y.
         var dims = xArr.Dimensions;
@@ -156,7 +187,6 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                         X[i0, i1, i2, i3] = data[flat];
                     }
 
-        var yData = yArr.Data;
         var y = new int[n];
         for (int i = 0; i < n; i++) y[i] = yData[i];
         return (X, y);

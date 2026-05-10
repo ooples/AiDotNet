@@ -37,6 +37,14 @@ public class TimitDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     public TimitDataLoader(TimitDataLoaderOptions? options = null)
     {
         _options = options ?? new TimitDataLoaderOptions();
+        _options.Validate();
+        // TIMIT ships only TRAIN/TEST directories — there is no canonical dev split.
+        // Reject Validation rather than silently returning the test set.
+        if (_options.Split == Geometry.DatasetSplit.Validation)
+            throw new ArgumentException(
+                "TIMIT (LDC93S1) ships only TRAIN/TEST directories — there is no canonical validation split. " +
+                "Use Split() to derive a validation set from TRAIN, or set Options.Split = Train/Test explicitly.",
+                nameof(options));
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("timit");
     }
 
@@ -52,9 +60,9 @@ public class TimitDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         if (!Directory.Exists(root))
             throw new DirectoryNotFoundException($"TIMIT not found at {_dataPath}.");
 
-        string splitDir = _options.Split == Geometry.DatasetSplit.Train
-            ? Path.Combine(root, "TRAIN")
-            : Path.Combine(root, "TEST");
+        string splitDir = _options.Split == Geometry.DatasetSplit.Test
+            ? Path.Combine(root, "TEST")
+            : Path.Combine(root, "TRAIN");
         if (!Directory.Exists(splitDir))
             throw new DirectoryNotFoundException($"TIMIT split dir not found: {splitDir}");
 

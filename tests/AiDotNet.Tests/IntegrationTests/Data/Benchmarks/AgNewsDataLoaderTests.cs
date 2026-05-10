@@ -46,15 +46,24 @@ public class AgNewsDataLoaderTests
     [Fact]
     public async Task Fixture_QuoteEscapingHandledCorrectly()
     {
-        // Row 4 has an embedded "" (escaped quote). If our CSV parser is broken,
-        // we'd lose row 4 or merge it into row 3.
-        string root = CreateFixture();
+        // Build a CSV where the *only* way to get the right row count is to handle "" correctly:
+        // 2 rows total. Row 1 contains an unescaped comma inside a quoted field plus an embedded
+        // "" escape. A naive split-on-comma parser would produce 3+ rows or merge them.
+        string root = DatasetLoaderTestHelpers.CreateTempDir("agnews-quote");
+        string sub = Path.Combine(root, "ag_news_csv");
+        Directory.CreateDirectory(sub);
+        const string csv =
+            "\"4\",\"Tech news\",\"A new processor, dubbed \"\"breakthrough\"\", was announced today.\"\n" +
+            "\"1\",\"World news\",\"Brief, normal headline.\"\n";
+        File.WriteAllText(Path.Combine(sub, "train.csv"), csv);
+        File.WriteAllText(Path.Combine(sub, "test.csv"), csv);
         try
         {
             var loader = new AgNewsDataLoader<float>(new AgNewsDataLoaderOptions
             { DataPath = root, AutoDownload = false, MaxSequenceLength = 8 });
             await loader.LoadAsync();
-            Assert.Equal(4, loader.TotalCount);
+            // A working RFC4180 parser sees 2 rows; a naive one would see 3+ or 1.
+            Assert.Equal(2, loader.TotalCount);
         }
         finally { DatasetLoaderTestHelpers.TryCleanup(root); }
     }

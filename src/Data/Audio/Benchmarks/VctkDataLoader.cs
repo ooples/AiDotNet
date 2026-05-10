@@ -41,6 +41,7 @@ public class VctkDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     public VctkDataLoader(VctkDataLoaderOptions? options = null)
     {
         _options = options ?? new VctkDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("vctk");
     }
 
@@ -67,6 +68,11 @@ public class VctkDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             : new HashSet<string>(_options.SpeakerFilter!.Split(',').Select(s => s.Trim()),
                 StringComparer.OrdinalIgnoreCase);
 
+        // Canonical roots used to defend against symlink/path-escape via untrusted speaker
+        // dirs or filenames returned by EnumerateFiles.
+        string canonicalWavRoot = Path.GetFullPath(wavRoot);
+        string canonicalTxtRoot = Path.GetFullPath(txtRoot);
+
         var pairs = new List<(string Wav, string Text)>();
         foreach (string spkDir in Directory.EnumerateDirectories(wavRoot).OrderBy(d => d, StringComparer.Ordinal))
         {
@@ -83,11 +89,16 @@ public class VctkDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                 string transcriptName = baseName;
                 int micIdx = transcriptName.LastIndexOf("_mic", StringComparison.OrdinalIgnoreCase);
                 if (micIdx > 0) transcriptName = transcriptName.Substring(0, micIdx);
-                string txtPath = Path.Combine(spkTxt, transcriptName + ".txt");
+                string txtPath = Path.GetFullPath(Path.Combine(spkTxt, transcriptName + ".txt"));
+                string canonicalWav = Path.GetFullPath(wav);
+                // Defense in depth: ensure both resolved paths stay under their canonical roots
+                // even after symlink/junction resolution.
+                if (!canonicalWav.StartsWith(canonicalWavRoot, StringComparison.Ordinal)) continue;
+                if (!txtPath.StartsWith(canonicalTxtRoot, StringComparison.Ordinal)) continue;
                 if (!File.Exists(txtPath)) continue;
                 string text = (await FilePolyfill.ReadAllTextAsync(txtPath, cancellationToken)).Trim();
                 if (string.IsNullOrEmpty(text)) continue;
-                pairs.Add((wav, text));
+                pairs.Add((canonicalWav, text));
             }
         }
 
@@ -135,7 +146,6 @@ public class VctkDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, textLen });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, audioLen });
         InitializeIndices(totalSamples);
-        await Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -162,10 +172,13 @@ public class VctkDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Take(trainSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, shuffled.Skip(trainSize + valSize).ToArray()), AudioLoaderHelper.ExtractTensorBatch(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, trainIndices), AudioLoaderHelper.ExtractTensorBatch(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, valIndices), AudioLoaderHelper.ExtractTensorBatch(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(AudioLoaderHelper.ExtractTensorBatch(features, testIndices), AudioLoaderHelper.ExtractTensorBatch(labels, testIndices))
         );
     }
 

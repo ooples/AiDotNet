@@ -31,4 +31,13 @@ public sealed class CityscapesDataLoaderOptions
     /// <summary>Map the 30 source classes to the 19 evaluation classes (CityscapesScripts ID2trainID). Default true.</summary>
     public bool MapToTrainIds { get; set; } = true;
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (ImageHeight <= 0) throw new ArgumentOutOfRangeException(nameof(ImageHeight), "ImageHeight must be positive.");
+        if (ImageWidth <= 0) throw new ArgumentOutOfRangeException(nameof(ImageWidth), "ImageWidth must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

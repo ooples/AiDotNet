@@ -99,7 +99,10 @@ public class Food101DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         {
             cancellationToken.ThrowIfCancellationRequested();
             var (imgPath, label) = paths[i];
-            if (!File.Exists(imgPath)) continue;
+            if (!File.Exists(imgPath))
+                throw new FileNotFoundException(
+                    $"Food-101 image referenced by meta/{(_options.Split == Geometry.DatasetSplit.Test ? "test" : "train")}.txt is missing: {imgPath}. " +
+                    "Re-extract food-101.tar.gz or check archive integrity.");
             var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(imgPath, _imageSize, _imageSize, 3, _options.Normalize);
             int featureOffset = i * pixelsPerImage;
             int copyLen = Math.Min(pixels.Length, pixelsPerImage);

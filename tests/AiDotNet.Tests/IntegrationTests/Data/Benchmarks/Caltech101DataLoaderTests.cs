@@ -57,7 +57,7 @@ public class Caltech101DataLoaderTests
     }
 
     [Fact]
-    public async Task Fixture_MissingDir_ThrowsDirectoryNotFound()
+    public async Task Fixture_MissingClassDirs_ThrowsInvalidOperation()
     {
         string root = DatasetLoaderTestHelpers.CreateTempDir("caltech101-miss");
         try

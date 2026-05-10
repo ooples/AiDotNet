@@ -23,5 +23,14 @@ public sealed class Stl10DataLoaderOptions
     /// Labels for unlabeled samples are zero-vectors. Default false.
     /// </summary>
     public bool UseUnlabeled { get; set; } = false;
+    /// <summary>Normalize byte pixel values to [0, 1] when true (default), or keep raw 0..255 when false.</summary>
+    public bool Normalize { get; set; } = true;
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

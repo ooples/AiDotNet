@@ -40,6 +40,7 @@ public class OxfordPetsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     public OxfordPetsDataLoader(OxfordPetsDataLoaderOptions? options = null)
     {
         _options = options ?? new OxfordPetsDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("oxford-pets");
         _imageSize = _options.ImageSize;
     }

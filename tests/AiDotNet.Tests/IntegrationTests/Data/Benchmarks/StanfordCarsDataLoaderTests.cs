@@ -19,14 +19,17 @@ public class StanfordCarsDataLoaderTests
     [Fact]
     public async Task Fixture_MissingDir_ThrowsDirectoryNotFound()
     {
-        string root = DatasetLoaderTestHelpers.CreateTempDir("stanford-cars-miss");
+        // Use a child path that doesn't exist so the throw is unambiguously about
+        // the missing root rather than missing internal subdirectories.
+        string tempRoot = DatasetLoaderTestHelpers.CreateTempDir("stanford-cars-miss");
+        string missingDataPath = System.IO.Path.Combine(tempRoot, "does-not-exist");
         try
         {
             var loader = new StanfordCarsDataLoader<float>(new StanfordCarsDataLoaderOptions
-            { DataPath = root, AutoDownload = false });
+            { DataPath = missingDataPath, AutoDownload = false });
             await Assert.ThrowsAsync<DirectoryNotFoundException>(async () => await loader.LoadAsync());
         }
-        finally { DatasetLoaderTestHelpers.TryCleanup(root); }
+        finally { DatasetLoaderTestHelpers.TryCleanup(tempRoot); }
     }
 
     // Stanford Cars uses a struct-array .mat layout that's complex to

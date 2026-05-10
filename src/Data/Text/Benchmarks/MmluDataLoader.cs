@@ -40,6 +40,7 @@ public class MmluDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     public MmluDataLoader(MmluDataLoaderOptions? options = null)
     {
         _options = options ?? new MmluDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("mmlu");
     }
 

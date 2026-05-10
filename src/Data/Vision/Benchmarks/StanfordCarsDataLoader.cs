@@ -40,6 +40,7 @@ public class StanfordCarsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
     public StanfordCarsDataLoader(StanfordCarsDataLoaderOptions? options = null)
     {
         _options = options ?? new StanfordCarsDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("stanford-cars");
         _imageSize = _options.ImageSize;
     }
@@ -64,6 +65,7 @@ public class StanfordCarsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
             throw new FileNotFoundException($"Stanford Cars annotation .mat not found: {annoMat}");
 
         var paths = new List<(string Path, int Label)>();
+        string canonicalImgDir = Path.GetFullPath(imgDir);
         using (var fs = new FileStream(annoMat, FileMode.Open, FileAccess.Read))
         {
             var mat = new MatFileReader(fs).Read();
@@ -83,7 +85,10 @@ public class StanfordCarsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
                     int label = classId1 - 1; // 1..196 → 0..195
                     if (label < 0 || label >= NumClasses) continue;
                     string filename = fname.String;
-                    string imgPath = Path.Combine(imgDir, filename);
+                    // Reject path-traversal characters in untrusted .mat-supplied filenames.
+                    if (filename.Contains("..") || filename.Contains('/') || filename.Contains('\\')) continue;
+                    string imgPath = Path.GetFullPath(Path.Combine(imgDir, filename));
+                    if (!imgPath.StartsWith(canonicalImgDir, StringComparison.Ordinal)) continue;
                     if (File.Exists(imgPath)) paths.Add((imgPath, label));
                 }
             }
@@ -92,6 +97,10 @@ public class StanfordCarsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         int totalSamples = paths.Count;
         if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < totalSamples)
             totalSamples = _options.MaxSamples.Value;
+        if (totalSamples == 0)
+            throw new InvalidDataException(
+                $"Stanford Cars annotation file '{annoMat}' produced 0 valid (image, class) pairs. " +
+                "Check that the cars_train/ or cars_test/ directory contains the JPEGs referenced by the .mat file.");
         _sampleCount = totalSamples;
 
         int pixelsPerImage = _imageSize * _imageSize * 3;
@@ -112,7 +121,6 @@ public class StanfordCarsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _imageSize, _imageSize, 3 });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
         InitializeIndices(totalSamples);
-        await Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -139,10 +147,13 @@ public class StanfordCarsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Take(trainSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Skip(trainSize + valSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, trainIndices), ExtractTensorBatchLocal(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, valIndices), ExtractTensorBatchLocal(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, testIndices), ExtractTensorBatchLocal(labels, testIndices))
         );
     }
 

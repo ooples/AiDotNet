@@ -16,12 +16,27 @@ namespace AiDotNet.Data.Text.Benchmarks;
 /// </remarks>
 public sealed class MmluDataLoaderOptions
 {
+    /// <summary>Dataset split. Default Test (the canonical eval split).</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Test;
+    /// <summary>Root data path. When null, uses default cache path.</summary>
     public string? DataPath { get; set; }
+    /// <summary>Automatically download if not present. Default is true.</summary>
     public bool AutoDownload { get; set; } = true;
     /// <summary>Optional subject filter (case-insensitive substring). Null = all 57 subjects.</summary>
     public string? SubjectFilter { get; set; }
+    /// <summary>Maximum encoded question + choice length in tokens. Default 256.</summary>
     public int MaxQuestionLength { get; set; } = 256;
+    /// <summary>Maximum vocabulary size for the BPE-style tokenizer. Default 16000.</summary>
     public int VocabularySize { get; set; } = 16000;
+    /// <summary>Optional maximum number of samples to load (for fast iteration / smoke testing).</summary>
     public int? MaxSamples { get; set; }
+
+    /// <summary>Validates that all option values are within acceptable ranges.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when any option is invalid.</exception>
+    public void Validate()
+    {
+        if (MaxQuestionLength <= 0) throw new ArgumentOutOfRangeException(nameof(MaxQuestionLength), "MaxQuestionLength must be positive.");
+        if (VocabularySize <= 0) throw new ArgumentOutOfRangeException(nameof(VocabularySize), "VocabularySize must be positive.");
+        if (MaxSamples is <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSamples), "MaxSamples must be positive when specified.");
+    }
 }

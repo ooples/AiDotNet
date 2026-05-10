@@ -61,6 +61,8 @@ public class Stl10DataLoaderTests
             { DataPath = root, AutoDownload = false, Split = DatasetSplit.Test });
             await loader.LoadAsync();
             Assert.Equal(2, loader.TotalCount);
+            DatasetLoaderTestHelpers.AssertShape(loader.Features, 2, 96, 96, 3);
+            DatasetLoaderTestHelpers.AssertShape(loader.Labels, 2, 10);
         }
         finally { DatasetLoaderTestHelpers.TryCleanup(root); }
     }

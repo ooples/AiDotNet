@@ -41,6 +41,7 @@ public class Flowers102DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     public Flowers102DataLoader(Flowers102DataLoaderOptions? options = null)
     {
         _options = options ?? new Flowers102DataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("flowers-102");
         _imageSize = _options.ImageSize;
     }
@@ -104,20 +105,28 @@ public class Flowers102DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             cancellationToken.ThrowIfCancellationRequested();
             int imgId = imgIds[i]; // 1-indexed
             string imgPath = Path.Combine(jpgDir, $"image_{imgId:D5}.jpg");
-            if (!File.Exists(imgPath)) continue;
+            if (!File.Exists(imgPath))
+                throw new FileNotFoundException(
+                    $"Flowers-102 image file referenced by setid.mat is missing: {imgPath}. " +
+                    "Re-extract 102flowers.tgz or check archive integrity.");
+            if (imgId - 1 >= labels.Length)
+                throw new InvalidDataException(
+                    $"Flowers-102 setid.mat references image id {imgId} but imagelabels.mat only has {labels.Length} entries.");
             var pixels = VisionLoaderHelper.LoadAndResizeImage<T>(imgPath, _imageSize, _imageSize, 3, _options.Normalize);
             int featureOffset = i * pixelsPerImage;
             int copyLen = Math.Min(pixels.Length, pixelsPerImage);
             Array.Copy(pixels, 0, featuresData, featureOffset, copyLen);
-            int label1 = imgId - 1 < labels.Length ? labels[imgId - 1] : 0; // 1..102 → 0..101
-            int label = label1 - 1;
-            if (label >= 0 && label < NumClasses) labelsData[i * NumClasses + label] = NumOps.One;
+            int label1 = labels[imgId - 1]; // 1..102
+            int label = label1 - 1;          // → 0..101
+            if (label < 0 || label >= NumClasses)
+                throw new InvalidDataException(
+                    $"Flowers-102 imagelabels.mat contains out-of-range label {label1} for image id {imgId}. Expected 1..{NumClasses}.");
+            labelsData[i * NumClasses + label] = NumOps.One;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _imageSize, _imageSize, 3 });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
         InitializeIndices(totalSamples);
-        await Task.CompletedTask;
     }
 
     /// <summary>Reads an int-typed MAT variable of any width (uint8/int16/int32/double) as int[].</summary>
@@ -161,10 +170,13 @@ public class Flowers102DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Take(trainSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Skip(trainSize + valSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, trainIndices), ExtractTensorBatchLocal(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, valIndices), ExtractTensorBatchLocal(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, testIndices), ExtractTensorBatchLocal(labels, testIndices))
         );
     }
 

@@ -39,14 +39,25 @@ public class TinyStoriesDataLoaderTests
     [Fact]
     public async Task Fixture_TestSplitFallsBackToValid()
     {
-        // TinyStories has no public test split — the loader uses validation for both.
-        string root = CreateFixture();
+        // TinyStories has no public test split — the loader maps DatasetSplit.Test to
+        // TinyStories-valid.txt. Prove fallback semantics by writing a *different* file
+        // for valid vs. train and confirming Test reads the valid content.
+        string root = DatasetLoaderTestHelpers.CreateTempDir("tinystories-fallback");
+        const string trainSample = "alpha alpha alpha alpha alpha alpha alpha alpha alpha alpha";
+        const string validSample = "beta beta beta beta beta beta beta beta beta beta";
+        File.WriteAllText(Path.Combine(root, "TinyStories-train.txt"), trainSample);
+        File.WriteAllText(Path.Combine(root, "TinyStories-valid.txt"), validSample);
         try
         {
-            var loader = new TinyStoriesDataLoader<float>(new TinyStoriesDataLoaderOptions
-            { DataPath = root, AutoDownload = false, Split = DatasetSplit.Test, SequenceLength = 4 });
-            await loader.LoadAsync();
-            Assert.True(loader.TotalCount > 0);
+            var validLoader = new TinyStoriesDataLoader<float>(new TinyStoriesDataLoaderOptions
+            { DataPath = root, AutoDownload = false, Split = DatasetSplit.Validation, SequenceLength = 4, VocabularySize = 32 });
+            var testLoader = new TinyStoriesDataLoader<float>(new TinyStoriesDataLoaderOptions
+            { DataPath = root, AutoDownload = false, Split = DatasetSplit.Test, SequenceLength = 4, VocabularySize = 32 });
+            await validLoader.LoadAsync();
+            await testLoader.LoadAsync();
+            // The fallback contract: Test must produce identical sample count to Validation.
+            Assert.Equal(validLoader.TotalCount, testLoader.TotalCount);
+            Assert.True(validLoader.TotalCount > 0);
         }
         finally { DatasetLoaderTestHelpers.TryCleanup(root); }
     }

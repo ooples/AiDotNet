@@ -84,6 +84,7 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     public CityscapesDataLoader(CityscapesDataLoaderOptions? options = null)
     {
         _options = options ?? new CityscapesDataLoaderOptions();
+        _options.Validate();
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("cityscapes");
         _h = _options.ImageHeight;
         _w = _options.ImageWidth;
@@ -108,6 +109,7 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         if (!Directory.Exists(imgRoot))
             throw new DirectoryNotFoundException($"Cityscapes image dir not found: {imgRoot}");
 
+        bool isTestSplit = splitName == "test";
         // Walk city subdirectories under leftImg8bit/{split}/.
         var pairs = new List<(string Img, string Lbl)>();
         foreach (string cityDir in Directory.EnumerateDirectories(imgRoot).OrderBy(d => d, StringComparer.Ordinal))
@@ -119,11 +121,25 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
                 cancellationToken.ThrowIfCancellationRequested();
                 string frame = Path.GetFileName(imgFile).Replace("_leftImg8bit.png", "");
                 string lblFile = Path.Combine(lblCity, frame + "_gtFine_labelIds.png");
-                if (Directory.Exists(lblCity) && File.Exists(lblFile))
+                bool labelExists = Directory.Exists(lblCity) && File.Exists(lblFile);
+                if (labelExists)
+                {
                     pairs.Add((imgFile, lblFile));
-                else if (splitName == "test")
-                    // test split has no public labels — emit zero label maps
+                }
+                else if (isTestSplit)
+                {
+                    // Test split has no public labels — sentinel (empty lblPath) emits an
+                    // IgnoreLabel mask so consumers don't accidentally train on class 0.
                     pairs.Add((imgFile, string.Empty));
+                }
+                else
+                {
+                    // Train/val splits MUST have labels — fail fast on missing GT
+                    // rather than silently dropping frames.
+                    throw new FileNotFoundException(
+                        $"Cityscapes label file missing for {splitName} split frame: {lblFile}. " +
+                        "Re-extract gtFine_trainvaltest.zip or check the gtFine/{split}/{city}/ layout.");
+                }
             }
         }
 
@@ -150,7 +166,12 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
 
             if (string.IsNullOrEmpty(lblPath))
             {
-                // Test split: label map is all zeros.
+                // Test split: labels are unavailable; fill with IgnoreLabel (255) so
+                // consumers and loss heads skip these pixels rather than training on class 0.
+                int lblOffSentinel = i * pixelsPerLabel;
+                T ignore = NumOps.FromDouble(IgnoreLabel);
+                for (int p = 0; p < pixelsPerLabel; p++)
+                    labelsData[lblOffSentinel + p] = ignore;
                 continue;
             }
 
@@ -173,7 +194,6 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _h, _w, 3 });
         LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, _h, _w });
         InitializeIndices(totalSamples);
-        await Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -200,10 +220,13 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         var shuffled = Enumerable.Range(0, _sampleCount).OrderBy(_ => random.Next()).ToArray();
         var features = LoadedFeatures ?? throw new InvalidOperationException("Not loaded.");
         var labels = LoadedLabels ?? throw new InvalidOperationException("Not loaded.");
+        var trainIndices = shuffled.Take(trainSize).ToArray();
+        var valIndices = shuffled.Skip(trainSize).Take(valSize).ToArray();
+        var testIndices = shuffled.Skip(trainSize + valSize).ToArray();
         return (
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Take(trainSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Take(trainSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Skip(trainSize).Take(valSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Skip(trainSize).Take(valSize).ToArray())),
-            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, shuffled.Skip(trainSize + valSize).ToArray()), ExtractTensorBatchLocal(labels, shuffled.Skip(trainSize + valSize).ToArray()))
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, trainIndices), ExtractTensorBatchLocal(labels, trainIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, valIndices), ExtractTensorBatchLocal(labels, valIndices)),
+            new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(ExtractTensorBatchLocal(features, testIndices), ExtractTensorBatchLocal(labels, testIndices))
         );
     }
 
