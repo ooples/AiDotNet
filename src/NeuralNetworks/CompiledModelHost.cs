@@ -295,6 +295,125 @@ internal sealed class CompiledModelHost<T> : IDisposable
         }
     }
 
+    /// <summary>
+    /// Async overload of <see cref="Predict(Tensor{T}, int, Func{Tensor{T}})"/>.
+    /// Routes through <c>ICompiledPlan&lt;T&gt;.ExecuteAsync(ct)</c> on the
+    /// trace-and-replay path so callers in async pipelines (web servers,
+    /// diffusion denoising loops, multi-stage VLM forwards) can await
+    /// completion without blocking a threadpool worker for the full plan.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On the eager-fallback path (compilation disabled, plan failed to
+    /// compile, or process is being torn down) this method runs the eager
+    /// forward synchronously and returns a completed <see cref="System.Threading.Tasks.ValueTask{T}"/>.
+    /// The async fast-path activates only when a compiled plan exists,
+    /// which is the common case after the first call at a given shape.
+    /// </para>
+    /// <para>
+    /// Cancellation: the token is honored at three points — pre-flight
+    /// (before any work is queued), post-trace (after the plan compiles),
+    /// and inside <c>plan.ExecuteAsync</c> (Tensors-side cooperative
+    /// cancellation between steps). Cancelling between steps does not
+    /// invalidate the cached plan; subsequent calls reuse it.
+    /// </para>
+    /// </remarks>
+    public async System.Threading.Tasks.ValueTask<Tensor<T>> PredictAsync(
+        Tensor<T> input,
+        int structureVersion,
+        Func<Tensor<T>> eagerForward,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        if (eagerForward is null)
+            throw new ArgumentNullException(nameof(eagerForward));
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        CompiledModelCache<T>? cache;
+        bool fallToEager;
+        lock (_sync)
+        {
+            fallToEager = _disposed || _disposeRequested
+                || !TensorCodecOptions.Current.EnableCompilation;
+
+            if (!fallToEager)
+            {
+                if (_cache is not null && structureVersion != _lastCompiledVersion)
+                {
+                    (_pendingDisposeCaches ??= new List<CompiledModelCache<T>>()).Add(_cache);
+                    _cache = new CompiledModelCache<T>();
+                    _lastCompiledVersion = structureVersion;
+                }
+                cache = _cache ??= new CompiledModelCache<T>();
+                _activeCalls++;
+            }
+            else
+            {
+                cache = null;
+            }
+        }
+
+        if (fallToEager || cache is null)
+            return eagerForward();
+
+        try
+        {
+            try
+            {
+                var concreteShape = (int[])input._shape.Clone();
+
+                if (TryUseDiskCachedPlan(concreteShape, structureVersion, out var preloadedResult))
+                {
+                    _lastCompiledVersion = structureVersion;
+                    return preloadedResult;
+                }
+
+                var symbolicShape = BuildSymbolicShape(concreteShape, _shapeMode);
+                var plan = symbolicShape is null
+                    ? cache.GetOrCompileInference(concreteShape, () => eagerForward())
+                    : cache.GetOrCompileInference(concreteShape, () => eagerForward(), symbolicShape);
+
+                MaybeSavePlanToDisk(plan, concreteShape, structureVersion);
+                _lastCompiledVersion = structureVersion;
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Real async path — defers to the engine-stream-aware
+                // ExecuteAsync added in Tensors PR #298. CPU engines have
+                // a fast-path that completes synchronously; GPU engines
+                // wrap the CUDA stream / IGpuStream completion event as
+                // a polling Task that doesn't block a worker thread.
+                return await plan.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (System.OperationCanceledException)
+            {
+                // Cooperative cancellation propagates without falling back
+                // to the eager path — eager would just re-do the whole
+                // forward, which the caller didn't ask for.
+                throw;
+            }
+            catch (Exception ex) when (
+                ex is not OutOfMemoryException &&
+                ex is not AccessViolationException &&
+                ex is not StackOverflowException &&
+                ex is not BadImageFormatException &&
+                ex is not InvalidProgramException &&
+                ex is not System.Threading.ThreadAbortException &&
+                ex is not AppDomainUnloadedException &&
+                ex is not CannotUnloadAppDomainException)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"CompiledModelHost.PredictAsync falling back to eager after compile/replay failure: " +
+                    $"{ex.ToString()}");
+                return eagerForward();
+            }
+        }
+        finally
+        {
+            DrainPendingDisposals();
+        }
+    }
+
     private void DrainPendingDisposals()
     {
         List<CompiledModelCache<T>>? toDispose = null;

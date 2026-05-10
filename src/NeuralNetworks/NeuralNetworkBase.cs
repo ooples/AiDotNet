@@ -2528,6 +2528,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // first PredictEager call. Idempotent once finalized.
         TryAutoEnableWeightStreaming();
 
+        // Auto-compile-on-eval (issue #1273 Workstream E). If a transition
+        // out of training mode flagged us for pre-warm, do it now on this
+        // first post-eval Predict and clear the flag. CompileForward is a
+        // no-op if compilation is disabled at the package-level config
+        // (TensorCodecOptions.EnableCompilation == false), so this is safe
+        // to call unconditionally when the flag is set.
+        if (_pendingAutoCompileOnNextPredict)
+        {
+            _pendingAutoCompileOnNextPredict = false;
+            try { CompileForward(input); } catch { /* fall back to eager */ }
+        }
+
         try
         {
             // Universal batch-dim auto-promotion (mirrors the Train path).
@@ -3321,8 +3333,54 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             {
                 _layers[i].SetTrainingMode(isTraining);
             }
+
+            // Auto-compile-on-eval (issue #1273 Workstream E). When the model
+            // transitions out of training mode, mark the next Predict call to
+            // pre-warm the compiled plan via CompileForward. Subsequent same-
+            // shape Predict calls then have the trace+compile cost amortized
+            // across the first-after-eval inference instead of paying it on
+            // each call.
+            //
+            // This is opt-in via _autoCompileOnEval (default false) because
+            // the compiled-plan cache today binds to the trace-time tensor
+            // *reference*: replay reads stale data when called with a
+            // different tensor of the same shape (canonical
+            // DifferentInputs / ScaledInput failure mode). Until the Tensors
+            // package adds value-aware replay (re-key on data hash, or
+            // re-trace on input change), only callers who can guarantee
+            // they feed the same tensor reference each call should opt in.
+            // See the long comment block at the top of Predict for context.
+            if (!isTraining && _autoCompileOnEval)
+            {
+                _pendingAutoCompileOnNextPredict = true;
+            }
         }
     }
+
+    /// <summary>
+    /// When true, transitioning the model out of training mode pre-warms the
+    /// compiled inference plan on the next <see cref="Predict"/> call.
+    /// Default: false (the safe value-correctness default — see remarks).
+    /// </summary>
+    /// <remarks>
+    /// Setting this to true requires the caller to guarantee they feed the
+    /// same input tensor reference (not merely the same shape) on each
+    /// subsequent Predict, because the compiled-plan cache is reference-keyed
+    /// today and replays stale data otherwise. Set to true ONLY in deployment
+    /// scenarios where you control the input tensor lifecycle (e.g.
+    /// preallocated buffer, online streaming). For batch / multi-tenant
+    /// inference where each Predict gets a fresh tensor, leave this false
+    /// and call <see cref="CompileForward"/> explicitly with a representative
+    /// shape if pre-warming is desired.
+    /// </remarks>
+    public bool AutoCompileOnEval
+    {
+        get => _autoCompileOnEval;
+        set => _autoCompileOnEval = value;
+    }
+
+    private bool _autoCompileOnEval;
+    private bool _pendingAutoCompileOnNextPredict;
 
     /// <summary>
     /// Enables mixed-precision training for the neural network.
