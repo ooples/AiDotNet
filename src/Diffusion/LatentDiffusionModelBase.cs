@@ -563,25 +563,77 @@ public abstract class LatentDiffusionModelBase<T> : DiffusionModelBase<T>, ILate
     /// <summary>
     /// Async overload of <see cref="Generate(int[], int, int?)"/> for latent
     /// diffusion (text encoder → noise predictor → VAE decode pipeline).
-    /// Future commits chain these three stages via Tensors' <c>ChainAsync</c>
-    /// so the conditioner output flows into the noise predictor's cross-
-    /// attention input without ever materializing on the host, and the VAE
-    /// decode overlaps with the tail of the final denoising step.
+    /// Mirrors the synchronous <see cref="Generate"/> contract: pixel-shape
+    /// inputs are translated to latent-shape, the latent denoising loop runs
+    /// asynchronously through <see cref="GenerateAsyncCore"/>, and the result
+    /// is decoded back to pixel space via the VAE unless the caller supplied
+    /// a latent shape (channel dim == <see cref="LatentChannels"/>) — that
+    /// preserves PyTorch's <c>output_type='latent'</c> semantics.
     /// </summary>
-    public override System.Threading.Tasks.ValueTask<Tensor<T>> GenerateAsync(
+    public override async System.Threading.Tasks.ValueTask<Tensor<T>> GenerateAsync(
         int[] shape,
         int numInferenceSteps = 50,
         int? seed = null,
         System.Threading.CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        // Delegate to the base GenerateAsyncCore which runs the latent-space
-        // denoising loop with true async noise prediction. Latent decode
-        // happens inside Generate (sync path) at the tail; future work
-        // can lift the VAE decode into the async chain too. The base
-        // GenerateAsyncCore returns latent-space output today; subclass
-        // overrides handle the latent → pixel decode after await.
-        return GenerateAsyncCore(shape, numInferenceSteps, seed, initialSample: null, cancellationToken);
+
+        // Translate pixel shape → latent shape, mirroring the sync Generate
+        // path. Without this, GenerateAsyncCore would allocate a sample at
+        // pixel shape, but PredictNoise operates in latent-channel space —
+        // the first denoising step's length-mismatch guard would throw, or
+        // (if the dims happened to align) the loop would silently produce
+        // shape-incorrect latents.
+        int[] latentShape;
+        bool inputIsLatent = false;
+        if (shape.Length >= 4 && shape[1] == LatentChannels)
+        {
+            latentShape = shape;
+            inputIsLatent = true;
+        }
+        else if (shape.Length >= 4)
+        {
+            latentShape = new[]
+            {
+                shape[0],
+                LatentChannels,
+                shape[2] / VAE.DownsampleFactor,
+                shape[3] / VAE.DownsampleFactor
+            };
+        }
+        else
+        {
+            latentShape = new[] { 1, LatentChannels, 64, 64 };
+        }
+
+        var latentSample = await GenerateAsyncCore(
+            latentShape, numInferenceSteps, seed, initialSample: null, cancellationToken)
+            .ConfigureAwait(false);
+
+        // Final NaN/Inf guard. Same rationale as the sync path: an untrained
+        // U-Net or untrained VAE can emit non-finite values through its
+        // upsample/activation chain; clip so the paper-minimum "Predict
+        // returns a finite tensor" contract holds.
+        if (inputIsLatent)
+        {
+            for (int i = 0; i < latentSample.Length; i++)
+            {
+                double v = NumOps.ToDouble(latentSample[i]);
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                    latentSample[i] = NumOps.Zero;
+            }
+            return latentSample;
+        }
+
+        // Pixel-space output: decode through the VAE.
+        var decoded = DecodeFromLatent(latentSample);
+        for (int i = 0; i < decoded.Length; i++)
+        {
+            double v = NumOps.ToDouble(decoded[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v))
+                decoded[i] = NumOps.Zero;
+        }
+        return decoded;
     }
 
     /// <inheritdoc />
