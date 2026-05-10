@@ -55,15 +55,40 @@ public class WikiText2DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
     private static readonly string DownloadUrl =
         "https://s3.us-west-2.amazonaws.com/research.metamind.io/wikitext/wikitext-2-raw-v1.zip";
 
-    /// <inheritdoc/>
-    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    private static string SplitFileName(Geometry.DatasetSplit split) => split switch
     {
-        string splitFile = _options.Split switch
-        {
-            Geometry.DatasetSplit.Test => "wiki.test.raw",
-            Geometry.DatasetSplit.Validation => "wiki.valid.raw",
-            _ => "wiki.train.raw"
-        };
+        Geometry.DatasetSplit.Test => "wiki.test.raw",
+        Geometry.DatasetSplit.Validation => "wiki.valid.raw",
+        _ => "wiki.train.raw"
+    };
+
+    /// <summary>
+    /// Loads the raw, unprocessed text content for the requested split,
+    /// auto-downloading via <see cref="WikiText2DataLoaderOptions.AutoDownload"/>
+    /// if the file is not already cached. Lets consumers run their own
+    /// tokenizer (BPE, SentencePiece, etc.) instead of the built-in
+    /// whitespace tokenization that <see cref="LoadAsync(CancellationToken)"/>
+    /// applies internally.
+    /// </summary>
+    /// <param name="split">Which WikiText-2 split to read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The raw text contents of the requested split file.</returns>
+    /// <remarks>
+    /// Honors the same <see cref="WikiText2DataLoaderOptions.DataPath"/> and
+    /// <see cref="WikiText2DataLoaderOptions.AutoDownload"/> options as
+    /// <see cref="LoadAsync(CancellationToken)"/>. Independent of the loader's
+    /// load-state, so it is safe to call without first calling LoadAsync.
+    /// </remarks>
+    public async Task<string> LoadRawTextAsync(
+        Geometry.DatasetSplit split,
+        CancellationToken cancellationToken = default)
+    {
+        string filePath = await EnsureSplitFileAsync(SplitFileName(split), cancellationToken);
+        return await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
+    }
+
+    private async Task<string> EnsureSplitFileAsync(string splitFile, CancellationToken cancellationToken)
+    {
         string filePath = Path.Combine(ResolveDataDir(), splitFile);
 
         if (!File.Exists(filePath) && _options.AutoDownload)
@@ -95,6 +120,13 @@ public class WikiText2DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
                 $"WikiText-2 data not found at {filePath}. {hint}");
         }
 
+        return filePath;
+    }
+
+    /// <inheritdoc/>
+    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    {
+        string filePath = await EnsureSplitFileAsync(SplitFileName(_options.Split), cancellationToken);
         string text = await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
 
         // Tokenize entire text
