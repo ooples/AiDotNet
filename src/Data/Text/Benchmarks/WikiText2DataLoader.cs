@@ -52,8 +52,11 @@ public class WikiText2DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("wikitext-2");
     }
 
+    // Original Salesforce/MetaMind S3 mirror was decommissioned (returns HTTP 403
+    // as of 2026-05; see #1284). Switched to the canonical Smerity mirror — same
+    // archive, hosted by the original WikiText paper author.
     private static readonly string DownloadUrl =
-        "https://s3.us-west-2.amazonaws.com/research.metamind.io/wikitext/wikitext-2-raw-v1.zip";
+        "https://wikitext.smerity.com/wikitext-2-raw-v1.zip";
 
     private static string SplitFileName(Geometry.DatasetSplit split) => split switch
     {
