@@ -153,6 +153,91 @@ internal sealed class ChainedCompiledModelHost<T> : IDisposable
         _stageHosts[stageIndex].Invalidate();
     }
 
+    /// <summary>
+    /// Async chained predict — each stage awaits the prior stage's output via
+    /// <see cref="CompiledModelHost{T}.PredictAsync"/>. CPU stages complete
+    /// inline (no work-transfer overhead); GPU stages let host work for the
+    /// next stage prep overlap with the current stage's tail kernels.
+    /// (Workstream C from #1273.)
+    /// </summary>
+    public async System.Threading.Tasks.ValueTask<Tensor<T>> PredictAsync(
+        Tensor<T> input,
+        int[] versions,
+        System.Func<Tensor<T>, Tensor<T>>[] stages,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        if (input is null) throw new System.ArgumentNullException(nameof(input));
+        if (versions is null) throw new System.ArgumentNullException(nameof(versions));
+        if (stages is null) throw new System.ArgumentNullException(nameof(stages));
+        var hosts = _stageHosts ?? throw new System.ObjectDisposedException(nameof(ChainedCompiledModelHost<T>));
+        if (versions.Length != hosts.Length)
+            throw new System.ArgumentException(
+                $"versions length ({versions.Length}) must equal stageCount ({hosts.Length}).",
+                nameof(versions));
+        if (stages.Length != hosts.Length)
+            throw new System.ArgumentException(
+                $"stages length ({stages.Length}) must equal stageCount ({hosts.Length}).",
+                nameof(stages));
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var current = input;
+        for (int i = 0; i < hosts.Length; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var stageInput = current;
+            var stageFn = stages[i];
+            current = await hosts[i]
+                .PredictAsync(stageInput, versions[i], () => stageFn(stageInput), cancellationToken)
+                .ConfigureAwait(false);
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// Multi-input async chain: stage k consumes
+    /// <c>(output_of_(k-1), perStageSideInputs[k])</c>. Maps to the multi-input
+    /// variant of Tensors' <c>ChainAsync(next, slot, ct)</c> — purpose-built
+    /// for cross-attention pipelines where the noise predictor takes both the
+    /// latent and the conditioner output (text encoder → cross-attention
+    /// noise predictor pattern in latent diffusion / SDXL / VLMs).
+    /// </summary>
+    public async System.Threading.Tasks.ValueTask<Tensor<T>> PredictAsync(
+        Tensor<T> primaryInput,
+        int[] versions,
+        Tensor<T>[][] perStageSideInputs,
+        System.Func<Tensor<T>, Tensor<T>[], Tensor<T>>[] stages,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        if (primaryInput is null) throw new System.ArgumentNullException(nameof(primaryInput));
+        if (versions is null) throw new System.ArgumentNullException(nameof(versions));
+        if (perStageSideInputs is null) throw new System.ArgumentNullException(nameof(perStageSideInputs));
+        if (stages is null) throw new System.ArgumentNullException(nameof(stages));
+        var hosts = _stageHosts ?? throw new System.ObjectDisposedException(nameof(ChainedCompiledModelHost<T>));
+        if (versions.Length != hosts.Length || perStageSideInputs.Length != hosts.Length || stages.Length != hosts.Length)
+            throw new System.ArgumentException(
+                $"All array lengths must equal stageCount ({hosts.Length}).");
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var current = primaryInput;
+        for (int i = 0; i < hosts.Length; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int stageIdx = i;
+            var stageInput = current;
+            var sideInputs = perStageSideInputs[stageIdx] ?? System.Array.Empty<Tensor<T>>();
+            current = await hosts[i]
+                .PredictAsync(
+                    stageInput,
+                    versions[i],
+                    () => stages[stageIdx](stageInput, sideInputs),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        return current;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
