@@ -808,6 +808,15 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (_vaeDisposed) return;
         _vaeDisposed = true;
+        if (disposing)
+        {
+            // The compile hosts own their CompiledModelCache instances which
+            // hold onto compiled plan steps + captured backend buffers;
+            // letting them survive past VAE Dispose leaks both managed and
+            // potentially native (pinned tensor) memory.
+            try { _encoderCompileHost.Dispose(); } catch { /* swallow per Dispose convention */ }
+            try { _decoderCompileHost.Dispose(); } catch { /* swallow per Dispose convention */ }
+        }
     }
 
     /// <summary>
