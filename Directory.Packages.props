@@ -6,9 +6,6 @@
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.75.3" />
-    <!-- Override transitive dep to clear NU1903 (CVE GHSA-pggp-6c3x-2xmx).
-         AiDotNet.Tensors 0.75.3 brings Snappier 1.3.0; 1.3.1 is the patched release. -->
-    <PackageVersion Include="Snappier" Version="1.3.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.75.3" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.75.3" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.75.3" />
