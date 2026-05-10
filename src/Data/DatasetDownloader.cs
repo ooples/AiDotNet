@@ -173,6 +173,47 @@ internal static class DatasetDownloader
     }
 
     /// <summary>
+    /// Downloads and extracts a tar.bz2 archive (e.g., LJSpeech).
+    /// Bzip2 decompression is provided by SharpZipLib.
+    /// </summary>
+    /// <param name="url">The URL to download from.</param>
+    /// <param name="extractDirectory">The directory to extract to.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public static async Task DownloadAndExtractTarBz2Async(
+        string url,
+        string extractDirectory,
+        CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(extractDirectory);
+
+        string tempFile = Path.Combine(Path.GetTempPath(), $"aidotnet_{Guid.NewGuid()}.tar.bz2");
+        try
+        {
+            await DownloadFileAsync(url, tempFile, cancellationToken);
+            ExtractTarBz2(tempFile, extractDirectory);
+        }
+        finally
+        {
+            if (File.Exists(tempFile))
+            {
+                try { File.Delete(tempFile); }
+                catch { /* Ignore cleanup errors */ }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Extracts a tar.bz2 file to the specified directory using SharpZipLib's
+    /// BZip2InputStream for the decompression layer plus the existing tar walker.
+    /// </summary>
+    private static void ExtractTarBz2(string tarBz2Path, string extractDirectory)
+    {
+        using var fileStream = new FileStream(tarBz2Path, FileMode.Open, FileAccess.Read);
+        using var bz2Stream = new ICSharpCode.SharpZipLib.BZip2.BZip2InputStream(fileStream);
+        ExtractTarStream(bz2Stream, extractDirectory);
+    }
+
+    /// <summary>
     /// Extracts a tar.gz file to the specified directory.
     /// </summary>
     /// <param name="tarGzPath">Path to the tar.gz file.</param>
@@ -182,12 +223,21 @@ internal static class DatasetDownloader
         using var fileStream = new FileStream(tarGzPath, FileMode.Open, FileAccess.Read);
         using var gzStream = new System.IO.Compression.GZipStream(
             fileStream, System.IO.Compression.CompressionMode.Decompress);
+        ExtractTarStream(gzStream, extractDirectory);
+    }
 
+    /// <summary>
+    /// Walks a TAR-format byte stream (already-decompressed) and writes entries
+    /// into <paramref name="extractDirectory"/>. Shared between the tar.gz and
+    /// tar.bz2 extractors.
+    /// </summary>
+    private static void ExtractTarStream(Stream tarStream, string extractDirectory)
+    {
         // Read TAR entries manually (TAR format: 512-byte header blocks)
         byte[] header = new byte[512];
         while (true)
         {
-            int bytesRead = ReadFull(gzStream, header, 0, 512);
+            int bytesRead = ReadFull(tarStream, header, 0, 512);
             if (bytesRead < 512) break;
 
             // Check for zero block (end of archive)
@@ -218,7 +268,7 @@ internal static class DatasetDownloader
             if (!fullPath.StartsWith(normalizedExtractDir, StringComparison.OrdinalIgnoreCase))
             {
                 // Skip entries that would escape the extract directory
-                SkipTarEntry(gzStream, size);
+                SkipTarEntry(tarStream, size);
                 continue;
             }
 
@@ -237,19 +287,19 @@ internal static class DatasetDownloader
                 }
 
                 using var output = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                CopyBytes(gzStream, output, size);
+                CopyBytes(tarStream, output, size);
 
                 // TAR data is padded to 512-byte blocks
                 long remainder = size % 512;
                 if (remainder > 0)
                 {
-                    SkipBytes(gzStream, 512 - remainder);
+                    SkipBytes(tarStream, 512 - remainder);
                 }
             }
             else
             {
                 // Skip other entry types (symlinks, etc.)
-                SkipTarEntry(gzStream, size);
+                SkipTarEntry(tarStream, size);
             }
         }
     }
