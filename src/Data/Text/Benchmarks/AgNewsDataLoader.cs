@@ -95,7 +95,7 @@ public class AgNewsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
                 featuresData[featureOffset + j] = NumOps.FromDouble(tokenIds[j]);
 
             // Class index is 1..4 in the source; convert to 0..3 for one-hot.
-            int classIdx = Math.Clamp(labelClasses[i] - 1, 0, 3);
+            int classIdx = Math.Min(3, Math.Max(0, labelClasses[i] - 1));
             labelsData[i * 4 + classIdx] = NumOps.One;
         }
 

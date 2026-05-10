@@ -64,7 +64,7 @@ public class DtdDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
             Geometry.DatasetSplit.Validation => "val",
             _ => "train"
         };
-        int n = Math.Clamp(_options.SplitIndex, 1, 10);
+        int n = Math.Min(10, Math.Max(1, _options.SplitIndex));
         string splitFile = Path.Combine(root, "labels", $"{splitPrefix}{n}.txt");
         if (!File.Exists(splitFile))
             throw new FileNotFoundException($"DTD split file not found: {splitFile}");

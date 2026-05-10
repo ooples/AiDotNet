@@ -71,7 +71,7 @@ public class CnnDailyMailDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
                  .OrderBy(f => f, StringComparer.Ordinal))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await using var stream = File.OpenRead(parquetFile);
+            using var stream = File.OpenRead(parquetFile);
             using var reader = await ParquetReader.CreateAsync(stream);
             var fields = reader.Schema.GetDataFields();
             var artField = fields.FirstOrDefault(f => f.Name.Equals("article", StringComparison.OrdinalIgnoreCase));
