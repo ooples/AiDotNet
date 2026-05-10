@@ -44,18 +44,53 @@ public class WikiText103DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("wikitext-103");
     }
 
+    // Original Salesforce/MetaMind S3 mirror was decommissioned (returns HTTP 403
+    // as of 2026-05; see #1284). Switched to the canonical Smerity mirror — same
+    // archive, hosted by the original WikiText paper author.
     private static readonly string DownloadUrl =
-        "https://s3.us-west-2.amazonaws.com/research.metamind.io/wikitext/wikitext-103-v1.zip";
+        "https://wikitext.smerity.com/wikitext-103-v1.zip";
 
-    /// <inheritdoc/>
-    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    private static string SplitFileName(Geometry.DatasetSplit split) => split switch
     {
-        string splitFile = _options.Split switch
-        {
-            Geometry.DatasetSplit.Test => "wiki.test.tokens",
-            Geometry.DatasetSplit.Validation => "wiki.valid.tokens",
-            _ => "wiki.train.tokens"
-        };
+        Geometry.DatasetSplit.Train => "wiki.train.tokens",
+        Geometry.DatasetSplit.Test => "wiki.test.tokens",
+        Geometry.DatasetSplit.Validation => "wiki.valid.tokens",
+        // Reject unknown enum values rather than silently coercing to the
+        // train split — a typo'd cast or a future DatasetSplit member added
+        // upstream would otherwise return wrong data with no diagnostic.
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(split),
+            split,
+            $"Unsupported {nameof(Geometry.DatasetSplit)} for WikiText-103 (only Train / Validation / Test).")
+    };
+
+    /// <summary>
+    /// Loads the raw, unprocessed text content for the requested split,
+    /// auto-downloading via <see cref="WikiText103DataLoaderOptions.AutoDownload"/>
+    /// if the file is not already cached. Lets consumers run their own
+    /// tokenizer (BPE, SentencePiece, etc.) instead of the built-in
+    /// whitespace tokenization that <see cref="LoadAsync(CancellationToken)"/>
+    /// applies internally.
+    /// </summary>
+    /// <param name="split">Which WikiText-103 split to read.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The raw text contents of the requested split file.</returns>
+    /// <remarks>
+    /// Honors the same <see cref="WikiText103DataLoaderOptions.DataPath"/> and
+    /// <see cref="WikiText103DataLoaderOptions.AutoDownload"/> options as
+    /// <see cref="LoadAsync(CancellationToken)"/>. Independent of the loader's
+    /// load-state, so it is safe to call without first calling LoadAsync.
+    /// </remarks>
+    public async Task<string> LoadRawTextAsync(
+        Geometry.DatasetSplit split,
+        CancellationToken cancellationToken = default)
+    {
+        string filePath = await EnsureSplitFileAsync(SplitFileName(split), cancellationToken);
+        return await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
+    }
+
+    private async Task<string> EnsureSplitFileAsync(string splitFile, CancellationToken cancellationToken)
+    {
         string filePath = Path.Combine(ResolveDataDir(), splitFile);
 
         if (!File.Exists(filePath) && _options.AutoDownload)
@@ -87,6 +122,13 @@ public class WikiText103DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                 $"WikiText-103 data not found at {filePath}. {hint}");
         }
 
+        return filePath;
+    }
+
+    /// <inheritdoc/>
+    protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
+    {
+        string filePath = await EnsureSplitFileAsync(SplitFileName(_options.Split), cancellationToken);
         string text = await FilePolyfill.ReadAllTextAsync(filePath, cancellationToken);
 
         // Tokenize entire text
