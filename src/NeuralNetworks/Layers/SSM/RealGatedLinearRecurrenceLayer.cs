@@ -253,6 +253,17 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
                 $"RealGatedLinearRecurrenceLayer requires modelDim >= 1 " +
                 $"(got modelDim={modelDim} from input shape [{string.Join(",", input.Shape)}]).",
                 nameof(input));
+        // Reject input-width mismatches at the boundary instead of letting
+        // them surface as a less actionable Engine.TensorMatMul shape error
+        // deeper in the forward pass. The input projection's [_modelDimension,
+        // _recurrenceDimension] weight matrix can only consume a tensor whose
+        // last dim is _modelDimension, so any other width is a user contract
+        // violation that's worth diagnosing here.
+        if (modelDim != _modelDimension)
+            throw new ArgumentException(
+                $"RealGatedLinearRecurrenceLayer expected modelDim={_modelDimension}, " +
+                $"but got modelDim={modelDim} from input shape [{string.Join(",", input.Shape)}].",
+                nameof(input));
 
         int batchSize = 1;
         for (int d = 0; d < rank - 2; d++)
