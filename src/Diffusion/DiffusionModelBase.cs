@@ -242,21 +242,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Mirrors the async surface added to <c>ICompiledPlan&lt;T&gt;</c> in
-    /// <c>AiDotNet.Tensors</c> PR #298. Today this implementation runs the
-    /// underlying <see cref="Generate(int[], int, int?)"/> on a threadpool
-    /// thread via <see cref="System.Threading.Tasks.Task.Run(System.Func{Tensor{T}})"/>;
-    /// future commits on this branch will replace the inner loop with a per-step
-    /// <c>noise_predictor_plan.ExecuteAsync(ct)</c> chained via
-    /// <c>ChainAsync</c> into the sampler-update kernel, eliminating the
-    /// boundary tensor materialization and overlapping host-side scheduler work
-    /// with the GPU stream's tail kernels.
-    /// </para>
-    /// <para>
-    /// Until the chained inner loop lands, the async surface still provides
-    /// real value: callers in async pipelines (web servers, batch generation
-    /// loops) no longer block a worker for the full 50-step Generate, which
-    /// matters for any host that runs many concurrent generations.
+    /// Runs the denoising loop through <see cref="GenerateAsyncCore"/>, which
+    /// awaits <see cref="PredictNoiseAsync"/> at each timestep so the compiled
+    /// async execution path can overlap backend work with host-side scheduler
+    /// state updates (timestep embedding, scheduler.Step, RNG advance,
+    /// NaN/Inf sanitization). On a CPU engine each step's await completes
+    /// inline; on a GPU engine the await polls the stream completion event
+    /// without blocking a threadpool worker.
     /// </para>
     /// </remarks>
     public virtual System.Threading.Tasks.ValueTask<Tensor<T>> GenerateAsync(
