@@ -865,54 +865,38 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
+        // Set the adjacency matrix on every graph layer BEFORE the tape forward
+        // pass — TrainWithTape walks `Layers[i].Forward(current)` directly,
+        // bypassing the 2-arg Forward that ordinarily sets adjacency, so graph
+        // layers would otherwise see whatever adjacency was last installed (null
+        // on the first Train call, stale after that). Mirrors the
+        // adjacency-setup branch inside Forward(input, adjacency).
         var adjacencyMatrix = EnsureAdjacencyMatrix(input);
-
-        // Set all layers to training mode
+        _cachedAdjacencyMatrix = adjacencyMatrix;
         foreach (var layer in Layers)
         {
-            layer.SetTrainingMode(true);
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
         }
 
-        // Forward pass
-        var predictions = Forward(input, adjacencyMatrix);
-
-        // Flatten tensors for loss function (which works on vectors)
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // Compute loss gradient
-        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        // Reshape gradient back to tensor shape if needed
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        // Delegate to the tape-based path that the rest of the NN base relies on
+        // — the previous implementation declared "Backward pass through all
+        // layers" in a comment but never actually called Backward, so
+        // GetParameterGradients() returned the layers' zero-initialized gradient
+        // tensors and the optimizer applied no update (Training_ShouldChangeParameters,
+        // GradientFlow_ShouldBeNonZeroAndFinite, LossStrictlyDecreasesOnMemorizationTask
+        // all failed because params didn't move).
+        SetTrainingMode(true);
+        try
         {
-            gradOutput = gradOutput.Reshape(predictions._shape);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        // Backward pass through all layers
-
-        // Get parameter gradients for all trainable layers and update
-        Vector<T> parameterGradients = GetParameterGradients();
-
-        // Clip gradients to prevent exploding gradients
-        parameterGradients = ClipGradient(parameterGradients);
-
-
-        // Fresh optimizer per step for stable convergence (no momentum oscillation).
-        var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters using the optimizer
-        Vector<T> updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
-        UpdateParameters(updatedParameters);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

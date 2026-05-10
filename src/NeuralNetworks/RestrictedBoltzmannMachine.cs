@@ -662,6 +662,41 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Yields the RBM's trainable parameters (weights matrix and the two bias
+    /// vectors) as <see cref="Tensor{T}"/> chunks so test infrastructure that
+    /// walks <see cref="NeuralNetworkBase{T}.GetParameterChunks"/> can observe
+    /// post-train parameter changes. Without this override the base implementation
+    /// walks only <c>Layers</c> — and RBM stores all of its parameters in
+    /// network-level fields per Hinton 2006 §3.3 (CD-k operates directly on the
+    /// W matrix and two bias vectors, not through ILayer sublayers), so the
+    /// invariant tests would see no parameters and falsely report "Parameters
+    /// did not change after training" / "gradients may all be zero".
+    /// </summary>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        int paramIndex = 0;
+        var weightsTensor = new Tensor<T>(new[] { HiddenSize, VisibleSize });
+        for (int i = 0; i < HiddenSize; i++)
+        {
+            for (int j = 0; j < VisibleSize; j++)
+            {
+                weightsTensor[paramIndex++] = _weights[i, j];
+            }
+        }
+        yield return weightsTensor;
+
+        var visibleBiasesTensor = new Tensor<T>(new[] { VisibleSize });
+        for (int i = 0; i < VisibleSize; i++)
+            visibleBiasesTensor[i] = _visibleBiases[i];
+        yield return visibleBiasesTensor;
+
+        var hiddenBiasesTensor = new Tensor<T>(new[] { HiddenSize });
+        for (int i = 0; i < HiddenSize; i++)
+            hiddenBiasesTensor[i] = _hiddenBiases[i];
+        yield return hiddenBiasesTensor;
+    }
+
+    /// <summary>
     /// Makes predictions using the RBM by computing hidden layer activations.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>
