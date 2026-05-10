@@ -309,41 +309,70 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
+        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) once per forward as
+        // a Tensor<T>[recurrenceDim] so the inner loop body is a sequence of
+        // SIMD-accelerated Engine ops instead of (recDim × batchSize)
+        // NumOps virtual dispatches per timestep. Closes the hot inner loop
+        // PerfView identified in #1224's Hawk cluster — at recDim=256 this
+        // turned ~5000 NumOps calls per timestep into 8 vectorized engine
+        // ops over 256 doubles each (≈ 32 AVX2 vectors), which the JIT
+        // inlines into tight SIMD intrinsics.
+        var baseDecay = new Tensor<T>(new[] { _recurrenceDimension });
+        for (int d = 0; d < _recurrenceDimension; d++)
+        {
+            double cVal = NumOps.ToDouble(_decayParam[d]);
+            // Numerically stable softplus: for large x, softplus(x) ≈ x.
+            double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
+            baseDecay[d] = NumOps.FromDouble(Math.Exp(-softplusC));
+        }
+
+        T one = NumOps.FromDouble(1.0);
+        T negOne = NumOps.FromDouble(-1.0);
+
         for (int t = 0; t < seqLen; t++)
         {
             var x_t = x.GetSliceAlongDimension(t, 1);
             var r_t = recGate.GetSliceAlongDimension(t, 1);
             var i_t = inpGate.GetSliceAlongDimension(t, 1);
 
-            // Value projection
+            // Value projection: v_t = x_t @ W_v   ([batch, recDim])
             var v_t = Engine.TensorMatMul(x_t, _valueProjectionWeights);
 
-            // Compute decay: a_t = r_t * exp(-softplus(c))
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _recurrenceDimension; d++)
-                {
-                    double cVal = NumOps.ToDouble(_decayParam[d]);
-                    // Numerically stable softplus: for large x, softplus(x) ≈ x
-                    double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
-                    double baseDecay = Math.Exp(-softplusC);
-                    double rVal = NumOps.ToDouble(r_t[new[] { bi, d }]);
-                    double a = rVal * baseDecay;
+            // Decay: a_t = r_t * baseDecay (broadcast [batch, recDim] × [recDim])
+            var a_t = Engine.TensorBroadcastMultiply(r_t, baseDecay);
 
-                    // Magnitude-preserving: sqrt(1 - a^2)
-                    double sqrtFactor = Math.Sqrt(Math.Max(0, 1.0 - a * a));
+            // Magnitude-preserving factor: sqrtFactor = sqrt(max(0, 1 - a²))
+            // Build via element-wise tensor ops:
+            //   neg_a_squared = -1 × a²
+            //   one_minus = neg_a_squared + 1
+            //   clamped = ReLU(one_minus)   (== max(0, .))
+            //   sqrtFactor = sqrt(clamped)
+            var aSquared = Engine.TensorSquare(a_t);
+            var negASquared = Engine.TensorMultiplyScalar(aSquared, negOne);
+            var oneMinusASquared = Engine.TensorAddScalar(negASquared, one);
+            var clamped = Engine.TensorReLU(oneMinusASquared);
+            var sqrtFactor = Engine.TensorSqrt(clamped);
 
-                    double iVal = NumOps.ToDouble(i_t[new[] { bi, d }]);
-                    double vVal = NumOps.ToDouble(v_t[new[] { bi, d }]);
-                    double hPrev = NumOps.ToDouble(h[new[] { bi, d }]);
+            // h_t = a_t · h_{t-1} + sqrtFactor · (i_t · v_t)
+            var iv = Engine.TensorMultiply(i_t, v_t);
+            var weighted = Engine.TensorMultiply(sqrtFactor, iv);
+            var aHPrev = Engine.TensorMultiply(a_t, h);
+            var hNext = Engine.TensorAdd(aHPrev, weighted);
 
-                    // h_t = a * h_{t-1} + sqrt(1 - a^2) * (i * v)
-                    double hNew = a * hPrev + sqrtFactor * (iVal * vVal);
-                    h[new[] { bi, d }] = NumOps.FromDouble(hNew);
-                    allDecay[new[] { bi, t, d }] = NumOps.FromDouble(a);
-                }
-            }
+            // Update h in-place for next iteration. h is rented from the
+            // allocator and we want to keep using the same buffer; bulk-copy
+            // hNext's full storage into h via Engine.TensorCopy rather than
+            // reassigning the local (which would drop the rented reference).
+            // The previous element-wise write loop allocated 2 fresh int[]
+            // index arrays per (batch, recurrenceDim) pair — at seqLen=1024,
+            // batchSize=16, recurrenceDim=256 that's ~8 million per-call
+            // allocations and erodes the SIMD gains from the gate/output
+            // computation above. Engine.TensorCopy dispatches to the
+            // SIMD-aware bulk path used by ConvLSTMLayer / Bidirectional
+            // and friends.
+            Engine.TensorCopy(hNext, h);
 
+            allDecay.SetSlice(1, t, a_t);
             allHidden.SetSlice(1, t + 1, h);
             output.SetSlice(1, t, h);
         }

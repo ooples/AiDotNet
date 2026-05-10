@@ -380,27 +380,28 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
     }
 
     /// <summary>
-    /// Trains the discriminator on a batch of images.
+    /// Trains the discriminator on a batch of images. Delegates to the
+    /// discriminator's tape-backed <c>Train</c> path so the optimizer
+    /// actually sees a real backward pass — the previous implementation
+    /// computed <c>outputGradients</c> but never propagated them, leaving
+    /// <see cref="NeuralNetworkBase{T}.GetParameterGradients"/> at
+    /// initialization-time zeros and silently no-opping every
+    /// <see cref="UpdateDiscriminatorWithOptimizer"/> call (#1224 Cluster
+    /// F: ConditionalGAN.Training_ShouldChangeParameters and
+    /// GradientFlow_ShouldBeNonZeroAndFinite both reported "no parameters
+    /// changed after training" because the discriminator weights never
+    /// moved). Loss is recomputed post-update for monitoring.
     /// </summary>
     private T TrainDiscriminatorOnBatch(Tensor<T> images, Tensor<T> labels)
     {
-        Discriminator.SetTrainingMode(true);
+        var trainableDisc = (NeuralNetworkBase<T>)Discriminator;
+        trainableDisc.Train(images, labels);
 
-        // Forward pass (handles batch -> per-sample for 1D networks)
+        // Recompute loss after the update for the returned monitoring
+        // value. The previous loss (from before the update) would also
+        // work, but post-update reflects the actual training-step delta.
         var predictions = PredictBatched(Discriminator, images);
-
-        // Calculate loss
-        var loss = CalculateBinaryLoss(predictions, labels);
-
-        // Calculate gradients
-        var outputGradients = CalculateBinaryGradients(predictions, labels);
-
-        // Backpropagate (handles batch -> per-sample for 1D networks)
-
-        // Update parameters using base class method
-        UpdateDiscriminatorWithOptimizer();
-
-        return loss;
+        return CalculateBinaryLoss(predictions, labels);
     }
 
     /// <summary>
@@ -829,8 +830,15 @@ public class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             }
         }
 
-        // Use input as noise and call TrainStep
-        TrainStep(expectedOutput, conditions, input);
+        // Use input as noise and call TrainStep. Surface the generator
+        // loss as LastLoss so the LossStrictlyDecreasesOnMemorizationTask
+        // invariant has a real per-step value to compare (the previous
+        // implementation discarded the TrainStep return tuple, leaving
+        // LastLoss at NumOps.Zero across every Train call and producing
+        // the misleading "step 1=0.000000, step N=0.000000" failure
+        // signature on #1224 Cluster F).
+        var (_, generatorLoss) = TrainStep(expectedOutput, conditions, input);
+        LastLoss = generatorLoss;
     }
 
     /// <inheritdoc/>

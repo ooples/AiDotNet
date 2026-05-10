@@ -115,7 +115,12 @@ public class AdvancedAlgebraNetworkTests
         // Assert
         Assert.NotNull(metadata);
         Assert.Equal("OctonionNeuralNetwork", metadata.AdditionalInfo["NetworkType"]);
-        Assert.True((int)metadata.AdditionalInfo["ParameterCount"] > 0);
+        // GetParameterCount returns long (foundation-scale models exceed
+        // int.MaxValue); CLR boxed-cast rules require an exact type match
+        // on unbox, so an (int) cast on a boxed long throws
+        // InvalidCastException. The assertion's intent (parameter count
+        // is positive) is unchanged.
+        Assert.True((long)metadata.AdditionalInfo["ParameterCount"] > 0);
     }
 
     [Fact(Timeout = 120000)]

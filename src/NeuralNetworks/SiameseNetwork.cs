@@ -175,6 +175,21 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         ContrastiveMargin = NumOps.FromDouble(1.0);
         _lastContrastiveLoss = NumOps.Zero;
         _cachedEmbeddingPairs = new List<(Vector<T>, Vector<T>, T)>();
+
+        // Wire the subnetwork's layers and the output layer into
+        // NeuralNetworkBase.Layers so the base class's parameter walks
+        // (CollectParameters, GetParameterChunks, GetParameters,
+        // SetParameters, ParameterCount) see the trainable surface.
+        // NeuralNetworkBase's ctor doesn't auto-call InitializeLayers
+        // (callers manage their own init order — FFNN/CNN call it from
+        // their own ctors), so without this explicit call Siamese.Layers
+        // stayed empty after construction. CollectParameters then yielded
+        // zero params, the Adam step had nothing to update, and every
+        // training-path invariant test reported "no parameters changed
+        // after training" — the #1224 Cluster D failure mode.
+        // Has to run AFTER _subnetwork and _outputLayer are assigned
+        // because InitializeLayers reads them.
+        InitializeLayers();
     }
 
     /// <summary>

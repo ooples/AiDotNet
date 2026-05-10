@@ -228,8 +228,11 @@ public static class CompiledTapeTrainingStep<T>
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
 
         if (!TensorCodecOptions.Current.EnableCompilation) return false;
-        // Fused optimizer kernels are float-only on the Tensors side.
-        if (typeof(T) != typeof(float)) return false;
+        // Fused optimizer kernels support float and double on the Tensors
+        // side (PR #319 / FusedOptimizer.{SGD,Adam,AdamW}UpdateSimd double
+        // overloads + CompiledTrainingPlan.ConfigureOptimizerDouble). Other
+        // numeric types still fall through to the eager autograd path.
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double)) return false;
         // Only SGD, Adam, AdamW are wired through ConfigureOptimizer.
         if (optimizerType is not (AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam

@@ -52,8 +52,25 @@ public class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
     /// <summary>Converts text to normalized character embeddings (char/128.0). Uses character-level encoding as the default; model-specific tokenization applies when corresponding weights are loaded.</summary>
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultProprietaryTTSLayers(_options.HiddenDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultProprietaryTTSLayers(_options.HiddenDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize)); }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Force eval mode so Dropout (DropoutRate=0.1 default) doesn't fire
+        // fresh randomness on every Predict call — required for the
+        // SpeakerConsistency invariant. PyTorch / TF idiom: inference disables
+        // training-mode randomization regardless of caller's prior state.
+        bool prev = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+        finally { SetTrainingMode(prev); }
+    }
     public override void Train(Tensor<T> input, Tensor<T> expected) { ThrowIfDisposed(); if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { ThrowIfDisposed(); if (IsOnnxMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "WellSaidLabs-Native" : "WellSaidLabs-ONNX", Description = "WellSaid Labs Neural TTS", FeatureCount = _options.HiddenDim }; }

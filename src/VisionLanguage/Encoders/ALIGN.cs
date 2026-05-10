@@ -73,7 +73,6 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
-    private int _visionLayerEnd;
 
     /// <summary>
     /// Creates an ALIGN model in ONNX inference mode.
@@ -82,6 +81,7 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         : base(architecture)
     {
         _options = options ?? new ALIGNOptions();
+        SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -114,6 +114,7 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         : base(architecture)
     {
         _options = options ?? new ALIGNOptions();
+        SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
@@ -187,23 +188,27 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
+            // Caller-supplied layer graph: keep historic single-list behaviour.
             Layers.AddRange(Architecture.Layers);
-            _visionLayerEnd = Layers.Count / 2;
+            return;
         }
-        else
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultALIGNLayers(
+
+        // ALIGN vision uses EfficientNet-B7 MBConv blocks (no patch embedding —
+        // EfficientNet processes [B, C, H, W] natively). Block size: 4 layers
+        // (or 5 with dropout): Dense + LN + Dense + LN + [Dropout]. Vision
+        // encoder lives in Layers, text encoder in TextEncoderLayers.
+        int visionBlockSize = _options.DropoutRate > 0 ? 5 : 4;
+        int visionLayerCount = 2 + _options.NumVisionLayers * visionBlockSize;
+        SplitDualStreamLayers(
+            LayerHelper<T>.CreateDefaultALIGNLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
                 textEmbeddingDim: _options.TextEmbeddingDim,
                 projectionDim: _options.ProjectionDim,
                 numVisionLayers: _options.NumVisionLayers,
                 numTextLayers: _options.NumTextLayers,
                 numTextHeads: _options.NumTextHeads,
-                dropoutRate: _options.DropoutRate));
-            // ALIGN vision uses MBConv blocks: Dense+LN+Dense+LN+[Dropout] per layer (no MHA)
-            int visionLpb = _options.DropoutRate > 0 ? 5 : 4;
-            _visionLayerEnd = 2 + _options.NumVisionLayers * visionLpb;
-        }
+                dropoutRate: _options.DropoutRate),
+            visionLayerCount);
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
@@ -211,7 +216,8 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxImageEncoder is not null)
             return OnnxImageEncoder.Run(input);
-        var current = input;
+        SetTrainingMode(false);
+        var current = PreprocessImage(input);
         foreach (var layer in Layers)
             current = layer.Forward(current);
         return current;
@@ -223,13 +229,17 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(PreprocessImage(input), expected);
         }
         finally
         {
             SetTrainingMode(false);
         }
     }
+
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateTextEncoderTrainableLayers();
 
     public override void UpdateParameters(Vector<T> parameters)
     {
@@ -313,19 +323,30 @@ public class ALIGN<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMo
         return tokens;
     }
 
+    /// <summary>
+    /// Aligns <c>_options.ImageSize</c> with <c>Architecture.InputHeight</c> when
+    /// the architecture declares an explicit square spatial extent.
+    /// </summary>
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+    }
+
     private Tensor<T> ForwardVisionEncoder(Tensor<T> input)
     {
         var current = input;
-        for (int i = 0; i < _visionLayerEnd; i++)
-            current = Layers[i].Forward(current);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
         return current;
     }
 
     private Tensor<T> ForwardTextEncoder(Tensor<T> tokens)
     {
         var current = tokens;
-        for (int i = _visionLayerEnd; i < Layers.Count; i++)
-            current = Layers[i].Forward(current);
+        foreach (var layer in TextEncoderLayers)
+            current = layer.Forward(current);
         return current;
     }
 

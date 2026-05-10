@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -92,7 +93,6 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
-    private int _visionLayerEnd;
 
     #endregion
 
@@ -108,6 +108,7 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
         : base(architecture)
     {
         _options = options ?? new OpenCLIPOptions();
+        SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -143,6 +144,7 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
         : base(architecture)
     {
         _options = options ?? new OpenCLIPOptions();
+        SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
@@ -252,14 +254,35 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _visionLayerEnd = Layers.Count / 2;
-        }
-        else
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultOpenCLIPLayers(
+
+        // ViT patch embedding (Dosovitskiy et al. 2021 §3.1) + dual-stream split.
+        // Vision encoder lives in Layers, text encoder lives in TextEncoderLayers
+        // — mirrors PyTorch / HuggingFace CLIPModel where vision_model and
+        // text_model are separate nn.Modules instead of one concatenated list.
+        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        Layers.Add(new PatchEmbeddingLayer<T>(
+            patchSize: patchSize,
+            embeddingDim: _options.VisionEmbeddingDim,
+            expectedInputChannels: 3));
+
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        int visionLayerCount = 2 + _options.NumVisionLayers * blockSize;
+
+        // Honour caller-supplied Architecture.Layers via the same
+        // SplitDualStreamLayers split as the default factory produces.
+        // The previous "AddRange + return" branch dropped the entire
+        // text stack on the floor — TextEncoderLayers stayed empty and
+        // EncodeText silently degenerated to walking nothing. Splitting
+        // the supplied list at visionLayerCount keeps the dual-stream
+        // contract: callers must hand us layers in
+        // [vision-pre-norm, N×vision-block, vision-projection,
+        //  text-pre-norm, N×text-block, text-projection] order,
+        // matching the CreateDefaultOpenCLIPLayers convention. Mismatched
+        // counts surface as the assertion inside SplitDualStreamLayers
+        // (see VisionLanguageModelBase) instead of silent breakage.
+        IEnumerable<ILayer<T>> graph = Architecture.Layers is not null && Architecture.Layers.Count > 0
+            ? Architecture.Layers
+            : LayerHelper<T>.CreateDefaultOpenCLIPLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
                 textEmbeddingDim: _options.TextEmbeddingDim,
                 projectionDim: _options.ProjectionDim,
@@ -267,10 +290,8 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
                 numTextLayers: _options.NumTextLayers,
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
-                dropoutRate: _options.DropoutRate));
-            int lpb = _options.DropoutRate > 0 ? 6 : 5;
-            _visionLayerEnd = 2 + _options.NumVisionLayers * lpb;
-        }
+                dropoutRate: _options.DropoutRate);
+        SplitDualStreamLayers(graph, visionLayerCount);
     }
 
     /// <inheritdoc />
@@ -280,7 +301,8 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
         if (IsOnnxMode && OnnxImageEncoder is not null)
             return OnnxImageEncoder.Run(input);
 
-        var current = input;
+        SetTrainingMode(false);
+        var current = PreprocessImage(input);
         foreach (var layer in Layers)
             current = layer.Forward(current);
         return current;
@@ -293,7 +315,7 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(PreprocessImage(input), expected);
         }
         finally
         {
@@ -302,11 +324,27 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     }
 
     /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateTextEncoderTrainableLayers();
+
+    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
         int idx = 0;
         foreach (var layer in Layers)
+        {
+            int count = checked((int)layer.ParameterCount);
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        // Sync the text-encoder stream too — GetExtraTrainableLayers
+        // (above) surfaces TextEncoderLayers to the base weight-registry
+        // walker, which means ParameterCount / GetParameters include the
+        // text-stream slice. Writing back only into Layers would leave
+        // the text encoder on stale weights and the streams would
+        // de-sync.
+        foreach (var layer in TextEncoderLayers)
         {
             int count = checked((int)layer.ParameterCount);
             layer.UpdateParameters(parameters.Slice(idx, count));
@@ -399,6 +437,20 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
 
     #region Private Helpers
 
+    /// <summary>
+    /// Aligns <c>_options.ImageSize</c> with <c>Architecture.InputHeight</c> when
+    /// the architecture declares an explicit square spatial extent. Same
+    /// rationale as DFNCLIP / BiomedCLIP — a CI-fast architecture at smaller
+    /// resolution must drive imageSize down so PatchEmbeddingLayer's grid
+    /// matches the runtime input.
+    /// </summary>
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+    }
+
     private Tensor<T> TokenizeText(string text)
     {
         if (_tokenizer is null)
@@ -415,16 +467,16 @@ public class OpenCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguag
     private Tensor<T> ForwardTextEncoder(Tensor<T> tokens)
     {
         var current = tokens;
-        for (int i = _visionLayerEnd; i < Layers.Count; i++)
-            current = Layers[i].Forward(current);
+        foreach (var layer in TextEncoderLayers)
+            current = layer.Forward(current);
         return current;
     }
 
     private Tensor<T> Forward(Tensor<T> input)
     {
         var current = input;
-        for (int i = 0; i < _visionLayerEnd; i++)
-            current = Layers[i].Forward(current);
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
         return current;
     }
 

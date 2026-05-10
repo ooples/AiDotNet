@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -33,17 +34,10 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create an InstructBLIP model for instruction-tuned visual Q&amp;A
-/// // with instruction-aware Q-Former and zero-shot generalization
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new InstructBLIP&lt;double&gt;(architecture, "instructblip.onnx");
-///
-/// // Training mode with native layers
 /// var trainModel = new InstructBLIP&lt;double&gt;(architecture, new InstructBLIPOptions());
 /// </code>
 /// </example>
@@ -58,15 +52,60 @@ namespace AiDotNet.VisionLanguage.Generative;
 [ResearchPaper("InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning", "https://arxiv.org/abs/2305.06500", Year = 2023, Authors = "Dai et al.")]
 public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLanguageModel<T>
 {
-    private readonly InstructBLIPOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly InstructBLIPOptions _options;
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
-    private int _visionLayerEnd; private int _qFormerLayerEnd;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
-    public InstructBLIP(NeuralNetworkArchitecture<T> architecture, string modelPath, InstructBLIPOptions? options = null) : base(architecture) { _options = options ?? new InstructBLIPOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public InstructBLIP(NeuralNetworkArchitecture<T> architecture, InstructBLIPOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new InstructBLIPOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    private readonly List<ILayer<T>> _qFormerLayers = new List<ILayer<T>>();
+    private readonly List<ILayer<T>> _decoderLayers = new List<ILayer<T>>();
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim;
+    public InstructBLIP(NeuralNetworkArchitecture<T> architecture, string modelPath, InstructBLIPOptions? options = null) : base(architecture)
+    {
+        _options = options ?? new InstructBLIPOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public InstructBLIP(NeuralNetworkArchitecture<T> architecture, InstructBLIPOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new InstructBLIPOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
 
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
@@ -74,7 +113,7 @@ public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
         var c = p;
-        for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+        foreach (var l in Layers) c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -97,29 +136,24 @@ public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
 
         // Step 1: Frozen ViT vision encoder
         var visionOut = p;
-        for (int i = 0; i < _visionLayerEnd; i++)
-            visionOut = Layers[i].Forward(visionOut);
+        foreach (var l in Layers) visionOut = l.Forward(visionOut);
 
         // Step 2: Instruction-aware Q-Former
         var qFormerOut = visionOut;
-        for (int i = _visionLayerEnd; i < _qFormerLayerEnd; i++)
-            qFormerOut = Layers[i].Forward(qFormerOut);
+        foreach (var l in _qFormerLayers) qFormerOut = l.Forward(qFormerOut);
 
         // Step 3: Tokenize instruction for dual routing
         Tensor<T>? promptTokens = null;
-        if (prompt is not null)
-            promptTokens = TokenizeText(prompt);
+        if (prompt is not null) promptTokens = TokenizeText(prompt);
 
         // Step 4: Concatenate Q-Former output with instruction tokens for LLM input
         // InstructBLIP routes instruction to both Q-Former and LLM decoder
         var decoderInput = qFormerOut;
-        if (promptTokens is not null)
-            decoderInput = qFormerOut.ConcatenateTensors(promptTokens);
+        if (promptTokens is not null) decoderInput = qFormerOut.ConcatenateTensors(promptTokens);
 
         // Step 5: LLM decoder generates text conditioned on visual + instruction
         var output = decoderInput;
-        for (int i = _qFormerLayerEnd; i < Layers.Count; i++)
-            output = Layers[i].Forward(output);
+        foreach (var l in _decoderLayers) output = l.Forward(output);
 
         return output;
     }
@@ -127,34 +161,156 @@ public class InstructBLIP<T> : VisionLanguageModelBase<T>, IGenerativeVisionLang
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _visionLayerEnd = Layers.Count / 3; _qFormerLayerEnd = Layers.Count * 2 / 3; }
-        else
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultQFormerGenerativeLayers(_options.VisionDim, _options.QFormerDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumQFormerLayers, _options.NumDecoderLayers, _options.NumQueryTokens, _options.NumHeads, _options.NumQFormerHeads, _options.DropoutRate));
-            ComputeQFormerBoundaries();
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        int qfBlockSize = _options.DropoutRate > 0 ? 8 : 7;
+        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
+        int qfProj = _options.VisionDim != _options.QFormerDim ? 1 : 0;
+        int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize;
+
+        var allLayers = LayerHelper<T>.CreateDefaultQFormerGenerativeLayers(
+            _options.VisionDim, _options.QFormerDim, _options.DecoderDim,
+            _options.NumVisionLayers, _options.NumQFormerLayers, _options.NumDecoderLayers,
+            _options.NumQueryTokens, _options.NumHeads, _options.NumQFormerHeads,
+            _options.DropoutRate);
+
+        int idx = 0;
+        foreach (var layer in allLayers)
+        {
+            if (idx < visionLayerEnd) Layers.Add(layer);
+            else if (idx < qFormerLayerEnd) _qFormerLayers.Add(layer);
+            else _decoderLayers.Add(layer);
+            idx++;
+        }
+
+        RegisterAuxiliaryEncoderStream(_qFormerLayers);
+        RegisterAuxiliaryEncoderStream(_decoderLayers);
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = PreprocessImage(input);
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try { TrainWithTape(PreprocessImage(input), expected); }
+        finally { SetTrainingMode(false); }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        // Sync the auxiliary streams (Q-Former / perceiver / decoder /
+        // regression head, depending on model) — see OpenFlamingo.UpdateParameters
+        // for full rationale (dual-stream split, GetExtraTrainableLayers
+        // widens the flat parameter vector to include them, so a writeback
+        // that only walks Layers leaves auxiliary streams on stale weights
+        // and the model state silently de-syncs across streams).
+        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
+        {
+            if (l is null) continue;
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
         }
     }
 
-    private void ComputeQFormerBoundaries()
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateAuxiliaryStreamTrainableLayers();
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
+
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _visionLayerEnd = 1 + _options.NumVisionLayers * lpb;
-        int qFormerProjection = _options.VisionDim != _options.QFormerDim ? 1 : 0;
-        int qfLpb = _options.DropoutRate > 0 ? 8 : 7; // cross-attn + LN + self-attn + LN + Dense + Dense + LN [+ Dropout]
-        _qFormerLayerEnd = _visionLayerEnd + qFormerProjection + _options.NumQFormerLayers * qfLpb;
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "InstructBLIP-Native" : "InstructBLIP-ONNX",
+            Description = "InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning (Dai et al., NeurIPS 2023)",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumQFormerLayers + _options.NumDecoderLayers
+        };
+        m.AdditionalInfo["Architecture"] = "InstructBLIP";
+        m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString();
+        return m;
     }
 
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.QFormerDim);
+        writer.Write(_options.DecoderDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumQFormerLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumHeads);
+    }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
-    protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "InstructBLIP-Native" : "InstructBLIP-ONNX", Description = "InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning (Dai et al., NeurIPS 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumQFormerLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "InstructBLIP"; m.AdditionalInfo["GenerativeType"] = _options.ArchitectureType.ToString(); return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.QFormerDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumQFormerLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.QFormerDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumQFormerLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new InstructBLIP<T>(Architecture, mp, _options); return new InstructBLIP<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(InstructBLIP<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.QFormerDim = reader.ReadInt32();
+        _options.DecoderDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumQFormerLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new InstructBLIP<T>(Architecture, mp, _options);
+        return new InstructBLIP<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(InstructBLIP<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) { OnnxModel?.Dispose(); }
+        base.Dispose(disposing);
+    }
 }

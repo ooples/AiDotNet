@@ -3543,15 +3543,26 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             ReturnPooledParameters();
 
             // Unregister all persistent tensors (parameters + buffers) from the engine
-            // This releases GPU memory that was cached for these tensors
+            // This releases GPU memory that was cached for these tensors.
+            //
+            // Skip SparseTensor<T> entries: Engine.UnregisterPersistentTensor calls
+            // tensor.Contiguous() to canonicalize layout before evicting the engine
+            // cache, but Contiguous() throws on sparse tensors (the CSR/CSC backing
+            // store has no contiguous dense view by definition). Sparse-weight
+            // layers (SparseLinearLayer, etc.) hold a SparseTensor<T> as a
+            // _registeredTensors entry; skipping them here lets dispose complete
+            // cleanly. The sparse tensor's own Dispose finalizer releases the
+            // underlying CSR/CSC arrays.
             foreach (var tensor in _registeredTensors)
             {
+                if (IsSparseTensor(tensor)) continue;
                 Engine.UnregisterPersistentTensor(tensor);
             }
             _registeredTensors.Clear();
 
             foreach (var (_, tensor) in _registeredBuffers)
             {
+                if (IsSparseTensor(tensor)) continue;
                 Engine.UnregisterPersistentTensor(tensor);
             }
             _registeredBuffers.Clear();
@@ -3559,6 +3570,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
 
         _disposed = true;
     }
+
+    /// <summary>
+    /// Returns true when <paramref name="tensor"/> is a sparse-storage tensor
+    /// (CSR/CSC). The base <c>Engine.UnregisterPersistentTensor</c> path calls
+    /// <c>Contiguous()</c>, which sparse tensors don't support — sparse layers
+    /// must skip the engine-side unregister and rely on the sparse tensor's
+    /// own finalizer to release CSR/CSC arrays. Detected via type name to
+    /// avoid a hard reference to a Tensors-side concrete type that may move
+    /// between major versions.
+    /// </summary>
+    private static bool IsSparseTensor(Tensor<T> tensor)
+        => tensor is not null && tensor.GetType().Name.StartsWith("SparseTensor", System.StringComparison.Ordinal);
 
     /// <summary>
     /// Hook called by <see cref="Dispose(bool)"/> to return rented parameter

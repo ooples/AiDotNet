@@ -331,6 +331,27 @@ public class EfficientNetNetwork<T> : NeuralNetworkBase<T>
         }
     }
 
+    /// <summary>
+    /// EfficientNet's stem-and-blocks pipeline expects rank-4 [B, C, H, W]
+    /// per Tan &amp; Le 2019 §3 — same constraint as
+    /// <see cref="Train"/>'s EnsureBatchForCnnTraining promotion. The
+    /// base <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/>
+    /// walks Layers without promotion, so a single-sample rank-3
+    /// [C, H, W] input (the model-family test base's default for vision
+    /// models) hit the SE block's broadcast multiply with mismatched
+    /// rank-3 shapes — InvertedResidualBlock's SE branch global-pools
+    /// to [B, C, 1, 1] and broadcasts back against [B, C, H, W];
+    /// without batch promotion the rank-3 input collapsed into
+    /// [1280, 2, 2] vs an SE output of [1, 1280, 1] which can't
+    /// broadcast (#1224 Cluster F). Promote rank-3 → rank-4 so the
+    /// pipeline sees the canonical NCHW shape it was built for.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var promoted = input.Rank == 3 ? PromoteToBatchedTensor(input) : input;
+        return base.GetNamedLayerActivations(promoted);
+    }
+
     /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {

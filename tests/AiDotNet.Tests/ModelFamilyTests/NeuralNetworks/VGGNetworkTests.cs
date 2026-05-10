@@ -24,6 +24,18 @@ public class VGGNetworkTests : NeuralNetworkModelTestBase
     protected override int[] InputShape => [1, 3, 32, 32];
     protected override int[] OutputShape => [10];
 
+    // VGG11-CIFAR is small in parameter count compared to VGG16, but still
+    // ~9 M params with two 4096-wide FC layers. Each Predict on 32 × 32 × 3
+    // input takes ~250 ms on consumer hardware. MoreData_ShouldNotDegrade at
+    // the 50 / 200 default = 250 iter × 250 ms ≈ 63 s per network × 2 ≈
+    // 125 s — overflows the 120 s xUnit per-test timeout. Apply the same
+    // paper-scale iteration override the Forecasting Foundation models
+    // and CLIP-family / VoxelCNN use; keeps the "long ≥ short shouldn't
+    // degrade" invariant exercised.
+    protected override int MoreDataShortIterations => 1;
+    protected override int MoreDataLongIterations => 2;
+    protected override double MoreDataTolerance => 0.5;
+
     protected override INeuralNetworkModel<double> CreateNetwork()
     {
         var arch = new NeuralNetworkArchitecture<double>(

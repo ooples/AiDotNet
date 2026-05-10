@@ -810,13 +810,53 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
         // InfoGAN doesn't use layers directly
     }
 
+    /// <summary>
+    /// Surfaces named activations from each sub-network so introspection
+    /// invariants (NamedLayerActivations_ShouldBeNonEmpty) see real
+    /// per-network state. The base implementation walks
+    /// <see cref="Layers"/>, but InfoGAN keeps its layers in three
+    /// sub-networks and leaves Layers empty — so the inherited path
+    /// returned an empty dictionary on every call (#1224 Cluster F).
+    /// Per Chen et al. 2016 §3 the Q-network shares its early layers
+    /// with the discriminator on a real implementation; here we surface
+    /// all three independently so callers see the architectural surface
+    /// even when share-layers wasn't configured.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var prepared = AppendCodesIfNoiseOnly(input);
+        var result = new Dictionary<string, Tensor<T>>();
+        foreach (var kv in Generator.GetNamedLayerActivations(prepared))
+            result["Generator/" + kv.Key] = kv.Value;
+        // Use the generated image as input to the discriminator + Q-network
+        // for the named-activation surface (mirrors what TrainStep does).
+        var fakeImage = Generator.Predict(prepared);
+        foreach (var kv in Discriminator.GetNamedLayerActivations(fakeImage))
+            result["Discriminator/" + kv.Key] = kv.Value;
+        foreach (var kv in QNetwork.GetNamedLayerActivations(fakeImage))
+            result["QNetwork/" + kv.Key] = kv.Value;
+        return result;
+    }
+
     public override Tensor<T> Predict(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        return Generator.Predict(input);
+        // Mirror Train's noise-only contract (Chen et al. 2016 §3 — public
+        // Train(noise, realImages) treats `input` as raw z and concatenates
+        // a code tensor internally before generator.Predict). If the input
+        // already includes the latent-code dimensions, pass it straight
+        // through; otherwise append default-zero codes so callers can
+        // probe the generator with noise-only inputs (the natural cGAN /
+        // InfoGAN public API). Without this, NN test invariants fed
+        // <c>InputShape</c>-sized noise tensors and got
+        // "Expected shape [noise+codes], but got [noise]" mismatches
+        // because the test base uses one shape for both Train and Predict
+        // (#1224 Cluster F).
+        var prepared = AppendCodesIfNoiseOnly(input);
+        return Generator.Predict(prepared);
     }
 
     /// <summary>
@@ -833,7 +873,42 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
-        return Generator.ForwardForTraining(input);
+        return Generator.ForwardForTraining(AppendCodesIfNoiseOnly(input));
+    }
+
+    /// <summary>
+    /// Appends a default-zero latent-code block to the input when the
+    /// input is shaped as raw noise (last dim = generator.InputSize -
+    /// latentCodeSize). Inputs already shaped with codes pass through
+    /// unchanged. Keeps the public Predict / ForwardForTraining contract
+    /// noise-only consistent with Train.
+    /// </summary>
+    private Tensor<T> AppendCodesIfNoiseOnly(Tensor<T> input)
+    {
+        int genInputSize = Generator.Architecture.InputSize;
+        int noiseOnlySize = genInputSize - _latentCodeSize;
+        if (input.Rank == 0 || input.Shape[input.Rank - 1] != noiseOnlySize)
+            return input;
+
+        // Append zero-codes along the last axis. Treat the input as
+        // [..., noiseDim] and emit [..., noiseDim + latentCodeSize].
+        var newShape = new int[input.Rank];
+        for (int i = 0; i < input.Rank - 1; i++) newShape[i] = input.Shape[i];
+        newShape[input.Rank - 1] = genInputSize;
+        var output = new Tensor<T>(newShape);
+
+        int trailing = input.Shape[input.Rank - 1];
+        int batches = 1;
+        for (int i = 0; i < input.Rank - 1; i++) batches *= input.Shape[i];
+        for (int b = 0; b < batches; b++)
+        {
+            int srcBase = b * trailing;
+            int dstBase = b * genInputSize;
+            for (int i = 0; i < trailing; i++)
+                output.Data.Span[dstBase + i] = input.Data.Span[srcBase + i];
+            // Latent-code slots are already zero from Tensor's default ctor.
+        }
+        return output;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -974,6 +1049,36 @@ public class InfoGAN<T> : NeuralNetworkBase<T>
             qNetworkOptimizer: null,
             _lossFunction,
             NumOps.ToDouble(_mutualInfoCoefficient));
+    }
+
+    /// <summary>
+    /// Returns the concatenated trainable parameters from Generator,
+    /// Discriminator, and QNetwork. The base
+    /// <see cref="NeuralNetworkBase{T}.GetParameters"/> walks
+    /// <see cref="Layers"/>, but InfoGAN keeps its trainable surface in
+    /// three sub-networks and leaves Layers empty — so the inherited
+    /// path returned a length-0 vector and broke
+    /// ParameterCount_ShouldBeSubstantial / Training_ShouldChangeParameters
+    /// / GradientFlow / Clone_AfterTraining (#1224 Cluster F).
+    /// Mirror <see cref="UpdateParameters(Vector{T})"/>'s ordering so
+    /// flat round-trips stay coherent. (GetParameterChunks already
+    /// streams the same data — see line 208 — but several test
+    /// invariants probe via the flat GetParameters surface specifically.)
+    /// </summary>
+    public override Vector<T> GetParameters()
+    {
+        var genParams = Generator.GetParameters();
+        var discParams = Discriminator.GetParameters();
+        var qParams = QNetwork.GetParameters();
+        int totalLength = genParams.Length + discParams.Length + qParams.Length;
+        var combined = new Vector<T>(totalLength);
+        int offset = 0;
+        for (int i = 0; i < genParams.Length; i++) combined[offset + i] = genParams[i];
+        offset += genParams.Length;
+        for (int i = 0; i < discParams.Length; i++) combined[offset + i] = discParams[i];
+        offset += discParams.Length;
+        for (int i = 0; i < qParams.Length; i++) combined[offset + i] = qParams[i];
+        return combined;
     }
 
     /// <summary>

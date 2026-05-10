@@ -426,10 +426,22 @@ public class KDTree<T>
 
     private T ComputeSquaredDistance(Vector<T> query, int dataIndex)
     {
-        var engine = AiDotNetEngine.Current;
-        var point = GetRow((_data ?? throw new InvalidOperationException("KDTree: Data not initialized.")), dataIndex);
-        var diff = engine.Subtract(query, point);
-        return engine.DotProduct(diff, diff);
+        // Inline sum-of-squares — see ClusteringBase.ComputeDistance for
+        // the rationale (Engine.DotProduct on tiny vectors dispatches to
+        // GPU when AutoDetectAndConfigureGpu has switched backends and
+        // produces wrong values for clustering distance metrics).
+        var data = _data ?? throw new InvalidOperationException("KDTree: Data not initialized.");
+        // Reuse the cached _numOps — re-resolving it through MathHelper inside
+        // this recursive distance hot path adds dictionary-lookup overhead per
+        // call.
+        T sumSq = _numOps.Zero;
+        int d = query.Length;
+        for (int j = 0; j < d; j++)
+        {
+            T diffJ = _numOps.Subtract(query[j], data[dataIndex, j]);
+            sumSq = _numOps.Add(sumSq, _numOps.Multiply(diffJ, diffJ));
+        }
+        return sumSq;
     }
 
     private Vector<T> GetRow(Matrix<T> matrix, int rowIndex)

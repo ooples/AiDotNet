@@ -483,13 +483,36 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     {
         _tapeStep++;
 
-        T beta1 = NumOps.FromDouble(_options.Beta1);
-        T beta2 = NumOps.FromDouble(_options.Beta2);
-        T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
-        T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
-        T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
-        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
+        double b1 = _options.Beta1;
+        double b2 = _options.Beta2;
+        double oneMinusB1 = 1.0 - b1;
+        double oneMinusB2 = 1.0 - b2;
+        double eps = _options.Epsilon;
+        double bc1 = 1.0 - Math.Pow(b1, _tapeStep);
+        double bc2 = 1.0 - Math.Pow(b2, _tapeStep);
+        double lr = NumOps.ToDouble(CurrentLearningRate);
+
+        // Fast-path detection — for T=double / T=float we can apply the
+        // entire Adam update as a single tight loop over the raw underlying
+        // arrays, no per-step tensor allocations. The previous engine-op
+        // chain allocated 15+ intermediate tensors per parameter group per
+        // step; on Hawk-class models that meant ~165 allocations per Adam
+        // step and dominated training cost (PerfView profile of Hawk train
+        // step at #1224 showed AdamOptimizer.Step at 56% of train wall-time).
+        // The slow generic-T path is preserved verbatim below for any T
+        // that isn't double or float.
+        bool isDouble = typeof(T) == typeof(double);
+        bool isFloat = typeof(T) == typeof(float);
+
+        // Pre-cast bias-correction / lr / eps / beta as T once (used by both
+        // paths but only constructed here).
+        T epsilon = NumOps.FromDouble(eps);
+        T biasCorrection1 = NumOps.FromDouble(bc1);
+        T biasCorrection2 = NumOps.FromDouble(bc2);
+        T beta1 = NumOps.FromDouble(b1);
+        T beta2 = NumOps.FromDouble(b2);
+        T oneMinusBeta1 = NumOps.FromDouble(oneMinusB1);
+        T oneMinusBeta2 = NumOps.FromDouble(oneMinusB2);
 
         foreach (var param in context.Parameters)
         {
@@ -523,33 +546,172 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 grad = Engine.Reshape(grad, param._shape);
             }
 
-            // m = beta1 * m + (1 - beta1) * grad  (engine-accelerated)
-            var mScaled = Engine.TensorMultiplyScalar(m, beta1);
-            var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1);
-            var mNew = Engine.TensorAdd(mScaled, gradScaled);
-            Engine.TensorCopy(mNew, m);
+            int n = param.Length;
+            // Buffer-aliased parameter views (NeuralNetworkBase wires every
+            // trainable layer's weight tensor as a slice into a shared
+            // ParameterBuffer<T> at non-zero _storageOffset) cannot use
+            // GetDataArray() — for non-zero-offset tensors that path falls
+            // back to ToArray() and returns a COPY, so an in-place
+            // mutation on the returned array silently throws away every
+            // Adam update and the buffer (the actual single source of
+            // truth) never sees the new weights. Symptom on BiomedCLIP /
+            // DFNCLIP / any model that goes through GetOrCreateParameterBuffer:
+            // train completes with non-zero loss but
+            // GradientFlow_ShouldBeNonZeroAndFinite reports "no parameters
+            // changed" because the post-Train chunk read returns the same
+            // pre-Train values. AsWritableSpan() returns a writable Span
+            // sliced at the correct offset into the live storage; mutations
+            // through it land on the buffer and are visible to subsequent
+            // reads through any view of the same slice.
+            if (isDouble)
+            {
+                // Hybrid fast-path: when the parameter tensor is stored at
+                // offset 0 with full storage length (the common case for
+                // models that don't go through ParameterBuffer<T> aliasing
+                // — every model whose layers own their weight tensors
+                // outright), GetLiveBackingArrayOrNull returns the live
+                // backing array and we run the original raw-array Adam
+                // loop the JIT auto-vectorizes most aggressively. When
+                // the tensor is a non-zero-offset view (CLIP-family vision
+                // encoders go through GetOrCreateParameterBuffer which
+                // hands out per-parameter views as slices into a single
+                // contiguous ParameterBuffer<T> at non-zero offsets), the
+                // fast array path returns null and we fall back to
+                // AsWritableSpan which correctly slices into the buffer
+                // at the right offset. Both paths execute the same
+                // numerics — only the destination of writes differs.
+                double[]? paramArr = (double[]?)(object?)param.GetLiveBackingArrayOrNull();
+                double[]? gradArr = (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
+                double[]? mArr = (double[]?)(object?)m.GetLiveBackingArrayOrNull();
+                double[]? vArr = (double[]?)(object?)v.GetLiveBackingArrayOrNull();
+                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null)
+                {
+                    for (int i = 0; i < n; i++)
+                    {
+                        double g = gradArr[i];
+                        double mNew = b1 * mArr[i] + oneMinusB1 * g;
+                        double vNew = b2 * vArr[i] + oneMinusB2 * g * g;
+                        mArr[i] = mNew;
+                        vArr[i] = vNew;
+                        double mHat = mNew / bc1;
+                        double vHat = vNew / bc2;
+                        paramArr[i] -= lr * mHat / (Math.Sqrt(vHat) + eps);
+                    }
+                }
+                else
+                {
+                    // Buffer-aliased view path. Use ref-T arithmetic via
+                    // MemoryMarshal + Unsafe.Add to avoid Span<T>'s
+                    // per-iteration bounds check while still slicing into
+                    // the real backing storage at the right offset (so
+                    // mutations land on the buffer).
+                    var paramD = (Tensor<double>)(object)param;
+                    var gradD = (Tensor<double>)(object)grad;
+                    var mD = (Tensor<double>)(object)m;
+                    var vD = (Tensor<double>)(object)v;
+                    System.Span<double> paramSpan = paramD.AsWritableSpan();
+                    System.ReadOnlySpan<double> gradSpan = gradD.AsSpan();
+                    System.Span<double> mSpan = mD.AsWritableSpan();
+                    System.Span<double> vSpan = vD.AsWritableSpan();
+                    ref double paramR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(paramSpan);
+                    ref double gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
+                    ref double mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
+                    ref double vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
+                    for (int i = 0; i < n; i++)
+                    {
+                        double g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
+                        double mPrev = System.Runtime.CompilerServices.Unsafe.Add(ref mR, i);
+                        double vPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vR, i);
+                        double mNew = b1 * mPrev + oneMinusB1 * g;
+                        double vNew = b2 * vPrev + oneMinusB2 * g * g;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
+                        double mHat = mNew / bc1;
+                        double vHat = vNew / bc2;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
+                            lr * mHat / (Math.Sqrt(vHat) + eps);
+                    }
+                }
+            }
+            else if (isFloat)
+            {
+                float[]? paramArr = (float[]?)(object?)param.GetLiveBackingArrayOrNull();
+                float[]? gradArr = (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
+                float[]? mArr = (float[]?)(object?)m.GetLiveBackingArrayOrNull();
+                float[]? vArr = (float[]?)(object?)v.GetLiveBackingArrayOrNull();
+                float fb1 = (float)b1, fb2 = (float)b2;
+                float f1mb1 = (float)oneMinusB1, f1mb2 = (float)oneMinusB2;
+                float fbc1 = (float)bc1, fbc2 = (float)bc2;
+                float feps = (float)eps, flr = (float)lr;
+                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null)
+                {
+                    for (int i = 0; i < n; i++)
+                    {
+                        float g = gradArr[i];
+                        float mNew = fb1 * mArr[i] + f1mb1 * g;
+                        float vNew = fb2 * vArr[i] + f1mb2 * g * g;
+                        mArr[i] = mNew;
+                        vArr[i] = vNew;
+                        float mHat = mNew / fbc1;
+                        float vHat = vNew / fbc2;
+                        paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                    }
+                }
+                else
+                {
+                    var paramF = (Tensor<float>)(object)param;
+                    var gradF = (Tensor<float>)(object)grad;
+                    var mF = (Tensor<float>)(object)m;
+                    var vF = (Tensor<float>)(object)v;
+                    System.Span<float> paramSpan = paramF.AsWritableSpan();
+                    System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
+                    System.Span<float> mSpan = mF.AsWritableSpan();
+                    System.Span<float> vSpan = vF.AsWritableSpan();
+                    ref float paramR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(paramSpan);
+                    ref float gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
+                    ref float mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
+                    ref float vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
+                    for (int i = 0; i < n; i++)
+                    {
+                        float g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
+                        float mPrev = System.Runtime.CompilerServices.Unsafe.Add(ref mR, i);
+                        float vPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vR, i);
+                        float mNew = fb1 * mPrev + f1mb1 * g;
+                        float vNew = fb2 * vPrev + f1mb2 * g * g;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
+                        float mHat = mNew / fbc1;
+                        float vHat = vNew / fbc2;
+                        System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
+                            flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                    }
+                }
+            }
+            else
+            {
+                // Generic-T fallback (Half / Decimal / etc.) — use the
+                // engine-op chain. Preserves correctness for non-fp T at
+                // the cost of the per-step allocations identified above.
+                var mScaled = Engine.TensorMultiplyScalar(m, beta1);
+                var gradScaled = Engine.TensorMultiplyScalar(grad, oneMinusBeta1);
+                var mNew = Engine.TensorAdd(mScaled, gradScaled);
+                Engine.TensorCopy(mNew, m);
 
-            // v = beta2 * v + (1 - beta2) * grad^2
-            var gradSquared = Engine.TensorMultiply(grad, grad);
-            var vScaled = Engine.TensorMultiplyScalar(v, beta2);
-            var gradSqScaled = Engine.TensorMultiplyScalar(gradSquared, oneMinusBeta2);
-            var vNew = Engine.TensorAdd(vScaled, gradSqScaled);
-            Engine.TensorCopy(vNew, v);
+                var gradSquared = Engine.TensorMultiply(grad, grad);
+                var vScaled = Engine.TensorMultiplyScalar(v, beta2);
+                var gradSqScaled = Engine.TensorMultiplyScalar(gradSquared, oneMinusBeta2);
+                var vNew = Engine.TensorAdd(vScaled, gradSqScaled);
+                Engine.TensorCopy(vNew, v);
 
-            // Bias-corrected estimates
-            var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
-            var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
-
-            // update = mHat / (sqrt(vHat) + epsilon)
-            var vHatSqrt = Engine.TensorSqrt(vHat);
-            var denom = Engine.TensorAddScalar(vHatSqrt, epsilon);
-            var update = Engine.TensorDivide(mHat, denom);
-
-            // param -= lr * update  (in-place on the actual parameter tensor)
-            var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);
-            Engine.TensorSubtractInPlace(param, scaledUpdate);
+                var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
+                var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
+                var vHatSqrt = Engine.TensorSqrt(vHat);
+                var denom = Engine.TensorAddScalar(vHatSqrt, epsilon);
+                var update = Engine.TensorDivide(mHat, denom);
+                var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);
+                Engine.TensorSubtractInPlace(param, scaledUpdate);
+            }
         }
-
     }
 
     /// <para>

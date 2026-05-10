@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -36,17 +37,10 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a MiniGPT-4 model for visual instruction following
-/// // using frozen ViT + Q-Former with Vicuna decoder
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MiniGPT4&lt;double&gt;(architecture, "minigpt4.onnx");
-///
-/// // Training mode with native layers
 /// var trainModel = new MiniGPT4&lt;double&gt;(architecture, new MiniGPT4Options());
 /// </code>
 /// </example>
@@ -60,17 +54,71 @@ namespace AiDotNet.VisionLanguage.InstructionTuned;
 [ResearchPaper("MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models", "https://arxiv.org/abs/2304.10592", Year = 2023, Authors = "Zhu et al.")]
 public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 {
-    private readonly MiniGPT4Options _options; public override ModelOptions GetOptions() => _options;
+    private readonly MiniGPT4Options _options;
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
-    private int _visionLayerEnd; private int _qFormerLayerEnd;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
-    public MiniGPT4(NeuralNetworkArchitecture<T> architecture, string modelPath, MiniGPT4Options? options = null) : base(architecture) { _options = options ?? new MiniGPT4Options(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public MiniGPT4(NeuralNetworkArchitecture<T> architecture, MiniGPT4Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MiniGPT4Options(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    private readonly List<ILayer<T>> _qFormerLayers = new List<ILayer<T>>();
+    private readonly List<ILayer<T>> _decoderLayers = new List<ILayer<T>>();
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName;
+    public MiniGPT4(NeuralNetworkArchitecture<T> architecture, string modelPath, MiniGPT4Options? options = null) : base(architecture)
+    {
+        _options = options ?? new MiniGPT4Options();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
 
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
+    public MiniGPT4(NeuralNetworkArchitecture<T> architecture, MiniGPT4Options? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new MiniGPT4Options();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var p = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
+        var c = p;
+        foreach (var l in Layers) c = l.Forward(c);
+        return L2Normalize(c);
+    }
 
     /// <summary>
     /// Generates text using MiniGPT-4's Q-Former + linear projection architecture.
@@ -91,13 +139,11 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
         // Step 1: Frozen ViT-G/14 vision encoder
         var visionOut = p;
-        for (int i = 0; i < _visionLayerEnd; i++)
-            visionOut = Layers[i].Forward(visionOut);
+        foreach (var l in Layers) visionOut = l.Forward(visionOut);
 
         // Step 2: Q-Former cross-attention layers
         var qFormerOut = visionOut;
-        for (int i = _visionLayerEnd; i < _qFormerLayerEnd; i++)
-            qFormerOut = Layers[i].Forward(qFormerOut);
+        foreach (var l in _qFormerLayers) qFormerOut = l.Forward(qFormerOut);
 
         // Step 3: Fuse Q-Former output with prompt tokens via ConcatenateTensors
         Tensor<T> fusedInput;
@@ -113,8 +159,7 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
 
         // Step 4: Vicuna decoder
         var output = fusedInput;
-        for (int i = _qFormerLayerEnd; i < Layers.Count; i++)
-            output = Layers[i].Forward(output);
+        foreach (var l in _decoderLayers) output = l.Forward(output);
 
         return output;
     }
@@ -132,30 +177,158 @@ public class MiniGPT4<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _visionLayerEnd = Layers.Count / 3; _qFormerLayerEnd = Layers.Count * 2 / 3; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultQFormerGenerativeLayers(_options.VisionDim, _options.QFormerDim, _options.DecoderDim, _options.NumVisionLayers, _options.NumQFormerLayers, _options.NumDecoderLayers, _options.NumQueryTokens, _options.NumHeads, _options.NumQFormerHeads, _options.DropoutRate)); ComputeQFormerBoundaries(); }
+        if (Architecture is TripleStreamArchitecture<T> triple)
+        {
+            Layers.AddRange(triple.VisionLayers);
+            _qFormerLayers.AddRange(triple.AuxiliaryLayers);
+            _decoderLayers.AddRange(triple.TextOrDecoderLayers);
+            RegisterAuxiliaryEncoderStream(_qFormerLayers);
+            RegisterAuxiliaryEncoderStream(_decoderLayers);
+            return;
+        }
+
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        int qfBlockSize = _options.DropoutRate > 0 ? 8 : 7;
+        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize;
+        int qfProj = _options.VisionDim != _options.QFormerDim ? 1 : 0;
+        int qFormerLayerEnd = visionLayerEnd + qfProj + _options.NumQFormerLayers * qfBlockSize;
+
+        var allLayers = LayerHelper<T>.CreateDefaultQFormerGenerativeLayers(
+            _options.VisionDim, _options.QFormerDim, _options.DecoderDim,
+            _options.NumVisionLayers, _options.NumQFormerLayers, _options.NumDecoderLayers,
+            _options.NumQueryTokens, _options.NumHeads, _options.NumQFormerHeads,
+            _options.DropoutRate);
+
+        int idx = 0;
+        foreach (var layer in allLayers)
+        {
+            if (idx < visionLayerEnd) Layers.Add(layer);
+            else if (idx < qFormerLayerEnd) _qFormerLayers.Add(layer);
+            else _decoderLayers.Add(layer);
+            idx++;
+        }
+
+        RegisterAuxiliaryEncoderStream(_qFormerLayers);
+        RegisterAuxiliaryEncoderStream(_decoderLayers);
     }
 
-    private void ComputeQFormerBoundaries()
+    private Tensor<T> TokenizeText(string text)
     {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _visionLayerEnd = 1 + _options.NumVisionLayers * lpb;
-        int qFormerProjection = _options.VisionDim != _options.QFormerDim ? 1 : 0;
-        int qfLpb = _options.DropoutRate > 0 ? 8 : 7;
-        _qFormerLayerEnd = _visionLayerEnd + qFormerProjection + _options.NumQFormerLayers * qfLpb;
+        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
     }
 
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = PreprocessImage(input);
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
+        finally { SetTrainingMode(false); }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        // Sync the auxiliary streams (Q-Former, decoder) too — see
+        // OpenFlamingo.UpdateParameters for the same dual-stream rationale.
+        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers())
+        {
+            if (l is null) continue;
+            int c = (int)l.ParameterCount;
+            l.UpdateParameters(parameters.Slice(idx, c));
+            idx += c;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateAuxiliaryStreamTrainableLayers();
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "MiniGPT-4-Native" : "MiniGPT-4-ONNX", Description = "MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models (Zhu et al., 2023)", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumQFormerLayers + _options.NumDecoderLayers }; m.AdditionalInfo["Architecture"] = "MiniGPT-4"; m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString(); m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName; return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.QFormerDim); writer.Write(_options.DecoderDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumQFormerLayers); writer.Write(_options.NumDecoderLayers); writer.Write(_options.NumHeads); writer.Write(_options.NumQueryTokens); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.QFormerDim = reader.ReadInt32(); _options.DecoderDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumQFormerLayers = reader.ReadInt32(); _options.NumDecoderLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); _options.NumQueryTokens = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new MiniGPT4<T>(Architecture, mp, _options); return new MiniGPT4<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MiniGPT4<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "MiniGPT-4-Native" : "MiniGPT-4-ONNX",
+            Description = "MiniGPT-4: Enhancing Vision-Language Understanding with Advanced Large Language Models (Zhu et al., 2023)",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumQFormerLayers + _options.NumDecoderLayers
+        };
+        m.AdditionalInfo["Architecture"] = "MiniGPT-4";
+        m.AdditionalInfo["InstructionType"] = _options.InstructionArchitectureType.ToString();
+        m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.QFormerDim);
+        writer.Write(_options.DecoderDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumQFormerLayers);
+        writer.Write(_options.NumDecoderLayers);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.NumQueryTokens);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.QFormerDim = reader.ReadInt32();
+        _options.DecoderDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumQFormerLayers = reader.ReadInt32();
+        _options.NumDecoderLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        _options.NumQueryTokens = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new MiniGPT4<T>(Architecture, mp, _options);
+        return new MiniGPT4<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MiniGPT4<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

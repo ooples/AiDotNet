@@ -124,6 +124,34 @@ public class AutoencoderKL<T> : VAEModelBase<T>
     /// </summary>
     private Tensor<T>? _cachedLogVar;
 
+    /// <summary>
+    /// Per-direction compiled-plan host. Each direction (encode, decode)
+    /// gets its own plan cache because their input shapes evolve
+    /// independently — encode runs on full-resolution images
+    /// (e.g. [B, 3, 512, 512]) while decode runs on the latent grid
+    /// (e.g. [B, 4, 64, 64]). A single host keyed by encode-input shape
+    /// would force decode to fall through to eager re-trace every call;
+    /// splitting them keeps both directions hot. The chained-host
+    /// equivalent (<see cref="ChainedCompiledModelHost{T}"/>) chains
+    /// stages sequentially, but encode and decode here are PARALLEL
+    /// surfaces (callers invoke either, not both per call), so two
+    /// independent hosts is the right fit. Closes #1272 W1's
+    /// compile-aware-VAE goal without disturbing the existing
+    /// VAEEncoder / VAEDecoder LayerBase&lt;T&gt; surface.
+    /// </summary>
+    private readonly CompiledModelHost<T> _encoderHost;
+    private readonly CompiledModelHost<T> _decoderHost;
+
+    /// <summary>
+    /// Structure version bumped when the encoder / decoder layer graph
+    /// mutates (e.g. external weight load, hot-swap). Both directions
+    /// share the same counter — callers don't typically hot-swap one
+    /// direction independently of the other, and a stale plan in either
+    /// direction would silently miscompute, so unifying the version
+    /// keeps both caches consistent.
+    /// </summary>
+    private int _structureVersion;
+
     /// <inheritdoc />
     public override int InputChannels => _inputChannels;
 
@@ -212,6 +240,16 @@ public class AutoencoderKL<T> : VAEModelBase<T>
             numResBlocks: numResBlocks,
             numGroups: numGroups,
             outputSpatialSize: inputSpatialSize);
+
+        // Initialize the per-direction compiled-plan hosts. Disk-cached
+        // plans get a stable identity so they don't collide between
+        // encoder and decoder, and don't collide between AutoencoderKL
+        // instances built for different spatial sizes / channel mults
+        // (the host's internal cache already keys by input shape, but
+        // the disk filename needs an extra discriminator).
+        string identityPrefix = $"AutoencoderKL.{inputChannels}c.{latentChannels}l.{baseChannels}b.{inputSpatialSize}s";
+        _encoderHost = new CompiledModelHost<T>(modelIdentity: $"{identityPrefix}.encoder");
+        _decoderHost = new CompiledModelHost<T>(modelIdentity: $"{identityPrefix}.decoder");
     }
 
     /// <inheritdoc />
@@ -239,7 +277,16 @@ public class AutoencoderKL<T> : VAEModelBase<T>
     /// <inheritdoc />
     public override Tensor<T> Decode(Tensor<T> latent)
     {
-        return _decoder.Forward(latent);
+        // Route the decoder forward through the per-direction CompiledModelHost
+        // so the second + Nth call at the same latent shape (the common case
+        // during diffusion sampling, where every denoising step decodes at
+        // the same [B, latentChannels, H/8, W/8]) replays a cached compiled
+        // plan instead of re-tracing the entire ResBlock + Conv stack
+        // every step. Closes #1272 W1's compile-aware-VAE goal for the
+        // decode direction; encode's two-output return signature
+        // (mean + logVar) doesn't fit the host's single-tensor Predict
+        // surface so it stays direct for now.
+        return _decoderHost.Predict(latent, _structureVersion, () => _decoder.Forward(latent));
     }
 
     /// <summary>
@@ -520,6 +567,36 @@ public class AutoencoderKL<T> : VAEModelBase<T>
     /// Gets the decoder component for direct access.
     /// </summary>
     public VAEDecoder<T> Decoder => _decoder;
+
+    /// <summary>
+    /// Bumps the structure version on both per-direction
+    /// <see cref="CompiledModelHost{T}"/>s so the next Encode / Decode call
+    /// drops the cached compiled plan and re-traces. Call after any
+    /// out-of-band weight mutation that <see cref="LoadParameters"/> /
+    /// <see cref="SetParameters"/> doesn't already cover (e.g. external
+    /// LoRA hot-swap, hand-edited tensor in <see cref="Encoder"/> /
+    /// <see cref="Decoder"/>). Matches the
+    /// <c>NeuralNetworkBase&lt;T&gt;.BumpLayerStructureVersion</c> contract
+    /// the rest of the codebase uses.
+    /// </summary>
+    public void InvalidateCompiledHosts()
+    {
+        unchecked { _structureVersion++; }
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            // Release the per-direction compiled-plan caches; the
+            // VAEEncoder / VAEDecoder LayerBase&lt;T&gt; objects clean up
+            // their own state via the base class's layer-disposal cascade.
+            _encoderHost.Dispose();
+            _decoderHost.Dispose();
+        }
+        base.Dispose(disposing);
+    }
 
     /// <summary>
     /// Creates a default AutoencoderKL matching Stable Diffusion v1.5 configuration.

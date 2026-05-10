@@ -235,10 +235,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
 
     /// <summary>
-    /// Cached reshape of _biases to [1, OutputDepth, 1, 1] for broadcast addition.
-    /// Avoids allocating a new view tensor on every forward pass.
-    /// </summary>
-    private Tensor<T>? _biasReshaped4D;
+    // Removed _biasReshaped4D cache: caching the reshape view across forwards is
+    // unsafe when the tape-trained optimizer.Step rebinds _biases to a new tensor —
+    // the cached view still points at the prior tensor's storage. Forward now
+    // recomputes the reshape every call (metadata-only op, view object alloc).
 
     /// <summary>
     /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
@@ -1027,9 +1027,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         if (fusedActivation != FusedActivationType.None)
         {
             // Single fused call: output = activation(conv(input, kernel) + bias)
-            // Reshape bias to [1, C, 1, 1] for proper broadcasting with conv output [B, C, H, W]
-            _biasReshaped4D ??= Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = Engine.FusedConv2D(_lastInput, _kernels, _biasReshaped4D,
+            // Reshape bias to [1, C, 1, 1] for proper broadcasting with conv output [B, C, H, W].
+            // Recompute every forward — caching the reshape view across forwards is unsafe
+            // when the tape-trained optimizer.Step rebinds _biases to a new tensor (the view's
+            // storage pointer is stale by the next forward). Reshape is metadata-only so the
+            // cost is a tensor-view object alloc.
+            var biasReshaped = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+            result = Engine.FusedConv2D(_lastInput, _kernels, biasReshaped,
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
         else if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
@@ -1062,8 +1066,9 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
             var output = _preAllocatedOutput;
 
-            _biasReshaped4D ??= Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
+            // Recompute every forward — see fused-activation branch above for rationale.
+            var biasReshapedInf = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+            Engine.TensorBroadcastAddInPlace(output, biasReshapedInf);
 
             result = ApplyActivation(output);
         }

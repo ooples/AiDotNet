@@ -373,8 +373,16 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <summary>
     /// The output weight matrix for combining controller output with read vectors.
     /// </summary>
+    // _outputWeights is a back-compat field for legacy serialized DNC checkpoints.
+    // The active output projection is the final DenseLayer in the Layers chain
+    // (see CreateDefaultDNCLayers + CombineControllerOutputWithReadVectors); this
+    // matrix is read/written by the legacy Serialize/Deserialize paths only.
+    // _lastCombinedVector was a backward-pass cache for the manual matmul that
+    // the new Layers-chain projection no longer needs.
     private Matrix<T> _outputWeights;
+#pragma warning disable CS0169
     private Vector<T>? _lastCombinedVector;
+#pragma warning restore CS0169
 
     private ILossFunction<T> _lossFunction;
 
@@ -1085,10 +1093,15 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private Tensor<T> ProcessThroughController(Tensor<T> controllerInput)
     {
-        // Process through all layers except the last one, which is typically an output layer
+        // Walk every layer EXCEPT the final output-projection layer. The output
+        // projection (Graves et al. 2016 §2 eq. 8: W_y[v_t; r_t^1; ...; r_t^R]) is
+        // applied later in CombineControllerOutputWithReadVectors, after the read
+        // vectors have been computed from memory. CreateDefaultDNCLayers always
+        // appends that projection as Layers[Last].
         Tensor<T> currentOutput = controllerInput;
+        int controllerLayerCount = Math.Max(1, Layers.Count - 1);
 
-        for (int i = 0; i < Layers.Count; i++)
+        for (int i = 0; i < controllerLayerCount; i++)
         {
             currentOutput = Layers[i].Forward(currentOutput);
 
@@ -1340,50 +1353,46 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private Tensor<T> CombineControllerOutputWithReadVectors(Tensor<T> controllerOutput, List<Vector<T>> readVectors)
     {
-        // Determine dimensions
-        int outputSize = Architecture.OutputSize;
-
-        // Extract the controller's direct output (excluding memory interface signals)
-        // Determine the interface size to know how much of the controller output to use
+        // Graves et al. 2016 §2 eq. 8: y_t = W_y [v_t; r_t^1; ...; r_t^R]
+        // where v_t is the controller's direct output (controllerOutput sliced to
+        // exclude the interface signals) and r_t^i are the read vectors. The
+        // projection W_y is implemented as Layers[Last] (a DenseLayer<T> appended
+        // by CreateDefaultDNCLayers) so its parameters live in the standard Layers
+        // chain — that's what makes the gradient tape capture this op and flow
+        // gradients back to the controller layers.
         int interfaceSize = CalculateDNCInterfaceSize(_memoryWordSize, _readHeads);
         int controllerDirectOutputSize = controllerOutput.Shape[1] - interfaceSize;
 
-        // Create empty output tensor with the right shape
-        Tensor<T> finalOutput = new Tensor<T>(new[] { 1, outputSize });
+        // Tape-aware slice of the controller's direct contribution. Engine.TensorNarrow
+        // records the slice op, so the gradient of the loss w.r.t. controllerDirect
+        // flows back to the full controllerOutput, then back through the controller
+        // layers via the standard Layers-chain backward pass.
+        Tensor<T> controllerDirect = Engine.TensorNarrow(controllerOutput, dim: 1, start: 0, length: controllerDirectOutputSize);
 
-        // Get the direct controller contribution from the first part of the controller output
-        Tensor<T> controllerDirectOutput = controllerOutput.Slice(0, 0, 1, controllerDirectOutputSize);
-
-        // Create a combined vector of controller output and read vectors for matrix multiplication
-        int combinedSize = controllerDirectOutputSize + (_readHeads * _memoryWordSize);
-        Vector<T> combinedVector = new Vector<T>(combinedSize);
-
-        // Copy controller direct output to combined vector
-        for (int i = 0; i < controllerDirectOutputSize; i++)
-        {
-            combinedVector[i] = controllerDirectOutput[0, i];
-        }
-
-        // Copy read vectors to combined vector
-        int offset = controllerDirectOutputSize;
+        // Build the read-vectors contribution as a constant Tensor<T>. Memory ops
+        // (UpdateMemory / ReadFromMemory) operate on the _memory Matrix<T> in
+        // raw C# math and therefore escape the tape — that's an acknowledged
+        // implementation gap relative to the fully-differentiable DNC paper. The
+        // controller still learns to use memory through the forward pass; the
+        // memory-op gradient path remains a known follow-up.
+        Tensor<T> readVectorsTensor = new Tensor<T>(new[] { 1, _readHeads * _memoryWordSize });
+        int writeOffset = 0;
         for (int i = 0; i < _readHeads; i++)
         {
             for (int j = 0; j < _memoryWordSize; j++)
             {
-                combinedVector[offset++] = readVectors[i][j];
+                readVectorsTensor[0, writeOffset++] = readVectors[i][j];
             }
         }
 
-        // Cache combined vector for backward pass (output weight gradient computation)
-        _lastCombinedVector = combinedVector;
+        // Concatenate controller-direct (tape-connected) with read-vectors (constants)
+        // along the feature axis so the output projection sees [v_t; r_t^1; ...; r_t^R].
+        Tensor<T> combined = Engine.TensorConcatenate(new[] { controllerDirect, readVectorsTensor }, axis: 1);
 
-        // Apply learnable output matrix to combined vector
-        for (int i = 0; i < outputSize; i++)
-        {
-            T sum = NumOps.Zero;
-            { var _w0 = new Vector<T>(combinedSize); for (int _i = 0; _i < combinedSize; _i++) _w0[_i] = _outputWeights[_i, i]; sum = NumOps.Add(sum, Engine.DotProduct(combinedVector, _w0)); }
-            finalOutput[0, i] = sum;
-        }
+        // Apply the output projection (Graves 2016 §2 eq. 8 W_y). This is the final
+        // layer in the Layers chain, registered for parameter updates and
+        // gradient capture by NeuralNetworkBase.
+        Tensor<T> finalOutput = Layers[Layers.Count - 1].Forward(combined);
 
         // Apply appropriate activation function based on task type
         NeuralNetworkHelper<T>.ApplyOutputActivation(finalOutput, Architecture);
