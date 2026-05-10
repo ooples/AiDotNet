@@ -329,6 +329,22 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// the subclass provides; subclasses extending <see cref="NoisePredictorBase{T}"/>
     /// inherit the compile-host-aware async path automatically.
     /// </summary>
+    /// <param name="noisySample">The current noisy latent / pixel tensor.</param>
+    /// <param name="timestep">The current diffusion timestep.</param>
+    /// <param name="conditioning">
+    /// Optional cross-attention conditioning tensor (text embedding, image
+    /// embedding, etc.). <b>Ignored by this default implementation</b> — the
+    /// base unconditional path delegates to <see cref="PredictNoise(Tensor{T}, int)"/>
+    /// which has no conditioning slot. The parameter exists for the multi-stage
+    /// chain pipeline (latent diffusion's text-conditioner → cross-attention
+    /// noise predictor pattern in #1272 / #1273); concrete subclasses that
+    /// accept conditioning override this method to thread it through to their
+    /// noise predictor (see <see cref="LatentDiffusionModelBase{T}"/>).
+    /// <see cref="GenerateAsyncCore"/> currently passes <see langword="null"/>
+    /// for the unconditional path; subclasses with conditioning supply it via
+    /// their own <c>GenerateAsync</c> override.
+    /// </param>
+    /// <param name="cancellationToken">Honored before the underlying forward runs.</param>
     protected virtual System.Threading.Tasks.ValueTask<Tensor<T>> PredictNoiseAsync(
         Tensor<T> noisySample,
         int timestep,
