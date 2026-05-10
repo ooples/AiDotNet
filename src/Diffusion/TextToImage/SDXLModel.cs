@@ -521,24 +521,143 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         await _generationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // System.Threading.Tasks.Task.Run keeps the long CPU-bound denoise
-            // loop off the caller's synchronization context (UI / ASP.NET
-            // request) — without it an `await GenerateAsync(...)` from a UI
-            // thread would block the UI for the full ~30 s of inference.
-            return await System.Threading.Tasks.Task.Run(() =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                return GenerateWithMicroConditionCancellable(
-                    prompt, negativePrompt, width, height,
-                    originalWidth, originalHeight, cropTop, cropLeft,
-                    numInferenceSteps, guidanceScale, seed,
-                    progress, cancellationToken);
-            }, cancellationToken).ConfigureAwait(false);
+            return await GenerateWithMicroConditionTrulyAsync(
+                prompt, negativePrompt, width, height,
+                originalWidth, originalHeight, cropTop, cropLeft,
+                numInferenceSteps, guidanceScale, seed,
+                progress, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _generationGate.Release();
         }
+    }
+
+    /// <summary>
+    /// True-async denoising path. The previous implementation wrapped the
+    /// fully-synchronous <see cref="GenerateWithMicroConditionCancellable"/>
+    /// in <c>Task.Run</c> — fake async that just moved the blocking work to
+    /// a threadpool worker, with no overlap of host and engine work between
+    /// steps. This implementation runs the dual conditioner pre-step
+    /// concurrently (<see cref="EncodeTextDualAsync"/>), awaits the per-step
+    /// noise prediction through <see cref="INoisePredictor{T}.PredictNoiseAsync"/>
+    /// (added in #1273) so GPU stream completion can overlap with host
+    /// scheduler work, and dispatches the final VAE decode on a worker so
+    /// the UI / request thread isn't blocked on the multi-second decode of
+    /// a 1024×1024 SDXL image. (#1272 W4: SDXLModel.Generate rewire.)
+    /// </summary>
+    private async System.Threading.Tasks.Task<Tensor<T>> GenerateWithMicroConditionTrulyAsync(
+        string prompt,
+        string? negativePrompt,
+        int width,
+        int height,
+        int? originalWidth,
+        int? originalHeight,
+        int cropTop,
+        int cropLeft,
+        int numInferenceSteps,
+        double? guidanceScale,
+        int? seed,
+        System.IProgress<int>? progress,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (_conditioner1 == null)
+            throw new InvalidOperationException("Text-to-image generation requires a conditioning module.");
+
+        originalWidth ??= width;
+        originalHeight ??= height;
+        var effectiveGuidanceScale = guidanceScale ?? GuidanceScale;
+        var useCFG = effectiveGuidanceScale > 1.0 && _unet.SupportsCFG;
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Conditioner pre-step: dual encoders run concurrently. CFG path also
+        // needs an unconditional embedding; encode it concurrently with the
+        // primary prompt when both are required.
+        Tensor<T> promptEmbedding;
+        Tensor<T>? negativeEmbedding = null;
+        if (useCFG)
+        {
+            // Two independent encode jobs (positive + negative prompts) — overlap
+            // them. Each one internally runs both CLIP encoders concurrently when
+            // dual-encoder mode is on.
+            var positiveTask = EncodeTextDualAsync(prompt, cancellationToken);
+            var negativeTask = !string.IsNullOrEmpty(negativePrompt)
+                ? EncodeTextDualAsync(negativePrompt ?? string.Empty, cancellationToken)
+                : new System.Threading.Tasks.ValueTask<Tensor<T>>(GetUnconditionalEmbeddingDual());
+            promptEmbedding = await positiveTask.ConfigureAwait(false);
+            negativeEmbedding = await negativeTask.ConfigureAwait(false);
+        }
+        else
+        {
+            promptEmbedding = await EncodeTextDualAsync(prompt, cancellationToken).ConfigureAwait(false);
+        }
+
+        var microCond = CreateMicroCondition(
+            originalWidth.Value, originalHeight.Value,
+            cropTop, cropLeft,
+            width, height);
+        promptEmbedding = ApplyMicroCondition(promptEmbedding, microCond);
+        if (negativeEmbedding != null)
+            negativeEmbedding = ApplyMicroCondition(negativeEmbedding, microCond);
+
+        var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
+        var latentWidth = width / SDXL_VAE_SCALE_FACTOR;
+        var latentShape = new[] { 1, SDXL_LATENT_CHANNELS, latentHeight, latentWidth };
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        var latents = SampleNoiseTensor(latentShape, rng);
+
+        Scheduler.SetTimesteps(numInferenceSteps);
+
+        int stepIndex = 0;
+        foreach (var timestep in Scheduler.Timesteps)
+        {
+            // Cancellation observed at the boundary, NOT mid-step — a half-applied
+            // UNet forward would leave the scheduler in an inconsistent state.
+            cancellationToken.ThrowIfCancellationRequested();
+
+            Tensor<T> noisePrediction;
+            if (useCFG && negativeEmbedding != null)
+            {
+                // Run conditional and unconditional UNet predictions concurrently
+                // when CFG is engaged. Both branches use identical (latents, t)
+                // inputs and differ only in the conditioning embedding, so they
+                // compete only for engine resources — for CPU engines that's a
+                // wash, but for GPU engines with separate streams the second
+                // PredictNoise's queue submission overlaps with the first's
+                // tail kernels.
+                var condTask = _unet.PredictNoiseAsync(latents, timestep, promptEmbedding, cancellationToken);
+                var uncondTask = _unet.PredictNoiseAsync(latents, timestep, negativeEmbedding, cancellationToken);
+                var condPred = await condTask.ConfigureAwait(false);
+                var uncondPred = await uncondTask.ConfigureAwait(false);
+                noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
+            }
+            else
+            {
+                noisePrediction = await _unet
+                    .PredictNoiseAsync(latents, timestep, promptEmbedding, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            var latentVector = latents.ToVector();
+            var noiseVector = noisePrediction.ToVector();
+            latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
+            latents = new Tensor<T>(latentShape, latentVector);
+
+            stepIndex++;
+            progress?.Report(stepIndex);
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // VAE decode on a worker — even on warm cache it's a multi-second forward
+        // for 1024×1024 SDXL output, and we don't want to block the
+        // SemaphoreSlim's continuation thread (which on UI hosts is the UI thread).
+        // Future commit on this branch can lift this into the chain via
+        // VAEModelBase.DecodeCompiledAsync once StandardVAE.Decode wraps its
+        // body with DecodeCompiled.
+        return await System.Threading.Tasks.Task.Run(
+            () => DecodeFromLatent(latents), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -700,6 +819,49 @@ public class SDXLModel<T> : LatentDiffusionModelBase<T>
         }
 
         return embedding1;
+    }
+
+    /// <summary>
+    /// Async dual-encoder text encode. The two conditioners (CLIP-L + CLIP-G/OpenCLIP-G
+    /// in the canonical SDXL configuration) have no data dependency on each other,
+    /// so they run concurrently via <see cref="System.Threading.Tasks.Task.WhenAll"/>.
+    /// On a 2-core CPU box this halves the wall time of the conditioning pre-step;
+    /// when the conditioners run on different engines (e.g. CPU primary + GPU
+    /// secondary) the engines' streams overlap natively. (#1272 acceptance
+    /// criterion #4: dual-conditioner SDXL path measures &lt; 1.5× single-conditioner
+    /// latency.)
+    /// </summary>
+    private async System.Threading.Tasks.ValueTask<Tensor<T>> EncodeTextDualAsync(
+        string prompt,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (_conditioner1 == null)
+            throw new InvalidOperationException("Primary conditioner not initialized.");
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Tokenization is fast (string scan) — keep on the calling thread.
+        var tokens1 = _conditioner1.Tokenize(prompt);
+
+        if (_useDualEncoder && _conditioner2 != null)
+        {
+            var tokens2 = _conditioner2.Tokenize(prompt);
+
+            // Run both encoders concurrently. Conditioner.EncodeText is sync today;
+            // wrap each in Task.Run so the two CPU-bound forward passes can interleave
+            // on the threadpool. When the IConditioningModule interface gains a true
+            // EncodeTextAsync overload, swap these for direct awaits.
+            var embed1Task = System.Threading.Tasks.Task.Run(
+                () => _conditioner1.EncodeText(tokens1), cancellationToken);
+            var embed2Task = System.Threading.Tasks.Task.Run(
+                () => _conditioner2.EncodeText(tokens2), cancellationToken);
+            await System.Threading.Tasks.Task.WhenAll(embed1Task, embed2Task).ConfigureAwait(false);
+            return ConcatenateEmbeddings(embed1Task.Result, embed2Task.Result);
+        }
+
+        // Single-conditioner fallback — no concurrency available.
+        return await System.Threading.Tasks.Task.Run(
+            () => _conditioner1.EncodeText(tokens1), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

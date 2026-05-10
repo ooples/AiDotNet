@@ -387,16 +387,22 @@ public class StandardVAE<T> : VAEModelBase<T>
             throw new InvalidOperationException("Encoder layers not initialized.");
         }
 
-        // Initial convolution
-        var x = _inputConv.Forward(image);
-
-        // Apply encoder blocks
-        foreach (var layer in _encoderLayers)
+        // The encode path produces TWO outputs (mean + logVar) but the compile
+        // host's single-output Predict surface fits only one tensor. Route the
+        // shared backbone (input conv + encoder blocks) through the compile
+        // cache and run the divergent (mean, logVar, quant) tail eagerly. The
+        // backbone is what dominates the encode forward — multi-second on
+        // 512×512 input — so caching just the backbone captures the bulk of
+        // the speedup. (#1272 W1.)
+        var x = EncodeCompiled(image, () =>
         {
-            x = layer.Forward(x);
-        }
+            var y = _inputConv.Forward(image);
+            foreach (var layer in _encoderLayers)
+                y = layer.Forward(y);
+            return y;
+        });
 
-        // Project to mean and log variance
+        // Project to mean and log variance (divergent tail, runs eagerly)
         var mean = _meanConv.Forward(x);
         var logVar = _logVarConv.Forward(x);
 
@@ -418,19 +424,27 @@ public class StandardVAE<T> : VAEModelBase<T>
             throw new InvalidOperationException("Decoder layers not initialized.");
         }
 
-        // Post-quant convolution
-        var x = _postQuantConv.Forward(latent);
-
-        // Apply decoder blocks
-        foreach (var layer in _decoderLayers)
+        // Route the decoder body through the inherited compile host so the
+        // second + Nth call at the same latent shape (every step of an SDXL
+        // generation that decodes once at the end at the same
+        // [B, latentChannels, H/8, W/8]) replays a cached compiled plan
+        // instead of re-tracing the entire ResBlock + Conv stack. (#1272 W1.)
+        return DecodeCompiled(latent, () =>
         {
-            x = layer.Forward(x);
-        }
+            // Post-quant convolution
+            var x = _postQuantConv.Forward(latent);
 
-        // Output convolution
-        x = _outputConv.Forward(x);
+            // Apply decoder blocks
+            foreach (var layer in _decoderLayers)
+            {
+                x = layer.Forward(x);
+            }
 
-        return x;
+            // Output convolution
+            x = _outputConv.Forward(x);
+
+            return x;
+        });
     }
 
     /// <summary>
