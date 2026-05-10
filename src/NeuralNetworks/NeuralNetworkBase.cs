@@ -2537,7 +2537,30 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_pendingAutoCompileOnNextPredict)
         {
             _pendingAutoCompileOnNextPredict = false;
-            try { CompileForward(input); } catch { /* fall back to eager */ }
+            try
+            {
+                CompileForward(input);
+            }
+            catch (Exception ex) when (
+                // Let unrecoverable runtime failures propagate so a poisoned
+                // process doesn't continue executing — same narrow filter
+                // CompileForward itself uses for its internal try/catch.
+                ex is not OutOfMemoryException &&
+                ex is not StackOverflowException &&
+                ex is not AccessViolationException &&
+                ex is not BadImageFormatException &&
+                ex is not InvalidProgramException &&
+                ex is not System.Threading.ThreadAbortException &&
+                ex is not AppDomainUnloadedException &&
+                ex is not CannotUnloadAppDomainException)
+            {
+                // Auto-compile prewarm is a best-effort optimisation; on a
+                // recoverable trace failure fall back to the eager Predict
+                // that follows. The warning surfaces the failure for
+                // diagnostics without aborting the request.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Auto-compile-on-eval prewarm failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         try

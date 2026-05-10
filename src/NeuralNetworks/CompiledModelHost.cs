@@ -362,10 +362,15 @@ internal sealed class CompiledModelHost<T> : IDisposable
             {
                 var concreteShape = (int[])input._shape.Clone();
 
-                if (TryUseDiskCachedPlan(concreteShape, structureVersion, out var preloadedResult))
+                // Disk-plan hit: route the hit through ExecuteAsync instead
+                // of the sync Execute that the matching sync Predict path
+                // uses. Otherwise the caller blocks on plan.Execute() and
+                // bypasses cooperative cancellation between steps.
+                if (TryGetDiskCachedPlan(concreteShape, structureVersion, out var preloadedPlan))
                 {
                     _lastCompiledVersion = structureVersion;
-                    return preloadedResult;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return await preloadedPlan!.ExecuteAsync(cancellationToken).ConfigureAwait(false);
                 }
 
                 var symbolicShape = BuildSymbolicShape(concreteShape, _shapeMode);
@@ -402,6 +407,14 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 ex is not AppDomainUnloadedException &&
                 ex is not CannotUnloadAppDomainException)
             {
+                // Invalidate the cache before falling back so a poisoned
+                // plan isn't reused on subsequent calls — mirrors the
+                // sync Predict path which invalidates under lock here.
+                lock (_sync)
+                {
+                    _cache?.Invalidate();
+                    _lastCompiledVersion = -1;
+                }
                 System.Diagnostics.Trace.TraceWarning(
                     $"CompiledModelHost.PredictAsync falling back to eager after compile/replay failure: " +
                     $"{ex.ToString()}");
@@ -568,7 +581,28 @@ internal sealed class CompiledModelHost<T> : IDisposable
         int structureVersion,
         out Tensor<T> result)
     {
+        if (TryGetDiskCachedPlan(concreteShape, structureVersion, out var plan))
+        {
+            result = plan!.Execute();
+            return true;
+        }
         result = null!;
+        return false;
+    }
+
+    /// <summary>
+    /// Async-friendly counterpart of <see cref="TryUseDiskCachedPlan"/>: returns
+    /// the loaded <see cref="ICompiledPlan{T}"/> instead of synchronously executing
+    /// it. Used by <see cref="PredictAsync"/> so the disk-plan-hit path can route
+    /// through <c>plan.ExecuteAsync(ct)</c> with cooperative cancellation instead
+    /// of blocking on a sync <c>Execute</c>.
+    /// </summary>
+    private bool TryGetDiskCachedPlan(
+        int[] concreteShape,
+        int structureVersion,
+        out ICompiledPlan<T>? plan)
+    {
+        plan = null;
         var planCache = PlanCache.Current;
         if (planCache is null || _modelIdentity is null)
         {
@@ -587,7 +621,7 @@ internal sealed class CompiledModelHost<T> : IDisposable
         {
             if (cachedPlan.IsValid(concreteShape))
             {
-                result = cachedPlan.Execute();
+                plan = cachedPlan;
                 return true;
             }
         }
@@ -620,7 +654,7 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 (_preloadedPlans ??= new Dictionary<string, ICompiledPlan<T>>())[shapeKey] = loaded;
             }
 
-            result = loaded.Execute();
+            plan = loaded;
             return true;
         }
         catch (Exception ex)
