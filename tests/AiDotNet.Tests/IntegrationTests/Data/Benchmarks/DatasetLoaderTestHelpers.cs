@@ -123,6 +123,22 @@ internal static class DatasetLoaderTestHelpers
     }
 
     /// <summary>
+    /// Writes a synthetic .mat file containing the supplied uint8 / sbyte / int
+    /// variables. Used by SVHN, Flowers-102, Stanford Cars fixtures to exercise
+    /// the MatFileHandler reader path against known data.
+    /// </summary>
+    public static byte[] CreateMockMatFile(System.Action<MatFileHandler.DataBuilder, System.Collections.Generic.List<MatFileHandler.IVariable>> populate)
+    {
+        var builder = new MatFileHandler.DataBuilder();
+        var vars = new System.Collections.Generic.List<MatFileHandler.IVariable>();
+        populate(builder, vars);
+        var matFile = builder.NewFile(vars);
+        using var ms = new MemoryStream();
+        new MatFileHandler.MatFileWriter(ms).Write(matFile);
+        return ms.ToArray();
+    }
+
+    /// <summary>
     /// Creates a minimal valid JPEG (8×8 black). Used for vision-loader fixtures.
     /// </summary>
     public static byte[] CreateMockJpeg()
