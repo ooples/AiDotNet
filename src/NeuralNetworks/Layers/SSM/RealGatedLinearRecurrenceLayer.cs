@@ -236,6 +236,24 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
         int modelDim = input.Shape[rank - 1];
 
+        // Reject zero-length sequences fast — the recurrence has no meaningful
+        // output when there are no timesteps to process, and downstream
+        // TensorAllocator.Rent / SetSlice / output Reshape paths all assume
+        // seqLen >= 1. Without this guard a [B, 0, modelDim] input would
+        // silently allocate empty tensors and surface as a confusing
+        // out-of-bounds in GatedRecurrenceForward's slice indexing instead
+        // of a clear input-validation error at the call boundary.
+        if (seqLen < 1)
+            throw new ArgumentException(
+                $"RealGatedLinearRecurrenceLayer requires sequence length >= 1 " +
+                $"(got seqLen={seqLen} from input shape [{string.Join(",", input.Shape)}]).",
+                nameof(input));
+        if (modelDim < 1)
+            throw new ArgumentException(
+                $"RealGatedLinearRecurrenceLayer requires modelDim >= 1 " +
+                $"(got modelDim={modelDim} from input shape [{string.Join(",", input.Shape)}]).",
+                nameof(input));
+
         int batchSize = 1;
         for (int d = 0; d < rank - 2; d++)
             batchSize *= input.Shape[d];
