@@ -117,10 +117,12 @@ public partial class RBMLayer<T> : LayerBase<T>
 
     private Tensor<T> _weights;
 
-    /// <summary>
-    /// Cached transpose of weights — invalidated when weights change via SetParameters/CD update.
-    /// </summary>
-    private Tensor<T>? _weightsTCache;
+    // Removed _weightsTCache: caching the transpose across forwards is unsafe
+    // in tape-trained networks because the optimizer's Step path updates the
+    // underlying ParameterBuffer in place without calling
+    // RBMLayer.UpdateParameters, so the explicit invalidation hooks never
+    // fire and the cache drifts one optimizer step behind `_weights`. Forward
+    // now recomputes the transpose every call — see Forward for cost analysis.
 
     /// <summary>
     /// Gets or sets the bias values for the visible units.
@@ -522,9 +524,22 @@ public partial class RBMLayer<T> : LayerBase<T>
 
         _lastVisibleInput = visible2D;
 
-        // Use FusedLinear for tape-tracked forward: h = sigmoid(v @ W^T + b_h)
-        _weightsTCache ??= Engine.TensorTranspose(_weights);
-        Tensor<T> hiddenProbs = Engine.FusedLinear(visible2D, _weightsTCache, _hiddenBiases, FusedActivationType.Sigmoid);
+        // Recompute the transpose every forward — caching it across forwards is
+        // unsafe in a tape-trained network because the tape-based optimizer's
+        // Step path updates the underlying ParameterBuffer in place WITHOUT
+        // calling RBMLayer.UpdateParameters, so the explicit `_weightsTCache = null`
+        // invalidation hooks never fire. The cached transpose then drifts
+        // exactly one optimizer step behind `_weights` after every Train iter,
+        // which surfaces as the consumer DBM Clone's ~3% prediction divergence:
+        // the trained network's forward consumes the stale cache, while the
+        // cloned network (constructed with `_weightsTCache = null`) computes
+        // a fresh, correct transpose. Recomputing per-forward keeps Forward
+        // strictly a function of the current parameter values — same input
+        // and same weights → same output, regardless of construction path.
+        // Cost: one O(_visibleUnits × _hiddenUnits) transpose per forward,
+        // negligible relative to the FusedLinear that follows it.
+        Tensor<T> weightsT = Engine.TensorTranspose(_weights);
+        Tensor<T> hiddenProbs = Engine.FusedLinear(visible2D, weightsT, _hiddenBiases, FusedActivationType.Sigmoid);
         _lastHiddenOutput = hiddenProbs;
 
         if (rank == 1)
@@ -718,7 +733,7 @@ public partial class RBMLayer<T> : LayerBase<T>
         var weightGradient = Engine.TensorSubtract(positiveOuter, negativeOuter);
         var weightDelta = Engine.TensorMultiplyScalar(weightGradient, batchScale);
         _weights = Engine.TensorAdd(_weights, weightDelta);
-        _weightsTCache = null;
+        // _weightsTCache invalidation removed — Forward no longer caches.
     }
 
 
@@ -914,7 +929,7 @@ public partial class RBMLayer<T> : LayerBase<T>
         if (_weightsGradient != null && _visibleBiasesGradient != null && _hiddenBiasesGradient != null)
         {
             _weights = Engine.TensorSubtract(_weights, Engine.TensorMultiplyScalar(_weightsGradient, learningRate));
-            _weightsTCache = null;
+            // _weightsTCache invalidation removed — Forward no longer caches.
             _visibleBiases = Engine.TensorSubtract(_visibleBiases, Engine.TensorMultiplyScalar(_visibleBiasesGradient, learningRate));
             _hiddenBiases = Engine.TensorSubtract(_hiddenBiases, Engine.TensorMultiplyScalar(_hiddenBiasesGradient, learningRate));
             return;
@@ -1003,7 +1018,7 @@ public partial class RBMLayer<T> : LayerBase<T>
         // _hiddenBiases is a 1D Tensor [hiddenUnits]
         for (int i = 0; i < _hiddenBiases.Length; i++)
             _hiddenBiases.SetFlat(i, parameters[idx++]);
-        _weightsTCache = null;
+        // _weightsTCache invalidation removed — Forward no longer caches.
     }
 
     /// <summary>

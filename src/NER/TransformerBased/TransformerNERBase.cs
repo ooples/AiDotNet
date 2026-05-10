@@ -310,12 +310,29 @@ public abstract class TransformerNERBase<T> : SequenceLabeling.SequenceLabelingN
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// BERT-family NER models pad input sequences to <c>MaxSequenceLength</c>
+    /// during both training and inference (Devlin et al. 2019 §3, Sanh et al.
+    /// 2019 DistilBERT §3, Jiao et al. 2020 TinyBERT §3). Apply the same
+    /// PreprocessTokens padding here that Predict / PredictLabels uses so the
+    /// model's first layer (positional embedding sized [maxLen, hiddenDim])
+    /// sees the shape it was constructed for, and the target tensor (sized
+    /// per the model's actual padded output shape) matches the prediction.
+    /// Without this, training input keeps its raw [8, hiddenDim] sequence
+    /// length but the target was created against EffectiveOutputShape inferred
+    /// from a padded Predict, causing a [256] vs [8, 9] mismatch in
+    /// CrossEntropyLoss.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
         SetTrainingMode(true);
-        try { TrainWithTape(input, expected); }
+        try
+        {
+            var preprocessedInput = PreprocessTokens(input);
+            TrainWithTape(preprocessedInput, expected);
+        }
         finally { SetTrainingMode(false); }
     }
 

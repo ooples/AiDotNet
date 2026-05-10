@@ -242,7 +242,24 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return !_useNativeMode ? PredictOnnx(input) : Forward(input);
+        if (!_useNativeMode) return PredictOnnx(input);
+
+        // Mask2Former's CNN backbone (ResNet/Swin per Cheng et al. 2022 §3) expects
+        // rank-4 [B, C, H, W] (NCHW). When a caller hands us a single-sample rank-3
+        // [C, H, W] tensor, promote to [1, C, H, W] for the forward pass and squeeze
+        // the unit batch axis off scalar-per-batch outputs so the per-sample
+        // inference contract is preserved. Mirror the MobileNetV3 / EfficientNet
+        // override pattern from 581419563.
+        bool promoted = input.Rank == 3;
+        var processed = promoted ? PromoteToBatchedTensor(input) : input;
+        var output = Forward(processed);
+        if (promoted && output.Rank > 1 && output.Shape[0] == 1)
+        {
+            var squeezed = new int[output.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++) squeezed[i] = output.Shape[i + 1];
+            output = output.Reshape(squeezed);
+        }
+        return output;
     }
 
     /// <summary>
@@ -263,11 +280,24 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode.");
 
-        if (input.Shape.Length < 4) throw new ArgumentException($"Tape-based training requires rank >= 4, got rank {input.Shape.Length}. Reshape to [batch, channels, height, width].", nameof(input));
+        // Promote single-sample rank-3 [C,H,W] to rank-4 [1,C,H,W] (NCHW per
+        // Cheng et al. 2022 §3) so the segmentation pipeline's batch-aware ops
+        // see a real batch axis. Train accepts ranks 4+ unchanged. The expected
+        // segmentation target follows the same per-sample → batched promotion.
+        // Mirror the MobileNetV3 / EfficientNet pattern.
+        var processedInput = input.Rank == 3 ? PromoteToBatchedTensor(input) : input;
+        var processedTarget = expectedOutput.Rank == 3 ? PromoteToBatchedTensor(expectedOutput) : expectedOutput;
+        if (processedInput.Rank < 4)
+        {
+            throw new ArgumentException(
+                $"Mask2Former training requires rank >= 3 (single sample [C,H,W]) or rank >= 4 (batched [B,C,H,W]); got rank {input.Rank}.",
+                nameof(input));
+        }
+
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(processedInput, processedTarget);
         }
         finally
         {

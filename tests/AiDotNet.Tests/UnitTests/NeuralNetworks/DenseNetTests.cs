@@ -120,7 +120,7 @@ public class DenseNetTests
     [Fact(Timeout = 120000)]
     public async Task DenseBlock_Constructor_CreatesValidBlock()
     {
-        // Arrange & Act
+        // Arrange & Act — lazy ctor, inputChannels resolved on first Forward.
         var block = new DenseBlock<float>(
             numLayers: 6,
             growthRate: 32);
@@ -128,6 +128,15 @@ public class DenseNetTests
         // Assert
         Assert.Equal(6, block.NumLayers);
         Assert.Equal(32, block.GrowthRate);
+        // OutputChannels is the lazy sentinel (-1) until first Forward
+        // resolves the input channel count. After PR #1209 dropped the
+        // explicit inputChannels constructor parameter, this is the
+        // documented lazy-state contract — exercise it by running a
+        // Forward to materialize, then re-read.
+        Assert.Equal(-1, block.OutputChannels);
+        var probe = new Tensor<float>([1, 64, 14, 14]);
+        InitializeWithRandomValues(probe);
+        block.Forward(probe);
         Assert.Equal(64 + 6 * 32, block.OutputChannels); // 64 + 192 = 256
     }
 
@@ -141,6 +150,12 @@ public class DenseNetTests
 
         // Act
         var block = new DenseBlock<float>(numLayers, growthRate);
+        // Trigger lazy resolution — Forward records the actual input
+        // channel count, after which OutputChannels reflects the
+        // inputChannels + numLayers × growthRate formula.
+        var probe = new Tensor<float>([1, inputChannels, 7, 7]);
+        InitializeWithRandomValues(probe);
+        block.Forward(probe);
 
         // Assert
         // Output = input + (numLayers * growthRate)
@@ -176,11 +191,15 @@ public class DenseNetTests
     [Fact(Timeout = 120000)]
     public async Task TransitionLayer_Constructor_CreatesValidLayer()
     {
-        // Arrange & Act
+        // Arrange & Act — lazy ctor, inputChannels resolved on first Forward.
         var layer = new TransitionLayer<float>(
             compressionFactor: 0.5);
 
-        // Assert
+        // Sentinel before Forward, then 0.5× of the resolved input channels.
+        Assert.Equal(0, layer.OutputChannels);
+        var probe = new Tensor<float>([1, 256, 14, 14]);
+        InitializeWithRandomValues(probe);
+        layer.Forward(probe);
         Assert.Equal(128, layer.OutputChannels); // 256 * 0.5
     }
 
@@ -211,6 +230,12 @@ public class DenseNetTests
         // Arrange - no compression (compression = 1.0)
         var layer = new TransitionLayer<float>(
             compressionFactor: 1.0);
+
+        // Trigger lazy resolution — at compression=1.0, output channels
+        // equal input channels.
+        var probe = new Tensor<float>([1, 100, 7, 7]);
+        InitializeWithRandomValues(probe);
+        layer.Forward(probe);
 
         // Assert - channels unchanged
         Assert.Equal(100, layer.OutputChannels);

@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.VisionLanguage;
@@ -204,6 +206,138 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// Gets the default loss function for this model.
     /// </summary>
     public override ILossFunction<T> DefaultLossFunction => LossFunction;
+
+    // --- Dual-stream layer split (CLIP / SigLIP / BLIP / etc.) ---
+    //
+    // CLIP-style models concatenate vision-encoder + text-encoder layers into
+    // a single LayerHelper.CreateDefaultOpenCLIPLayers() output. Walking that
+    // sequentially is incorrect: visionEmbeddingDim ≠ textEmbeddingDim in the
+    // OpenCLIP defaults, so vision-projection output mismatches text-encoder
+    // input on the first text-encoder MultiHeadAttention. This base provides
+    // the storage + accessors so subclasses' Predict / Train walk the vision
+    // stack only, and EncodeText walks the text stack independently — mirrors
+    // PyTorch / HuggingFace CLIPModel where vision_model and text_model are
+    // separate nn.Modules instead of one concatenated list.
+
+    /// <summary>
+    /// Text-encoder layers, walked by <c>EncodeText</c> in subclasses.
+    /// Lives outside <see cref="NeuralNetworkBase{T}.Layers"/> so the inherited
+    /// forward / TrainWithTape paths operate on the vision-only stack.
+    /// Surface to streaming-pool / weight-registry by overriding
+    /// <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/> in the
+    /// concrete subclass (e.g. via <see cref="EnumerateTextEncoderTrainableLayers"/>).
+    /// </summary>
+    protected readonly List<ILayer<T>> TextEncoderLayers = new List<ILayer<T>>();
+
+    /// <summary>
+    /// Splits an OpenCLIP-shaped layer factory output (vision pre-norm +
+    /// N×vision-block + vision-projection + text pre-norm + N×text-block +
+    /// text-projection) into the model's <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// list (vision portion) and <see cref="TextEncoderLayers"/> (text portion).
+    /// </summary>
+    /// <param name="allLayers">The combined factory output to split.</param>
+    /// <param name="visionLayerCount">Count of vision-portion layers; for the
+    /// standard OpenCLIP / SigLIP factory this is
+    /// <c>2 + numVisionLayers × blockSize</c> where <c>blockSize = 5</c> at
+    /// dropoutRate = 0 and <c>6</c> with dropout (the +2 is the pre-norm and
+    /// the projection head).</param>
+    protected void SplitDualStreamLayers(IEnumerable<ILayer<T>> allLayers, int visionLayerCount)
+    {
+        if (allLayers is null) throw new System.ArgumentNullException(nameof(allLayers));
+        if (visionLayerCount < 0)
+            throw new System.ArgumentOutOfRangeException(nameof(visionLayerCount), "visionLayerCount must be ≥ 0.");
+
+        // Materialize once so we can validate before mutating Layers /
+        // TextEncoderLayers. An oversized visionLayerCount that the
+        // previous loop silently accepted (everything piles into Layers,
+        // TextEncoderLayers stays empty) would surface as the same
+        // class of "EncodeText silently degrades" bug the per-encoder
+        // overrides try to prevent — fail fast here so a layer-factory
+        // drift becomes an obvious construction error instead of a
+        // runtime no-op.
+        var layerList = allLayers as IList<ILayer<T>> ?? new List<ILayer<T>>(allLayers);
+        if (visionLayerCount > layerList.Count)
+            throw new System.ArgumentOutOfRangeException(
+                nameof(visionLayerCount),
+                $"visionLayerCount ({visionLayerCount}) exceeds the supplied layer sequence " +
+                $"({layerList.Count}). The supplied factory's layer count and the dual-stream " +
+                "split point have drifted apart — check the OpenCLIP-style block-size / layer-count " +
+                "math against the architecture's NumVisionLayers / DropoutRate.");
+
+        for (int idx = 0; idx < layerList.Count; idx++)
+        {
+            if (idx < visionLayerCount) Layers.Add(layerList[idx]);
+            else TextEncoderLayers.Add(layerList[idx]);
+        }
+    }
+
+    /// <summary>
+    /// Helper for subclasses overriding <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/>
+    /// to surface their <see cref="TextEncoderLayers"/> to the base weight-registry walker.
+    /// </summary>
+    protected IEnumerable<LayerBase<T>?> EnumerateTextEncoderTrainableLayers()
+    {
+        foreach (var layer in TextEncoderLayers)
+            if (layer is LayerBase<T> lb) yield return lb;
+    }
+
+    // --- Auxiliary-stream support (BLIP-2 / Q-Former / fusion VL models) ---
+    //
+    // Triple-stream architectures (vision encoder → Q-Former → decoder, or
+    // vision + text + cross-modal fusion bridge) need MORE than the dual-stream
+    // split. Subclasses register additional streams via
+    // <see cref="RegisterAuxiliaryEncoderStream"/>; the base's auxiliary
+    // enumerator walks them all so the inherited GetExtraTrainableLayers /
+    // streaming-pool / weight-registry hooks stay correct without per-subclass
+    // boilerplate.
+
+    private readonly List<List<ILayer<T>>> _auxiliaryEncoderStreams = new List<List<ILayer<T>>>();
+
+    /// <summary>
+    /// Registers an auxiliary encoder stream that lives outside
+    /// <see cref="NeuralNetworkBase{T}.Layers"/>. The base does NOT walk these
+    /// in <c>Predict</c> / <c>TrainWithTape</c>; subclasses use them in their
+    /// own forward methods (e.g. <c>GenerateFromImage</c> for Q-Former models,
+    /// <c>FuseVisionAndText</c> for BridgeTower-style fusion). Registered
+    /// streams are surfaced through
+    /// <see cref="EnumerateAuxiliaryStreamTrainableLayers"/> so subclasses can
+    /// override <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/>
+    /// to yield from auxiliary + text streams in one call.
+    /// </summary>
+    /// <param name="stream">A non-null stream to register. Adds a reference,
+    /// not a copy — subsequent mutations to <paramref name="stream"/> are
+    /// visible.</param>
+    protected void RegisterAuxiliaryEncoderStream(List<ILayer<T>> stream)
+    {
+        if (stream is null) throw new System.ArgumentNullException(nameof(stream));
+        _auxiliaryEncoderStreams.Add(stream);
+    }
+
+    /// <summary>
+    /// Iterates the registered auxiliary streams (Q-Former, decoder, fusion
+    /// bridge, etc.) yielding each layer's <see cref="LayerBase{T}"/> view.
+    /// Use alongside <see cref="EnumerateTextEncoderTrainableLayers"/> when
+    /// the subclass owns BOTH a text encoder and additional streams.
+    /// </summary>
+    protected IEnumerable<LayerBase<T>?> EnumerateAuxiliaryStreamTrainableLayers()
+    {
+        foreach (var stream in _auxiliaryEncoderStreams)
+            foreach (var layer in stream)
+                if (layer is LayerBase<T> lb) yield return lb;
+    }
+
+    /// <summary>
+    /// Combined helper that yields trainable-layer references for both the
+    /// dual-stream <see cref="TextEncoderLayers"/> and any registered
+    /// auxiliary streams. Most subclasses override
+    /// <see cref="NeuralNetworkBase{T}.GetExtraTrainableLayers"/> to return
+    /// this directly.
+    /// </summary>
+    protected IEnumerable<LayerBase<T>?> EnumerateAllAuxiliaryTrainableLayers()
+    {
+        foreach (var l in EnumerateTextEncoderTrainableLayers()) yield return l;
+        foreach (var l in EnumerateAuxiliaryStreamTrainableLayers()) yield return l;
+    }
 
     /// <summary>
     /// Disposes of resources used by this model.

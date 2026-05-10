@@ -303,7 +303,24 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
+        return WalkLayersWithMeshReshape(input, activations: null);
+    }
 
+    /// <summary>
+    /// Walks <see cref="NeuralNetworkBase{T}.Layers"/> applying the MeshCNN-specific
+    /// rank promotion required by <see cref="GlobalPoolingLayer{T}"/>. MeshCNN data is
+    /// shaped <c>[numEdges, channels]</c> (rank-2), but <see cref="GlobalPoolingLayer{T}"/>
+    /// requires rank-3+. Rather than touching the pooling layer's contract — which
+    /// would impact every other consumer — we reshape locally to
+    /// <c>[1, numEdges, channels]</c> right before the pooling layer runs.
+    /// </summary>
+    /// <param name="input">Edge-feature tensor.</param>
+    /// <param name="activations">Optional dictionary that receives a clone of every
+    /// layer's output (keyed <c>Layer_{i}_{TypeName}</c>) — used by
+    /// <see cref="GetNamedLayerActivations"/> so its walk goes through the same
+    /// reshape path. Pass <c>null</c> to skip recording.</param>
+    private Tensor<T> WalkLayersWithMeshReshape(Tensor<T> input, Dictionary<string, Tensor<T>>? activations)
+    {
         if (_currentEdgeAdjacency == null)
         {
             throw new InvalidOperationException(
@@ -315,20 +332,22 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         Tensor<T> output = input;
         var currentAdjacency = _currentEdgeAdjacency;
 
-        foreach (var layer in Layers)
+        for (int i = 0; i < Layers.Count; i++)
         {
+            var layer = Layers[i];
+
             // GlobalPoolingLayer expects 3D+ input. MeshCNN data is [edges, channels] (2D).
             // Reshape to [1, edges, channels] so GlobalPoolingLayer processes it normally
             // and caches the input for backward pass gradient computation.
             if (layer is GlobalPoolingLayer<T> && output.Rank == 2)
             {
                 output = output.Reshape([1, output.Shape[0], output.Shape[1]]);
-                output = layer.Forward(output);
             }
-            else
-            {
-                output = layer.Forward(output);
-            }
+
+            output = layer.Forward(output);
+
+            if (activations is not null)
+                activations[$"Layer_{i}_{layer.GetType().Name}"] = output.Clone();
 
             if (layer is MeshPoolLayer<T> poolLayer && poolLayer.UpdatedAdjacency != null)
             {
@@ -338,6 +357,26 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
         }
 
         return output;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Override to route through <see cref="WalkLayersWithMeshReshape"/> so the tape
+    /// path sees the same rank-2 → rank-3 promotion before <see cref="GlobalPoolingLayer{T}"/>
+    /// that the eager <see cref="Forward"/> applies. The base implementation walks
+    /// <c>Layers</c> directly and would fail with "GlobalPoolingLayer requires rank-3+".
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        return WalkLayersWithMeshReshape(input, activations: null);
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        WalkLayersWithMeshReshape(input, activations);
+        return activations;
     }
 
     /// <summary>
@@ -534,6 +573,27 @@ public class MeshCNN<T> : NeuralNetworkBase<T>
                         reader.ReadInt32();
             }
         }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// MeshCNN's per-mesh edge adjacency is intentionally NOT serialized as model
+    /// state (see <see cref="SerializeNetworkSpecificData"/>) because real workloads
+    /// supply a fresh adjacency per mesh sample via <see cref="SetEdgeAdjacency"/>.
+    /// However, <see cref="Clone"/> consumers expect to call <c>Predict</c> on the
+    /// clone with the same input the original was using, so we propagate the live
+    /// adjacency to the clone alongside the serialized weights. This preserves
+    /// "clone reproduces original on the same input" without changing the on-disk
+    /// model format.
+    /// </remarks>
+    public override IFullModel<T, Tensor<T>, Tensor<T>> Clone()
+    {
+        var clone = base.Clone();
+        if (clone is MeshCNN<T> meshClone && _currentEdgeAdjacency is not null)
+        {
+            meshClone.SetEdgeAdjacency(_currentEdgeAdjacency);
+        }
+        return clone;
     }
 
     /// <summary>

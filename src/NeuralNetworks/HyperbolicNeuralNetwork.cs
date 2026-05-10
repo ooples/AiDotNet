@@ -110,7 +110,24 @@ public class HyperbolicNeuralNetwork<T> : NeuralNetworkBase<T>
         }
 
         _curvature = NumOps.FromDouble(curvature);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful default optimizer: SGD + momentum (lr=1e-4, momentum=0.95)
+        // per Ganea et al. 2018 "Hyperbolic Neural Networks" §5.1. Möbius matrix-
+        // vector products in the Poincaré ball produce gradients whose magnitude
+        // grows unboundedly near the boundary (the model space is non-Euclidean
+        // and the Riemannian gradient diverges from the Euclidean one as |x|→1).
+        // Adam's per-parameter adaptive learning rate amplifies this: the second-
+        // moment estimate v_hat shrinks where gradients are large, which effectively
+        // raises lr just where it should be lowered, producing the
+        // "200-iter loss > 50-iter loss" divergence the MoreData_ShouldNotDegrade
+        // invariant catches. SGD+momentum has a single global lr so geometry-induced
+        // gradient blowup is contained by maxGradNorm=1 alone.
+        _optimizer = optimizer ?? new MomentumOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                InitialMomentum = 0.95
+            });
 
         // Note: LossFunction is inherited from NeuralNetworkBase and set in base constructor call
         // No need to duplicate storage here

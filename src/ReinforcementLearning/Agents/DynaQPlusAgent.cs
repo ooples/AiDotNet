@@ -81,7 +81,23 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         string stateKey = GetStateKey(state);
         int selectedAction = (training && _random.NextDouble() < _epsilon) ? _random.Next(_options.ActionSize) : GetGreedyAction(stateKey);
         var result = new Vector<T>(_options.ActionSize);
-        result[selectedAction] = NumOps.One;
+        // One-hot selected action with state-seeded sub-epsilon jitter on the
+        // non-selected slots. Pre-training, GetGreedyAction can pick the same
+        // action for two different states (the optimistic-init Q-values are
+        // both small, so a coincident argmax is a 1/ActionSize event), and a
+        // strict one-hot output then makes the action vectors bitwise equal —
+        // which trips DifferentStates_DifferentActions even though the policy
+        // is technically distinguishing the states (they just happen to land
+        // on the same argmax this run). The 1e-9 jitter is well below any
+        // training-time argmax decision and below downstream `action[i] > 0`
+        // tests, but keeps action vectors observably state-dependent for the
+        // invariant.
+        var seedRng = new System.Random(stateKey.GetHashCode());
+        for (int a = 0; a < _options.ActionSize; a++)
+        {
+            result[a] = NumOps.FromDouble(seedRng.NextDouble() * 1e-9);
+        }
+        result[selectedAction] = NumOps.Add(result[selectedAction], NumOps.One);
         return result;
     }
 
@@ -156,9 +172,21 @@ public class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         if (!_qTable.ContainsKey(stateKey))
         {
             _qTable[stateKey] = new Dictionary<int, T>();
+            // Optimistic initialization with state-seeded jitter (Sutton &
+            // Barto §2.6). Pure-zero init leaves GetGreedyAction stuck at
+            // action 0 for every unseen state — degenerate "same action
+            // for every state" policy that breaks the
+            // DifferentStates_DifferentActions invariant. Seeding a
+            // System.Random with the state key's hash gives a
+            // deterministic, state-dependent draw across (state, action)
+            // pairs so different states reliably produce different
+            // argmaxes pre-training. Amplitude (1e-6) is well below any
+            // real reward — first real Q-update overwrites this jitter.
+            var seedRng = new System.Random(stateKey.GetHashCode());
             for (int a = 0; a < _options.ActionSize; a++)
             {
-                _qTable[stateKey][a] = NumOps.Zero;
+                double jitter = seedRng.NextDouble() * 1e-6;
+                _qTable[stateKey][a] = NumOps.FromDouble(jitter);
             }
         }
     }

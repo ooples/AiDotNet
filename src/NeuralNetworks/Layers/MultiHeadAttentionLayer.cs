@@ -1093,11 +1093,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Cache pre-projection context for weight gradient computation in backward pass
         _lastAttentionContext = Engine.Reshape(context_transposed, [batchSize, seqLengthQ, embeddingDimension]);
 
-        var output_flat = Engine.TensorMatMul(context_flat, _outputWeights);
-        var output_reshaped = Engine.Reshape(output_flat, [batchSize, seqLengthQ, embeddingDimension]);
-
-        var biasBroadcast = Engine.Reshape(_outputBias, [1, 1, embeddingDimension]);
-        var outputWithBias = Engine.TensorBroadcastAdd(output_reshaped, biasBroadcast);
+        // Fused matmul+bias: collapses MatMul + Reshape + Reshape + BroadcastAdd
+        // (4 engine dispatches) into FusedLinear + Reshape (2 dispatches). Same fused
+        // kernel DenseLayer / FeedForwardLayer use. PersistentParallelExecutor's per-op
+        // signal cost dominates wall-clock on small tensors (Tensors#313 profile),
+        // so reducing dispatch count is a measured user-side win.
+        var output_flat_with_bias = Engine.FusedLinear(context_flat, _outputWeights, _outputBias, FusedActivationType.None);
+        var outputWithBias = Engine.Reshape(output_flat_with_bias, [batchSize, seqLengthQ, embeddingDimension]);
         var result = ApplyActivation(outputWithBias);
 
         // Only store for backward pass during training - skip during inference

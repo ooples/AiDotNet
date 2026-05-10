@@ -54,16 +54,17 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
             throw new ArgumentOutOfRangeException(nameof(length),
                 $"Length ({length}) must be non-negative and within bounds of both arrays (a={a.Length}, b={b.Length}).");
 
-        // Engine.Subtract + DotProduct — zero-overhead in 0.13.0
-        var aVec = new Vector<T>(length);
-        var bVec = new Vector<T>(length);
+        // Direct sum-of-squares loop — see VectorHelper.EuclideanDistance
+        // for the rationale (clustering distance computations dispatch to
+        // GPU per call when AutoDetectAndConfigureGpu has switched
+        // backends, surfaced as the issue #1224 Cluster B regression).
+        T sumSq = NumOps.Zero;
         for (int i = 0; i < length; i++)
         {
-            aVec[i] = a[i];
-            bVec[i] = b[i];
+            T diffI = NumOps.Subtract(a[i], b[i]);
+            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diffI, diffI));
         }
-        var diff = Engine.Subtract(aVec, bVec);
-        return NumOps.Sqrt(Engine.DotProduct(diff, diff));
+        return NumOps.Sqrt(sumSq);
     }
 
     /// <inheritdoc />

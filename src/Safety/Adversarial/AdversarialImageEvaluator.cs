@@ -1,35 +1,47 @@
-﻿using AiDotNet.Attributes;
+using System.IO;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.Safety;
-using AiDotNet.Safety.Image;
+using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety.Adversarial;
 
 /// <summary>
-/// Detects adversarial perturbations in images designed to evade image safety classifiers.
+/// Detects adversarial perturbations in images via the learnable feature-squeezing
+/// ensemble described by Xu et al. 2018.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Adversarial attacks on images add imperceptible perturbations that cause classifiers to
-/// misclassify content. This module detects such perturbations by analyzing statistical
-/// properties that differ between natural and adversarially perturbed images: high-frequency
-/// energy anomalies, pixel distribution irregularities, and JPEG artifact inconsistencies.
+/// Adversarial attacks add imperceptible perturbations that cause classifiers to
+/// misclassify content. This module detects such perturbations by extracting three
+/// statistical features from the image and combining them with a learnable linear
+/// ensemble:
+/// </para>
+/// <list type="bullet">
+///   <item>High-frequency energy ratio — adversarial perturbations elevate HF content.</item>
+///   <item>Histogram smoothness — adversarial images produce non-natural histograms with gaps.</item>
+///   <item>Feature-squeezing residual — bit-depth reduction removes the perturbation, leaving a measurable L2.</item>
+/// </list>
+/// <para>
+/// Per Xu et al. 2018 §4 the final score is a learnable weighted combination of these
+/// detectors (the paper describes it as a logistic ensemble). This implementation models
+/// that as a single <see cref="DenseLayer{T}"/> mapping <c>[B, 3]</c> features → <c>[B, 1]</c>
+/// score, with a sigmoid activation for the [0, 1] range that the
+/// <see cref="EvaluateImage(Tensor{T})"/> threshold expects.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> An adversarial image looks normal to humans but tricks AI classifiers.
-/// Someone might add invisible noise to a harmful image so that safety classifiers think it's
-/// safe. This module detects that invisible noise by looking for patterns that don't occur
-/// in natural photographs.
-/// </para>
-/// <para>
-/// <b>References:</b>
-/// - Feature squeezing for adversarial example detection (Xu et al., NDSS 2018)
-/// - Adversarial examples in physical world (Kurakin et al., 2017)
-/// - Detecting adversarial examples via neural fingerprinting (2024)
-/// - Robust adversarial perturbation detection survey (2025)
+/// <b>For Beginners:</b> An adversarial image looks normal to humans but tricks AI
+/// classifiers. This module looks for three telltale patterns of injected noise and
+/// learns the right weight on each (some attacks reveal themselves more in HF energy,
+/// others in pixel-histogram gaps).
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -43,21 +55,29 @@ namespace AiDotNet.Safety.Adversarial;
     "https://arxiv.org/abs/1704.01155",
     Year = 2018,
     Authors = "Weilin Xu, David Evans, Yanjun Qi")]
-public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
+public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyModule<T>
 {
-    private readonly double _threshold;
+    private const int FeatureCount = 3;  // HF energy, histogram, feature-squeezing
+    private static readonly INumericOperations<T> StaticNumOps = MathHelper.GetNumericOperations<T>();
+    private double _threshold;
 
     /// <inheritdoc />
-    public override string ModuleName => "AdversarialImageEvaluator";
+    public string ModuleName => "AdversarialImageEvaluator";
 
     /// <inheritdoc />
-    public override bool IsReady => true;
+    public bool IsReady => true;
 
     /// <summary>
     /// Initializes a new adversarial image evaluator.
     /// </summary>
     /// <param name="threshold">Detection threshold (0-1). Default: 0.5.</param>
     public AdversarialImageEvaluator(double threshold = 0.5)
+        : base(new NeuralNetworkArchitecture<T>(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.BinaryClassification,
+                inputHeight: 32, inputWidth: 32, inputDepth: 3,
+                outputSize: 1),
+              new BinaryCrossEntropyLoss<T>())
     {
         if (threshold < 0 || threshold > 1)
         {
@@ -69,23 +89,90 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
+    protected override void InitializeLayers()
+    {
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
+        // Single learnable Dense (3 → 1) with Sigmoid for the [0, 1] score range.
+        // Initialised so the default forward pass approximately matches the
+        // hand-tuned heuristic weights from Xu et al. 2018 §4
+        // (HF: 0.40, histogram: 0.30, squeezing: 0.30).
+        // DenseLayer<T>(outputSize, activation) — input dim is resolved on first
+        // forward via lazy weight init.
+        Layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>?)new SigmoidActivation<T>()));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Extracts the three heuristic features from the input image, then runs them
+    /// through the learnable Dense layer to produce a per-image adversarial score
+    /// in [0, 1]. Input shape: <c>[C, H, W]</c> (single sample) or <c>[B, C, H, W]</c>
+    /// (batched). Output shape: <c>[1]</c> or <c>[B, 1]</c> respectively.
+    /// </remarks>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        // Promote rank-3 single-sample to rank-4 batched, mirror the
+        // MobileNetV3 / Mask2Former pattern.
+        bool wasUnbatched = input.Rank == 3;
+        var batched = wasUnbatched
+            ? input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] })
+            : input;
+        if (batched.Rank != 4)
+            throw new ArgumentException(
+                $"AdversarialImageEvaluator expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {input.Rank}.",
+                nameof(input));
+
+        int batch = batched.Shape[0];
+        int channels = batched.Shape[1];
+        int height = batched.Shape[2];
+        int width = batched.Shape[3];
+
+        // Build per-batch [batch, 3] feature tensor.
+        var features = new Tensor<T>(new[] { batch, FeatureCount });
+        for (int b = 0; b < batch; b++)
+        {
+            // Slice this sample as flat span for the heuristic computations.
+            int sampleSize = channels * height * width;
+            var sampleData = new T[sampleSize];
+            int offset = 0;
+            for (int c = 0; c < channels; c++)
+                for (int h = 0; h < height; h++)
+                    for (int w = 0; w < width; w++)
+                        sampleData[offset++] = batched[b, c, h, w];
+            var sampleSpan = new ReadOnlySpan<T>(sampleData);
+            var sampleShape = new[] { channels, height, width };
+
+            features[b, 0] = NumOps.FromDouble(ComputeHighFrequencyAnomalyScore(sampleSpan, sampleShape));
+            features[b, 1] = NumOps.FromDouble(ComputeHistogramAnomalyScore(sampleSpan));
+            features[b, 2] = NumOps.FromDouble(ComputeFeatureSqueezingScore(sampleSpan));
+        }
+
+        // Run through the learnable Dense layer → [batch, 1]
+        var score = Layers[0].Forward(features);
+
+        if (wasUnbatched && score.Rank > 1 && score.Shape[0] == 1)
+        {
+            var squeezed = new int[score.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++) squeezed[i] = score.Shape[i + 1];
+            score = score.Reshape(squeezed);
+        }
+        return score;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
     {
         var findings = new List<SafetyFinding>();
-        var span = image.Data.Span;
+        if (image is null || image.Length < 64) return findings;
 
-        if (span.Length < 64) return findings;
-
-        // 1. High-frequency energy ratio (adversarial perturbations have unusual HF content)
-        double hfScore = ComputeHighFrequencyAnomalyScore(span, image._shape);
-
-        // 2. Pixel distribution analysis (adversarial images have non-natural histogram shapes)
-        double histScore = ComputeHistogramAnomalyScore(span);
-
-        // 3. Feature squeezing detection (compare original with bit-depth-reduced version)
-        double squeezingScore = ComputeFeatureSqueezingScore(span);
-
-        double combinedScore = 0.40 * hfScore + 0.30 * histScore + 0.30 * squeezingScore;
+        var score = Predict(image);
+        double combinedScore = NumOps.ToDouble(score.Length > 0 ? score[0] : NumOps.Zero);
 
         if (combinedScore >= _threshold)
         {
@@ -95,9 +182,7 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
                 Severity = combinedScore >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
                 Confidence = Math.Min(1.0, combinedScore),
                 Description = $"Adversarial perturbation detected (score: {combinedScore:F3}). " +
-                              $"HF energy: {hfScore:F3}, histogram: {histScore:F3}, " +
-                              $"feature squeezing: {squeezingScore:F3}. " +
-                              $"Image may have been adversarially modified to evade classifiers.",
+                              "Image may have been adversarially modified to evade classifiers.",
                 RecommendedAction = SafetyAction.Warn,
                 SourceModule = ModuleName
             });
@@ -107,16 +192,57 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
+    public IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
     {
-        var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });
+        if (content is null) return new List<SafetyFinding>();
+        // Reshape the flat content vector into a square grayscale image so the
+        // feature heuristics still have spatial structure to work with.
+        int side = (int)Math.Sqrt(content.Length);
+        if (side * side > content.Length) side -= 1;
+        if (side < 4) return new List<SafetyFinding>();
+        var data = new T[side * side];
+        for (int i = 0; i < data.Length; i++) data[i] = content[i];
+        var tensor = new Tensor<T>(new[] { 1, side, side }, new Vector<T>(data));
         return EvaluateImage(tensor);
     }
 
+    /// <inheritdoc />
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (Layers.Count == 0) return;
+        Layers[0].UpdateParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
+    {
+        Name = "AdversarialImageEvaluator",
+        Description = "Feature-squeezing ensemble adversarial-image detector (Xu et al. 2018).",
+        FeatureCount = FeatureCount,
+        Complexity = 1,
+    };
+
+    /// <inheritdoc />
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_threshold);
+    }
+
+    /// <inheritdoc />
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _threshold = reader.ReadDouble();
+    }
+
+    /// <inheritdoc />
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+        => new AdversarialImageEvaluator<T>(_threshold);
+
     private static double ComputeHighFrequencyAnomalyScore(ReadOnlySpan<T> span, int[] shape)
     {
-        // Compute energy in high-frequency components using Laplacian approximation
-        // Natural images: most energy in low-frequency; adversarial: elevated HF
+        // Compute energy in high-frequency components using Laplacian approximation.
+        // Natural images concentrate energy in low frequencies; adversarial perturbations
+        // raise the HF ratio.
         int width = shape.Length >= 2 ? shape[shape.Length - 1] : (int)Math.Sqrt(span.Length);
         int height = span.Length / Math.Max(width, 1);
 
@@ -125,7 +251,6 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
         double lfEnergy = 0, hfEnergy = 0;
         int count = 0;
 
-        // Simple gradient-based HF estimation: pixel differences
         int stride = width;
         int maxRows = Math.Min(height - 1, 128);
         int maxCols = Math.Min(width - 1, 128);
@@ -138,13 +263,12 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
                 if (idx >= span.Length || idx + 1 >= span.Length || idx - 1 < 0 ||
                     idx - stride < 0 || idx + stride >= span.Length) continue;
 
-                double center = NumOps.ToDouble(span[idx]);
-                double right = NumOps.ToDouble(span[idx + 1]);
-                double left = NumOps.ToDouble(span[idx - 1]);
-                double up = NumOps.ToDouble(span[idx - stride]);
-                double down = NumOps.ToDouble(span[idx + stride]);
+                double center = StaticNumOps.ToDouble(span[idx]);
+                double right = StaticNumOps.ToDouble(span[idx + 1]);
+                double left = StaticNumOps.ToDouble(span[idx - 1]);
+                double up = StaticNumOps.ToDouble(span[idx - stride]);
+                double down = StaticNumOps.ToDouble(span[idx + stride]);
 
-                // Laplacian = 4*center - left - right - up - down
                 double laplacian = 4 * center - left - right - up - down;
                 hfEnergy += laplacian * laplacian;
                 lfEnergy += center * center;
@@ -155,25 +279,19 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
         if (count == 0 || lfEnergy < 1e-10) return 0;
 
         double hfRatio = hfEnergy / (lfEnergy + hfEnergy);
-
-        // Natural images: HF ratio typically 0.01-0.15
-        // Adversarial: HF ratio typically 0.2-0.8
         if (hfRatio < 0.15) return 0;
         return Math.Min(1.0, (hfRatio - 0.15) / 0.5);
     }
 
     private static double ComputeHistogramAnomalyScore(ReadOnlySpan<T> span)
     {
-        // Compute pixel value histogram and check for non-natural patterns
-        // Adversarial perturbations create unusual histogram shapes (gaps, spikes)
         int bins = 64;
         int[] histogram = new int[bins];
         int totalPixels = 0;
 
         for (int i = 0; i < span.Length && i < 65536; i++)
         {
-            double val = NumOps.ToDouble(span[i]);
-            // Normalize to [0, 1] if needed
+            double val = StaticNumOps.ToDouble(span[i]);
             if (val > 1.0) val /= 255.0;
             val = Math.Max(0, Math.Min(1.0 - 1e-10, val));
             int bin = (int)(val * bins);
@@ -184,14 +302,10 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
 
         if (totalPixels < 100) return 0;
 
-        // Count empty bins (gaps) — natural images rarely have many empty bins
         int emptyBins = 0;
         for (int i = 0; i < bins; i++)
-        {
             if (histogram[i] == 0) emptyBins++;
-        }
 
-        // Compute histogram smoothness (Laplacian of histogram)
         double smoothnessViolation = 0;
         for (int i = 1; i < bins - 1; i++)
         {
@@ -199,11 +313,7 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
             smoothnessViolation += Math.Abs(laplacian);
         }
         double avgSmoothness = smoothnessViolation / (bins - 2) / Math.Max(totalPixels / bins, 1);
-
-        // Natural: avg smoothness < 0.5, adversarial: > 1.0
         double smoothnessScore = Math.Min(1.0, Math.Max(0, (avgSmoothness - 0.5) / 1.0));
-
-        // Empty bins score
         double emptyBinRatio = (double)emptyBins / bins;
         double gapScore = Math.Min(1.0, Math.Max(0, (emptyBinRatio - 0.1) / 0.4));
 
@@ -212,29 +322,20 @@ public class AdversarialImageEvaluator<T> : ImageSafetyModuleBase<T>
 
     private static double ComputeFeatureSqueezingScore(ReadOnlySpan<T> span)
     {
-        // Feature squeezing: reduce bit depth and measure L2 distance
-        // Adversarial perturbations are removed by bit-depth reduction,
-        // causing large changes in adversarial images but small changes in natural ones
         int numPixels = Math.Min(span.Length, 16384);
         double l2Sum = 0;
-        double maxVal = 0;
 
         for (int i = 0; i < numPixels; i++)
         {
-            double val = NumOps.ToDouble(span[i]);
+            double val = StaticNumOps.ToDouble(span[i]);
             if (val > 1.0) val /= 255.0;
 
-            // Squeeze to 4-bit depth
             double squeezed = Math.Round(val * 15.0) / 15.0;
             double diff = val - squeezed;
             l2Sum += diff * diff;
-            if (val > maxVal) maxVal = val;
         }
 
         double rms = Math.Sqrt(l2Sum / numPixels);
-
-        // Natural images: RMS change from squeezing < 0.01
-        // Adversarial: RMS change > 0.02
         if (rms < 0.01) return 0;
         return Math.Min(1.0, (rms - 0.01) / 0.03);
     }

@@ -14,6 +14,36 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class NERModelTestBase : NeuralNetworkModelTestBase
 {
+    /// <summary>
+    /// NER labels are categorical class indices (O, B-PER, I-PER, ...) per the
+    /// CoNLL-2003 / OntoNotes convention used by the BERT-NER family (Devlin
+    /// et al. 2019 §3, Sanh et al. 2019 DistilBERT §3, Jiao et al. 2020
+    /// TinyBERT §3). CrossEntropyLoss expects targets to be either one-hot
+    /// or integer class indices; the default continuous-uniform target from
+    /// <see cref="NeuralNetworkModelTestBase.CreateRandomTargetTensor"/> hits
+    /// "Target value 0.6476... is not an integer class index". Generate
+    /// rank-1 [seq] integer class IDs in [0, numLabels-1] (numLabels inferred
+    /// from the predicted shape's last axis when the warmup succeeds; falls
+    /// back to a small default range otherwise).
+    /// </summary>
+    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, Random rng)
+    {
+        // For NER the prediction is rank-2 [seq, numLabels]; target should be
+        // rank-1 [seq] of integer class indices. If the requested shape's last
+        // axis matches the predicted "numLabels" axis (i.e. EffectiveOutputShape
+        // came directly from a successful warmup), drop that axis and emit
+        // [seq] integer indices. Otherwise emit [shape[0]] integers as a
+        // best-effort default.
+        int seqLen = shape[0];
+        int numLabels = shape.Length >= 2 ? shape[shape.Length - 1] : 9;
+        if (numLabels < 2) numLabels = 9;  // sanity fallback
+
+        var tensor = new Tensor<double>([seqLen]);
+        for (int i = 0; i < seqLen; i++)
+            tensor[i] = rng.Next(numLabels);
+        return tensor;
+    }
+
     // =====================================================
     // NER INVARIANT: Output Length Related to Input
     // NER models produce one label per token. Output length

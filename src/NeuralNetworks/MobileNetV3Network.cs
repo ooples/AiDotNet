@@ -212,7 +212,30 @@ public class MobileNetV3Network<T> : NeuralNetworkBase<T>
         // Set eval mode on all layers for inference (BN uses running stats)
         foreach (var layer in Layers)
             layer.SetTrainingMode(false);
-        return Forward(input);
+
+        // MobileNetV3's stem-and-blocks pipeline expects rank-4
+        // [B, C, H, W] (Howard et al. 2019 §3, NCHW). When a caller
+        // hands us a single-sample rank-3 [C, H, W] tensor (the
+        // integration test passes <c>[3, 32, 32]</c>), the SE block
+        // inside InvertedResidualBlock global-pools to [B, C, 1, 1]
+        // and broadcasts back against the spatial input — without a
+        // batch axis the rank-3 collapse produced shapes like
+        // <c>[16, 32, 32]</c> vs <c>[1, 16, 1]</c> that can't
+        // broadcast (#1224 Cluster F:
+        // <c>MobileNetV3Network_Predict_ProducesOutput</c>). Mirror
+        // the EfficientNet override: promote rank-3 → rank-4 and
+        // squeeze the unit batch axis off scalar outputs to preserve
+        // the per-sample inference contract.
+        bool promoted = input.Rank == 3;
+        var processed = promoted ? PromoteToBatchedTensor(input) : input;
+        var output = Forward(processed);
+        if (promoted && output.Rank > 1 && output.Shape[0] == 1)
+        {
+            var squeezed = new int[output.Rank - 1];
+            for (int i = 0; i < squeezed.Length; i++) squeezed[i] = output.Shape[i + 1];
+            output = output.Reshape(squeezed);
+        }
+        return output;
     }
 
     /// <inheritdoc />

@@ -231,6 +231,59 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
         }
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// The base <c>TrainWithTape</c> walks <c>Layers</c> via
+        /// <c>ForwardForTraining</c> with no per-layer adjacency setup. Route
+        /// the tape-mode forward through the same adjacency-aware path
+        /// <see cref="Predict"/> uses (default identity adjacency from input
+        /// shape) so <see cref="GraphConvolutionalLayer{T}.Forward"/> sees the
+        /// graph structure it requires.
+        /// </remarks>
+        public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        {
+            if (input == null) throw new ArgumentNullException(nameof(input));
+            if (input.Rank != 2 && input.Rank != 3)
+            {
+                throw new ArgumentException("GraphNeuralOperator expects a 2D [nodes, features] or 3D [batch, nodes, features] tensor.");
+            }
+
+            int numNodes = input.Rank == 2 ? input.Shape[0] : input.Shape[1];
+            var adjacency = CreateIdentityAdjacency(numNodes);
+            return Forward(input, adjacency);
+        }
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// Override the base implementation so the per-layer walk goes through
+        /// <see cref="Forward(Tensor{T}, Tensor{T})"/>'s adjacency-aware path
+        /// instead of the base class's plain layer iteration. Without this,
+        /// <see cref="GraphConvolutionalLayer{T}.Forward"/> throws because no
+        /// adjacency was set on the layer.
+        /// </remarks>
+        public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+        {
+            if (input == null) throw new ArgumentNullException(nameof(input));
+            if (input.Rank != 2 && input.Rank != 3)
+            {
+                throw new ArgumentException("GraphNeuralOperator expects a 2D [nodes, features] or 3D [batch, nodes, features] tensor.");
+            }
+
+            int numNodes = input.Rank == 2 ? input.Shape[0] : input.Shape[1];
+            var adjacency = CreateIdentityAdjacency(numNodes);
+            var preparedAdjacency = PrepareAdjacency(adjacency, input.Rank == 2 ? 1 : input.Shape[0]);
+
+            var activations = new Dictionary<string, Tensor<T>>();
+            var features = input.Rank == 2 ? AddBatchDimension(input) : input;
+            for (int i = 0; i < _graphLayers.Count; i++)
+            {
+                _graphLayers[i].SetAdjacencyMatrix(preparedAdjacency);
+                features = _graphLayers[i].Forward(features);
+                activations[$"Layer_{i}_{_graphLayers[i].GetType().Name}"] = features.Clone();
+            }
+            return activations;
+        }
+
 
 
         /// <summary>

@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -29,17 +30,10 @@ namespace AiDotNet.VisionLanguage.Foundational;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a BridgeTower model for cross-modal alignment
-/// // with bridge layers connecting vision and text encoder levels
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new BridgeTower&lt;double&gt;(architecture, "bridgetower.onnx");
-///
-/// // Training mode with native layers
 /// var trainModel = new BridgeTower&lt;double&gt;(architecture, new BridgeTowerOptions());
 /// </code>
 /// </example>
@@ -53,24 +47,68 @@ namespace AiDotNet.VisionLanguage.Foundational;
 [ResearchPaper("BridgeTower: Building Bridges Between Encoders in Vision-Language Representation Learning", "https://arxiv.org/abs/2206.08657", Year = 2023, Authors = "Xu et al.")]
 public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionModel<T>
 {
-    private readonly BridgeTowerOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly BridgeTowerOptions _options;
+    public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
-    private int _visionLayerEnd; private int _textLayerEnd;
+    private readonly ITokenizer? _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
 
-    public BridgeTower(NeuralNetworkArchitecture<T> architecture, string modelPath, BridgeTowerOptions? options = null) : base(architecture) { _options = options ?? new BridgeTowerOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.FusionDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public BridgeTower(NeuralNetworkArchitecture<T> architecture, BridgeTowerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new BridgeTowerOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.FusionDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    // Foundational fusion split: vision in Layers, text + bridge fusion as auxiliaries.
+    private readonly List<ILayer<T>> _bridgeFusionLayers = new List<ILayer<T>>();
 
-    public int EmbeddingDimension => _options.FusionDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int FusionEmbeddingDim => _options.FusionDim; public int MaxSequenceLength => _options.MaxSequenceLength;
+    public BridgeTower(NeuralNetworkArchitecture<T> architecture, string modelPath, BridgeTowerOptions? options = null) : base(architecture)
+    {
+        _options = options ?? new BridgeTowerOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.FusionDim;
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath))
+            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public BridgeTower(NeuralNetworkArchitecture<T> architecture, BridgeTowerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new BridgeTowerOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.FusionDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+    }
+
+    public int EmbeddingDimension => _options.FusionDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int FusionEmbeddingDim => _options.FusionDim;
+    public int MaxSequenceLength => _options.MaxSequenceLength;
 
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p));
-        // Vision encoder with bridge layers
         var c = p;
-        for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c);
+        foreach (var l in Layers) c = l.Forward(c);
         return L2Normalize(c);
     }
 
@@ -80,18 +118,19 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
 
-        // Vision encoder with bridge cross-attention layers
+        // Vision encoder with bridge cross-attention layers (Layers).
         var visionOut = p;
-        for (int i = 0; i < _visionLayerEnd; i++) visionOut = Layers[i].Forward(visionOut);
+        foreach (var l in Layers) visionOut = l.Forward(visionOut);
 
-        // Text encoder with bridge cross-attention layers
+        // Text encoder + bridge fusion (auxiliary stream). The auxiliary
+        // stream contains both the text encoder layers and the bridge fusion
+        // layers concatenated; we feed the text tokens through the text
+        // portion, then concatenate with vision and run through the fusion.
         var textTokens = TokenizeText(text);
-        var textOut = textTokens;
-        for (int i = _visionLayerEnd; i < _textLayerEnd; i++) textOut = Layers[i].Forward(textOut);
+        var current = textTokens;
+        foreach (var l in _bridgeFusionLayers) current = l.Forward(current);
 
-        // Concatenate vision and text for cross-modal fusion layers
-        var fused = visionOut.ConcatenateTensors(textOut);
-        for (int i = _textLayerEnd; i < Layers.Count; i++) fused = Layers[i].Forward(fused);
+        var fused = visionOut.ConcatenateTensors(current);
         return fused;
     }
 
@@ -100,11 +139,14 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
         var imageEmb = EncodeImage(image);
         var textTokens = TokenizeText(text);
         Tensor<T> textEmb;
-        if (IsOnnxMode && OnnxModel is not null) { textEmb = L2Normalize(OnnxModel.Run(textTokens)); }
+        if (IsOnnxMode && OnnxModel is not null)
+        {
+            textEmb = L2Normalize(OnnxModel.Run(textTokens));
+        }
         else
         {
             var c = textTokens;
-            for (int i = _visionLayerEnd; i < _textLayerEnd; i++) c = Layers[i].Forward(c);
+            foreach (var l in _bridgeFusionLayers) c = l.Forward(c);
             textEmb = L2Normalize(c);
         }
         return CosineSimilarity(imageEmb, textEmb);
@@ -113,31 +155,37 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is DualStreamArchitecture<T> dual)
         {
-            Layers.AddRange(Architecture.Layers);
-            _visionLayerEnd = Layers.Count / 3;
-            _textLayerEnd = Layers.Count * 2 / 3;
+            Layers.AddRange(dual.VisionLayers);
+            _bridgeFusionLayers.AddRange(dual.TextLayers);
+            RegisterAuxiliaryEncoderStream(_bridgeFusionLayers);
+            return;
         }
-        else
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultBridgeFusionLayers(_options.VisionDim, _options.TextDim, _options.FusionDim, _options.NumVisionLayers, _options.NumTextLayers, _options.NumBridgeLayers, _options.NumHeads, _options.DropoutRate));
-            ComputeBridgeBoundaries();
-        }
-    }
 
-    private void ComputeBridgeBoundaries()
-    {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
         // Vision encoder: LN + N vision blocks, with bridge cross-attention at evenly-spaced intervals
         int bridgeInterval = _options.NumVisionLayers > 0 ? Math.Max(1, _options.NumVisionLayers / Math.Max(1, _options.NumBridgeLayers)) : 1;
         int numVisionBridges = _options.NumVisionLayers > 0 ? (_options.NumVisionLayers / bridgeInterval) : 0;
         int bridgeCrossAttnLayers = _options.DropoutRate > 0 ? 3 : 2; // MHA + LN + optional Dropout
-        _visionLayerEnd = 1 + _options.NumVisionLayers * lpb + numVisionBridges * bridgeCrossAttnLayers + (_options.VisionDim != _options.FusionDim ? 1 : 0);
-        // Text encoder: LN + N text blocks, with bridge cross-attention at evenly-spaced intervals
-        int textBridgeInterval = _options.NumTextLayers > 0 ? Math.Max(1, _options.NumTextLayers / Math.Max(1, _options.NumBridgeLayers)) : 1;
-        int numTextBridges = _options.NumTextLayers > 0 ? (_options.NumTextLayers / textBridgeInterval) : 0;
-        _textLayerEnd = _visionLayerEnd + 1 + _options.NumTextLayers * lpb + numTextBridges * bridgeCrossAttnLayers + (_options.TextDim != _options.FusionDim ? 1 : 0);
+        int visionLayerEnd = 1 + _options.NumVisionLayers * blockSize
+            + numVisionBridges * bridgeCrossAttnLayers
+            + (_options.VisionDim != _options.FusionDim ? 1 : 0);
+
+        var allLayers = LayerHelper<T>.CreateDefaultBridgeFusionLayers(
+            _options.VisionDim, _options.TextDim, _options.FusionDim,
+            _options.NumVisionLayers, _options.NumTextLayers, _options.NumBridgeLayers,
+            _options.NumHeads, _options.DropoutRate);
+
+        int idx = 0;
+        foreach (var layer in allLayers)
+        {
+            if (idx < visionLayerEnd) Layers.Add(layer);
+            else _bridgeFusionLayers.Add(layer);
+            idx++;
+        }
+
+        RegisterAuxiliaryEncoderStream(_bridgeFusionLayers);
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -149,15 +197,116 @@ public class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguageFusionM
         for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
         return tokens;
     }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        SetTrainingMode(false);
+        var c = PreprocessImage(input);
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        // Pass _optimizer (the AdamW the constructor created with the
+        // model's paper-faithful hyperparameters) into TrainWithTape so
+        // the train path actually uses it. Without this the call
+        // dropped through to GetOrCreateBaseOptimizer's default Adam at
+        // lr=1e-3, ignoring whatever the caller configured via the
+        // optimizer ctor parameter.
+        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
+        finally { SetTrainingMode(false); }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+        // Bridge-fusion stream is part of the trainable graph (registered via
+        // RegisterAuxiliaryEncoderStream in InitializeLayers and surfaced
+        // through GetExtraTrainableLayers), so its parameter slices live
+        // alongside the vision encoder's in the flat parameter vector. Walk
+        // it here so the writeback covers every trainable parameter the
+        // model exposes.
+        foreach (var l in _bridgeFusionLayers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; }
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateAuxiliaryStreamTrainableLayers();
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() { var m = new ModelMetadata<T> { Name = _useNativeMode ? "BridgeTower-Native" : "BridgeTower-ONNX", Description = "BridgeTower: Building Bridges Between Encoders in Vision-Language Representation Learning (Xu et al., AAAI 2023)", FeatureCount = _options.FusionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers + _options.NumBridgeLayers }; m.AdditionalInfo["Architecture"] = "BridgeTower"; m.AdditionalInfo["FusionType"] = _options.FusionType.ToString(); return m; }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionDim); writer.Write(_options.TextDim); writer.Write(_options.FusionDim); writer.Write(_options.NumVisionLayers); writer.Write(_options.NumTextLayers); writer.Write(_options.NumBridgeLayers); writer.Write(_options.NumHeads); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string mp = reader.ReadString(); if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp; _options.ImageSize = reader.ReadInt32(); _options.VisionDim = reader.ReadInt32(); _options.TextDim = reader.ReadInt32(); _options.FusionDim = reader.ReadInt32(); _options.NumVisionLayers = reader.ReadInt32(); _options.NumTextLayers = reader.ReadInt32(); _options.NumBridgeLayers = reader.ReadInt32(); _options.NumHeads = reader.ReadInt32(); if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions); if (_useNativeMode) ComputeBridgeBoundaries(); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new BridgeTower<T>(Architecture, mp, _options); return new BridgeTower<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(BridgeTower<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; if (disposing) { OnnxModel?.Dispose(); } base.Dispose(disposing); }
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var m = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "BridgeTower-Native" : "BridgeTower-ONNX",
+            Description = "BridgeTower: Building Bridges Between Encoders in Vision-Language Representation Learning (Xu et al., AAAI 2023)",
+            FeatureCount = _options.FusionDim,
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers + _options.NumBridgeLayers
+        };
+        m.AdditionalInfo["Architecture"] = "BridgeTower";
+        m.AdditionalInfo["FusionType"] = _options.FusionType.ToString();
+        return m;
+    }
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionDim);
+        writer.Write(_options.TextDim);
+        writer.Write(_options.FusionDim);
+        writer.Write(_options.NumVisionLayers);
+        writer.Write(_options.NumTextLayers);
+        writer.Write(_options.NumBridgeLayers);
+        writer.Write(_options.NumHeads);
+    }
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string mp = reader.ReadString();
+        if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionDim = reader.ReadInt32();
+        _options.TextDim = reader.ReadInt32();
+        _options.FusionDim = reader.ReadInt32();
+        _options.NumVisionLayers = reader.ReadInt32();
+        _options.NumTextLayers = reader.ReadInt32();
+        _options.NumBridgeLayers = reader.ReadInt32();
+        _options.NumHeads = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new BridgeTower<T>(Architecture, mp, _options);
+        return new BridgeTower<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(BridgeTower<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) { OnnxModel?.Dispose(); }
+        base.Dispose(disposing);
+    }
 }

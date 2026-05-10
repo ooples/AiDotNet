@@ -48,7 +48,26 @@ public class ISTFTNet<T> : TtsModelBase<T>, IVocoder<T>
     public Tensor<T> MelToWaveform(Tensor<T> melSpectrogram) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(melSpectrogram); return Predict(melSpectrogram); }
     protected override Tensor<T> PreprocessText(string text) { var t = new Tensor<T>([1]); t[0] = NumOps.FromDouble(0.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultVocoderLayers(_options.MelChannels, 512, _options.StftWindow / 2 + 1, _options.NumUpsampleLayers, 3, _options.DropoutRate)); }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        // Force eval mode for the duration of the forward pass so Dropout
+        // (DropoutRate=0.1 by default in TtsModelOptions) doesn't randomize
+        // outputs across consecutive Predict calls — pattern matches PyTorch
+        // model.eval() and TF model(x, training=False). Without this the
+        // SpeakerConsistency invariant fails because Dropout fires fresh
+        // randomness on every forward.
+        bool prev = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+        finally { SetTrainingMode(prev); }
+    }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); try { TrainWithTape(input, expected); } finally { SetTrainingMode(false); } }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "iSTFTNet-Native" : "iSTFTNet-ONNX", Description = "iSTFTNet: Fast Mel-Spectrogram Vocoder with Inverse STFT (Kaneko et al., 2022)", FeatureCount = _options.MelChannels }; }

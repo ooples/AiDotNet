@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -64,12 +65,13 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
-    private bool _disposed; private int _visionLayerEnd;
+    private bool _disposed;
 
     public FLIP(NeuralNetworkArchitecture<T> architecture, string imageEncoderModelPath, FLIPOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new FLIPOptions();
+        SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.VisionEmbeddingDim;
         if (string.IsNullOrWhiteSpace(imageEncoderModelPath)) throw new ArgumentException("Image encoder model path cannot be null or empty.", nameof(imageEncoderModelPath));
@@ -84,7 +86,9 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
     public FLIP(NeuralNetworkArchitecture<T> architecture, FLIPOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
-        _options = options ?? new FLIPOptions(); _useNativeMode = true;
+        _options = options ?? new FLIPOptions();
+        SyncImageSizeWithArchitecture();
+        _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.VisionEmbeddingDim;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
@@ -116,12 +120,51 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _visionLayerEnd = Layers.Count / 2; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultOpenCLIPLayers(_options.VisionEmbeddingDim, _options.TextEmbeddingDim, _options.ProjectionDim, _options.NumVisionLayers, _options.NumTextLayers, _options.NumVisionHeads, _options.NumTextHeads, _options.DropoutRate)); int lpb = _options.DropoutRate > 0 ? 6 : 5; _visionLayerEnd = 2 + _options.NumVisionLayers * lpb; }
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        Layers.Add(new PatchEmbeddingLayer<T>(patchSize, _options.VisionEmbeddingDim, expectedInputChannels: 3));
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        int visionLayerCount = 2 + _options.NumVisionLayers * blockSize;
+        SplitDualStreamLayers(
+            LayerHelper<T>.CreateDefaultOpenCLIPLayers(
+                _options.VisionEmbeddingDim, _options.TextEmbeddingDim, _options.ProjectionDim,
+                _options.NumVisionLayers, _options.NumTextLayers,
+                _options.NumVisionHeads, _options.NumTextHeads, _options.DropoutRate),
+            visionLayerCount);
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input);
+        SetTrainingMode(false);
+        var c = PreprocessImage(input);
+        foreach (var l in Layers) c = l.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try { TrainWithTape(PreprocessImage(input), expected); }
+        finally { SetTrainingMode(false); }
+    }
+
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateTextEncoderTrainableLayers();
+
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
+    }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
@@ -138,8 +181,8 @@ public class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMod
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new FLIP<T>(Architecture, mp, _options); return new FLIP<T>(Architecture, _options); }
 
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var enc = _tokenizer.Encode(text); int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength); var tk = new Tensor<T>([sl]); for (int i = 0; i < sl; i++) tk[i] = NumOps.FromDouble(enc.TokenIds[i]); return tk; }
-    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { var c = input; for (int i = 0; i < _visionLayerEnd; i++) c = Layers[i].Forward(c); return c; }
-    private Tensor<T> ForwardTextEncoder(Tensor<T> tokens) { var c = tokens; for (int i = _visionLayerEnd; i < Layers.Count; i++) c = Layers[i].Forward(c); return c; }
+    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    private Tensor<T> ForwardTextEncoder(Tensor<T> tokens) { var c = tokens; foreach (var l in TextEncoderLayers) c = l.Forward(c); return c; }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FLIP<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); } base.Dispose(disposing); }
 }

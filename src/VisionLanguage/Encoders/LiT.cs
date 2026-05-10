@@ -3,6 +3,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -37,17 +38,10 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a LiT model for efficient locked-image text tuning
-/// // freezing the vision encoder and only training the text side
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new LiT&lt;double&gt;(architecture, "lit.onnx");
-///
-/// // Training mode with native layers
 /// var trainModel = new LiT&lt;double&gt;(architecture, new LiTOptions());
 /// </code>
 /// </example>
@@ -63,15 +57,17 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
 {
     private readonly LiTOptions _options;
     public override ModelOptions GetOptions() => _options;
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
-    private bool _disposed; private int _visionLayerEnd;
+    private bool _disposed;
 
     public LiT(NeuralNetworkArchitecture<T> architecture, string imageEncoderModelPath, LiTOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new LiTOptions();
+        SyncImageSizeWithArchitecture();
         _useNativeMode = false;
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
@@ -87,7 +83,8 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
 
         if (_options.TextEncoderModelPath is { } tp && !string.IsNullOrEmpty(tp))
         {
-            if (!File.Exists(tp)) throw new FileNotFoundException($"Text encoder ONNX model not found: {tp}", tp);
+            if (!File.Exists(tp))
+                throw new FileNotFoundException($"Text encoder ONNX model not found: {tp}", tp);
             OnnxTextEncoder = new OnnxModel<T>(tp, _options.OnnxOptions);
         }
 
@@ -100,6 +97,7 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
         : base(architecture)
     {
         _options = options ?? new LiTOptions();
+        SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
@@ -107,6 +105,13 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
         base.EmbeddingDim = _options.VisionEmbeddingDim;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
+    }
+
+    private void SyncImageSizeWithArchitecture()
+    {
+        int h = Architecture.InputHeight;
+        int w = Architecture.InputWidth;
+        if (h > 0 && w > 0 && h == w) _options.ImageSize = h;
     }
 
     public int EmbeddingDimension => _options.VisionEmbeddingDim;
@@ -117,10 +122,47 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
     public int ProjectionDimension => _options.ProjectionDim;
     public T Temperature => NumOps.FromDouble(_options.Temperature);
 
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var preprocessed = PreprocessImage(image); if (IsOnnxMode && OnnxImageEncoder is not null) return L2Normalize(OnnxImageEncoder.Run(preprocessed)); return L2Normalize(ForwardVisionEncoder(preprocessed)); }
-    public Tensor<T> EncodeText(string text) { ThrowIfDisposed(); var tokenized = TokenizeText(text); if (IsOnnxMode && OnnxTextEncoder is not null) return L2Normalize(OnnxTextEncoder.Run(tokenized)); return L2Normalize(ForwardTextEncoder(tokenized)); }
-    public Tensor<T>[] EncodeTexts(string[] texts) { var e = new Tensor<T>[texts.Length]; for (int i = 0; i < texts.Length; i++) e[i] = EncodeText(texts[i]); return e; }
-    public T ComputeSimilarity(Tensor<T> image, string text) { return CosineSimilarity(EncodeImage(image), EncodeText(text)); }
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var preprocessed = PreprocessImage(image);
+        if (IsOnnxMode && OnnxImageEncoder is not null) return L2Normalize(OnnxImageEncoder.Run(preprocessed));
+        var c = preprocessed;
+        foreach (var l in Layers) c = l.Forward(c);
+        return L2Normalize(c);
+    }
+
+    public Tensor<T> EncodeText(string text)
+    {
+        ThrowIfDisposed();
+        var tokenized = TokenizeText(text);
+        // Fail fast in ONNX mode when no text encoder is configured. The
+        // ONNX-mode constructor never populates TextEncoderLayers, so the
+        // previous fallback ran the empty native stack and L2-normalized
+        // raw token IDs — ComputeSimilarity / ZeroShotClassify silently
+        // returned garbage instead of surfacing the configuration error.
+        if (IsOnnxMode)
+        {
+            if (OnnxTextEncoder is null)
+                throw new InvalidOperationException(
+                    "Text encoding in ONNX mode requires a configured text encoder model path. "
+                    + "Set LiTOptions.TextEncoderModelPath before constructing the model.");
+            return L2Normalize(OnnxTextEncoder.Run(tokenized));
+        }
+        var c = tokenized;
+        foreach (var l in TextEncoderLayers) c = l.Forward(c);
+        return L2Normalize(c);
+    }
+
+    public Tensor<T>[] EncodeTexts(string[] texts)
+    {
+        var e = new Tensor<T>[texts.Length];
+        for (int i = 0; i < texts.Length; i++) e[i] = EncodeText(texts[i]);
+        return e;
+    }
+
+    public T ComputeSimilarity(Tensor<T> image, string text) =>
+        CosineSimilarity(EncodeImage(image), EncodeText(text));
 
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, string[] labels)
     {
@@ -139,11 +181,20 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _visionLayerEnd = Layers.Count / 2; }
-        else
+        if (Architecture is DualStreamArchitecture<T> dual)
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultOpenCLIPLayers(
+            Layers.AddRange(dual.VisionLayers);
+            TextEncoderLayers.AddRange(dual.TextLayers);
+            return;
+        }
+
+        int patchSize = Math.Max(1, _options.ImageSize / 16);
+        Layers.Add(new PatchEmbeddingLayer<T>(patchSize, _options.VisionEmbeddingDim, expectedInputChannels: 3));
+
+        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
+        int visionLayerCount = 2 + _options.NumVisionLayers * blockSize;
+        SplitDualStreamLayers(
+            LayerHelper<T>.CreateDefaultOpenCLIPLayers(
                 visionEmbeddingDim: _options.VisionEmbeddingDim,
                 textEmbeddingDim: _options.TextEmbeddingDim,
                 projectionDim: _options.ProjectionDim,
@@ -151,33 +202,139 @@ public class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLanguageMode
                 numTextLayers: _options.NumTextLayers,
                 numVisionHeads: _options.NumVisionHeads,
                 numTextHeads: _options.NumTextHeads,
-                dropoutRate: _options.DropoutRate));
-            int lpb = _options.DropoutRate > 0 ? 6 : 5; _visionLayerEnd = 2 + _options.NumVisionLayers * lpb;
+                dropoutRate: _options.DropoutRate),
+            visionLayerCount);
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        // Normalize ONNX inputs the same way the native path does — both
+        // EncodeImage and the native Predict call PreprocessImage. Without
+        // this, the ONNX fast path would diverge silently from native
+        // (different mean/std offsets reach the model on ONNX vs.
+        // native), which is hard to debug.
+        var c = PreprocessImage(input);
+        if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(c);
+        SetTrainingMode(false);
+        foreach (var layer in Layers) c = layer.Forward(c);
+        return c;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try { TrainWithTape(PreprocessImage(input), expected, _optimizer); }
+        finally { SetTrainingMode(false); }
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        // Sync the text-encoder stream too — see CLIPA.UpdateParameters
+        // for full rationale (dual-stream split, GetExtraTrainableLayers
+        // widens ParameterCount to include TextEncoderLayers, so a
+        // flat-vector writeback that only walks Layers leaves the text
+        // encoder on stale weights and the streams de-sync).
+        foreach (var layer in TextEncoderLayers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
         }
     }
 
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxImageEncoder is not null) return OnnxImageEncoder.Run(input); var current = input; foreach (var layer in Layers) current = layer.Forward(current); return current; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var layer in Layers) { int count = (int)layer.ParameterCount; layer.UpdateParameters(parameters.Slice(idx, count)); idx += count; } }
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+        => EnumerateTextEncoderTrainableLayers();
+
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
+        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var meta = new ModelMetadata<T> { Name = _useNativeMode ? "LiT-Native" : "LiT-ONNX", Description = "LiT: Zero-Shot Transfer with Locked-image text Tuning (Zhai et al., CVPR 2022)", FeatureCount = _options.ProjectionDim, Complexity = _options.NumVisionLayers + _options.NumTextLayers };
+        var meta = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "LiT-Native" : "LiT-ONNX",
+            Description = "LiT: Zero-Shot Transfer with Locked-image text Tuning (Zhai et al., CVPR 2022)",
+            FeatureCount = _options.ProjectionDim,
+            Complexity = _options.NumVisionLayers + _options.NumTextLayers
+        };
         meta.AdditionalInfo["Architecture"] = "LiT";
         meta.AdditionalInfo["FreezeVisionEncoder"] = _options.FreezeVisionEncoder.ToString();
         meta.AdditionalInfo["ProjectionDim"] = _options.ProjectionDim.ToString();
         return meta;
     }
 
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) { writer.Write(_useNativeMode); writer.Write(_options.ImageEncoderModelPath ?? string.Empty); writer.Write(_options.TextEncoderModelPath ?? string.Empty); writer.Write(_options.ImageSize); writer.Write(_options.VisionEmbeddingDim); writer.Write(_options.TextEmbeddingDim); writer.Write(_options.ProjectionDim); writer.Write(_options.Temperature); writer.Write(_options.FreezeVisionEncoder); }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) { _useNativeMode = reader.ReadBoolean(); string imgPath = reader.ReadString(); if (!string.IsNullOrEmpty(imgPath)) _options.ImageEncoderModelPath = imgPath; string txtPath = reader.ReadString(); if (!string.IsNullOrEmpty(txtPath)) _options.TextEncoderModelPath = txtPath; _options.ImageSize = reader.ReadInt32(); _options.VisionEmbeddingDim = reader.ReadInt32(); _options.TextEmbeddingDim = reader.ReadInt32(); _options.ProjectionDim = reader.ReadInt32(); _options.Temperature = reader.ReadDouble(); _options.FreezeVisionEncoder = reader.ReadBoolean(); if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions); if (_options.TextEncoderModelPath is { } tp2 && !string.IsNullOrEmpty(tp2)) OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions); }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new LiT<T>(Architecture, mp, _options); return new LiT<T>(Architecture, _options); }
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
+        writer.Write(_useNativeMode);
+        writer.Write(_options.ImageEncoderModelPath ?? string.Empty);
+        writer.Write(_options.TextEncoderModelPath ?? string.Empty);
+        writer.Write(_options.ImageSize);
+        writer.Write(_options.VisionEmbeddingDim);
+        writer.Write(_options.TextEmbeddingDim);
+        writer.Write(_options.ProjectionDim);
+        writer.Write(_options.Temperature);
+        writer.Write(_options.FreezeVisionEncoder);
+    }
 
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    private Tensor<T> ForwardVisionEncoder(Tensor<T> input) { var current = input; for (int i = 0; i < _visionLayerEnd; i++) current = Layers[i].Forward(current); return current; }
-    private Tensor<T> ForwardTextEncoder(Tensor<T> tokens) { var current = tokens; for (int i = _visionLayerEnd; i < Layers.Count; i++) current = Layers[i].Forward(current); return current; }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(LiT<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); } base.Dispose(disposing); }
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
+        _useNativeMode = reader.ReadBoolean();
+        string imgPath = reader.ReadString();
+        if (!string.IsNullOrEmpty(imgPath)) _options.ImageEncoderModelPath = imgPath;
+        string txtPath = reader.ReadString();
+        if (!string.IsNullOrEmpty(txtPath)) _options.TextEncoderModelPath = txtPath;
+        _options.ImageSize = reader.ReadInt32();
+        _options.VisionEmbeddingDim = reader.ReadInt32();
+        _options.TextEmbeddingDim = reader.ReadInt32();
+        _options.ProjectionDim = reader.ReadInt32();
+        _options.Temperature = reader.ReadDouble();
+        _options.FreezeVisionEncoder = reader.ReadBoolean();
+        if (!_useNativeMode && _options.ImageEncoderModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxImageEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
+        if (_options.TextEncoderModelPath is { } tp2 && !string.IsNullOrEmpty(tp2))
+            OnnxTextEncoder = new OnnxModel<T>(tp2, _options.OnnxOptions);
+    }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ImageEncoderModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new LiT<T>(Architecture, mp, _options);
+        return new LiT<T>(Architecture, _options);
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(LiT<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (disposing) { OnnxImageEncoder?.Dispose(); OnnxTextEncoder?.Dispose(); }
+        base.Dispose(disposing);
+    }
 }

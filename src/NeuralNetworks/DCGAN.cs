@@ -1,5 +1,8 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.NeuralNetworks;
@@ -166,26 +169,75 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int imageWidth,
         int featureMaps)
     {
-        // For DCGAN generator, the latent vector is first projected and reshaped to an initial
-        // 3D feature map. The typical starting spatial size is 4x4 which gets upsampled through
-        // transposed convolutions. The depth represents the number of feature channels.
-        // Note: The actual latent vector (1D) handling is done by the first projection layer.
+        // Paper-faithful DCGAN generator (Radford et al. 2015 §3):
+        //   "The first layer of the GAN, which takes a uniform noise distribution
+        //    Z as input, could be called fully connected as it is just a matrix
+        //    multiplication, but the result is reshaped into a 4-dimensional
+        //    tensor and used as the start of the convolution stack."
+        //
+        // Layout:
+        //   latent[B, latentSize]
+        //     → DenseLayer  (latentSize → 8·featureMaps · 4 · 4) [linear]
+        //     → ReshapeLayer to [8·featureMaps, 4, 4]
+        //     → log2(target/4) × { Deconv 4×4 stride 2 [ReLU] + BatchNorm }
+        //     → final Deconv 4×4 stride 2 → [imageChannels, H, W] [Tanh]
+        //
+        // BatchNorm sits AFTER the deconv (per paper Fig. 1) and ReLU is the
+        // deconv's built-in activation; the final layer uses Tanh and no BN
+        // so the [-1, 1] output range matches the pre-processed image distribution.
 
-        // Compute the initial spatial size based on image dimensions.
-        // Standard DCGAN uses powers of 2 (4->8->16->32->64...).
-        // We compute the smallest valid initial size that can upsample to target dimensions.
         int targetSize = Math.Min(imageHeight, imageWidth);
         int initialSpatialSize = ComputeInitialSpatialSize(targetSize);
-        int initialChannels = featureMaps * 8;  // Standard DCGAN uses 8x feature maps initially
+        int initialChannels = featureMaps * 8;
+        int initialFeatureMapSize = initialChannels * initialSpatialSize * initialSpatialSize;
+
+        var layers = new List<ILayer<T>>
+        {
+            // Project & reshape latent to initial feature map
+            new DenseLayer<T>(initialFeatureMapSize, (IActivationFunction<T>?)new IdentityActivation<T>()),
+            new ReshapeLayer<T>([initialChannels, initialSpatialSize, initialSpatialSize]),
+        };
+
+        int currentChannels = initialChannels;
+        int currentSize = initialSpatialSize;
+
+        // Upsample stages: each doubles spatial dims and halves channels until
+        // we reach the target size. Last stage outputs imageChannels with Tanh.
+        while (currentSize < targetSize)
+        {
+            bool isFinal = currentSize * 2 >= targetSize;
+            int nextChannels = isFinal ? imageChannels : currentChannels / 2;
+            IActivationFunction<T> activation = isFinal
+                ? new TanhActivation<T>()
+                : new ReLUActivation<T>();
+
+            // Deconv 4×4 stride 2 padding 1 doubles spatial dim exactly:
+            //   out = (in - 1) · stride − 2·padding + kernel = (in − 1)·2 − 2 + 4 = 2·in
+            layers.Add(new DeconvolutionalLayer<T>(
+                outputDepth: nextChannels,
+                kernelSize: 4,
+                stride: 2,
+                padding: 1,
+                activationFunction: activation));
+
+            // BatchNorm only on intermediate stages — final layer outputs raw
+            // image so no normalization (paper Fig. 1 / Sec. 3 guideline).
+            if (!isFinal)
+            {
+                layers.Add(new BatchNormalizationLayer<T>());
+            }
+
+            currentChannels = nextChannels;
+            currentSize *= 2;
+        }
 
         return new NeuralNetworkArchitecture<T>(
-            InputType.ThreeDimensional,
+            InputType.OneDimensional,
             NeuralNetworkTaskType.Generative,
             NetworkComplexity.Medium,
-            inputDepth: initialChannels,
-            inputHeight: initialSpatialSize,
-            inputWidth: initialSpatialSize,
-            outputSize: imageChannels * imageHeight * imageWidth);
+            inputSize: latentSize,
+            outputSize: imageChannels * imageHeight * imageWidth,
+            layers: layers);
     }
 
     /// <summary>

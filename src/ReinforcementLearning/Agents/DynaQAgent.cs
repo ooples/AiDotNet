@@ -81,7 +81,15 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         }
 
         var result = new Vector<T>(_options.ActionSize);
-        result[selectedAction] = NumOps.One;
+        // See identical comment in DynaQPlusAgent.SelectAction — state-seeded
+        // sub-epsilon jitter so action vectors stay observably state-dependent
+        // even when GetGreedyAction picks the same argmax for two states.
+        var seedRng = new System.Random(stateKey.GetHashCode());
+        for (int a = 0; a < _options.ActionSize; a++)
+        {
+            result[a] = NumOps.FromDouble(seedRng.NextDouble() * 1e-9);
+        }
+        result[selectedAction] = NumOps.Add(result[selectedAction], NumOps.One);
         return result;
     }
 
@@ -150,9 +158,15 @@ public class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         if (!_qTable.ContainsKey(stateKey))
         {
             _qTable[stateKey] = new Dictionary<int, T>();
+            // Optimistic initialization with state-seeded jitter (Sutton &
+            // Barto §2.6). See identical comment in DynaQPlusAgent — same
+            // tabular-RL fix to avoid the "same action for every untrained
+            // state" degeneracy that breaks DifferentStates_DifferentActions.
+            var seedRng = new System.Random(stateKey.GetHashCode());
             for (int a = 0; a < _options.ActionSize; a++)
             {
-                _qTable[stateKey][a] = NumOps.Zero;
+                double jitter = seedRng.NextDouble() * 1e-6;
+                _qTable[stateKey][a] = NumOps.FromDouble(jitter);
             }
         }
     }

@@ -70,7 +70,7 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
         ILossFunction<T>? lossFunction = null,
         HawkOptions? options = null)
         : base(architecture,
-            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.TextGeneration))
+            lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
         _options = options ?? new HawkOptions();
         Options = _options;
@@ -115,6 +115,22 @@ public class HawkLanguageModel<T> : NeuralNetworkBase<T>
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Tape-based forward + backward + parameter update path that all
+        // other NeuralNetworkBase consumers use. Without this delegation,
+        // Train() was a no-op and downstream tests that expect parameters
+        // to change after Train (LossStrictlyDecreasesOnMemorizationTask,
+        // Training_ShouldChangeParameters, OptimizerStep_ParamL2_DoesNotExplode,
+        // TrainingError_ShouldNotExceedTestError) all fail with "loss
+        // didn't decrease" / "parameters unchanged" diagnostics.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> gradients)

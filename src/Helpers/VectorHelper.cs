@@ -133,11 +133,33 @@ public static class VectorHelper
     /// <returns>The Euclidean distance as type T.</returns>
     public static T EuclideanDistance<T>(Vector<T> a, Vector<T> b)
     {
+        // Direct sum-of-squares loop — every site this helper is called from
+        // (clustering distance computations, K-means EM, kNN feature
+        // selection, RAG vector similarity) iterates over many small
+        // vectors per call. Routing those through engine.Subtract +
+        // engine.DotProduct dispatches to GPU when the global engine has
+        // been switched to a GPU backend (via AiDotNetEngine
+        // .AutoDetectAndConfigureGpu, which AiModelBuilder calls during
+        // BuildAsync) — for small d the per-call dispatch overhead and
+        // tiny-buffer round-trip cost dominate the math, and GPU-path
+        // numerics surfaced as the all-same-cluster regression in
+        // issue #1224 Cluster B (KMeans through AiModelBuilder produced
+        // ARI=0). Computing the dot product inline keeps the math on
+        // CPU FP64 regardless of engine state, which is what every
+        // distance-metric call in this codebase actually wants.
+        if (a is null) throw new ArgumentNullException(nameof(a));
+        if (b is null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length)
+            throw new ArgumentException($"Vectors must have the same length. Got {a.Length} and {b.Length}.", nameof(b));
         var numOps = MathHelper.GetNumericOperations<T>();
-        var engine = AiDotNetEngine.Current;
-        var diff = engine.Subtract(a, b);
-        return numOps.FromDouble(Math.Sqrt(
-            Math.Max(0, numOps.ToDouble(engine.DotProduct(diff, diff)))));
+        T sumSq = numOps.Zero;
+        int n = a.Length;
+        for (int i = 0; i < n; i++)
+        {
+            T diffI = numOps.Subtract(a[i], b[i]);
+            sumSq = numOps.Add(sumSq, numOps.Multiply(diffI, diffI));
+        }
+        return numOps.Sqrt(sumSq);
     }
 
     /// <summary>

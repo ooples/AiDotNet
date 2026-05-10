@@ -140,15 +140,146 @@ public class MMDiTXNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Per Esser et al. 2024 §3 (Scaling Rectified Flow Transformers
+    /// for High-Resolution Image Synthesis, MMDiT § 3) the predictor
+    /// runs on patch TOKENS, not on the raw [B, C, H, W] spatial
+    /// tensor. The forward path is:
+    /// <list type="number">
+    ///   <item>Patchify: [B, C, H, W] → [B, (H/P)·(W/P), C·P²]</item>
+    ///   <item>Embed:    [B, N, C·P²] → [B, N, hiddenSize]</item>
+    ///   <item>Joint blocks at [B, N, hiddenSize]</item>
+    ///   <item>Project:  [B, N, hiddenSize] → [B, N, C·P²]</item>
+    ///   <item>Unpatchify: [B, N, C·P²] → [B, C, H, W]</item>
+    /// </list>
+    /// where N = (H/P)·(W/P) and P = patchSize. The previous
+    /// implementation skipped patchify/unpatchify and just ran Dense
+    /// layers on the spatial tensor's last axis, which projects W →
+    /// patchDim and emits [B, C, H, patchDim] (=2× the latent on the
+    /// SD3 default 32×32×16, patchSize=2 → patchDim=64 so output
+    /// elements = 1·16·32·64 = 32768 vs latent 16384) — exactly the
+    /// "PredictNoise output length 32768 does not match the
+    /// latent/sample length 16384" failure the test reported (#1224
+    /// Cluster F: ControlNetSD3 — 11/11 tests blocked).
+    /// </remarks>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
-        var timeEmb = GetTimestepEmbedding(timestep);
-        var x = _patchEmbed.Forward(noisySample);
+        // Normalize input to rank-4 [B, C, H, W]. Tests pass rank-3
+        // [C, H, W] as a single sample; promote a leading batch dim of 1.
+        var input4d = noisySample;
+        bool wasUnbatched = false;
+        if (input4d.Rank == 3)
+        {
+            wasUnbatched = true;
+            input4d = input4d.Reshape(new[] { 1, input4d.Shape[0], input4d.Shape[1], input4d.Shape[2] });
+        }
+        if (input4d.Rank != 4)
+            throw new ArgumentException(
+                $"MMDiTXNoisePredictor expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {input4d.Rank}.",
+                nameof(noisySample));
 
+        int batch = input4d.Shape[0];
+        int channels = input4d.Shape[1];
+        int height = input4d.Shape[2];
+        int width = input4d.Shape[3];
+
+        if (channels != _inputChannels)
+            throw new ArgumentException(
+                $"MMDiTXNoisePredictor configured for {_inputChannels} channels; got {channels}.",
+                nameof(noisySample));
+        if (height % _patchSize != 0 || width % _patchSize != 0)
+            throw new ArgumentException(
+                $"MMDiTXNoisePredictor requires spatial dims divisible by patchSize ({_patchSize}); got {height}×{width}.",
+                nameof(noisySample));
+
+        int patchDim = _inputChannels * _patchSize * _patchSize;
+        int hPatches = height / _patchSize;
+        int wPatches = width / _patchSize;
+        int numTokens = hPatches * wPatches;
+
+        // Patchify: [B, C, H, W] → [B, numTokens, patchDim]
+        var tokens = Patchify(input4d, batch, channels, height, width, hPatches, wPatches, patchDim);
+
+        // Embed and propagate
+        var x = _patchEmbed.Forward(tokens);
         foreach (var block in _jointBlocks)
             x = block.Forward(x);
+        var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
 
-        return _finalLayer.Forward(x);
+        // Unpatchify back to [B, C, H, W]
+        var output = Unpatchify(projected, batch, channels, height, width, hPatches, wPatches);
+
+        if (wasUnbatched)
+            output = output.Reshape(new[] { channels, height, width });
+        return output;
+    }
+
+    /// <summary>
+    /// [B, C, H, W] → [B, (H/P)·(W/P), C·P²] via the standard
+    /// rearrange("b c (h p1) (w p2) → b (h w) (c p1 p2)") that the
+    /// MMDiT reference implementation uses (Esser et al. 2024 §3).
+    /// </summary>
+    private Tensor<T> Patchify(Tensor<T> input, int batch, int channels, int height, int width,
+        int hPatches, int wPatches, int patchDim)
+    {
+        var output = new Tensor<T>(new[] { batch, hPatches * wPatches, patchDim });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int hp = 0; hp < hPatches; hp++)
+            {
+                for (int wp = 0; wp < wPatches; wp++)
+                {
+                    int tokenIdx = hp * wPatches + wp;
+                    int featIdx = 0;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int p1 = 0; p1 < _patchSize; p1++)
+                        {
+                            for (int p2 = 0; p2 < _patchSize; p2++)
+                            {
+                                int hSrc = hp * _patchSize + p1;
+                                int wSrc = wp * _patchSize + p2;
+                                output[b, tokenIdx, featIdx++] = input[b, c, hSrc, wSrc];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// [B, (H/P)·(W/P), C·P²] → [B, C, H, W] — inverse of <see cref="Patchify"/>.
+    /// </summary>
+    private Tensor<T> Unpatchify(Tensor<T> tokens, int batch, int channels, int height, int width,
+        int hPatches, int wPatches)
+    {
+        var output = new Tensor<T>(new[] { batch, channels, height, width });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int hp = 0; hp < hPatches; hp++)
+            {
+                for (int wp = 0; wp < wPatches; wp++)
+                {
+                    int tokenIdx = hp * wPatches + wp;
+                    int featIdx = 0;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int p1 = 0; p1 < _patchSize; p1++)
+                        {
+                            for (int p2 = 0; p2 < _patchSize; p2++)
+                            {
+                                int hDst = hp * _patchSize + p1;
+                                int wDst = wp * _patchSize + p2;
+                                output[b, c, hDst, wDst] = tokens[b, tokenIdx, featIdx++];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return output;
     }
 
     /// <inheritdoc />

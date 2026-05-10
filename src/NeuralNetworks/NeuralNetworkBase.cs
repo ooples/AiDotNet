@@ -2108,6 +2108,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (layer is ConvolutionalLayer<T>)
             return true;
 
+        // For generative-image models (DCGAN, VAE decoders, segmentation
+        // upsamplers), the final layer is a transposed convolution that
+        // produces an image-shaped tensor. The activation (typically Tanh
+        // for [-1, 1] image range, or Sigmoid for [0, 1]) is the deconv's
+        // built-in activation, so the output is valid even though the layer
+        // itself is a deconvolution.
+        if (layer is DeconvolutionalLayer<T>)
+            return true;
+
         // Check if the layer has an activation function typically used in output layers
         if (layer is ActivationLayer<T> activationLayer)
         {
@@ -2376,13 +2385,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Returns the architecture's input shape as a positive-dim array,
-    /// or null if the architecture doesn't declare a usable shape.
-    /// Used by <see cref="ResolveLazyLayerShapes"/>; intentionally
-    /// silent on missing data so dynamic-spatial models that depend on
-    /// runtime shape feeding still work.
+    /// Returns the input shape that <see cref="Layers"/>[0] actually
+    /// observes — the starting point for <see cref="ResolveLazyLayerShapes"/>'s
+    /// chain walk. Default implementation returns the architecture's
+    /// declared input shape (with a unit batch prepended); models that
+    /// pre-process inputs before the layer stack — patch-embedding image
+    /// tokenizers in vision-language encoders, audio mel-spectrogram front
+    /// ends, etc. — should override to return the post-pre-processing
+    /// shape so lazy <c>LayerNormalization</c>/<c>Dense</c>/etc. layers
+    /// resolve their gamma/weights to the right channel count up-front
+    /// instead of binding to the raw architecture shape and mismatching
+    /// at first real Forward. (Was the cause of the BiomedCLIP /
+    /// DFNCLIP <c>"Gamma shape (128) does not match the last 1 dimensions
+    /// of input shape (1, 256, 768)"</c> failure mode in #1224 — the
+    /// pre-norm <c>LayerNormalizationLayer</c> resolved its gamma to the
+    /// raw NCHW spatial dim 128 from <c>TryGetArchitectureInputShape</c>
+    /// instead of the post-patch-embed channel dim 768.)
     /// </summary>
-    private int[]? TryGetArchitectureInputShape()
+    /// <remarks>
+    /// Intentionally silent on missing data so dynamic-spatial models
+    /// that depend on runtime shape feeding still work — return null to
+    /// defer all shape resolution to the first real Forward.
+    /// </remarks>
+    protected virtual int[]? TryGetArchitectureInputShape()
     {
         // Layer-only models carry a stub architecture; fall back to the
         // first layer's input shape so the lazy-resolution chain still
@@ -4827,7 +4852,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_fusedTrainingDisabled) return false;
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
-        if (typeof(T) != typeof(float))
+        // PR #319 fused-optimizer double-kernel support — paired with the
+        // matching gate drop in CompiledTapeTrainingStep.TryStepWithFusedOptimizer
+        // (line 232 in that file). Both float and double models can now hit
+        // the compile-once-replay-many fast path; other numeric types still
+        // fall through to the eager autograd tape.
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
             return false;
 
         if (!TryMapToFusedOptimizerConfig(

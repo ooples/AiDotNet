@@ -264,6 +264,23 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
     protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
     /// <summary>
+    /// Tape-recorded forward pass. The default <c>NeuralNetworkBase</c>
+    /// implementation walks <c>Layers</c> directly and skips the
+    /// rank-4 → rank-5 batch-axis injection / rank-2 → rank-1 squeeze
+    /// dance <see cref="Forward"/> does. Without this override the
+    /// training path (TrainWithTape → ForwardForTraining) fed the layer
+    /// stack rank-4 input that <see cref="ConvolutionalLayer3D{T}"/>
+    /// silently mis-interpreted as [batch, depth, height, width],
+    /// producing rank-2 [128, 128] output that the loss couldn't align
+    /// with the rank-1 [128] target — surfacing as the
+    /// "Tensor shapes must match. Got [128, 128] and [128]" failure on
+    /// every VoxelCNN training-path invariant test (#1224 Cluster C).
+    /// Delegate to <see cref="Forward"/> so train and infer paths see
+    /// the same rank handling.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    /// <summary>
     /// Trains the network on a single batch of input-output pairs.
     /// </summary>
     /// <param name="input">The input voxel grid tensor.</param>
@@ -284,13 +301,22 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
+            // TrainWithTape handles forward + backward + parameter update
+            // via the GradientTape + optimizer.Step path. The trailing
+            // _optimizer.UpdateParameters(Layers) call this method had
+            // before tried to ALSO run the legacy
+            // ConvolutionalLayer3D.UpdateParameters path, which expects
+            // each layer's _gradients field to be populated by a previous
+            // .Backward() call — but tape-based training never calls
+            // layer.Backward, so the legacy path threw "Backward pass
+            // must be called before updating parameters" on every
+            // VoxelCNN training-path invariant test (#1224 Cluster C).
             TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
             SetTrainingMode(false);
         }
-        _optimizer.UpdateParameters(Layers);
     }
 
     /// <summary>
