@@ -34,9 +34,37 @@ const base = import.meta.env.BASE_URL;
   </div>
 
   <script>
-    import { supabase } from '../../lib/supabase';
+    import { supabase as defaultSupabase } from '../../lib/supabase';
 
     const base = import.meta.env.BASE_URL || '/';
+
+    /**
+     * E2E test seam.
+     *
+     * The post-deploy Playwright smoke specs in
+     * tests/e2e/auth/callback.spec.ts need to drive this page through
+     * each branch (immediate-session redirect, getSession() error,
+     * SIGNED_IN-event-never-fires timeout, etc.) without mounting a real
+     * Supabase project just for the smoke run.
+     *
+     * Astro/Vite bundles the supabase import into a hashed
+     * `_astro/<chunk>.js` file in production, so the previous
+     * `page.route('lib/supabase')` glob never matched the bundled URL.
+     * Instead we read a single
+     * runtime override that the test plants via `page.addInitScript`
+     * BEFORE the navigation, then fall back to the real client when the
+     * override isn't set.
+     *
+     * The override is a no-op in production: nothing in the codebase or
+     * docs tells real users to set `window.__authTestStub`, and the
+     * fallback is the real client. The escape hatch is the
+     * minimum-viable surface (one nullish-coalesce, no extra entry
+     * points, no `if (DEV)` gates) — enough to unblock the smoke job
+     * without leaking a configurable surface to end users.
+     */
+    const supabase: typeof defaultSupabase =
+      (window as unknown as { __authTestStub?: typeof defaultSupabase })
+        .__authTestStub ?? defaultSupabase;
 
     /**
      * OAuth providers can fail at three different layers, each surfacing

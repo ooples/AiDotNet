@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 /**
  * Regression coverage for /auth/callback's URL-error handling. The
@@ -11,6 +11,65 @@ import { test, expect } from '@playwright/test';
  * error-rendering path. Runs under the auth-anon project (see
  * playwright.config.ts) so it picks up no storageState.
  */
+
+/**
+ * Plants a `window.__authTestStub` BEFORE page navigation so the
+ * callback page picks it up instead of the real Supabase client.
+ *
+ * We can't use `page.route('**\/lib/supabase*')`: Astro/Vite bundles
+ * the supabase import into a hashed `_astro/*.js` chunk in production,
+ * and the route pattern never matches the bundled URL. The page-side
+ * test seam (`window.__authTestStub ?? defaultSupabase`) sidesteps
+ * bundling entirely.
+ */
+/**
+ * Replaces the destination pages (`/account/`, `/settings/api-keys/`)
+ * with no-op HTML so they don't run their own auth-state checks and
+ * bounce the assertion off to `/login/`. The success-path tests only
+ * care that the callback page set `window.location.href = redirectTo`;
+ * the destination's behaviour is out of scope.
+ */
+async function stubRedirectTargets(page: Page) {
+  await page.route(/\/(?:account|settings)\/.*/, async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><body>stub destination</body></html>',
+    });
+  });
+}
+
+async function installAuthStub(page: Page, stub: {
+  getSession: 'success' | 'error' | 'empty';
+  errorMessage?: string;
+  emitSignedIn?: boolean;
+}) {
+  await page.addInitScript(({ kind, errorMessage, emitSignedIn }) => {
+    let onChangeCb: ((event: string, session: unknown) => void) | undefined;
+    (window as unknown as { __authTestStub: unknown }).__authTestStub = {
+      auth: {
+        getSession: async () => {
+          if (kind === 'success') {
+            return { data: { session: { access_token: 't', user: { id: 'u' } } }, error: null };
+          }
+          if (kind === 'error') {
+            return { data: { session: null }, error: { message: errorMessage ?? 'Forced error' } };
+          }
+          // 'empty' — no session, no error; page falls through to onAuthStateChange.
+          return { data: { session: null }, error: null };
+        },
+        onAuthStateChange: (cb: (event: string, session: unknown) => void) => {
+          onChangeCb = cb;
+          if (emitSignedIn) {
+            // Defer one microtask so the page's getSession() resolves first.
+            queueMicrotask(() => cb('SIGNED_IN', { access_token: 't', user: { id: 'u' } }));
+          }
+          return { data: { subscription: { unsubscribe: () => { onChangeCb = undefined; } } } };
+        },
+      },
+    };
+  }, { kind: stub.getSession, errorMessage: stub.errorMessage, emitSignedIn: stub.emitSignedIn });
+}
 
 test.describe('/auth/callback URL-error handling', () => {
   test('search-param server_error renders fatal-error UI with provider-misconfig hint', async ({ page }) => {
@@ -130,47 +189,23 @@ test.describe('/auth/callback success paths', () => {
 
   test('immediate getSession() success redirects to default account page', async ({ page }) => {
     // Force getSession() to return a valid session synchronously so the
-    // page hits the "data.session" branch (line ~189) and redirects
-    // without waiting for an auth-state event.
-    await page.route('**/lib/supabase*', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/javascript',
-        body: `
-          export const supabase = {
-            auth: {
-              getSession: async () => ({ data: { session: { access_token: 't', user: { id: 'u' } } }, error: null }),
-              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-            },
-          };
-        `,
-      });
-    });
+    // page hits the "data.session" branch and redirects without waiting
+    // for an auth-state event. Stub the destination so its own
+    // auth-state check doesn't bounce us off to /login/ before the
+    // assertion runs.
+    await installAuthStub(page, { getSession: 'success' });
+    await stubRedirectTargets(page);
     await page.goto('/auth/callback/');
     // Sanitized fallback redirect = ${base}account/. Wait for the URL
-    // change rather than asserting on /account/ content (which would
-    // require auth state we don't actually have in this stub).
+    // change rather than asserting on /account/ content.
     await expect(page).toHaveURL(/\/account\/?$/, { timeout: 5_000 });
   });
 
   test('redirect query param routing honours same-origin paths only', async ({ page }) => {
     // sanitizeRedirect must accept ?redirect=/foo/ but reject
     // protocol-relative (//evil.com) and absolute URLs.
-    await page.route('**/lib/supabase*', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/javascript',
-        body: `
-          export const supabase = {
-            auth: {
-              getSession: async () => ({ data: { session: { access_token: 't', user: { id: 'u' } } }, error: null }),
-              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-            },
-          };
-        `,
-      });
-    });
-
+    await installAuthStub(page, { getSession: 'success' });
+    await stubRedirectTargets(page);
     // Whitelisted same-origin path → respected.
     await page.goto('/auth/callback/?redirect=/settings/api-keys/');
     await expect(page).toHaveURL(/\/settings\/api-keys\/?$/, { timeout: 5_000 });
@@ -179,20 +214,8 @@ test.describe('/auth/callback success paths', () => {
   test('redirect with protocol-relative URL falls back to default account page (open-redirect guard)', async ({ page }) => {
     // PR #1258 review comment #1: open-redirect guard must reject
     // //evil.example which would otherwise resolve to https://evil.example.
-    await page.route('**/lib/supabase*', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/javascript',
-        body: `
-          export const supabase = {
-            auth: {
-              getSession: async () => ({ data: { session: { access_token: 't', user: { id: 'u' } } }, error: null }),
-              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-            },
-          };
-        `,
-      });
-    });
+    await installAuthStub(page, { getSession: 'success' });
+    await stubRedirectTargets(page);
     await page.goto('/auth/callback/?redirect=//evil.example/phish');
     // Must land on default /account/ — NOT navigate off-domain.
     await expect(page).toHaveURL(/\/account\/?$/, { timeout: 5_000 });
@@ -207,23 +230,12 @@ test.describe('/auth/callback non-URL failure paths', () => {
   // gated the silent-stall regression #1258 was created to fix.
 
   test('getSession() error renders "Session exchange failed."', async ({ page }) => {
-    // Intercept the Supabase client lib that the page imports and force
-    // its `auth.getSession()` to return an error tuple. Routing the
-    // import to a small inline shim is sufficient — the page only uses
-    // `auth.getSession()` and `auth.onAuthStateChange()` from the lib.
-    await page.route('**/lib/supabase*', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/javascript',
-        body: `
-          export const supabase = {
-            auth: {
-              getSession: async () => ({ data: { session: null }, error: { message: 'Forced session-exchange failure for test' } }),
-              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-            },
-          };
-        `,
-      });
+    // Force `auth.getSession()` to return an error tuple via the
+    // page's __authTestStub seam (page.route can't intercept the
+    // bundled `_astro/*.js` chunk in production builds).
+    await installAuthStub(page, {
+      getSession: 'error',
+      errorMessage: 'Forced session-exchange failure for test',
     });
 
     const consoleErrors: string[] = [];
@@ -232,6 +244,10 @@ test.describe('/auth/callback non-URL failure paths', () => {
     await page.goto('/auth/callback/');
 
     await expect(page.getByText('Session exchange failed.')).toBeVisible();
+    // The error message lives inside the <details> "Show technical
+    // details" disclosure (added in PR #1258 review #5 to mitigate
+    // phishing). Open it before asserting on the body text.
+    await page.getByText('Show technical details').click();
     await expect(page.getByText('Forced session-exchange failure for test')).toBeVisible();
     // PR #1258 promise: every failure path leaves a console.error.
     expect(consoleErrors.some(e => e.includes('getSession() error'))).toBeTruthy();
@@ -243,20 +259,7 @@ test.describe('/auth/callback non-URL failure paths', () => {
     // setTimeout fallback. Use page.clock.fastForward to skip the wall-
     // clock wait so the spec runs in <1s.
     await page.clock.install();
-    await page.route('**/lib/supabase*', async route => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/javascript',
-        body: `
-          export const supabase = {
-            auth: {
-              getSession: async () => ({ data: { session: null }, error: null }),
-              onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-            },
-          };
-        `,
-      });
-    });
+    await installAuthStub(page, { getSession: 'empty', emitSignedIn: false });
 
     const consoleErrors: string[] = [];
     page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
@@ -266,6 +269,9 @@ test.describe('/auth/callback non-URL failure paths', () => {
     await page.clock.fastForward(10_500);
 
     await expect(page.getByText('Sign-in did not complete in time.')).toBeVisible();
+    // The detail line "Supabase did not surface a SIGNED_IN event…"
+    // sits inside <details>, so open the disclosure first.
+    await page.getByText('Show technical details').click();
     await expect(page.getByText(/SIGNED_IN event within 10 seconds/)).toBeVisible();
     // PR #1258 review #2/#7: timeout path must console.error too.
     expect(consoleErrors.some(e => e.includes('timed out waiting for SIGNED_IN'))).toBeTruthy();
@@ -281,6 +287,10 @@ test.describe('/auth/callback non-URL failure paths', () => {
     // that the literal '%' message renders intact.
     await page.goto('/auth/callback/?error=server_error&error_description=quota%2025%25%20exceeded');
 
+    // The error_description text is rendered inside the <details>
+    // disclosure block (PR #1258 review #5: phishing mitigation).
+    // Open it before asserting on the body text.
+    await page.getByText('Show technical details').click();
     // After URLSearchParams.get(), the value is "quota 25% exceeded".
     await expect(page.getByText('error_description: quota 25% exceeded')).toBeVisible();
     // Critically, NOT the generic fallback message.
