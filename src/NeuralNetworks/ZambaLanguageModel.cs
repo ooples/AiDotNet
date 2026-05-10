@@ -120,10 +120,6 @@ public class ZambaLanguageModel<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-    }
-
     public override void UpdateParameters(Vector<T> gradients)
     {
         if (gradients.Length != ParameterCount)

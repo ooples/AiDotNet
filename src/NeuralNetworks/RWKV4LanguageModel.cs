@@ -179,11 +179,6 @@ public class RWKV4LanguageModel<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(Vector<T> gradients)
     {
         int expectedCount = ParameterCountHelper.ToFlatVectorSize(ParameterCount);

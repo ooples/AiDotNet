@@ -228,6 +228,11 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _originalInputShape = input._shape;
 
         int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                "RealGatedLinearRecurrenceLayer requires rank >= 1 input (got rank-0 scalar tensor).",
+                nameof(input));
+
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
         int modelDim = input.Shape[rank - 1];
 
@@ -286,6 +291,8 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
+        if (rank == 1)
+            return Engine.Reshape(result, new[] { _modelDimension });
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
