@@ -74,7 +74,11 @@
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime" />
 	  <PackageReference Include="Microsoft.Research.SEALNet" />
 	  <PackageReference Include="Newtonsoft.Json" />
+	  <!-- MatFileHandler — read .mat split/annotation files (SVHN, Stanford Cars, Flowers-102) -->
+	  <PackageReference Include="MatFileHandler" />
 	  <PackageReference Include="Pinecone.Client" />
+	  <!-- SharpZipLib — bzip2 decompression for .tar.bz2 archives (LJSpeech) -->
+	  <PackageReference Include="SharpZipLib" />
 	  <PackageReference Include="StackExchange.Redis" />
 	  <PackageReference Include="System.ValueTuple" />
 	  <PackageReference Include="TreeSitter.DotNet" />
