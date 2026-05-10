@@ -164,6 +164,9 @@
 	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo) -->
 	<ItemGroup>
 	  <PackageReference Include="AiDotNet.Tensors" />
+	  <!-- Snappier 1.3.0 (transitive via Tensors) has CVE GHSA-pggp-6c3x-2xmx;
+	       force the patched 1.3.1 transitively. -->
+	  <PackageReference Include="Snappier" />
 	</ItemGroup>
 
 	<!--
