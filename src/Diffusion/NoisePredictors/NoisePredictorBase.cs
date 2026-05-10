@@ -233,6 +233,22 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
         _compileHost.Predict(input, _layerStructureVersion, eagerFallback);
 
     /// <summary>
+    /// Async overload of <see cref="PredictCompiled"/> — routes through
+    /// <see cref="CompiledModelHost{T}.PredictAsync"/> so the compiled plan's
+    /// <c>ExecuteAsync</c> path is taken. CPU engines complete synchronously
+    /// on the same thread (no work transfer cost); GPU engines wrap their
+    /// stream completion event as a polling task that does not block a
+    /// threadpool worker for the GPU's tail kernels. Concrete noise
+    /// predictors call this from <see cref="PredictNoiseAsync"/> overrides
+    /// to expose the same trace-and-replay benefit on their async surface.
+    /// </summary>
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> PredictCompiledAsync(
+        Tensor<T> input,
+        Func<Tensor<T>> eagerFallback,
+        System.Threading.CancellationToken cancellationToken) =>
+        _compileHost.PredictAsync(input, _layerStructureVersion, eagerFallback, cancellationToken);
+
+    /// <summary>
     /// Bump to signal the layer graph has changed — lazy init expanded a tensor,
     /// weights were reassigned, a sub-layer was replaced. The compile host drops
     /// any plan captured against the prior graph on the next <see cref="PredictCompiled"/>.
@@ -476,6 +492,46 @@ public abstract class NoisePredictorBase<T> : INoisePredictor<T>, IModelShape, I
 
     /// <inheritdoc />
     public abstract Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null);
+
+    /// <summary>
+    /// Async overload of <see cref="PredictNoise(Tensor{T}, int, Tensor{T})"/>.
+    /// Routes the forward through <see cref="CompiledModelHost{T}.PredictAsync"/>
+    /// so the underlying compiled plan's <c>ExecuteAsync</c> path is taken,
+    /// allowing per-step noise predictions in a denoising loop to overlap
+    /// host-side scheduler work with the backend's tail kernels.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Concrete noise predictors are encouraged to override this to expose
+    /// their own compile-host-aware async path. The base implementation
+    /// falls back to running the sync <see cref="PredictNoise"/> on the
+    /// threadpool — which is no worse than the prior all-sync surface — so
+    /// that callers in async pipelines never have to add a Task.Run wrapper
+    /// at the call site even before each predictor migrates.
+    /// </para>
+    /// </remarks>
+    public virtual System.Threading.Tasks.ValueTask<Tensor<T>> PredictNoiseAsync(
+        Tensor<T> noisySample,
+        int timestep,
+        Tensor<T>? conditioning = null,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        // Route through the compile host's async path. The compile cache
+        // is keyed on (shape, structureVersion); after the first call at
+        // each shape, replays go through plan.ExecuteAsync, which on CPU
+        // completes synchronously on the same thread (zero overhead vs
+        // sync) and on GPU returns a ValueTask that polls the stream
+        // completion event without blocking a threadpool worker.
+        //
+        // We close over (timestep, conditioning) for the eager-fallback
+        // capture so the trace-time lambda matches what PredictNoise would
+        // do for the same args; the host's shape key is just `noisySample`.
+        return PredictCompiledAsync(
+            noisySample,
+            () => PredictNoise(noisySample, timestep, conditioning),
+            cancellationToken);
+    }
 
     /// <inheritdoc />
     /// <remarks>

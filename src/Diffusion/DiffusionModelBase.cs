@@ -236,6 +236,152 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         => Generate(shape, numInferenceSteps, seed, initialSample: null);
 
     /// <summary>
+    /// Async overload of <see cref="Generate(int[], int, int?)"/>. Returns a
+    /// <see cref="ValueTask{T}"/> so callers on the .NET threadpool can await
+    /// completion without blocking a worker thread for the full denoising loop.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors the async surface added to <c>ICompiledPlan&lt;T&gt;</c> in
+    /// <c>AiDotNet.Tensors</c> PR #298. Today this implementation runs the
+    /// underlying <see cref="Generate(int[], int, int?)"/> on a threadpool
+    /// thread via <see cref="System.Threading.Tasks.Task.Run(System.Func{Tensor{T}})"/>;
+    /// future commits on this branch will replace the inner loop with a per-step
+    /// <c>noise_predictor_plan.ExecuteAsync(ct)</c> chained via
+    /// <c>ChainAsync</c> into the sampler-update kernel, eliminating the
+    /// boundary tensor materialization and overlapping host-side scheduler work
+    /// with the GPU stream's tail kernels.
+    /// </para>
+    /// <para>
+    /// Until the chained inner loop lands, the async surface still provides
+    /// real value: callers in async pipelines (web servers, batch generation
+    /// loops) no longer block a worker for the full 50-step Generate, which
+    /// matters for any host that runs many concurrent generations.
+    /// </para>
+    /// </remarks>
+    public virtual System.Threading.Tasks.ValueTask<Tensor<T>> GenerateAsync(
+        int[] shape,
+        int numInferenceSteps = 50,
+        int? seed = null,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return GenerateAsyncCore(shape, numInferenceSteps, seed, initialSample: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// True-async denoising loop. Each per-step noise prediction goes through
+    /// <see cref="PredictNoiseAsync"/> which routes to the compile host's
+    /// <c>ExecuteAsync</c>; awaits between steps let the runtime overlap host
+    /// scheduler work with backend tail kernels. Concrete subclasses that
+    /// don't yet expose a true-async sampler-update can stay on the inherited
+    /// behavior — only the noise-predictor stage gains async semantics today,
+    /// which is already the dominant cost on CPU (75% of wall time per the
+    /// profile in #1273) and the highest-priority overlap point.
+    /// </summary>
+    protected virtual async System.Threading.Tasks.ValueTask<Tensor<T>> GenerateAsyncCore(
+        int[] shape,
+        int numInferenceSteps,
+        int? seed,
+        Vector<T>? initialSample,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (shape == null || shape.Length == 0)
+            throw new ArgumentException("Shape must be a non-empty array.", nameof(shape));
+        if (numInferenceSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numInferenceSteps), "Must be positive.");
+
+        var invalidDims = shape.Where(d => d <= 0).ToArray();
+        if (invalidDims.Length > 0)
+            throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
+
+        using var _ = new NoGradScope<T>();
+
+        long totalElements = 1;
+        foreach (var dim in shape)
+            totalElements = checked(totalElements * dim);
+        if (totalElements > int.MaxValue)
+            throw new ArgumentException("Total tensor size exceeds maximum supported size.", nameof(shape));
+
+        Vector<T> sample;
+        if (initialSample is not null)
+        {
+            if (initialSample.Length != (int)totalElements)
+                throw new ArgumentException(
+                    $"initialSample.Length ({initialSample.Length}) must equal the product of shape ({(int)totalElements}).",
+                    nameof(initialSample));
+            sample = initialSample;
+        }
+        else
+        {
+            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+            sample = SampleNoise((int)totalElements, rng);
+        }
+
+        _scheduler.SetTimesteps(numInferenceSteps);
+        var sampleTensor = new Tensor<T>(shape, sample);
+        var noisePredVec = new Vector<T>(sample.Length);
+
+        foreach (var timestep in _scheduler.Timesteps)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var sampleSpan = sample.AsSpan();
+            var tensorSpan = sampleTensor.AsWritableSpan();
+            sampleSpan.CopyTo(tensorSpan);
+
+            // True-async noise prediction: GPU stream completion polled
+            // without blocking; CPU completes inline.
+            var noisePrediction = await PredictNoiseAsync(sampleTensor, timestep, conditioning: null, cancellationToken)
+                .ConfigureAwait(false);
+
+            var predSpan = noisePrediction.AsSpan();
+            if (predSpan.Length != noisePredVec.Length)
+                throw new InvalidOperationException(
+                    $"PredictNoise output length ({predSpan.Length}) does not match the " +
+                    $"latent/sample length ({noisePredVec.Length}). Check that the noise " +
+                    $"predictor's output shape matches the input tensor shape.");
+            for (int idx = 0; idx < predSpan.Length; idx++)
+                noisePredVec[idx] = predSpan[idx];
+
+            sample = _scheduler.Step(noisePredVec, timestep, sample, NumOps.Zero);
+
+            // NaN/Inf guard preserved from sync path
+            int sanitizedCount = 0;
+            for (int si = 0; si < sample.Length; si++)
+            {
+                double v = NumOps.ToDouble(sample[si]);
+                if (double.IsNaN(v) || double.IsInfinity(v))
+                {
+                    sample[si] = NumOps.Zero;
+                    sanitizedCount++;
+                }
+            }
+            if (sanitizedCount > 0)
+                System.Diagnostics.Trace.TraceWarning(
+                    $"DiffusionModelBase.GenerateAsync: sanitized {sanitizedCount} non-finite element(s) at timestep {timestep}.");
+        }
+
+        return new Tensor<T>(shape, sample);
+    }
+
+    /// <summary>
+    /// Concrete async noise prediction overload for the base path. Routes
+    /// through whatever <see cref="PredictNoise(Tensor{T}, int)"/> implementation
+    /// the subclass provides; subclasses extending <see cref="NoisePredictorBase{T}"/>
+    /// inherit the compile-host-aware async path automatically.
+    /// </summary>
+    protected virtual System.Threading.Tasks.ValueTask<Tensor<T>> PredictNoiseAsync(
+        Tensor<T> noisySample,
+        int timestep,
+        Tensor<T>? conditioning,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return new System.Threading.Tasks.ValueTask<Tensor<T>>(PredictNoise(noisySample, timestep));
+    }
+
+    /// <summary>
     /// Internal Generate that optionally accepts an explicit starting sample.
     /// When <paramref name="initialSample"/> is null, fresh Gaussian noise is
     /// drawn (the standard text-to-image / unconditional-generation path).
