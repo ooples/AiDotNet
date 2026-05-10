@@ -278,37 +278,11 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         Vector<T>? initialSample,
         System.Threading.CancellationToken cancellationToken)
     {
-        if (shape == null || shape.Length == 0)
-            throw new ArgumentException("Shape must be a non-empty array.", nameof(shape));
-        if (numInferenceSteps <= 0)
-            throw new ArgumentOutOfRangeException(nameof(numInferenceSteps), "Must be positive.");
-
-        var invalidDims = shape.Where(d => d <= 0).ToArray();
-        if (invalidDims.Length > 0)
-            throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
+        ValidateGenerateInputs(shape, numInferenceSteps, out long totalElements);
 
         using var _ = new NoGradScope<T>();
 
-        long totalElements = 1;
-        foreach (var dim in shape)
-            totalElements = checked(totalElements * dim);
-        if (totalElements > int.MaxValue)
-            throw new ArgumentException("Total tensor size exceeds maximum supported size.", nameof(shape));
-
-        Vector<T> sample;
-        if (initialSample is not null)
-        {
-            if (initialSample.Length != (int)totalElements)
-                throw new ArgumentException(
-                    $"initialSample.Length ({initialSample.Length}) must equal the product of shape ({(int)totalElements}).",
-                    nameof(initialSample));
-            sample = initialSample;
-        }
-        else
-        {
-            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-            sample = SampleNoise((int)totalElements, rng);
-        }
+        Vector<T> sample = ResolveInitialSample(shape, numInferenceSteps, seed, initialSample, totalElements);
 
         _scheduler.SetTimesteps(numInferenceSteps);
         var sampleTensor = new Tensor<T>(shape, sample);
@@ -338,17 +312,9 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
 
             sample = _scheduler.Step(noisePredVec, timestep, sample, NumOps.Zero);
 
-            // NaN/Inf guard preserved from sync path
-            int sanitizedCount = 0;
-            for (int si = 0; si < sample.Length; si++)
-            {
-                double v = NumOps.ToDouble(sample[si]);
-                if (double.IsNaN(v) || double.IsInfinity(v))
-                {
-                    sample[si] = NumOps.Zero;
-                    sanitizedCount++;
-                }
-            }
+            // NaN/Inf guard via shared helper — same contract the sync
+            // Generate path uses, centralised so the two surfaces can't drift.
+            int sanitizedCount = SanitizeNonFiniteElements(sample);
             if (sanitizedCount > 0)
                 System.Diagnostics.Trace.TraceWarning(
                     $"DiffusionModelBase.GenerateAsync: sanitized {sanitizedCount} non-finite element(s) at timestep {timestep}.");
@@ -387,7 +353,13 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
     /// themselves — failing tests like NoiseSchedule_ShouldBeMonotonic that
     /// scale the input and expect the output magnitude to track the scale.
     /// </summary>
-    protected virtual Tensor<T> Generate(int[] shape, int numInferenceSteps, int? seed, Vector<T>? initialSample)
+    /// <summary>
+    /// Shared input validation for the sync and async Generate paths. Throws
+    /// the same exceptions both surfaces produce, computes the total element
+    /// count with overflow checking. Centralised so a fix only has to land
+    /// in one place.
+    /// </summary>
+    private static void ValidateGenerateInputs(int[] shape, int numInferenceSteps, out long totalElements)
     {
         if (shape == null || shape.Length == 0)
             throw new ArgumentException("Shape must be a non-empty array.", nameof(shape));
@@ -398,32 +370,61 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         if (invalidDims.Length > 0)
             throw new ArgumentOutOfRangeException(nameof(shape), $"All dimensions must be positive, but found {invalidDims[0]}.");
 
-        // Suppress tape recording during inference (like PyTorch torch.no_grad())
-        using var _ = new NoGradScope<T>();
-
-        long totalElements = 1;
+        totalElements = 1;
         foreach (var dim in shape)
-        {
             totalElements = checked(totalElements * dim);
-        }
-
         if (totalElements > int.MaxValue)
             throw new ArgumentException("Total tensor size exceeds maximum supported size.", nameof(shape));
+    }
 
-        Vector<T> sample;
+    /// <summary>
+    /// Resolves the initial denoising sample: if the caller passed an explicit
+    /// <paramref name="initialSample"/>, validates its length and returns it
+    /// directly; otherwise draws fresh Gaussian noise via the seeded RNG.
+    /// Shared between the sync and async Generate paths.
+    /// </summary>
+    private Vector<T> ResolveInitialSample(int[] shape, int numInferenceSteps, int? seed, Vector<T>? initialSample, long totalElements)
+    {
         if (initialSample is not null)
         {
             if (initialSample.Length != (int)totalElements)
                 throw new ArgumentException(
                     $"initialSample.Length ({initialSample.Length}) must equal the product of shape ({(int)totalElements}).",
                     nameof(initialSample));
-            sample = initialSample;
+            return initialSample;
         }
-        else
+        var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
+        return SampleNoise((int)totalElements, rng);
+    }
+
+    /// <summary>
+    /// Replaces every NaN / Infinity element of <paramref name="sample"/> with
+    /// zero (Ho et al. 2020 §3.2 paper-minimum "Predict returns finite tensor"
+    /// contract). Returns the sanitised count for diagnostic logging.
+    /// </summary>
+    private int SanitizeNonFiniteElements(Vector<T> sample)
+    {
+        int sanitizedCount = 0;
+        for (int si = 0; si < sample.Length; si++)
         {
-            var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomGenerator;
-            sample = SampleNoise((int)totalElements, rng);
+            double v = NumOps.ToDouble(sample[si]);
+            if (double.IsNaN(v) || double.IsInfinity(v))
+            {
+                sample[si] = NumOps.Zero;
+                sanitizedCount++;
+            }
         }
+        return sanitizedCount;
+    }
+
+    protected virtual Tensor<T> Generate(int[] shape, int numInferenceSteps, int? seed, Vector<T>? initialSample)
+    {
+        ValidateGenerateInputs(shape, numInferenceSteps, out long totalElements);
+
+        // Suppress tape recording during inference (like PyTorch torch.no_grad())
+        using var _ = new NoGradScope<T>();
+
+        Vector<T> sample = ResolveInitialSample(shape, numInferenceSteps, seed, initialSample, totalElements);
 
         // Set up the scheduler for inference
         _scheduler.SetTimesteps(numInferenceSteps);
@@ -477,16 +478,7 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
             // returns a finite tensor (the documented paper-minimum
             // contract), matching the Song et al. 2020 DDIM paper's
             // "noise-only sampling = finite noise output" invariant.
-            int sanitizedCount = 0;
-            for (int si = 0; si < sample.Length; si++)
-            {
-                double v = NumOps.ToDouble(sample[si]);
-                if (double.IsNaN(v) || double.IsInfinity(v))
-                {
-                    sample[si] = NumOps.Zero;
-                    sanitizedCount++;
-                }
-            }
+            int sanitizedCount = SanitizeNonFiniteElements(sample);
             if (sanitizedCount > 0)
             {
                 System.Diagnostics.Trace.TraceWarning(
