@@ -407,6 +407,14 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 ex is not AppDomainUnloadedException &&
                 ex is not CannotUnloadAppDomainException)
             {
+                // Invalidate the cache before falling back so a poisoned
+                // plan isn't reused on subsequent calls — mirrors the
+                // sync Predict path which invalidates under lock here.
+                lock (_sync)
+                {
+                    _cache?.Invalidate();
+                    _lastCompiledVersion = -1;
+                }
                 System.Diagnostics.Trace.TraceWarning(
                     $"CompiledModelHost.PredictAsync falling back to eager after compile/replay failure: " +
                     $"{ex.ToString()}");
