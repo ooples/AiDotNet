@@ -514,6 +514,23 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         T oneMinusBeta1 = NumOps.FromDouble(oneMinusB1);
         T oneMinusBeta2 = NumOps.FromDouble(oneMinusB2);
 
+        // Global-norm gradient clipping (PyTorch's torch.nn.utils.clip_grad_norm_
+        // semantics) before applying the Adam update. Compute the L2 norm
+        // across every parameter's gradient, and if the global norm exceeds
+        // the configured MaxGradientNorm threshold, scale every gradient by
+        // (threshold / global_norm) so the global norm caps at the threshold.
+        // Without this, Adam's first-step bias correction (biasC1 ≈ 0.1,
+        // biasC2 ≈ 0.001) creates huge updates on randomly-initialised large
+        // models — Hawk's 135M-parameter LM diverges from loss=0.43 to 6.97
+        // over 10 iterations on default LR=1e-3 without clipping. With it
+        // (or with the canonical PyTorch default MaxGradientNorm=1.0) the
+        // first-step update is bounded and training converges.
+        if (GradientOptions.EnableGradientClipping &&
+            GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm)
+        {
+            ApplyGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+        }
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
@@ -1016,6 +1033,65 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _gpuV?.Dispose();
         _gpuV = null;
         _gpuStateInitialized = false;
+    }
+
+    /// <summary>
+    /// Applies PyTorch-style global-norm gradient clipping across every
+    /// gradient in the tape step's <see cref="TapeStepContext{T}.Gradients"/>
+    /// dictionary. Computes the global L2 norm
+    /// <c>sqrt(Σ_p ‖grad_p‖²)</c> across all parameter gradients; if that
+    /// norm exceeds <paramref name="maxNorm"/>, every gradient is scaled
+    /// by <c>maxNorm / globalNorm</c> in place so the post-clip global norm
+    /// is exactly <paramref name="maxNorm"/>. Mirrors
+    /// <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Without global-norm clipping, Adam's first-step bias correction
+    /// (<c>biasC1 ≈ 0.1</c>, <c>biasC2 ≈ 0.001</c>) creates huge updates on
+    /// randomly-initialised large models — Hawk's 135M-parameter LM diverges
+    /// from loss 0.43 to 6.97 over 10 iterations on default LR=1e-3
+    /// (issue #1275 acceptance criterion 3). With clipping at the canonical
+    /// PyTorch transformer-training default <c>MaxGradientNorm=1.0</c>, the
+    /// first-step update is bounded and training converges.
+    /// </remarks>
+    private static void ApplyGlobalNormGradientClipping(
+        TapeStepContext<T> context,
+        double maxNorm)
+    {
+        if (maxNorm <= 0.0) return;
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Pass 1: compute global L2 norm. Walk every gradient tensor and
+        // accumulate the squared sum across all elements.
+        double globalNormSq = 0.0;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = numOps.ToDouble(span[i]);
+                globalNormSq += v * v;
+            }
+        }
+        double globalNorm = Math.Sqrt(globalNormSq);
+
+        // Below threshold: nothing to do.
+        if (globalNorm <= maxNorm || globalNorm == 0.0 || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
+            return;
+
+        // Pass 2: scale every gradient by (maxNorm / globalNorm) in place.
+        double scale = maxNorm / globalNorm;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+                span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
+        }
     }
 
     #endregion

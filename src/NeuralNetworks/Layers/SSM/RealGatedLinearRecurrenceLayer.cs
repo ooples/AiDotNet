@@ -228,8 +228,42 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         _originalInputShape = input._shape;
 
         int rank = input.Shape.Length;
+        if (rank < 1)
+            throw new ArgumentException(
+                "RealGatedLinearRecurrenceLayer requires rank >= 1 input (got rank-0 scalar tensor).",
+                nameof(input));
+
         int seqLen = rank >= 2 ? input.Shape[rank - 2] : 1;
         int modelDim = input.Shape[rank - 1];
+
+        // Reject zero-length sequences fast — the recurrence has no meaningful
+        // output when there are no timesteps to process, and downstream
+        // TensorAllocator.Rent / SetSlice / output Reshape paths all assume
+        // seqLen >= 1. Without this guard a [B, 0, modelDim] input would
+        // silently allocate empty tensors and surface as a confusing
+        // out-of-bounds in GatedRecurrenceForward's slice indexing instead
+        // of a clear input-validation error at the call boundary.
+        if (seqLen < 1)
+            throw new ArgumentException(
+                $"RealGatedLinearRecurrenceLayer requires sequence length >= 1 " +
+                $"(got seqLen={seqLen} from input shape [{string.Join(",", input.Shape)}]).",
+                nameof(input));
+        if (modelDim < 1)
+            throw new ArgumentException(
+                $"RealGatedLinearRecurrenceLayer requires modelDim >= 1 " +
+                $"(got modelDim={modelDim} from input shape [{string.Join(",", input.Shape)}]).",
+                nameof(input));
+        // Reject input-width mismatches at the boundary instead of letting
+        // them surface as a less actionable Engine.TensorMatMul shape error
+        // deeper in the forward pass. The input projection's [_modelDimension,
+        // _recurrenceDimension] weight matrix can only consume a tensor whose
+        // last dim is _modelDimension, so any other width is a user contract
+        // violation that's worth diagnosing here.
+        if (modelDim != _modelDimension)
+            throw new ArgumentException(
+                $"RealGatedLinearRecurrenceLayer expected modelDim={_modelDimension}, " +
+                $"but got modelDim={modelDim} from input shape [{string.Join(",", input.Shape)}].",
+                nameof(input));
 
         int batchSize = 1;
         for (int d = 0; d < rank - 2; d++)
@@ -286,6 +320,8 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         var result = ApplyActivation(output3D);
         _lastOutput = result;
 
+        if (rank == 1)
+            return Engine.Reshape(result, new[] { _modelDimension });
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
 
