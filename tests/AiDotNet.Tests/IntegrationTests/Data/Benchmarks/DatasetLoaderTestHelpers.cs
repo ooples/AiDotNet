@@ -123,6 +123,25 @@ internal static class DatasetLoaderTestHelpers
     }
 
     /// <summary>
+    /// Writes a 2-string-column Parquet file for summarization-loader fixtures.
+    /// Used by CnnDailyMail / XSum tests to exercise the Parquet.Net code path
+    /// without needing to hit the HuggingFace network.
+    /// </summary>
+    public static async System.Threading.Tasks.Task WriteStringParquetAsync(
+        string filePath, string colA, string colB,
+        System.Collections.Generic.IList<string> a, System.Collections.Generic.IList<string> b)
+    {
+        var fieldA = new Parquet.Schema.DataField<string>(colA);
+        var fieldB = new Parquet.Schema.DataField<string>(colB);
+        var schema = new Parquet.Schema.ParquetSchema(fieldA, fieldB);
+        using var fs = File.Create(filePath);
+        using var writer = await Parquet.ParquetWriter.CreateAsync(schema, fs);
+        using var rg = writer.CreateRowGroup();
+        await rg.WriteColumnAsync(new Parquet.Data.DataColumn(fieldA, a.ToArray()));
+        await rg.WriteColumnAsync(new Parquet.Data.DataColumn(fieldB, b.ToArray()));
+    }
+
+    /// <summary>
     /// Writes a synthetic .mat file containing the supplied uint8 / sbyte / int
     /// variables. Used by SVHN, Flowers-102, Stanford Cars fixtures to exercise
     /// the MatFileHandler reader path against known data.
