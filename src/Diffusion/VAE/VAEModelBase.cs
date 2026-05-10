@@ -56,6 +56,69 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     protected bool TilingEnabled;
 
     /// <summary>
+    /// Compile host shared by Encode and Decode forward paths so VAE
+    /// inference traces once and replays the compiled plan on subsequent
+    /// calls. Mirrors the pattern in <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}"/>
+    /// and <see cref="AiDotNet.Diffusion.NoisePredictors.NoisePredictorBase{T}"/>.
+    /// Each VAE instance gets one host with two compile-cache entries —
+    /// one keyed on encoder input shape, one on decoder input shape — so
+    /// repeated encode/decode at the same shape replays the cached plan
+    /// with zero re-trace cost. Bumped on TilingEnabled / SlicingEnabled
+    /// transitions because those change the layer graph the plan was
+    /// captured against. (Workstream B from #1273.)
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _encoderCompileHost
+        = new AiDotNet.NeuralNetworks.CompiledModelHost<T>(modelIdentity: nameof(VAEModelBase<T>) + ".Encoder");
+    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _decoderCompileHost
+        = new AiDotNet.NeuralNetworks.CompiledModelHost<T>(modelIdentity: nameof(VAEModelBase<T>) + ".Decoder");
+    private int _vaeStructureVersion;
+
+    /// <summary>
+    /// Routes <paramref name="eagerEncode"/> through the encoder compile
+    /// host. First call at a given input shape traces and compiles; subsequent
+    /// calls replay the compiled plan. Subclasses' <see cref="Encode"/>
+    /// implementations should wrap their forward body with this helper.
+    /// </summary>
+    protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>> eagerEncode) =>
+        _encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode);
+
+    /// <summary>
+    /// Routes <paramref name="eagerDecode"/> through the decoder compile host.
+    /// </summary>
+    protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>> eagerDecode) =>
+        _decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode);
+
+    /// <summary>
+    /// Async overload of <see cref="EncodeCompiled"/>.
+    /// </summary>
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> EncodeCompiledAsync(
+        Tensor<T> image,
+        Func<Tensor<T>> eagerEncode,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        _encoderCompileHost.PredictAsync(image, _vaeStructureVersion, eagerEncode, cancellationToken);
+
+    /// <summary>
+    /// Async overload of <see cref="DecodeCompiled"/>.
+    /// </summary>
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> DecodeCompiledAsync(
+        Tensor<T> latent,
+        Func<Tensor<T>> eagerDecode,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        _decoderCompileHost.PredictAsync(latent, _vaeStructureVersion, eagerDecode, cancellationToken);
+
+    /// <summary>
+    /// Bump when the layer graph changes (tiling/slicing toggle, weight
+    /// reassignment) so the compile host drops stale plans on the next
+    /// EncodeCompiled / DecodeCompiled call.
+    /// </summary>
+    protected void InvalidateVAECompiledPlans()
+    {
+        _vaeStructureVersion++;
+        _encoderCompileHost.Invalidate();
+        _decoderCompileHost.Invalidate();
+    }
+
+    /// <summary>
     /// Whether slicing mode is enabled for sequential processing.
     /// </summary>
     protected bool SlicingEnabled;
