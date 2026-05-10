@@ -240,6 +240,12 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (enabled && !SupportsTiling)
             throw new NotSupportedException("This VAE does not support tiling mode.");
+        // Tiling changes how Encode/Decode partition the input across the
+        // layer graph; an already-compiled plan was traced against the
+        // pre-toggle layout and would replay against the wrong graph.
+        // Drop any cached plan when the mode actually changes.
+        if (TilingEnabled != enabled)
+            InvalidateVAECompiledPlans();
         TilingEnabled = enabled;
     }
 
@@ -248,6 +254,10 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (enabled && !SupportsSlicing)
             throw new NotSupportedException("This VAE does not support slicing mode.");
+        // Same rationale as SetTilingEnabled: slicing changes the layer
+        // graph the compile cache captured.
+        if (SlicingEnabled != enabled)
+            InvalidateVAECompiledPlans();
         SlicingEnabled = enabled;
     }
 
