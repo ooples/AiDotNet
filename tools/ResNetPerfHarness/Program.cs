@@ -118,13 +118,28 @@ internal static class Program
             }
             case "siglip2-ctor":
             {
-                // Ctor-only benchmark: time the SigLIP2TextConditioner default
-                // construction — the slowest single test in the Unit-03
-                // Diffusion/Encoding shard (1m10s pre-fix).
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 var conditioner = new AiDotNet.Diffusion.Conditioning.SigLIP2TextConditioner<double>();
                 sw.Stop();
                 Console.WriteLine($"[harness] SigLIP2TextConditioner ctor: {sw.ElapsedMilliseconds} ms");
+                System.Environment.Exit(0);
+                return default;
+            }
+            case "sd15-ctor":
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var sd = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+                sw.Stop();
+                Console.WriteLine($"[harness] StableDiffusion15Model ctor: {sw.ElapsedMilliseconds} ms");
+                System.Environment.Exit(0);
+                return default;
+            }
+            case "t5xxl-ctor":
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var t5 = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>("T5-XXL");
+                sw.Stop();
+                Console.WriteLine($"[harness] T5TextConditioner(T5-XXL) ctor: {sw.ElapsedMilliseconds} ms");
                 System.Environment.Exit(0);
                 return default;
             }

@@ -288,7 +288,17 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
 
         if (length < ParallelThreshold || cores == 1)
         {
-            FillChunkDouble(dst.AsSpan(offset, length), stddev, clipBound, Random);
+            // Even the sequential path benefits from skipping LockedRandom's
+            // per-NextDouble lock — UNet / VAE in SD 1.5 ctor allocate
+            // hundreds of small conv-kernel weight tensors (each typically
+            // <256K elements, hitting this branch), and each LockedRandom
+            // NextDouble pays a lock acquire+release. Derive a single
+            // fresh non-locked Random from the master and use it for the
+            // whole fill — preserves determinism w.r.t. the master seed
+            // and removes ~2N lock acquires across the Box-Muller draws.
+            int seqSeed = Random.Next();
+            var seqRng = CreateUnlockedSeededRandom(seqSeed);
+            FillChunkDouble(dst.AsSpan(offset, length), stddev, clipBound, seqRng);
             return;
         }
 
@@ -387,7 +397,10 @@ public abstract class InitializationStrategyBase<T> : IInitializationStrategy<T>
 
         if (length < ParallelThreshold || cores == 1)
         {
-            FillChunkFloat(dst.AsSpan(offset, length), stddev, clipBound, Random);
+            // See XavierFillDouble — same lock-elision rationale.
+            int seqSeed = Random.Next();
+            var seqRng = CreateUnlockedSeededRandom(seqSeed);
+            FillChunkFloat(dst.AsSpan(offset, length), stddev, clipBound, seqRng);
             return;
         }
 
