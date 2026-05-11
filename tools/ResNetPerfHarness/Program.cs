@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using AiDotNet.Configuration;
+using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
@@ -34,6 +36,13 @@ internal static class Program
         }
 
         Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters}");
+        // Wrap construction + every train call in ONE TensorArena scope —
+        // mirrors the model-family test base which does this so per-iter
+        // intermediate tensor allocations pool inside the arena rather than
+        // landing on the managed heap. Without this, paper-scale CNNs alloc
+        // ~2 GB per ResNet50 train iter (verified empirically) and trigger
+        // a Gen2 GC per step.
+        using var arena = TensorArena.Create();
         var (net, input, target) = Build(model);
         Console.WriteLine($"[harness] ParameterCount={net.ParameterCount}, Layers={net.Layers.Count}");
 
@@ -45,17 +54,42 @@ internal static class Program
             Console.WriteLine($"[harness] warmup#{w + 1}: {sw.ElapsedMilliseconds} ms");
         }
 
+        // Snapshot GC counters so we can report deltas. Charge any GC done
+        // before the measured window to warm-up (we don't want the first-
+        // iteration JIT/init allocations skewing GC stats on the measured
+        // training loop itself).
+        int g0Pre = GC.CollectionCount(0);
+        int g1Pre = GC.CollectionCount(1);
+        int g2Pre = GC.CollectionCount(2);
+        long allocPre = GC.GetTotalAllocatedBytes(precise: true);
+
         long total = 0;
         for (int i = 0; i < iters; i++)
         {
+            int g0 = GC.CollectionCount(0);
+            int g1 = GC.CollectionCount(1);
+            int g2 = GC.CollectionCount(2);
+            long allocBytesBefore = GC.GetTotalAllocatedBytes(precise: true);
             var sw = Stopwatch.StartNew();
             net.Train(input, target);
             sw.Stop();
+            long allocBytesAfter = GC.GetTotalAllocatedBytes(precise: true);
+            int dG0 = GC.CollectionCount(0) - g0;
+            int dG1 = GC.CollectionCount(1) - g1;
+            int dG2 = GC.CollectionCount(2) - g2;
+            long dAlloc = allocBytesAfter - allocBytesBefore;
             total += sw.ElapsedMilliseconds;
-            Console.WriteLine($"[harness] iter#{i + 1}: {sw.ElapsedMilliseconds} ms");
+            Console.WriteLine(
+                $"[harness] iter#{i + 1}: {sw.ElapsedMilliseconds,5} ms  " +
+                $"gc(G0={dG0,3} G1={dG1,3} G2={dG2,2})  alloc={dAlloc / (1024.0 * 1024.0):F1} MiB");
         }
         double avg = (double)total / iters;
-        Console.WriteLine($"[harness] avg over {iters} iters: {avg:F1} ms");
+        long allocTotal = GC.GetTotalAllocatedBytes(precise: true) - allocPre;
+        Console.WriteLine(
+            $"[harness] avg over {iters} iters: {avg:F1} ms  " +
+            $"total alloc {allocTotal / (1024.0 * 1024.0):F1} MiB  " +
+            $"({allocTotal / (1024.0 * 1024.0 * iters):F1} MiB / iter)  " +
+            $"gc(G0={GC.CollectionCount(0) - g0Pre} G1={GC.CollectionCount(1) - g1Pre} G2={GC.CollectionCount(2) - g2Pre})");
         return 0;
     }
 
@@ -79,12 +113,12 @@ internal static class Program
             case "vgg11":
             {
                 var arch = new NeuralNetworkArchitecture<double>(
-                    inputType: AiDotNet.Enums.InputType.ThreeDimensional,
-                    taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification,
+                    inputType: InputType.ThreeDimensional,
+                    taskType: NeuralNetworkTaskType.MultiClassClassification,
                     inputHeight: 32, inputWidth: 32, inputDepth: 3,
                     outputSize: 10);
-                var config = AiDotNet.Configuration.VGGConfiguration.CreateForCIFAR(
-                    AiDotNet.Enums.VGGVariant.VGG11, numClasses: 10);
+                var config = VGGConfiguration.CreateForCIFAR(
+                    VGGVariant.VGG11, numClasses: 10);
                 var net = new VGGNetwork<double>(arch, config);
                 var input = new Tensor<double>(new[] { 1, 3, 32, 32 });
                 for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
