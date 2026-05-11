@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -104,7 +105,15 @@ public class AdamOptimizerAnomalyGuardTests
         for (int i = 0; i < gradValues.Length; i++) grad[i] = gradValues[i];
 
         var ctxType = typeof(AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<double>);
-        var ctor = ctxType.GetConstructors()[0]; // single ctor in the source we read
+        // Deterministic ctor selection: pick the public ctor with the most
+        // parameters. Indexing [0] on GetConstructors() depended on ordering
+        // (not guaranteed by reflection) and would silently bind to the wrong
+        // overload if a new ctor were added later. Selecting the widest
+        // signature matches the construction site in NeuralNetworkBase
+        // which passes every available context field.
+        var ctor = ctxType.GetConstructors()
+            .OrderByDescending(c => c.GetParameters().Length)
+            .First();
         var parameters = ctor.GetParameters();
         var args = new object?[parameters.Length];
         for (int i = 0; i < parameters.Length; i++)

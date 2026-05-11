@@ -72,6 +72,13 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
     // base test cares about — "Forward pass actually consumes input
     // values, isn't a constant function" — still holds, just via a quantum-
     // appropriate probe.
+    //
+    // xUnit attributes don't inherit on overrides — without an explicit
+    // [Fact] on the override, this test would silently not be discovered
+    // for QuantumNeuralNetworkTests. Mirror the base's
+    // [Fact(Timeout = 120000)] so the override actually replaces (and runs
+    // in place of) the inherited test.
+    [Fact(Timeout = 120000)]
     public override async System.Threading.Tasks.Task ScaledInput_ShouldChangeOutput()
     {
         await System.Threading.Tasks.Task.Yield();

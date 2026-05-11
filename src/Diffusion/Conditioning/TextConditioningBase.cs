@@ -257,7 +257,12 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
             // without an extra hash dependency. Same baseSeed + same c on any
             // host yields the same chunk seed, hence the same chunk values.
             int chunkSeed = unchecked(baseSeed ^ (c * 16777619));
-            var chunkRng = new Random(chunkSeed);
+            // Route per-chunk RNG construction through the centralized helper
+            // (same one used at line 131 for the base Rng) so any future repo-
+            // wide RNG policy change (e.g. crypto-grade vs deterministic
+            // selection) flows through one chokepoint instead of grepping
+            // for `new Random` across the diffusion pipeline.
+            var chunkRng = Tensors.Helpers.RandomHelper.CreateSeededRandom(chunkSeed);
             FillWeights(weights, chunkStart, chunkEnd - chunkStart, stddev, chunkRng);
         });
         return weights;

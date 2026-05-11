@@ -61,6 +61,11 @@ internal static class Program
         }
 
         Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters}");
+        // Ctor-only probes (siglip2-ctor / sd15-ctor / t5xxl-ctor) measure
+        // constructor wall-clock and exit. Handle them BEFORE Build() so the
+        // builder stays a pure factory (model, input, target) instead of
+        // mixing Environment.Exit into the middle of the model selector.
+        if (TryRunCtorProbe(model)) return 0;
         using var arena = TensorArena.Create();
         var (net, input, target) = Build(model);
         // Dispose the network when we're done: NeuralNetworkBase<T> owns
@@ -157,35 +162,49 @@ internal static class Program
                 for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
                 return (net, input, target);
             }
+            default:
+                throw new ArgumentException($"Unknown model: {model}");
+        }
+    }
+
+    /// <summary>
+    /// Handles the "*-ctor" probe modes that only need to measure a
+    /// constructor's wall-clock and exit. Returns true if a probe ran
+    /// (the caller should then return its own exit code), false if the
+    /// model name isn't a ctor probe (the caller falls through to Build
+    /// + training loop). Keeps Build() as a pure (model, input, target)
+    /// factory by lifting the side-effects + early-exit out.
+    /// </summary>
+    private static bool TryRunCtorProbe(string model)
+    {
+        switch (model)
+        {
             case "siglip2-ctor":
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var conditioner = new AiDotNet.Diffusion.Conditioning.SigLIP2TextConditioner<double>();
+                _ = new AiDotNet.Diffusion.Conditioning.SigLIP2TextConditioner<double>();
                 sw.Stop();
                 Console.WriteLine($"[harness] SigLIP2TextConditioner ctor: {sw.ElapsedMilliseconds} ms");
-                System.Environment.Exit(0);
-                return default;
+                return true;
             }
             case "sd15-ctor":
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var sd = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+                _ = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
                 sw.Stop();
                 Console.WriteLine($"[harness] StableDiffusion15Model ctor: {sw.ElapsedMilliseconds} ms");
-                System.Environment.Exit(0);
-                return default;
+                return true;
             }
             case "t5xxl-ctor":
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var t5 = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>("T5-XXL");
+                _ = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>("T5-XXL");
                 sw.Stop();
                 Console.WriteLine($"[harness] T5TextConditioner(T5-XXL) ctor: {sw.ElapsedMilliseconds} ms");
-                System.Environment.Exit(0);
-                return default;
+                return true;
             }
             default:
-                throw new ArgumentException($"Unknown model: {model}");
+                return false;
         }
     }
 }

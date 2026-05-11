@@ -1085,7 +1085,16 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             AdamAnomalyGuardMode.Never => false,
             AdamAnomalyGuardMode.Always => true,
             AdamAnomalyGuardMode.Auto => true,
-            _ => true,
+            // Unknown values (corrupted config, future enum additions not
+            // yet handled here) fail loudly instead of silently enabling
+            // the guard. Detecting misconfiguration deterministically beats
+            // running with the wrong policy and reporting wrong gradients
+            // downstream.
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(AdamOptimizerOptions<T, TInput, TOutput>.AnomalyGuardMode),
+                _options.AnomalyGuardMode,
+                $"Unknown AdamAnomalyGuardMode value: {_options.AnomalyGuardMode}. " +
+                "Expected one of: Auto, Always, Never."),
         };
     }
 

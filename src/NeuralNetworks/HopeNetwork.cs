@@ -589,11 +589,11 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             // drop over 100 steps instead of the required ≥1%.
             _adaptationStep++;
 
-            // Consolidate memory periodically — safe in eval mode. Guard
-            // against the initial step (counter was 1 when incremented from
-            // 0) so we don't consolidate on the very first Train call when
-            // there's nothing yet learned to consolidate.
-            if (_adaptationStep > 0 && _adaptationStep % 100 == 0)
+            // Consolidate memory periodically — every 100 Train calls per
+            // Behrouz et al. 2025 §3.4. After the increment above
+            // _adaptationStep is always ≥ 1, so a `> 0` guard would be
+            // redundant; the modulo alone naturally skips Train calls 1-99.
+            if (_adaptationStep % 100 == 0)
             {
                 ConsolidateMemory();
             }
