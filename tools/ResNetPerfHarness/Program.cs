@@ -9,15 +9,6 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Tools.ResNetPerfHarness;
 
-/// <summary>
-/// Lightweight perf-timing harness for paper-scale CNN training paths
-/// (ResNet50 @ 224×224 / VGG11 @ 32×32). Used to validate the
-/// BlasEnvDefault ModuleInitializer's effect on training-step wall time
-/// and to provide a profileable, deterministic target for dotnet-trace.
-/// Runs <c>--warmup</c> iterations first (lazy weight allocation, first-
-/// forward JIT) then reports per-iteration timings + average for
-/// <c>--iters</c> measured iterations.
-/// </summary>
 internal static class Program
 {
     private static int Main(string[] args)
@@ -36,68 +27,50 @@ internal static class Program
         }
 
         Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters}");
-        // Wrap construction + every train call in ONE TensorArena scope —
-        // mirrors the model-family test base which does this so per-iter
-        // intermediate tensor allocations pool inside the arena rather than
-        // landing on the managed heap. Without this, paper-scale CNNs alloc
-        // ~2 GB per ResNet50 train iter (verified empirically) and trigger
-        // a Gen2 GC per step.
         using var arena = TensorArena.Create();
         var (net, input, target) = Build(model);
         Console.WriteLine($"[harness] ParameterCount={net.ParameterCount}, Layers={net.Layers.Count}");
 
+        double L2() { double s = 0; foreach (var c in net.GetParameterChunks()) for (int i = 0; i < c.Length; i++) s += c[i] * c[i]; return Math.Sqrt(s); }
+        double LossNow()
+        {
+            var o = net.Predict(input);
+            double s = 0; int len = Math.Min(o.Length, target.Length);
+            for (int i = 0; i < len; i++) { double d = o[i] - target[i]; s += d * d; }
+            return s / len;
+        }
+        bool HasNaN()
+        {
+            foreach (var c in net.GetParameterChunks())
+                for (int i = 0; i < c.Length; i++) if (double.IsNaN(c[i]) || double.IsInfinity(c[i])) return true;
+            return false;
+        }
+
+        Console.WriteLine($"[harness] init: L2={L2():F4} loss={LossNow():F6}");
         for (int w = 0; w < warmup; w++)
         {
             var sw = Stopwatch.StartNew();
             net.Train(input, target);
             sw.Stop();
-            Console.WriteLine($"[harness] warmup#{w + 1}: {sw.ElapsedMilliseconds} ms");
+            Console.WriteLine($"[harness] warmup#{w + 1}: {sw.ElapsedMilliseconds} ms  L2={L2():F4}  loss={LossNow():F6}  hasNaN={HasNaN()}");
         }
-
-        // Snapshot GC counters so we can report deltas. Charge any GC done
-        // before the measured window to warm-up (we don't want the first-
-        // iteration JIT/init allocations skewing GC stats on the measured
-        // training loop itself).
-        int g0Pre = GC.CollectionCount(0);
-        int g1Pre = GC.CollectionCount(1);
-        int g2Pre = GC.CollectionCount(2);
-        long allocPre = GC.GetTotalAllocatedBytes(precise: true);
 
         long total = 0;
         for (int i = 0; i < iters; i++)
         {
-            int g0 = GC.CollectionCount(0);
-            int g1 = GC.CollectionCount(1);
-            int g2 = GC.CollectionCount(2);
-            long allocBytesBefore = GC.GetTotalAllocatedBytes(precise: true);
             var sw = Stopwatch.StartNew();
             net.Train(input, target);
             sw.Stop();
-            long allocBytesAfter = GC.GetTotalAllocatedBytes(precise: true);
-            int dG0 = GC.CollectionCount(0) - g0;
-            int dG1 = GC.CollectionCount(1) - g1;
-            int dG2 = GC.CollectionCount(2) - g2;
-            long dAlloc = allocBytesAfter - allocBytesBefore;
             total += sw.ElapsedMilliseconds;
-            Console.WriteLine(
-                $"[harness] iter#{i + 1}: {sw.ElapsedMilliseconds,5} ms  " +
-                $"gc(G0={dG0,3} G1={dG1,3} G2={dG2,2})  alloc={dAlloc / (1024.0 * 1024.0):F1} MiB");
+            Console.WriteLine($"[harness] iter#{i + 1}: {sw.ElapsedMilliseconds,5} ms  L2={L2():F4}  loss={LossNow():F6}  hasNaN={HasNaN()}");
         }
         double avg = (double)total / iters;
-        long allocTotal = GC.GetTotalAllocatedBytes(precise: true) - allocPre;
-        Console.WriteLine(
-            $"[harness] avg over {iters} iters: {avg:F1} ms  " +
-            $"total alloc {allocTotal / (1024.0 * 1024.0):F1} MiB  " +
-            $"({allocTotal / (1024.0 * 1024.0 * iters):F1} MiB / iter)  " +
-            $"gc(G0={GC.CollectionCount(0) - g0Pre} G1={GC.CollectionCount(1) - g1Pre} G2={GC.CollectionCount(2) - g2Pre})");
+        Console.WriteLine($"[harness] avg over {iters} iters: {avg:F1} ms");
         return 0;
     }
 
     private static (NeuralNetworkBase<double> net, Tensor<double> input, Tensor<double> target) Build(string model)
     {
-        // Use RandomHelper for crypto-grade RNG (CreateSeededRandom is the
-        // reproducible variant — the harness wants deterministic input/target
-        // tensors so per-iter timings are comparable across runs).
         var rng = RandomHelper.CreateSeededRandom(42);
         switch (model)
         {
@@ -117,12 +90,29 @@ internal static class Program
                     taskType: NeuralNetworkTaskType.MultiClassClassification,
                     inputHeight: 32, inputWidth: 32, inputDepth: 3,
                     outputSize: 10);
-                var config = VGGConfiguration.CreateForCIFAR(
-                    VGGVariant.VGG11, numClasses: 10);
+                var config = VGGConfiguration.CreateForCIFAR(VGGVariant.VGG11, numClasses: 10);
                 var net = new VGGNetwork<double>(arch, config);
                 var input = new Tensor<double>(new[] { 1, 3, 32, 32 });
                 for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
                 var target = new Tensor<double>(new[] { 10 });
+                for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
+                return (net, input, target);
+            }
+            case "hope":
+            {
+                var net = new HopeNetwork<double>();
+                var input = new Tensor<double>(new[] { 256 });
+                for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+                var target = new Tensor<double>(new[] { 256 });
+                for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
+                return (net, input, target);
+            }
+            case "sgpt":
+            {
+                var net = new SGPT<double>();
+                var input = new Tensor<double>(new[] { 1, 4 });
+                for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+                var target = new Tensor<double>(new[] { 1, 1 });
                 for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
                 return (net, input, target);
             }

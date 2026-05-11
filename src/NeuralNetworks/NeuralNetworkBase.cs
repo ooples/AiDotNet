@@ -4643,7 +4643,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // tape-walk path uses. Pattern mismatch (different shapes /
             // different loss) gracefully falls back to the tape-walk path,
             // so the change is safe across the model zoo.
-            using var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true });
+            using var tape = new GradientTape<T>();
             var output = ForwardForTraining(input);
 
             // Align output shape to target: when ranks mismatch, ALWAYS reshape the
