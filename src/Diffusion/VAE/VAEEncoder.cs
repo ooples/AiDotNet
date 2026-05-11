@@ -292,6 +292,22 @@ public class VAEEncoder<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Per-instance compile host. Routing the encoder's full forward through
+    /// this host means a second + Nth call at the same input shape replays a
+    /// cached compiled plan instead of re-tracing the entire ResBlock + Conv
+    /// stack. The host is materialized lazily on first Forward call so the
+    /// per-instance setup cost is paid only by callers that actually invoke
+    /// the encoder (a VAEEncoder constructed but never called pays nothing).
+    /// (#1272 W1: VAEEncoder gets its own CompiledModelHost.)
+    /// </summary>
+    private AiDotNet.NeuralNetworks.CompiledModelHost<T>? _compileHost;
+    private int _compileStructureVersion;
+
+    private AiDotNet.NeuralNetworks.CompiledModelHost<T> EnsureCompileHost() =>
+        _compileHost ??= new AiDotNet.NeuralNetworks.CompiledModelHost<T>(
+            modelIdentity: nameof(VAEEncoder<T>));
+
+    /// <summary>
     /// Encodes an image to latent space, returning concatenated mean and log variance.
     /// </summary>
     /// <param name="input">Input image tensor [batch, inputChannels, H, W].</param>
@@ -299,7 +315,16 @@ public class VAEEncoder<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));
+    }
 
+    /// <summary>
+    /// Eager forward pass (the body of the original Forward). Called by the
+    /// compile host on cache miss / when compilation is disabled, and reused
+    /// by the backward path when it needs intermediate-tensor caching.
+    /// </summary>
+    private Tensor<T> ForwardEager(Tensor<T> input)
+    {
         // Input convolution
         var x = _inputConv.Forward(input);
         _inputConvOutput = x;
@@ -332,6 +357,32 @@ public class VAEEncoder<T> : LayerBase<T>
 
         // Concatenate mean and logVar along channel dimension
         return ConcatenateChannels(mean, logVar);
+    }
+
+    /// <summary>
+    /// Async overload of <see cref="Forward(Tensor{T})"/>. Routes through the
+    /// compile host's <c>PredictAsync</c> so callers in async pipelines get
+    /// the GPU-stream-aware <c>ExecuteAsync</c> path. (#1272 W1.)
+    /// </summary>
+    public System.Threading.Tasks.ValueTask<Tensor<T>> ForwardAsync(
+        Tensor<T> input,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        _lastInput = input;
+        return EnsureCompileHost().PredictAsync(
+            input, _compileStructureVersion, () => ForwardEager(input), cancellationToken);
+    }
+
+    /// <summary>
+    /// Bumps the structure-version counter so the next call to
+    /// <see cref="Forward"/> drops any plan compiled against an older
+    /// graph topology. Called by serialization / weight-loading paths
+    /// that mutate the underlying layer parameters.
+    /// </summary>
+    public void InvalidateCompiledPlans()
+    {
+        _compileStructureVersion++;
+        _compileHost?.Invalidate();
     }
 
     /// <summary>

@@ -280,6 +280,56 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
     /// <inheritdoc />
     public abstract Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null);
 
+    /// <summary>
+    /// Per-instance compile host shared across <see cref="Encode"/> and
+    /// <see cref="EncodeText"/>. Subclasses route their forward body through
+    /// <see cref="EncodeCompiled"/> / <see cref="EncodeTextCompiled"/> so the
+    /// second + Nth call at the same input shape replays a cached compiled
+    /// plan. Same pattern <see cref="AiDotNet.Diffusion.VAE.VAEModelBase{T}"/>
+    /// uses for VAE encode/decode. (#1272 W2: IConditioningModule compile-
+    /// host audit.)
+    /// </summary>
+    private AiDotNet.NeuralNetworks.CompiledModelHost<T>? _compileHost;
+    private int _compileStructureVersion;
+
+    private AiDotNet.NeuralNetworks.CompiledModelHost<T> EnsureCompileHost() =>
+        _compileHost ??= new AiDotNet.NeuralNetworks.CompiledModelHost<T>(
+            modelIdentity: GetType().Name);
+
+    /// <summary>
+    /// Routes <paramref name="eagerEncode"/> through the conditioner's
+    /// compile host. Subclasses' <see cref="Encode"/> bodies should wrap
+    /// their forward path with this helper. The cache is shape-keyed on
+    /// <paramref name="input"/>, so different prompt-token lengths get
+    /// distinct compiled plans (typical conditioner inputs are bucketed
+    /// by max-token-length so cache hit rate stays high).
+    /// </summary>
+    protected Tensor<T> EncodeCompiled(Tensor<T> input, System.Func<Tensor<T>> eagerEncode) =>
+        EnsureCompileHost().Predict(input, _compileStructureVersion, eagerEncode);
+
+    /// <summary>
+    /// Async overload of <see cref="EncodeCompiled"/>. Routes through the
+    /// compile host's <c>PredictAsync</c> so callers in async pipelines
+    /// (e.g. SDXL's concurrent dual-encoder pre-step) get the GPU-stream-
+    /// aware <c>ExecuteAsync</c> path.
+    /// </summary>
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> EncodeCompiledAsync(
+        Tensor<T> input,
+        System.Func<Tensor<T>> eagerEncode,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        EnsureCompileHost().PredictAsync(input, _compileStructureVersion, eagerEncode, cancellationToken);
+
+    /// <summary>
+    /// Bumps the structure-version counter so the next call drops any plan
+    /// captured against a prior layer-graph topology (weight reload,
+    /// quantization toggle, etc.).
+    /// </summary>
+    protected void InvalidateConditionerCompiledPlans()
+    {
+        _compileStructureVersion++;
+        _compileHost?.Invalidate();
+    }
+
     /// <inheritdoc />
     public abstract Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings);
 

@@ -33,6 +33,15 @@
     <ProjectReference Include="..\src\AiDotNet.csproj" />
   </ItemGroup>
 
+  <!-- Python baseline script for #1272 acceptance criterion #1 (SDXL head-to-head).
+       Copied to the build output so SDXLEndToEndBenchmark can spawn it as a
+       subprocess via Process.Start("python", scriptPath). -->
+  <ItemGroup>
+    <None Update="Diffusion\diffusers_sdxl_baseline.py">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
   <!--
     Native acceleration packages are now provided via NuGet.
     OpenBLAS and CLBlast are included via AiDotNet's transitive dependencies.

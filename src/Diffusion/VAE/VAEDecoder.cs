@@ -317,6 +317,19 @@ public class VAEDecoder<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Per-instance compile host. Routing the decoder's full forward through
+    /// this host means a second + Nth call at the same latent shape replays a
+    /// cached compiled plan instead of re-tracing the entire ResBlock + Conv
+    /// + Upsample stack. (#1272 W1: VAEDecoder gets its own CompiledModelHost.)
+    /// </summary>
+    private AiDotNet.NeuralNetworks.CompiledModelHost<T>? _compileHost;
+    private int _compileStructureVersion;
+
+    private AiDotNet.NeuralNetworks.CompiledModelHost<T> EnsureCompileHost() =>
+        _compileHost ??= new AiDotNet.NeuralNetworks.CompiledModelHost<T>(
+            modelIdentity: nameof(VAEDecoder<T>));
+
+    /// <summary>
     /// Decodes a latent representation to an image.
     /// </summary>
     /// <param name="input">Latent tensor [batch, latentChannels, H, W].</param>
@@ -324,7 +337,16 @@ public class VAEDecoder<T> : LayerBase<T>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         _lastInput = input;
+        return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));
+    }
 
+    /// <summary>
+    /// Eager forward pass body — invoked by the compile host on cache miss /
+    /// when compilation is disabled, also reused by the backward path that
+    /// depends on the cached intermediate tensors.
+    /// </summary>
+    private Tensor<T> ForwardEager(Tensor<T> input)
+    {
         // Post-quant convolution
         var x = _postQuantConv.Forward(input);
         _postQuantOutput = x;
@@ -357,6 +379,28 @@ public class VAEDecoder<T> : LayerBase<T>
 
         // Apply tanh for [-1, 1] output range
         return ApplyTanh(x);
+    }
+
+    /// <summary>
+    /// Async overload of <see cref="Forward(Tensor{T})"/> — routes through
+    /// the compile host's <c>PredictAsync</c>.
+    /// </summary>
+    public System.Threading.Tasks.ValueTask<Tensor<T>> ForwardAsync(
+        Tensor<T> input,
+        System.Threading.CancellationToken cancellationToken = default)
+    {
+        _lastInput = input;
+        return EnsureCompileHost().PredictAsync(
+            input, _compileStructureVersion, () => ForwardEager(input), cancellationToken);
+    }
+
+    /// <summary>
+    /// Bumps the structure-version so the next Forward drops stale plans.
+    /// </summary>
+    public void InvalidateCompiledPlans()
+    {
+        _compileStructureVersion++;
+        _compileHost?.Invalidate();
     }
 
     private Tensor<T> ApplySiLU(Tensor<T> input)
