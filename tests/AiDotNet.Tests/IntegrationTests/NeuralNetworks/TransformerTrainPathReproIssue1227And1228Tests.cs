@@ -51,11 +51,18 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// </para>
 ///
 /// <para>
-/// These tests do NOT fail the build on regressions — they emit
-/// telemetry to <see cref="ITestOutputHelper"/> and assert only on
-/// extreme thresholds (10 GB working-set growth, &gt; 30 s/call) so the
-/// test serves as a tripwire for future regressions while staying
-/// stable on the current implementation.
+/// <b>Assertion policy:</b> these tests DO fail the build on regressions
+/// — but the thresholds are calibrated to the current post-fix baseline.
+/// The L=1 probe asserts &lt; 2 GB working-set growth (loose, single-layer
+/// is small); the L=4 stress probe asserts &lt; 1 GB working-set growth
+/// AND &lt; 100 MB managed-heap growth across 1000 calls (tight, since
+/// the post-fix measurement is 0 MB). The #1228 CPU-ratio probe asserts
+/// ratio &gt;= 1.2 on multi-core hosts (skipped on single-core CI). The
+/// diagnostic probes (tensor-survival + per-field accumulation) assert
+/// that no layer field accumulates Tensor refs across calls. Together
+/// these catch any regression that reintroduces the #1227 / #1228
+/// signatures while telemetry to <see cref="ITestOutputHelper"/> gives
+/// triage data for future investigations.
 /// </para>
 /// </summary>
 [Collection("NonParallelIntegration")]
@@ -153,15 +160,15 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         long workingSetEnd = process.WorkingSet64;
         long managedHeapEnd = GC.GetTotalMemory(forceFullCollection: false);
 
-        double walSec = sw.Elapsed.TotalSeconds;
+        double wallSec = sw.Elapsed.TotalSeconds;
         double cpuSec = (cpuTimeEnd - cpuTimeStart).TotalSeconds;
-        double cpuToWallRatio = walSec > 0 ? cpuSec / walSec : 0;
-        double msPerCall = walSec * 1000.0 / trainSteps;
+        double cpuToWallRatio = wallSec > 0 ? cpuSec / wallSec : 0;
+        double msPerCall = wallSec * 1000.0 / trainSteps;
         long workingSetGrowthMB = (workingSetEnd - workingSetStart) / (1024 * 1024);
         long managedHeapGrowthMB = (managedHeapEnd - managedHeapStart) / (1024 * 1024);
 
         _output.WriteLine($"#1227 probe: {trainSteps} train calls on 1-layer Transformer (d=128, ff=512, h=4, ctx={ctx}, V={vocab})");
-        _output.WriteLine($"  Wall time:        {walSec:F2}s  ({msPerCall:F1} ms/call)");
+        _output.WriteLine($"  Wall time:        {wallSec:F2}s  ({msPerCall:F1} ms/call)");
         _output.WriteLine($"  CPU time:         {cpuSec:F2}s  (ratio = {cpuToWallRatio:F2})");
         _output.WriteLine($"  Working-set:      start={workingSetStart / (1024.0 * 1024):F0}MB  end={workingSetEnd / (1024.0 * 1024):F0}MB  delta={workingSetGrowthMB:+#;-#;0}MB");
         _output.WriteLine($"  Managed heap:     start={managedHeapStart / (1024.0 * 1024):F0}MB  end={managedHeapEnd / (1024.0 * 1024):F0}MB  delta={managedHeapGrowthMB:+#;-#;0}MB");
@@ -372,7 +379,14 @@ public class TransformerTrainPathReproIssue1227And1228Tests
             var target = BuildOneHotTarget(step % vocab, vocab);
             model.Train(input, target);
 
-            if (step == trainSteps / 2)
+            // step is zero-based, so `step + 1 == trainSteps / 2` fires
+            // immediately after the (trainSteps/2)'th call completes — giving
+            // window1 exactly trainSteps/2 calls (0..trainSteps/2 - 1) and
+            // window2 exactly trainSteps/2 calls (trainSteps/2..trainSteps-1).
+            // Sampling at `step == trainSteps / 2` would capture after 501
+            // calls instead of 500, and the per-window math (denominator
+            // trainSteps/2) would then be off by one.
+            if (step + 1 == trainSteps / 2)
             {
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
@@ -388,9 +402,10 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         TimeSpan cpuTimeEnd = process.TotalProcessorTime;
 
         // workingSetEnd must be sampled AFTER the same GC sequence as the
-        // baseline (line 311) — otherwise transient allocations from the
-        // tail of the loop bias the delta upward and the test would report
-        // false-positive growth.
+        // baseline (the pre-loop forced GC near the top of this method,
+        // matching the post-loop GC right below) — otherwise transient
+        // allocations from the tail of the loop bias the delta upward and
+        // the test would report false-positive growth.
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
@@ -411,7 +426,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         // retention means the per-call lifecycle is allocating heavily but
         // releasing on Dispose. A high retention rate means something is
         // rooting tensors across calls.
-        long totalAllocBytes = GC.GetTotalAllocatedBytes(precise: true);
+        long totalAllocBytes = GetTotalAllocated();
         _output.WriteLine($"  Total alloc:      {totalAllocBytes / (1024.0 * 1024 * 1024):F2} GB (over the whole process — includes warm-up + test infra)");
 
         _output.WriteLine($"#1227 L=4 stress: {trainSteps} train calls on 4-layer Transformer (d=128, ff=512, h=4, ctx={ctx}, V={vocab})");
@@ -502,7 +517,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         GC.Collect();
 
         long baseline = GC.GetTotalMemory(forceFullCollection: false);
-        long allocBaseline = GC.GetTotalAllocatedBytes(precise: true);
+        long allocBaseline = GetTotalAllocated();
         _output.WriteLine($"Granular leak profile (4-layer Transformer, {numWindows}x{windowSize} calls)");
         _output.WriteLine($"  Baseline:  heap={baseline / (1024.0 * 1024):F0}MB  alloc={allocBaseline / (1024.0 * 1024):F0}MB");
 
@@ -552,7 +567,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
             GC.Collect();
 
             long heap = GC.GetTotalMemory(forceFullCollection: false);
-            long alloc = GC.GetTotalAllocatedBytes(precise: true);
+            long alloc = GetTotalAllocated();
             long heapDelta = heap - prevHeap;
             long allocDelta = alloc - prevAlloc;
             int tapeMCount = readTapeMCount?.Invoke() is int cw ? cw : -1;
@@ -896,5 +911,24 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         var t = new Tensor<float>(new[] { 1, vocab });
         t[0, classIndex] = 1f;
         return t;
+    }
+
+    /// <summary>
+    /// Returns the cumulative allocated-byte count since process start.
+    /// Uses <c>GC.GetTotalAllocatedBytes(precise: true)</c> when available
+    /// (net5.0+) and falls back to <c>GC.GetTotalMemory(forceFullCollection: false)</c>
+    /// on net471 where the precise API doesn't exist. The fallback is less
+    /// useful for measuring allocation rate (it reports retained, not
+    /// cumulative), but keeps the test file compiling cross-TFM — the
+    /// allocation-rate telemetry is diagnostic, not load-bearing for any
+    /// assertion.
+    /// </summary>
+    private static long GetTotalAllocated()
+    {
+#if NET5_0_OR_GREATER
+        return GC.GetTotalAllocatedBytes(precise: true);
+#else
+        return GC.GetTotalMemory(forceFullCollection: false);
+#endif
     }
 }
