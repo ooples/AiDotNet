@@ -76,7 +76,7 @@
     <PackageVersion Include="Accord.Statistics" Version="3.8.0" />
     <PackageVersion Include="TensorFlow.NET" Version="0.150.0" />
     <PackageVersion Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
-    <PackageVersion Include="TorchSharp" Version="0.106.0" />
+    <PackageVersion Include="TorchSharp" Version="0.107.0" />
     <PackageVersion Include="TorchSharp-cuda-windows" Version="0.106.0" />
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
