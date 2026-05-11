@@ -522,7 +522,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task ScaledInput_ShouldChangeOutput()
+    public virtual async Task ScaledInput_ShouldChangeOutput()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
