@@ -557,8 +557,24 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
                     layer.SetTrainingMode(false);
             }
 
-            // Consolidate memory periodically — safe in eval mode
-            if (_adaptationStep % 100 == 0)
+            // Increment the training step counter explicitly: Hope's custom
+            // Forward at line ~243 increments _adaptationStep, but
+            // TrainWithTape calls Layers[i].Forward directly and bypasses
+            // that path entirely, so the counter would stay at 0 forever
+            // and the `_adaptationStep % 100 == 0` gate would fire on EVERY
+            // Train call. That triggered ConsolidateMemory after every
+            // single optimizer step (instead of every 100 per Behrouz et
+            // al. 2025 §3.4), mixing 1% of fast-block weights into slow
+            // blocks each step and overpowering the gradient signal —
+            // LossStrictlyDecreasesOnMemorizationTask saw a ~0.005% loss
+            // drop over 100 steps instead of the required ≥1%.
+            _adaptationStep++;
+
+            // Consolidate memory periodically — safe in eval mode. Guard
+            // against the initial step (counter was 1 when incremented from
+            // 0) so we don't consolidate on the very first Train call when
+            // there's nothing yet learned to consolidate.
+            if (_adaptationStep > 0 && _adaptationStep % 100 == 0)
             {
                 ConsolidateMemory();
             }
