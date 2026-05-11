@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
@@ -617,8 +619,8 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         // including reflective traversal of `_lastX` caches. Compare BEFORE / AFTER N
         // train calls to see which instances survive in those caches.
         long heapBefore = GC.GetTotalMemory(forceFullCollection: false);
-        var beforeRefs = new System.Collections.Generic.List<System.WeakReference>();
-        foreach (var t in EnumerateLayerTensors(model)) beforeRefs.Add(new System.WeakReference(t));
+        var beforeRefs = new List<WeakReference>();
+        foreach (var t in EnumerateLayerTensors(model)) beforeRefs.Add(new WeakReference(t));
 
         const int trainSteps = 50;
         for (int step = 0; step < trainSteps; step++)
@@ -630,8 +632,8 @@ public class TransformerTrainPathReproIssue1227And1228Tests
 
         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         long heapAfter = GC.GetTotalMemory(forceFullCollection: false);
-        var afterRefs = new System.Collections.Generic.List<System.WeakReference>();
-        foreach (var t in EnumerateLayerTensors(model)) afterRefs.Add(new System.WeakReference(t));
+        var afterRefs = new List<WeakReference>();
+        foreach (var t in EnumerateLayerTensors(model)) afterRefs.Add(new WeakReference(t));
 
         int beforeAlive = 0; foreach (var wr in beforeRefs) if (wr.IsAlive) beforeAlive++;
         int afterAlive = 0; foreach (var wr in afterRefs) if (wr.IsAlive) afterAlive++;
@@ -669,7 +671,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
     /// every reachable Tensor&lt;float&gt; instance. Used by the survival
     /// diagnostic above to bisect what specifically is being retained.
     /// </summary>
-    private static System.Collections.Generic.IEnumerable<Tensor<float>> EnumerateLayerTensors(NeuralNetworkBase<float> model)
+    private static IEnumerable<Tensor<float>> EnumerateLayerTensors(NeuralNetworkBase<float> model)
     {
         foreach (var layer in model.Layers)
         {
@@ -677,7 +679,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         }
     }
 
-    private static System.Collections.Generic.IEnumerable<Tensor<float>> EnumerateTensorFields(object obj)
+    private static IEnumerable<Tensor<float>> EnumerateTensorFields(object obj)
     {
         var type = obj.GetType();
         while (type is not null && type != typeof(object))
@@ -685,8 +687,24 @@ public class TransformerTrainPathReproIssue1227And1228Tests
             foreach (var field in type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance))
             {
                 var val = field.GetValue(obj);
-                if (val is Tensor<float> tf) yield return tf;
-                else if (val is System.Collections.IEnumerable enumerable && val is not string)
+                if (val is null) continue;
+                if (val is Tensor<float> tf) { yield return tf; continue; }
+
+                // Dictionaries iterate as KeyValuePair entries which our
+                // `item is Tensor<float>` check below would skip. Inspect
+                // the Values collection explicitly so Tensor-valued
+                // dictionaries (e.g. Adam's _tapeM / _tapeV gradient stash)
+                // contribute to the survival/accumulation diagnostics.
+                if (val is IDictionary dict)
+                {
+                    foreach (var v in dict.Values)
+                    {
+                        if (v is Tensor<float> dictTf) yield return dictTf;
+                    }
+                    continue;
+                }
+
+                if (val is IEnumerable enumerable && val is not string)
                 {
                     foreach (var item in enumerable)
                     {
@@ -736,7 +754,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
 
         _output.WriteLine($"#1227 per-field accumulation diagnostic ({trainSteps} calls)");
         _output.WriteLine($"  Fields that GREW in tensor count (delta > 0):");
-        var grewFields = new System.Collections.Generic.List<string>();
+        var grewFields = new List<string>();
         foreach (var kvp in afterCounts)
         {
             int before = beforeCounts.TryGetValue(kvp.Key, out var b) ? b : 0;
@@ -761,9 +779,9 @@ public class TransformerTrainPathReproIssue1227And1228Tests
             $"cleaned up on the tape-based training path. Fields: {string.Join("; ", grewFields)}.");
     }
 
-    private static System.Collections.Generic.Dictionary<string, int> CountTensorsPerField(NeuralNetworkBase<float> model)
+    private static Dictionary<string, int> CountTensorsPerField(NeuralNetworkBase<float> model)
     {
-        var counts = new System.Collections.Generic.Dictionary<string, int>();
+        var counts = new Dictionary<string, int>();
         for (int li = 0; li < model.Layers.Count; li++)
         {
             var layer = model.Layers[li];
@@ -776,7 +794,16 @@ public class TransformerTrainPathReproIssue1227And1228Tests
                     var val = field.GetValue(layer);
                     int count = 0;
                     if (val is Tensor<float>) count = 1;
-                    else if (val is System.Collections.IEnumerable enumerable && val is not string)
+                    // Same IDictionary handling as EnumerateTensorFields — iterating
+                    // a dictionary as IEnumerable yields KeyValuePair entries, so
+                    // Tensor-valued dicts (e.g. Adam optimizer state) would be
+                    // invisible to the per-field count without this explicit branch.
+                    else if (val is IDictionary dict)
+                    {
+                        foreach (var v in dict.Values)
+                            if (v is Tensor<float>) count++;
+                    }
+                    else if (val is IEnumerable enumerable && val is not string)
                     {
                         foreach (var item in enumerable)
                             if (item is Tensor<float>) count++;
@@ -873,7 +900,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
                         foreach (var fn in new[] { "_tapeM", "_tapeV" })
                         {
                             var f = opt.GetType().GetField(fn, BindingFlags.NonPublic | BindingFlags.Instance);
-                            if (f?.GetValue(opt) is System.Collections.IDictionary dict)
+                            if (f?.GetValue(opt) is IDictionary dict)
                                 dict.Clear();
                         }
                     }

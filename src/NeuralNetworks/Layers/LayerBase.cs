@@ -4,6 +4,7 @@ using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -2005,13 +2006,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         //     all, so the push is pure dead weight that accumulates one entry
         //     per Forward call indefinitely.
         //
+        //   - JIT graph capture (IsCapturing == true): Forward is recording
+        //     operations into a computation graph rather than executing the
+        //     eager activation derivative, so ApplyActivationDerivativeFromOutput
+        //     is never invoked during capture. IsCapturing can be set while
+        //     IsTrainingMode is also true, so checking training-mode alone
+        //     isn't sufficient.
+        //
         // Only push when we know the eager backward will drain it: training
-        // mode ON and no tape recording. The tape path already preserves the
-        // pre-activation reference through its recorded GradFn closures, so
-        // skipping the push there is functionally equivalent.
+        // mode ON, not capturing, no tape recording. The tape path already
+        // preserves the pre-activation reference through its recorded GradFn
+        // closures; the capture path encodes it into the graph node — both
+        // cases make the cache redundant.
         bool eagerBackwardWillRun =
             IsTrainingMode
-            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null;
+            && !IsCapturing
+            && GradientTape<T>.Current is null;
         if (eagerBackwardWillRun)
         {
             _preActivationCache.Push(input);
