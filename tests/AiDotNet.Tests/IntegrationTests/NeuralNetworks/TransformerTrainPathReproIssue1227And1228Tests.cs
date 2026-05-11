@@ -58,6 +58,7 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// stable on the current implementation.
 /// </para>
 /// </summary>
+[Collection("NonParallelIntegration")]
 public class TransformerTrainPathReproIssue1227And1228Tests
 {
     private readonly ITestOutputHelper _output;
@@ -115,9 +116,17 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
+        // Process counters (WorkingSet64, TotalProcessorTime) return cached
+        // snapshots — Microsoft's documented contract is to call Refresh()
+        // before each read in a measurement loop, or the values reflect the
+        // state at process-handle creation. Without these refreshes, the
+        // computed deltas are misleading on Windows in particular, where
+        // working-set sampling is otherwise unchanged across the run.
         var process = Process.GetCurrentProcess();
+        process.Refresh();
         long workingSetStart = process.WorkingSet64;
         long managedHeapStart = GC.GetTotalMemory(forceFullCollection: false);
+        process.Refresh();
         TimeSpan cpuTimeStart = process.TotalProcessorTime;
         var sw = Stopwatch.StartNew();
 
@@ -129,13 +138,19 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         }
 
         sw.Stop();
+        process.Refresh();
         TimeSpan cpuTimeEnd = process.TotalProcessorTime;
-        long workingSetEnd = process.WorkingSet64;
 
         // Force GC so we measure ACTUAL retained memory, not transient.
+        // Both managed-heap and working-set must be sampled AFTER the same
+        // GC sequence as the baseline (which was sampled post-GC at line 114)
+        // — otherwise we'd compare a transient-loaded end-state to a
+        // GC-clean baseline and the delta would be biased upward.
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
+        process.Refresh();
+        long workingSetEnd = process.WorkingSet64;
         long managedHeapEnd = GC.GetTotalMemory(forceFullCollection: false);
 
         double walSec = sw.Elapsed.TotalSeconds;
@@ -175,15 +190,24 @@ public class TransformerTrainPathReproIssue1227And1228Tests
 
     /// <summary>
     /// #1228 repro: measure CPU-time / wall-time ratio across 200 train
-    /// calls. Reporter saw 1.06 cores avg on a 16-core machine.
-    /// Post-fix the ratio should exceed 1.3 (some multi-core engagement);
-    /// a ratio close to 1.0 means the train path is still serial. We
-    /// only assert as a tripwire — the test will pass on current code
-    /// regardless of the exact ratio, while emitting telemetry.
+    /// calls. Reporter saw 1.06 cores avg on a 16-core machine. The Train
+    /// path should engage at least the matmul kernels' parallel path, so
+    /// on a multi-core host the ratio should clear ~1.2 (loose) once #1228
+    /// is fixed. A ratio ≈ 1.0 on a multi-core box means the train path
+    /// is still effectively serial.
+    ///
+    /// <para>Skipped on hosts with fewer than 2 cores because the ratio
+    /// caps at ~1.0 by definition when there's only one core to schedule
+    /// on, and the test is about parallel scheduling, not raw throughput.</para>
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task Issue1228_TransformerTrain_CpuToWallRatio()
     {
+        Skip.If(Environment.ProcessorCount < 2,
+            $"#1228 measures multi-core engagement on the Train path. " +
+            $"Host has {Environment.ProcessorCount} core(s) — the CPU/wall ratio caps at ~1.0 by definition. " +
+            "Re-enable on a multi-core host to validate parallel dispatch.");
+
         await Task.Yield();
 
         const int vocab = 256;
@@ -214,6 +238,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         for (int i = 0; i < 3; i++) model.Train(warmupInput, warmupTarget);
 
         var process = Process.GetCurrentProcess();
+        process.Refresh();
         TimeSpan cpuStart = process.TotalProcessorTime;
         var sw = Stopwatch.StartNew();
 
@@ -225,6 +250,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         }
 
         sw.Stop();
+        process.Refresh();
         TimeSpan cpuEnd = process.TotalProcessorTime;
 
         double wallSec = sw.Elapsed.TotalSeconds;
@@ -234,17 +260,27 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         _output.WriteLine($"#1228 probe: {trainSteps} train calls, wall={wallSec:F2}s, cpu={cpuSec:F2}s, ratio={ratio:F2}");
         _output.WriteLine($"  Available cores: {Environment.ProcessorCount}");
         _output.WriteLine(ratio >= 1.3
-            ? "  -> Multi-core engagement detected on Train path (#1228 reduced or fixed)."
-            : ratio >= 1.05
-                ? "  -> Light multi-core engagement (some kernels parallel, others serial)."
-                : "  -> Train path appears single-threaded (#1228 still active or partly so).");
+            ? "  -> Multi-core engagement detected on Train path (#1228 fixed)."
+            : ratio >= 1.2
+                ? "  -> Marginal multi-core engagement (passing tripwire; some kernels still serial)."
+                : "  -> Train path appears single-threaded (#1228 still active).");
 
-        // Tripwire only: don't fail the build on the parallelism level
-        // since that's a perf concern not a correctness concern, AND it
-        // depends heavily on machine topology and Tensors version.
-        // The training itself must complete (no hangs).
+        // Sanity bound: the run must complete. A hang or pathological slowdown
+        // would show up as a > 120 s wall time regardless of the ratio.
         Assert.True(wallSec < 120,
             $"Train loop took {wallSec:F1}s — should complete well under the framework's 120 s budget.");
+
+        // Actual #1228 assertion: CPU/wall ratio must exceed 1.2 on a
+        // multi-core host. The reporter's single-threaded baseline was
+        // 1.06 cores avg on 16-core hardware; the post-fix observation on
+        // this probe is consistently ratio >= 1.3 (matmul + softmax dispatch
+        // parallel). 1.2 is the floor: it lets a chunk of kernels still
+        // serialize without false-positive failure, but rejects the
+        // "1 core only" symptom #1228 documented.
+        Assert.True(ratio >= 1.2,
+            $"CPU/wall ratio {ratio:F2} indicates serial Train dispatch on a " +
+            $"{Environment.ProcessorCount}-core host. Reporter's baseline was 1.06 cores " +
+            $"on 16-core hardware — see #1228. wall={wallSec:F2}s cpu={cpuSec:F2}s.");
     }
 
     /// <summary>
@@ -310,9 +346,15 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
+        // Same Refresh()-before-read discipline as the L=1 probe — see the
+        // commentary there for the rationale. Process counters are cached
+        // snapshots; deltas computed off stale baselines mis-represent the
+        // run's actual memory profile.
         var process = Process.GetCurrentProcess();
+        process.Refresh();
         long workingSetStart = process.WorkingSet64;
         long managedHeapStart = GC.GetTotalMemory(forceFullCollection: false);
+        process.Refresh();
         TimeSpan cpuTimeStart = process.TotalProcessorTime;
         var sw = Stopwatch.StartNew();
 
@@ -335,18 +377,25 @@ public class TransformerTrainPathReproIssue1227And1228Tests
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
                 GC.Collect();
+                process.Refresh();
                 workingSetMid = process.WorkingSet64;
                 managedHeapMid = GC.GetTotalMemory(forceFullCollection: false);
             }
         }
 
         sw.Stop();
+        process.Refresh();
         TimeSpan cpuTimeEnd = process.TotalProcessorTime;
-        long workingSetEnd = process.WorkingSet64;
 
+        // workingSetEnd must be sampled AFTER the same GC sequence as the
+        // baseline (line 311) — otherwise transient allocations from the
+        // tail of the loop bias the delta upward and the test would report
+        // false-positive growth.
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
+        process.Refresh();
+        long workingSetEnd = process.WorkingSet64;
         long managedHeapEnd = GC.GetTotalMemory(forceFullCollection: false);
 
         double wallSec = sw.Elapsed.TotalSeconds;
@@ -571,13 +620,33 @@ public class TransformerTrainPathReproIssue1227And1228Tests
 
         int beforeAlive = 0; foreach (var wr in beforeRefs) if (wr.IsAlive) beforeAlive++;
         int afterAlive = 0; foreach (var wr in afterRefs) if (wr.IsAlive) afterAlive++;
+        long heapDeltaBytes = heapAfter - heapBefore;
+        int tensorCountDelta = afterRefs.Count - beforeRefs.Count;
         _output.WriteLine($"#1227 tensor-survival diagnostic ({trainSteps} train calls, 4-layer Transformer)");
         _output.WriteLine($"  Heap before:       {heapBefore / (1024.0 * 1024):F0}MB");
         _output.WriteLine($"  Heap after:        {heapAfter / (1024.0 * 1024):F0}MB");
-        _output.WriteLine($"  Heap delta:        +{(heapAfter - heapBefore) / (1024 * 1024)}MB ({(heapAfter - heapBefore) / (double)trainSteps / 1024:F0} KB/call)");
+        _output.WriteLine($"  Heap delta:        +{heapDeltaBytes / (1024 * 1024)}MB ({heapDeltaBytes / (double)trainSteps / 1024:F0} KB/call)");
         _output.WriteLine($"  Layer tensors before: {beforeRefs.Count} (live: {beforeAlive})");
         _output.WriteLine($"  Layer tensors after:  {afterRefs.Count} (live: {afterAlive})");
-        _output.WriteLine($"  Tensor count delta:   +{afterRefs.Count - beforeRefs.Count}");
+        _output.WriteLine($"  Tensor count delta:   +{tensorCountDelta}");
+
+        // Real assertions — pre-LayerBase-fix this probe showed +650 tensors
+        // (~13/call) and ~775 KB/call heap retention. Post-fix it measures
+        // +0 tensors and 0 MB heap delta. The thresholds below catch a
+        // regression at any meaningful magnitude while tolerating GC
+        // scheduling jitter on Server-GC hosts. Total layer field count
+        // for the 4-encoder Transformer is ~221 — a delta of 50 means
+        // a single field accumulated ~1 entry per call, which is the
+        // signature pattern this probe is designed to surface.
+        Assert.True(tensorCountDelta < 50,
+            $"Layer-field tensor count grew by {tensorCountDelta} across {trainSteps} train calls. " +
+            $"Indicates a field-level cache is accumulating tensor refs (the signature pattern of " +
+            $"AiDotNet#1227's residual leak in LayerBase._preActivationCache). " +
+            $"before={beforeRefs.Count} after={afterRefs.Count}.");
+
+        Assert.True(heapDeltaBytes < 10L * 1024 * 1024,
+            $"Managed heap grew by {heapDeltaBytes / (1024 * 1024)} MB across {trainSteps} train calls " +
+            $"after a forced Gen2 GC — see #1227.");
     }
 
     /// <summary>
@@ -652,6 +721,7 @@ public class TransformerTrainPathReproIssue1227And1228Tests
 
         _output.WriteLine($"#1227 per-field accumulation diagnostic ({trainSteps} calls)");
         _output.WriteLine($"  Fields that GREW in tensor count (delta > 0):");
+        var grewFields = new System.Collections.Generic.List<string>();
         foreach (var kvp in afterCounts)
         {
             int before = beforeCounts.TryGetValue(kvp.Key, out var b) ? b : 0;
@@ -659,8 +729,21 @@ public class TransformerTrainPathReproIssue1227And1228Tests
             if (delta > 0)
             {
                 _output.WriteLine($"    +{delta,4}  {kvp.Key}  ({before} -> {kvp.Value})");
+                grewFields.Add($"{kvp.Key} (+{delta}, {before} -> {kvp.Value})");
             }
         }
+
+        // Real assertion: post-LayerBase-fix no layer field accumulates
+        // tensor refs across calls. Pre-fix this probe listed 13 fields
+        // (one per MHA + per Dense) each growing by 50 entries on a
+        // 50-call run — that's the exact "_preActivationCache" signature
+        // the LayerBase gate eliminated. A non-empty `grewFields` list
+        // means a new field is leaking, which is exactly the regression
+        // this diagnostic is designed to catch.
+        Assert.True(grewFields.Count == 0,
+            $"{grewFields.Count} layer field(s) accumulated Tensor refs across {trainSteps} train calls — " +
+            $"see #1227. This is the field-level signature of a forward-side cache that's not getting " +
+            $"cleaned up on the tape-based training path. Fields: {string.Join("; ", grewFields)}.");
     }
 
     private static System.Collections.Generic.Dictionary<string, int> CountTensorsPerField(NeuralNetworkBase<float> model)
