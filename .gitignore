@@ -417,3 +417,8 @@ _playground_test/
 # there.
 traces/
 /tools/PerfView/
+# Local profiler-staging dir for ad-hoc dotnet-trace / PerfView captures
+# (PerfView.exe download, .nettrace + .speedscope.json outputs, analyze
+# scripts). Keep out of the index so contributors don't accidentally
+# commit 25 MB binaries / multi-MB trace artifacts.
+/.tools/
