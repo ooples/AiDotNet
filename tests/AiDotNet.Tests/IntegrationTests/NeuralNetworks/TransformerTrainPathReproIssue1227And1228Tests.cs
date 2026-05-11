@@ -13,11 +13,20 @@ using Xunit.Abstractions;
 namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 
 /// <summary>
-/// Fresh repro probes for AiDotNet#1227 and #1228, both filed against
-/// AiDotNet 0.171.0 + AiDotNet.Tensors 0.68.0. The repo currently
-/// pins AiDotNet.Tensors 0.69.1 and the post-#1232 Transformer
-/// architecture, so we re-run scaled-down versions of the reporter's
-/// scenarios to confirm whether either bug still reproduces.
+/// Regression probes for AiDotNet#1227 and #1228, both originally filed
+/// against AiDotNet 0.171.0 + AiDotNet.Tensors 0.68.0. Both bugs have
+/// since been fixed:
+/// <list type="bullet">
+///   <item>#1227 (memory leak) — fixed upstream in AiDotNet.Tensors 0.75.5
+///     (graph + persistent-tape + optimized-backward .Grad cleanup, plus
+///     nested-tape ownership checks) combined with the consumer-side
+///     <c>LayerBase._preActivationCache</c> gate added in this PR.</item>
+///   <item>#1228 (single-threaded Train) — addressed by the parallel
+///     matmul / softmax dispatch landed across the Tensors 0.69.x – 0.75.x
+///     series.</item>
+/// </list>
+/// The probes below pin the post-fix baseline so any regression that
+/// reintroduces the original symptoms fails the suite.
 ///
 /// <para>
 /// <b>#1227</b> — 52 GB RAM working set after ~17 min training a 3M-param
@@ -152,9 +161,10 @@ public class TransformerTrainPathReproIssue1227And1228Tests
 
         // Force GC so we measure ACTUAL retained memory, not transient.
         // Both managed-heap and working-set must be sampled AFTER the same
-        // GC sequence as the baseline (which was sampled post-GC at line 114)
-        // — otherwise we'd compare a transient-loaded end-state to a
-        // GC-clean baseline and the delta would be biased upward.
+        // GC sequence as the baseline (the pre-loop forced GC right after
+        // warm-up, matching this block) — otherwise we'd compare a
+        // transient-loaded end-state to a GC-clean baseline and the delta
+        // would be biased upward.
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
@@ -175,11 +185,12 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         _output.WriteLine($"  Working-set:      start={workingSetStart / (1024.0 * 1024):F0}MB  end={workingSetEnd / (1024.0 * 1024):F0}MB  delta={workingSetGrowthMB:+#;-#;0}MB");
         _output.WriteLine($"  Managed heap:     start={managedHeapStart / (1024.0 * 1024):F0}MB  end={managedHeapEnd / (1024.0 * 1024):F0}MB  delta={managedHeapGrowthMB:+#;-#;0}MB");
 
-        // Tripwire: working-set growth > 10 GB on 200 calls would mean the
-        // 0.68.0-era leak is still live (~50 MB/call). On the current
-        // code (per-call using-disposed arena + tape), growth should be
-        // well under 1 GB.
-        Assert.True(workingSetGrowthMB < 10240,
+        // Tripwire: working-set growth > 2 GB on 200 calls is well above
+        // the post-fix baseline (~0 MB) while still tolerating native pool
+        // warm-up, JIT, and IO buffer noise. The L=1 probe is the lighter
+        // of the two stress tests; the heavier L=4 probe enforces a
+        // tighter 1 GB / 100 MB contract.
+        Assert.True(workingSetGrowthMB < 2048,
             $"Working-set grew by {workingSetGrowthMB} MB across {trainSteps} train calls. " +
             $"This indicates the per-call tape/arena lifecycle is leaking — see #1227. " +
             "Growth at this rate would reach the reporter's observed 52 GB within ~10k calls.");
@@ -190,11 +201,15 @@ public class TransformerTrainPathReproIssue1227And1228Tests
             $"Managed heap grew by {managedHeapGrowthMB} MB across {trainSteps} train calls (after forced GC). " +
             "Suggests tape graph nodes or per-call activations are being retained — see #1227.");
 
-        // Tripwire: per-call wall time > 30 s indicates pathological
-        // single-threaded behavior on a tiny model.
-        Assert.True(msPerCall < 30000,
-            $"Each train call took {msPerCall:F0} ms on a 1-layer Transformer. " +
-            "This is pathologically slow — see #1228 (single-threaded backward).");
+        // Sanity bound: the whole 200-call probe must finish well inside the
+        // suite's 120 s timeout. A `wallSec < 120` ceiling is meaningful
+        // (catches a hang or pathological per-call slowdown that would
+        // multiply across the loop), whereas the previous `msPerCall < 30s`
+        // was effectively unfalsifiable — 30 s/call × 200 calls = 6000 s,
+        // far past any framework budget.
+        Assert.True(wallSec < 120,
+            $"Train loop took {wallSec:F1}s across {trainSteps} L=1 calls — " +
+            $"should stay well under the 120 s budget. {msPerCall:F0} ms/call.");
     }
 
     /// <summary>
