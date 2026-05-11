@@ -6,14 +6,14 @@
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.75.5" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.75.3" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.75.5" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.75.3" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.75.3" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.75.5" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.7" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
-    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.25.1" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
     <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />
     <PackageVersion Include="Microsoft.Bcl.Numerics" Version="10.0.7" />
     <PackageVersion Include="System.Net.Http" Version="4.3.4" />
@@ -54,7 +54,7 @@
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
     <!-- Infrastructure -->
-    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.3.6" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.0" />
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.12.14" />
     <PackageVersion Include="Stripe.net" Version="50.4.1" />
@@ -76,8 +76,8 @@
     <PackageVersion Include="Accord.Statistics" Version="3.8.0" />
     <PackageVersion Include="TensorFlow.NET" Version="0.150.0" />
     <PackageVersion Include="SciSharp.TensorFlow.Redist" Version="2.16.0" />
-    <PackageVersion Include="TorchSharp" Version="0.106.0" />
-    <PackageVersion Include="TorchSharp-cuda-windows" Version="0.106.0" />
+    <PackageVersion Include="TorchSharp" Version="0.107.0" />
+    <PackageVersion Include="TorchSharp-cuda-windows" Version="0.107.0" />
     <!-- Testing -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.5.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
