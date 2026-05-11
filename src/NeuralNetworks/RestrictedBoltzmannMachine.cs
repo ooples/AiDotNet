@@ -125,6 +125,18 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     private Matrix<T> _weights { get; set; }
 
     /// <summary>
+    /// Cached tensors returned by <see cref="GetParameterChunks"/>. Allocated
+    /// once and refreshed in-place on each call to avoid the per-call
+    /// allocation that surprises consumers expecting parameter-snapshot APIs
+    /// to be cheap. Sized lazily on first access from <c>HiddenSize</c> /
+    /// <c>VisibleSize</c> (both set in the ctor before any chunks query is
+    /// possible).
+    /// </summary>
+    private Tensor<T>? _weightsChunk;
+    private Tensor<T>? _visibleBiasesChunk;
+    private Tensor<T>? _hiddenBiasesChunk;
+
+    /// <summary>
     /// Gets the number of neurons in the visible layer.
     /// </summary>
     /// <remarks>
@@ -674,26 +686,34 @@ public class RestrictedBoltzmannMachine<T> : NeuralNetworkBase<T>
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
+        // Lazy-allocate once, then refresh values in-place on every subsequent
+        // call. The previous implementation allocated three fresh tensors per
+        // call which surfaced as measurable allocator pressure in test
+        // infrastructure that polls parameter state every iteration (e.g. the
+        // Training_ShouldChangeParameters / GradientFlow invariant probes
+        // snapshot before AND after every step). The copy cost is unavoidable
+        // because RBM's parameters live in Matrix<T>/Vector<T> rather than
+        // Tensor<T>, but the allocation can be skipped after the first call.
+        _weightsChunk ??= new Tensor<T>(new[] { HiddenSize, VisibleSize });
         int paramIndex = 0;
-        var weightsTensor = new Tensor<T>(new[] { HiddenSize, VisibleSize });
         for (int i = 0; i < HiddenSize; i++)
         {
             for (int j = 0; j < VisibleSize; j++)
             {
-                weightsTensor[paramIndex++] = _weights[i, j];
+                _weightsChunk[paramIndex++] = _weights[i, j];
             }
         }
-        yield return weightsTensor;
+        yield return _weightsChunk;
 
-        var visibleBiasesTensor = new Tensor<T>(new[] { VisibleSize });
+        _visibleBiasesChunk ??= new Tensor<T>(new[] { VisibleSize });
         for (int i = 0; i < VisibleSize; i++)
-            visibleBiasesTensor[i] = _visibleBiases[i];
-        yield return visibleBiasesTensor;
+            _visibleBiasesChunk[i] = _visibleBiases[i];
+        yield return _visibleBiasesChunk;
 
-        var hiddenBiasesTensor = new Tensor<T>(new[] { HiddenSize });
+        _hiddenBiasesChunk ??= new Tensor<T>(new[] { HiddenSize });
         for (int i = 0; i < HiddenSize; i++)
-            hiddenBiasesTensor[i] = _hiddenBiases[i];
-        yield return hiddenBiasesTensor;
+            _hiddenBiasesChunk[i] = _hiddenBiases[i];
+        yield return _hiddenBiasesChunk;
     }
 
     /// <summary>

@@ -184,6 +184,16 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
     }
 
     /// <summary>
+    /// Fixed work-unit size for the parallel weight fill. Selected so chunks
+    /// stay well above SIMD-vector-block sizes (every chunk fully amortizes
+    /// hardware-thread bring-up cost) while small enough that an 8-core
+    /// runner and a 64-core runner produce IDENTICAL bit patterns for the
+    /// same seed — the chunk boundaries depend only on <see cref="ChunkSize"/>
+    /// and the requested fill size, NOT on <c>Environment.ProcessorCount</c>.
+    /// </summary>
+    private const int ChunkSize = 1 << 16; // 64K elements
+
+    /// <summary>
     /// Initializes a weight vector with small random values (Xavier initialization).
     /// </summary>
     /// <remarks>
@@ -195,10 +205,18 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
     /// (1) the per-chunk RNG is a fresh non-locked <see cref="Random"/> (chunks
     /// are touched by exactly one Parallel.For thread, so LockedRandom's
     /// lock-per-NextDouble was pure overhead — 2×N lock acquires for the
-    /// Box-Muller draws); (2) partitions across logical cores so SigLIP2 init
-    /// amortizes from O(N) to O(N/cores). Determinism is preserved: when a
-    /// caller-supplied seed flows in via <see cref="Rng"/>, each chunk's seed
-    /// is derived deterministically from it.
+    /// Box-Muller draws); (2) partitions into fixed-size chunks so SigLIP2
+    /// init amortizes from O(N) to O(N/min(numChunks,cores)).
+    /// <para>
+    /// <b>Determinism contract:</b> with a fixed caller-supplied seed flowing
+    /// in via <see cref="Rng"/>, the chunk count, chunk boundaries, and the
+    /// number of <c>Rng.Next()</c> calls all depend only on <c>size</c> —
+    /// NOT on the host's core count. A model initialized with seed=42 on an
+    /// 8-core CI worker produces the same byte-for-byte weight values as the
+    /// same seed on a 64-core dev box, and downstream <see cref="Rng"/>
+    /// draws (e.g. for layer-norm gain init below) see the same RNG state
+    /// regardless of host.
+    /// </para>
     /// </remarks>
     protected Vector<T> InitializeWeights(int size)
     {
@@ -216,19 +234,30 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
             return weights;
         }
 
-        int chunkSize = (size + cores - 1) / cores;
-        var seeds = new int[cores];
-        for (int c = 0; c < cores; c++) seeds[c] = Rng.Next();
+        // Partition into FIXED-size chunks. The number of chunks depends only
+        // on `size`, never on `Environment.ProcessorCount` — that's what makes
+        // the output deterministic across hosts. Parallel.For will still use
+        // up to `cores` worker threads, but each thread processes whole
+        // chunks at a time and the chunk assignment is order-independent
+        // (each chunk's RNG is independent of every other chunk's).
+        int numChunks = (size + ChunkSize - 1) / ChunkSize;
 
-        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        // Single Rng.Next() advance — same number of base-RNG steps on any
+        // host, so downstream consumers of Rng see the same state after this
+        // method regardless of cores.
+        int baseSeed = Rng.Next();
+
+        System.Threading.Tasks.Parallel.For(0, numChunks, c =>
         {
-            int chunkStart = c * chunkSize;
-            int chunkEnd = Math.Min(chunkStart + chunkSize, size);
+            int chunkStart = c * ChunkSize;
+            int chunkEnd = Math.Min(chunkStart + ChunkSize, size);
             if (chunkStart >= chunkEnd) return;
-            // Non-locked Random — chunk is owned by exactly one thread
-            // for its entire lifetime; LockedRandom's lock-per-NextDouble
-            // is pure overhead here. See remarks above.
-            var chunkRng = new Random(seeds[c]);
+            // Derive a deterministic per-chunk seed from (baseSeed, c). FNV-prime
+            // mix gives good avalanching from a 32-bit base + small chunk index
+            // without an extra hash dependency. Same baseSeed + same c on any
+            // host yields the same chunk seed, hence the same chunk values.
+            int chunkSeed = unchecked(baseSeed ^ (c * 16777619));
+            var chunkRng = new Random(chunkSeed);
             FillWeights(weights, chunkStart, chunkEnd - chunkStart, stddev, chunkRng);
         });
         return weights;
