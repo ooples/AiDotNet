@@ -186,18 +186,63 @@ public abstract class TextConditioningBase<T> : IConditioningModule<T>
     /// <summary>
     /// Initializes a weight vector with small random values (Xavier initialization).
     /// </summary>
+    /// <remarks>
+    /// Paper-scale text conditioners (SigLIP2-Large, T5-XXL, CLIP-bigG) allocate
+    /// hundreds of millions of weights per ctor. The previous single-threaded
+    /// loop with LockedRandom.NextDouble took ~23 s locally / ~70 s on CI for
+    /// SigLIP2's 365M-element init alone — single-handedly enough to blow the
+    /// Unit-03 Diffusion/Encoding shard's wall-time budget. Two wins applied:
+    /// (1) the per-chunk RNG is a fresh non-locked <see cref="Random"/> (chunks
+    /// are touched by exactly one Parallel.For thread, so LockedRandom's
+    /// lock-per-NextDouble was pure overhead — 2×N lock acquires for the
+    /// Box-Muller draws); (2) partitions across logical cores so SigLIP2 init
+    /// amortizes from O(N) to O(N/cores). Determinism is preserved: when a
+    /// caller-supplied seed flows in via <see cref="Rng"/>, each chunk's seed
+    /// is derived deterministically from it.
+    /// </remarks>
     protected Vector<T> InitializeWeights(int size)
     {
         var weights = new Vector<T>(size);
+        if (size <= 0) return weights;
+
         double stddev = Math.Sqrt(2.0 / (size + 1));
-        for (int i = 0; i < size; i++)
+
+        const int ParallelThreshold = 1 << 18; // 256K elements (~2 MB)
+        int cores = Math.Max(1, Environment.ProcessorCount);
+
+        if (size < ParallelThreshold || cores == 1)
         {
-            double u1 = 1.0 - Rng.NextDouble();
-            double u2 = 1.0 - Rng.NextDouble();
-            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            weights[i] = NumOps.FromDouble(normal * stddev);
+            FillWeights(weights, 0, size, stddev, Rng);
+            return weights;
         }
+
+        int chunkSize = (size + cores - 1) / cores;
+        var seeds = new int[cores];
+        for (int c = 0; c < cores; c++) seeds[c] = Rng.Next();
+
+        System.Threading.Tasks.Parallel.For(0, cores, c =>
+        {
+            int chunkStart = c * chunkSize;
+            int chunkEnd = Math.Min(chunkStart + chunkSize, size);
+            if (chunkStart >= chunkEnd) return;
+            // Non-locked Random — chunk is owned by exactly one thread
+            // for its entire lifetime; LockedRandom's lock-per-NextDouble
+            // is pure overhead here. See remarks above.
+            var chunkRng = new Random(seeds[c]);
+            FillWeights(weights, chunkStart, chunkEnd - chunkStart, stddev, chunkRng);
+        });
         return weights;
+    }
+
+    private void FillWeights(Vector<T> weights, int offset, int count, double stddev, Random rng)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            double u1 = 1.0 - rng.NextDouble();
+            double u2 = 1.0 - rng.NextDouble();
+            double normal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+            weights[offset + i] = NumOps.FromDouble(normal * stddev);
+        }
     }
 
     /// <inheritdoc />

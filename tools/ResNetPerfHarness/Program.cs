@@ -116,6 +116,18 @@ internal static class Program
                 for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
                 return (net, input, target);
             }
+            case "siglip2-ctor":
+            {
+                // Ctor-only benchmark: time the SigLIP2TextConditioner default
+                // construction — the slowest single test in the Unit-03
+                // Diffusion/Encoding shard (1m10s pre-fix).
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var conditioner = new AiDotNet.Diffusion.Conditioning.SigLIP2TextConditioner<double>();
+                sw.Stop();
+                Console.WriteLine($"[harness] SigLIP2TextConditioner ctor: {sw.ElapsedMilliseconds} ms");
+                System.Environment.Exit(0);
+                return default;
+            }
             default:
                 throw new ArgumentException($"Unknown model: {model}");
         }
