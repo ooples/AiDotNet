@@ -1990,7 +1990,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <returns>The activated tensor.</returns>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
-        _preActivationCache.Push(input);
+        // The push/pop discipline only balances on the eager-backward path,
+        // where every ApplyActivation call from Forward is matched by an
+        // ApplyActivationDerivativeFromOutput call from Backward. The tape-
+        // based training path (Transformer.Train -> TrainWithTape) never
+        // invokes ApplyActivationDerivativeFromOutput — backward goes through
+        // the autodiff graph instead — so a push during tape recording is
+        // never popped and leaks one Tensor<T> per layer per Train call.
+        // Issue #1227 documented this at ~13 tensors/call (~775 KB/call) on
+        // a 4-encoder-layer Transformer (4 MHA + 8 Dense + 1 output dense).
+        // Skip the push entirely when a tape is active; the tape's recorded
+        // ops carry the pre-activation reference through GradFn closures.
+        // GradientTape<T>.Current is the public signal — when non-null, the
+        // consumer is on the tape path and won't invoke the eager backward
+        // that drains this stack.
+        if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+        {
+            _preActivationCache.Push(input);
+        }
 
         if (VectorActivation != null)
         {

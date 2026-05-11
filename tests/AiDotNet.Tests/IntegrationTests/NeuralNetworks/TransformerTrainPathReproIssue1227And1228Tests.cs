@@ -374,19 +374,25 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         long window2Growth = managedHeapEnd - managedHeapMid;
         _output.WriteLine($"  Window growth:    win1(0..{trainSteps / 2})=+{window1Growth / (1024 * 1024)}MB  win2({trainSteps / 2}..{trainSteps})=+{window2Growth / (1024 * 1024)}MB  per-call={window2Growth / (double)(trainSteps / 2) / 1024:F0}KB");
 
-        // Tripwire: at the reporter's observed ~50 MB/call leak rate, 1000
-        // calls = 50 GB. 10 GB band catches the leak with a 5x safety margin
-        // while tolerating up to ~10 MB/call of legitimate steady-state
-        // allocation noise on a 4-layer Transformer.
-        Assert.True(workingSetGrowthMB < 10240,
+        // Tripwire: tight working-set bound now that both ends of the fix
+        // have landed — Tensors 0.75.5 (graph + persistent-tape .Grad cleanup)
+        // and the LayerBase._preActivationCache gating below. Measured on a
+        // clean local build: ~0 MB delta across the full 1000 calls. The
+        // 1 GB ceiling tolerates working-set noise (native pool warm-up, JIT
+        // compilation, IO buffers) while still firing if per-call retention
+        // climbs back to even ~1 MB.
+        Assert.True(workingSetGrowthMB < 1024,
             $"Working-set grew by {workingSetGrowthMB} MB across {trainSteps} L=4 train calls. " +
+            $"With the Tensors-side cleanup + LayerBase fix this should be ~0 MB. " +
             $"At this rate the reporter's 56k-sample run would hit {workingSetGrowthMB * 56L} MB — see #1227.");
 
-        // Tripwire: managed heap retention > 2 GB across 1000 calls means
-        // graph nodes or activations are surviving Gen2 GC.
-        Assert.True(managedHeapGrowthMB < 2048,
+        // Tripwire: managed heap retention > 100 MB across 1000 calls means
+        // graph nodes or activations are surviving Gen2 GC. Measured locally
+        // at 0 MB; 100 MB is well above the noise floor of GC scheduling
+        // jitter on a Server-GC host.
+        Assert.True(managedHeapGrowthMB < 100,
             $"Managed heap grew by {managedHeapGrowthMB} MB across {trainSteps} L=4 train calls (after forced GC). " +
-            "Indicates retained tape graph nodes — see #1227.");
+            "Indicates retained tape graph nodes or layer caches — see #1227.");
 
         // Linearity check: if the leak is real and linear, end-growth should
         // be ~2x mid-growth. Allow a 4x slack window for transient pool
@@ -515,6 +521,180 @@ public class TransformerTrainPathReproIssue1227And1228Tests
     // inside AiDotNet.Tensors (tape arena / saved-for-backward / engine-op
     // static state), not on AiDotNet's side. Re-enable when investigating
     // potential consumer-side workarounds.
+    /// <summary>
+    /// Heap-snapshot-style diagnostic: capture WeakReferences to every
+    /// Tensor instance allocated during a Train call, then check after
+    /// the call returns + GC how many survive. This bisects the residual
+    /// 0.75 MB/call leak between "tensors get allocated and held" (the
+    /// leak we care about) vs "tensors get allocated and released but
+    /// the heap delta is from internal pool/cache growth" (less worrying).
+    /// </summary>
+    [Fact]
+    public async Task Issue1227_TransformerTrain_TensorSurvivalDiagnostic()
+    {
+        await Task.Yield();
+        const int vocab = 256;
+        const int ctx = 64;
+        var arch = new TransformerArchitecture<float>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            numEncoderLayers: 4, numDecoderLayers: 0, numHeads: 4,
+            modelDimension: 128, feedForwardDimension: 512,
+            inputSize: ctx, outputSize: vocab,
+            maxSequenceLength: ctx, vocabularySize: vocab);
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+        model.SetTrainingMode(true);
+        var warmupInput = BuildInputTensor(ctx, vocab, seed: 0);
+        var warmupTarget = BuildOneHotTarget(0, vocab);
+        for (int i = 0; i < 5; i++) model.Train(warmupInput, warmupTarget);
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+
+        // Snapshot: every live Tensor<float> reachable from the model's layer fields,
+        // including reflective traversal of `_lastX` caches. Compare BEFORE / AFTER N
+        // train calls to see which instances survive in those caches.
+        long heapBefore = GC.GetTotalMemory(forceFullCollection: false);
+        var beforeRefs = new System.Collections.Generic.List<System.WeakReference>();
+        foreach (var t in EnumerateLayerTensors(model)) beforeRefs.Add(new System.WeakReference(t));
+
+        const int trainSteps = 50;
+        for (int step = 0; step < trainSteps; step++)
+        {
+            var input = BuildInputTensor(ctx, vocab, seed: step);
+            var target = BuildOneHotTarget(step % vocab, vocab);
+            model.Train(input, target);
+        }
+
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        long heapAfter = GC.GetTotalMemory(forceFullCollection: false);
+        var afterRefs = new System.Collections.Generic.List<System.WeakReference>();
+        foreach (var t in EnumerateLayerTensors(model)) afterRefs.Add(new System.WeakReference(t));
+
+        int beforeAlive = 0; foreach (var wr in beforeRefs) if (wr.IsAlive) beforeAlive++;
+        int afterAlive = 0; foreach (var wr in afterRefs) if (wr.IsAlive) afterAlive++;
+        _output.WriteLine($"#1227 tensor-survival diagnostic ({trainSteps} train calls, 4-layer Transformer)");
+        _output.WriteLine($"  Heap before:       {heapBefore / (1024.0 * 1024):F0}MB");
+        _output.WriteLine($"  Heap after:        {heapAfter / (1024.0 * 1024):F0}MB");
+        _output.WriteLine($"  Heap delta:        +{(heapAfter - heapBefore) / (1024 * 1024)}MB ({(heapAfter - heapBefore) / (double)trainSteps / 1024:F0} KB/call)");
+        _output.WriteLine($"  Layer tensors before: {beforeRefs.Count} (live: {beforeAlive})");
+        _output.WriteLine($"  Layer tensors after:  {afterRefs.Count} (live: {afterAlive})");
+        _output.WriteLine($"  Tensor count delta:   +{afterRefs.Count - beforeRefs.Count}");
+    }
+
+    /// <summary>
+    /// Reflective walk over a NeuralNetworkBase's layer fields, yielding
+    /// every reachable Tensor&lt;float&gt; instance. Used by the survival
+    /// diagnostic above to bisect what specifically is being retained.
+    /// </summary>
+    private static System.Collections.Generic.IEnumerable<Tensor<float>> EnumerateLayerTensors(NeuralNetworkBase<float> model)
+    {
+        foreach (var layer in model.Layers)
+        {
+            foreach (var t in EnumerateTensorFields(layer)) yield return t;
+        }
+    }
+
+    private static System.Collections.Generic.IEnumerable<Tensor<float>> EnumerateTensorFields(object obj)
+    {
+        var type = obj.GetType();
+        while (type is not null && type != typeof(object))
+        {
+            foreach (var field in type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance))
+            {
+                var val = field.GetValue(obj);
+                if (val is Tensor<float> tf) yield return tf;
+                else if (val is System.Collections.IEnumerable enumerable && val is not string)
+                {
+                    foreach (var item in enumerable)
+                    {
+                        if (item is Tensor<float> innerTf) yield return innerTf;
+                    }
+                }
+            }
+            type = type.BaseType;
+        }
+    }
+
+    /// <summary>
+    /// Per-field tensor-count diagnostic: walks each layer and reports which
+    /// specific fields are accumulating Tensor refs across calls. Bisects the
+    /// 650-tensor / 50-call (~13/call) accumulation seen in the survival probe.
+    /// </summary>
+    [Fact]
+    public async Task Issue1227_TransformerTrain_PerFieldAccumulationDiagnostic()
+    {
+        await Task.Yield();
+        const int vocab = 256;
+        const int ctx = 64;
+        var arch = new TransformerArchitecture<float>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            numEncoderLayers: 4, numDecoderLayers: 0, numHeads: 4,
+            modelDimension: 128, feedForwardDimension: 512,
+            inputSize: ctx, outputSize: vocab,
+            maxSequenceLength: ctx, vocabularySize: vocab);
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+        model.SetTrainingMode(true);
+        var warmupInput = BuildInputTensor(ctx, vocab, seed: 0);
+        var warmupTarget = BuildOneHotTarget(0, vocab);
+        for (int i = 0; i < 5; i++) model.Train(warmupInput, warmupTarget);
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+
+        var beforeCounts = CountTensorsPerField(model);
+
+        const int trainSteps = 50;
+        for (int step = 0; step < trainSteps; step++)
+        {
+            model.Train(BuildInputTensor(ctx, vocab, step), BuildOneHotTarget(step % vocab, vocab));
+        }
+
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        var afterCounts = CountTensorsPerField(model);
+
+        _output.WriteLine($"#1227 per-field accumulation diagnostic ({trainSteps} calls)");
+        _output.WriteLine($"  Fields that GREW in tensor count (delta > 0):");
+        foreach (var kvp in afterCounts)
+        {
+            int before = beforeCounts.TryGetValue(kvp.Key, out var b) ? b : 0;
+            int delta = kvp.Value - before;
+            if (delta > 0)
+            {
+                _output.WriteLine($"    +{delta,4}  {kvp.Key}  ({before} -> {kvp.Value})");
+            }
+        }
+    }
+
+    private static System.Collections.Generic.Dictionary<string, int> CountTensorsPerField(NeuralNetworkBase<float> model)
+    {
+        var counts = new System.Collections.Generic.Dictionary<string, int>();
+        for (int li = 0; li < model.Layers.Count; li++)
+        {
+            var layer = model.Layers[li];
+            var type = layer.GetType();
+            string layerKey = $"L{li}:{type.Name}";
+            while (type is not null && type != typeof(object))
+            {
+                foreach (var field in type.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance))
+                {
+                    var val = field.GetValue(layer);
+                    int count = 0;
+                    if (val is Tensor<float>) count = 1;
+                    else if (val is System.Collections.IEnumerable enumerable && val is not string)
+                    {
+                        foreach (var item in enumerable)
+                            if (item is Tensor<float>) count++;
+                    }
+                    if (count > 0)
+                    {
+                        string key = $"{layerKey}.{field.Name}";
+                        counts[key] = (counts.TryGetValue(key, out var c) ? c : 0) + count;
+                    }
+                }
+                type = type.BaseType;
+            }
+        }
+        return counts;
+    }
+
     [Fact(Skip = "Diagnostic — established the leak is upstream in AiDotNet.Tensors, not on the AiDotNet side. Re-enable when re-investigating consumer workarounds.")]
     public async Task Issue1227_TransformerTrain_ResetStateClearLeakDiagnostic()
     {
