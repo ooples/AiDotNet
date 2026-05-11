@@ -1,3 +1,5 @@
+using AiDotNet.Enums;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -101,6 +103,33 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// You typically don't need to change this unless you're experiencing numerical stability issues.</para>
     /// </remarks>
     public double Epsilon { get; set; } = 1e-8;
+
+    /// <summary>
+    /// Gets or sets the policy for the PyTorch GradScaler-style anomaly guard
+    /// that skips an Adam step when any gradient contains NaN or Inf.
+    /// </summary>
+    /// <value>Defaults to <see cref="AdamAnomalyGuardMode.Auto"/>.</value>
+    /// <remarks>
+    /// <para>
+    /// The guard scans every gradient element once per <c>Step</c>. Without it,
+    /// a single NaN/Inf gradient permanently poisons Adam's <c>m</c> / <c>v</c>
+    /// moment accumulators and every subsequent step produces NaN weights.
+    /// With it, the offending step is a no-op (parameters, moments, and the
+    /// step index all stay put) and training resumes once gradients become
+    /// finite again. Verified on HopeNetwork memorization where step ~10
+    /// produces a NaN gradient from <c>sqrt(v_hat) ≈ 0</c>.
+    /// </para>
+    /// <para>
+    /// The scan is O(total-gradient-elements) per step. On large models
+    /// where gradients are already the dominant cost, this is measurable
+    /// overhead. The <c>Never</c> mode lets callers skip the scan when
+    /// upstream NaN/Inf is impossible (e.g. fully-deterministic fp64
+    /// regression tests). <c>Auto</c> currently behaves like
+    /// <c>Always</c>; reserved for a future heuristic that gates on the
+    /// numeric type.
+    /// </para>
+    /// </remarks>
+    public AdamAnomalyGuardMode AnomalyGuardMode { get; set; } = AdamAnomalyGuardMode.Auto;
 
     /// <summary>
     /// Gets or sets whether to automatically adjust the Beta parameters during training.

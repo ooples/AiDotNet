@@ -131,16 +131,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     private int[]? _originalInputShape;
 
     /// <summary>
-    /// Stores the hidden state tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached hidden state is needed during the backward pass to compute gradients. It holds the
-    /// sequence of hidden state vectors that were computed in the most recent forward pass. The tensor
-    /// is null before the first forward pass or after a reset.
-    /// </remarks>
-    private Tensor<T>? _lastHiddenState;
-
-    /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
     /// <remarks>
@@ -957,7 +947,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward and backward passes
         _lastInput = null;
-        _lastHiddenState = null;
         _lastOutput = null;
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;

@@ -36,9 +36,10 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
     // can translate constant scalars..."). Apply the same idea here: shape
     // the "constant" value with a position-dependent modulation so two
     // different scalars produce two different DIRECTIONS in state space.
-    // The modulation amplitude is small (±10 %) so the test still
-    // exercises the "is the network input-sensitive" question rather than
-    // turning into an unrelated stress test.
+    // The modulation amplitude is ±0.5 absolute (peak swing) — large
+    // enough to give the two test scalars distinguishable directions
+    // after L2 normalization, while bounded so the input still resembles
+    // the original constant rather than an arbitrary stress signal.
     // </para>
     protected override Tensor<double> CreateConstantTensor(int[] shape, double value)
     {

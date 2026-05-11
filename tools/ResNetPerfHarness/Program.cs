@@ -18,17 +18,58 @@ internal static class Program
         string model = "resnet50";
         for (int i = 0; i < args.Length; i++)
         {
-            switch (args[i])
+            var arg = args[i];
+            string TakeValue(string flag)
             {
-                case "--warmup": warmup = int.Parse(args[++i]); break;
-                case "--iters": iters = int.Parse(args[++i]); break;
-                case "--model": model = args[++i].ToLowerInvariant(); break;
+                if (i + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine($"[harness] {flag} requires a value");
+                    System.Environment.Exit(2);
+                }
+                return args[++i];
+            }
+            switch (arg)
+            {
+                case "--warmup":
+                    if (!int.TryParse(TakeValue(arg), out warmup) || warmup < 0)
+                    {
+                        Console.Error.WriteLine("[harness] --warmup must be a non-negative integer");
+                        return 2;
+                    }
+                    break;
+                case "--iters":
+                    if (!int.TryParse(TakeValue(arg), out iters) || iters < 1)
+                    {
+                        Console.Error.WriteLine("[harness] --iters must be a positive integer (>= 1)");
+                        return 2;
+                    }
+                    break;
+                case "--model":
+                    model = TakeValue(arg).ToLowerInvariant();
+                    break;
+                case "-h":
+                case "--help":
+                    Console.WriteLine("Usage: ResNetPerfHarness [--model <name>] [--warmup <N>] [--iters <N>]");
+                    Console.WriteLine("  --model    one of: resnet50, vgg11, hope, sgpt, siglip2-ctor, sd15-ctor, t5xxl-ctor");
+                    Console.WriteLine("  --warmup   non-negative integer (default: 1)");
+                    Console.WriteLine("  --iters    positive integer (default: 3)");
+                    return 0;
+                default:
+                    Console.Error.WriteLine($"[harness] unknown flag: {arg} (use --help)");
+                    return 2;
             }
         }
 
         Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters}");
         using var arena = TensorArena.Create();
         var (net, input, target) = Build(model);
+        // Dispose the network when we're done: NeuralNetworkBase<T> owns
+        // potentially large managed buffers and pooled native handles
+        // (engine workspaces, BLAS scratch, parameter tensor lifetimes).
+        // Even though this is a short-lived tool, an explicit using
+        // keeps the timing window honest by releasing those resources
+        // before the process exits and the runtime tears them down.
+        using var netHandle = net;
         Console.WriteLine($"[harness] ParameterCount={net.ParameterCount}, Layers={net.Layers.Count}");
 
         double L2() { double s = 0; foreach (var c in net.GetParameterChunks()) for (int i = 0; i < c.Length; i++) s += c[i] * c[i]; return Math.Sqrt(s); }

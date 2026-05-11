@@ -481,6 +481,24 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // PyTorch GradScaler-style anomaly guard runs BEFORE advancing the
+        // step counter or any other state. Otherwise a skipped step would
+        // still bump _tapeStep, which advances bc1/bc2 on the NEXT real step
+        // (Adam's bias correction is step-indexed) and silently distorts
+        // the optimizer's adaptive scale. With this ordering, a skipped
+        // step is a true no-op: no parameters, no moments, no step index.
+        //
+        // The guard is configurable via AdamOptimizerOptions.AnomalyGuardMode:
+        //   Auto    (default for fp32/fp16): scan; rare with bf16/fp64.
+        //   Always  : scan regardless of T.
+        //   Never   : skip the scan (saves the O(total-grad-elements)
+        //             per-Step cost; only safe when upstream NaN/Inf isn't
+        //             expected, e.g. fully-deterministic regression tests).
+        if (ShouldRunAnomalyGuard() && AnyGradientIsAnomalous(context))
+        {
+            return;
+        }
+
         _tapeStep++;
 
         double b1 = _options.Beta1;
@@ -530,36 +548,6 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         {
             ApplyGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
         }
-
-        // PyTorch GradScaler-style anomaly guard: if any gradient contains
-        // NaN or Inf, skip this entire optimizer step (DON'T update weights,
-        // DON'T poison the m/v moment accumulators). Adam's update
-        // m_hat / (sqrt(v_hat) + eps) develops a near-zero denominator on
-        // narrow tasks like single-sample memorization where v_t collapses
-        // toward 0 after the loss converges (HopeNetwork memorization
-        // verified empirically — finite for the first 9 training steps,
-        // then a NaN gradient at step ~10 because of the float-cliff in
-        // sqrt(v_hat) ≈ 0 paired with even a tiny non-zero m_hat). Without
-        // this guard, a single NaN gradient poisons m/v permanently and
-        // every subsequent step produces NaN weights — what previously
-        // surfaced as Hope's ForwardPass_ShouldBeFinite_AfterTraining /
-        // DifferentInputs_AfterTraining / Clone_AfterTraining triple-fail.
-        // Skipping the step preserves the latest finite weights and lets
-        // training proceed once the next iteration produces clean gradients.
-        bool anyAnomalousGrad = false;
-        foreach (var kvp in context.Gradients)
-        {
-            var grad = kvp.Value;
-            if (grad is null) continue;
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = NumOps.ToDouble(span[i]);
-                if (double.IsNaN(v) || double.IsInfinity(v)) { anyAnomalousGrad = true; break; }
-            }
-            if (anyAnomalousGrad) break;
-        }
-        if (anyAnomalousGrad) return;
 
         foreach (var param in context.Parameters)
         {
@@ -1084,6 +1072,46 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// PyTorch transformer-training default <c>MaxGradientNorm=1.0</c>, the
     /// first-step update is bounded and training converges.
     /// </remarks>
+    /// <summary>
+    /// Returns true iff the anomaly guard's configured mode says to run
+    /// the per-step gradient scan. Default <see cref="AdamAnomalyGuardMode.Auto"/>
+    /// currently behaves identically to <c>Always</c>; reserved for a future
+    /// numeric-type-aware heuristic.
+    /// </summary>
+    private bool ShouldRunAnomalyGuard()
+    {
+        return _options.AnomalyGuardMode switch
+        {
+            AdamAnomalyGuardMode.Never => false,
+            AdamAnomalyGuardMode.Always => true,
+            AdamAnomalyGuardMode.Auto => true,
+            _ => true,
+        };
+    }
+
+    /// <summary>
+    /// Scans every gradient tensor for NaN/Inf entries and returns true on
+    /// the first sighting. PyTorch GradScaler-style anomaly guard for the
+    /// Adam <c>m</c>/<c>v</c> moment accumulators: a single NaN gradient
+    /// poisons them permanently, so callers must skip the entire step
+    /// (parameters, moments, AND step index) on a positive return.
+    /// </summary>
+    private bool AnyGradientIsAnomalous(TapeStepContext<T> context)
+    {
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = NumOps.ToDouble(span[i]);
+                if (double.IsNaN(v) || double.IsInfinity(v)) return true;
+            }
+        }
+        return false;
+    }
+
     private static void ApplyGlobalNormGradientClipping(
         TapeStepContext<T> context,
         double maxNorm)
