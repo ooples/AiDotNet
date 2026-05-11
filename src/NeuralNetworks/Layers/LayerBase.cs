@@ -4,6 +4,7 @@ using AiDotNet.Initialization;
 using AiDotNet.Interfaces;
 using AiDotNet.Memory;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 
@@ -1990,7 +1991,41 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <returns>The activated tensor.</returns>
     protected Tensor<T> ApplyActivation(Tensor<T> input)
     {
-        _preActivationCache.Push(input);
+        // The push/pop discipline only balances on the eager-backward path,
+        // where every ApplyActivation call from Forward is matched by an
+        // ApplyActivationDerivativeFromOutput call from Backward. Cases where
+        // the pop never runs leak one Tensor<T> per layer per forward call:
+        //
+        //   - Tape-based training (Transformer.Train -> TrainWithTape):
+        //     backward goes through the autodiff graph, not through
+        //     ApplyActivationDerivativeFromOutput. Issue #1227 documented this
+        //     at ~13 tensors/call (~775 KB/call) on a 4-encoder-layer
+        //     Transformer (4 MHA + 8 Dense + 1 output dense).
+        //
+        //   - Inference / eval (IsTrainingMode == false): no backward runs at
+        //     all, so the push is pure dead weight that accumulates one entry
+        //     per Forward call indefinitely.
+        //
+        //   - JIT graph capture (IsCapturing == true): Forward is recording
+        //     operations into a computation graph rather than executing the
+        //     eager activation derivative, so ApplyActivationDerivativeFromOutput
+        //     is never invoked during capture. IsCapturing can be set while
+        //     IsTrainingMode is also true, so checking training-mode alone
+        //     isn't sufficient.
+        //
+        // Only push when we know the eager backward will drain it: training
+        // mode ON, not capturing, no tape recording. The tape path already
+        // preserves the pre-activation reference through its recorded GradFn
+        // closures; the capture path encodes it into the graph node — both
+        // cases make the cache redundant.
+        bool eagerBackwardWillRun =
+            IsTrainingMode
+            && !IsCapturing
+            && GradientTape<T>.Current is null;
+        if (eagerBackwardWillRun)
+        {
+            _preActivationCache.Push(input);
+        }
 
         if (VectorActivation != null)
         {
