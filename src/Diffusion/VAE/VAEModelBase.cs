@@ -56,6 +56,69 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     protected bool TilingEnabled;
 
     /// <summary>
+    /// Compile host shared by Encode and Decode forward paths so VAE
+    /// inference traces once and replays the compiled plan on subsequent
+    /// calls. Mirrors the pattern in <see cref="AiDotNet.NeuralNetworks.NeuralNetworkBase{T}"/>
+    /// and <see cref="AiDotNet.Diffusion.NoisePredictors.NoisePredictorBase{T}"/>.
+    /// Each VAE instance gets one host with two compile-cache entries —
+    /// one keyed on encoder input shape, one on decoder input shape — so
+    /// repeated encode/decode at the same shape replays the cached plan
+    /// with zero re-trace cost. Bumped on TilingEnabled / SlicingEnabled
+    /// transitions because those change the layer graph the plan was
+    /// captured against. (Workstream B from #1273.)
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _encoderCompileHost
+        = new AiDotNet.NeuralNetworks.CompiledModelHost<T>(modelIdentity: nameof(VAEModelBase<T>) + ".Encoder");
+    private readonly AiDotNet.NeuralNetworks.CompiledModelHost<T> _decoderCompileHost
+        = new AiDotNet.NeuralNetworks.CompiledModelHost<T>(modelIdentity: nameof(VAEModelBase<T>) + ".Decoder");
+    private int _vaeStructureVersion;
+
+    /// <summary>
+    /// Routes <paramref name="eagerEncode"/> through the encoder compile
+    /// host. First call at a given input shape traces and compiles; subsequent
+    /// calls replay the compiled plan. Subclasses' <see cref="Encode"/>
+    /// implementations should wrap their forward body with this helper.
+    /// </summary>
+    protected Tensor<T> EncodeCompiled(Tensor<T> image, Func<Tensor<T>> eagerEncode) =>
+        _encoderCompileHost.Predict(image, _vaeStructureVersion, eagerEncode);
+
+    /// <summary>
+    /// Routes <paramref name="eagerDecode"/> through the decoder compile host.
+    /// </summary>
+    protected Tensor<T> DecodeCompiled(Tensor<T> latent, Func<Tensor<T>> eagerDecode) =>
+        _decoderCompileHost.Predict(latent, _vaeStructureVersion, eagerDecode);
+
+    /// <summary>
+    /// Async overload of <see cref="EncodeCompiled"/>.
+    /// </summary>
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> EncodeCompiledAsync(
+        Tensor<T> image,
+        Func<Tensor<T>> eagerEncode,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        _encoderCompileHost.PredictAsync(image, _vaeStructureVersion, eagerEncode, cancellationToken);
+
+    /// <summary>
+    /// Async overload of <see cref="DecodeCompiled"/>.
+    /// </summary>
+    protected System.Threading.Tasks.ValueTask<Tensor<T>> DecodeCompiledAsync(
+        Tensor<T> latent,
+        Func<Tensor<T>> eagerDecode,
+        System.Threading.CancellationToken cancellationToken = default) =>
+        _decoderCompileHost.PredictAsync(latent, _vaeStructureVersion, eagerDecode, cancellationToken);
+
+    /// <summary>
+    /// Bump when the layer graph changes (tiling/slicing toggle, weight
+    /// reassignment) so the compile host drops stale plans on the next
+    /// EncodeCompiled / DecodeCompiled call.
+    /// </summary>
+    protected void InvalidateVAECompiledPlans()
+    {
+        _vaeStructureVersion++;
+        _encoderCompileHost.Invalidate();
+        _decoderCompileHost.Invalidate();
+    }
+
+    /// <summary>
     /// Whether slicing mode is enabled for sequential processing.
     /// </summary>
     protected bool SlicingEnabled;
@@ -177,6 +240,12 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (enabled && !SupportsTiling)
             throw new NotSupportedException("This VAE does not support tiling mode.");
+        // Tiling changes how Encode/Decode partition the input across the
+        // layer graph; an already-compiled plan was traced against the
+        // pre-toggle layout and would replay against the wrong graph.
+        // Drop any cached plan when the mode actually changes.
+        if (TilingEnabled != enabled)
+            InvalidateVAECompiledPlans();
         TilingEnabled = enabled;
     }
 
@@ -185,6 +254,10 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (enabled && !SupportsSlicing)
             throw new NotSupportedException("This VAE does not support slicing mode.");
+        // Same rationale as SetTilingEnabled: slicing changes the layer
+        // graph the compile cache captured.
+        if (SlicingEnabled != enabled)
+            InvalidateVAECompiledPlans();
         SlicingEnabled = enabled;
     }
 
@@ -735,6 +808,15 @@ public abstract class VAEModelBase<T> : IVAEModel<T>, IModelShape
     {
         if (_vaeDisposed) return;
         _vaeDisposed = true;
+        if (disposing)
+        {
+            // The compile hosts own their CompiledModelCache instances which
+            // hold onto compiled plan steps + captured backend buffers;
+            // letting them survive past VAE Dispose leaks both managed and
+            // potentially native (pinned tensor) memory.
+            try { _encoderCompileHost.Dispose(); } catch { /* swallow per Dispose convention */ }
+            try { _decoderCompileHost.Dispose(); } catch { /* swallow per Dispose convention */ }
+        }
     }
 
     /// <summary>

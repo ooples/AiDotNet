@@ -103,7 +103,15 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         // flow. Without this, Tokenize/TokenizeBatch produce padded rows of zeros, and
         // EncodeText (called with mask = null) treats them as real text. The pooled
         // embedding would then come from the last padded position instead of EOS.
-        return EncodeText(input, BuildDefaultAttentionMask(input));
+        //
+        // Route the EncodeText body through the inherited compile host so the
+        // second + Nth call at the same token-shape replays a cached compiled
+        // plan. The cache is shape-keyed on `input` (the token-id tensor), so
+        // distinct prompt-token-lengths get distinct compiled plans — but
+        // SDXL pipelines bucket prompts to a fixed 77-token max, so the cache
+        // hit rate is ~100% after the first generation. (#1272 W2.)
+        var mask = BuildDefaultAttentionMask(input);
+        return EncodeCompiled(input, () => EncodeText(input, mask));
     }
 
     /// <summary>
