@@ -2708,18 +2708,23 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int nChunks = (n + batchSize - 1) / batchSize;
         var perChunkOutputs = new Tensor<T>[nChunks];
 
-        // Per-chunk forwards go through the same Predict path the rest of
-        // the codebase uses. Routing chunks through PredictCompiled was
-        // explored as a stretch optimisation but the compile cache holds
-        // one plan + captured input buffer per traced shape across the
-        // chunk loop, which inflated peak managed-heap pressure beyond
-        // what the chunking itself was trying to bound (verified in the
-        // d=128 / L=4 Transformer smoke run: 390 MB peak via plain
-        // Predict, OOM via PredictCompiled). The value-stable rebind
-        // landed in CompiledModelHost in the same PR still benefits any
-        // caller that explicitly opts into PredictCompiled — chunked
-        // PredictInBatches just stays on the eager path the default
-        // Predict already uses.
+        // Per-chunk forwards route through plain Predict (which uses
+        // PredictEager by default). Two attempts to engage the compile
+        // cache here surfaced an inherent memory tradeoff: even with
+        // tail-padding so all chunks share a single shape (and therefore
+        // hit one cached plan instead of two), the plan itself retains
+        // all-layer pinned intermediate buffers (~96 MB at d=128 / L=4
+        // /heads=4 / ctx=64) that coexist with the training tape's own
+        // intermediates across the optimizer's epoch loop. The host's
+        // unmanaged-commit limit gets exhausted before the test finishes.
+        // The value-stable rebind landed in CompiledModelHost in the same
+        // PR still benefits any caller that explicitly invokes
+        // PredictCompiled; chunked PredictInBatches just stays on the
+        // eager path the default Predict already uses. A future Tensors-
+        // side pass that bounds the compiled plan's resident memory
+        // (e.g. by eagerly releasing intermediate buffers between
+        // Executes) is the prerequisite for safely re-enabling compile-
+        // by-default on chunked dispatch.
         for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
         {
             int start = chunkIdx * batchSize;

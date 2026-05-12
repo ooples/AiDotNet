@@ -110,24 +110,73 @@ public static class NeuralBatchHelper
     /// <see cref="Tensor{T}"/> with a leading axis larger than
     /// <paramref name="batchSize"/>. Output is element-equivalent (modulo
     /// matmul reduction order) to a single-shot <c>Predict</c>.
+    ///
+    /// <para><b>Adaptive OOM recovery is on by default.</b> If the
+    /// chunked forward throws <see cref="OutOfMemoryException"/>, the
+    /// helper halves <paramref name="batchSize"/>, forces a GC, and
+    /// retries — repeating down to 1. The per-model adaptive ratchet
+    /// persists across calls so subsequent calls start from the
+    /// last-known-good size instead of probing from scratch. Pass
+    /// <paramref name="disableAdaptiveRetry"/> = <see langword="true"/>
+    /// to opt out (raw OOM propagation for diagnostics).</para>
     /// </summary>
     public static TOutput PredictMaybeBatched<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,
         TInput X,
-        int batchSize = DefaultBatchSize)
+        int batchSize = DefaultBatchSize,
+        bool disableAdaptiveRetry = false)
     {
         if (model is null) throw new ArgumentNullException(nameof(model));
         if (batchSize < 1) batchSize = 1;
 
-        if (model is NeuralNetworkBase<T> nn
+        if (!(model is NeuralNetworkBase<T> nn
             && X is Tensor<T> xTensor
-            && xTensor.Rank >= 1
-            && xTensor.Shape[0] > batchSize)
+            && xTensor.Rank >= 1))
         {
-            var chunked = nn.PredictInBatches(xTensor, batchSize);
-            if (chunked is TOutput typed) return typed;
+            return model.Predict(X);
         }
-        return model.Predict(X);
+
+        if (disableAdaptiveRetry)
+        {
+            if (xTensor.Shape[0] > batchSize)
+            {
+                var chunked = nn.PredictInBatches(xTensor, batchSize);
+                if (chunked is TOutput typed) return typed;
+            }
+            return model.Predict(X);
+        }
+
+        var state = GetOrCreateAdaptiveState(model, batchSize);
+        while (true)
+        {
+            try
+            {
+                int effectiveBatchSize = System.Math.Min(state.CurrentBatchSize, batchSize);
+                TOutput result;
+                if (xTensor.Shape[0] <= effectiveBatchSize)
+                {
+                    var direct = nn.Predict(xTensor);
+                    result = direct is TOutput dt ? dt : model.Predict(X);
+                }
+                else
+                {
+                    var chunked = nn.PredictInBatches(xTensor, effectiveBatchSize);
+                    result = chunked is TOutput typed ? typed : model.Predict(X);
+                }
+                state.ConsecutiveSuccesses++;
+                MaybeGrowBatch(state, batchSize);
+                return result;
+            }
+            catch (OutOfMemoryException)
+            {
+                if (state.CurrentBatchSize <= MinAdaptiveBatchSize) throw;
+                state.CurrentBatchSize = System.Math.Max(MinAdaptiveBatchSize, state.CurrentBatchSize / 2);
+                state.ConsecutiveSuccesses = 0;
+                System.GC.Collect();
+                System.GC.WaitForPendingFinalizers();
+                System.GC.Collect();
+            }
+        }
     }
 
     /// <summary>
@@ -136,36 +185,86 @@ public static class NeuralBatchHelper
     /// gradient-accumulated step under <see cref="GradientAccumulationMode.Accumulate"/>)
     /// when the model is a tensor neural network and the inputs share a
     /// large leading axis. Non-NN models pass through.
+    ///
+    /// <para><b>Adaptive OOM recovery is on by default</b> — see
+    /// <see cref="PredictMaybeBatched{T,TInput,TOutput}"/> for the
+    /// halve-and-retry contract. Pass <paramref name="disableAdaptiveRetry"/>
+    /// = <see langword="true"/> to opt out.</para>
     /// </summary>
     public static void TrainMaybeBatched<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,
         TInput X,
         TOutput Y,
         int batchSize = DefaultBatchSize,
-        GradientAccumulationMode mode = GradientAccumulationMode.Independent)
+        GradientAccumulationMode mode = GradientAccumulationMode.Independent,
+        bool disableAdaptiveRetry = false)
     {
         if (model is null) throw new ArgumentNullException(nameof(model));
         if (batchSize < 1) batchSize = 1;
 
-        if (model is NeuralNetworkBase<T> nn
+        if (!(model is NeuralNetworkBase<T> nn
             && X is Tensor<T> xTensor
             && Y is Tensor<T> yTensor
             && xTensor.Rank >= 1
             && yTensor.Rank >= 1
-            && xTensor.Shape[0] == yTensor.Shape[0]
-            && xTensor.Shape[0] > batchSize)
+            && xTensor.Shape[0] == yTensor.Shape[0]))
         {
-            if (mode == GradientAccumulationMode.Accumulate)
+            model.Train(X, Y);
+            return;
+        }
+
+        if (disableAdaptiveRetry)
+        {
+            if (xTensor.Shape[0] > batchSize)
             {
-                nn.TrainWithGradientAccumulation(xTensor, yTensor, batchSize);
+                if (mode == GradientAccumulationMode.Accumulate)
+                {
+                    nn.TrainWithGradientAccumulation(xTensor, yTensor, batchSize);
+                }
+                else
+                {
+                    TrainIndependentChunks(nn, xTensor, yTensor, batchSize);
+                }
             }
             else
             {
-                TrainIndependentChunks(nn, xTensor, yTensor, batchSize);
+                nn.Train(xTensor, yTensor);
             }
             return;
         }
-        model.Train(X, Y);
+
+        var state = GetOrCreateAdaptiveState(model, batchSize);
+        while (true)
+        {
+            try
+            {
+                int effectiveBatchSize = System.Math.Min(state.CurrentBatchSize, batchSize);
+                if (xTensor.Shape[0] <= effectiveBatchSize)
+                {
+                    nn.Train(xTensor, yTensor);
+                }
+                else if (mode == GradientAccumulationMode.Accumulate)
+                {
+                    nn.TrainWithGradientAccumulation(xTensor, yTensor, effectiveBatchSize);
+                }
+                else
+                {
+                    TrainIndependentChunks(nn, xTensor, yTensor, effectiveBatchSize);
+                }
+                state.ConsecutiveSuccesses++;
+                MaybeGrowBatch(state, batchSize);
+                return;
+            }
+            catch (OutOfMemoryException)
+            {
+                if (state.CurrentBatchSize <= MinAdaptiveBatchSize) throw;
+                state.CurrentBatchSize = System.Math.Max(MinAdaptiveBatchSize, state.CurrentBatchSize / 2);
+                state.ConsecutiveSuccesses = 0;
+                System.GC.Collect();
+                System.GC.WaitForPendingFinalizers();
+                System.GC.Collect();
+            }
+        }
     }
 
     private static void TrainIndependentChunks<T>(
@@ -188,59 +287,23 @@ public static class NeuralBatchHelper
     // ─────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Adaptive variant of <see cref="PredictMaybeBatched{T,TInput,TOutput}"/>:
-    /// starts at <paramref name="initialBatchSize"/>, on
-    /// <see cref="OutOfMemoryException"/> halves and retries, auto-grows
-    /// back up after <see cref="SuccessesBeforeGrow"/> consecutive
-    /// successes. Per-model ratchet persists across calls in a
-    /// weak-reference table.
+    /// Alias for <see cref="PredictMaybeBatched{T,TInput,TOutput}"/> with
+    /// adaptive OOM recovery — kept as a named entry point for callers
+    /// that want to make the adaptive intent explicit. Adaptive recovery
+    /// is now the default in <see cref="PredictMaybeBatched{T,TInput,TOutput}"/>
+    /// so users no longer need to opt in.
     /// </summary>
     public static TOutput PredictAdaptive<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,
         TInput X,
         int initialBatchSize = DefaultBatchSize,
         int minBatchSize = MinAdaptiveBatchSize)
-    {
-        if (model is null) throw new ArgumentNullException(nameof(model));
-        if (initialBatchSize < 1) initialBatchSize = 1;
-        if (minBatchSize < 1) minBatchSize = 1;
-
-        if (!(model is NeuralNetworkBase<T> nn && X is Tensor<T> xTensor && xTensor.Rank >= 1))
-        {
-            return model.Predict(X);
-        }
-
-        var state = GetOrCreateAdaptiveState(model, initialBatchSize);
-        while (true)
-        {
-            try
-            {
-                if (xTensor.Shape[0] <= state.CurrentBatchSize)
-                {
-                    var direct = nn.Predict(xTensor);
-                    state.ConsecutiveSuccesses++;
-                    MaybeGrowBatch(state, initialBatchSize);
-                    return direct is TOutput dt ? dt : model.Predict(X);
-                }
-                var chunked = nn.PredictInBatches(xTensor, state.CurrentBatchSize);
-                state.ConsecutiveSuccesses++;
-                MaybeGrowBatch(state, initialBatchSize);
-                return chunked is TOutput typed ? typed : model.Predict(X);
-            }
-            catch (OutOfMemoryException)
-            {
-                if (state.CurrentBatchSize <= minBatchSize) throw;
-                state.CurrentBatchSize = System.Math.Max(minBatchSize, state.CurrentBatchSize / 2);
-                state.ConsecutiveSuccesses = 0;
-                System.GC.Collect();
-                System.GC.WaitForPendingFinalizers();
-                System.GC.Collect();
-            }
-        }
-    }
+        => PredictMaybeBatched(model, X, initialBatchSize, disableAdaptiveRetry: false);
 
     /// <summary>
-    /// Adaptive counterpart to <see cref="TrainMaybeBatched{T,TInput,TOutput}"/>.
+    /// Alias for <see cref="TrainMaybeBatched{T,TInput,TOutput}"/> with
+    /// adaptive OOM recovery — adaptive is now the default; this
+    /// overload preserves the explicit intent for callers that want it.
     /// </summary>
     public static void TrainAdaptive<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,
@@ -249,54 +312,7 @@ public static class NeuralBatchHelper
         int initialBatchSize = DefaultBatchSize,
         int minBatchSize = MinAdaptiveBatchSize,
         GradientAccumulationMode mode = GradientAccumulationMode.Independent)
-    {
-        if (model is null) throw new ArgumentNullException(nameof(model));
-        if (initialBatchSize < 1) initialBatchSize = 1;
-        if (minBatchSize < 1) minBatchSize = 1;
-
-        if (!(model is NeuralNetworkBase<T> nn
-            && X is Tensor<T> xTensor
-            && Y is Tensor<T> yTensor
-            && xTensor.Rank >= 1
-            && yTensor.Rank >= 1
-            && xTensor.Shape[0] == yTensor.Shape[0]))
-        {
-            model.Train(X, Y);
-            return;
-        }
-
-        var state = GetOrCreateAdaptiveState(model, initialBatchSize);
-        while (true)
-        {
-            try
-            {
-                if (xTensor.Shape[0] <= state.CurrentBatchSize)
-                {
-                    nn.Train(xTensor, yTensor);
-                }
-                else if (mode == GradientAccumulationMode.Accumulate)
-                {
-                    nn.TrainWithGradientAccumulation(xTensor, yTensor, state.CurrentBatchSize);
-                }
-                else
-                {
-                    TrainIndependentChunks(nn, xTensor, yTensor, state.CurrentBatchSize);
-                }
-                state.ConsecutiveSuccesses++;
-                MaybeGrowBatch(state, initialBatchSize);
-                return;
-            }
-            catch (OutOfMemoryException)
-            {
-                if (state.CurrentBatchSize <= minBatchSize) throw;
-                state.CurrentBatchSize = System.Math.Max(minBatchSize, state.CurrentBatchSize / 2);
-                state.ConsecutiveSuccesses = 0;
-                System.GC.Collect();
-                System.GC.WaitForPendingFinalizers();
-                System.GC.Collect();
-            }
-        }
-    }
+        => TrainMaybeBatched(model, X, Y, initialBatchSize, mode, disableAdaptiveRetry: false);
 
     private static AdaptiveState GetOrCreateAdaptiveState(object modelKey, int initialBatchSize)
     {
