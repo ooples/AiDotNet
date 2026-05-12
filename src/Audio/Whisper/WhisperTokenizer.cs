@@ -1,3 +1,6 @@
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
@@ -24,6 +27,70 @@ namespace AiDotNet.Audio.Whisper;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class WhisperTokenizer
 {
+    // GPT-2 / Whisper byte-level BPE state — populated lazily by LoadVocab.
+    // Null means "vocab not loaded; use byte-level identity fallback".
+    private Dictionary<string, int>? _vocab;          // token-string → ID
+    private Dictionary<int, string>? _inverseVocab;   // ID → token-string
+    private Dictionary<(string, string), int>? _merges; // pair → priority (lower = applied earlier)
+    private readonly Dictionary<int, char> _byteToUnicode;
+    private readonly Dictionary<char, int> _unicodeToByte;
+    // GPT-2's pre-tokenizer regex (Radford 2019, OpenAI tiktoken's gpt2 pattern).
+    // Splits on contractions, alphabetic/numeric/punctuation runs, leading spaces.
+    private static readonly Regex _preTokenPattern = new(
+        @"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+",
+        RegexOptions.Compiled);
+
+    /// <summary>Initializes a tokenizer that operates in byte-level identity mode (no learned merges).</summary>
+    public WhisperTokenizer()
+    {
+        (_byteToUnicode, _unicodeToByte) = BuildByteUnicodeMaps();
+    }
+
+    /// <summary>Initializes a tokenizer that loads the official Whisper / GPT-2 BPE vocabulary.</summary>
+    /// <param name="vocabPath">Path to vocab.json (token string → ID).</param>
+    /// <param name="mergesPath">Path to merges.txt (priority-ordered pair merges).</param>
+    public WhisperTokenizer(string vocabPath, string mergesPath) : this()
+    {
+        LoadVocab(vocabPath, mergesPath);
+    }
+
+    /// <summary>Loads the BPE vocabulary and merge table at runtime.</summary>
+    /// <remarks>
+    /// vocab.json maps every byte-unicode token to its integer ID; merges.txt
+    /// lists the learned pair merges in priority order (first line = priority
+    /// 0 = applied first). Both files are shipped alongside any HuggingFace
+    /// Whisper checkpoint.
+    /// </remarks>
+    public void LoadVocab(string vocabPath, string mergesPath)
+    {
+        if (vocabPath is null) throw new ArgumentNullException(nameof(vocabPath));
+        if (mergesPath is null) throw new ArgumentNullException(nameof(mergesPath));
+        if (!File.Exists(vocabPath)) throw new FileNotFoundException("vocab.json not found.", vocabPath);
+        if (!File.Exists(mergesPath)) throw new FileNotFoundException("merges.txt not found.", mergesPath);
+
+        // vocab.json: {"token": id, ...} where keys are the byte-unicode token strings.
+        var vocabJson = File.ReadAllText(vocabPath);
+        var vocab = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(vocabJson)
+            ?? throw new InvalidDataException("vocab.json could not be parsed as a string→int dictionary.");
+
+        // merges.txt: optional "#version: ..." header line then pair-per-line.
+        var merges = new Dictionary<(string, string), int>();
+        int priority = 0;
+        foreach (var rawLine in File.ReadLines(mergesPath))
+        {
+            var line = rawLine.TrimEnd();
+            if (string.IsNullOrEmpty(line)) continue;
+            if (line.StartsWith("#", StringComparison.Ordinal)) continue;
+            int sp = line.IndexOf(' ');
+            if (sp <= 0 || sp >= line.Length - 1) continue;
+            merges[(line[..sp], line[(sp + 1)..])] = priority++;
+        }
+
+        _vocab = vocab;
+        _inverseVocab = vocab.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+        _merges = merges;
+    }
+
     // Standard Whisper special token IDs
     private const int EndOfTextId = 50256;
     private const int StartOfTranscriptId = 50257;
@@ -235,43 +302,206 @@ public class WhisperTokenizer
     }
 
     /// <summary>
-    /// Decodes a sequence of token IDs to text.
+    /// Decodes a sequence of token IDs back to text.
     /// </summary>
     /// <param name="tokenIds">The token IDs to decode.</param>
-    /// <returns>The decoded text.</returns>
+    /// <returns>The decoded UTF-8 text.</returns>
     /// <remarks>
-    /// This is a simplified decoder. A full implementation would use
-    /// the actual BPE vocabulary from the Whisper model.
+    /// <para>
+    /// With a vocab loaded (<see cref="LoadVocab"/> or the
+    /// <see cref="WhisperTokenizer(string, string)"/> ctor): each token ID is
+    /// looked up in the inverse vocabulary to get its byte-unicode string,
+    /// the strings are concatenated, each byte-unicode character is mapped
+    /// back to its underlying byte (Radford 2019 GPT-2 byte mapping), and
+    /// the resulting byte array is UTF-8 decoded. This is the exact inverse
+    /// of <see cref="Encode"/> and matches HuggingFace's
+    /// <c>WhisperTokenizer.decode</c>.
+    /// </para>
+    /// <para>
+    /// Without a vocab loaded: tokens in <c>[0, 255]</c> are interpreted as
+    /// raw UTF-8 byte values (the byte-level base layer that Encode emits in
+    /// fallback mode); other token IDs are silently dropped because there's
+    /// no merge table to expand them. This preserves the
+    /// <c>Encode → Decode</c> round-trip for fallback-mode output.
+    /// </para>
     /// </remarks>
     public string Decode(IEnumerable<long> tokenIds)
     {
-        var tokens = tokenIds.Where(t => !IsSpecialToken((int)t)).ToList();
+        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
 
-        // Note: This is a placeholder implementation.
-        // A full implementation would use the BPE vocabulary to decode.
-        // For now, we return a representation of the tokens.
-        if (tokens.Count == 0)
+        if (_inverseVocab is null)
         {
-            return string.Empty;
+            // Fallback: byte-level identity decode.
+            var rawBytes = new List<byte>();
+            foreach (long t in tokenIds)
+            {
+                int id = (int)t;
+                if (id < 0 || IsSpecialToken(id)) continue;
+                if (id <= 255) rawBytes.Add((byte)id);
+            }
+            return Encoding.UTF8.GetString(rawBytes.ToArray());
         }
 
-        // In a full implementation, each token would be looked up in the vocabulary
-        // and converted to its text representation.
-        return $"[Decoded {tokens.Count} tokens - full BPE decoder not implemented]";
+        // Real BPE decode: concat token strings, then byte-unicode → bytes → UTF-8.
+        var concatenated = new StringBuilder();
+        foreach (long t in tokenIds)
+        {
+            int id = (int)t;
+            if (IsSpecialToken(id)) continue; // drop control tokens
+            if (_inverseVocab.TryGetValue(id, out var tokenStr))
+                concatenated.Append(tokenStr);
+            // Unknown IDs are silently dropped — matches HuggingFace behavior.
+        }
+
+        var bytes = new List<byte>(concatenated.Length);
+        foreach (char c in concatenated.ToString())
+        {
+            if (_unicodeToByte.TryGetValue(c, out int b))
+                bytes.Add((byte)b);
+            // chars that aren't in the byte-unicode map indicate corruption; drop them.
+        }
+        return Encoding.UTF8.GetString(bytes.ToArray());
     }
 
     /// <summary>
-    /// Encodes text to token IDs.
+    /// Encodes text to GPT-2 / Whisper BPE token IDs.
     /// </summary>
     /// <param name="text">The text to encode.</param>
     /// <returns>The encoded token IDs.</returns>
     /// <remarks>
-    /// This is a placeholder. A full implementation would use BPE encoding.
+    /// <para>
+    /// With a vocab loaded: full byte-level BPE per Radford 2019 GPT-2 §2.2
+    /// (also used by Whisper, Radford 2023 §2.2). Pipeline:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>UTF-8 encode text → bytes → byte-unicode chars.</description></item>
+    /// <item><description>Pre-tokenize with GPT-2's regex pattern (contractions, word runs, punctuation).</description></item>
+    /// <item><description>For each pre-token: split into characters and repeatedly merge the highest-priority adjacent pair from the merges table until none apply.</description></item>
+    /// <item><description>Look up each final BPE piece in the vocab.</description></item>
+    /// </list>
+    /// <para>
+    /// Without a vocab loaded: byte-level fallback — each UTF-8 byte becomes
+    /// one token in <c>[0, 255]</c>. Both modes round-trip exactly through
+    /// <see cref="Decode"/>.
+    /// </para>
     /// </remarks>
     public List<long> Encode(string text)
     {
-        // Placeholder - a full implementation would use BPE encoding
-        // with the Whisper vocabulary
-        return [];
+        if (text is null) throw new ArgumentNullException(nameof(text));
+
+        if (_vocab is null || _merges is null)
+        {
+            // Fallback: byte-level identity. Each UTF-8 byte → token ID.
+            var rawBytes = Encoding.UTF8.GetBytes(text);
+            var tokens = new List<long>(rawBytes.Length);
+            foreach (byte b in rawBytes) tokens.Add(b);
+            return tokens;
+        }
+
+        // Real BPE encode.
+        var output = new List<long>();
+        foreach (Match m in _preTokenPattern.Matches(text))
+        {
+            var piece = m.Value;
+            if (piece.Length == 0) continue;
+
+            // Step 1: bytes → byte-unicode chars (so non-printable / multi-byte
+            // characters are representable as ordinary char runs).
+            var bytes = Encoding.UTF8.GetBytes(piece);
+            var chars = new char[bytes.Length];
+            for (int i = 0; i < bytes.Length; i++)
+                chars[i] = _byteToUnicode[bytes[i]];
+
+            // Step 2: build the BPE symbol list (start with one symbol per char).
+            var symbols = new List<string>(chars.Length);
+            foreach (char c in chars) symbols.Add(c.ToString());
+
+            // Step 3: iteratively merge the highest-priority adjacent pair until
+            // none of the remaining pairs is in the merge table.
+            ApplyBpeMerges(symbols, _merges);
+
+            // Step 4: map each final symbol to its vocab ID. Unknown symbols
+            // are decomposed into their byte-unicode chars (each individual
+            // byte-unicode char is guaranteed to be in the vocab since the
+            // base 256 entries are always present).
+            foreach (var sym in symbols)
+            {
+                if (_vocab.TryGetValue(sym, out int id))
+                {
+                    output.Add(id);
+                }
+                else
+                {
+                    foreach (char c in sym)
+                    {
+                        if (_vocab.TryGetValue(c.ToString(), out int charId))
+                            output.Add(charId);
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private static void ApplyBpeMerges(List<string> symbols, Dictionary<(string, string), int> merges)
+    {
+        while (symbols.Count >= 2)
+        {
+            // Find the lowest-rank merge among adjacent pairs.
+            int bestPriority = int.MaxValue;
+            int bestPosition = -1;
+            for (int i = 0; i + 1 < symbols.Count; i++)
+            {
+                if (merges.TryGetValue((symbols[i], symbols[i + 1]), out int p) && p < bestPriority)
+                {
+                    bestPriority = p;
+                    bestPosition = i;
+                }
+            }
+            if (bestPosition < 0) break; // no more applicable merges
+
+            symbols[bestPosition] = symbols[bestPosition] + symbols[bestPosition + 1];
+            symbols.RemoveAt(bestPosition + 1);
+        }
+    }
+
+    /// <summary>
+    /// Builds the GPT-2 byte-to-unicode mapping (Radford 2019 §2.2). Bytes 33-126,
+    /// 161-172, and 174-255 map to themselves as Unicode code points (printable
+    /// ASCII / Latin-1); the remaining 68 bytes are assigned code points in the
+    /// 256+ range so every byte has a unique printable representation. This
+    /// representation is what vocab.json keys are written in.
+    /// </summary>
+    private static (Dictionary<int, char> ByteToChar, Dictionary<char, int> CharToByte) BuildByteUnicodeMaps()
+    {
+        var byteToChar = new Dictionary<int, char>();
+        var charToByte = new Dictionary<char, int>();
+
+        // "Native" bytes that map to themselves.
+        var nativeBytes = new List<int>();
+        for (int b = '!'; b <= '~'; b++) nativeBytes.Add(b);
+        for (int b = '¡'; b <= '¬'; b++) nativeBytes.Add(b);
+        for (int b = '®'; b <= 'ÿ'; b++) nativeBytes.Add(b);
+
+        var nativeSet = new HashSet<int>(nativeBytes);
+        int extra = 0;
+        for (int b = 0; b < 256; b++)
+        {
+            if (nativeSet.Contains(b))
+            {
+                byteToChar[b] = (char)b;
+                charToByte[(char)b] = b;
+            }
+            else
+            {
+                // Map to a private-use-area-style point past 256.
+                char c = (char)(256 + extra);
+                byteToChar[b] = c;
+                charToByte[c] = b;
+                extra++;
+            }
+        }
+        return (byteToChar, charToByte);
     }
 }
