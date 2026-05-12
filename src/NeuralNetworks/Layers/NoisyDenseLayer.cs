@@ -58,6 +58,14 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// <param name="activationFunction">Optional element-wise activation. Defaults to identity.</param>
     /// <param name="sigmaInit">Initial σ scale; Fortunato 2017 Eq. 18 uses 0.5/√p.</param>
     /// <param name="seed">RNG seed for noise + initialisation. Defaults to a non-deterministic seed.</param>
+    /// <remarks>
+    /// Constructor reports <c>InputShape = [-1]</c> to the layer-compatibility
+    /// validator so the layer composes cleanly behind shape-agnostic predecessors
+    /// (ActivationLayer, DropoutLayer, lazy DenseLayer). The validator skips
+    /// strict <c>SequenceEqual</c> comparisons for layers with any non-positive
+    /// dimension. The actual input size is fixed at construction time (the σ
+    /// initialisation depends on it) so behaviour matches a fixed-shape layer.
+    /// </remarks>
     public NoisyDenseLayer(
         int inputSize,
         int outputSize,
@@ -65,7 +73,7 @@ public class NoisyDenseLayer<T> : LayerBase<T>
         double? sigmaInit = null,
         int? seed = null)
         : base(
-            inputShape: [inputSize],
+            inputShape: [-1],                 // lazy marker — layer validator skips shape-equality
             outputShape: [outputSize],
             scalarActivation: activationFunction ?? new IdentityActivation<T>())
     {
@@ -117,9 +125,6 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
     {
-        // The base contract expects the same shapes; we copy values in-place
-        // so the existing tensor field references stay live (the tape keys
-        // gradients by reference identity).
         if (parameters.Count != 4)
             throw new ArgumentException("Expected exactly 4 parameter tensors (μ_w, σ_w, μ_b, σ_b).", nameof(parameters));
         CopyTensorInPlace(parameters[0], _muWeights);
@@ -139,18 +144,26 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        // Resample noise on every forward (Fortunato 2017 §3.3: one resample
-        // per environment step / minibatch).
-        var (epsW, epsB) = SampleFactorisedNoise();
-
-        // Build effective weights/biases through engine ops so the tape captures
-        // gradients ∂L/∂μ_w = ∂L/∂W_eff and ∂L/∂σ_w = ∂L/∂W_eff ⊙ ε_w.
-        // W_eff = μ_w + σ_w ⊙ ε_w
-        var wNoise = Engine.TensorMultiply(_sigmaWeights, epsW);
-        var wEff = Engine.TensorAdd(_muWeights, wNoise);
-        // b_eff = μ_b + σ_b ⊙ ε_b
-        var bNoise = Engine.TensorMultiply(_sigmaBiases, epsB);
-        var bEff = Engine.TensorAdd(_muBiases, bNoise);
+        // Training mode: resample noise (Fortunato 2017 §3.3 — one resample
+        // per environment step / minibatch). Eval mode: use mean weights only
+        // (paper §3.4: at evaluation the network uses μ and the σ term is set
+        // to zero), which makes the policy deterministic given a fixed state.
+        Tensor<T> wEff, bEff;
+        if (IsTrainingMode)
+        {
+            var (epsW, epsB) = SampleFactorisedNoise();
+            // W_eff = μ_w + σ_w ⊙ ε_w; tape captures ∂L/∂μ = ∂L/∂W_eff and
+            // ∂L/∂σ = ∂L/∂W_eff ⊙ ε_w.
+            var wNoise = Engine.TensorMultiply(_sigmaWeights, epsW);
+            wEff = Engine.TensorAdd(_muWeights, wNoise);
+            var bNoise = Engine.TensorMultiply(_sigmaBiases, epsB);
+            bEff = Engine.TensorAdd(_muBiases, bNoise);
+        }
+        else
+        {
+            wEff = _muWeights;
+            bEff = _muBiases;
+        }
 
         // Flatten input to [batch, inputSize] for matmul.
         int batchSize;
@@ -172,15 +185,12 @@ public class NoisyDenseLayer<T> : LayerBase<T>
             flatInput = Engine.Reshape(input, [batchSize, _inputSize]);
         }
 
-        // pre = flatInput @ W_eff
         var pre = Engine.TensorMatMul(flatInput, wEff);
-        // pre = pre + b_eff (broadcast over batch axis)
         var bBroadcast = Engine.Reshape(bEff, [1, _outputSize]);
         pre = Engine.TensorAdd(pre, bBroadcast);
 
         var activated = ApplyActivation(pre);
 
-        // Restore output rank.
         if (input.Rank == 1) return Engine.Reshape(activated, [_outputSize]);
         if (input.Rank == 2) return activated;
         var outShape = new int[input.Rank];
@@ -257,12 +267,10 @@ public class NoisyDenseLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Gradient-tape-driven training paths supply gradients via the optimizer
-    /// step (which mutates μ/σ tensors in place using their tape-tracked grads).
-    /// This SGD-style fallback is retained for callers that use the legacy
-    /// per-layer UpdateParameters API; it reads gradients from
-    /// <see cref="LayerBase{T}.ParameterGradients"/> in the same flat layout as
-    /// <see cref="GetParameters"/>/<see cref="SetParameters"/>.
+    /// SGD-style fallback retained for callers using the legacy per-layer
+    /// UpdateParameters API; reads gradients from <see cref="LayerBase{T}.ParameterGradients"/>.
+    /// Tape-based training (the standard path) updates μ/σ tensors in-place via
+    /// the optimizer step and doesn't go through this method.
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {

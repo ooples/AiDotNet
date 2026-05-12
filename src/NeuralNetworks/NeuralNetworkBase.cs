@@ -2100,6 +2100,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return denseLayer.GetOutputShape().Length == 1 && denseLayer.GetOutputShape()[0] > 0;
         }
 
+        // NoisyDenseLayer is functionally a dense linear layer with parametric
+        // noise on its weights (Fortunato et al. 2017 "Noisy Networks for
+        // Exploration") — used as the output head in Noisy-DQN / Rainbow-DQN
+        // (Hessel et al. 2018 §3.4). Same output-shape contract as DenseLayer.
+        if (layer is Layers.NoisyDenseLayer<T> noisyDense)
+        {
+            return noisyDense.GetOutputShape().Length == 1 && noisyDense.GetOutputShape()[0] > 0;
+        }
+
         // For some specific tasks, the output might be from other layer types
         // For example, in sequence-to-sequence models, it could be LSTM or GRU
         if (layer is LSTMLayer<T> || layer is GRULayer<T>)
