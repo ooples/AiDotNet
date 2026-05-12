@@ -1273,10 +1273,32 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     protected static System.Collections.Generic.IEnumerable<Tensor<double>> EnumerateParameterChunks(INeuralNetworkModel<double> network)
     {
 #if !NETFRAMEWORK
-        return network.GetParameterChunks();
+        foreach (var chunk in network.GetParameterChunks())
+            yield return MaterializeIfSparse(chunk);
 #else
-        return EnumerateParameterChunksLegacy(network);
+        foreach (var chunk in EnumerateParameterChunksLegacy(network))
+            yield return MaterializeIfSparse(chunk);
 #endif
+    }
+
+    /// <summary>
+    /// Materializes a sparse parameter chunk into a dense tensor so callers
+    /// can use the standard <c>chunk[i]</c> int-indexer. <c>SparseNeuralNetwork</c>
+    /// (and any future sparse-parameter model) yields its weights as
+    /// <see cref="SparseTensor{T}"/> instances directly from
+    /// <c>GetParameterChunks()</c>. <c>TensorBase.GetFlat</c> calls
+    /// <c>ThrowIfSparse</c> as of AiDotNet.Tensors 0.75.4+, so every
+    /// snapshot/diff loop in the invariant tests
+    /// (<c>Training_ShouldChangeParameters</c>, <c>GradientFlow_…</c>,
+    /// <c>SumSquaredChunks</c>) crashes the moment it hits a sparse chunk.
+    /// Materializing once at the iteration boundary keeps the invariants
+    /// dense-only without forcing every test author to remember the cast.
+    /// </summary>
+    private static Tensor<double> MaterializeIfSparse(Tensor<double> chunk)
+    {
+        if (chunk.IsSparse && chunk is SparseTensor<double> sparse)
+            return sparse.ToDense();
+        return chunk;
     }
 
 #if NETFRAMEWORK

@@ -1268,9 +1268,21 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(SparseLinearLayer<>))
         {
+            // SparseLinearLayer(int, int, double sparsity, IActivationFunction<T>?,
+            //                   IInitializationStrategy<T>?). Restore sparsity +
+            // activation from the saved metadata so a Clone of a layer with a
+            // non-default activation (e.g., the IdentityActivation that
+            // SparseNeuralNetwork uses on its regression output layer) doesn't
+            // silently fall back to the default ReLU and clamp the output to
+            // zero — clone_ShouldProduceIdenticalOutput would otherwise see
+            // original≠0 vs cloned=0 for any negative pre-activation.
             int inputSize = inputShape[0];
             int outputSize = outputShape[0];
-            instance = new SparseLinearLayer<T>(inputSize, outputSize);
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            double sparsity = TryGetDouble(additionalParams, "Sparsity") ?? 0.9;
+            instance = new SparseLinearLayer<T>(inputSize, outputSize, sparsity,
+                (IActivationFunction<T>?)activation);
         }
         else if (genericDef == typeof(OctonionLinearLayer<>))
         {
