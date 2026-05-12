@@ -318,34 +318,99 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         // Convert to mel spectrogram
         int numSamples = rawAudio.Shape[^1];
-        int numFrames = (numSamples - _windowSize) / _hopSize + 1;
-
+        int numFrames = Math.Max(1, (numSamples - _windowSize) / _hopSize + 1);
         var melSpec = new T[numFrames * _numMelBands];
 
-        // Simplified mel spectrogram computation
+        // Real log-mel spectrogram (CLAP paper §3.1 — Wu et al. 2023 uses
+        // librosa-style mel features as the audio encoder input). Pipeline:
+        //   1. Per-frame Hann window
+        //   2. Real-FFT → magnitude spectrum
+        //   3. Triangular mel filterbank (slaney-style HTK mel scale)
+        //   4. Power → log
+        // The previous Gaussian-on-time-samples "Simplified mel" had no
+        // frequency analysis at all — the encoder was being fed acoustically
+        // meaningless features.
+        var frameData = new double[_windowSize];
+        var melFilterbank = ComputeClapMelFilterbank(_windowSize, _numMelBands, SampleRate);
+
         for (int f = 0; f < numFrames; f++)
         {
             int start = f * _hopSize;
+            Array.Clear(frameData, 0, frameData.Length);
+            for (int i = 0; i < _windowSize; i++)
+            {
+                int idx = start + i;
+                if (idx >= numSamples || idx >= rawAudio.Length) break;
+                double sample = _numOps.ToDouble(rawAudio.Data.Span[idx]);
+                double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (_windowSize - 1))); // Hann
+                frameData[i] = sample * w;
+            }
+
+            var spectrum = FftSharp.FFT.Forward(frameData);
+            int specLen = _windowSize / 2 + 1;
+            var powerSpectrum = new double[specLen];
+            for (int k = 0; k < specLen; k++)
+                powerSpectrum[k] = spectrum[k].Magnitude * spectrum[k].Magnitude;
+
             for (int m = 0; m < _numMelBands; m++)
             {
-                double sum = 0;
-                for (int i = 0; i < Math.Min(_windowSize, numSamples - start); i++)
-                {
-                    int idx = start + i;
-                    if (idx < rawAudio.Length)
-                    {
-                        double sample = _numOps.ToDouble(rawAudio.Data.Span[idx]);
-                        // Simplified mel bin calculation
-                        double melWeight = Math.Exp(-Math.Pow(m - (double)i / _windowSize * _numMelBands, 2) / 10);
-                        sum += Math.Abs(sample) * melWeight;
-                    }
-                }
-                melSpec[f * _numMelBands + m] = _numOps.FromDouble(Math.Log(sum + 1e-7));
+                double melEnergy = 0.0;
+                for (int k = 0; k < specLen; k++)
+                    melEnergy += powerSpectrum[k] * melFilterbank[m, k];
+                melSpec[f * _numMelBands + m] = _numOps.FromDouble(Math.Log(Math.Max(melEnergy, 1e-10)));
             }
         }
 
         return new Tensor<T>(melSpec, new[] { 1, numFrames, _numMelBands });
     }
+
+    /// <summary>
+    /// Triangular mel filterbank in the HTK-style mel scale that CLAP's
+    /// audio encoder consumes (librosa default; mel = 2595·log10(1 + Hz/700)).
+    /// </summary>
+    private static double[,] ComputeClapMelFilterbank(int windowSize, int numMelBands, int sampleRate)
+    {
+        int numBins = windowSize / 2 + 1;
+        var filterbank = new double[numMelBands, numBins];
+
+        double melMin = HzToMel(0);
+        double melMax = HzToMel(sampleRate / 2.0);
+
+        var melPoints = new double[numMelBands + 2];
+        for (int i = 0; i < melPoints.Length; i++)
+            melPoints[i] = melMin + (melMax - melMin) * i / (numMelBands + 1);
+
+        var binPoints = new int[numMelBands + 2];
+        for (int i = 0; i < melPoints.Length; i++)
+        {
+            double hz = MelToHz(melPoints[i]);
+            binPoints[i] = (int)Math.Floor((windowSize + 1) * hz / sampleRate);
+        }
+
+        for (int m = 0; m < numMelBands; m++)
+        {
+            int startBin = binPoints[m];
+            int centerBin = binPoints[m + 1];
+            int endBin = binPoints[m + 2];
+
+            for (int k = startBin; k < centerBin && k < numBins; k++)
+            {
+                if (centerBin != startBin)
+                    filterbank[m, k] = (double)(k - startBin) / (centerBin - startBin);
+            }
+            for (int k = centerBin; k < endBin && k < numBins; k++)
+            {
+                if (endBin != centerBin)
+                    filterbank[m, k] = (double)(endBin - k) / (endBin - centerBin);
+            }
+        }
+
+        return filterbank;
+    }
+
+    /// <summary>Mel scale (HTK convention): 2595·log10(1 + Hz/700).</summary>
+    private static double HzToMel(double hz) => 2595.0 * Math.Log10(1.0 + hz / 700.0);
+    private static double MelToHz(double mel) => 700.0 * (Math.Pow(10.0, mel / 2595.0) - 1.0);
 
     /// <summary>
     /// Postprocesses model output.
