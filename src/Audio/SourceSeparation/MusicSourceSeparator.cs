@@ -61,7 +61,10 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
 
     private readonly ShortTimeFourierTransform<T> _stft;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly bool _useNativeMode;
+    // Native vs ONNX inference mode. Not readonly: DeserializeNetworkSpecificData
+    // sets this from the persisted model bytes so a loaded native-mode checkpoint
+    // doesn't silently fall back to ONNX (or vice-versa).
+    private bool _useNativeMode;
     private bool _disposed;
 
     /// <summary>Standard source names for 4-stem separation.</summary>
@@ -544,11 +547,48 @@ public class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusicSourceSe
     }
 
     /// <summary>
-    /// Deserializes network-specific data.
+    /// Deserializes network-specific data — the inverse of
+    /// <see cref="SerializeNetworkSpecificData"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="MusicSourceSeparationOptions"/> properties are init-only and
+    /// only accept values at construction; we cannot rebind <c>_options</c>
+    /// here. Instead, read every field the serializer wrote and verify it
+    /// matches the in-memory configuration. A mismatch indicates the model
+    /// being loaded was trained with a different STFT / stem layout, which
+    /// would silently corrupt every separation if accepted unchanged. Throw
+    /// with the offending field so the caller can reconstruct the separator
+    /// with the right options.
+    /// </para>
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Simplified - options would need to be reconstructed
+        int sampleRate = reader.ReadInt32();
+        int fftSize = reader.ReadInt32();
+        int hopLength = reader.ReadInt32();
+        int stemCount = reader.ReadInt32();
+        int hpssKernelSize = reader.ReadInt32();
+        bool useNativeMode = reader.ReadBoolean();
+
+        if (sampleRate != _options.SampleRate)
+            throw new InvalidOperationException(
+                $"Deserialized SampleRate ({sampleRate}) does not match constructor option ({_options.SampleRate}). " +
+                "Reconstruct MusicSourceSeparator with matching options before loading this model.");
+        if (fftSize != _options.FftSize)
+            throw new InvalidOperationException(
+                $"Deserialized FftSize ({fftSize}) does not match constructor option ({_options.FftSize}).");
+        if (hopLength != _options.HopLength)
+            throw new InvalidOperationException(
+                $"Deserialized HopLength ({hopLength}) does not match constructor option ({_options.HopLength}).");
+        if (stemCount != _options.StemCount)
+            throw new InvalidOperationException(
+                $"Deserialized StemCount ({stemCount}) does not match constructor option ({_options.StemCount}).");
+        if (hpssKernelSize != _options.HpssKernelSize)
+            throw new InvalidOperationException(
+                $"Deserialized HpssKernelSize ({hpssKernelSize}) does not match constructor option ({_options.HpssKernelSize}).");
+
+        _useNativeMode = useNativeMode;
     }
 
     /// <summary>

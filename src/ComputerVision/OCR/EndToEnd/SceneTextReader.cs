@@ -200,17 +200,200 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         return crop;
     }
 
+    /// <summary>
+    /// Removes perspective distortion from a text crop by warping the four
+    /// polygon corners onto a canonical axis-aligned rectangle via a planar
+    /// homography (DLT, Hartley &amp; Zisserman 2003 §4.1). Output is sampled
+    /// with bilinear interpolation. For quads with rotation > 45° we keep
+    /// the existing 90° rotate fast-path because the bilinear sampler is
+    /// dominated by the corner correspondence; for the typical 5°-45°
+    /// regime this is the implementation that actually undoes the warp.
+    /// </summary>
     private Tensor<T> CorrectPerspective(Tensor<T> crop, TextRegion<T> region)
     {
-        // Simplified perspective correction - just return crop for now
-        // Full implementation would use homography transformation
-        if (Math.Abs(region.RotationAngle) > 45)
+        if (region.Polygon.Count < 4) return crop;
+
+        int batch = crop.Shape[0];
+        int channels = crop.Shape[1];
+        int srcH = crop.Shape[2];
+        int srcW = crop.Shape[3];
+
+        // Sort the 4 corners into (top-left, top-right, bottom-right, bottom-left)
+        // by angle from the polygon centroid. The detector usually emits them in
+        // some order; rotating into a canonical order makes the homography stable.
+        var (tl, tr, br, bl) = OrderQuadCorners(region.Polygon, srcW, srcH);
+
+        // Target rectangle dimensions: preserve aspect ratio from the quad.
+        double topEdge    = Math.Sqrt(SqDist(tl, tr));
+        double bottomEdge = Math.Sqrt(SqDist(bl, br));
+        double leftEdge   = Math.Sqrt(SqDist(tl, bl));
+        double rightEdge  = Math.Sqrt(SqDist(tr, br));
+        int dstW = Math.Max(1, (int)Math.Round(Math.Max(topEdge, bottomEdge)));
+        int dstH = Math.Max(1, (int)Math.Round(Math.Max(leftEdge, rightEdge)));
+
+        // Solve for the inverse homography H^-1 mapping destination → source.
+        // Target corners in destination image space:
+        var (dx, dy) = (
+            new[] { 0.0,         dstW - 1.0,  dstW - 1.0,  0.0         },
+            new[] { 0.0,         0.0,         dstH - 1.0,  dstH - 1.0  });
+        var (sx, sy) = (
+            new[] { tl.X, tr.X, br.X, bl.X },
+            new[] { tl.Y, tr.Y, br.Y, bl.Y });
+        if (!SolveHomographyDLT(dx, dy, sx, sy, out double[] h))
         {
-            // Rotate 90 degrees if heavily rotated
-            return Rotate90(crop);
+            // Degenerate corners (collinear / coincident) — fall back to crop.
+            return Math.Abs(region.RotationAngle) > 45 ? Rotate90(crop) : crop;
         }
 
-        return crop;
+        // Warp.
+        var output = new Tensor<T>(new[] { batch, channels, dstH, dstW });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int y = 0; y < dstH; y++)
+                {
+                    for (int x = 0; x < dstW; x++)
+                    {
+                        // (x, y) in dst → (xs, ys) in src via the projective map.
+                        double w = h[6] * x + h[7] * y + 1.0;
+                        if (Math.Abs(w) < 1e-12) continue;
+                        double xs = (h[0] * x + h[1] * y + h[2]) / w;
+                        double ys = (h[3] * x + h[4] * y + h[5]) / w;
+                        output[b, c, y, x] = BilinearSample(crop, b, c, xs, ys, srcW, srcH);
+                    }
+                }
+            }
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// Orders 4 polygon corners as (top-left, top-right, bottom-right,
+    /// bottom-left) so the homography target rectangle has a consistent
+    /// orientation. Uses centroid-angle sort, which is robust to corner
+    /// permutations from different detectors.
+    /// </summary>
+    private static ((double X, double Y) TL, (double X, double Y) TR, (double X, double Y) BR, (double X, double Y) BL)
+        OrderQuadCorners(List<(T X, T Y)> poly, int srcW, int srcH)
+    {
+        var pts = new (double X, double Y)[4];
+        for (int i = 0; i < 4; i++)
+        {
+            pts[i] = (Convert.ToDouble(poly[i].X), Convert.ToDouble(poly[i].Y));
+        }
+        // Centroid.
+        double cx = (pts[0].X + pts[1].X + pts[2].X + pts[3].X) / 4.0;
+        double cy = (pts[0].Y + pts[1].Y + pts[2].Y + pts[3].Y) / 4.0;
+        // Sort by angle from centroid (descending), then re-anchor on the
+        // top-left corner (smallest x+y).
+        Array.Sort(pts, (a, b) => Math.Atan2(a.Y - cy, a.X - cx).CompareTo(Math.Atan2(b.Y - cy, b.X - cx)));
+        int startIdx = 0;
+        double minSum = double.PositiveInfinity;
+        for (int i = 0; i < 4; i++)
+        {
+            double s = pts[i].X + pts[i].Y;
+            if (s < minSum) { minSum = s; startIdx = i; }
+        }
+        return (
+            pts[startIdx],
+            pts[(startIdx + 1) % 4],
+            pts[(startIdx + 2) % 4],
+            pts[(startIdx + 3) % 4]);
+    }
+
+    private static double SqDist((double X, double Y) a, (double X, double Y) b)
+    {
+        double dx = a.X - b.X, dy = a.Y - b.Y;
+        return dx * dx + dy * dy;
+    }
+
+    /// <summary>
+    /// Direct Linear Transform: solves for the 8 parameters of a planar
+    /// homography mapping (dx_i, dy_i) → (sx_i, sy_i) for i ∈ {0..3}.
+    /// Returns false when the 8×8 normal-equation matrix is singular
+    /// (collinear corners).
+    /// </summary>
+    private static bool SolveHomographyDLT(double[] dx, double[] dy, double[] sx, double[] sy, out double[] h)
+    {
+        // 8 equations, 8 unknowns. Rows alternate:
+        //   x' = h0·x + h1·y + h2 − h6·x·x' − h7·y·x'
+        //   y' = h3·x + h4·y + h5 − h6·x·y' − h7·y·y'
+        var A = new double[8, 8];
+        var b = new double[8];
+        for (int i = 0; i < 4; i++)
+        {
+            A[2 * i, 0] = dx[i]; A[2 * i, 1] = dy[i]; A[2 * i, 2] = 1;
+            A[2 * i, 6] = -dx[i] * sx[i]; A[2 * i, 7] = -dy[i] * sx[i];
+            b[2 * i] = sx[i];
+
+            A[2 * i + 1, 3] = dx[i]; A[2 * i + 1, 4] = dy[i]; A[2 * i + 1, 5] = 1;
+            A[2 * i + 1, 6] = -dx[i] * sy[i]; A[2 * i + 1, 7] = -dy[i] * sy[i];
+            b[2 * i + 1] = sy[i];
+        }
+        h = new double[8];
+        return GaussianEliminate(A, b, h);
+    }
+
+    /// <summary>
+    /// Gaussian elimination with partial pivoting on an 8×8 system. Returns
+    /// false if the matrix is singular (a pivot ≈ 0).
+    /// </summary>
+    private static bool GaussianEliminate(double[,] A, double[] b, double[] x)
+    {
+        int n = b.Length;
+        for (int i = 0; i < n; i++)
+        {
+            int pivot = i;
+            double pivAbs = Math.Abs(A[i, i]);
+            for (int r = i + 1; r < n; r++)
+            {
+                double a = Math.Abs(A[r, i]);
+                if (a > pivAbs) { pivAbs = a; pivot = r; }
+            }
+            if (pivAbs < 1e-12) return false;
+            if (pivot != i)
+            {
+                for (int c = 0; c < n; c++) (A[i, c], A[pivot, c]) = (A[pivot, c], A[i, c]);
+                (b[i], b[pivot]) = (b[pivot], b[i]);
+            }
+            for (int r = i + 1; r < n; r++)
+            {
+                double m = A[r, i] / A[i, i];
+                for (int c = i; c < n; c++) A[r, c] -= m * A[i, c];
+                b[r] -= m * b[i];
+            }
+        }
+        for (int i = n - 1; i >= 0; i--)
+        {
+            double s = b[i];
+            for (int c = i + 1; c < n; c++) s -= A[i, c] * x[c];
+            x[i] = s / A[i, i];
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Bilinear-interpolated sample from a [batch, channel, H, W] tensor at
+    /// a fractional position. Returns 0 for out-of-bounds reads.
+    /// </summary>
+    private T BilinearSample(Tensor<T> src, int b, int c, double xs, double ys, int srcW, int srcH)
+    {
+        if (xs < 0 || xs > srcW - 1 || ys < 0 || ys > srcH - 1) return NumOps.Zero;
+        int x0 = (int)Math.Floor(xs);
+        int y0 = (int)Math.Floor(ys);
+        int x1 = Math.Min(x0 + 1, srcW - 1);
+        int y1 = Math.Min(y0 + 1, srcH - 1);
+        double dxw = xs - x0, dyw = ys - y0;
+        double v00 = Convert.ToDouble(src[b, c, y0, x0]);
+        double v01 = Convert.ToDouble(src[b, c, y0, x1]);
+        double v10 = Convert.ToDouble(src[b, c, y1, x0]);
+        double v11 = Convert.ToDouble(src[b, c, y1, x1]);
+        double v = v00 * (1 - dxw) * (1 - dyw)
+                 + v01 * dxw * (1 - dyw)
+                 + v10 * (1 - dxw) * dyw
+                 + v11 * dxw * dyw;
+        return NumOps.FromDouble(v);
     }
 
     private Tensor<T> Rotate90(Tensor<T> input)
