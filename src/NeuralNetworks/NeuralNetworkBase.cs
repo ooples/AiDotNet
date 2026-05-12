@@ -2708,28 +2708,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int nChunks = (n + batchSize - 1) / batchSize;
         var perChunkOutputs = new Tensor<T>[nChunks];
 
-        // Route per-chunk forwards through PredictCompiled when compilation
-        // is on. Every chunk after the first hits the cache and replays the
-        // compiled plan; the value-stable rebind landed in CompiledModelHost
-        // copies the chunk's data into the plan's captured input buffer
-        // before each Execute, so the previously-known stale-data hazard is
-        // gone (the chunks reuse the same shape, only the data changes).
-        // Full chunks share one shape so the cache hits N-1 times after one
-        // trace; the last chunk may be smaller and gets its own trace, but
-        // it's only one extra compile across the whole call.
-        bool useCompiled = TensorCodecOptions.Current.EnableCompilation && nChunks >= 2;
-        int fullChunkSize = batchSize;
-        int lastChunkSize = n - (nChunks - 1) * batchSize;
-
+        // Per-chunk forwards go through the same Predict path the rest of
+        // the codebase uses. Routing chunks through PredictCompiled was
+        // explored as a stretch optimisation but the compile cache holds
+        // one plan + captured input buffer per traced shape across the
+        // chunk loop, which inflated peak managed-heap pressure beyond
+        // what the chunking itself was trying to bound (verified in the
+        // d=128 / L=4 Transformer smoke run: 390 MB peak via plain
+        // Predict, OOM via PredictCompiled). The value-stable rebind
+        // landed in CompiledModelHost in the same PR still benefits any
+        // caller that explicitly opts into PredictCompiled — chunked
+        // PredictInBatches just stays on the eager path the default
+        // Predict already uses.
         for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
         {
             int start = chunkIdx * batchSize;
             int end = Math.Min(start + batchSize, n);
-            int chunkSize = end - start;
             var chunk = SliceAlongAxis0(input, start, end);
-            perChunkOutputs[chunkIdx] = useCompiled
-                ? PredictCompiled(chunk)
-                : Predict(chunk);
+            perChunkOutputs[chunkIdx] = Predict(chunk);
         }
 
         return Tensor<T>.Concatenate(perChunkOutputs, axis: 0);

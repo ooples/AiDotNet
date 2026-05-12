@@ -254,12 +254,14 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // compilation off-by-default on the Predict path). SetInputs
                 // is a span-to-span copy into the plan's captured buffer
                 // (~O(input.Length) memcpy, sub-millisecond on typical
-                // batches), so the steady-state replay cost is still the
-                // compiled steps' execution time — orders of magnitude faster
-                // than the eager forward this used to fall back to. The trace
-                // pass already wrote `input`'s data into the captured buffer
-                // via the eager lambda, so this call is a no-op (same source
-                // and destination data) on the cache-miss path.
+                // batches). The trace pass already wrote `input`'s data into
+                // the captured buffer via the eager lambda, so this call is
+                // a no-op (same source and destination data) on the
+                // cache-miss path. If the rebind throws (multi-input plan
+                // mismatch, strided captured view, etc.) the outer
+                // narrow-fallback catch below invalidates the cache and
+                // re-routes the call through eager so correctness is
+                // preserved end-to-end.
                 if (plan is ICompiledPlan<T> rebindable)
                 {
                     rebindable.SetInputs(new[] { input });
