@@ -897,11 +897,6 @@ public partial class Mamba2Block<T> : LayerBase<T>
         }
     }
 
-    private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b, int axis)
-    {
-        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: axis);
-    }
-
     #endregion
 
     #region Parameter Management
