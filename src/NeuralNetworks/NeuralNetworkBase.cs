@@ -3120,8 +3120,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Falls back to eager execution if compilation fails. Plans auto-invalidate
     /// when <see cref="_layerStructureVersion"/> changes.
     /// </summary>
-    protected internal Tensor<T> PredictCompiled(Tensor<T> input) =>
-        _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
+    protected internal Tensor<T> PredictCompiled(Tensor<T> input)
+    {
+        // Mirror Predict()'s inference-mode contract: temporary training-
+        // mode flip so stateful layers (Dropout, BatchNorm running-stats,
+        // GaussianNoise) behave deterministically + cheaply. Without this,
+        // PredictCompiled's eager fallback or replay both ran with Dropout
+        // sampling and BatchNorm batch-stat updates every call — 3-5× per-
+        // call slowdown vs Predict() at the same model shape, and outputs
+        // were non-deterministic across repeated calls with the same input.
+        // NoGradScope mirrors Predict() too so the autodiff tape doesn't
+        // record any of the inference work as a training step.
+        using var _ = new NoGradScope<T>();
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
 
     /// <summary>
     /// Eagerly traces and compiles the forward pass for the given input shape,

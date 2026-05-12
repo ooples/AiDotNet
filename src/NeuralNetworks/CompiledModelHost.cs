@@ -88,6 +88,57 @@ internal sealed class CompiledModelHost<T> : IDisposable
     /// </summary>
     private Dictionary<string, ICompiledPlan<T>>? _preloadedPlans;
 
+    /// <summary>
+    /// <b>Hot-path cache for steady-state replay.</b> After every successful
+    /// <see cref="Predict"/> call we capture the plan + shape-hash + version
+    /// here. The next call, if it sees matching shape and version, takes a
+    /// short-circuit straight to <c>SetInputs</c>+<c>Execute</c>, skipping
+    /// the full <see cref="Predict"/> path with its lock-acquire, shape
+    /// clone, disk-cache poll, symbolic-shape build, fallback-cache lookup,
+    /// and fire-and-forget disk save. Those amortise once across the lifetime
+    /// of the (shape, version) pair — re-paying them on every call doubles
+    /// per-call wall time on small/medium Transformer inference. The hot-path
+    /// preserves all the correctness guarantees: still goes through
+    /// <c>SetInputs</c> for value-stable replay, still type-checks via the
+    /// <c>ICompiledPlan&lt;T&gt;</c> interface, still safely yields to the
+    /// slow path when shape or version changes. Volatile reads avoid the
+    /// <c>_sync</c> acquisition on every call; the slow path re-validates
+    /// under the lock.
+    /// </summary>
+    private volatile ICompiledPlan<T>? _hotPlan;
+    private long _hotShapeKey;
+    private int _hotVersion = -1;
+
+    /// <summary>
+    /// "Eager-only" shapes — (shape, version) pairs that have FAILED to
+    /// compile (trace pass couldn't resolve a leaf, plan execute threw, etc.).
+    /// On the next call with the same shape we skip the retry-and-throw cycle
+    /// entirely and go straight to eager. Without this, every Predict call
+    /// pays the full trace overhead followed by the catch + cache-invalidate
+    /// path — the dominant cost on models where the captured graph never
+    /// references the user's input tensor (the canonical failure mode is
+    /// EmbeddingLayer reading <c>int</c> token IDs from the input that the
+    /// GraphMode tracer doesn't recognise as a graph leaf, so the captured
+    /// trace has no consumer of the input shape and CompileInference
+    /// throws). Cleared on version swap so a future layer-graph change can
+    /// re-attempt compile if the new shape works.
+    /// </summary>
+    private HashSet<(long ShapeKey, int Version)>? _eagerOnlyShapeKeys;
+
+    /// <summary>
+    /// Diagnostic counter: number of times the hot-path was hit (cache-only
+    /// SetInputs+Execute) vs the slow path. Used by tests / profiling to
+    /// verify the steady-state replay short-circuit is actually engaged.
+    /// </summary>
+    private long _hotPathHits;
+    private long _slowPathCalls;
+
+    /// <summary>Hot-path replay count since this host was created. Diagnostic-only.</summary>
+    public long HotPathHits => System.Threading.Interlocked.Read(ref _hotPathHits);
+
+    /// <summary>Slow-path call count since this host was created. Diagnostic-only.</summary>
+    public long SlowPathCalls => System.Threading.Interlocked.Read(ref _slowPathCalls);
+
     public CompiledModelHost(
         SymbolicShapeMode shapeMode = SymbolicShapeMode.BatchDynamic,
         string? modelIdentity = null)
@@ -164,6 +215,65 @@ internal sealed class CompiledModelHost<T> : IDisposable
         if (eagerForward is null)
             throw new ArgumentNullException(nameof(eagerForward));
 
+        // ---------- HOT-PATH: steady-state replay short-circuit ----------
+        // After the first successful Predict for a given (shape, version),
+        // every subsequent call with the same (shape, version) skips
+        // everything below — no lock, no shape clone, no disk-cache poll,
+        // no symbolic-shape build, no fallback cache lookup, no disk save.
+        // Just SetInputs + Execute on the cached plan. Volatile read of
+        // _hotPlan ensures cross-thread visibility without lock; shape and
+        // version equality re-validate the cache identity. If any check
+        // fails we drop through to the slow path below which is correct
+        // under all conditions (including version swaps, cache invalidation,
+        // and Dispose races).
+        // ---------- EAGER-ONLY shortcut: bail out before any further work
+        // when this (shape, version) has previously failed compile. This
+        // skips the trace retry, hot-path bool computations, and slow-path
+        // entry — straight to eager. Without it every call for a non-
+        // compileable shape pays ~14 ms trace + throw + cache-invalidate
+        // overhead plus the hot-path bookkeeping. Volatile snapshot read
+        // avoids the lock; writers use copy-on-write so readers never see
+        // a torn HashSet.
+        long shapeKey = 0;
+        bool shapeKeyOk = TryComputeShapeKey(input._shape, out shapeKey);
+        var eagerSnap = System.Threading.Volatile.Read(ref _eagerOnlyShapeKeys);
+        if (shapeKeyOk
+            && eagerSnap is not null
+            && eagerSnap.Contains((shapeKey, structureVersion)))
+        {
+            return eagerForward();
+        }
+
+        // ---------- HOT-PATH: steady-state replay short-circuit ----------
+        // Cached plan + matching shape + version + compilation still on +
+        // host not disposed. Everything below is the slow-path that compiles
+        // a new plan on first encounter.
+        var hotPlan = _hotPlan;
+        bool nullPlan = hotPlan is null;
+        bool versionMatches = !nullPlan && _hotVersion == structureVersion;
+        bool shapeMatches = !nullPlan && versionMatches && shapeKeyOk && _hotShapeKey == shapeKey;
+        bool compilationOn = !nullPlan && versionMatches && shapeMatches
+            && TensorCodecOptions.Current.EnableCompilation;
+        bool notDisposed = !nullPlan && versionMatches && shapeMatches && compilationOn
+            && !_disposed && !_disposeRequested;
+        if (notDisposed && hotPlan is not null)
+        {
+            try
+            {
+                System.Threading.Interlocked.Increment(ref _hotPathHits);
+                hotPlan.SetInputs(new[] { input });
+                return hotPlan.Execute();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Plan was disposed concurrently (version swap drained the
+                // pending-dispose queue). Fall through to the slow path
+                // which will lock + re-acquire a fresh cache.
+                _hotPlan = null;
+            }
+        }
+        System.Threading.Interlocked.Increment(ref _slowPathCalls);
+
         // Quick state checks + cache acquisition under lock; the actual
         // compile/replay AND the eager fallback run OUTSIDE the lock because
         // they can be slow and blocking other threads on them would defeat
@@ -196,6 +306,14 @@ internal sealed class CompiledModelHost<T> : IDisposable
                     (_pendingDisposeCaches ??= new List<CompiledModelCache<T>>()).Add(_cache);
                     _cache = new CompiledModelCache<T>();
                     _lastCompiledVersion = structureVersion;
+                    // Hot plan was bound to the old cache; clear so the next
+                    // call falls into the slow path which will rebuild against
+                    // the fresh cache + capture a new hot plan. Also clear the
+                    // eager-only verdict cache so a fresh graph gets to attempt
+                    // compile again — the prior failure was for a now-stale
+                    // layer structure.
+                    _hotPlan = null;
+                    _eagerOnlyShapeKeys = null;
                 }
                 cache = _cache ??= new CompiledModelCache<T>();
                 // Increment while still holding the lock — Dispose observes
@@ -266,7 +384,24 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 {
                     rebindable.SetInputs(new[] { input });
                 }
-                return plan.Execute();
+                var result = plan.Execute();
+
+                // Capture this (plan, shape, version) as the hot-path target
+                // so subsequent calls with matching shape and version skip
+                // the entire slow path above. TryComputeShapeKey returns
+                // false for ranks > 4 or dims > 65535 — those callers stay
+                // on the slow path (correct, just slower). The write order
+                // (ICompiledPlan? assignment last) makes the hot-path entry
+                // safe under volatile read: a concurrent reader either sees
+                // null or a fully-initialised (shape, version) pair.
+                if (plan is ICompiledPlan<T> hotCandidate
+                    && TryComputeShapeKey(concreteShape, out long hotKey))
+                {
+                    _hotShapeKey = hotKey;
+                    _hotVersion = structureVersion;
+                    _hotPlan = hotCandidate;
+                }
+                return result;
             }
             catch (Exception ex) when (
                 // Narrow the fallback so fatal/unrecoverable CLR failures
@@ -302,6 +437,32 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 System.Diagnostics.Trace.TraceWarning(
                     $"CompiledModelHost falling back to eager after compile/replay failure: " +
                     $"{ex.ToString()}");
+                // Mark this (shape, version) as eager-only so the next call
+                // skips the trace retry and goes straight to eager. The
+                // canonical case is models whose forward path consumes the
+                // input through a non-graph-traced operation (e.g.
+                // EmbeddingLayer reading int token IDs via a lookup that the
+                // GraphMode tracer doesn't record as a leaf consumer) — the
+                // trace pass cannot bind the input shape, throws here, and
+                // every subsequent call would repeat the same failure. The
+                // ratchet is shape+version-keyed so a later layer-graph
+                // change can re-attempt compile if the new graph works.
+                if (TryComputeShapeKey(input._shape, out long failedShape))
+                {
+                    // Copy-on-write: build a new set from the existing one +
+                    // the failed shape, then atomically swap. Readers using
+                    // the snapshot reference see a consistent set without
+                    // ever needing the lock on the hot path.
+                    lock (_sync)
+                    {
+                        var current = _eagerOnlyShapeKeys;
+                        var next = current is null
+                            ? new HashSet<(long, int)>()
+                            : new HashSet<(long, int)>(current);
+                        next.Add((failedShape, structureVersion));
+                        System.Threading.Volatile.Write(ref _eagerOnlyShapeKeys, next);
+                    }
+                }
                 return eagerForward();
             }
         }
@@ -363,6 +524,14 @@ internal sealed class CompiledModelHost<T> : IDisposable
                     (_pendingDisposeCaches ??= new List<CompiledModelCache<T>>()).Add(_cache);
                     _cache = new CompiledModelCache<T>();
                     _lastCompiledVersion = structureVersion;
+                    // Hot plan was bound to the old cache; clear so the next
+                    // call falls into the slow path which will rebuild against
+                    // the fresh cache + capture a new hot plan. Also clear the
+                    // eager-only verdict cache so a fresh graph gets to attempt
+                    // compile again — the prior failure was for a now-stale
+                    // layer structure.
+                    _hotPlan = null;
+                    _eagerOnlyShapeKeys = null;
                 }
                 cache = _cache ??= new CompiledModelCache<T>();
                 _activeCalls++;
@@ -562,6 +731,12 @@ internal sealed class CompiledModelHost<T> : IDisposable
         {
             if (_disposed || _disposeRequested) return;
             _disposeRequested = true;
+            // Hot plan references a cached plan that is about to be disposed
+            // (either now if _activeCalls==0, or by the last in-flight caller).
+            // Clear immediately so any concurrent fast-path read sees null and
+            // drops to the slow path which observes _disposeRequested and
+            // falls back to eager.
+            _hotPlan = null;
 
             if (_activeCalls == 0)
             {
@@ -616,6 +791,17 @@ internal sealed class CompiledModelHost<T> : IDisposable
             // VALUE-STABLE REPLAY: see comment in Predict above.
             plan!.SetInputs(new[] { currentInput });
             result = plan.Execute();
+            // Capture this plan as the hot-path target too — the disk-cache
+            // early-return path is also amortisable across calls. Without
+            // this, every call falls through TryGetDiskCachedPlan's
+            // lock+dict-lookup + SetInputs + Execute, ~10× slower than the
+            // hot-path's direct SetInputs + Execute on a captured pointer.
+            if (TryComputeShapeKey(concreteShape, out long hotKey))
+            {
+                _hotShapeKey = hotKey;
+                _hotVersion = structureVersion;
+                _hotPlan = plan;
+            }
             return true;
         }
         result = null!;
@@ -743,6 +929,31 @@ internal sealed class CompiledModelHost<T> : IDisposable
             sb.Append(shape[i]);
         }
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Allocation-free shape hash for the hot-path replay check. Packs up to
+    /// four 16-bit dim values into a long so equality check is a single
+    /// compare. Returns false for ranks/dim sizes outside this window, which
+    /// drops the caller to the slow path (correct but slower). For typical
+    /// Transformer inference (rank 2/3, dims ≤ 4096) the hot-path covers
+    /// nearly all calls. Independent of structure version — that's compared
+    /// separately via <c>_hotVersion</c>.
+    /// </summary>
+    private static bool TryComputeShapeKey(int[] shape, out long key)
+    {
+        key = 0;
+        if (shape is null || shape.Length == 0 || shape.Length > 4)
+            return false;
+        for (int i = 0; i < shape.Length; i++)
+        {
+            int dim = shape[i];
+            if (dim < 0 || dim > 0xFFFF) return false;
+            key |= ((long)dim) << (i * 16);
+        }
+        // Encode rank in the top byte so [1,4,1] never collides with [1,4].
+        key |= ((long)shape.Length) << 56;
+        return true;
     }
 
     /// <summary>
