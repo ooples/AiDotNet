@@ -643,8 +643,10 @@ public class ProgressiveGAN<T> : NeuralNetworkBase<T>
         // Create gradient tensor filled with ones using vectorized Fill
         var ones = CreateFilledTensor(interpolatedOutput._shape, NumOps.One);
 
-        // Compute input gradients for gradient penalty using tape-based autodiff
-        var eng = AiDotNetEngine.Current;
+        // Compute input gradients for gradient penalty using tape-based autodiff.
+        // Use the inherited protected Engine from NeuralNetworkBase rather than
+        // the static singleton.
+        var eng = Engine;
         Tensor<T> inputGradients;
         using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
         {

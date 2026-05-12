@@ -714,6 +714,10 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             var gradientTensor = new Tensor<TLoss>(predictedCpu._shape);
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
 
+            // Nested loss class with no outer reference — falls back to the
+            // singleton. Threading IEngine through the loss constructor is a
+            // bigger refactor; the call site already enforces that GPU mode
+            // requires a DirectGpuTensorEngine.
             var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
             var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
             var gradientGpu = GpuTensorHelper.UploadToGpu<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);

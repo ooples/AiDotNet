@@ -1921,8 +1921,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Reset layer states to ensure clean forward pass
         Discriminator.ResetState();
 
-        // Compute input gradients using tape-based autodiff
-        var eng = AiDotNetEngine.Current;
+        // Compute input gradients using tape-based autodiff. Use the inherited
+        // protected Engine from NeuralNetworkBase rather than the static
+        // singleton so this GAN respects whatever engine the surrounding model
+        // composition was built under.
+        var eng = Engine;
         Tensor<T> inputGradient;
         using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
         {
