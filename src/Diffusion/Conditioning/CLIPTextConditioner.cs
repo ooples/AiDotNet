@@ -142,15 +142,14 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// This is a teaching-grade CLIP text encoder: it implements the embedding lookup,
-    /// position embeddings, layer-norm, residual connections, final projection, and
-    /// applies an attention mask, but the per-block "attention" and "MLP" are linear
-    /// projections rather than full multi-head attention with QKV+softmax. That keeps
-    /// the implementation accessible and avoids pulling in a full transformer stack on
-    /// this side of the diffusion conditioner — but it is intentionally not byte-equal
-    /// to the reference CLIP weights. Treat this as a structurally-correct CLIP that
-    /// trains end-to-end inside AiDotNet, not as a drop-in replacement for OpenAI's
-    /// pretrained CLIP.
+    /// Implements the full CLIP text encoder pipeline: embedding lookup, position
+    /// embeddings, the per-layer transformer block (pre-LN + multi-head scaled
+    /// dot-product attention with Q/K/V/O projections + residual + pre-LN +
+    /// MLP H→4H GELU 4H→H + residual), final layer norm, and the optional
+    /// text-projection head. Attention masks are applied to suppress contributions
+    /// from padding tokens. The architecture follows Radford et al. 2021 §3.1.2.
+    /// Trained end-to-end inside AiDotNet — not byte-equal to OpenAI's pretrained
+    /// weights, but structurally a real CLIP rather than a stand-in.
     /// </para>
     /// </remarks>
     public override Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null)
