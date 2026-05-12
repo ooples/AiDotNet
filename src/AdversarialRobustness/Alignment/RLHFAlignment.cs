@@ -402,10 +402,42 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
     private bool IsHonest(Vector<T> output, Vector<T> input)
     {
-        // Simplified honesty check
-        _ = output;
-        _ = input;
-        return true; // Placeholder
+        // "Honesty" in the 3H-RLHF sense (Bai et al. 2022 "Training a Helpful and
+        // Harmless Assistant with RLHF" §2.2) requires comparing a claim against
+        // ground truth — not derivable from (output, input) alone without a fact
+        // checker or knowledge base. The structural proxy here flags outputs that
+        // are *clearly* not honest engagement with the input: degenerate outputs
+        // (all-NaN, all-Inf, all-zero) and saturated outputs that ignore the input
+        // entirely. Users who need a true honesty signal should plug a trained
+        // checker into the alignment pipeline; the in-line heuristic here is
+        // strictly a structural sanity gate, not an honesty metric.
+        if (output is null || output.Length == 0) return false;
+
+        bool anyFinite = false;
+        double absMax = 0.0;
+        double sumAbs = 0.0;
+        for (int i = 0; i < output.Length; i++)
+        {
+            double v = NumOps.ToDouble(output[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v)) return false;
+            anyFinite = true;
+            double absV = Math.Abs(v);
+            if (absV > absMax) absMax = absV;
+            sumAbs += absV;
+        }
+        if (!anyFinite || sumAbs == 0.0) return false;
+
+        // Input-conditioned engagement: an output uncorrelated with the input
+        // (cosine ≈ 0) and saturated to one extreme is a tell-tale "ignore the
+        // prompt" pattern. Require some non-trivial directional response.
+        if (input is not null && input.Length > 0)
+        {
+            double cos = VectorHelper.CosineSimilarity(output, input);
+            if (Math.Abs(cos) < 1e-6 && absMax > 0.99 * (sumAbs / output.Length))
+                return false;
+        }
+
+        return true;
     }
 
     private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(Vector<T> response)

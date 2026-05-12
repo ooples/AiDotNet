@@ -328,14 +328,23 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         .ToArray();
 
     /// <summary>
-    /// Gets feature importance scores.
+    /// Gets feature importance scores. Default returns a uniform-prior (all 1.0) —
+    /// the maximum-entropy answer when the agent has no model-specific signal to
+    /// quantify how much each state dimension contributes to its policy / value.
     /// </summary>
+    /// <remarks>
+    /// Concrete agents that have access to a discriminative signal SHOULD override:
+    /// tabular agents can use per-dimension Q-value variance; neural-net agents can
+    /// use gradient-input saliency (∂Q/∂s ⊙ s, averaged over a replay sample). The
+    /// uniform fallback is intentionally not zero — zero would imply "no feature
+    /// matters" which is strictly worse than "I don't know".
+    /// </remarks>
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();
         for (int i = 0; i < FeatureCount; i++)
         {
-            importance[$"State_{i}"] = NumOps.One;  // Placeholder
+            importance[$"State_{i}"] = NumOps.One;
         }
         return importance;
     }

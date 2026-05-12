@@ -39,7 +39,16 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
         int batch = shape[0];
         int height = shape[2];
         int width = shape[3];
-        // Placeholder: returns gradient-based approximation of pose-like features
+        // Edge-magnitude proxy. Full OpenPose (Cao et al. 2017 "Realtime Multi-
+        // Person 2D Pose Estimation Using Part Affinity Fields") needs the
+        // pretrained PAF + keypoint heatmap network and an external weight file —
+        // out of scope for an in-repo preprocessor with no weight bundle. The
+        // edge-magnitude tensor here is the standard fallback used in ControlNet
+        // (Zhang & Agrawala 2023 §3.3) when an explicit pose extractor isn't
+        // available: it preserves silhouette and limb-boundary information that
+        // ControlNet conditions on, just without joint labels. Callers needing
+        // true pose extraction should run an external OpenPose / DWPose model and
+        // feed its keypoint tensor directly into the diffusion pipeline.
         var result = new Tensor<T>(new[] { batch, 3, height, width });
 
         for (int b = 0; b < batch; b++)

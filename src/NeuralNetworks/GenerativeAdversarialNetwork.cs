@@ -190,6 +190,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     private bool _useGradientPenalty = false;
 
     /// <summary>
+    /// WGAN-GP penalty coefficient λ. Default 10.0 from Gulrajani et al. 2017 §4
+    /// "Improved Training of Wasserstein GANs"; toggleable via
+    /// <see cref="EnableGradientPenalty(bool, double)"/>.
+    /// </summary>
+    private double _gradientPenaltyLambda = 10.0;
+
+    /// <summary>
     /// Gets or sets whether feature matching is enabled for generator training.
     /// </summary>
     /// <value>True if feature matching should be used; false otherwise.</value>
@@ -1267,6 +1274,23 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
+    /// Enables WGAN-GP gradient penalty and overrides the penalty coefficient.
+    /// </summary>
+    /// <param name="enable">Whether to enable the penalty.</param>
+    /// <param name="lambda">
+    /// Penalty coefficient. Default 10.0 per Gulrajani et al. 2017 §4 — calibrated
+    /// for image domains and shown to be insensitive within [1, 10]. Use a smaller
+    /// value (e.g. 1.0–5.0) for very low-dimensional toy problems.
+    /// </param>
+    public void EnableGradientPenalty(bool enable, double lambda)
+    {
+        _useGradientPenalty = enable;
+        if (lambda <= 0)
+            throw new ArgumentOutOfRangeException(nameof(lambda), "λ must be > 0.");
+        _gradientPenaltyLambda = lambda;
+    }
+
+    /// <summary>
     /// Enables feature matching loss to encourage the generator to match statistics of real data.
     /// </summary>
     /// <param name="enable">Whether to enable feature matching.</param>
@@ -1408,26 +1432,28 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
-    /// Computes the gradient penalty for WGAN-GP.
+    /// Computes the gradient penalty for WGAN-GP using the most recent real / fake
+    /// batches captured during training.
     /// </summary>
-    /// <returns>The gradient penalty value.</returns>
+    /// <returns>The gradient penalty value, or zero if no batches have been observed yet.</returns>
     /// <remarks>
-    /// The gradient penalty enforces the Lipschitz constraint by penalizing deviations
-    /// of the gradient norm from 1 at interpolated points between real and generated samples.
-    /// Formula: λ * E[(||∇D(x̂)||₂ - 1)²] where x̂ = εx + (1-ε)G(z)
+    /// Routes through the public <see cref="ComputeGradientPenalty(Tensor{T}, Tensor{T}, double)"/>
+    /// implementation with the lambda configured via <see cref="EnableGradientPenalty(bool, double)"/>.
+    /// Formula (Gulrajani et al. 2017 Eq. 3): λ · E[(‖∇D(x̂)‖₂ − 1)²] where
+    /// <c>x̂ = εx + (1 − ε)G(z)</c> and <c>ε ~ U(0, 1)</c>. When the GAN has not yet
+    /// observed a training batch (e.g. when <see cref="ComputeAuxiliaryLoss"/> is
+    /// invoked before the first training step) the penalty contribution is zero
+    /// rather than a fabricated constant — that's the only mathematically defensible
+    /// answer in the absence of samples.
     /// </remarks>
     private T ComputeGradientPenalty()
     {
-        // For gradient penalty, we need interpolated samples between real and fake
-        // This is a simplified implementation that returns a placeholder
-        // A full implementation would require:
-        // 1. Interpolate between real and generated samples
-        // 2. Compute discriminator output on interpolated samples
-        // 3. Calculate gradients of discriminator with respect to interpolated samples
-        // 4. Compute (||gradient||_2 - 1)^2
+        var real = _lastRealBatch;
+        var fake = _lastFakeBatch;
+        if (real == null || fake == null)
+            return NumOps.Zero;
 
-        // Placeholder implementation - return small penalty
-        return NumOps.FromDouble(0.01);
+        return ComputeGradientPenalty(real, fake, _gradientPenaltyLambda);
     }
 
     /// <summary>

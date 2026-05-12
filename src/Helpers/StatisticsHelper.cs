@@ -959,6 +959,58 @@ public static class StatisticsHelper<T>
     }
 
     /// <summary>
+    /// Computes the upper-tail (survival-function) p-value of the F-distribution:
+    /// <c>p = P(F &gt; fStatistic | H0)</c>. Used by feature selectors and ANOVA-style
+    /// tests where significance is judged against the right tail.
+    /// </summary>
+    /// <param name="fStatistic">The observed F-statistic (must be ≥ 0).</param>
+    /// <param name="numeratorDf">Numerator degrees of freedom.</param>
+    /// <param name="denominatorDf">Denominator degrees of freedom.</param>
+    /// <returns>p-value in [0, 1].</returns>
+    /// <remarks>
+    /// Equivalent to <c>scipy.stats.f.sf(fStatistic, numeratorDf, denominatorDf)</c>.
+    /// Implemented via the identity <c>1 − I_x(a, b) = I_{1−x}(b, a)</c> with
+    /// <c>x = ν1·F / (ν1·F + ν2)</c>, <c>a = ν1/2</c>, <c>b = ν2/2</c> — this routes
+    /// through the same continued-fraction beta-function code the t and F CDFs already
+    /// use, so the numerical-stability properties are identical.
+    /// </remarks>
+    public static T FDistributionPValue(T fStatistic, int numeratorDf, int denominatorDf)
+    {
+        if (_numOps.LessThanOrEquals(fStatistic, _numOps.Zero) || numeratorDf <= 0 || denominatorDf <= 0)
+            return _numOps.One;
+
+        T _x = _numOps.Divide(
+            _numOps.Multiply(_numOps.FromDouble(numeratorDf), fStatistic),
+            _numOps.Add(_numOps.Multiply(_numOps.FromDouble(numeratorDf), fStatistic), _numOps.FromDouble(denominatorDf)));
+        T _a = _numOps.Divide(_numOps.FromDouble(numeratorDf), _numOps.FromDouble(2));
+        T _b = _numOps.Divide(_numOps.FromDouble(denominatorDf), _numOps.FromDouble(2));
+
+        // Upper-tail probability via the symmetry identity above.
+        return RegularizedIncompleteBetaFunction(_numOps.Subtract(_numOps.One, _x), _b, _a);
+    }
+
+    /// <summary>
+    /// Computes the upper-tail p-value of the chi-square distribution:
+    /// <c>p = P(χ² &gt; chiSquare | H0)</c>. Used by chi-square goodness-of-fit and
+    /// independence tests (e.g., feature-selection scoring).
+    /// </summary>
+    /// <param name="chiSquare">The observed χ² statistic (must be ≥ 0).</param>
+    /// <param name="degreesOfFreedom">Degrees of freedom.</param>
+    /// <returns>p-value in [0, 1].</returns>
+    /// <remarks>
+    /// Equivalent to <c>scipy.stats.chi2.sf(chiSquare, df)</c>. Computed as
+    /// <c>1 − P(df/2, χ²/2)</c> where <c>P</c> is the regularized lower incomplete
+    /// gamma function — reusing the existing <c>GammaRegularized</c> implementation.
+    /// </remarks>
+    public static T ChiSquarePValue(T chiSquare, int degreesOfFreedom)
+    {
+        if (_numOps.LessThanOrEquals(chiSquare, _numOps.Zero) || degreesOfFreedom <= 0)
+            return _numOps.One;
+
+        return _numOps.Subtract(_numOps.One, ChiSquareCDF(chiSquare, degreesOfFreedom));
+    }
+
+    /// <summary>
     /// Calculates a quantile (inverse cumulative distribution function) of the F-distribution.
     /// </summary>
     /// <param name="probability">The probability value (between 0 and 1).</param>

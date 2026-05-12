@@ -143,11 +143,17 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
             }
 
-            // F-statistic
+            // F-statistic with one-way ANOVA degrees of freedom (k-1 numerator,
+            // n-k denominator). The p-value is the right-tail F-distribution
+            // probability — matches scipy.stats.f_classif.
             double msb = ssb / (k - 1);
             double msw = ssw / (n - k);
-            scores[j] = msw > 1e-10 ? msb / msw : 0;
-            _pValues[j] = 0.05; // Placeholder
+            double fStat = msw > 1e-10 ? msb / msw : 0;
+            scores[j] = fStat;
+            _pValues[j] = (k > 1 && n > k && fStat > 0)
+                ? NumOps.ToDouble(StatisticsHelper<T>.FDistributionPValue(
+                      NumOps.FromDouble(fStat), k - 1, n - k))
+                : 1.0;
         }
 
         return scores;
@@ -196,12 +202,18 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 ssResidual += residual * residual;
             }
 
+            // F-test for univariate regression: 1 numerator df (the slope) and
+            // n-2 denominator df (after intercept + slope). Matches
+            // scipy.stats.f_regression's degrees-of-freedom convention.
             double ssRegression = ssTotal - ssResidual;
             double msRegression = ssRegression;
             double msResidual = ssResidual / Math.Max(1, n - 2);
-
-            scores[j] = msResidual > 1e-10 ? msRegression / msResidual : 0;
-            _pValues[j] = 0.05;
+            double fStat = msResidual > 1e-10 ? msRegression / msResidual : 0;
+            scores[j] = fStat;
+            _pValues[j] = (n > 2 && fStat > 0)
+                ? NumOps.ToDouble(StatisticsHelper<T>.FDistributionPValue(
+                      NumOps.FromDouble(fStat), 1, n - 2))
+                : 1.0;
         }
 
         return scores;
@@ -242,8 +254,15 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     chi2 += (kvp.Value - expected) * (kvp.Value - expected) / expected;
             }
 
+            // Pearson chi-square test, df = (#categories - 1). For univariate
+            // tabulation against the target classes there are classSums.Count rows
+            // and one column, so df = classSums.Count - 1.
+            int chi2Df = Math.Max(1, classSums.Count - 1);
             scores[j] = chi2;
-            _pValues[j] = 0.05;
+            _pValues[j] = (chi2 > 0)
+                ? NumOps.ToDouble(StatisticsHelper<T>.ChiSquarePValue(
+                      NumOps.FromDouble(chi2), chi2Df))
+                : 1.0;
         }
 
         return scores;
