@@ -1,11 +1,14 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using System;
@@ -135,8 +138,30 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: outputSize
         );
 
-        // Use LayerHelper for production-ready network
-        var layers = LayerHelper<T>.CreateDefaultDeepQNetworkLayers(architecture);
+        // Build layers. When UseNoisyNetworks is on, swap the final two dense
+        // layers (the value/advantage heads in the dueling architecture) for
+        // NoisyDenseLayer instances per Hessel et al. 2018 §3.4: "We then
+        // replace the linear layers of the dueling architecture with their
+        // noisy equivalents." Keeping the hidden feature extractor
+        // deterministic matches the published RainbowDQN setup and avoids
+        // injecting noise where it isn't paper-required.
+        IEnumerable<ILayer<T>> layers;
+        if (_options.UseNoisyNetworks)
+        {
+            const int hiddenSize = 64;
+            layers = new ILayer<T>[]
+            {
+                new DenseLayer<T>(hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>),
+                new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>),
+                new NoisyDenseLayer<T>(hiddenSize, hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>),
+                new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>),
+                new NoisyDenseLayer<T>(hiddenSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>)
+            };
+        }
+        else
+        {
+            layers = LayerHelper<T>.CreateDefaultDeepQNetworkLayers(architecture);
+        }
 
         var finalArchitecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
