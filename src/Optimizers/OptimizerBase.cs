@@ -3,6 +3,8 @@ global using AiDotNet.Evaluation;
 global using AiDotNet.Models.Inputs;
 using AiDotNet.Helpers;
 using AiDotNet.Caching;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -116,6 +118,21 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// Gradient-based optimizers use this to enable SkipTrainingInEvaluation.
     /// </summary>
     protected virtual void OnInitialTrainingCompleted() { }
+
+    /// <summary>
+    /// Per-axis-0 chunk size used when the optimizer's evaluator path
+    /// (<see cref="CalculateDataSetStatsForOptimizer"/> /
+    /// <see cref="CalculateR2OnlyStatsForOptimizer"/>) routes its
+    /// <c>model.Predict(X)</c> call through
+    /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/>.
+    /// Defaults to <c>256</c> — large enough to amortise per-call overhead on
+    /// small / medium tensors, small enough that a Transformer at
+    /// <c>d=128 / L=4 / heads=4 / ctx=64</c> peaks at ~17 MB of attention
+    /// scores per chunk instead of the multi-GB single-shot allocation that
+    /// surfaced as the second half of #1296. Gradient-based subclasses
+    /// override this to track their <c>BatchSize</c> setting.
+    /// </summary>
+    protected virtual int EvaluationBatchSize => 256;
 
     /// <summary>
     /// Counts the number of consecutive iterations with improvement.
@@ -649,6 +666,43 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// Routes <c>model.Predict(X)</c> through
+    /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/> when
+    /// the model is a tensor-based neural network and <paramref name="X"/> is
+    /// a <see cref="LinearAlgebra.Tensor{T}"/> with a leading axis larger than
+    /// <see cref="EvaluationBatchSize"/>. Eliminates the per-epoch unbatched
+    /// full-dataset forward inside <c>EvaluateModelDirectly</c> — the second
+    /// half of #1296 that PR #1297 left unfixed. Non-tensor inputs and
+    /// non-neural-net models fall through to <c>Predict(X)</c> unchanged, so
+    /// the helper is a no-op for closed-form / tree / linear / clustering
+    /// pipelines.
+    /// </summary>
+    /// <param name="model">The model being evaluated. Caller has already null-checked.</param>
+    /// <param name="X">Input batch — chunked along axis 0 when feasible.</param>
+    /// <returns>Predictions tensor (or whatever <typeparamref name="TOutput"/> is) matching what an unchunked <c>Predict(X)</c> would have returned.</returns>
+    private TOutput PredictForEvaluation(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X)
+    {
+        if (model is NeuralNetworkBase<T> nn
+            && X is Tensor<T> xTensor
+            && xTensor.Rank >= 1
+            && xTensor.Shape[0] > EvaluationBatchSize)
+        {
+            var chunked = nn.PredictInBatches(xTensor, EvaluationBatchSize);
+            if (chunked is TOutput typed)
+            {
+                return typed;
+            }
+            // PredictInBatches always returns Tensor<T>; if TOutput is some
+            // other type the model's own Predict will produce, the cast fails
+            // and we transparently fall through to the unchunked path so
+            // semantics stay identical for every non-Tensor<T> output type.
+        }
+        return model.Predict(X);
+    }
+
+    /// <summary>
     /// Lightweight stats helper: computes R² only (the metric FitDetector reads) for a
     /// dataset, skipping the expensive PredictionStats / ErrorStats / BasicStats
     /// construction. The Predict call still happens because R² requires per-sample
@@ -672,7 +726,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             };
         }
 
-        var predictions = model.Predict(X);
+        var predictions = PredictForEvaluation(model, X);
         if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
         {
             return new DataSetStats<T, TInput, TOutput>
@@ -739,7 +793,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             };
         }
 
-        var predictions = model.Predict(X);
+        var predictions = PredictForEvaluation(model, X);
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
 
         if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))

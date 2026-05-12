@@ -2665,6 +2665,74 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Chunked inference path: splits <paramref name="input"/> along axis 0
+    /// into slices of size <paramref name="batchSize"/>, runs <see cref="Predict"/>
+    /// on each slice, and concatenates the per-slice outputs back along axis 0.
+    /// Output shape matches what <c>Predict(input)</c> would have produced —
+    /// chunking is a memory-bounding refactor of the same forward computation,
+    /// not a semantic change. Single-chunk inputs short-circuit to a direct
+    /// <see cref="Predict"/> call.
+    /// </summary>
+    /// <param name="input">Batched input tensor with at least one axis-0 sample.</param>
+    /// <param name="batchSize">Maximum samples per forward pass. Clamped to <c>≥ 1</c>.</param>
+    /// <remarks>
+    /// Use this in any caller that may receive a full-dataset tensor and
+    /// would otherwise allocate O(N · seq²) attention scores in one shot —
+    /// optimizer evaluators, cross-validation predict, AutoML, etc. The
+    /// chunked path eliminates the OOM surface described in #1296 (and the
+    /// sibling-bug audit at the Predict-eval site) for Transformer-class
+    /// models while leaving small-batch calls (the common case) unchanged.
+    ///
+    /// Layers that maintain per-sample state across batch elements (none of
+    /// the canonical Dense/Conv/Attention/Norm layers do — they treat
+    /// axis-0 as i.i.d. samples) would observe different behaviour vs a
+    /// single big forward. Callers that build such layers must opt out by
+    /// invoking <see cref="Predict"/> directly. This is the same contract
+    /// PyTorch eval-mode forward implies when iterating a DataLoader.
+    /// </remarks>
+    public virtual Tensor<T> PredictInBatches(Tensor<T> input, int batchSize)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (batchSize < 1) batchSize = 1;
+
+        // A rank-0 / unbatched-leading tensor has no meaningful axis-0
+        // chunking semantics — fall through to plain Predict and let the
+        // existing batch-dim promotion path inside Predict handle it.
+        if (input.Rank == 0 || input.Shape[0] <= batchSize)
+        {
+            return Predict(input);
+        }
+
+        int n = input.Shape[0];
+        int nChunks = (n + batchSize - 1) / batchSize;
+        var perChunkOutputs = new Tensor<T>[nChunks];
+
+        for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
+        {
+            int start = chunkIdx * batchSize;
+            int end = Math.Min(start + batchSize, n);
+            var chunk = SliceAlongAxis0(input, start, end);
+            perChunkOutputs[chunkIdx] = Predict(chunk);
+        }
+
+        return Tensor<T>.Concatenate(perChunkOutputs, axis: 0);
+    }
+
+    /// <summary>
+    /// Axis-0 slice helper for <see cref="PredictInBatches"/>: returns
+    /// <c>input[start..end, …]</c> as a contiguous tensor. Uses the
+    /// O(1) <see cref="Tensor{T}.Slice(int, int, int?)"/> view and
+    /// materialises it with <see cref="Tensor{T}.Contiguous"/> so downstream
+    /// engine ops (BLAS GEMM, attention SDP, etc.) that assume contiguous
+    /// storage observe a strict copy of the slice, not a strided view into
+    /// the parent.
+    /// </summary>
+    private static Tensor<T> SliceAlongAxis0(Tensor<T> input, int start, int end)
+    {
+        return input.Slice(axis: 0, start: start, end: end).Contiguous();
+    }
+
+    /// <summary>
     /// Read-only counterpart to <see cref="NormalizeBatchDim"/> for the
     /// inference path: only the input is shape-normalized; targets aren't
     /// involved in Predict. Returns the original tensor if the architecture
