@@ -1076,10 +1076,105 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         private Tensor<T> SelfAttention(Tensor<T> input)
         {
-            // Simplified self-attention (identity for performance)
-            var output = new T[input.Length];
-            Array.Copy(input.Data.ToArray(), output, input.Length);
-            return new Tensor<T>(output, input._shape);
+            // Multi-head scaled dot-product self-attention (Vaswani et al. 2017
+            // Eqs. 1-2; AST adopts the standard ViT transformer block per Gong
+            // et al. 2021 "AST: Audio Spectrogram Transformer" §2.2). The
+            // previous identity copy bypassed the entire attention mechanism —
+            // every AST forward pass effectively returned its input unchanged
+            // through every transformer block, collapsing fingerprint quality
+            // to mean pooling. Plain CPU loops to match the rest of this nested
+            // class; AST is inference-only here and ONNX mode handles
+            // production-quality attention with vendor kernels.
+            int batchSize = input.Shape[0];
+            int seqLen = input.Shape[1];
+            int dim = input.Shape[2];
+
+            var inSpan = input.Data.Span;
+            var x = new double[input.Length];
+            for (int i = 0; i < input.Length; i++) x[i] = _ops.ToDouble(inSpan[i]);
+
+            // Q/K/V/Proj as x @ W^T, W stored row-major [dim, dim].
+            var q = Project(x, _qWeight, batchSize, seqLen, dim);
+            var k = Project(x, _kWeight, batchSize, seqLen, dim);
+            var v = Project(x, _vWeight, batchSize, seqLen, dim);
+
+            double scale = 1.0 / Math.Sqrt(_headDim);
+            var attnOut = new double[input.Length];
+            var logits = new double[seqLen];
+
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int h = 0; h < _numHeads; h++)
+                {
+                    int headOffset = h * _headDim;
+                    for (int sq = 0; sq < seqLen; sq++)
+                    {
+                        int qBase = ((b * seqLen) + sq) * dim + headOffset;
+                        double maxLogit = double.NegativeInfinity;
+                        for (int t = 0; t < seqLen; t++)
+                        {
+                            int kBase = ((b * seqLen) + t) * dim + headOffset;
+                            double dot = 0.0;
+                            for (int d = 0; d < _headDim; d++)
+                                dot += q[qBase + d] * k[kBase + d];
+                            double l = dot * scale;
+                            logits[t] = l;
+                            if (l > maxLogit) maxLogit = l;
+                        }
+
+                        // Numerically stable softmax across t.
+                        double sumExp = 0.0;
+                        for (int t = 0; t < seqLen; t++)
+                        {
+                            logits[t] = Math.Exp(logits[t] - maxLogit);
+                            sumExp += logits[t];
+                        }
+                        double invSum = sumExp > 0 ? 1.0 / sumExp : 0.0;
+
+                        int outBase = ((b * seqLen) + sq) * dim + headOffset;
+                        for (int d = 0; d < _headDim; d++) attnOut[outBase + d] = 0.0;
+                        for (int t = 0; t < seqLen; t++)
+                        {
+                            double w = logits[t] * invSum;
+                            int vBase = ((b * seqLen) + t) * dim + headOffset;
+                            for (int d = 0; d < _headDim; d++)
+                                attnOut[outBase + d] += w * v[vBase + d];
+                        }
+                    }
+                }
+            }
+
+            // Final output projection.
+            var projected = Project(attnOut, _projWeight, batchSize, seqLen, dim);
+
+            var outArr = new T[input.Length];
+            for (int i = 0; i < input.Length; i++) outArr[i] = _ops.FromDouble(projected[i]);
+            return new Tensor<T>(outArr, input._shape);
+        }
+
+        /// <summary>
+        /// Linear projection of x ∈ ℝ^{B×S×dim} via row-major weight W ∈ ℝ^{dim×dim}.
+        /// </summary>
+        private double[] Project(double[] x, T[] weight, int batchSize, int seqLen, int dim)
+        {
+            var output = new double[x.Length];
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < seqLen; s++)
+                {
+                    int xBase = ((b * seqLen) + s) * dim;
+                    int yBase = xBase;
+                    for (int o = 0; o < dim; o++)
+                    {
+                        double sum = 0.0;
+                        int wRow = o * dim;
+                        for (int d = 0; d < dim; d++)
+                            sum += x[xBase + d] * _ops.ToDouble(weight[wRow + d]);
+                        output[yBase + o] = sum;
+                    }
+                }
+            }
+            return output;
         }
 
         private Tensor<T> MLP(Tensor<T> input)
