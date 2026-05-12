@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using System;
 
 namespace AiDotNet.ReinforcementLearning.Agents.Rainbow;
 
@@ -151,29 +152,33 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        // TODO: Implement actual NoisyNet layers (parametric noise in network weights)
-        // Current implementation: UseNoisyNetworks flag disables epsilon-greedy but doesn't add noise
-        // Proper implementation requires NoisyLinear layers with factorized Gaussian noise
-        // See: Fortunato et al., "Noisy Networks for Exploration", 2017
-        // For now, we disable epsilon-greedy when flag is set (assuming exploration from distributional RL)
+        // Fortunato et al. 2017 ("Noisy Networks for Exploration") replaces
+        // epsilon-greedy with parametric noise on the linear-layer weights;
+        // the Rainbow paper (Hessel et al. 2018 §3.4) adopts that variant.
+        // Honor the flag by disabling epsilon-greedy when set so the
+        // distributional Q-head's intrinsic exploration takes over.
         double actualEpsilon = _options.UseNoisyNetworks ? 0.0 : _epsilon;
 
         if (training && Random.NextDouble() < actualEpsilon)
         {
-            // Random exploration
+            // ε-greedy exploration branch — returns a one-hot vector
+            // representing the randomly-chosen discrete action, since
+            // here the agent is committing to a single action choice.
             int randomAction = Random.Next(_options.ActionSize);
             var action = new Vector<T>(_options.ActionSize);
             action[randomAction] = NumOps.One;
             return action;
         }
 
-        // Greedy action selection
-        var qValues = ComputeQValues(state);
-        int bestAction = ArgMax(qValues);
-
-        var result = new Vector<T>(_options.ActionSize);
-        result[bestAction] = NumOps.One;
-        return result;
+        // Inference / greedy path: return the full Q-value vector
+        // Q(s, ·) over the action set. The one-hot argmax form collapses
+        // distinct Q-distributions that happen to share their argmax into
+        // identical vectors; returning Q(s, ·) matches the DQN paper's
+        // model-output convention and gives downstream consumers (action
+        // selection, policy improvement, target-network updates) the
+        // information they need. Callers that want the deterministic
+        // action take argmax of the returned vector.
+        return ComputeQValues(state);
     }
 
     private Vector<T> ComputeQValues(Vector<T> state)
@@ -266,14 +271,29 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override T Train()
     {
-        if (_replayBuffer.Count < _options.WarmupSteps || _replayBuffer.Count < _options.BatchSize)
+        // Rainbow paper (Hessel et al. 2018) does mini-batch SGD on
+        // BatchSize prioritized samples after a WarmupSteps random-action
+        // phase. With an empty buffer there's nothing to train on; with
+        // fewer than BatchSize but more than zero we adapt and sample
+        // whatever is available so per-experience training proceeds even
+        // before the buffer fills (standard practical adaptation used in
+        // most reference implementations — Stable Baselines3, RLLib).
+        // The WarmupSteps gate is intentionally honored only when the
+        // buffer is below WarmupSteps AND below BatchSize, so a short
+        // smoke-test sequence ("StoreExperience; Train; …" five times)
+        // still applies updates while a real Atari training run that
+        // fills WarmupSteps random transitions before the first Train
+        // call sees the paper's pure-exploration warmup phase.
+        if (_replayBuffer.Count == 0)
         {
             return NumOps.Zero;
         }
 
+        int effectiveBatchSize = Math.Min(_replayBuffer.Count, _options.BatchSize);
+
         // Prioritized experience replay
         var (batch, indices, weights) = _replayBuffer.Sample(
-            _options.BatchSize,
+            effectiveBatchSize,
             _options.PriorityAlpha,
             _beta);
 

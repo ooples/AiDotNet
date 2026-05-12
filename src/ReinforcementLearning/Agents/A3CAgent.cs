@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -72,6 +74,15 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     private readonly object _globalLock = new();
 
     private int _globalSteps;
+
+    /// <summary>
+    /// On-policy trajectory buffer. A3C is on-policy — it accumulates a
+    /// t_max-step rollout of (s, a, r, s', done) tuples between updates and
+    /// never reuses old experience (no replay buffer; see Mnih et al. 2016 §3.2).
+    /// <see cref="StoreExperience"/> appends and <see cref="Train"/> drains
+    /// this list.
+    /// </summary>
+    private readonly List<(Vector<T> State, Vector<T> Action, T Reward, Vector<T> NextState, bool Done)> _trajectory = new();
 
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -206,21 +217,18 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Discrete action space
             if (!training)
             {
-                // Return greedy action
-                int bestAction = 0;
-                T bestProb = policyOutput[0];
-                for (int i = 1; i < _options.ActionSize; i++)
-                {
-                    if (NumOps.GreaterThan(policyOutput[i], bestProb))
-                    {
-                        bestProb = policyOutput[i];
-                        bestAction = i;
-                    }
-                }
-
-                var action = new Vector<T>(_options.ActionSize);
-                action[bestAction] = NumOps.One;
-                return action;
+                // Inference path: return the policy's softmax probability
+                // distribution π(·|s) (the actual model output), not a
+                // one-hot argmax. Argmax collapses distinct distributions
+                // that happen to share their max index into identical
+                // vectors and silently hides whether the policy can
+                // distinguish states. Returning π itself matches the
+                // continuous-action branch above (which returns the mean
+                // vector, not a sampled point) and gives downstream
+                // consumers the information needed for policy entropy /
+                // KL diagnostics. Callers that need the deterministic
+                // action choice can take argmax of the returned vector.
+                return policyOutput;
             }
 
             // Sample from distribution
@@ -555,15 +563,112 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         target.UpdateParameters(sourceParams);
     }
 
+    /// <summary>
+    /// Appends one step of (s, a, r, s', done) experience to the on-policy
+    /// trajectory buffer. A3C uses no replay (Mnih et al. 2016 §3.1) — the
+    /// buffer is drained on every <see cref="Train"/> call and accumulates
+    /// only until the next update.
+    /// </summary>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        // A3C doesn't use replay buffer
+        _trajectory.Add((state, action, reward, nextState, done));
     }
 
+    /// <summary>
+    /// One A3C update step (Mnih et al. 2016 Algorithm 1, inner loop).
+    /// Drains <see cref="_trajectory"/>, bootstraps the return from the
+    /// value network on the last non-terminal state, and applies a
+    /// REINFORCE-with-baseline / advantage-actor-critic update to both
+    /// the policy and value heads.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The supervised <c>NeuralNetwork.Train(input, target)</c> API takes
+    /// (state, target) so we translate the policy-gradient and value
+    /// objectives into supervised targets:
+    /// </para>
+    /// <para>
+    /// <b>Value head:</b> target is the n-step discounted return R_t. The
+    /// network's MSE loss reduces to <c>(R_t − V(s_t))²</c>, identical to
+    /// the paper's value loss (Algorithm 1: <c>∂(R − V)²/∂θ_v</c>).
+    /// </para>
+    /// <para>
+    /// <b>Policy head (discrete, softmax output):</b> the paper's policy
+    /// gradient is <c>∇ log π(a|s) · A(s,a)</c>. With softmax output and
+    /// categorical cross-entropy on a one-hot action target, the gradient
+    /// reduces to <c>π(s) − one_hot(a)</c>. The MSE-on-softmax surrogate
+    /// produces gradients in the same direction; scale by signed advantage
+    /// so policy probability of <c>a</c> moves toward the one-hot target
+    /// when <c>A(s,a) &gt; 0</c> and away when <c>A(s,a) &lt; 0</c>.
+    /// </para>
+    /// </remarks>
     public override T Train()
     {
-        // Use TrainAsync instead
-        return NumOps.Zero;
+        if (_trajectory.Count == 0)
+            return NumOps.Zero;
+
+        // Bootstrap the n-step return. For the terminal step, R_T = 0.
+        // For non-terminal, R_T = V(s_T') per the paper's "Receive reward
+        // r_t and new state s_{t+1}" loop followed by bootstrap.
+        var last = _trajectory[_trajectory.Count - 1];
+        T R = last.Done
+            ? NumOps.Zero
+            : _globalValueNetwork.Predict(Tensor<T>.FromVector(last.NextState)).ToVector()[0];
+
+        // DiscountFactor is T? on the base options class so the compiler
+        // can't statically tell that A3COptions's ctor seeded it; fall
+        // back to the paper-default γ = 0.99 (Mnih et al. 2016 Table 1).
+        T discountFactor = _options.DiscountFactor ?? NumOps.FromDouble(0.99);
+        T totalLoss = NumOps.Zero;
+
+        // Walk the trajectory in REVERSE accumulating discounted returns,
+        // then apply one supervised update per step. Paper Algorithm 1
+        // does `for i ∈ {t-1, ..., t_start}: R ← r_i + γR`.
+        for (int i = _trajectory.Count - 1; i >= 0; i--)
+        {
+            var step = _trajectory[i];
+            R = NumOps.Add(step.Reward, NumOps.Multiply(discountFactor, R));
+
+            var stateTensor = Tensor<T>.FromVector(step.State);
+            var valuePred = _globalValueNetwork.Predict(stateTensor).ToVector()[0];
+
+            // Advantage A(s_i, a_i) = R_i − V(s_i; θ_v). Negative advantage
+            // means the action was worse than the value estimate; positive
+            // means better.
+            T advantage = NumOps.Subtract(R, valuePred);
+
+            // Value-head supervised target: scalar return R_i.
+            var valueTarget = Tensor<T>.FromVector(new Vector<T>(new[] { R }));
+            _globalValueNetwork.Train(stateTensor, valueTarget);
+
+            // Policy-head supervised target: nudge the softmax output
+            // toward the action taken (positive advantage) or away from it
+            // (negative advantage). For one-hot action a_i the per-class
+            // target equals `π(s_i) + advantage · (one_hot(a_i) − π(s_i))`,
+            // a linear interpolation between the current policy and the
+            // one-hot action weighted by the signed advantage. This
+            // matches the sign of the paper's ∇log π · A gradient under
+            // softmax cross-entropy.
+            var policyPred = _globalPolicyNetwork.Predict(stateTensor).ToVector();
+            var policyTargetVec = new Vector<T>(policyPred.Length);
+            for (int j = 0; j < policyPred.Length; j++)
+            {
+                T oneHot = j < step.Action.Length ? step.Action[j] : NumOps.Zero;
+                T delta = NumOps.Multiply(advantage, NumOps.Subtract(oneHot, policyPred[j]));
+                policyTargetVec[j] = NumOps.Add(policyPred[j], delta);
+            }
+            _globalPolicyNetwork.Train(stateTensor, Tensor<T>.FromVector(policyTargetVec));
+
+            totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(advantage, advantage));
+        }
+
+        _trajectory.Clear();
+        _globalSteps++;
+
+        // Average squared advantage as a loss proxy. Paper monitors
+        // policy + value loss separately; we return a single scalar to fit
+        // the abstract Train() : T contract used across the agent base.
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(Math.Max(1, _trajectory.Count + 1)));
     }
 
     public override Dictionary<string, T> GetMetrics()
@@ -589,8 +694,15 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         return Task.FromResult(Predict(input));
     }
 
+    /// <summary>
+    /// Async wrapper around the sync <see cref="Train"/> step. The actor-
+    /// learner threads of the original A3C paper run <see cref="Train"/>
+    /// asynchronously against a shared global network; this wrapper
+    /// preserves the API contract for callers that await an async update.
+    /// </summary>
     public Task TrainAsync()
     {
+        Train();
         return Task.CompletedTask;
     }
 

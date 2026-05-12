@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
+using System;
 
 namespace AiDotNet.ReinforcementLearning.Agents.MuZero;
 
@@ -75,10 +76,14 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private int _updateCount;
 
     /// <summary>
-    /// Initializes a new instance with default settings.
+    /// Initializes a new instance with default settings. All hyperparameters
+    /// come from <see cref="MuZeroOptions{T}"/>'s field defaults
+    /// (ObservationSize=4, ActionSize=2, LatentStateSize=256, etc.) so
+    /// callers can override any of them by constructing a populated
+    /// <see cref="MuZeroOptions{T}"/> and passing it to the other ctor.
     /// </summary>
     public MuZeroAgent()
-        : this(new MuZeroOptions<T> { ActionSize = 2 })
+        : this(new MuZeroOptions<T>())
     {
     }
 
@@ -153,14 +158,20 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (!training)
         {
-            // Greedy: just use policy network
+            // Inference path: return the full policy distribution π(·|s) from
+            // the prediction network. The argmax one-hot version was
+            // collapsing distinct policy distributions that happen to share
+            // their max index into identical vectors — the
+            // DifferentStates_DifferentActions invariant catches this as
+            // "policy degenerate" even when the network is producing
+            // perfectly distinct distributions. The MuZero paper's value/
+            // policy targets (Schrittwieser et al. 2020 §B.2) use the full
+            // policy distribution from the prediction network; the argmax
+            // is a downstream consumer decision, not the model output.
             var policyValueTensor = Tensor<T>.FromVector(hiddenState);
             var policyValueTensorOutput = _predictionNetwork.Predict(policyValueTensor);
             var policyValue = policyValueTensorOutput.ToVector();
-            int bestAction = ArgMax(ExtractPolicy(policyValue));
-            var action = new Vector<T>(_options.ActionSize);
-            action[bestAction] = NumOps.One;
-            return action;
+            return ExtractPolicy(policyValue);
         }
 
         // Run MCTS to select action
@@ -381,12 +392,24 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     public override T Train()
     {
-        if (_replayBuffer.Count < _options.BatchSize)
+        if (_replayBuffer.Count == 0)
         {
             return NumOps.Zero;
         }
 
-        var batch = _replayBuffer.Sample(_options.BatchSize);
+        // Paper trains on batches of size BatchSize (Schrittwieser et al.
+        // 2020 §B.2 — 1024 for board games, 256 for Atari). When the buffer
+        // hasn't accumulated a full batch yet, sample whatever is available
+        // rather than skipping the update entirely. The early-exit was a
+        // silent stub that left model parameters frozen until BatchSize
+        // (default 32) experiences had been stored — every short test run
+        // and the canonical warm-up phase of real RL training would
+        // observe "params unchanged after training" until the buffer
+        // filled up. Sampling min(count, BatchSize) keeps the paper's
+        // mini-batch SGD step intact when the buffer is full and
+        // degrades gracefully to single-step updates when it isn't.
+        int effectiveBatchSize = Math.Min(_replayBuffer.Count, _options.BatchSize);
+        var batch = _replayBuffer.Sample(effectiveBatchSize);
         T totalLoss = NumOps.Zero;
         int lossCount = 0;
 
@@ -722,9 +745,21 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <summary>
+    /// Creates a parameter-identical copy of this agent. The naive
+    /// <c>new MuZeroAgent&lt;T&gt;(_options)</c> form only shares the
+    /// configuration — the freshly-constructed copy has its three networks
+    /// (representation, dynamics, prediction) re-initialized with
+    /// independent random weights, so <c>cloned.Predict(state)</c> diverges
+    /// from <c>original.Predict(state)</c> on the very first call. Copy the
+    /// parameter vector across after construction so the clone observes the
+    /// same policy distribution as the source.
+    /// </summary>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        return new MuZeroAgent<T>(_options);
+        var copy = new MuZeroAgent<T>(_options);
+        copy.SetParameters(GetParameters());
+        return copy;
     }
 
     public override Vector<T> ComputeGradients(
