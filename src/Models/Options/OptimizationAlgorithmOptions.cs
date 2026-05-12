@@ -103,14 +103,30 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     public virtual double InitialLearningRate { get; set; } = 0.01;
 
     /// <summary>
-    /// Gets or sets whether to automatically adjust the learning rate during training.
+    /// Gets or sets whether to automatically adjust the learning rate during training
+    /// based on per-epoch fitness improvement (see
+    /// <see cref="OptimizerBase{T,TInput,TOutput}.UpdateAdaptiveParameters"/>).
     /// </summary>
-    /// <value>True to use adaptive learning rate (default), false otherwise.</value>
+    /// <value>False by default — matches Kingma &amp; Ba (Adam 2014) and PyTorch / TensorFlow / Keras defaults, which use a fixed LR unless an explicit scheduler is attached.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> When enabled, the algorithm will automatically adjust how fast it learns
-    /// based on its progress. It's like slowing down when you're getting close to your destination.</para>
+    /// based on its progress between optimization epochs. It's like slowing down when you're getting close to your destination.</para>
+    /// <para><b>Why false by default:</b>
+    /// (1) Matches the original Adam paper (Kingma &amp; Ba 2014) and every major
+    ///     framework's default — adaptive LR is opt-in via an explicit
+    ///     <c>ILearningRateScheduler</c>.
+    /// (2) Adaptive LR fires only inside <c>Optimize()</c>'s outer epoch loop;
+    ///     it never runs when callers invoke <c>Train(input, target)</c>
+    ///     directly. The previous <c>true</c> default therefore provided no
+    ///     functional benefit on per-step <c>Train()</c> callers (the common
+    ///     test-suite and inference-loop pattern).
+    /// (3) Unlocks <see cref="Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>,
+    ///     which bakes the LR into the compiled plan and is gated off when
+    ///     <c>UseAdaptiveLearningRate</c> is true. The fused-compiled path
+    ///     fuses forward + backward + Adam update in one kernel and runs
+    ///     5-10× faster than the eager autograd tape on paper-scale CNNs.</para>
     /// </remarks>
-    public bool UseAdaptiveLearningRate { get; set; } = true;
+    public bool UseAdaptiveLearningRate { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the rate at which the learning rate decreases over time.

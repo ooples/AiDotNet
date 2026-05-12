@@ -12,10 +12,12 @@ namespace AiDotNet.Tools.ResNetPerfHarness;
 internal static class Program
 {
     private const string UsageText =
-        "Usage: ResNetPerfHarness [--warmup N] [--iters N] [--model NAME]\n" +
+        "Usage: ResNetPerfHarness [--warmup N] [--iters N] [--model NAME] [--dtype double|float]\n" +
         "  --warmup N   Number of warm-up training iterations (default: 1).\n" +
         "  --iters  N   Number of measured training iterations (default: 3).\n" +
-        "  --model NAME One of: resnet50, vgg11, hope, sgpt, siglip2-ctor, sd15-ctor, t5xxl-ctor (default: resnet50).\n" +
+        "  --model NAME One of: resnet50, vgg11, vgg16bn, hope, sgpt, siglip2-ctor, sd15-ctor, t5xxl-ctor (default: resnet50).\n" +
+        "  --dtype TYPE One of: double, float (default: double). Models that support float run via the fused-compiled\n" +
+        "               training path which is typically 5-10× faster than the eager autograd tape on CNNs.\n" +
         "  --help, -h   Show this message and exit.";
 
     private static int Main(string[] args)
@@ -23,6 +25,7 @@ internal static class Program
         int warmup = 1;
         int iters = 3;
         string model = "resnet50";
+        string dtype = "double";
         for (int i = 0; i < args.Length; i++)
         {
             string flag = args[i];
@@ -43,6 +46,15 @@ internal static class Program
                     if (!TryTakeStringArg(args, ref i, flag, out var modelArg)) return 2;
                     model = modelArg.ToLowerInvariant();
                     break;
+                case "--dtype":
+                    if (!TryTakeStringArg(args, ref i, flag, out var dtypeArg)) return 2;
+                    dtype = dtypeArg.ToLowerInvariant();
+                    if (dtype != "double" && dtype != "float")
+                    {
+                        Console.Error.WriteLine($"[harness] error: --dtype expects 'double' or 'float', got '{dtype}'.");
+                        return 2;
+                    }
+                    break;
                 default:
                     Console.Error.WriteLine($"[harness] error: unknown argument '{flag}'.");
                     Console.Error.WriteLine(UsageText);
@@ -50,7 +62,20 @@ internal static class Program
             }
         }
 
-        Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters}");
+        if (dtype == "float")
+        {
+            return RunFloat(model, warmup, iters);
+        }
+
+        Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters} dtype={dtype}");
+        Console.WriteLine(
+            $"[harness] TensorCodecOptions.EnableCompilation = " +
+            $"{AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation}");
+
+        // Surface CompiledTapeTrainingStep.TryStepWithFusedOptimizer Trace
+        // warnings to the console so fused-path compile failures aren't
+        // silently swallowed during a harness run.
+        Trace.Listeners.Add(new ConsoleTraceListener());
         using var arena = TensorArena.Create();
         var (net, input, target) = Build(model);
         Console.WriteLine($"[harness] ParameterCount={net.ParameterCount}, Layers={net.Layers.Count}");
@@ -90,7 +115,119 @@ internal static class Program
         }
         double avg = (double)total / iters;
         Console.WriteLine($"[harness] avg over {iters} iters: {avg:F1} ms");
+
+        // Diagnostic: did the fused-compiled training path engage? Non-zero
+        // count = forward+backward+optimizer-step ran inside the compiled plan.
+        // Zero count after iters Train() calls = every step fell back to the
+        // eager autograd-tape path, which is typically 5-10x slower for
+        // paper-scale CNNs and is the single biggest perf knob on these
+        // tests (see VGGNetwork bottleneck analysis on PR #1299).
+        long fusedSteps = AiDotNet.Training.CompiledTapeTrainingStep<double>.GetFusedStepCount();
+        Console.WriteLine(
+            fusedSteps > 0
+                ? $"[harness] fused-compiled training path engaged on {fusedSteps} step(s) of {warmup + iters} total"
+                : $"[harness] fused-compiled training path did NOT engage — every step ran on the eager tape (see TryStepWithFusedOptimizer gates)");
+
         return 0;
+    }
+
+    private static int RunFloat(string model, int warmup, int iters)
+    {
+        Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters} dtype=float");
+        Console.WriteLine(
+            $"[harness] TensorCodecOptions.EnableCompilation = " +
+            $"{AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation}");
+        Trace.Listeners.Add(new ConsoleTraceListener());
+        using var arena = TensorArena.Create();
+        var (net, input, target) = BuildFloat(model);
+        Console.WriteLine($"[harness] ParameterCount={net.ParameterCount}, Layers={net.Layers.Count}");
+
+        double L2() { double s = 0; foreach (var c in net.GetParameterChunks()) for (int i = 0; i < c.Length; i++) s += (double)c[i] * c[i]; return Math.Sqrt(s); }
+        double LossNow()
+        {
+            var o = net.Predict(input);
+            double s = 0; int len = Math.Min(o.Length, target.Length);
+            for (int i = 0; i < len; i++) { double d = (double)o[i] - target[i]; s += d * d; }
+            return s / len;
+        }
+        bool HasNaN()
+        {
+            foreach (var c in net.GetParameterChunks())
+                for (int i = 0; i < c.Length; i++) if (float.IsNaN(c[i]) || float.IsInfinity(c[i])) return true;
+            return false;
+        }
+
+        Console.WriteLine($"[harness] init: L2={L2():F4} loss={LossNow():F6}");
+        for (int w = 0; w < warmup; w++)
+        {
+            var sw = Stopwatch.StartNew();
+            net.Train(input, target);
+            sw.Stop();
+            Console.WriteLine($"[harness] warmup#{w + 1}: {sw.ElapsedMilliseconds} ms  L2={L2():F4}  loss={LossNow():F6}  hasNaN={HasNaN()}");
+        }
+
+        long total = 0;
+        for (int i = 0; i < iters; i++)
+        {
+            var sw = Stopwatch.StartNew();
+            net.Train(input, target);
+            sw.Stop();
+            total += sw.ElapsedMilliseconds;
+            Console.WriteLine($"[harness] iter#{i + 1}: {sw.ElapsedMilliseconds,5} ms  L2={L2():F4}  loss={LossNow():F6}  hasNaN={HasNaN()}");
+        }
+        double avg = (double)total / iters;
+        Console.WriteLine($"[harness] avg over {iters} iters: {avg:F1} ms");
+
+        long fusedSteps = AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount();
+        Console.WriteLine(
+            fusedSteps > 0
+                ? $"[harness] fused-compiled training path engaged on {fusedSteps} step(s) of {warmup + iters} total"
+                : $"[harness] fused-compiled training path did NOT engage — every step ran on the eager tape (see TryStepWithFusedOptimizer gates)");
+
+        return 0;
+    }
+
+    private static (NeuralNetworkBase<float> net, Tensor<float> input, Tensor<float> target) BuildFloat(string model)
+    {
+        var rng = RandomHelper.CreateSeededRandom(42);
+        switch (model)
+        {
+            case "vgg16bn":
+            {
+                var net = new VGGNetwork<float>();
+                var input = new Tensor<float>(new[] { 1, 3, 224, 224 });
+                for (int i = 0; i < input.Length; i++) input[i] = (float)rng.NextDouble();
+                var target = new Tensor<float>(new[] { 1000 });
+                for (int i = 0; i < target.Length; i++) target[i] = (float)rng.NextDouble();
+                return (net, input, target);
+            }
+            case "vgg11":
+            {
+                var arch = new NeuralNetworkArchitecture<float>(
+                    inputType: InputType.ThreeDimensional,
+                    taskType: NeuralNetworkTaskType.MultiClassClassification,
+                    inputHeight: 32, inputWidth: 32, inputDepth: 3,
+                    outputSize: 10);
+                var config = VGGConfiguration.CreateForCIFAR(VGGVariant.VGG11, numClasses: 10);
+                var net = new VGGNetwork<float>(arch, config);
+                var input = new Tensor<float>(new[] { 1, 3, 32, 32 });
+                for (int i = 0; i < input.Length; i++) input[i] = (float)rng.NextDouble();
+                var target = new Tensor<float>(new[] { 10 });
+                for (int i = 0; i < target.Length; i++) target[i] = (float)rng.NextDouble();
+                return (net, input, target);
+            }
+            case "resnet50":
+            {
+                var net = new ResNetNetwork<float>();
+                var input = new Tensor<float>(new[] { 1, 3, 224, 224 });
+                for (int i = 0; i < input.Length; i++) input[i] = (float)rng.NextDouble();
+                var target = new Tensor<float>(new[] { 1000 });
+                for (int i = 0; i < target.Length; i++) target[i] = (float)rng.NextDouble();
+                return (net, input, target);
+            }
+            default:
+                throw new ArgumentException($"BuildFloat does not yet wire up model '{model}'. Add a case mirroring the Build switch.");
+        }
     }
 
     private static (NeuralNetworkBase<double> net, Tensor<double> input, Tensor<double> target) Build(string model)
@@ -119,6 +256,27 @@ internal static class Program
                 var input = new Tensor<double>(new[] { 1, 3, 32, 32 });
                 for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
                 var target = new Tensor<double>(new[] { 10 });
+                for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
+                return (net, input, target);
+            }
+            case "vgg16bn":
+            {
+                // Paper-scale VGG16-BN per Simonyan & Zisserman 2014: 224×224×3
+                // ImageNet input → 1000 classes. Same shape the parameterless
+                // VGGNetwork() ctor produces and the same shape the model-family
+                // invariant tests train against. Measures the production hot path,
+                // not a CIFAR-shrunk surrogate.
+                //
+                // Note: T=double currently bails out of the fused-compiled
+                // training path because AiDotNet.Tensors 0.75.5
+                // CompiledTrainingPlan<T>.TryBuildSpecializedForward casts
+                // Tensor<double> to Tensor<float> unconditionally
+                // (InvalidCastException at runtime). Use the `vgg16bn-float`
+                // case instead to measure the fused-path performance.
+                var net = new VGGNetwork<double>();
+                var input = new Tensor<double>(new[] { 1, 3, 224, 224 });
+                for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+                var target = new Tensor<double>(new[] { 1000 });
                 for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
                 return (net, input, target);
             }
