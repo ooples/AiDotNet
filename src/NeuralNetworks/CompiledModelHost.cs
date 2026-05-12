@@ -220,7 +220,7 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // Disk-cache preload: first time we see a shape at this structure
                 // version, try to load a previously-compiled plan from PlanCache.
                 // Skips the compile cost entirely on cold-start replay.
-                if (TryUseDiskCachedPlan(concreteShape, structureVersion, out var preloadedResult))
+                if (TryUseDiskCachedPlan(concreteShape, structureVersion, input, out var preloadedResult))
                 {
                     _lastCompiledVersion = structureVersion;
                     return preloadedResult;
@@ -246,6 +246,24 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // next Predict's version-mismatch check (which itself runs under
                 // the lock and will recover from any race).
                 _lastCompiledVersion = structureVersion;
+                // VALUE-STABLE REPLAY: refresh the plan's captured input buffer
+                // with the CURRENT call's data before Execute. Without this,
+                // every call after the trace pass replayed against the trace-
+                // time input bytes — producing silently-stale outputs for the
+                // common "same shape, new values" pattern (the bug that kept
+                // compilation off-by-default on the Predict path). SetInputs
+                // is a span-to-span copy into the plan's captured buffer
+                // (~O(input.Length) memcpy, sub-millisecond on typical
+                // batches), so the steady-state replay cost is still the
+                // compiled steps' execution time — orders of magnitude faster
+                // than the eager forward this used to fall back to. The trace
+                // pass already wrote `input`'s data into the captured buffer
+                // via the eager lambda, so this call is a no-op (same source
+                // and destination data) on the cache-miss path.
+                if (plan is ICompiledPlan<T> rebindable)
+                {
+                    rebindable.SetInputs(new[] { input });
+                }
                 return plan.Execute();
             }
             catch (Exception ex) when (
@@ -370,7 +388,11 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 {
                     _lastCompiledVersion = structureVersion;
                     cancellationToken.ThrowIfCancellationRequested();
-                    return await preloadedPlan!.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+                    // VALUE-STABLE REPLAY: rebind the current call's data into
+                    // the cached plan's input buffer. See the matching
+                    // comment in the sync Predict path.
+                    preloadedPlan!.SetInputs(new[] { input });
+                    return await preloadedPlan.ExecuteAsync(cancellationToken).ConfigureAwait(false);
                 }
 
                 var symbolicShape = BuildSymbolicShape(concreteShape, _shapeMode);
@@ -388,6 +410,11 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // a fast-path that completes synchronously; GPU engines
                 // wrap the CUDA stream / IGpuStream completion event as
                 // a polling Task that doesn't block a worker thread.
+                // VALUE-STABLE REPLAY: see comment in sync Predict path.
+                if (plan is ICompiledPlan<T> rebindable)
+                {
+                    rebindable.SetInputs(new[] { input });
+                }
                 return await plan.ExecuteAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (System.OperationCanceledException)
@@ -579,11 +606,14 @@ internal sealed class CompiledModelHost<T> : IDisposable
     private bool TryUseDiskCachedPlan(
         int[] concreteShape,
         int structureVersion,
+        Tensor<T> currentInput,
         out Tensor<T> result)
     {
         if (TryGetDiskCachedPlan(concreteShape, structureVersion, out var plan))
         {
-            result = plan!.Execute();
+            // VALUE-STABLE REPLAY: see comment in Predict above.
+            plan!.SetInputs(new[] { currentInput });
+            result = plan.Execute();
             return true;
         }
         result = null!;

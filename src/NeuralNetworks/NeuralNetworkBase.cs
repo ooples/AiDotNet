@@ -16,6 +16,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -2707,15 +2708,153 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         int nChunks = (n + batchSize - 1) / batchSize;
         var perChunkOutputs = new Tensor<T>[nChunks];
 
+        // Route per-chunk forwards through PredictCompiled when compilation
+        // is on. Every chunk after the first hits the cache and replays the
+        // compiled plan; the value-stable rebind landed in CompiledModelHost
+        // copies the chunk's data into the plan's captured input buffer
+        // before each Execute, so the previously-known stale-data hazard is
+        // gone (the chunks reuse the same shape, only the data changes).
+        // Full chunks share one shape so the cache hits N-1 times after one
+        // trace; the last chunk may be smaller and gets its own trace, but
+        // it's only one extra compile across the whole call.
+        bool useCompiled = TensorCodecOptions.Current.EnableCompilation && nChunks >= 2;
+        int fullChunkSize = batchSize;
+        int lastChunkSize = n - (nChunks - 1) * batchSize;
+
         for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
         {
             int start = chunkIdx * batchSize;
             int end = Math.Min(start + batchSize, n);
+            int chunkSize = end - start;
             var chunk = SliceAlongAxis0(input, start, end);
-            perChunkOutputs[chunkIdx] = Predict(chunk);
+            perChunkOutputs[chunkIdx] = useCompiled
+                ? PredictCompiled(chunk)
+                : Predict(chunk);
         }
 
         return Tensor<T>.Concatenate(perChunkOutputs, axis: 0);
+    }
+
+    /// <summary>
+    /// Chunked training with TRUE gradient accumulation. Walks
+    /// <paramref name="input"/> / <paramref name="target"/> in axis-0
+    /// chunks of size <paramref name="batchSize"/>, runs forward + backward
+    /// per chunk WITHOUT firing the optimizer step, sums per-chunk
+    /// gradients into a single accumulator keyed by parameter-tensor
+    /// reference, then applies one optimizer step at the end with the
+    /// averaged gradient. Matches PyTorch's
+    /// <c>optimizer.zero_grad / loss.backward / optimizer.step</c> idiom
+    /// that users normally hand-roll for memory-bounded full-batch
+    /// gradients.
+    /// </summary>
+    /// <param name="input">Full input tensor; leading axis is chunked.</param>
+    /// <param name="target">Full target tensor; leading axis must match input.</param>
+    /// <param name="batchSize">Per-chunk leading-axis size. Sub-threshold inputs short-circuit to a single <see cref="Train"/> call.</param>
+    /// <remarks>
+    /// Preserves full-batch-equivalent gradient DIRECTION and keeps the
+    /// optimizer's per-parameter state (Adam's <c>_m</c> / <c>_v</c>) at
+    /// one update per logical batch — the semantic that distinguishes
+    /// gradient accumulation from naive mini-batched SGD. Falls through
+    /// to <see cref="Train"/> when the input is already small enough to
+    /// fit in one forward.
+    /// </remarks>
+    public virtual void TrainWithGradientAccumulation(
+        Tensor<T> input, Tensor<T> target, int batchSize)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (batchSize < 1) batchSize = 1;
+        if (input.Rank == 0 || target.Rank == 0 || input.Shape[0] <= batchSize)
+        {
+            Train(input, target);
+            return;
+        }
+
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
+            ?? throw new InvalidOperationException(
+                "TrainWithGradientAccumulation requires a LossFunctionBase<T> for ComputeTapeLoss.");
+        int n = input.Shape[0];
+        int nChunks = (n + batchSize - 1) / batchSize;
+        Dictionary<Tensor<T>, Tensor<T>>? accumGrads = null;
+        T accumLoss = NumOps.Zero;
+
+        for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
+        {
+            int start = chunkIdx * batchSize;
+            int end = Math.Min(start + batchSize, n);
+            var xChunk = SliceAlongAxis0(input, start, end);
+            var yChunk = SliceAlongAxis0(target, start, end);
+
+            using var arena = TensorArena.Create();
+            using var tape = new GradientTape<T>();
+            var prediction = ForwardForTraining(xChunk);
+
+            // Align target to prediction shape — same policy as TrainWithTape.
+            var alignedTarget = yChunk;
+            if (prediction.Rank > yChunk.Rank && prediction.Shape[0] == 1 && prediction.Length == yChunk.Length)
+            {
+                alignedTarget = Engine.Reshape(yChunk, prediction._shape);
+            }
+            else if (yChunk.Rank > prediction.Rank && yChunk.Shape[0] == 1 && yChunk.Length == prediction.Length)
+            {
+                alignedTarget = Engine.Reshape(yChunk, prediction._shape);
+            }
+
+            var lossTensor = loss.ComputeTapeLoss(prediction, alignedTarget);
+            T chunkLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            accumLoss = NumOps.Add(accumLoss, chunkLoss);
+
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+            var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+            foreach (var param in trainableParams)
+            {
+                if (!allGrads.TryGetValue(param, out var grad)) continue;
+                if (accumGrads is null)
+                {
+                    accumGrads = new Dictionary<Tensor<T>, Tensor<T>>(
+                        Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                }
+                if (accumGrads.TryGetValue(param, out var existing))
+                {
+                    Engine.TensorAddInPlace(existing, grad);
+                }
+                else
+                {
+                    // Clone the grad so it survives tape disposal at the
+                    // arena-using scope end.
+                    var cloned = grad.Clone();
+                    accumGrads[param] = cloned;
+                }
+            }
+        }
+
+        if (accumGrads is null || accumGrads.Count == 0) return;
+
+        // Average across chunks to match a single full-batch SGD step
+        // under mean-reduced losses.
+        T inverseChunks = NumOps.Divide(NumOps.One, NumOps.FromDouble(nChunks));
+        var avgGrads = new Dictionary<Tensor<T>, Tensor<T>>(
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var kvp in accumGrads)
+        {
+            avgGrads[kvp.Key] = Engine.TensorMultiplyScalar(kvp.Value, inverseChunks);
+        }
+        T avgLoss = NumOps.Multiply(accumLoss, inverseChunks);
+
+        // Build one TapeStepContext and fire the optimizer once. The
+        // optimizer's per-parameter state (Adam m/v) advances exactly once
+        // for the logical full batch, matching PyTorch's grad-accum pattern.
+        var optimizer = GetOrCreateBaseOptimizer();
+        var paramsList = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+        var context = new TapeStepContext<T>(
+            paramsList, avgGrads, avgLoss,
+            input, target,
+            (inp, tgt) => ForwardForTraining(inp),
+            (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
+            parameterBuffer: null);
+        optimizer.Step(context);
+        StepSchedulerIfSupported(optimizer);
+        LastLoss = avgLoss;
     }
 
     /// <summary>
