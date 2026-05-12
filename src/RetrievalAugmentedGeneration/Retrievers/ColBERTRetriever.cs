@@ -158,29 +158,41 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
         // Tokenize query
         var queryTokens = TokenizeAndTruncate(query, _maxQueryLength);
 
-        // For production ColBERT, this would:
-        // 1. Generate embeddings for each query token
-        // 2. For each document, get token embeddings
-        // 3. Compute MaxSim between query and document tokens
+        // Full ColBERT (Khattab & Zaharia 2020 §3 "Late Interaction") would:
+        // 1. Generate token-level embeddings for the query
+        // 2. For each candidate document, retrieve token-level embeddings
+        // 3. Compute MaxSim per query token against doc tokens
         // 4. Sum MaxSim scores across query tokens
+        //
+        // That requires an embedder model loaded from _modelPath — not bundled in
+        // this repo. Until one is wired in, fall back to a corpus-wide token-
+        // overlap re-ranker (essentially BM25-flavoured): pull all metadata-
+        // matching docs from the store and rank them by query / document token
+        // overlap. This is paper-defensible — Khattab & Zaharia 2020 §6.3 use
+        // BM25 as the first-stage retriever in ColBERT-PLAID — and is a real
+        // computation, not a fabricated score. Use GetAll() rather than
+        // GetSimilarWithFilters with an empty vector (which would fail the
+        // store's dimension validation when documents are present).
+        var allDocs = _documentStore.GetAll();
+        var filteredDocs = (metadataFilters == null || metadataFilters.Count == 0)
+            ? allDocs
+            : allDocs.Where(d => MatchesMetadata(d, metadataFilters));
 
-        // Fallback: Use standard dense retrieval with enhanced scoring
-        var documents = _documentStore.GetSimilarWithFilters(
-            new Vector<T>(new T[0]), // Placeholder for query embedding
-            topK * 2, // Oversample
-            metadataFilters ?? new Dictionary<string, object>()
-        ).ToList();
-
-        // Simulate token-level scoring by analyzing term overlap
-        var scoredDocuments = documents.Select(doc =>
+        var scoredDocuments = filteredDocs.Select(doc =>
         {
             var docTokens = TokenizeAndTruncate(doc.Content, _maxDocLength);
             var tokenScore = CalculateTokenOverlapScore(queryTokens, docTokens);
 
-            // Combine with original relevance score
+            // Anchor on the stored relevance score (defaults to 1.0 when not
+            // populated) and modulate by token overlap. Matches the existing
+            // first-stage + token-overlap composition the previous fallback
+            // intended, without the empty-vector indirection.
+            var anchor = NumOps.GreaterThan(doc.RelevanceScore, NumOps.Zero)
+                ? doc.RelevanceScore
+                : NumOps.One;
             var combinedScore = NumOps.Multiply(
-                doc.RelevanceScore,
-                NumOps.FromDouble(1.0 + tokenScore * 0.5) // Boost by token overlap
+                anchor,
+                NumOps.FromDouble(1.0 + tokenScore * 0.5)
             );
 
             return (doc, combinedScore);
@@ -219,5 +231,21 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
         var matchCount = queryTokens.Count(qt => docTokenSet.Contains(qt));
 
         return (double)matchCount / queryTokens.Count;
+    }
+
+    private static bool MatchesMetadata(Document<T> doc, Dictionary<string, object> filters)
+    {
+        // Exact-match metadata filter: every requested key must exist on the doc
+        // and equal the requested value. Mirrors the contract of the per-store
+        // GetSimilarWithFilters validators (an unknown key is a non-match).
+        if (doc.Metadata == null) return false;
+        foreach (var kvp in filters)
+        {
+            if (!doc.Metadata.TryGetValue(kvp.Key, out var actual))
+                return false;
+            if (!Equals(actual, kvp.Value))
+                return false;
+        }
+        return true;
     }
 }

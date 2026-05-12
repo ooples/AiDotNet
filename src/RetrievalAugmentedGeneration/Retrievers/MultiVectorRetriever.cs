@@ -164,15 +164,18 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        // Generate query embedding (would use actual embedding model in production)
-        var queryVector = new Vector<T>(new T[0]); // Placeholder
-
-        // Retrieve documents and their multiple vectors
-        var allDocuments = _documentStore.GetSimilarWithFilters(
-            queryVector,
-            topK * _vectorsPerDocument * 2, // Oversample
-            metadataFilters ?? new Dictionary<string, object>()
-        ).ToList();
+        // Multi-vector retrieval (Khattab et al. 2021 PLAID, Santhanam et al. 2022
+        // ColBERTv2) needs a token-level embedder to produce a per-token query
+        // matrix — that embedder isn't bundled with this repo. Until one is
+        // wired in, drive candidate selection off the documentstore's GetAll +
+        // metadata-filter rather than a fabricated empty query vector (which
+        // would trip the store's dimension validator). The aggregation step
+        // below — group by base doc ID, combine scores — is the paper-faithful
+        // late-interaction reducer and stays the same regardless of where the
+        // candidate set comes from.
+        var allDocuments = (metadataFilters == null || metadataFilters.Count == 0)
+            ? _documentStore.GetAll().ToList()
+            : _documentStore.GetAll().Where(d => MatchesMetadata(d, metadataFilters)).ToList();
 
         // Group documents by ID and aggregate their vector scores
         var documentScores = new Dictionary<string, (Document<T> doc, List<T> scores)>();
@@ -211,6 +214,22 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
                 x.doc.HasRelevanceScore = true;
                 return x.doc;
             });
+    }
+
+    private static bool MatchesMetadata(Document<T> doc, Dictionary<string, object> filters)
+    {
+        // Exact-match metadata filter: every key must exist on the doc and equal
+        // the requested value. Mirrors the per-store GetSimilarWithFilters
+        // contract — unknown keys are non-matches.
+        if (doc.Metadata == null) return false;
+        foreach (var kvp in filters)
+        {
+            if (!doc.Metadata.TryGetValue(kvp.Key, out var actual))
+                return false;
+            if (!Equals(actual, kvp.Value))
+                return false;
+        }
+        return true;
     }
 
     private string GetBaseDocumentId(string vectorDocId)

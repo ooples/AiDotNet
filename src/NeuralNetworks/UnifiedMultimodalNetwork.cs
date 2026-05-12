@@ -784,6 +784,15 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     #region Safety and Attention
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Structural sanity gate. Real content-safety classification (NSFW image,
+    /// toxic-text classifier, audio-deepfake detector) needs trained modality-
+    /// specific safety models that aren't bundled with this repo — callers
+    /// requiring policy enforcement MUST plug in their own safety classifier.
+    /// The default returned by this method flags only inputs that fail
+    /// numerical / shape sanity checks, the strongest answer that's defensible
+    /// without an external classifier.
+    /// </remarks>
     public Dictionary<ModalityType, (bool IsSafe, IEnumerable<string> Flags)> SafetyCheck(
         IEnumerable<MultimodalInput<T>> inputs)
     {
@@ -791,14 +800,67 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
 
         foreach (var input in inputs)
         {
-            if (!results.ContainsKey(input.Modality))
+            // Aggregate by modality: if any input of a modality fails, the
+            // modality is flagged unsafe with the union of every input's flags.
+            var (sampleSafe, sampleFlags) = StructuralSafetyCheck(input);
+            if (results.TryGetValue(input.Modality, out var existing))
             {
-                // Placeholder safety check - all inputs considered safe
-                results[input.Modality] = (true, Enumerable.Empty<string>());
+                var mergedFlags = existing.Flags.Concat(sampleFlags).Distinct();
+                results[input.Modality] = (existing.IsSafe && sampleSafe, mergedFlags);
+            }
+            else
+            {
+                results[input.Modality] = (sampleSafe, sampleFlags);
             }
         }
 
         return results;
+    }
+
+    private (bool IsSafe, IEnumerable<string> Flags) StructuralSafetyCheck(MultimodalInput<T> input)
+    {
+        var flags = new List<string>();
+        if (input == null)
+        {
+            flags.Add("null-input");
+            return (false, flags);
+        }
+
+        // Text modality: empty / whitespace text content is the structural failure.
+        if (input.Modality == ModalityType.Text)
+        {
+            if (string.IsNullOrWhiteSpace(input.TextContent))
+            {
+                flags.Add("empty-text");
+                return (false, flags);
+            }
+            return (true, flags);
+        }
+
+        // Tensor modalities: missing tensor + NaN/Inf/all-zero are the structural failures.
+        var data = input.InternalData;
+        if (data == null)
+        {
+            flags.Add("null-data");
+            return (false, flags);
+        }
+
+        bool safe = true;
+        bool anyFinite = false;
+        for (int i = 0; i < data.Length; i++)
+        {
+            double v = NumOps.ToDouble(data[i]);
+            if (double.IsNaN(v)) { flags.Add("nan"); safe = false; break; }
+            if (double.IsInfinity(v)) { flags.Add("inf"); safe = false; break; }
+            if (!anyFinite && v != 0) anyFinite = true;
+        }
+        if (safe && !anyFinite)
+        {
+            flags.Add("all-zero");
+            safe = false;
+        }
+
+        return (safe, flags);
     }
 
     /// <inheritdoc/>
