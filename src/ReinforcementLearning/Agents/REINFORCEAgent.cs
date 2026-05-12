@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -145,11 +146,20 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     private Vector<T> SampleDiscreteAction(Vector<T> logits, bool training)
     {
         var probs = Softmax(logits);
-        int actionIndex = training ? SampleCategorical(probs) : ArgMax(probs);
 
-        var action = new Vector<T>(_reinforceOptions.ActionSize);
-        action[actionIndex] = NumOps.One;
-        return action;
+        if (training)
+        {
+            // Training: sample a discrete action and return a one-hot
+            // vector so StoreExperience records the commitment.
+            int actionIndex = SampleCategorical(probs);
+            var action = new Vector<T>(_reinforceOptions.ActionSize);
+            action[actionIndex] = NumOps.One;
+            return action;
+        }
+
+        // Inference: return the full softmax distribution π(·|s). Same
+        // convention as A3C / MuZero / RainbowDQN inference output.
+        return probs;
     }
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)
@@ -224,9 +234,21 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// One REINFORCE update step (Williams 1992 "Simple statistical
+    /// gradient-following algorithms for connectionist reinforcement
+    /// learning" Eq. 5; Sutton &amp; Barto 2018 §13.3 Algorithm box):
+    /// <para><c>θ ← θ + α · Σ_t G_t · ∇_θ log π(a_t | s_t; θ)</c></para>
+    /// where <c>G_t</c> is the discounted return from step t and
+    /// <c>π(·|s; θ)</c> is the parameterized policy. Implemented via
+    /// tape-based autodiff: build a batched log-prob tensor against the
+    /// sampled actions, multiply by returns, sum (NOT mean — that
+    /// rescales the per-sample gradient by 1/N and isn't the paper's
+    /// objective), negate to convert maximization to minimization,
+    /// backprop through the policy network.
+    /// </remarks>
     public override T Train()
     {
-        // REINFORCE trains after each complete episode
         if (_trajectory.Length == 0)
         {
             return NumOps.Zero;
@@ -237,7 +259,6 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Compute discounted returns
         ComputeReturns();
 
-        // Build batched state tensor
         int stateSize = _reinforceOptions.StateSize;
         int trajLen = _trajectory.Length;
         var returns = _trajectory.Returns ?? throw new InvalidOperationException("Returns not initialized.");
@@ -247,12 +268,14 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             for (int j = 0; j < stateSize; j++)
                 batchStates[i, j] = _trajectory.States[i][j];
 
-        // Build returns and action tensors for batched engine-op computation
         var returnsTensor = new Tensor<T>([trajLen]);
         for (int i = 0; i < trajLen; i++)
             returnsTensor[i] = returns[i];
 
-        // REINFORCE policy gradient: -mean(log_prob * return) via engine ops
+        // Policy gradient objective: maximize Σ_t G_t · log π(a_t | s_t).
+        // Minimize the negation. All ops below are engine-routed so the
+        // gradient tape captures them through to the policy network's
+        // trainable parameters.
         var trainablePolicy = (NeuralNetworkBase<T>)_policyNetwork;
         T avgLoss = trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
@@ -261,34 +284,34 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             if (_reinforceOptions.IsContinuous)
             {
-                // Continuous: policyOutput = [trajLen, actionSize*2] = [means, logStds]
                 int actionSize = _reinforceOptions.ActionSize;
-                var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actionSize]);
-                var logStds = Engine.TensorSlice(policyOutput, [0, actionSize], [trajLen, actionSize * 2]);
+                var means = eng.TensorSlice(policyOutput, [0, 0], [trajLen, actionSize]);
+                var logStds = eng.TensorSlice(policyOutput, [0, actionSize], [trajLen, actionSize * 2]);
 
-                // Build batched actions tensor
                 var actionsTensor = new Tensor<T>([trajLen, actionSize]);
                 for (int i = 0; i < trajLen; i++)
                     for (int j = 0; j < actionSize; j++)
                         actionsTensor[i, j] = _trajectory.Actions[i][j];
 
-                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(eng, means, logStds, actionsTensor);
             }
             else
             {
-                // Discrete: policyOutput = [trajLen, numActions] logits
                 var actionIndices = new int[trajLen];
                 for (int i = 0; i < trajLen; i++)
                     actionIndices[i] = GetDiscreteAction(_trajectory.Actions[i]);
 
-                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(eng, policyOutput, actionIndices);
             }
 
-            // loss = -mean(logProbs * returns) — all engine ops, tape-differentiable
+            // weighted = G_t · log π(a_t|s_t), shape [trajLen]
             var weighted = eng.TensorMultiply(logProbs, returnsTensor);
+            // Sum (NOT mean) per the paper's Σ_t — mean would shrink the
+            // gradient by 1/N which silently changes the effective
+            // learning rate as trajectory length varies.
             var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
-            var meanLoss = eng.ReduceMean(weighted, allAxes, keepDims: false);
-            return eng.TensorNegate(meanLoss);
+            var summed = eng.ReduceSum(weighted, allAxes, keepDims: false);
+            return eng.TensorNegate(summed);
         });
 
         LossHistory.Add(avgLoss);
@@ -395,9 +418,18 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Calls <see cref="NeuralNetworkBase{T}.SetParameters"/> (not
+    /// <c>UpdateParameters</c>) so the call is a full state restore that
+    /// round-trips with <see cref="GetParameters"/>. <c>UpdateParameters</c>
+    /// on the underlying network is the optimizer-style apply-delta path
+    /// and doesn't guarantee that the resulting parameter vector equals
+    /// the input; Clone would then produce a network whose
+    /// <c>Predict(state)</c> diverges from the original on every call.
+    /// </remarks>
     public override void SetParameters(Vector<T> parameters)
     {
-        _policyNetwork.UpdateParameters(parameters);
+        _policyNetwork.SetParameters(parameters);
     }
 
     /// <inheritdoc/>

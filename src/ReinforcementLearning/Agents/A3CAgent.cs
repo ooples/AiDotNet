@@ -449,11 +449,11 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 int actSize = _options.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
                 var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
-                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor!);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, actionsTensor!);
             }
             else
             {
-                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
             }
 
             var weighted = Engine.TensorMultiply(logProbs, advantagesTensor);

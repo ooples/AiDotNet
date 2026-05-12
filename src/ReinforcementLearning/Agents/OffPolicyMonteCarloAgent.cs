@@ -89,9 +89,13 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         }
         else
         {
-            // Target policy: greedy
+            // Target policy: greedy with Sutton & Barto §2.3 tie-break.
+            // See OnPolicyMonteCarloAgent.SelectAction for the rationale —
+            // an all-zero Q-table at init makes every action tie and a
+            // naive "pick index 0" produces a degenerate constant policy.
             selectedAction = 0;
             T bestValue = _qTable[stateKey][0];
+            bool allEqual = true;
 
             for (int a = 1; a < _options.ActionSize; a++)
             {
@@ -99,7 +103,17 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
                 {
                     bestValue = _qTable[stateKey][a];
                     selectedAction = a;
+                    allEqual = false;
                 }
+                else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
+                {
+                    allEqual = false;
+                }
+            }
+
+            if (allEqual)
+            {
+                selectedAction = (stateKey.GetHashCode() & int.MaxValue) % _options.ActionSize;
             }
         }
 

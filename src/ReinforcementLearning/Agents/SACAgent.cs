@@ -327,7 +327,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
                     noise[i] = NumOps.FromDouble(rng.NextDouble() * 2.0 - 1.0);
                 var sampledActions = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
 
-                var logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, sampledActions);
+                var logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, sampledActions);
 
                 // Build state-action for Q evaluation
                 var stateActionForQ = new Tensor<T>([batchCount, stateSize + actionSize]);

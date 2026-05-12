@@ -175,11 +175,22 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     private Vector<T> SampleDiscreteAction(Vector<T> logits, bool training)
     {
         var probs = Softmax(logits);
-        int actionIndex = training ? SampleCategorical(probs) : ArgMax(probs);
 
-        var action = new Vector<T>(_a2cOptions.ActionSize);
-        action[actionIndex] = NumOps.One;
-        return action;
+        if (training)
+        {
+            // Training: sample a discrete action and return a one-hot
+            // vector so StoreExperience records the commitment.
+            int actionIndex = SampleCategorical(probs);
+            var action = new Vector<T>(_a2cOptions.ActionSize);
+            action[actionIndex] = NumOps.One;
+            return action;
+        }
+
+        // Inference: return the full softmax distribution π(·|s). The
+        // argmax-one-hot form collapses distinct distributions that
+        // happen to share their max index into identical vectors. Same
+        // convention as A3C / MuZero / RainbowDQN inference output.
+        return probs;
     }
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)
@@ -318,11 +329,11 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 int actSize = _a2cOptions.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
                 var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
-                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor!);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, actionsTensor!);
             }
             else
             {
-                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
             }
 
             // loss = -mean(logProbs * advantages)

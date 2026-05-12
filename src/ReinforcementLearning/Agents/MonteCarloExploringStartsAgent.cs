@@ -89,12 +89,18 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
             return action;
         }
 
-        // Greedy action selection based on Q-table
+        // Greedy action selection with Sutton & Barto §2.3 tie-break. On
+        // a fresh state where all Q(s, ·) are still at zero init, every
+        // action ties and a naive "pick index 0" rule produces a
+        // degenerate constant policy that maps every state to action 0.
+        // Hash the state key when all Q-values are equal so distinct
+        // unvisited states get distinct initial choices.
         EnsureStateExists(state);
         string stateKey = GetStateKey(state);
 
         int bestAction = 0;
         T bestValue = _qTable[stateKey][0];
+        bool allEqual = true;
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
@@ -102,7 +108,17 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
             {
                 bestValue = _qTable[stateKey][a];
                 bestAction = a;
+                allEqual = false;
             }
+            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
+            {
+                allEqual = false;
+            }
+        }
+
+        if (allEqual)
+        {
+            bestAction = (stateKey.GetHashCode() & int.MaxValue) % _options.ActionSize;
         }
 
         var result = new Vector<T>(_options.ActionSize);
