@@ -16,6 +16,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
@@ -2665,6 +2666,286 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Chunked inference path: splits <paramref name="input"/> along axis 0
+    /// into slices of size <paramref name="batchSize"/>, runs <see cref="Predict"/>
+    /// on each slice, and concatenates the per-slice outputs back along axis 0.
+    /// Output shape matches what <c>Predict(input)</c> would have produced —
+    /// chunking is a memory-bounding refactor of the same forward computation,
+    /// not a semantic change. Single-chunk inputs short-circuit to a direct
+    /// <see cref="Predict"/> call.
+    /// </summary>
+    /// <param name="input">Batched input tensor with at least one axis-0 sample.</param>
+    /// <param name="batchSize">Maximum samples per forward pass. Clamped to <c>≥ 1</c>.</param>
+    /// <remarks>
+    /// Use this in any caller that may receive a full-dataset tensor and
+    /// would otherwise allocate O(N · seq²) attention scores in one shot —
+    /// optimizer evaluators, cross-validation predict, AutoML, etc. The
+    /// chunked path eliminates the OOM surface described in #1296 (and the
+    /// sibling-bug audit at the Predict-eval site) for Transformer-class
+    /// models while leaving small-batch calls (the common case) unchanged.
+    ///
+    /// Layers that maintain per-sample state across batch elements (none of
+    /// the canonical Dense/Conv/Attention/Norm layers do — they treat
+    /// axis-0 as i.i.d. samples) would observe different behaviour vs a
+    /// single big forward. Callers that build such layers must opt out by
+    /// invoking <see cref="Predict"/> directly. This is the same contract
+    /// PyTorch eval-mode forward implies when iterating a DataLoader.
+    /// </remarks>
+    public virtual Tensor<T> PredictInBatches(Tensor<T> input, int batchSize)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (batchSize < 1) batchSize = 1;
+
+        // A rank-0 / unbatched-leading tensor has no meaningful axis-0
+        // chunking semantics — fall through to plain Predict and let the
+        // existing batch-dim promotion path inside Predict handle it.
+        //
+        // The leading-axis-larger-than-batchSize check alone is not enough:
+        // a genuine single sample with shape [seq, F] (or even [features]
+        // where features > batchSize) would otherwise be sliced on its
+        // sequence / feature axis instead of a batch axis, corrupting
+        // semantics. When the architecture's expected unbatched input
+        // rank equals the input's rank, this is a single sample — short-
+        // circuit to Predict so the auto-promote path treats it correctly.
+        int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
+        bool appearsUnbatched = expectedUnbatchedRank > 0
+            && input.Rank == expectedUnbatchedRank;
+
+        if (input.Rank == 0 || appearsUnbatched || input.Shape[0] <= batchSize)
+        {
+            return Predict(input);
+        }
+
+        int n = input.Shape[0];
+        int nChunks = (n + batchSize - 1) / batchSize;
+        var perChunkOutputs = new Tensor<T>[nChunks];
+
+        // Per-chunk forwards route through plain Predict (which uses
+        // PredictEager by default). Two attempts to engage the compile
+        // cache here surfaced an inherent memory tradeoff: even with
+        // tail-padding so all chunks share a single shape (and therefore
+        // hit one cached plan instead of two), the plan itself retains
+        // all-layer pinned intermediate buffers (~96 MB at d=128 / L=4
+        // /heads=4 / ctx=64) that coexist with the training tape's own
+        // intermediates across the optimizer's epoch loop. The host's
+        // unmanaged-commit limit gets exhausted before the test finishes.
+        // The value-stable rebind landed in CompiledModelHost in the same
+        // PR still benefits any caller that explicitly invokes
+        // PredictCompiled; chunked PredictInBatches just stays on the
+        // eager path the default Predict already uses. A future Tensors-
+        // side pass that bounds the compiled plan's resident memory
+        // (e.g. by eagerly releasing intermediate buffers between
+        // Executes) is the prerequisite for safely re-enabling compile-
+        // by-default on chunked dispatch.
+        for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
+        {
+            int start = chunkIdx * batchSize;
+            int end = Math.Min(start + batchSize, n);
+            var chunk = SliceAlongAxis0(input, start, end);
+            perChunkOutputs[chunkIdx] = Predict(chunk);
+        }
+
+        return Tensor<T>.Concatenate(perChunkOutputs, axis: 0);
+    }
+
+    /// <summary>
+    /// Chunked training with TRUE gradient accumulation. Walks
+    /// <paramref name="input"/> / <paramref name="target"/> in axis-0
+    /// chunks of size <paramref name="batchSize"/>, runs forward + backward
+    /// per chunk WITHOUT firing the optimizer step, sums per-chunk
+    /// gradients into a single accumulator keyed by parameter-tensor
+    /// reference, then applies one optimizer step at the end with the
+    /// averaged gradient. Matches PyTorch's
+    /// <c>optimizer.zero_grad / loss.backward / optimizer.step</c> idiom
+    /// that users normally hand-roll for memory-bounded full-batch
+    /// gradients.
+    /// </summary>
+    /// <param name="input">Full input tensor; leading axis is chunked.</param>
+    /// <param name="target">Full target tensor; leading axis must match input.</param>
+    /// <param name="batchSize">Per-chunk leading-axis size. Sub-threshold inputs short-circuit to a single <see cref="Train"/> call.</param>
+    /// <remarks>
+    /// Preserves full-batch-equivalent gradient DIRECTION and keeps the
+    /// optimizer's per-parameter state (Adam's <c>_m</c> / <c>_v</c>) at
+    /// one update per logical batch — the semantic that distinguishes
+    /// gradient accumulation from naive mini-batched SGD. Falls through
+    /// to <see cref="Train"/> when the input is already small enough to
+    /// fit in one forward.
+    /// </remarks>
+    public virtual void TrainWithGradientAccumulation(
+        Tensor<T> input, Tensor<T> target, int batchSize)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (batchSize < 1) batchSize = 1;
+
+        // Match Train's pre-conditions and training-mode bracketing so
+        // unbatched [seq,F] inputs don't get chunked on their sequence
+        // axis, dropout/batchnorm run with the right semantics, and
+        // input / target leading-axis mismatches surface as a clear
+        // ArgumentException rather than silent truncation.
+        (input, target) = NormalizeBatchDim(input, target);
+
+        if (input.Rank == 0 || target.Rank == 0 || input.Shape[0] <= batchSize)
+        {
+            Train(input, target);
+            return;
+        }
+
+        if (input.Shape[0] != target.Shape[0])
+        {
+            throw new ArgumentException(
+                $"TrainWithGradientAccumulation: input leading axis ({input.Shape[0]}) " +
+                $"must equal target leading axis ({target.Shape[0]}). " +
+                $"input.Shape=[{string.Join(",", input._shape)}] " +
+                $"target.Shape=[{string.Join(",", target._shape)}].",
+                nameof(target));
+        }
+
+        var loss = LossFunction as LossFunctions.LossFunctionBase<T>
+            ?? throw new InvalidOperationException(
+                "TrainWithGradientAccumulation requires a LossFunctionBase<T> for ComputeTapeLoss.");
+
+        // Collect any network-level trainable tensors so models with
+        // raw trainable parameters on the network (not on a layer) keep
+        // receiving updates under gradient accumulation, matching
+        // TrainWithTape's parameter set.
+        var extraTrainableTensors = new List<Tensor<T>>();
+        foreach (var t in GetExtraTrainableTensors())
+        {
+            if (t is not null && t.Length > 0) extraTrainableTensors.Add(t);
+        }
+
+        bool wasTraining = IsTrainingMode;
+        if (!wasTraining) SetTrainingMode(true);
+        try
+        {
+            int n = input.Shape[0];
+            int nChunks = (n + batchSize - 1) / batchSize;
+            Dictionary<Tensor<T>, Tensor<T>>? accumGrads = null;
+            T accumLoss = NumOps.Zero;
+            int totalSamples = 0;
+
+            for (int chunkIdx = 0; chunkIdx < nChunks; chunkIdx++)
+            {
+                int start = chunkIdx * batchSize;
+                int end = Math.Min(start + batchSize, n);
+                int chunkSamples = end - start;
+                totalSamples += chunkSamples;
+                var xChunk = SliceAlongAxis0(input, start, end);
+                var yChunk = SliceAlongAxis0(target, start, end);
+
+                using var arena = TensorArena.Create();
+                using var tape = new GradientTape<T>();
+                var prediction = ForwardForTraining(xChunk);
+
+                // Align target to prediction shape — same policy as TrainWithTape.
+                var alignedTarget = yChunk;
+                if (prediction.Rank > yChunk.Rank && prediction.Shape[0] == 1 && prediction.Length == yChunk.Length)
+                {
+                    alignedTarget = Engine.Reshape(yChunk, prediction._shape);
+                }
+                else if (yChunk.Rank > prediction.Rank && yChunk.Shape[0] == 1 && yChunk.Length == prediction.Length)
+                {
+                    alignedTarget = Engine.Reshape(yChunk, prediction._shape);
+                }
+
+                var lossTensor = loss.ComputeTapeLoss(prediction, alignedTarget);
+                T chunkLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+                // Weight each chunk's loss by its sample count so a final
+                // short chunk doesn't overweight the accumulator. Dividing
+                // by nChunks alone is only correct when every chunk is the
+                // same size, which is rarely true at the tail.
+                T chunkSamplesT = NumOps.FromDouble(chunkSamples);
+                accumLoss = NumOps.Add(accumLoss, NumOps.Multiply(chunkLoss, chunkSamplesT));
+
+                var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+                var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+                // Walk both the layer-collected params AND any network-
+                // level trainable tensors so the latter actually receive
+                // accumulated gradient updates.
+                foreach (var param in trainableParams.Concat(extraTrainableTensors))
+                {
+                    if (!allGrads.TryGetValue(param, out var grad)) continue;
+                    if (accumGrads is null)
+                    {
+                        accumGrads = new Dictionary<Tensor<T>, Tensor<T>>(
+                            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                    }
+                    if (accumGrads.TryGetValue(param, out var existing))
+                    {
+                        var scaledGrad = Engine.TensorMultiplyScalar(grad, chunkSamplesT);
+                        Engine.TensorAddInPlace(existing, scaledGrad);
+                    }
+                    else
+                    {
+                        // Clone-and-scale so the gradient survives tape
+                        // disposal at the arena-using scope end AND is
+                        // pre-weighted by its chunk's sample count.
+                        var cloned = Engine.TensorMultiplyScalar(grad, chunkSamplesT);
+                        accumGrads[param] = cloned;
+                    }
+                }
+            }
+
+            if (accumGrads is null || accumGrads.Count == 0) return;
+
+            // Average across SAMPLES to match a single full-batch SGD
+            // step under mean-reduced losses. Each chunk's grad and loss
+            // were pre-weighted by its sample count above; dividing the
+            // sum by total samples gives the true mean over the logical
+            // full batch even when the final chunk is short.
+            if (totalSamples <= 0) return;
+            T inverseSamples = NumOps.Divide(NumOps.One, NumOps.FromDouble(totalSamples));
+            var avgGrads = new Dictionary<Tensor<T>, Tensor<T>>(
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var kvp in accumGrads)
+            {
+                avgGrads[kvp.Key] = Engine.TensorMultiplyScalar(kvp.Value, inverseSamples);
+            }
+            T avgLoss = NumOps.Multiply(accumLoss, inverseSamples);
+
+            // Build one TapeStepContext and fire the optimizer once. The
+            // optimizer's per-parameter state (Adam m/v) advances exactly
+            // once for the logical full batch, matching PyTorch's grad-
+            // accum pattern.
+            var optimizer = GetOrCreateBaseOptimizer();
+            var paramsList = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
+            // Include extra trainable tensors in the optimizer's
+            // parameter list too, so its update step (and any per-
+            // parameter state it maintains) covers them.
+            var fullParams = paramsList.Concat(extraTrainableTensors).ToList();
+            var context = new TapeStepContext<T>(
+                fullParams, avgGrads, avgLoss,
+                input, target,
+                (inp, tgt) => ForwardForTraining(inp),
+                (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
+                parameterBuffer: null);
+            optimizer.Step(context);
+            StepSchedulerIfSupported(optimizer);
+            LastLoss = avgLoss;
+        }
+        finally
+        {
+            if (!wasTraining) SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Axis-0 slice helper for <see cref="PredictInBatches"/>: returns
+    /// <c>input[start..end, …]</c> as a contiguous tensor. Uses the
+    /// O(1) <see cref="Tensor{T}.Slice(int, int, int?)"/> view and
+    /// materialises it with <see cref="Tensor{T}.Contiguous"/> so downstream
+    /// engine ops (BLAS GEMM, attention SDP, etc.) that assume contiguous
+    /// storage observe a strict copy of the slice, not a strided view into
+    /// the parent.
+    /// </summary>
+    private static Tensor<T> SliceAlongAxis0(Tensor<T> input, int start, int end)
+    {
+        return input.Slice(axis: 0, start: start, end: end).Contiguous();
+    }
+
+    /// <summary>
     /// Read-only counterpart to <see cref="NormalizeBatchDim"/> for the
     /// inference path: only the input is shape-normalized; targets aren't
     /// involved in Predict. Returns the original tensor if the architecture
@@ -2687,6 +2968,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// the model's first layer actually expects so auto-promote can fire on
     /// the right unbatched signal.
     /// </summary>
+    /// <remarks>
+    /// Test-only / helper-only accessor. <see cref="NeuralBatchHelper"/>
+    /// uses this via <see cref="GetExpectedUnbatchedInputRankInternal"/>
+    /// to decide whether a tensor with a leading axis exceeding its chunk
+    /// size is truly a batched input or an unbatched single sample whose
+    /// leading axis is sequence/features.
+    /// </remarks>
+    internal int GetExpectedUnbatchedInputRankInternal() => GetExpectedUnbatchedInputRank();
+
     private int GetExpectedUnbatchedInputRank()
     {
         if (Architecture is null) return 0;
@@ -2912,8 +3202,29 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Falls back to eager execution if compilation fails. Plans auto-invalidate
     /// when <see cref="_layerStructureVersion"/> changes.
     /// </summary>
-    protected Tensor<T> PredictCompiled(Tensor<T> input) =>
-        _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
+    protected internal Tensor<T> PredictCompiled(Tensor<T> input)
+    {
+        // Mirror Predict()'s inference-mode contract: temporary training-
+        // mode flip so stateful layers (Dropout, BatchNorm running-stats,
+        // GaussianNoise) behave deterministically + cheaply. Without this,
+        // PredictCompiled's eager fallback or replay both ran with Dropout
+        // sampling and BatchNorm batch-stat updates every call — 3-5× per-
+        // call slowdown vs Predict() at the same model shape, and outputs
+        // were non-deterministic across repeated calls with the same input.
+        // NoGradScope mirrors Predict() too so the autodiff tape doesn't
+        // record any of the inference work as a training step.
+        using var _ = new NoGradScope<T>();
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
 
     /// <summary>
     /// Eagerly traces and compiles the forward pass for the given input shape,

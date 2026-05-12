@@ -7,6 +7,7 @@ using AiDotNet.Exceptions;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.AutoML;
 
@@ -130,7 +131,12 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
                 model = await CreateModelWithHookAsync(modelType, trialParameters);
 
                 cancellationToken.ThrowIfCancellationRequested();
-                model.Train(trainInputs, trainTargets);
+                // Chunked AutoML trial Train (#1296): full trainInputs/Targets
+                // went straight to model.Train, ignoring any sane batch size for
+                // NN models. NeuralBatchHelper dispatches to mini-batched Train
+                // calls for NeuralNetworkBase<T>, falls through unchanged for
+                // closed-form / tree / linear / ensemble models.
+                NeuralBatchHelper.TrainMaybeBatched(model, trainInputs, trainTargets);
 
                 cancellationToken.ThrowIfCancellationRequested();
                 score = await EvaluateModelAsync(model, validationInputs, validationTargets);
@@ -268,7 +274,8 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
 
             // Create and train model for this fold
             var foldModel = await CreateModelWithHookAsync(modelType, trialParameters);
-            foldModel.Train(foldTrainInputs, foldTrainTargets);
+            // Chunked AutoML CV fold Train (#1296): see comment at line ~134.
+            NeuralBatchHelper.TrainMaybeBatched(foldModel, foldTrainInputs, foldTrainTargets);
 
             // Evaluate on validation fold
             var foldScore = await EvaluateModelAsync(foldModel, foldValInputs, foldValTargets);
@@ -280,7 +287,8 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
 
         // Retrain final model on full training data
         var finalModel = await CreateModelWithHookAsync(modelType, trialParameters);
-        finalModel.Train(trainInputs, trainTargets);
+        // Chunked AutoML final retrain (#1296): see comment at line ~134.
+        NeuralBatchHelper.TrainMaybeBatched(finalModel, trainInputs, trainTargets);
 
         return (finalModel, avgScore);
     }
@@ -455,7 +463,8 @@ public abstract class SupervisedAutoMLModelBase<T, TInput, TOutput> : AutoMLMode
                     continue;
                 }
 
-                model.Train(trainInputs, trainTargets);
+                // Chunked AutoML ensembling Train (#1296): see comment at line ~134.
+                NeuralBatchHelper.TrainMaybeBatched(model, trainInputs, trainTargets);
 
                 double score;
                 try
