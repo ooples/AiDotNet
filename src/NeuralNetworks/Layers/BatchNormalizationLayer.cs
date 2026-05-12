@@ -541,7 +541,15 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             flattenedFeaturesLast = true;
         }
 
-        _lastInput = input;
+        // _lastInput is layer-side activation retention for a backward path
+        // that's never reached when training goes through the tape (tape
+        // holds its own intermediate refs already). Skip the assignment
+        // when a tape is active so this field doesn't double-root the
+        // input activation; null it out so the previous step's tensor is
+        // eligible for collection.
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        _lastInput = tapeActive ? null : input;
 
         if (IsTrainingMode)
         {

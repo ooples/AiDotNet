@@ -1003,13 +1003,24 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
                 $"Expected input depth {InputDepth}, but got {actualInputChannels}.");
         }
 
-        _lastInput = input4D;
+        // Pin _lastInput only when no tape is active. When a tape is active
+        // the tape itself retains every intermediate needed by backward; the
+        // layer-side _lastInput field would just double-root the activation
+        // (Conv1a output at VGG paper-scale is 25.7 MB at fp64) and inflate
+        // peak retained memory across the L-layer chain. Skip the assignment
+        // in tape mode; use the local input4D directly for the conv ops.
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        if (!tapeActive)
+        {
+            _lastInput = input4D;
+        }
 
         // === Zero-Allocation Convolution ===
         // Pre-allocate output buffer on first forward pass, then reuse via Conv2DInto
-        int outputHeight = (_lastInput.Shape[2] + 2 * Padding - KernelSize) / Stride + 1;
-        int outputWidth = (_lastInput.Shape[3] + 2 * Padding - KernelSize) / Stride + 1;
-        int batchSize_conv = _lastInput.Shape[0];
+        int outputHeight = (input4D.Shape[2] + 2 * Padding - KernelSize) / Stride + 1;
+        int outputWidth = (input4D.Shape[3] + 2 * Padding - KernelSize) / Stride + 1;
+        int batchSize_conv = input4D.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
         if (_preAllocatedOutput is null ||
@@ -1033,7 +1044,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // storage pointer is stale by the next forward). Reshape is metadata-only so the
             // cost is a tensor-view object alloc.
             var biasReshaped = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = Engine.FusedConv2D(_lastInput, _kernels, biasReshaped,
+            result = Engine.FusedConv2D(input4D, _kernels, biasReshaped,
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
         else if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
@@ -1055,7 +1066,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             // with no GradFn pointing back to _biases. Reusing that cached handle
             // would make the gradient walk hit a dead end at _biasReshaped4D,
             // leaving _biases with zero gradient on every training step.
-            var conv = Engine.Conv2D(_lastInput, _kernels, Stride, Padding, dilation: 1);
+            var conv = Engine.Conv2D(input4D, _kernels, Stride, Padding, dilation: 1);
             var biasReshapedForTape = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
             result = Engine.TensorBroadcastAdd(conv, biasReshapedForTape);
         }
@@ -1063,7 +1074,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         {
             // Inference fast path: separate Conv2DInto + in-place bias + activation.
             // Safe because no tape is active during inference (NoGradScope).
-            Engine.Conv2DInto(_preAllocatedOutput, _lastInput, _kernels, Stride, Padding, dilation: 1);
+            Engine.Conv2DInto(_preAllocatedOutput, input4D, _kernels, Stride, Padding, dilation: 1);
             var output = _preAllocatedOutput;
 
             // Recompute every forward — see fused-activation branch above for rationale.
@@ -1073,8 +1084,13 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             result = ApplyActivation(output);
         }
 
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
+        // Only retain _lastOutput when no tape is active. The tape holds
+        // `result` as a node already; layer-side retention would double-root
+        // the activation and inflate peak memory through the L-layer chain.
+        // Keep the assignment alive on the inference path (where Conv2D
+        // doesn't hit a tape) for any caller that still reads the layer's
+        // last output for diagnostics.
+        if (IsTrainingMode && !tapeActive)
         {
             _lastOutput = result;
         }
