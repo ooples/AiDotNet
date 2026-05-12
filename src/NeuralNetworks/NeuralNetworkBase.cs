@@ -3120,7 +3120,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Falls back to eager execution if compilation fails. Plans auto-invalidate
     /// when <see cref="_layerStructureVersion"/> changes.
     /// </summary>
-    protected Tensor<T> PredictCompiled(Tensor<T> input) =>
+    protected internal Tensor<T> PredictCompiled(Tensor<T> input) =>
         _compileHost.Predict(input, _layerStructureVersion, () => PredictEager(input));
 
     /// <summary>

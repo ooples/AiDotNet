@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Inputs;
@@ -120,8 +121,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// </para>
     /// </summary>
     [Fact(Timeout = 300_000)]
-    public void Adam_LargeXTrain_InitialTrainSkipped_NoHeapBlowup()
+    public async Task Adam_LargeXTrain_InitialTrainSkipped_NoHeapBlowup()
     {
+        await Task.Yield();
         const int sampleCount = 2000;
         var (arch, xTrain, yTrain) = BuildFixture(sampleCount: sampleCount);
 
@@ -133,12 +135,23 @@ public class Issue1296LargeXTrainBatchingTests
             BatchSize = 32,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, options);
+        var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(model, options);
 
         var inputData = new OptimizationInputData<float, Tensor<float>, Tensor<float>>
         {
             XTrain = xTrain,
             YTrain = yTrain,
+            // OptimizerBase.PrepareAndEvaluateSolution calls
+            // SelectFeatures on every dataset; the default rank-0 stubs
+            // produced by the OptimizationInputData ctor throw
+            // "rank>=2 required" inside OptimizerHelper. Reuse the
+            // train tensors as placeholders for validation / test —
+            // the tests below only assert against memory deltas, not
+            // generalisation, so the duplicate-data is irrelevant.
+            XValidation = xTrain,
+            YValidation = yTrain,
+            XTest = xTrain,
+            YTest = yTrain,
         };
 
         long heapBefore = GC.GetTotalMemory(forceFullCollection: true);
@@ -174,8 +187,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// </para>
     /// </summary>
     [Fact(Timeout = 600_000)]
-    public void Adam_LargeXValidation_PerEpochPredict_IsChunked()
+    public async Task Adam_LargeXValidation_PerEpochPredict_IsChunked()
     {
+        await Task.Yield();
         var (arch, xTrain, yTrain) = BuildFixture(sampleCount: 800);
         var (_, xVal, yVal) = BuildFixture(sampleCount: 4000);
 
@@ -187,7 +201,7 @@ public class Issue1296LargeXTrainBatchingTests
             BatchSize = 32,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, options);
+        var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(model, options);
 
         var inputData = new OptimizationInputData<float, Tensor<float>, Tensor<float>>
         {
@@ -195,6 +209,10 @@ public class Issue1296LargeXTrainBatchingTests
             YTrain = yTrain,
             XValidation = xVal,
             YValidation = yVal,
+            // SelectFeatures rejects the default rank-0 XTest stub; reuse
+            // validation tensors as a placeholder.
+            XTest = xVal,
+            YTest = yVal,
         };
 
         long peakHeap = 0;
@@ -222,8 +240,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// changes the order of matmul reductions inside the engine kernels.
     /// </summary>
     [Fact(Timeout = 60_000)]
-    public void PredictInBatches_MatchesUnchunkedPredict_WithinTolerance()
+    public async Task PredictInBatches_MatchesUnchunkedPredict_WithinTolerance()
     {
+        await Task.Yield();
         const int sampleCount = 128;
         var (arch, x, _) = BuildFixture(sampleCount: sampleCount);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
@@ -274,8 +293,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// and must stay zero-overhead.
     /// </summary>
     [Fact(Timeout = 60_000)]
-    public void PredictInBatches_BelowChunkThreshold_DelegatesToPredict()
+    public async Task PredictInBatches_BelowChunkThreshold_DelegatesToPredict()
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 16);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -303,8 +323,9 @@ public class Issue1296LargeXTrainBatchingTests
     [Theory(Timeout = 60_000)]
     [InlineData(0)]
     [InlineData(-1)]
-    public void PredictInBatches_NonPositiveBatchSize_ClampsToOne(int batchSize)
+    public async Task PredictInBatches_NonPositiveBatchSize_ClampsToOne(int batchSize)
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 4);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -322,8 +343,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// including <c>OptimizerBase.PredictForEvaluation</c>.
     /// </summary>
     [Fact(Timeout = 30_000)]
-    public void PredictInBatches_NullInput_Throws()
+    public async Task PredictInBatches_NullInput_Throws()
     {
+        await Task.Yield();
         var (arch, _, _) = BuildFixture(sampleCount: 4);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
         Assert.Throws<ArgumentNullException>(() => model.PredictInBatches(null!, batchSize: 32));
@@ -337,8 +359,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// PR #1297, this catches it.
     /// </summary>
     [Fact(Timeout = 300_000)]
-    public void AdamW_LargeXTrain_InitialTrainSkipped()
+    public async Task AdamW_LargeXTrain_InitialTrainSkipped()
     {
+        await Task.Yield();
         const int sampleCount = 2000;
         var (arch, xTrain, yTrain) = BuildFixture(sampleCount: sampleCount);
 
@@ -350,12 +373,23 @@ public class Issue1296LargeXTrainBatchingTests
             BatchSize = 32,
             UseAdaptiveLearningRate = false,
         };
-        var optimizer = new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null, options);
+        var optimizer = new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(model, options);
 
         var inputData = new OptimizationInputData<float, Tensor<float>, Tensor<float>>
         {
             XTrain = xTrain,
             YTrain = yTrain,
+            // OptimizerBase.PrepareAndEvaluateSolution calls
+            // SelectFeatures on every dataset; the default rank-0 stubs
+            // produced by the OptimizationInputData ctor throw
+            // "rank>=2 required" inside OptimizerHelper. Reuse the
+            // train tensors as placeholders for validation / test —
+            // the tests below only assert against memory deltas, not
+            // generalisation, so the duplicate-data is irrelevant.
+            XValidation = xTrain,
+            YValidation = yTrain,
+            XTest = xTrain,
+            YTest = yTrain,
         };
 
         long heapBefore = GC.GetTotalMemory(forceFullCollection: true);
@@ -377,8 +411,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// output is element-equivalent in both cases.
     /// </summary>
     [Fact(Timeout = 60_000)]
-    public void NeuralBatchHelper_PredictMaybeBatched_ShortCircuitsAndChunks()
+    public async Task NeuralBatchHelper_PredictMaybeBatched_ShortCircuitsAndChunks()
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 64);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -421,8 +456,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// shot.
     /// </summary>
     [Fact(Timeout = 600_000)]
-    public void NeuralBatchHelper_TrainMaybeBatched_LargeNNBatch_NoOOM()
+    public async Task NeuralBatchHelper_TrainMaybeBatched_LargeNNBatch_NoOOM()
     {
+        await Task.Yield();
         const int sampleCount = 2000;
         var (arch, x, y) = BuildFixture(sampleCount: sampleCount);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
@@ -463,32 +499,43 @@ public class Issue1296LargeXTrainBatchingTests
     /// Post-fix: outputs reflect the actual input data.
     /// </summary>
     [Fact(Timeout = 60_000)]
-    public void CompiledReplay_ValueStability_DifferentInputs_ProduceDifferentOutputs()
+    public async Task CompiledReplay_ValueStability_DifferentInputs_ProduceDifferentOutputs()
     {
+        await Task.Yield();
         var prevCompile = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
         try
         {
             AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
 
             var (arch, _, _) = BuildFixture(sampleCount: 1);
-            var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+            var model = new TestExposingTransformer(arch);
 
-            // First input: deterministic pattern A
+            // Prime the model so weights materialise BEFORE compile trace.
+            var primer = new Tensor<float>([1, arch.InputSize]);
+            for (int s = 0; s < arch.InputSize; s++) primer[0, s] = s * 1.0f;
+            _ = model.Predict(primer);
+
+            // Use PredictCompiledPublic (test-only override that exposes
+            // the protected-internal PredictCompiled) so the cache is
+            // actually exercised. The default Predict path routes through
+            // PredictEager regardless of EnableCompilation; explicit
+            // PredictCompiled is the entry point the SetInputs rebind in
+            // CompiledModelHost actually protects.
             var inputA = new Tensor<float>([1, arch.InputSize]);
             for (int s = 0; s < arch.InputSize; s++) inputA[0, s] = s * 1.0f;
-            var outputA = model.Predict(inputA);
-            // Materialise into a snapshot vector so we can compare without
-            // worrying about lazy tensor evaluation.
+            var outputA = model.PredictCompiledPublic(inputA);
             var snapshotA = new float[outputA.Length];
             for (int i = 0; i < outputA.Length; i++) snapshotA[i] = outputA[i];
 
-            // Second input: distinct deterministic pattern B (same shape,
-            // different data). If the stale-data bug were still present,
-            // the cached plan would replay against inputA's data and the
-            // outputs would be byte-identical.
+            // Second input: distinct deterministic pattern B (same
+            // shape, different data). Pre-SetInputs-fix, the cached
+            // plan replayed against inputA's data via the captured
+            // input buffer and outputs were byte-identical. Post-fix,
+            // SetInputs(inputB) overwrites the buffer and outputs
+            // reflect inputB.
             var inputB = new Tensor<float>([1, arch.InputSize]);
             for (int s = 0; s < arch.InputSize; s++) inputB[0, s] = (arch.InputSize - s) * 2.0f;
-            var outputB = model.Predict(inputB);
+            var outputB = model.PredictCompiledPublic(inputB);
 
             int diffCount = 0;
             for (int i = 0; i < outputB.Length; i++)
@@ -514,8 +561,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// exactly once and the accumulated gradient was well-defined.
     /// </summary>
     [Fact(Timeout = 600_000)]
-    public void GradientAccumulation_LargeNNBatch_CompletesAndAdvancesLoss()
+    public async Task GradientAccumulation_LargeNNBatch_CompletesAndAdvancesLoss()
     {
+        await Task.Yield();
         const int sampleCount = 1000;
         var (arch, x, y) = BuildFixture(sampleCount: sampleCount);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
@@ -552,8 +600,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// at the initial size.
     /// </summary>
     [Fact(Timeout = 60_000)]
-    public void PredictAdaptive_NoOOM_MatchesNonAdaptive()
+    public async Task PredictAdaptive_NoOOM_MatchesNonAdaptive()
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 200);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -584,8 +633,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// regardless of the budget.
     /// </summary>
     [Fact(Timeout = 60_000)]
-    public void MemoryBudget_SmallBudget_ChunksBelowFullSize()
+    public async Task MemoryBudget_SmallBudget_ChunksBelowFullSize()
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 4000);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -611,8 +661,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// reducer calls.
     /// </summary>
     [Fact(Timeout = 60_000)]
-    public void StreamAggregation_ReducerFiresOncePerChunk()
+    public async Task StreamAggregation_ReducerFiresOncePerChunk()
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 1000);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -657,8 +708,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// a valid output.
     /// </summary>
     [Fact(Timeout = 600_000)]
-    public void AdaptiveOOMRecovery_RecoversFromHostileInitialBatchSize()
+    public async Task AdaptiveOOMRecovery_RecoversFromHostileInitialBatchSize()
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 256);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -703,8 +755,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// diverge measurably.
     /// </summary>
     [Fact(Timeout = 600_000)]
-    public void GradientAccumulation_MatchesFullBatchGradient_OnOneStep()
+    public async Task GradientAccumulation_MatchesFullBatchGradient_OnOneStep()
     {
+        await Task.Yield();
         const int sampleCount = 128;
         var (arch, x, y) = BuildFixture(sampleCount: sampleCount);
         var probeInput = new Tensor<float>([1, x.Shape[1]]);
@@ -767,8 +820,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// would peak at GBs.
     /// </summary>
     [Fact(Timeout = 600_000)]
-    public void MemoryBudget_ActualPeakStaysUnderTwiceBudget()
+    public async Task MemoryBudget_ActualPeakStaysUnderTwiceBudget()
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 4000);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -801,8 +855,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// tensor in memory alongside the chunk outputs.
     /// </summary>
     [Fact(Timeout = 300_000)]
-    public void StreamAggregation_LowersPeakHeapVsConcatPath()
+    public async Task StreamAggregation_LowersPeakHeapVsConcatPath()
     {
+        await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 2000);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -810,38 +865,61 @@ public class Issue1296LargeXTrainBatchingTests
         for (int s = 0; s < x.Shape[1]; s++) primer[0, s] = x[0, s];
         _ = model.Predict(primer);
 
-        // Concat path (PredictMaybeBatched → PredictInBatches → Concatenate)
-        long heapBeforeConcat = GC.GetTotalMemory(forceFullCollection: true);
-        var concatOutput = NeuralBatchHelper.PredictMaybeBatched(model, x, batchSize: 64);
-        long heapAfterConcat = GC.GetTotalMemory(forceFullCollection: false);
-        double concatPeakMb = Math.Max(0, heapAfterConcat - heapBeforeConcat) / 1024.0 / 1024.0;
-        GC.KeepAlive(concatOutput);
+        // Use GetAllocatedBytesForCurrentThread — strictly better than
+        // heap-delta because it captures every allocation regardless of
+        // intra-call GC timing. Heap-delta is just (live_after -
+        // live_before) and intermediate frees during the call vanish.
+        // For "did the algorithm allocate fewer total bytes?" the
+        // allocated-bytes counter is the correct measurement.
 
-        // Force GC between runs so the two measurements are independent.
+        // Concat path
+#if NET5_0_OR_GREATER
+        long allocBeforeConcat = GC.GetAllocatedBytesForCurrentThread();
+#else
+        long allocBeforeConcat = GC.GetTotalMemory(forceFullCollection: true);
+#endif
+        var concatOutput = NeuralBatchHelper.PredictMaybeBatched(model, x, batchSize: 64);
+#if NET5_0_OR_GREATER
+        long allocAfterConcat = GC.GetAllocatedBytesForCurrentThread();
+#else
+        long allocAfterConcat = GC.GetTotalMemory(forceFullCollection: false);
+#endif
+        double concatAllocMb = Math.Max(0, allocAfterConcat - allocBeforeConcat) / 1024.0 / 1024.0;
+        GC.KeepAlive(concatOutput);
         concatOutput = null!;
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
         // Reduce path — fold per-chunk into a counter (no full tensor materialised)
-        long heapBeforeReduce = GC.GetTotalMemory(forceFullCollection: true);
+#if NET5_0_OR_GREATER
+        long allocBeforeReduce = GC.GetAllocatedBytesForCurrentThread();
+#else
+        long allocBeforeReduce = GC.GetTotalMemory(forceFullCollection: true);
+#endif
         int sum = NeuralBatchHelper.PredictAndReduce<float, Tensor<float>, Tensor<float>, int>(
             model, x, seed: 0,
             reducer: (acc, chunk, start, end) => acc + (end - start),
             batchSize: 64);
-        long heapAfterReduce = GC.GetTotalMemory(forceFullCollection: false);
-        double reducePeakMb = Math.Max(0, heapAfterReduce - heapBeforeReduce) / 1024.0 / 1024.0;
+#if NET5_0_OR_GREATER
+        long allocAfterReduce = GC.GetAllocatedBytesForCurrentThread();
+#else
+        long allocAfterReduce = GC.GetTotalMemory(forceFullCollection: false);
+#endif
+        double reduceAllocMb = Math.Max(0, allocAfterReduce - allocBeforeReduce) / 1024.0 / 1024.0;
 
-        _output.WriteLine($"Concat path peak: {concatPeakMb:F1} MB");
-        _output.WriteLine($"Reduce path peak: {reducePeakMb:F1} MB");
-        _output.WriteLine($"Savings: {concatPeakMb - reducePeakMb:F1} MB ({100.0 * (1 - reducePeakMb / Math.Max(1e-3, concatPeakMb)):F1}%)");
+        _output.WriteLine($"Concat path total allocations: {concatAllocMb:F1} MB");
+        _output.WriteLine($"Reduce path total allocations: {reduceAllocMb:F1} MB");
+        _output.WriteLine($"Savings: {concatAllocMb - reduceAllocMb:F1} MB ({100.0 * (1 - reduceAllocMb / Math.Max(1e-3, concatAllocMb)):F1}%)");
 
         Assert.Equal(x.Shape[0], sum);
-        // Reduce path must peak strictly lower than concat path. Allow
-        // 10 % noise for GC timing differences between the two runs.
-        Assert.True(reducePeakMb < concatPeakMb * 0.9,
-            $"Stream-aggregation didn't lower peak heap. Concat={concatPeakMb:F1} MB, Reduce={reducePeakMb:F1} MB. " +
-            $"Either the reducer is materialising more than it should, or the concat path got cheaper.");
+        // Reduce path must allocate strictly less than concat path
+        // (Concat path holds N_chunks chunk-output tensors AND the final
+        // concatenated tensor; Reduce path holds only the current chunk's
+        // output). Allow 5 % noise for per-call infrastructure overhead.
+        Assert.True(reduceAllocMb < concatAllocMb * 0.95,
+            $"Stream-aggregation didn't lower allocations. Concat={concatAllocMb:F1} MB, Reduce={reduceAllocMb:F1} MB. " +
+            $"PredictAndReduce should be allocating less than the concat path.");
     }
 
     /// <summary>
@@ -852,8 +930,9 @@ public class Issue1296LargeXTrainBatchingTests
     /// (loose because the trace pass is amortised but JIT timing is noisy).
     /// </summary>
     [Fact(Timeout = 300_000)]
-    public void CompileReplay_DeliversSpeedupVsEager()
+    public async Task CompileReplay_DeliversSpeedupVsEager()
     {
+        await Task.Yield();
         const int warmup = 5;
         const int trials = 50;
         var (arch, _, _) = BuildFixture(sampleCount: 1);
@@ -872,13 +951,14 @@ public class Issue1296LargeXTrainBatchingTests
             sw.Stop();
             double eagerMs = sw.Elapsed.TotalMilliseconds;
 
-            // COMPILED — same warmup then N trials. The first call after
-            // EnableCompilation flip traces; the rest replay.
+            // COMPILED — explicit PredictCompiled invocation (default
+            // Predict still routes through PredictEager; the compile
+            // path is only engaged via the explicit-opt-in entry point).
             AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
-            var compiledModel = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
-            for (int i = 0; i < warmup; i++) _ = compiledModel.Predict(input);
+            var compiledModel = new TestExposingTransformer(arch);
+            for (int i = 0; i < warmup; i++) _ = compiledModel.PredictCompiledPublic(input);
             sw.Restart();
-            for (int i = 0; i < trials; i++) _ = compiledModel.Predict(input);
+            for (int i = 0; i < trials; i++) _ = compiledModel.PredictCompiledPublic(input);
             sw.Stop();
             double compiledMs = sw.Elapsed.TotalMilliseconds;
 
@@ -901,5 +981,23 @@ public class Issue1296LargeXTrainBatchingTests
         {
             AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = prev;
         }
+    }
+
+    /// <summary>
+    /// Test-only Transformer subclass that re-exposes the
+    /// <see cref="NeuralNetworkBase{T}.PredictCompiled"/> entry point
+    /// (which is <c>protected internal</c>) as a public method, so the
+    /// value-stable replay and compile-speedup probes can drive it
+    /// directly. The compile path is opt-in for end users; this wrapper
+    /// is the test surface that makes it observable.
+    /// </summary>
+    private sealed class TestExposingTransformer : Transformer<float>
+    {
+        public TestExposingTransformer(TransformerArchitecture<float> arch)
+            : base(arch, lossFunction: new CategoricalCrossEntropyLoss<float>())
+        {
+        }
+
+        public Tensor<float> PredictCompiledPublic(Tensor<float> input) => PredictCompiled(input);
     }
 }

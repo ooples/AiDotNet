@@ -434,8 +434,20 @@ public static class NeuralBatchHelper
     /// <summary>
     /// Empirically estimates the chunk size that keeps a Predict call's
     /// peak managed-heap delta under <paramref name="memoryBudgetBytes"/>.
-    /// Probes with a single-sample forward, scales linearly against the
-    /// budget with <see cref="MemoryBudgetSafetyFactor"/> headroom.
+    /// Probes at <c>B = probeSmall</c> AND <c>B = probeLarge</c>, fits a
+    /// linear slope <c>bytes(B) ≈ alpha + beta · B</c> via the two-point
+    /// estimator, then solves for B such that <c>alpha + beta · B ≤
+    /// budget × safety</c>.
+    ///
+    /// <para>
+    /// A single B=1 probe systematically under-counts memory cost on
+    /// quadratic-in-seq operators (attention scores) because the per-call
+    /// fixed overhead (arena setup, layer caches, tape allocation) is a
+    /// large fraction of B=1's measurement and masks the per-sample
+    /// contribution. The two-point fit isolates the per-sample slope
+    /// (beta) from the per-call fixed overhead (alpha), which is what
+    /// actually determines whether a larger chunk fits.
+    /// </para>
     /// </summary>
     public static int EstimateChunkSize<T>(
         NeuralNetworkBase<T> nn,
@@ -446,21 +458,73 @@ public static class NeuralBatchHelper
         if (sampleInput is null) throw new ArgumentNullException(nameof(sampleInput));
         if (sampleInput.Rank == 0) return 1;
 
-        var oneSample = sampleInput.Shape[0] == 1
-            ? sampleInput
-            : sampleInput.Slice(axis: 0, start: 0, end: 1).Contiguous();
+        int axis0 = sampleInput.Shape[0];
+        // Probe sizes — small enough to be feasible probes; large enough
+        // that the per-sample slope dominates the fixed overhead in the
+        // delta between them. If the input is small, fall back to a
+        // single-point estimate at the input's own size.
+        int probeSmall = System.Math.Min(8, axis0);
+        int probeLarge = System.Math.Min(16, axis0);
 
-        long before = System.GC.GetTotalMemory(forceFullCollection: true);
-        var probeOutput = nn.Predict(oneSample);
-        long after = System.GC.GetTotalMemory(forceFullCollection: false);
-        long perSampleBytes = System.Math.Max(1L, after - before);
-
-        if (probeOutput is System.IDisposable disposable) disposable.Dispose();
+        long bytesSmall = MeasureForwardAllocatedBytes(nn, sampleInput, probeSmall);
+        long beta;       // per-sample slope (bytes per additional sample)
+        long alpha;      // per-call fixed cost (intercept)
+        if (probeLarge > probeSmall)
+        {
+            long bytesLarge = MeasureForwardAllocatedBytes(nn, sampleInput, probeLarge);
+            long dB = probeLarge - probeSmall;
+            beta = System.Math.Max(1L, (bytesLarge - bytesSmall) / dB);
+            // Solve alpha from one point: alpha = bytesSmall - beta * probeSmall
+            alpha = System.Math.Max(0L, bytesSmall - beta * probeSmall);
+        }
+        else
+        {
+            // Single-point fallback: assume zero fixed overhead and
+            // attribute all measured bytes to the per-sample slope.
+            beta = System.Math.Max(1L, bytesSmall / System.Math.Max(1, probeSmall));
+            alpha = 0L;
+        }
 
         long budgetWithMargin = (long)(memoryBudgetBytes * MemoryBudgetSafetyFactor);
-        long chunk = budgetWithMargin / perSampleBytes;
+        // Solve alpha + beta * chunk <= budget for chunk.
+        long chunk = (budgetWithMargin - alpha) / beta;
         if (chunk < 1) return 1;
-        if (chunk > sampleInput.Shape[0]) return sampleInput.Shape[0];
+        if (chunk > axis0) return axis0;
         return (int)chunk;
+    }
+
+    /// <summary>
+    /// Probes the actual bytes-allocated cost of a single Predict at
+    /// <paramref name="batchSize"/> samples. Uses
+    /// <see cref="System.GC.GetAllocatedBytesForCurrentThread"/> which
+    /// captures every allocation regardless of GC timing — strictly
+    /// better than the heap-delta read used previously.
+    /// </summary>
+    private static long MeasureForwardAllocatedBytes<T>(
+        NeuralNetworkBase<T> nn, Tensor<T> sampleInput, int batchSize)
+    {
+        var probeInput = sampleInput.Shape[0] >= batchSize
+            ? sampleInput.Slice(axis: 0, start: 0, end: batchSize).Contiguous()
+            : sampleInput;
+
+        // Warm-up: run once so JIT and lazy-init costs don't pollute the
+        // probe. The first Predict on a lazy-init Transformer allocates
+        // weights — only the SECOND call reflects steady-state forward
+        // cost.
+        _ = nn.Predict(probeInput);
+
+        // GetAllocatedBytesForCurrentThread is net5+; for net471 fall
+        // back to GetTotalMemory (less precise but always available).
+#if NET5_0_OR_GREATER
+        long before = System.GC.GetAllocatedBytesForCurrentThread();
+        var probeOutput = nn.Predict(probeInput);
+        long after = System.GC.GetAllocatedBytesForCurrentThread();
+#else
+        long before = System.GC.GetTotalMemory(forceFullCollection: true);
+        var probeOutput = nn.Predict(probeInput);
+        long after = System.GC.GetTotalMemory(forceFullCollection: false);
+#endif
+        if (probeOutput is System.IDisposable disposable) disposable.Dispose();
+        return System.Math.Max(0L, after - before);
     }
 }
