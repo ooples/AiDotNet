@@ -11,6 +11,13 @@ namespace AiDotNet.Tools.ResNetPerfHarness;
 
 internal static class Program
 {
+    private const string UsageText =
+        "Usage: ResNetPerfHarness [--warmup N] [--iters N] [--model NAME]\n" +
+        "  --warmup N   Number of warm-up training iterations (default: 1).\n" +
+        "  --iters  N   Number of measured training iterations (default: 3).\n" +
+        "  --model NAME One of: resnet50, vgg11, hope, sgpt, siglip2-ctor, sd15-ctor, t5xxl-ctor (default: resnet50).\n" +
+        "  --help, -h   Show this message and exit.";
+
     private static int Main(string[] args)
     {
         int warmup = 1;
@@ -18,11 +25,28 @@ internal static class Program
         string model = "resnet50";
         for (int i = 0; i < args.Length; i++)
         {
-            switch (args[i])
+            string flag = args[i];
+            switch (flag)
             {
-                case "--warmup": warmup = int.Parse(args[++i]); break;
-                case "--iters": iters = int.Parse(args[++i]); break;
-                case "--model": model = args[++i].ToLowerInvariant(); break;
+                case "--help":
+                case "-h":
+                case "/?":
+                    Console.WriteLine(UsageText);
+                    return 0;
+                case "--warmup":
+                    if (!TryTakeIntArg(args, ref i, flag, out warmup, minInclusive: 0)) return 2;
+                    break;
+                case "--iters":
+                    if (!TryTakeIntArg(args, ref i, flag, out iters, minInclusive: 1)) return 2;
+                    break;
+                case "--model":
+                    if (!TryTakeStringArg(args, ref i, flag, out var modelArg)) return 2;
+                    model = modelArg.ToLowerInvariant();
+                    break;
+                default:
+                    Console.Error.WriteLine($"[harness] error: unknown argument '{flag}'.");
+                    Console.Error.WriteLine(UsageText);
+                    return 2;
             }
         }
 
@@ -146,5 +170,50 @@ internal static class Program
             default:
                 throw new ArgumentException($"Unknown model: {model}");
         }
+    }
+
+    /// <summary>
+    /// Consumes the value following <paramref name="flag"/> in
+    /// <paramref name="args"/>, parses it as an integer with an optional
+    /// minimum bound, and emits a clear diagnostic + non-zero exit code
+    /// when the value is missing or malformed. Advances
+    /// <paramref name="i"/> past the consumed value on success.
+    /// </summary>
+    private static bool TryTakeIntArg(string[] args, ref int i, string flag, out int value, int minInclusive)
+    {
+        value = 0;
+        if (i + 1 >= args.Length)
+        {
+            Console.Error.WriteLine($"[harness] error: '{flag}' requires a value.");
+            Console.Error.WriteLine(UsageText);
+            return false;
+        }
+        i++;
+        if (!int.TryParse(args[i], System.Globalization.NumberStyles.Integer,
+                System.Globalization.CultureInfo.InvariantCulture, out value))
+        {
+            Console.Error.WriteLine($"[harness] error: '{flag}' expects an integer, got '{args[i]}'.");
+            return false;
+        }
+        if (value < minInclusive)
+        {
+            Console.Error.WriteLine($"[harness] error: '{flag}' must be >= {minInclusive}, got {value}.");
+            return false;
+        }
+        return true;
+    }
+
+    private static bool TryTakeStringArg(string[] args, ref int i, string flag, out string value)
+    {
+        value = string.Empty;
+        if (i + 1 >= args.Length)
+        {
+            Console.Error.WriteLine($"[harness] error: '{flag}' requires a value.");
+            Console.Error.WriteLine(UsageText);
+            return false;
+        }
+        i++;
+        value = args[i];
+        return true;
     }
 }

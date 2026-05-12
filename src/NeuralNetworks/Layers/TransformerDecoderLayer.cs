@@ -1240,6 +1240,22 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["FeedForwardDim"] = _feedForwardDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["SequenceLength"] = _sequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        // Persist the FFN activation type so DeserializationHelper can
+        // re-instantiate it via TryCreateActivationInstance. Without this,
+        // any non-default FFN activation (anything other than
+        // GELUActivation<T>) silently round-trips to the ctor default on
+        // Clone / Deserialize, producing behaviourally divergent models
+        // (the symptom CodeRabbit flagged on PR #1290 / PR #1299).
+        if (_lazyFfnActivation is not null)
+        {
+            var aqn = _lazyFfnActivation.GetType().AssemblyQualifiedName;
+            if (!string.IsNullOrWhiteSpace(aqn))
+            {
+                metadata["FfnActivationType"] = aqn;
+            }
+        }
+
         return metadata;
     }
 

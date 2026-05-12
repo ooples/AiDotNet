@@ -607,6 +607,12 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (_trajectory.Count == 0)
             return NumOps.Zero;
 
+        // Snapshot the step count BEFORE the reverse-pass loop. The final
+        // divisor below must use this count, not _trajectory.Count after
+        // the loop / Clear() because the buffer is drained and Count
+        // would be 0.
+        int stepCount = _trajectory.Count;
+
         // Bootstrap the n-step return. For the terminal step, R_T = 0.
         // For non-terminal, R_T = V(s_T') per the paper's "Receive reward
         // r_t and new state s_{t+1}" loop followed by bootstrap.
@@ -668,7 +674,10 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Average squared advantage as a loss proxy. Paper monitors
         // policy + value loss separately; we return a single scalar to fit
         // the abstract Train() : T contract used across the agent base.
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(Math.Max(1, _trajectory.Count + 1)));
+        // Divide by the captured step count (stepCount), not _trajectory
+        // .Count — the trajectory has been Clear()ed above so reading
+        // _trajectory.Count here would always yield 0.
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(Math.Max(1, stepCount)));
     }
 
     public override Dictionary<string, T> GetMetrics()
