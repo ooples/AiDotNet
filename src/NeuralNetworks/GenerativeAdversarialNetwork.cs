@@ -387,8 +387,18 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Initialize tracking collections
         _generatorLosses = new List<T>();
-        Generator = CreateNetworkForInputType(generatorArchitecture, inputType);
-        Discriminator = CreateNetworkForInputType(discriminatorArchitecture, inputType);
+        // Use each architecture's own InputType for its wrapper. Sharing one
+        // `inputType` across both (e.g., ThreeDimensional for DCGAN) wraps
+        // the 1D-latent generator in a CNN whose pre-Forward shape walk
+        // (ResolveLazyLayerShapes) infers wrong dims for the first
+        // Deconv — the saved layer's 512 input channels gets resolved to
+        // 288, and SetParameters then rejects the 2097408-param block.
+        // Honoring each architecture's declared InputType picks the right
+        // wrapper (FeedForwardNeuralNetwork for 1D, CNN for 3D).
+        Generator = CreateNetworkForInputType(generatorArchitecture,
+            generatorArchitecture.InputType);
+        Discriminator = CreateNetworkForInputType(discriminatorArchitecture,
+            discriminatorArchitecture.InputType);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Initialize optimizers (default to Adam if not provided)
@@ -713,9 +723,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // For a GAN, prediction means generating data using the generator
-        // Determine if input is a single sample or batch based on the generator's expected input type
-        var expectedInputRank = Architecture.InputType switch
+        // For a GAN, prediction means generating data using the generator.
+        // Use the GENERATOR's input type (not the GAN-level Architecture.InputType)
+        // because the latter mirrors the image-side data type (3D for DCGAN)
+        // while the generator's input is the latent vector (1D). Reading the
+        // wrong source classifies a rank-1 latent as a single-sample 3D image
+        // and routes it to the "input doesn't match" else-branch.
+        var expectedInputRank = Generator.Architecture.InputType switch
         {
             InputType.OneDimensional => 1,
             InputType.TwoDimensional => 2,
@@ -723,12 +737,18 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             _ => 1
         };
 
-        // If input rank matches expected, it's a single sample
-        // If input rank is one more than expected, it's a batch
+        // If input rank matches expected, it's a single sample.
+        // Promote single samples to batched form so the generator sees a
+        // consistent rank-N+1 [batch, …] input — Dense/Reshape layers
+        // assume the leading axis is batch, and a rank-1 latent gets
+        // misinterpreted as "batch=latentDim" through ReshapeLayer.
         if (input.Rank == expectedInputRank)
         {
-            // Single sample - pass directly to generator
-            return Generator.Predict(input);
+            // Reshape to add a leading batch dim of 1.
+            var batched = new int[input.Rank + 1];
+            batched[0] = 1;
+            for (int i = 0; i < input.Rank; i++) batched[i + 1] = input.Shape[i];
+            return Generator.Predict(input.Reshape(batched));
         }
         else if (input.Rank == expectedInputRank + 1)
         {
@@ -775,6 +795,23 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // Promote single-sample inputs to batched form before reading the
+        // batch axis. DCGAN-style consumers (and the auto-generated tests)
+        // pass a rank-1 latent [latentDim] and a rank-3 image [C, H, W],
+        // neither of which carries an explicit batch dim — `input.Shape[0]`
+        // would then read the latent dim (e.g. 100) as the batch count.
+        // The downstream label-tensor sizing and Discriminator.Predict shape
+        // both diverge from each other (labels [latentDim] vs predictions
+        // [channels]) and `LossFunction.CalculateLoss` throws
+        // "Predicted and actual vectors must have the same length". Reshape
+        // to [1, latentDim] / [1, C, H, W] so batchSize=1 is consistent
+        // through the whole forward+backward+loss path.
+        if (input.Rank == 1)
+            input = input.Reshape(new[] { 1, input.Shape[0] });
+        if (expectedOutput.Rank == 3)
+            expectedOutput = expectedOutput.Reshape(
+                new[] { 1, expectedOutput.Shape[0], expectedOutput.Shape[1], expectedOutput.Shape[2] });
+
         // Get batch size from the input tensor
         int batchSize = input.Shape[0];
 
@@ -1591,8 +1628,29 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         var activations = new Dictionary<string, Tensor<T>>();
 
-        // Generator activations
+        // Generator activations. Promote single-sample latent to batched
+        // form so the generator's Dense → Reshape → Deconv stack reads the
+        // leading axis as batch (=1), not as latentDim. Without this, the
+        // ReshapeLayer that targets [channels, H, W] expands the
+        // latentDim-element 1-D tensor against the inferred batch axis and
+        // throws "Cannot reshape tensor with N elements to shape [N, C, H, W]"
+        // — N matching the latent dim.
         var current = input;
+        var genInputType = Generator.Architecture.InputType;
+        int expectedGenRank = genInputType switch
+        {
+            InputType.OneDimensional => 1,
+            InputType.TwoDimensional => 2,
+            InputType.ThreeDimensional => 3,
+            _ => 1
+        };
+        if (current.Rank == expectedGenRank)
+        {
+            var batched = new int[current.Rank + 1];
+            batched[0] = 1;
+            for (int j = 0; j < current.Rank; j++) batched[j + 1] = current.Shape[j];
+            current = current.Reshape(batched);
+        }
         for (int i = 0; i < Generator.Layers.Count; i++)
         {
             current = Generator.Layers[i].Forward(current);
