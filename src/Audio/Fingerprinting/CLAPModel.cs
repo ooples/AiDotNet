@@ -1034,17 +1034,20 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         public Tensor<T> Forward(Tensor<T> input)
         {
-            // Standard post-LN Transformer encoder block (Vaswani et al. 2017
-            // Eqs. 1–2; HTSAT-CLAP / Wu et al. 2023 §3.1 uses the same block).
-            //   x' = LayerNorm(x + MultiHeadSelfAttention(x))
-            //   y  = LayerNorm(x' + FFN(x'))
-            // This is CLAP's audio-side transformer — running it as a no-op (the
-            // previous "Placeholder for actual attention" copy) made every CLAP
-            // forward pass return the input unchanged, silently breaking
-            // fingerprint quality. The implementation below is faithful to the
-            // paper but stays on plain CPU loops to match the rest of this nested
-            // class; CLAPModel is inference-only here (training uses
-            // pretrained-ONNX mode in Forward when a model file is configured).
+            // Pre-LN Transformer encoder block matching CLAP's audio encoder
+            // architecture (Wu et al. 2023 CLAP §3.1 uses HTSAT — Chen et al.
+            // 2022 — which is built on Swin Transformer blocks, Liu et al. 2021
+            // §3.2). Swin and ViT/CLIP both use Pre-LN (Xiong et al. 2020 §3
+            // showed Pre-LN trains more stably than the Vaswani 2017 Post-LN):
+            //
+            //   x'  = x  + MHA(LN1(x))
+            //   y   = x' + FFN(LN2(x'))
+            //
+            // (For a strict HTSAT replica we'd also need shifted-window
+            // attention; we use global attention here as a close-enough
+            // approximation — it has the same trainable-parameter signature
+            // and reproduces the cross-token information mixing that the
+            // previous identity-copy stub completely bypassed.)
             int batchSize = input.Shape[0];
             int seqLen = input.Shape[1];
             int dim = input.Shape[2];
@@ -1054,11 +1057,13 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             for (int i = 0; i < input.Length; i++)
                 xBuf[i] = _ops.ToDouble(inSpan[i]);
 
-            // ------- 1. Multi-head self-attention -------
-            // Q, K, V: [B, S, dim] each, computed as x @ W{q,k,v}^T with W shape [dim, dim].
-            var q = ProjectLinear(xBuf, _qWeight, batchSize, seqLen, dim);
-            var k = ProjectLinear(xBuf, _kWeight, batchSize, seqLen, dim);
-            var v = ProjectLinear(xBuf, _vWeight, batchSize, seqLen, dim);
+            // ── Pre-LN + Multi-head self-attention ────────────────────────
+            var xNorm1 = LayerNorm1D(xBuf, _norm1Gamma, _norm1Beta, batchSize, seqLen, dim);
+
+            // Q, K, V: [B, S, dim] each, computed as x_norm @ W{q,k,v}^T with W shape [dim, dim].
+            var q = ProjectLinear(xNorm1, _qWeight, batchSize, seqLen, dim);
+            var k = ProjectLinear(xNorm1, _kWeight, batchSize, seqLen, dim);
+            var v = ProjectLinear(xNorm1, _vWeight, batchSize, seqLen, dim);
 
             // Scaled dot-product attention per head, then concat back to [B, S, dim].
             double scale = 1.0 / Math.Sqrt(_headDim);
@@ -1112,12 +1117,14 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             // Output projection: attnOut @ Wo^T.
             var projected = ProjectLinear(attnOut, _oWeight, batchSize, seqLen, dim);
 
-            // ------- 2. Residual + LayerNorm 1 -------
-            var afterAttn = ResidualLayerNorm(xBuf, projected, _norm1Gamma, _norm1Beta, batchSize, seqLen, dim);
+            // ── Residual after MHA: afterAttn = x + projected (no LN — Pre-LN block).
+            var afterAttn = new double[input.Length];
+            for (int i = 0; i < input.Length; i++) afterAttn[i] = xBuf[i] + projected[i];
 
-            // ------- 3. FFN: linear → GELU → linear -------
+            // ── Pre-LN + FFN (linear → GELU → linear) ─────────────────────
+            var xNorm2 = LayerNorm1D(afterAttn, _norm2Gamma, _norm2Beta, batchSize, seqLen, dim);
             int ffnDim = dim * 4;
-            // hidden = afterAttn @ W1^T   (W1 has shape [ffnDim, dim])
+            // hidden = xNorm2 @ W1^T   (W1 has shape [ffnDim, dim])
             var hidden = new double[batchSize * seqLen * ffnDim];
             for (int b = 0; b < batchSize; b++)
             {
@@ -1130,7 +1137,7 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                         double sum = 0.0;
                         int wRow = o * dim;
                         for (int d = 0; d < dim; d++)
-                            sum += afterAttn[xBase + d] * _ops.ToDouble(_ffnW1[wRow + d]);
+                            sum += xNorm2[xBase + d] * _ops.ToDouble(_ffnW1[wRow + d]);
                         // GELU (tanh approximation per Hendrycks & Gimpel 2016).
                         double x = sum;
                         hidden[hBase + o] = 0.5 * x * (1.0 + Math.Tanh(0.79788456 * (x + 0.044715 * x * x * x)));
@@ -1156,13 +1163,47 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 }
             }
 
-            // ------- 4. Residual + LayerNorm 2 -------
-            var final = ResidualLayerNorm(afterAttn, ffnOut, _norm2Gamma, _norm2Beta, batchSize, seqLen, dim);
+            // ── Residual after FFN: final = afterAttn + ffnOut (no LN). ───
+            var final = new double[input.Length];
+            for (int i = 0; i < input.Length; i++) final[i] = afterAttn[i] + ffnOut[i];
 
             var outArr = new T[input.Length];
-            for (int i = 0; i < input.Length; i++)
-                outArr[i] = _ops.FromDouble(final[i]);
+            for (int i = 0; i < input.Length; i++) outArr[i] = _ops.FromDouble(final[i]);
             return new Tensor<T>(outArr, input._shape);
+        }
+
+        /// <summary>
+        /// LayerNorm applied over the last (channel) axis of a [B, S, D] tensor
+        /// laid out in row-major order, with affine γ/β. Centres + normalises
+        /// per-token across the feature dimension.
+        /// </summary>
+        private double[] LayerNorm1D(double[] x, T[] gamma, T[] beta,
+            int batchSize, int seqLen, int dim)
+        {
+            var output = new double[x.Length];
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < seqLen; s++)
+                {
+                    int baseIdx = ((b * seqLen) + s) * dim;
+                    double mean = 0.0;
+                    for (int d = 0; d < dim; d++) mean += x[baseIdx + d];
+                    mean /= dim;
+                    double variance = 0.0;
+                    for (int d = 0; d < dim; d++)
+                    {
+                        double v = x[baseIdx + d] - mean;
+                        variance += v * v;
+                    }
+                    double invStd = 1.0 / Math.Sqrt(variance / dim + 1e-5);
+                    for (int d = 0; d < dim; d++)
+                    {
+                        double normalised = (x[baseIdx + d] - mean) * invStd;
+                        output[baseIdx + d] = normalised * _ops.ToDouble(gamma[d]) + _ops.ToDouble(beta[d]);
+                    }
+                }
+            }
+            return output;
         }
 
         // Linear projection x @ W^T where x is [B, S, dim] and W is row-major [dim, dim].
@@ -1188,40 +1229,6 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             return output;
         }
 
-        // y = LayerNorm(residual + delta) along the last axis (dim), with affine gamma/beta.
-        private double[] ResidualLayerNorm(double[] residual, double[] delta, T[] gamma, T[] beta,
-            int batchSize, int seqLen, int dim)
-        {
-            var output = new double[residual.Length];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    int baseIdx = ((b * seqLen) + s) * dim;
-
-                    double sum = 0.0;
-                    for (int d = 0; d < dim; d++)
-                        sum += residual[baseIdx + d] + delta[baseIdx + d];
-                    double mean = sum / dim;
-
-                    double variance = 0.0;
-                    for (int d = 0; d < dim; d++)
-                    {
-                        double v = residual[baseIdx + d] + delta[baseIdx + d] - mean;
-                        variance += v * v;
-                    }
-                    double invStd = 1.0 / Math.Sqrt(variance / dim + 1e-5);
-
-                    for (int d = 0; d < dim; d++)
-                    {
-                        double v = residual[baseIdx + d] + delta[baseIdx + d];
-                        double normalised = (v - mean) * invStd;
-                        output[baseIdx + d] = normalised * _ops.ToDouble(gamma[d]) + _ops.ToDouble(beta[d]);
-                    }
-                }
-            }
-            return output;
-        }
     }
 
     #endregion
