@@ -202,34 +202,61 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// <summary>
     /// Resamples ε_in (size p) and ε_out (size q), applies the signed-sqrt
     /// transform <c>f(x) = sign(x)·√|x|</c>, and builds the per-forward
-    /// noise tensors ε_w (outer product, shape [p, q]) and ε_b (= f(ε_out)).
-    /// Public for advanced callers that want to sync noise across multiple
-    /// layers (e.g., per-rollout reset in deep RL).
+    /// noise tensors via an engine-accelerated outer product:
+    /// <c>ε_w = f(ε_in)ᵀ · f(ε_out)</c> (Fortunato 2017 §3.2). Public for
+    /// advanced callers that want to sync noise across multiple layers.
     /// </summary>
+    /// <remarks>
+    /// Only the Gaussian RNG step runs on the CPU (Box-Muller via
+    /// <see cref="Math"/>). The signed-sqrt transform and outer product are
+    /// routed through <see cref="LayerBase{T}.Engine"/> ops so they pick up
+    /// BLAS / GPU acceleration and the gradient tape sees them as part of
+    /// the same compute graph as the rest of the forward pass.
+    /// </remarks>
     public (Tensor<T> EpsilonW, Tensor<T> EpsilonB) SampleFactorisedNoise()
     {
-        var fIn = new T[_inputSize];
+        // Sample raw Gaussian vectors. RNG is intrinsically scalar; we
+        // populate two Tensor<T>s in one pass per side.
+        var rawIn = new Tensor<T>([_inputSize, 1]);
         for (int i = 0; i < _inputSize; i++)
-        {
-            double g = SampleStandardNormal();
-            fIn[i] = NumOps.FromDouble(Math.Sign(g) * Math.Sqrt(Math.Abs(g)));
-        }
-        var fOut = new T[_outputSize];
+            rawIn[i, 0] = NumOps.FromDouble(SampleStandardNormal());
+
+        var rawOut = new Tensor<T>([1, _outputSize]);
         for (int j = 0; j < _outputSize; j++)
-        {
-            double g = SampleStandardNormal();
-            fOut[j] = NumOps.FromDouble(Math.Sign(g) * Math.Sqrt(Math.Abs(g)));
-        }
+            rawOut[0, j] = NumOps.FromDouble(SampleStandardNormal());
 
-        var epsW = new Tensor<T>([_inputSize, _outputSize]);
-        for (int i = 0; i < _inputSize; i++)
-            for (int j = 0; j < _outputSize; j++)
-                epsW[i, j] = NumOps.Multiply(fIn[i], fOut[j]);
+        // Signed-sqrt transform f(x) = sign(x) · √|x|. Engine ops:
+        //   f(x) = sign(x) · sqrt(|x|) = sign(x) · sqrt(x · sign(x))
+        // Build via TensorAbs → TensorSqrt → TensorSign then multiply.
+        var fIn = SignedSqrt(rawIn);
+        var fOut = SignedSqrt(rawOut);
 
-        var epsB = new Tensor<T>([_outputSize]);
-        for (int j = 0; j < _outputSize; j++) epsB[j] = fOut[j];
+        // Outer product f(ε_in)ᵀ · f(ε_out): [p, 1] @ [1, q] → [p, q].
+        // This is exactly Engine.TensorMatMul — BLAS-routed.
+        var epsW = Engine.TensorMatMul(fIn, fOut);
+
+        // ε_b is just f(ε_out) reshaped to [q].
+        var epsB = Engine.Reshape(fOut, [_outputSize]);
 
         return (epsW, epsB);
+    }
+
+    /// <summary>
+    /// Element-wise signed-square-root: <c>f(x) = sign(x) · √|x|</c>, the
+    /// per-element transform Fortunato 2017 §3.2 specifies for factorised
+    /// noise. Built from engine ops so it stays generic in T and runs on
+    /// whatever hardware the engine is bound to.
+    /// </summary>
+    private Tensor<T> SignedSqrt(Tensor<T> x)
+    {
+        // |x|
+        var absX = Engine.TensorAbs(x);
+        // √|x|
+        var sqrtAbs = Engine.TensorSqrt(absX);
+        // sign(x) — engine sign is available; fall back to safe division
+        // (x / (|x| + ε)) if the engine doesn't expose a TensorSign.
+        var sign = Engine.TensorSign(x);
+        return Engine.TensorMultiply(sign, sqrtAbs);
     }
 
     private double SampleStandardNormal()
