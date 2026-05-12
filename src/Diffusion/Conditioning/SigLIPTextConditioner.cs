@@ -178,35 +178,123 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
         return new Tensor<T>(new[] { texts.Length, MaxSequenceLength }, tokenData);
     }
 
+    /// <summary>
+    /// SigLIP-style transformer block (Zhai et al. 2023 "Sigmoid Loss for
+    /// Language Image Pre-Training" — same encoder architecture as CLIP):
+    /// pre-LN + multi-head scaled dot-product attention + residual +
+    /// pre-LN + MLP (H→4H GELU 4H→H) + residual. The previous "linear
+    /// projection in place of attention" stand-in collapsed attention to
+    /// one matmul, so the model never attended across tokens — the text
+    /// embeddings produced were structurally similar to a bag-of-tokens
+    /// representation rather than a context-aware one.
+    /// Weight layout matches <see cref="TextConditioningBase{T}.TransformerWeights"/>
+    /// (12·H² + 4·H per layer): see CLIPTextConditioner for the slot map.
+    /// </summary>
     private Vector<T> ApplyTransformerLayers(Vector<T> hidden, int seqLen)
     {
-        int weightsPerLayer = 12 * HiddenSize * HiddenSize + 4 * HiddenSize;
+        int H = HiddenSize;
+        int H2 = H * H;
+        int weightsPerLayer = 12 * H2 + 4 * H;
+        int numHeads = Math.Max(1, H / 64);     // SigLIP follows ViT's head_dim=64 convention
+        int headDim = H / numHeads;
 
         for (int layer = 0; layer < NumLayers; layer++)
         {
             int layerOffset = layer * weightsPerLayer;
+
+            // Attention block: pre-LN + MHA + residual.
             var residual = CopyVector(hidden);
+            var lnGamma = ExtractSubVector(TransformerWeights, layerOffset, H);
+            var lnBeta = ExtractSubVector(TransformerWeights, layerOffset + H, H);
+            hidden = LayerNorm(hidden, lnGamma, lnBeta, H);
 
-            var lnGamma = ExtractSubVector(TransformerWeights, layerOffset, HiddenSize);
-            var lnBeta = ExtractSubVector(TransformerWeights, layerOffset + HiddenSize, HiddenSize);
-            hidden = LayerNorm(hidden, lnGamma, lnBeta, HiddenSize);
-
-            int attnWeightOffset = layerOffset + 2 * HiddenSize;
-            hidden = LinearProject(hidden, TransformerWeights, attnWeightOffset, HiddenSize, HiddenSize, seqLen);
+            int qOff = layerOffset + 2 * H;
+            int kOff = qOff + H2;
+            int vOff = qOff + 2 * H2;
+            int oOff = qOff + 3 * H2;
+            hidden = MultiHeadAttention(hidden, qOff, kOff, vOff, oOff, seqLen, H, numHeads, headDim);
             hidden = AddVectors(hidden, residual);
 
+            // MLP block: pre-LN + (H→4H GELU 4H→H) + residual.
             residual = CopyVector(hidden);
-            int ln2Offset = layerOffset + 2 * HiddenSize + HiddenSize * HiddenSize;
-            var ln2Gamma = ExtractSubVector(TransformerWeights, ln2Offset, HiddenSize);
-            var ln2Beta = ExtractSubVector(TransformerWeights, ln2Offset + HiddenSize, HiddenSize);
-            hidden = LayerNorm(hidden, ln2Gamma, ln2Beta, HiddenSize);
+            int ln2Offset = layerOffset + 2 * H + 4 * H2;
+            var ln2Gamma = ExtractSubVector(TransformerWeights, ln2Offset, H);
+            var ln2Beta = ExtractSubVector(TransformerWeights, ln2Offset + H, H);
+            hidden = LayerNorm(hidden, ln2Gamma, ln2Beta, H);
 
-            int mlpOffset = ln2Offset + 2 * HiddenSize;
-            hidden = LinearProject(hidden, TransformerWeights, mlpOffset, HiddenSize, HiddenSize, seqLen);
+            int mlpW1Off = ln2Offset + 2 * H;
+            int mlpW2Off = mlpW1Off + 4 * H2;
+            hidden = MLP(hidden, mlpW1Off, mlpW2Off, seqLen, H);
             hidden = AddVectors(hidden, residual);
         }
 
         return hidden;
+    }
+
+    private Vector<T> MultiHeadAttention(Vector<T> input, int qOff, int kOff, int vOff, int oOff,
+        int seqLen, int H, int numHeads, int headDim)
+    {
+        var q = LinearProject(input, TransformerWeights, qOff, H, H, seqLen);
+        var k = LinearProject(input, TransformerWeights, kOff, H, H, seqLen);
+        var v = LinearProject(input, TransformerWeights, vOff, H, H, seqLen);
+
+        double scale = 1.0 / Math.Sqrt(headDim);
+        var output = new Vector<T>(seqLen * H);
+        var logits = new double[seqLen];
+
+        for (int h = 0; h < numHeads; h++)
+        {
+            int headOff = h * headDim;
+            for (int sq = 0; sq < seqLen; sq++)
+            {
+                double maxLogit = double.NegativeInfinity;
+                int qBase = sq * H + headOff;
+                for (int t = 0; t < seqLen; t++)
+                {
+                    int kBase = t * H + headOff;
+                    double dot = 0.0;
+                    for (int d = 0; d < headDim; d++)
+                        dot += NumOps.ToDouble(q[qBase + d]) * NumOps.ToDouble(k[kBase + d]);
+                    double l = dot * scale;
+                    logits[t] = l;
+                    if (l > maxLogit) maxLogit = l;
+                }
+                double sumExp = 0.0;
+                for (int t = 0; t < seqLen; t++)
+                {
+                    logits[t] = Math.Exp(logits[t] - maxLogit);
+                    sumExp += logits[t];
+                }
+                double invSum = sumExp > 0 ? 1.0 / sumExp : 0.0;
+
+                int outBase = sq * H + headOff;
+                for (int d = 0; d < headDim; d++) output[outBase + d] = NumOps.Zero;
+                for (int t = 0; t < seqLen; t++)
+                {
+                    double w = logits[t] * invSum;
+                    int vBase = t * H + headOff;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        double contrib = w * NumOps.ToDouble(v[vBase + d]);
+                        output[outBase + d] = NumOps.Add(output[outBase + d], NumOps.FromDouble(contrib));
+                    }
+                }
+            }
+        }
+
+        return LinearProject(output, TransformerWeights, oOff, H, H, seqLen);
+    }
+
+    private Vector<T> MLP(Vector<T> input, int w1Off, int w2Off, int seqLen, int H)
+    {
+        var hidden = LinearProject(input, TransformerWeights, w1Off, H, 4 * H, seqLen);
+        for (int i = 0; i < hidden.Length; i++)
+        {
+            double x = NumOps.ToDouble(hidden[i]);
+            double g = 0.5 * x * (1.0 + Math.Tanh(0.79788456 * (x + 0.044715 * x * x * x)));
+            hidden[i] = NumOps.FromDouble(g);
+        }
+        return LinearProject(hidden, TransformerWeights, w2Off, 4 * H, H, seqLen);
     }
 
     private Vector<T> LinearProject(Vector<T> input, Vector<T> weights, int weightOffset, int inDim, int outDim, int seqLen)

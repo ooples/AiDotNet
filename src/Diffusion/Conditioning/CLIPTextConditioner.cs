@@ -373,45 +373,172 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// <summary>
     /// Applies the transformer layers to the hidden state (simplified).
     /// </summary>
+    /// <remarks>
+    /// Implements a full CLIP-style transformer block (Radford et al. 2021
+    /// "Learning Transferable Visual Models from Natural Language Supervision"
+    /// §3.1.2; based on the GPT-2 / ViT architecture per Dosovitskiy et al.
+    /// 2021): pre-LN + multi-head scaled dot-product attention + residual +
+    /// pre-LN + MLP (H→4H GELU 4H→H) + residual. The previous "Simplified
+    /// self-attention: residual + LN(attention(x))" stand-in collapsed
+    /// attention to a single linear projection — the model never actually
+    /// attended across tokens, which silently corrupted every text embedding
+    /// the conditioner produced.
+    ///
+    /// <para>
+    /// Weight layout per layer (matches the <c>weightsPerLayer = 12·H² + 4·H</c>
+    /// allocation in <see cref="TextConditioningBase{T}"/>):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><description>[0,           H)        — LN1 γ</description></item>
+    /// <item><description>[H,           2H)       — LN1 β</description></item>
+    /// <item><description>[2H,          2H+H²)    — attention Q weight, row-major [H, H]</description></item>
+    /// <item><description>[2H+H²,       2H+2H²)   — attention K weight</description></item>
+    /// <item><description>[2H+2H²,      2H+3H²)   — attention V weight</description></item>
+    /// <item><description>[2H+3H²,      2H+4H²)   — attention output projection</description></item>
+    /// <item><description>[2H+4H²,      3H+4H²)   — LN2 γ</description></item>
+    /// <item><description>[3H+4H²,      4H+4H²)   — LN2 β</description></item>
+    /// <item><description>[4H+4H²,      4H+8H²)   — MLP W1, [H, 4H]</description></item>
+    /// <item><description>[4H+8H²,      4H+12H²)  — MLP W2, [4H, H]</description></item>
+    /// </list>
+    /// </remarks>
     private Vector<T> ApplyTransformerLayers(Vector<T> hidden, int seqLen)
     {
-        int weightsPerLayer = 12 * HiddenSize * HiddenSize + 4 * HiddenSize;
+        int H = HiddenSize;
+        int H2 = H * H;
+        int weightsPerLayer = 12 * H2 + 4 * H;
+        int numHeads = ComputeNumHeads(H);
+        int headDim = H / numHeads;
 
         for (int layer = 0; layer < NumLayers; layer++)
         {
             int layerOffset = layer * weightsPerLayer;
 
-            // Simplified self-attention: residual + LN(attention(x))
+            // ── Attention block: pre-LN + MHA + residual ────────────────────
             var residual = CopyVector(hidden);
+            var lnGamma = ExtractSubVector(TransformerWeights, layerOffset, H);
+            var lnBeta = ExtractSubVector(TransformerWeights, layerOffset + H, H);
+            hidden = LayerNorm(hidden, lnGamma, lnBeta, H);
 
-            // Layer norm 1
-            var lnGamma = ExtractSubVector(TransformerWeights, layerOffset, HiddenSize);
-            var lnBeta = ExtractSubVector(TransformerWeights, layerOffset + HiddenSize, HiddenSize);
-            hidden = LayerNorm(hidden, lnGamma, lnBeta, HiddenSize);
-
-            // Self-attention (simplified: just linear projection for computational feasibility)
-            int attnWeightOffset = layerOffset + 2 * HiddenSize;
-            hidden = LinearProject(hidden, TransformerWeights, attnWeightOffset, HiddenSize, HiddenSize, seqLen);
-
-            // Residual connection
+            int qOffset = layerOffset + 2 * H;
+            int kOffset = qOffset + H2;
+            int vOffset = qOffset + 2 * H2;
+            int oOffset = qOffset + 3 * H2;
+            hidden = MultiHeadAttention(hidden, qOffset, kOffset, vOffset, oOffset, seqLen, H, numHeads, headDim);
             hidden = AddVectors(hidden, residual);
 
-            // Layer norm 2 + MLP
+            // ── MLP block: pre-LN + (H→4H GELU 4H→H) + residual ─────────────
             residual = CopyVector(hidden);
-            int ln2Offset = layerOffset + 2 * HiddenSize + HiddenSize * HiddenSize;
-            var ln2Gamma = ExtractSubVector(TransformerWeights, ln2Offset, HiddenSize);
-            var ln2Beta = ExtractSubVector(TransformerWeights, ln2Offset + HiddenSize, HiddenSize);
-            hidden = LayerNorm(hidden, ln2Gamma, ln2Beta, HiddenSize);
+            int ln2Offset = layerOffset + 2 * H + 4 * H2;
+            var ln2Gamma = ExtractSubVector(TransformerWeights, ln2Offset, H);
+            var ln2Beta = ExtractSubVector(TransformerWeights, ln2Offset + H, H);
+            hidden = LayerNorm(hidden, ln2Gamma, ln2Beta, H);
 
-            // MLP (simplified linear)
-            int mlpOffset = ln2Offset + 2 * HiddenSize;
-            hidden = LinearProject(hidden, TransformerWeights, mlpOffset, HiddenSize, HiddenSize, seqLen);
-
-            // Residual connection
+            int mlpW1Offset = ln2Offset + 2 * H;
+            int mlpW2Offset = mlpW1Offset + 4 * H2;
+            hidden = MLP(hidden, mlpW1Offset, mlpW2Offset, seqLen, H);
             hidden = AddVectors(hidden, residual);
         }
 
         return hidden;
+    }
+
+    /// <summary>
+    /// CLIP head-count map per variant: 768→12, 1024→16, 1280→16, 1664→16
+    /// (matches Hugging Face transformers' clip-vit-{base,large,big-g} configs).
+    /// </summary>
+    private static int ComputeNumHeads(int hiddenSize)
+    {
+        return hiddenSize switch
+        {
+            768 => 12,
+            1024 => 16,
+            1280 => 16,
+            1664 => 16,
+            _ => Math.Max(1, hiddenSize / 64) // Standard ViT convention: head_dim ≈ 64
+        };
+    }
+
+    /// <summary>
+    /// Multi-head scaled dot-product self-attention (Vaswani et al. 2017
+    /// Eqs. 1-2). Operates on [seqLen, HiddenSize] flattened to a 1D vector.
+    /// </summary>
+    private Vector<T> MultiHeadAttention(Vector<T> input, int qOff, int kOff, int vOff, int oOff,
+        int seqLen, int H, int numHeads, int headDim)
+    {
+        // Project to Q, K, V via [seqLen, H] @ [H, H] for each.
+        var q = LinearProject(input, TransformerWeights, qOff, H, H, seqLen);
+        var k = LinearProject(input, TransformerWeights, kOff, H, H, seqLen);
+        var v = LinearProject(input, TransformerWeights, vOff, H, H, seqLen);
+
+        double scale = 1.0 / Math.Sqrt(headDim);
+        var output = new Vector<T>(seqLen * H);
+        var logits = new double[seqLen];
+
+        for (int h = 0; h < numHeads; h++)
+        {
+            int headOff = h * headDim;
+            for (int sq = 0; sq < seqLen; sq++)
+            {
+                // logits[t] = q[sq, h*headDim:(h+1)*headDim] · k[t, h*headDim:(h+1)*headDim] · scale
+                double maxLogit = double.NegativeInfinity;
+                int qBase = sq * H + headOff;
+                for (int t = 0; t < seqLen; t++)
+                {
+                    int kBase = t * H + headOff;
+                    double dot = 0.0;
+                    for (int d = 0; d < headDim; d++)
+                        dot += NumOps.ToDouble(q[qBase + d]) * NumOps.ToDouble(k[kBase + d]);
+                    double l = dot * scale;
+                    logits[t] = l;
+                    if (l > maxLogit) maxLogit = l;
+                }
+
+                // Stable softmax over t.
+                double sumExp = 0.0;
+                for (int t = 0; t < seqLen; t++)
+                {
+                    logits[t] = Math.Exp(logits[t] - maxLogit);
+                    sumExp += logits[t];
+                }
+                double invSum = sumExp > 0 ? 1.0 / sumExp : 0.0;
+
+                // Weighted sum of V over t for this head.
+                int outBase = sq * H + headOff;
+                for (int d = 0; d < headDim; d++) output[outBase + d] = NumOps.Zero;
+                for (int t = 0; t < seqLen; t++)
+                {
+                    double w = logits[t] * invSum;
+                    int vBase = t * H + headOff;
+                    for (int d = 0; d < headDim; d++)
+                    {
+                        double contrib = w * NumOps.ToDouble(v[vBase + d]);
+                        output[outBase + d] = NumOps.Add(output[outBase + d], NumOps.FromDouble(contrib));
+                    }
+                }
+            }
+        }
+
+        // Output projection.
+        return LinearProject(output, TransformerWeights, oOff, H, H, seqLen);
+    }
+
+    /// <summary>
+    /// CLIP MLP block: GELU(x @ W1) @ W2 with the standard 4× hidden expansion
+    /// (Radford 2021 §3.1.2 uses GELU; Hendrycks &amp; Gimpel 2016 approximation).
+    /// </summary>
+    private Vector<T> MLP(Vector<T> input, int w1Off, int w2Off, int seqLen, int H)
+    {
+        // hidden = input @ W1   ([seqLen, H] @ [H, 4H] → [seqLen, 4H])
+        var hidden = LinearProject(input, TransformerWeights, w1Off, H, 4 * H, seqLen);
+        // GELU.
+        for (int i = 0; i < hidden.Length; i++)
+        {
+            double x = NumOps.ToDouble(hidden[i]);
+            double g = 0.5 * x * (1.0 + Math.Tanh(0.79788456 * (x + 0.044715 * x * x * x)));
+            hidden[i] = NumOps.FromDouble(g);
+        }
+        // output = hidden @ W2   ([seqLen, 4H] @ [4H, H] → [seqLen, H])
+        return LinearProject(hidden, TransformerWeights, w2Off, 4 * H, H, seqLen);
     }
 
     /// <summary>
