@@ -343,19 +343,30 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             returns.Insert(0, runningReturn);
         }
 
-        // Normalize returns (reduces variance) using StatisticsHelper
-        var stdReturn = StatisticsHelper<T>.CalculateStandardDeviation(returns);
-        T meanReturn = NumOps.Zero;
-        foreach (var ret in returns)
-            meanReturn = NumOps.Add(meanReturn, ret);
-        meanReturn = NumOps.Divide(meanReturn, NumOps.FromDouble(returns.Count));
-
-        for (int i = 0; i < returns.Count; i++)
+        // Baseline subtraction + std normalization is a Sutton & Barto §13.4 variance-reduction
+        // heuristic, NOT part of the original Williams 1992 paper objective. Apply it only when
+        // there are at least two samples AND the spread is non-trivial — otherwise (single-step
+        // trajectory, or all-equal returns) the formula collapses every return to zero and kills
+        // the gradient signal. Leaving the raw returns alone in that case is still a valid (just
+        // higher-variance) Monte Carlo policy-gradient estimator per Williams Eq. 5.
+        if (returns.Count > 1)
         {
-            returns[i] = NumOps.Divide(
-                NumOps.Subtract(returns[i], meanReturn),
-                NumOps.Add(stdReturn, NumOps.FromDouble(1e-8))
-            );
+            var stdReturn = StatisticsHelper<T>.CalculateStandardDeviation(returns);
+            if (NumOps.ToDouble(stdReturn) > 1e-6)
+            {
+                T meanReturn = NumOps.Zero;
+                foreach (var ret in returns)
+                    meanReturn = NumOps.Add(meanReturn, ret);
+                meanReturn = NumOps.Divide(meanReturn, NumOps.FromDouble(returns.Count));
+
+                for (int i = 0; i < returns.Count; i++)
+                {
+                    returns[i] = NumOps.Divide(
+                        NumOps.Subtract(returns[i], meanReturn),
+                        NumOps.Add(stdReturn, NumOps.FromDouble(1e-8))
+                    );
+                }
+            }
         }
 
         _trajectory.Returns = returns;
