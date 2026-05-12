@@ -1034,51 +1034,193 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         public Tensor<T> Forward(Tensor<T> input)
         {
-            // Simplified transformer layer
+            // Standard post-LN Transformer encoder block (Vaswani et al. 2017
+            // Eqs. 1–2; HTSAT-CLAP / Wu et al. 2023 §3.1 uses the same block).
+            //   x' = LayerNorm(x + MultiHeadSelfAttention(x))
+            //   y  = LayerNorm(x' + FFN(x'))
+            // This is CLAP's audio-side transformer — running it as a no-op (the
+            // previous "Placeholder for actual attention" copy) made every CLAP
+            // forward pass return the input unchanged, silently breaking
+            // fingerprint quality. The implementation below is faithful to the
+            // paper but stays on plain CPU loops to match the rest of this nested
+            // class; CLAPModel is inference-only here (training uses
+            // pretrained-ONNX mode in Forward when a model file is configured).
             int batchSize = input.Shape[0];
             int seqLen = input.Shape[1];
             int dim = input.Shape[2];
 
-            // Self-attention (simplified)
-            var attended = new T[input.Length];
+            var inSpan = input.Data.Span;
+            var xBuf = new double[input.Length];
             for (int i = 0; i < input.Length; i++)
-            {
-                attended[i] = input.Data.Span[i]; // Placeholder for actual attention
-            }
+                xBuf[i] = _ops.ToDouble(inSpan[i]);
 
-            // Residual + LayerNorm
-            var normed = new T[input.Length];
+            // ------- 1. Multi-head self-attention -------
+            // Q, K, V: [B, S, dim] each, computed as x @ W{q,k,v}^T with W shape [dim, dim].
+            var q = ProjectLinear(xBuf, _qWeight, batchSize, seqLen, dim);
+            var k = ProjectLinear(xBuf, _kWeight, batchSize, seqLen, dim);
+            var v = ProjectLinear(xBuf, _vWeight, batchSize, seqLen, dim);
+
+            // Scaled dot-product attention per head, then concat back to [B, S, dim].
+            double scale = 1.0 / Math.Sqrt(_headDim);
+            var attnOut = new double[input.Length];
+            var logits = new double[seqLen]; // reused per (batch, head, query)
             for (int b = 0; b < batchSize; b++)
             {
-                for (int s = 0; s < seqLen; s++)
+                for (int h = 0; h < _numHeads; h++)
                 {
-                    double mean = 0, variance = 0;
-                    for (int d = 0; d < dim; d++)
+                    int headOffset = h * _headDim;
+                    for (int sq = 0; sq < seqLen; sq++)
                     {
-                        int idx = b * seqLen * dim + s * dim + d;
-                        mean += _ops.ToDouble(attended[idx]);
-                    }
-                    mean /= dim;
+                        // logits[t] = q[b,sq,h,:] · k[b,t,h,:] * scale
+                        double maxLogit = double.NegativeInfinity;
+                        int qBase = ((b * seqLen) + sq) * dim + headOffset;
+                        for (int t = 0; t < seqLen; t++)
+                        {
+                            int kBase = ((b * seqLen) + t) * dim + headOffset;
+                            double dot = 0.0;
+                            for (int d = 0; d < _headDim; d++)
+                                dot += q[qBase + d] * k[kBase + d];
+                            double l = dot * scale;
+                            logits[t] = l;
+                            if (l > maxLogit) maxLogit = l;
+                        }
 
-                    for (int d = 0; d < dim; d++)
-                    {
-                        int idx = b * seqLen * dim + s * dim + d;
-                        double diff = _ops.ToDouble(attended[idx]) - mean;
-                        variance += diff * diff;
-                    }
-                    variance = Math.Sqrt(variance / dim + 1e-5);
+                        // Numerically stable softmax over t.
+                        double sumExp = 0.0;
+                        for (int t = 0; t < seqLen; t++)
+                        {
+                            logits[t] = Math.Exp(logits[t] - maxLogit);
+                            sumExp += logits[t];
+                        }
+                        double invSum = sumExp > 0 ? 1.0 / sumExp : 0.0;
 
-                    for (int d = 0; d < dim; d++)
-                    {
-                        int idx = b * seqLen * dim + s * dim + d;
-                        double val = (_ops.ToDouble(attended[idx]) - mean) / variance;
-                        val = val * _ops.ToDouble(_norm1Gamma[d]) + _ops.ToDouble(_norm1Beta[d]);
-                        normed[idx] = _ops.Add(input.Data.Span[idx], _ops.FromDouble(val));
+                        // weighted sum: attnOut[b,sq,h,:] = Σ_t softmax · v[b,t,h,:]
+                        int outBase = ((b * seqLen) + sq) * dim + headOffset;
+                        for (int d = 0; d < _headDim; d++)
+                            attnOut[outBase + d] = 0.0;
+                        for (int t = 0; t < seqLen; t++)
+                        {
+                            double w = logits[t] * invSum;
+                            int vBase = ((b * seqLen) + t) * dim + headOffset;
+                            for (int d = 0; d < _headDim; d++)
+                                attnOut[outBase + d] += w * v[vBase + d];
+                        }
                     }
                 }
             }
 
-            return new Tensor<T>(normed, input._shape);
+            // Output projection: attnOut @ Wo^T.
+            var projected = ProjectLinear(attnOut, _oWeight, batchSize, seqLen, dim);
+
+            // ------- 2. Residual + LayerNorm 1 -------
+            var afterAttn = ResidualLayerNorm(xBuf, projected, _norm1Gamma, _norm1Beta, batchSize, seqLen, dim);
+
+            // ------- 3. FFN: linear → GELU → linear -------
+            int ffnDim = dim * 4;
+            // hidden = afterAttn @ W1^T   (W1 has shape [ffnDim, dim])
+            var hidden = new double[batchSize * seqLen * ffnDim];
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < seqLen; s++)
+                {
+                    int xBase = ((b * seqLen) + s) * dim;
+                    int hBase = ((b * seqLen) + s) * ffnDim;
+                    for (int o = 0; o < ffnDim; o++)
+                    {
+                        double sum = 0.0;
+                        int wRow = o * dim;
+                        for (int d = 0; d < dim; d++)
+                            sum += afterAttn[xBase + d] * _ops.ToDouble(_ffnW1[wRow + d]);
+                        // GELU (tanh approximation per Hendrycks & Gimpel 2016).
+                        double x = sum;
+                        hidden[hBase + o] = 0.5 * x * (1.0 + Math.Tanh(0.79788456 * (x + 0.044715 * x * x * x)));
+                    }
+                }
+            }
+            // ffnOut = hidden @ W2^T   (W2 has shape [dim, ffnDim])
+            var ffnOut = new double[input.Length];
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < seqLen; s++)
+                {
+                    int hBase = ((b * seqLen) + s) * ffnDim;
+                    int yBase = ((b * seqLen) + s) * dim;
+                    for (int o = 0; o < dim; o++)
+                    {
+                        double sum = 0.0;
+                        int wRow = o * ffnDim;
+                        for (int j = 0; j < ffnDim; j++)
+                            sum += hidden[hBase + j] * _ops.ToDouble(_ffnW2[wRow + j]);
+                        ffnOut[yBase + o] = sum;
+                    }
+                }
+            }
+
+            // ------- 4. Residual + LayerNorm 2 -------
+            var final = ResidualLayerNorm(afterAttn, ffnOut, _norm2Gamma, _norm2Beta, batchSize, seqLen, dim);
+
+            var outArr = new T[input.Length];
+            for (int i = 0; i < input.Length; i++)
+                outArr[i] = _ops.FromDouble(final[i]);
+            return new Tensor<T>(outArr, input._shape);
+        }
+
+        // Linear projection x @ W^T where x is [B, S, dim] and W is row-major [dim, dim].
+        private double[] ProjectLinear(double[] x, T[] weight, int batchSize, int seqLen, int dim)
+        {
+            var output = new double[x.Length];
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < seqLen; s++)
+                {
+                    int xBase = ((b * seqLen) + s) * dim;
+                    int yBase = xBase;
+                    for (int o = 0; o < dim; o++)
+                    {
+                        double sum = 0.0;
+                        int wRow = o * dim;
+                        for (int d = 0; d < dim; d++)
+                            sum += x[xBase + d] * _ops.ToDouble(weight[wRow + d]);
+                        output[yBase + o] = sum;
+                    }
+                }
+            }
+            return output;
+        }
+
+        // y = LayerNorm(residual + delta) along the last axis (dim), with affine gamma/beta.
+        private double[] ResidualLayerNorm(double[] residual, double[] delta, T[] gamma, T[] beta,
+            int batchSize, int seqLen, int dim)
+        {
+            var output = new double[residual.Length];
+            for (int b = 0; b < batchSize; b++)
+            {
+                for (int s = 0; s < seqLen; s++)
+                {
+                    int baseIdx = ((b * seqLen) + s) * dim;
+
+                    double sum = 0.0;
+                    for (int d = 0; d < dim; d++)
+                        sum += residual[baseIdx + d] + delta[baseIdx + d];
+                    double mean = sum / dim;
+
+                    double variance = 0.0;
+                    for (int d = 0; d < dim; d++)
+                    {
+                        double v = residual[baseIdx + d] + delta[baseIdx + d] - mean;
+                        variance += v * v;
+                    }
+                    double invStd = 1.0 / Math.Sqrt(variance / dim + 1e-5);
+
+                    for (int d = 0; d < dim; d++)
+                    {
+                        double v = residual[baseIdx + d] + delta[baseIdx + d];
+                        double normalised = (v - mean) * invStd;
+                        output[baseIdx + d] = normalised * _ops.ToDouble(gamma[d]) + _ops.ToDouble(beta[d]);
+                    }
+                }
+            }
+            return output;
         }
     }
 

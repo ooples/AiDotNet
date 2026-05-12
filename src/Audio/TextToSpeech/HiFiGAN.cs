@@ -268,18 +268,20 @@ public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
     private Tensor<T> TextToMelFeatures(string text)
     {
-        // Placeholder: map text to mel-shaped features for vocoder
-        int numFrames = text.Length * 5; // rough estimate
-        int numMels = _options.NumMels;
-        var mel = new Tensor<T>(new[] { numFrames * numMels });
-        for (int i = 0; i < text.Length; i++)
-        {
-            int frame = i * 5;
-            int bin = text[i] % numMels;
-            if (frame * numMels + bin < mel.Length)
-                mel[frame * numMels + bin] = NumOps.FromDouble(1.0);
-        }
-        return mel;
+        // HiFi-GAN (Kong et al. 2020 "HiFi-GAN: Generative Adversarial Networks
+        // for Efficient and High Fidelity Speech Synthesis") is purely a vocoder
+        // operating on a precomputed mel-spectrogram — text→mel is the job of a
+        // separate frontend such as Tacotron 2, FastSpeech 2, or VITS. The full
+        // TTS pipeline is therefore "Frontend(text) → mel → HiFiGAN.Vocode(mel)".
+        // Synthesising mel features from a character-mod-numMels one-hot grid
+        // (the previous placeholder) is acoustically meaningless — the vocoder
+        // would render incoherent noise. Fail fast with actionable guidance
+        // instead of letting callers walk into garbled output.
+        throw new NotSupportedException(
+            "HiFi-GAN is a mel→audio vocoder and does not own a text→mel front-end. " +
+            "Generate mel features with a TTS acoustic model (Tacotron2 / FastSpeech2 / VITS) " +
+            "and feed them directly into HiFiGAN.Vocode(mel). " +
+            "If you only have text, the streaming session here can't be used until a frontend is wired in.");
     }
 
     #endregion
