@@ -65,7 +65,13 @@ namespace AiDotNet.AutoML.NAS
                 ApplyArchitectureToModel(model, architecture);
 
                 // Initialize model weights deterministically for downstream training/evaluation.
-                _ = model.Predict(inputs);
+                // Slice to a single sample — one forward pass materialises lazy weight
+                // shapes; pushing the full inputs tensor was the NAS sibling of #1296
+                // and OOM-prone for Transformer-class supernet cells.
+                var warmupSample = inputs.Rank >= 1 && inputs.Shape[0] > 1
+                    ? inputs.Slice(axis: 0, start: 0, end: 1).Contiguous()
+                    : inputs;
+                _ = model.Predict(warmupSample);
 
                 BestModel = model;
 

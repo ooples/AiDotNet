@@ -42,17 +42,30 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected GradientBasedOptimizerOptions<T, TInput, TOutput> GradientOptions;
 
     /// <summary>
-    /// Gradient-based optimizers skip model.Train() during evaluation AFTER the
-    /// initial training. They already update parameters via UpdateSolution() —
-    /// re-training would overwrite gradient updates. The flag is set to true
-    /// after the first PrepareAndEvaluateSolution call.
+    /// Gradient-based optimizers ALWAYS skip <c>model.Train()</c> during the
+    /// pre-epoch <c>PrepareAndEvaluateSolution</c> call. They update parameters
+    /// exclusively via <see cref="UpdateSolution"/> inside the mini-batched
+    /// epoch loop in <c>Optimize()</c> — the initial Train pass would push the
+    /// entire <c>XTrain</c> tensor through the model in one shot, ignoring
+    /// the configured <c>BatchSize</c>. For Transformer-style architectures
+    /// the resulting activation footprint scales like <c>O(B · S²)</c> for
+    /// attention scores (B = full-corpus batch, S = sequence length), which
+    /// OOMs on any non-trivial corpus — see #1296 for the repro. Adam's
+    /// <c>_m</c> / <c>_v</c> are deferred-allocated until the first
+    /// <see cref="UpdateSolution"/> (#1221), so the model's initial
+    /// untrained-state evaluation is correct as the optimization baseline.
     /// </summary>
-    protected override bool SkipTrainingInEvaluation => _hasCompletedInitialTraining;
-    private bool _hasCompletedInitialTraining;
+    protected override bool SkipTrainingInEvaluation => true;
 
+    /// <summary>
+    /// No-op for gradient-based optimizers — <see cref="SkipTrainingInEvaluation"/>
+    /// is already <c>true</c> from the very first call. Kept on the override
+    /// surface so future tape-aware optimizer subclasses that DO need a
+    /// one-shot warm-up Train can re-enable it via composition rather than
+    /// re-implementing the flag.
+    /// </summary>
     protected override void OnInitialTrainingCompleted()
     {
-        _hasCompletedInitialTraining = true;
     }
 
     /// <summary>

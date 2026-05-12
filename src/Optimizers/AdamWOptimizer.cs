@@ -161,12 +161,18 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // Initialize with random solution
         var currentSolution = InitializeWorkingSolution(inputData.XTrain);
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
-        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
-        _m = new Vector<T>(parameters.Length);
-        _v = new Vector<T>(parameters.Length);
+        // Issue #1221 + #1296: defer _m/_v allocation. Lazy-shape models
+        // (Transformers, etc.) report a truncated parameter count BEFORE the
+        // first forward pass materialises weights. Sizing _m/_v eagerly here
+        // bakes in the wrong length and the next UpdateSolution call throws
+        // "Vector lengths must match" when gradient arrives at the post-
+        // materialisation length. UpdateSolution now lazy-resizes on first
+        // call instead.
+        _m = Vector<T>.Empty();
+        _v = Vector<T>.Empty();
         if (_options.UseAMSGrad)
         {
-            _vMax = new Vector<T>(parameters.Length);
+            _vMax = Vector<T>.Empty();
         }
         _t = 0;
 
@@ -245,6 +251,33 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
+
+        // Right-size _m/_v/_vMax to gradient on first call or after lazy-layer
+        // expansion. Mirrors the AdamOptimizer #1221 fix: lazy-shape models
+        // (e.g. Transformers) report a truncated parameter count before the
+        // first forward pass materialises layer weights, then expand mid-Train.
+        // Without this guard, the next Engine.Add(mScaled, gradScaled) throws
+        // "Vector lengths must match" because _m is sized to the pre-expansion
+        // parameter count while gradient is sized to the post-expansion count.
+        if (_m.Length != gradient.Length)
+        {
+            var newM = new Vector<T>(gradient.Length);
+            var newV = new Vector<T>(gradient.Length);
+            int copyLen = Math.Min(_m.Length, gradient.Length);
+            for (int i = 0; i < copyLen; i++) { newM[i] = _m[i]; newV[i] = _v[i]; }
+            _m = newM;
+            _v = newV;
+            if (_options.UseAMSGrad)
+            {
+                var newVMax = new Vector<T>(gradient.Length);
+                if (_vMax != null)
+                {
+                    int copyVMax = Math.Min(_vMax.Length, gradient.Length);
+                    for (int i = 0; i < copyVMax; i++) newVMax[i] = _vMax[i];
+                }
+                _vMax = newVMax;
+            }
+        }
 
         T oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
         T oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);

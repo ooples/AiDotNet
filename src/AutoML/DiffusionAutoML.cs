@@ -18,6 +18,7 @@ using AiDotNet.Diffusion.FastGeneration;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
@@ -613,7 +614,12 @@ namespace AiDotNet.AutoML
                 for (int i = 0; i < defaultTrainingIterations; i++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    model.Train(inputs, targets);
+                    // Chunked diffusion AutoML training iteration (#1296):
+                    // each iteration previously did one full-batch Train on
+                    // the entire inputs/targets pair. NeuralBatchHelper
+                    // dispatches to mini-batched Train calls for NN models;
+                    // closed-form / classical models fall through.
+                    NeuralBatchHelper.TrainMaybeBatched(model, inputs, targets);
                 }
             }, cancellationToken);
         }

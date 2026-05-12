@@ -3,6 +3,8 @@ global using AiDotNet.Evaluation;
 global using AiDotNet.Models.Inputs;
 using AiDotNet.Helpers;
 using AiDotNet.Caching;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.LinearAlgebra;
 using Newtonsoft.Json;
 
 namespace AiDotNet.Optimizers;
@@ -116,6 +118,23 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// Gradient-based optimizers use this to enable SkipTrainingInEvaluation.
     /// </summary>
     protected virtual void OnInitialTrainingCompleted() { }
+
+    /// <summary>
+    /// Per-axis-0 chunk size used when the optimizer's evaluator path
+    /// (<see cref="CalculateDataSetStatsForOptimizer"/> /
+    /// <see cref="CalculateR2OnlyStatsForOptimizer"/>) routes its
+    /// <c>model.Predict(X)</c> call through
+    /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/>.
+    /// Defaults to <c>256</c> — large enough to amortise per-call overhead on
+    /// small / medium tensors, small enough that a Transformer at
+    /// <c>d=128 / L=4 / heads=4 / ctx=64</c> peaks at ~17 MB of attention
+    /// scores per chunk instead of the multi-GB single-shot allocation that
+    /// surfaced as the second half of #1296. Subclasses MAY override this
+    /// to track a configured training <c>BatchSize</c>; doing so is opt-in
+    /// per-optimizer because not every options type carries the same
+    /// <c>BatchSize</c> property.
+    /// </summary>
+    protected virtual int EvaluationBatchSize => 256;
 
     /// <summary>
     /// Counts the number of consecutive iterations with improvement.
@@ -649,6 +668,19 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
+    /// Routes the evaluator's <c>model.Predict(X)</c> through
+    /// <see cref="NeuralBatchHelper.PredictMaybeBatched{T,TInput,TOutput}"/>
+    /// at the optimizer's <see cref="EvaluationBatchSize"/> chunk size,
+    /// so the per-epoch full-dataset forward inside
+    /// <c>EvaluateModelDirectly</c> is bounded for neural-network models
+    /// while staying identical for all other model types.
+    /// </summary>
+    private TOutput PredictForEvaluation(
+        IFullModel<T, TInput, TOutput> model,
+        TInput X)
+        => NeuralBatchHelper.PredictMaybeBatched(model, X, EvaluationBatchSize);
+
+    /// <summary>
     /// Lightweight stats helper: computes R² only (the metric FitDetector reads) for a
     /// dataset, skipping the expensive PredictionStats / ErrorStats / BasicStats
     /// construction. The Predict call still happens because R² requires per-sample
@@ -672,7 +704,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             };
         }
 
-        var predictions = model.Predict(X);
+        var predictions = PredictForEvaluation(model, X);
         if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
         {
             return new DataSetStats<T, TInput, TOutput>
@@ -739,7 +771,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             };
         }
 
-        var predictions = model.Predict(X);
+        var predictions = PredictForEvaluation(model, X);
         var inputSize = InputHelper<T, TInput>.GetInputSize(X);
 
         if (!TryGetAlignedVectorsForOptimizer(y, predictions, predictionType, out var actual, out var predicted))
