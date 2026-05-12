@@ -115,8 +115,14 @@ public class NeuralArchitectureSearch<T>
         var weightMomentum = new Dictionary<string, Vector<T>>();
         var weightVelocity = new Dictionary<string, Vector<T>>();
 
-        // Do an initial forward pass to initialize weight parameters
-        supernet.Predict(trainData);
+        // Do an initial forward pass to initialize weight parameters.
+        // Only ONE sample is needed to materialise lazy weight shapes;
+        // pushing the full trainData tensor through was the NAS sibling
+        // of #1296 and OOM-prone on Transformer-class supernet cells.
+        var warmupSample = trainData.Rank >= 1 && trainData.Shape[0] > 1
+            ? trainData.Slice(axis: 0, start: 0, end: 1).Contiguous()
+            : trainData;
+        supernet.Predict(warmupSample);
 
         // Now initialize momentum buffers
         foreach (var kvp in supernet.GetWeightParameters())

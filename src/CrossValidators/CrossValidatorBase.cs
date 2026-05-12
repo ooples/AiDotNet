@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks;
 namespace AiDotNet.CrossValidators;
 
 
@@ -180,8 +181,15 @@ public abstract class CrossValidatorBase<T, TInput, TOutput> : ICrossValidator<T
             var trainingTime = trainingTimer.Elapsed;
 
             var evaluationTimer = Stopwatch.StartNew();
-            var trainingPredictions = foldModel.Predict(XTrain);
-            var validationPredictions = foldModel.Predict(XValidation);
+            // Chunked per-fold Predict (#1296): the original
+            // `foldModel.Predict(XTrain)` pushed the full per-fold training
+            // tensor through the model in one shot, OOM'ing on Transformer
+            // folds. NeuralBatchHelper.PredictMaybeBatched delegates to
+            // NeuralNetworkBase.PredictInBatches when the model is a tensor
+            // NN and falls through to the unchunked Predict for closed-form
+            // / tree / linear models.
+            var trainingPredictions = NeuralBatchHelper.PredictMaybeBatched(foldModel, XTrain);
+            var validationPredictions = NeuralBatchHelper.PredictMaybeBatched(foldModel, XValidation);
             evaluationTimer.Stop();
             var evaluationTime = evaluationTimer.Elapsed;
 

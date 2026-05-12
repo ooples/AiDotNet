@@ -366,4 +366,82 @@ public class Issue1296LargeXTrainBatchingTests
         _output.WriteLine($"AdamW heap delta: {deltaMb:F1} MB");
         Assert.True(deltaMb < 500.0, $"AdamW heap delta {deltaMb:F1} MB > 500 MB — full-batch Train may have engaged.");
     }
+
+    /// <summary>
+    /// <see cref="NeuralBatchHelper.PredictMaybeBatched{T,TInput,TOutput}"/>
+    /// preserves the unchunked output element-for-element on small inputs
+    /// (below the chunk threshold) AND on large inputs (where chunking
+    /// engages). Verifies the helper's two-path contract: short-circuit to
+    /// <c>Predict</c> when the input fits, route through
+    /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/> when it doesn't,
+    /// output is element-equivalent in both cases.
+    /// </summary>
+    [Fact(Timeout = 60_000)]
+    public void NeuralBatchHelper_PredictMaybeBatched_ShortCircuitsAndChunks()
+    {
+        var (arch, x, _) = BuildFixture(sampleCount: 64);
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+
+        // Warm the model so weights are materialised before either call.
+        var primer = new Tensor<float>([1, x.Shape[1]]);
+        for (int s = 0; s < x.Shape[1]; s++) primer[0, s] = x[0, s];
+        _ = model.Predict(primer);
+
+        // Below threshold -> short-circuit delegates straight to Predict.
+        var ground = model.Predict(x);
+        var shortCircuited = NeuralBatchHelper.PredictMaybeBatched(model, x, batchSize: 256);
+        Assert.Equal(ground.Length, shortCircuited.Length);
+        for (int i = 0; i < ground.Length; i++)
+            Assert.Equal(ground[i], shortCircuited[i]);
+
+        // Above threshold -> chunked path. Use small batchSize so chunking
+        // engages on a 64-sample input.
+        var chunked = NeuralBatchHelper.PredictMaybeBatched(model, x, batchSize: 8);
+        const float relTol = 1e-3f;
+        const float absTol = 1e-4f;
+        int mismatches = 0;
+        for (int i = 0; i < ground.Length; i++)
+        {
+            float delta = MathF.Abs(ground[i] - chunked[i]);
+            float tol = absTol + relTol * MathF.Abs(ground[i]);
+            if (delta > tol) mismatches++;
+        }
+        Assert.Equal(0, mismatches);
+    }
+
+    /// <summary>
+    /// <see cref="NeuralBatchHelper.TrainMaybeBatched{T,TInput,TOutput}"/>
+    /// chunks a large NN training call into <c>ceil(N / batchSize)</c>
+    /// smaller <c>Train</c> calls. We can't directly verify the call count
+    /// from the outside, so the contract probe is: a 2000-sample training
+    /// run completes without OOM at the same Transformer config that OOMs
+    /// the unchunked path. P1-3 sentinel: AutoML trial loop's
+    /// <c>model.Train(trainInputs, trainTargets)</c> at <c>SupervisedAutoMLModelBase.cs:134</c>
+    /// would otherwise allocate the full attention-scores tensor in one
+    /// shot.
+    /// </summary>
+    [Fact(Timeout = 600_000)]
+    public void NeuralBatchHelper_TrainMaybeBatched_LargeNNBatch_NoOOM()
+    {
+        const int sampleCount = 2000;
+        var (arch, x, y) = BuildFixture(sampleCount: sampleCount);
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+
+        // Warm to materialise weights before the chunked Train.
+        var primer = new Tensor<float>([1, x.Shape[1]]);
+        for (int s = 0; s < x.Shape[1]; s++) primer[0, s] = x[0, s];
+        _ = model.Predict(primer);
+
+        long heapBefore = GC.GetTotalMemory(forceFullCollection: true);
+        var sw = Stopwatch.StartNew();
+        NeuralBatchHelper.TrainMaybeBatched(model, x, y, batchSize: 64);
+        sw.Stop();
+        long heapAfter = GC.GetTotalMemory(forceFullCollection: false);
+
+        double deltaMb = Math.Max(0, heapAfter - heapBefore) / 1024.0 / 1024.0;
+        _output.WriteLine($"TrainMaybeBatched wall: {sw.Elapsed.TotalSeconds:F1} s; heap delta: {deltaMb:F1} MB");
+        Assert.True(deltaMb < 800.0,
+            $"TrainMaybeBatched heap delta {deltaMb:F1} MB > 800 MB — chunked Train path may have collapsed to a single full-batch call.");
+    }
+
 }

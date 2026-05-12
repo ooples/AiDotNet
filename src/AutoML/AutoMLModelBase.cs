@@ -10,6 +10,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Inputs;
+using AiDotNet.NeuralNetworks;
 
 namespace AiDotNet.AutoML
 {
@@ -366,7 +367,11 @@ namespace AiDotNet.AutoML
             TInput inputs,
             TOutput targets)
         {
-            var predictions = model.Predict(inputs);
+            // Chunked AutoML eval Predict (#1296): a full validation tensor
+            // fed straight into model.Predict was the per-trial sibling of
+            // the optimizer-evaluator P0. NeuralBatchHelper dispatches NN
+            // models to PredictInBatches; everything else falls through.
+            var predictions = NeuralBatchHelper.PredictMaybeBatched(model, inputs);
             var inputSize = InputHelper<T, TInput>.GetInputSize(inputs);
             var predictionType = PredictionTypeInference.InferFromTargets<T, TOutput>(targets);
 

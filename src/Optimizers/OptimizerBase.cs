@@ -666,41 +666,17 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
-    /// Routes <c>model.Predict(X)</c> through
-    /// <see cref="NeuralNetworkBase{T}.PredictInBatches"/> when
-    /// the model is a tensor-based neural network and <paramref name="X"/> is
-    /// a <see cref="LinearAlgebra.Tensor{T}"/> with a leading axis larger than
-    /// <see cref="EvaluationBatchSize"/>. Eliminates the per-epoch unbatched
-    /// full-dataset forward inside <c>EvaluateModelDirectly</c> — the second
-    /// half of #1296 that PR #1297 left unfixed. Non-tensor inputs and
-    /// non-neural-net models fall through to <c>Predict(X)</c> unchanged, so
-    /// the helper is a no-op for closed-form / tree / linear / clustering
-    /// pipelines.
+    /// Routes the evaluator's <c>model.Predict(X)</c> through
+    /// <see cref="NeuralBatchHelper.PredictMaybeBatched{T,TInput,TOutput}"/>
+    /// at the optimizer's <see cref="EvaluationBatchSize"/> chunk size,
+    /// so the per-epoch full-dataset forward inside
+    /// <c>EvaluateModelDirectly</c> is bounded for neural-network models
+    /// while staying identical for all other model types.
     /// </summary>
-    /// <param name="model">The model being evaluated. Caller has already null-checked.</param>
-    /// <param name="X">Input batch — chunked along axis 0 when feasible.</param>
-    /// <returns>Predictions tensor (or whatever <typeparamref name="TOutput"/> is) matching what an unchunked <c>Predict(X)</c> would have returned.</returns>
     private TOutput PredictForEvaluation(
         IFullModel<T, TInput, TOutput> model,
         TInput X)
-    {
-        if (model is NeuralNetworkBase<T> nn
-            && X is Tensor<T> xTensor
-            && xTensor.Rank >= 1
-            && xTensor.Shape[0] > EvaluationBatchSize)
-        {
-            var chunked = nn.PredictInBatches(xTensor, EvaluationBatchSize);
-            if (chunked is TOutput typed)
-            {
-                return typed;
-            }
-            // PredictInBatches always returns Tensor<T>; if TOutput is some
-            // other type the model's own Predict will produce, the cast fails
-            // and we transparently fall through to the unchunked path so
-            // semantics stay identical for every non-Tensor<T> output type.
-        }
-        return model.Predict(X);
-    }
+        => NeuralBatchHelper.PredictMaybeBatched(model, X, EvaluationBatchSize);
 
     /// <summary>
     /// Lightweight stats helper: computes R² only (the metric FitDetector reads) for a

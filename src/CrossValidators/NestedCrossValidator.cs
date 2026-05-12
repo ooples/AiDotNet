@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.NeuralNetworks;
 namespace AiDotNet.CrossValidators;
 
 /// <summary>
@@ -171,13 +172,18 @@ public class NestedCrossValidator<T, TInput, TOutput> : CrossValidatorBase<T, TI
                 $"ValidationIndices not available for outer fold {outerFoldResult.FoldIndex}. " +
                 "Ensure the outer cross-validator populates ValidationIndices in FoldResult.");
             var outerValidationX = InputHelper<T, TInput>.GetBatch(X, validationIndices);
-            var validationPredictions = bestModel.Predict(outerValidationX);
+            // Chunked outer-fold Predict (#1296): full validation/train
+            // tensors went through one Predict call each, OOM-prone on NN
+            // models. NeuralBatchHelper dispatches NN -> PredictInBatches,
+            // everything else -> Predict unchanged.
+            var validationPredictions = NeuralBatchHelper.PredictMaybeBatched(bestModel, outerValidationX);
 
             // Get feature importance from the best model
             var featureImportance = bestModel.GetModelMetadata().FeatureImportance;
 
             // Convert predictions to Vector<T> for metrics calculation
-            var trainingPredictionsVector = ConversionsHelper.ConvertToVector<T, TOutput>(bestModel.Predict(outerTrainX));
+            var trainingPredictionsVector = ConversionsHelper.ConvertToVector<T, TOutput>(
+                NeuralBatchHelper.PredictMaybeBatched(bestModel, outerTrainX));
             var trainingActualVector = ConversionsHelper.ConvertToVector<T, TOutput>(outerTrainY);
             var validationPredictionsVector = ConversionsHelper.ConvertToVector<T, TOutput>(validationPredictions);
 
