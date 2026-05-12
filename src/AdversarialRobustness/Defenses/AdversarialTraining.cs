@@ -273,18 +273,209 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
     private Vector<T> ApplyJPEGCompression(Vector<T> input)
     {
-        // Simplified JPEG-like compression: quantize values
-        var quantizationLevel = 0.1;
-        var compressed = new Vector<T>(input.Length);
-
-        for (int i = 0; i < input.Length; i++)
+        // JPEG compression as adversarial defense (Das et al. 2017 "Keeping
+        // the Bad Guys Out: Protecting and Vaccinating Deep Learning with
+        // JPEG Compression"). Real JPEG works in the DCT domain, not in
+        // pixel domain — uniform-quantize per pixel doesn't remove
+        // high-frequency adversarial perturbations like real JPEG does.
+        //
+        // Algorithm (per JPEG standard ISO/IEC 10918-1):
+        //   1. Partition the flattened image into 8×8 blocks.
+        //   2. For each block: compute the 2D DCT-II.
+        //   3. Quantize DCT coefficients using the JPEG luminance table
+        //      scaled by the quality factor.
+        //   4. Inverse-quantize (multiply back) and inverse-DCT.
+        //   5. Reassemble the blocks.
+        //
+        // Since the public surface here is a 1D Vector<T>, we assume a
+        // square image of side √Length. Non-square inputs fall back to the
+        // single-block DCT path.
+        int n = input.Length;
+        int side = (int)Math.Sqrt(n);
+        if (side * side != n || side < 8)
         {
-            var v = NumOps.ToDouble(input[i]);
-            var quantized = Math.Floor(v / quantizationLevel) * quantizationLevel;
-            compressed[i] = NumOps.FromDouble(MathHelper.Clamp(quantized, 0.0, 1.0));
+            // Can't tile into 8×8 blocks — fall back to a 1D DCT-quantize-
+            // inverse-DCT path that still removes high-frequency components.
+            return Apply1DDCTQuantization(input);
         }
 
-        return compressed;
+        // Quality factor from quantization level: 0.1 → high compression (Q≈20),
+        // 0.05 → moderate (Q≈50). Lower quality = stronger defense.
+        double quality = MathHelper.Clamp(100.0 - 800.0 * 0.1, 1.0, 99.0); // ≈20
+
+        // JPEG standard luminance quantization table (ISO/IEC 10918-1 Annex K).
+        double[,] qTable =
+        {
+            { 16, 11, 10, 16, 24, 40, 51, 61 },
+            { 12, 12, 14, 19, 26, 58, 60, 55 },
+            { 14, 13, 16, 24, 40, 57, 69, 56 },
+            { 14, 17, 22, 29, 51, 87, 80, 62 },
+            { 18, 22, 37, 56, 68,109,103, 77 },
+            { 24, 35, 55, 64, 81,104,113, 92 },
+            { 49, 64, 78, 87,103,121,120,101 },
+            { 72, 92, 95, 98,112,100,103, 99 }
+        };
+        // Quality scaling per IJG libjpeg convention.
+        double scale = quality < 50 ? 5000.0 / quality : 200.0 - 2.0 * quality;
+        for (int i = 0; i < 8; i++)
+            for (int j = 0; j < 8; j++)
+                qTable[i, j] = Math.Max(1, Math.Floor((qTable[i, j] * scale + 50) / 100.0));
+
+        // Copy pixels into a 2D buffer for in-place block processing.
+        var image = new double[side, side];
+        for (int i = 0; i < n; i++)
+            image[i / side, i % side] = NumOps.ToDouble(input[i]);
+
+        var block = new double[8, 8];
+        for (int by = 0; by < side; by += 8)
+        {
+            for (int bx = 0; bx < side; bx += 8)
+            {
+                int blockH = Math.Min(8, side - by);
+                int blockW = Math.Min(8, side - bx);
+                if (blockH < 8 || blockW < 8) continue;  // skip edge fragments
+
+                // Pull block (centred on 0 — JPEG subtracts 128 from [0..255] range;
+                // we keep the [0,1]-style centring symmetric and skip the shift).
+                for (int y = 0; y < 8; y++)
+                    for (int x = 0; x < 8; x++)
+                        block[y, x] = image[by + y, bx + x];
+
+                Dct2D(block);
+
+                // Quantize then dequantize.
+                for (int y = 0; y < 8; y++)
+                    for (int x = 0; x < 8; x++)
+                        block[y, x] = Math.Round(block[y, x] / qTable[y, x]) * qTable[y, x];
+
+                InverseDct2D(block);
+
+                for (int y = 0; y < 8; y++)
+                    for (int x = 0; x < 8; x++)
+                        image[by + y, bx + x] = block[y, x];
+            }
+        }
+
+        var output = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            output[i] = NumOps.FromDouble(MathHelper.Clamp(image[i / side, i % side], 0.0, 1.0));
+        return output;
+    }
+
+    /// <summary>
+    /// 2D type-II DCT (the JPEG DCT) computed via the separable two-pass form
+    /// over an 8×8 block. Operates in-place.
+    /// </summary>
+    private static void Dct2D(double[,] block)
+    {
+        var tmp = new double[8, 8];
+        // Rows.
+        for (int y = 0; y < 8; y++)
+        {
+            for (int u = 0; u < 8; u++)
+            {
+                double sum = 0.0;
+                for (int x = 0; x < 8; x++)
+                    sum += block[y, x] * Math.Cos((2 * x + 1) * u * Math.PI / 16.0);
+                double cu = u == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
+                tmp[y, u] = 0.5 * cu * sum;
+            }
+        }
+        // Columns.
+        for (int u = 0; u < 8; u++)
+        {
+            for (int v = 0; v < 8; v++)
+            {
+                double sum = 0.0;
+                for (int y = 0; y < 8; y++)
+                    sum += tmp[y, u] * Math.Cos((2 * y + 1) * v * Math.PI / 16.0);
+                double cv = v == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
+                block[v, u] = 0.5 * cv * sum;
+            }
+        }
+    }
+
+    /// <summary>Inverse 2D DCT (IDCT) — the JPEG decode step. Operates in-place.</summary>
+    private static void InverseDct2D(double[,] block)
+    {
+        var tmp = new double[8, 8];
+        // Inverse columns.
+        for (int u = 0; u < 8; u++)
+        {
+            for (int y = 0; y < 8; y++)
+            {
+                double sum = 0.0;
+                for (int v = 0; v < 8; v++)
+                {
+                    double cv = v == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
+                    sum += cv * block[v, u] * Math.Cos((2 * y + 1) * v * Math.PI / 16.0);
+                }
+                tmp[y, u] = 0.5 * sum;
+            }
+        }
+        // Inverse rows.
+        for (int y = 0; y < 8; y++)
+        {
+            for (int x = 0; x < 8; x++)
+            {
+                double sum = 0.0;
+                for (int u = 0; u < 8; u++)
+                {
+                    double cu = u == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
+                    sum += cu * tmp[y, u] * Math.Cos((2 * x + 1) * u * Math.PI / 16.0);
+                }
+                block[y, x] = 0.5 * sum;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 1D DCT-quantize-inverse-DCT fallback for non-square or sub-block inputs.
+    /// Same idea (kill high-frequency components via coarse quantization in
+    /// the DCT domain) without requiring an image-shape assumption.
+    /// </summary>
+    private Vector<T> Apply1DDCTQuantization(Vector<T> input)
+    {
+        int n = input.Length;
+        var x = new double[n];
+        for (int i = 0; i < n; i++) x[i] = NumOps.ToDouble(input[i]);
+
+        // 1D DCT-II.
+        var X = new double[n];
+        for (int k = 0; k < n; k++)
+        {
+            double sum = 0.0;
+            for (int i = 0; i < n; i++)
+                sum += x[i] * Math.Cos(Math.PI * (i + 0.5) * k / n);
+            double c = k == 0 ? 1.0 / Math.Sqrt(n) : Math.Sqrt(2.0 / n);
+            X[k] = c * sum;
+        }
+
+        // Coarsely quantize higher-frequency coefficients (proxy for JPEG's
+        // quality-controlled quantization table).
+        for (int k = 0; k < n; k++)
+        {
+            double step = 0.01 + 0.1 * ((double)k / n);
+            X[k] = Math.Round(X[k] / step) * step;
+        }
+
+        // Inverse 1D DCT.
+        var y = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double sum = 0.0;
+            for (int k = 0; k < n; k++)
+            {
+                double c = k == 0 ? 1.0 / Math.Sqrt(n) : Math.Sqrt(2.0 / n);
+                sum += c * X[k] * Math.Cos(Math.PI * (i + 0.5) * k / n);
+            }
+            y[i] = sum;
+        }
+
+        var output = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+            output[i] = NumOps.FromDouble(MathHelper.Clamp(y[i], 0.0, 1.0));
+        return output;
     }
 
     private Vector<T> ApplyBitDepthReduction(Vector<T> input)
