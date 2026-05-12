@@ -1451,6 +1451,83 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     public abstract void Step(TapeStepContext<T> context);
 
     /// <summary>
+    /// Applies PyTorch-style global-norm gradient clipping across every gradient
+    /// in the tape step's <see cref="TapeStepContext{T}.Gradients"/> dictionary.
+    /// Mirrors <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>:
+    /// computes <c>sqrt(Σ_p ‖grad_p‖²)</c>; if it exceeds <paramref name="maxNorm"/>,
+    /// scales every gradient by <c>maxNorm / globalNorm</c> in place so the
+    /// post-clip global norm is exactly <paramref name="maxNorm"/>. Without
+    /// clipping, randomly-initialised classifiers paired with CrossEntropyLoss
+    /// and non-distribution targets diverge in a few iterations (ODISE: initial
+    /// MSE 0.24 → final 184.69, 770× explosion). Pre-clipping every tape-path
+    /// optimizer that opts in keeps that loss-explosion contained at the
+    /// canonical PyTorch transformer default <c>MaxGradientNorm = 1.0</c>.
+    /// </summary>
+    protected static void ApplyTapeGlobalNormGradientClipping(
+        TapeStepContext<T> context, double maxNorm)
+    {
+        if (maxNorm <= 0.0) return;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        double globalNormSq = 0.0;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = numOps.ToDouble(span[i]);
+                globalNormSq += v * v;
+            }
+        }
+        double globalNorm = Math.Sqrt(globalNormSq);
+        if (globalNorm <= maxNorm || globalNorm == 0.0
+            || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
+            return;
+
+        double scale = maxNorm / globalNorm;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+                span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
+        }
+    }
+
+    /// <summary>
+    /// PyTorch GradScaler-style anomaly probe across every gradient in the tape
+    /// step's <see cref="TapeStepContext{T}.Gradients"/> dictionary: returns
+    /// <c>true</c> if any element is NaN or ±Inf. Tape-path optimizers should
+    /// SKIP the entire <see cref="Step(TapeStepContext{T})"/> when this returns
+    /// <c>true</c> — Adam-family updates with NaN/Inf gradients permanently
+    /// poison the m/v moment accumulators, after which every subsequent step
+    /// produces NaN weights. The narrow trigger is single-sample memorization
+    /// where <c>v_hat</c> collapses toward 0 after loss converges, paired with
+    /// even a tiny non-zero <c>m_hat</c> producing a float-cliff NaN gradient
+    /// at one specific step (HopeNetwork verified empirically — finite for
+    /// the first 9 steps, then NaN at step ~10).
+    /// </summary>
+    protected static bool HasAnomalousTapeGradients(TapeStepContext<T> context)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = numOps.ToDouble(span[i]);
+                if (double.IsNaN(v) || double.IsInfinity(v)) return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Updates a matrix of parameters based on the calculated gradient.
     /// </summary>
     /// <remarks>

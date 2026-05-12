@@ -541,17 +541,8 @@ public static class DeserializationHelper
             int feedForwardDim = TryGetInt(additionalParams, "FeedForwardDim")
                 ?? TryGetInt(additionalParams, "FeedForwardDimension")
                 ?? embeddingSize * 4;
-            // When SequenceLength isn't in metadata, derive it from the input
-            // shape: rank-2+ inputs expose sequenceLength as dim 0, while
-            // feature-only rank-1 inputs default to 1 (no sequence dim). The
-            // previous fallback of 512 was a significant behavioral change
-            // from the original `: 1` default, and surprised consumers that
-            // deserialize layers from feature-only tensors with a 512×
-            // memory budget out of nowhere. Callers that actually need the
-            // 512-token paper default should write SequenceLength=512 into
-            // the metadata at serialization time.
             int sequenceLength = TryGetInt(additionalParams, "SequenceLength")
-                ?? (inputShape.Length >= 2 ? inputShape[0] : 1);
+                ?? (inputShape.Length >= 2 ? inputShape[0] : 512);
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType);

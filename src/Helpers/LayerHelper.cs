@@ -26023,6 +26023,16 @@ public static class LayerHelper<T>
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
     {
+        // ODISE per Xu et al. 2023 §3 derives its encoder features from
+        // Stable Diffusion's U-Net, which uses GroupNormalization (Wu &
+        // He 2018) throughout — not BatchNorm. GroupNorm is also batch-
+        // size-independent, so a single-sample inference (B=1) still
+        // produces non-degenerate per-channel features. BatchNorm with
+        // B=1 collapses variance to ~0 and (after eps stabilisation)
+        // emits zero features that propagate as zero gradients via
+        // the chain rule — manifesting in tests as "Network produces
+        // identical output for inputs [0.1,...] and [0.9,...]" (zero
+        // L2 distance between distinct-input outputs).
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         int h = inputHeight, w = inputWidth, inC = inputChannels;
 
@@ -26035,16 +26045,31 @@ public static class LayerHelper<T>
 
             yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
+            yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
 
             for (int d = 1; d < depths[stage]; d++)
             {
                 yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
+                yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
             }
 
             inC = outC;
         }
+    }
+
+    /// <summary>
+    /// Picks a GroupNormalization group count that evenly divides
+    /// <paramref name="numChannels"/>. Follows Wu &amp; He 2018 §3.1 which
+    /// recommends 32 groups by default, falling back to 16 / 8 / 4 / 2 / 1
+    /// when 32 isn't a divisor (small-channel stages early in a backbone).
+    /// </summary>
+    private static int ChooseGroupCount(int numChannels)
+    {
+        foreach (int g in new[] { 32, 16, 8, 4, 2, 1 })
+        {
+            if (numChannels % g == 0) return Math.Min(g, numChannels);
+        }
+        return 1;
     }
 
     /// <summary>

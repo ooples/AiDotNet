@@ -503,6 +503,27 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     {
         _tapeStep++;
 
+        // Global-norm gradient clipping BEFORE the AdamW update. AdamW is the
+        // canonical optimizer for transformer / classifier fine-tuning, and
+        // the reference recipes pair it with torch.nn.utils.clip_grad_norm_
+        // after every backward. Without clipping, CrossEntropyLoss against a
+        // non-distribution target (as in the model-family invariant tests,
+        // which feed uniform-random targets to a softmax classifier) produces
+        // gradients large enough to drive logits past float range in a few
+        // iterations — ODISE diverged 770× (initial MSE 0.24 → final 184.69)
+        // before clipping was wired into the tape path.
+        if (GradientOptions.EnableGradientClipping &&
+            GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm)
+        {
+            ApplyTapeGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+        }
+
+        // PyTorch GradScaler-style anomaly guard: skip the entire step (don't
+        // update weights, don't poison m/v) when ANY gradient contains NaN/Inf.
+        // Without this, a single NaN gradient permanently poisons m/v and
+        // every subsequent step produces NaN weights.
+        if (HasAnomalousTapeGradients(context)) return;
+
         T beta1 = NumOps.FromDouble(_options.Beta1);
         T beta2 = NumOps.FromDouble(_options.Beta2);
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);

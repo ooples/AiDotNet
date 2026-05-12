@@ -22,6 +22,28 @@ namespace AiDotNet.Models.Options;
 public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Default ctor — overrides the base
+    /// <see cref="GradientBasedOptimizerOptions{T,TInput,TOutput}.EnableGradientClipping"/>
+    /// default from <c>false</c> to <c>true</c> with
+    /// <see cref="GradientBasedOptimizerOptions{T,TInput,TOutput}.MaxGradientNorm"/>
+    /// at the canonical transformer-training value of <c>1.0</c>. AdamW is the
+    /// canonical optimizer for transformer fine-tuning (Loshchilov &amp; Hutter
+    /// 2019); the reference HuggingFace / PyTorch transformer recipes pair it
+    /// with <c>torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)</c> after
+    /// every backward. Without clipping, AdamW's first-step bias correction
+    /// creates huge updates on randomly-initialised classifiers driven by
+    /// CrossEntropyLoss + non-distribution targets — ODISE diverged from
+    /// initial MSE 0.24 to 184.69 (a 770× explosion) under that exact pairing.
+    /// Callers needing the unclipped behaviour can explicitly set
+    /// <c>EnableGradientClipping = false</c>.
+    /// </summary>
+    public AdamWOptimizerOptions()
+    {
+        EnableGradientClipping = true;
+        MaxGradientNorm = 1.0;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
     /// <value>A positive integer, defaulting to 32.</value>

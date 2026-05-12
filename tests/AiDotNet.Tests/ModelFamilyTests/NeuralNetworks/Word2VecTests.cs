@@ -41,22 +41,6 @@ public class Word2VecTests : NeuralNetworkModelTestBase
         return tensor;
     }
 
-    // Word2Vec's default loss is BinaryCrossEntropy, which expects targets
-    // in [0, 1] (probabilities / one-hot encoding) — NOT the integer token
-    // IDs that the input-side CreateRandomTensor emits. Override the target
-    // factory to fall back to the base's default continuous [0, 1) sampler
-    // so the target tensor stays compatible with BCE. Without this override,
-    // the base's default CreateRandomTargetTensor delegates to our
-    // CreateRandomTensor and the target gets out-of-range integer values
-    // (0..999) that BCE then computes nonsensical log probabilities over.
-    protected override Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)
-    {
-        var tensor = new Tensor<double>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble();
-        return tensor;
-    }
-
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new Word2Vec<double>();
 }

@@ -165,16 +165,28 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
 
     #region Public Methods
     /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
+    /// Runs a forward pass to produce per-pixel class probabilities.
     /// </summary>
     /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
+    /// <returns>Probability tensor in [0, 1] with the same spatial layout as input.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
+    /// <b>For Beginners:</b> Pass an image to get a per-pixel class probability map.
+    /// </para>
+    /// <para>
+    /// Inference applies softmax along the class dimension so the output is a
+    /// probability distribution per pixel, matching the paper-canonical inference
+    /// formulation (Xu et al. 2023 §3 outputs per-pixel class probabilities; CE
+    /// loss applies log-softmax internally during training, so the training path
+    /// continues to consume raw logits via <see cref="Forward"/>).
     /// </para>
     /// </remarks>
-    public override Tensor<T> Predict(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        if (!_useNativeMode) return PredictOnnx(input);
+        var logits = Forward(input);
+        return Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
+    }
 
     /// <summary>
     /// Performs one training step.
@@ -355,9 +367,13 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     int IPanopticSegmentation<T>.NumThingClasses => _numClasses - Math.Max(1, _numClasses / 3);
     PanopticSegmentationResult<T> IPanopticSegmentation<T>.SegmentPanoptic(Tensor<T> image)
     {
-        var logits = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
-        var probMap = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
-        var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(logits);
+        // Predict() returns per-pixel softmax probabilities (paper-faithful
+        // inference output per Xu et al. 2023 §3), so the probability map and
+        // argmax-derived class map both come directly from that — applying
+        // SoftmaxAlongClassDim again would double-softmax. Argmax is invariant
+        // under softmax so the semanticMap is unchanged.
+        var probMap = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
+        var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(probMap);
         int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
         int numStuff = Math.Max(1, _numClasses / 3);
         var instanceMap = new Tensor<T>([h, w]);

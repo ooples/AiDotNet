@@ -490,6 +490,65 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Greedy layer-wise pre-training of the stacked RBMs via Contrastive
+    /// Divergence per Hinton 2006 ("A fast learning algorithm for deep
+    /// belief nets") and Hinton &amp; Salakhutdinov 2006 ("Reducing the
+    /// Dimensionality of Data with Neural Networks"). For each RBM bottom-
+    /// up: run CD-1 for <paramref name="epochsPerLayer"/> updates on the
+    /// current input, then propagate the input through that RBM's forward
+    /// pass to produce the training data for the next RBM up.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This phase is REQUIRED before <see cref="Train"/> for the supervised
+    /// fine-tuning to escape the vanishing-gradient regime of a deep
+    /// stack of sigmoid units (Hinton 2006 §1: "Backpropagation gets stuck
+    /// in poor local optima when used on randomly-initialised deep
+    /// networks"). CD pre-training initialises each RBM's weights so the
+    /// composed forward pass already separates the input distribution
+    /// before the supervised gradient signal ever flows through —
+    /// without it, every supervised step on random sigmoid stacks
+    /// vanishes through three sigmoid backwards, and the model
+    /// collapses to input-invariant output within a handful of steps.
+    /// </para>
+    /// <para>
+    /// Paper-canonical defaults:
+    /// <list type="bullet">
+    ///   <item><c>epochsPerLayer</c> = 50 (Hinton &amp; Salakhutdinov 2006
+    ///   §"Pretraining" — 50 epochs per RBM on the MNIST pre-training
+    ///   recipe).</item>
+    ///   <item><c>learningRate</c> = 0.1 (Hinton 2006 §3.2 — the canonical
+    ///   binary-RBM CD-1 step size).</item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    /// <param name="input">Training input tensor. Only the input is used —
+    /// pre-training is unsupervised; the labels are not consulted.</param>
+    /// <param name="epochsPerLayer">CD-1 epochs run on each RBM before
+    /// advancing to the next layer. Default 50 per the paper.</param>
+    /// <param name="learningRate">CD-1 step size. Default 0.1 per the
+    /// paper.</param>
+    public void PreTrain(Tensor<T> input, int epochsPerLayer = 50, double learningRate = 0.1)
+    {
+        T lr = NumOps.FromDouble(learningRate);
+        Tensor<T> currentInput = input;
+
+        foreach (var rbm in _rbmLayers)
+        {
+            for (int epoch = 0; epoch < epochsPerLayer; epoch++)
+            {
+                rbm.TrainWithContrastiveDivergence(currentInput.ToVector(), lr, kSteps: 1);
+            }
+
+            // Propagate the input through this just-pretrained RBM to
+            // produce the training input for the next RBM up the stack.
+            // Hinton 2006 §3 step (b): "After learning W₁, the activity
+            // vectors h₁ are used as the 'data' for training the next RBM."
+            currentInput = rbm.Forward(currentInput);
+        }
+    }
+
+    /// <summary>
     /// Gets the shape of the gradient tensor for all layers in the Deep Belief Network.
     /// </summary>
     /// <returns>An array of integers representing the shape of the gradient tensor.</returns>

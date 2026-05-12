@@ -408,7 +408,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs()
+    public virtual async Task DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
