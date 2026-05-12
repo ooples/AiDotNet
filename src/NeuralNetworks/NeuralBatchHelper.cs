@@ -11,11 +11,9 @@ namespace AiDotNet.NeuralNetworks;
 /// warmup, diffusion AutoML).
 ///
 /// <para>
-/// Exposes five capabilities beyond the basic per-call chunking that
+/// Exposes four capabilities beyond the basic per-call chunking that
 /// closed the #1296 OOM family. PyTorch / TensorFlow ship none of these
-/// out of the box (1, 3, 4 are user-rolled patterns; 2 is unique; 5
-/// supersedes the value-stability hazard that kept compile-on-Predict
-/// off-by-default before this PR):
+/// out of the box (1, 3, 4 are user-rolled patterns; 2 is unique):
 /// </para>
 /// <list type="number">
 ///   <item><b>Adaptive OOM recovery</b> (<see cref="PredictAdaptive{T,TInput,TOutput}"/>,
@@ -25,9 +23,15 @@ namespace AiDotNet.NeuralNetworks;
 ///     held in a weak-reference table.</item>
 ///   <item><b>Stream-aggregation</b> (<see cref="PredictAndReduce{T,TInput,TOutput,TAccumulator}"/>) —
 ///     per-chunk reducer callback that never materialises the full
-///     predictions tensor. The optimizer's R² / SS<sub>res</sub> path
-///     uses it to drop the concat 2× peak the plain
-///     <see cref="NeuralNetworkBase{T}.PredictInBatches"/> incurs.</item>
+///     predictions tensor. Available for callers (e.g. user-defined
+///     metric paths) that only need a scalar aggregate over predictions
+///     and want to skip the concat 2× peak the plain
+///     <see cref="NeuralNetworkBase{T}.PredictInBatches"/> incurs.
+///     The <see cref="OptimizerBase{T,TInput,TOutput}"/> R² / SS<sub>res</sub>
+///     path currently routes through <see cref="PredictMaybeBatched{T,TInput,TOutput}"/>
+///     because its downstream consumers (PredictionStats, alignment
+///     helpers) need the materialised prediction tensor; wiring R² to
+///     this reducer is a follow-up tracked separately.</item>
 ///   <item><b>True gradient accumulation</b> (<see cref="GradientAccumulationMode.Accumulate"/>) —
 ///     delegates to <see cref="NeuralNetworkBase{T}.TrainWithGradientAccumulation"/>
 ///     so the optimizer fires exactly once with averaged chunk gradients,
@@ -37,18 +41,22 @@ namespace AiDotNet.NeuralNetworks;
 ///     <see cref="EstimateChunkSize{T}"/>) — caller specifies a budget
 ///     in bytes; the helper probes per-sample cost with a B=1 forward
 ///     and picks the chunk size that fits with safety margin.</item>
-///   <item><b>Value-stable compile reuse</b> — <see cref="NeuralNetworkBase{T}.PredictInBatches"/>
-///     now routes per-chunk forwards through <see cref="NeuralNetworkBase{T}.PredictCompiled"/>
-///     when <see cref="AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions"/>
-///     enables compilation. The companion <see cref="CompiledModelHost{T}.Predict"/>
-///     fix in this PR copies the current call's data into the cached plan's
-///     captured input buffer via <see cref="AiDotNet.Tensors.Engines.Compilation.ICompiledPlan{T}.SetInputs"/>
-///     on every replay, eliminating the same-shape-different-values stale-
-///     data hazard that previously kept compile-by-default off the
-///     <c>Predict</c> path.</item>
 /// </list>
+///
+/// <para>
+/// <b>Note on compile routing:</b> Earlier drafts of this PR routed
+/// per-chunk forwards through <see cref="NeuralNetworkBase{T}.PredictCompiled"/>
+/// when <see cref="AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions"/>
+/// has compilation enabled, but that interacted with the optimizer's
+/// epoch-loop tape allocations and exhausted the unmanaged-commit limit.
+/// The current implementation deliberately stays on the eager
+/// <see cref="NeuralNetworkBase{T}.Predict"/> path; the companion
+/// <see cref="CompiledModelHost{T}.Predict"/> SetInputs-rebind fix in
+/// this PR still benefits any caller that explicitly invokes
+/// <c>PredictCompiled</c>.
+/// </para>
 /// </summary>
-public static class NeuralBatchHelper
+internal static class NeuralBatchHelper
 {
     /// <summary>
     /// Default chunk size used when callers don't specify one.
@@ -124,14 +132,29 @@ public static class NeuralBatchHelper
         IFullModel<T, TInput, TOutput> model,
         TInput X,
         int batchSize = DefaultBatchSize,
-        bool disableAdaptiveRetry = false)
+        bool disableAdaptiveRetry = false,
+        int minBatchSize = MinAdaptiveBatchSize)
     {
         if (model is null) throw new ArgumentNullException(nameof(model));
         if (batchSize < 1) batchSize = 1;
+        if (minBatchSize < 1) minBatchSize = 1;
+        if (minBatchSize > batchSize) minBatchSize = batchSize;
 
         if (!(model is NeuralNetworkBase<T> nn
             && X is Tensor<T> xTensor
             && xTensor.Rank >= 1))
+        {
+            return model.Predict(X);
+        }
+
+        // The leading-axis-larger-than-batchSize check is necessary but
+        // not sufficient to call a tensor "batched". A genuine single
+        // sample with shape [seq, F] or even [features] where the leading
+        // axis happens to exceed batchSize would otherwise be sliced
+        // along the wrong axis. When the architecture's expected unbatched
+        // rank matches the input rank, the tensor is unbatched — let the
+        // base Predict path handle promotion.
+        if (IsLikelyUnbatched(nn, xTensor))
         {
             return model.Predict(X);
         }
@@ -169,8 +192,8 @@ public static class NeuralBatchHelper
             }
             catch (OutOfMemoryException)
             {
-                if (state.CurrentBatchSize <= MinAdaptiveBatchSize) throw;
-                state.CurrentBatchSize = System.Math.Max(MinAdaptiveBatchSize, state.CurrentBatchSize / 2);
+                if (state.CurrentBatchSize <= minBatchSize) throw;
+                state.CurrentBatchSize = System.Math.Max(minBatchSize, state.CurrentBatchSize / 2);
                 state.ConsecutiveSuccesses = 0;
                 System.GC.Collect();
                 System.GC.WaitForPendingFinalizers();
@@ -197,10 +220,13 @@ public static class NeuralBatchHelper
         TOutput Y,
         int batchSize = DefaultBatchSize,
         GradientAccumulationMode mode = GradientAccumulationMode.Independent,
-        bool disableAdaptiveRetry = false)
+        bool disableAdaptiveRetry = false,
+        int minBatchSize = MinAdaptiveBatchSize)
     {
         if (model is null) throw new ArgumentNullException(nameof(model));
         if (batchSize < 1) batchSize = 1;
+        if (minBatchSize < 1) minBatchSize = 1;
+        if (minBatchSize > batchSize) minBatchSize = batchSize;
 
         if (!(model is NeuralNetworkBase<T> nn
             && X is Tensor<T> xTensor
@@ -210,6 +236,15 @@ public static class NeuralBatchHelper
             && xTensor.Shape[0] == yTensor.Shape[0]))
         {
             model.Train(X, Y);
+            return;
+        }
+
+        // Same unbatched-input guard as PredictMaybeBatched: rank-equal-
+        // to-unbatched-expected means the leading axis is sequence/
+        // feature, not batch — chunking along it would corrupt semantics.
+        if (IsLikelyUnbatched(nn, xTensor))
+        {
+            nn.Train(xTensor, yTensor);
             return;
         }
 
@@ -257,14 +292,28 @@ public static class NeuralBatchHelper
             }
             catch (OutOfMemoryException)
             {
-                if (state.CurrentBatchSize <= MinAdaptiveBatchSize) throw;
-                state.CurrentBatchSize = System.Math.Max(MinAdaptiveBatchSize, state.CurrentBatchSize / 2);
+                if (state.CurrentBatchSize <= minBatchSize) throw;
+                state.CurrentBatchSize = System.Math.Max(minBatchSize, state.CurrentBatchSize / 2);
                 state.ConsecutiveSuccesses = 0;
                 System.GC.Collect();
                 System.GC.WaitForPendingFinalizers();
                 System.GC.Collect();
             }
         }
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="input"/> is
+    /// likely an unbatched single sample for <paramref name="nn"/> — its
+    /// rank matches the architecture's expected unbatched input rank
+    /// rather than that rank + 1. Used to short-circuit axis-0 chunking
+    /// paths for inputs whose leading axis is sequence / features, not
+    /// batch, even when that axis happens to exceed the chunk size.
+    /// </summary>
+    internal static bool IsLikelyUnbatched<T>(NeuralNetworkBase<T> nn, Tensor<T> input)
+    {
+        int expectedUnbatchedRank = nn.GetExpectedUnbatchedInputRankInternal();
+        return expectedUnbatchedRank > 0 && input.Rank == expectedUnbatchedRank;
     }
 
     private static void TrainIndependentChunks<T>(
@@ -291,19 +340,24 @@ public static class NeuralBatchHelper
     /// adaptive OOM recovery — kept as a named entry point for callers
     /// that want to make the adaptive intent explicit. Adaptive recovery
     /// is now the default in <see cref="PredictMaybeBatched{T,TInput,TOutput}"/>
-    /// so users no longer need to opt in.
+    /// so users no longer need to opt in. <paramref name="minBatchSize"/>
+    /// caps how far the halve-on-OOM loop will reduce the chunk size
+    /// before rethrowing — defaults to <see cref="MinAdaptiveBatchSize"/>.
     /// </summary>
     public static TOutput PredictAdaptive<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,
         TInput X,
         int initialBatchSize = DefaultBatchSize,
         int minBatchSize = MinAdaptiveBatchSize)
-        => PredictMaybeBatched(model, X, initialBatchSize, disableAdaptiveRetry: false);
+        => PredictMaybeBatched(model, X, initialBatchSize, disableAdaptiveRetry: false, minBatchSize: minBatchSize);
 
     /// <summary>
     /// Alias for <see cref="TrainMaybeBatched{T,TInput,TOutput}"/> with
     /// adaptive OOM recovery — adaptive is now the default; this
     /// overload preserves the explicit intent for callers that want it.
+    /// <paramref name="minBatchSize"/> caps how far the halve-on-OOM loop
+    /// will reduce the chunk size before rethrowing — defaults to
+    /// <see cref="MinAdaptiveBatchSize"/>.
     /// </summary>
     public static void TrainAdaptive<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model,
@@ -312,7 +366,7 @@ public static class NeuralBatchHelper
         int initialBatchSize = DefaultBatchSize,
         int minBatchSize = MinAdaptiveBatchSize,
         GradientAccumulationMode mode = GradientAccumulationMode.Independent)
-        => TrainMaybeBatched(model, X, Y, initialBatchSize, mode, disableAdaptiveRetry: false);
+        => TrainMaybeBatched(model, X, Y, initialBatchSize, mode, disableAdaptiveRetry: false, minBatchSize: minBatchSize);
 
     private static AdaptiveState GetOrCreateAdaptiveState(object modelKey, int initialBatchSize)
     {
@@ -389,7 +443,18 @@ public static class NeuralBatchHelper
             }
             else
             {
-                return reducer(seed, model.Predict(X), 0, totalN);
+                // Per-chunk forward returned a runtime type incompatible
+                // with TOutput. Discarding the accumulated reductions and
+                // silently restarting from `seed` against a full-input
+                // Predict would: (a) lose the chunked work already done,
+                // (b) defeat the memory-bounding contract by running an
+                // unchunked Predict, and (c) hide the type mismatch from
+                // the caller. Fail fast with an actionable diagnostic.
+                throw new InvalidOperationException(
+                    $"PredictAndReduce: per-chunk Predict on chunk [{start}..{end}) " +
+                    $"returned {chunkOut?.GetType().FullName ?? "null"}, which is not " +
+                    $"assignable to TOutput={typeof(TOutput).FullName}. The reducer " +
+                    $"contract requires every chunk output to be a {typeof(TOutput).Name}.");
             }
         }
         return acc;

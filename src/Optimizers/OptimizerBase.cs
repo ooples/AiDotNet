@@ -129,8 +129,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// small / medium tensors, small enough that a Transformer at
     /// <c>d=128 / L=4 / heads=4 / ctx=64</c> peaks at ~17 MB of attention
     /// scores per chunk instead of the multi-GB single-shot allocation that
-    /// surfaced as the second half of #1296. Gradient-based subclasses
-    /// override this to track their <c>BatchSize</c> setting.
+    /// surfaced as the second half of #1296. Subclasses MAY override this
+    /// to track a configured training <c>BatchSize</c>; doing so is opt-in
+    /// per-optimizer because not every options type carries the same
+    /// <c>BatchSize</c> property.
     /// </summary>
     protected virtual int EvaluationBatchSize => 256;
 

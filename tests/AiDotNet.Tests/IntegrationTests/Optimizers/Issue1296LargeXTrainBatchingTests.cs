@@ -221,17 +221,34 @@ public class Issue1296LargeXTrainBatchingTests
             YTest = yVal,
         };
 
-        long peakHeap = 0;
+        // Sample the live managed heap on a polling loop while Optimize
+        // runs on a background task. `peakHeap` is the maximum live delta
+        // observed during the call — i.e., a TRUE peak, not just the
+        // end-of-call retention. A single pre/post pair would miss
+        // transient peaks (the regression symptom for #1296) entirely.
         long heapBefore = GC.GetTotalMemory(forceFullCollection: true);
+        long peakHeap = 0;
         var sw = Stopwatch.StartNew();
-        var _ = optimizer.Optimize(inputData);
+        var optimizeTask = Task.Run(() => optimizer.Optimize(inputData));
+        while (!optimizeTask.IsCompleted)
+        {
+            long live = GC.GetTotalMemory(forceFullCollection: false) - heapBefore;
+            if (live > peakHeap) peakHeap = live;
+            try { await Task.Delay(25); }
+            catch (TaskCanceledException) { break; }
+        }
+        // Surface any optimizer exception before reading post-call heap.
+        _ = await optimizeTask;
         sw.Stop();
-        // forceFullCollection:true → measure RETENTION not transient garbage.
-        long heapAfter = GC.GetTotalMemory(forceFullCollection: true);
-        peakHeap = Math.Max(peakHeap, heapAfter - heapBefore);
+        // Read post-call live heap (no force-collect — keep the in-flight
+        // peak signal intact); fold it into peakHeap so a peak that
+        // happens to land right at end-of-call is also captured.
+        long heapAfter = GC.GetTotalMemory(forceFullCollection: false);
+        long endDelta = Math.Max(0L, heapAfter - heapBefore);
+        if (endDelta > peakHeap) peakHeap = endDelta;
 
         double peakMb = peakHeap / 1024.0 / 1024.0;
-        _output.WriteLine($"Optimize wall: {sw.Elapsed.TotalSeconds:F1} s; retained heap delta: {peakMb:F1} MB");
+        _output.WriteLine($"Optimize wall: {sw.Elapsed.TotalSeconds:F1} s; PEAK heap delta during run: {peakMb:F1} MB");
 
         Assert.True(
             peakMb < 800.0,
@@ -406,6 +423,73 @@ public class Issue1296LargeXTrainBatchingTests
         double deltaMb = Math.Max(0, heapAfter - heapBefore) / 1024.0 / 1024.0;
         _output.WriteLine($"AdamW retained heap delta: {deltaMb:F1} MB");
         Assert.True(deltaMb < 500.0, $"AdamW retained heap delta {deltaMb:F1} MB > 500 MB — full-batch Train may have engaged.");
+    }
+
+    /// <summary>
+    /// Targeted regression guard for #1296 root cause: gradient-based
+    /// optimizers MUST NOT invoke <c>model.Train(...)</c> during the
+    /// pre-epoch <c>PrepareAndEvaluateSolution</c> path. They update
+    /// parameters via the mini-batched epoch loop's <c>UpdateSolution</c>
+    /// only. If a future refactor reintroduces a pre-epoch full-batch
+    /// Train, this test surfaces it independently of any heap-delta or
+    /// wall-time threshold — the model's <c>Train</c> override increments
+    /// a counter, and we assert it stays at zero across the optimizer's
+    /// preparation phase.
+    /// </summary>
+    [Fact(Timeout = 120_000)]
+    public async Task GradientOptimizer_NeverCallsModelTrainDuringPrepareAndEvaluate()
+    {
+        await Task.Yield();
+        var (arch, xTrain, yTrain) = BuildFixture(sampleCount: 64);
+
+        var model = new TrainCallCountingTransformer(arch);
+        var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        {
+            InitialLearningRate = 1e-3,
+            MaxIterations = 1,
+            BatchSize = 16,
+            UseAdaptiveLearningRate = false,
+        };
+        var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(model, options);
+
+        var inputData = new OptimizationInputData<float, Tensor<float>, Tensor<float>>
+        {
+            XTrain = xTrain,
+            YTrain = yTrain,
+            XValidation = xTrain,
+            YValidation = yTrain,
+            XTest = xTrain,
+            YTest = yTrain,
+        };
+
+        _ = optimizer.Optimize(inputData);
+
+        _output.WriteLine($"Counted model.Train calls during Optimize: {model.TrainCallCount}");
+        Assert.Equal(0, model.TrainCallCount);
+    }
+
+    /// <summary>
+    /// Test-only Transformer subclass that counts how many times
+    /// <see cref="NeuralNetworkBase{T}.Train"/> is invoked from outside
+    /// the optimizer's per-step tape path. Used by
+    /// <see cref="GradientOptimizer_NeverCallsModelTrainDuringPrepareAndEvaluate"/>
+    /// to guarantee the #1296 fix (skipping the pre-epoch full-batch Train)
+    /// can't silently regress.
+    /// </summary>
+    private sealed class TrainCallCountingTransformer : Transformer<float>
+    {
+        public int TrainCallCount { get; private set; }
+
+        public TrainCallCountingTransformer(TransformerArchitecture<float> arch)
+            : base(arch, lossFunction: new CategoricalCrossEntropyLoss<float>())
+        {
+        }
+
+        public override void Train(Tensor<float> input, Tensor<float> expectedOutput)
+        {
+            TrainCallCount++;
+            base.Train(input, expectedOutput);
+        }
     }
 
     /// <summary>
@@ -679,12 +763,16 @@ public class Issue1296LargeXTrainBatchingTests
         _ = model.Predict(primer);
 
         // 4 MB budget on a 4000-sample tensor where one sample probes at
-        // a non-trivial cost — chunk should bound below 4000.
+        // a non-trivial cost — chunk should bound STRICTLY below 4000.
+        // A returned chunk equal to the input size would mean the
+        // estimator failed to bound the budget (the regression this test
+        // claims to catch), so we assert strict inequality.
         const long fourMb = 4L * 1024 * 1024;
         int chunk = NeuralBatchHelper.EstimateChunkSize(model, x, fourMb);
         _output.WriteLine($"4 MB budget -> chunk size {chunk} (input has {x.Shape[0]} samples)");
         Assert.True(chunk >= 1, "Estimator returned a chunk size below 1.");
-        Assert.True(chunk <= x.Shape[0], "Estimator returned a chunk size larger than the input.");
+        Assert.True(chunk < x.Shape[0],
+            $"Estimator returned chunk={chunk} which is not strictly below input size {x.Shape[0]} — a small budget must force chunking.");
     }
 
     /// <summary>
@@ -731,19 +819,20 @@ public class Issue1296LargeXTrainBatchingTests
     // ───────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// <b>Benchmark — adaptive OOM recovery: actually recovers from injected OOM.</b>
-    /// We can't reliably trigger a real OOM in a test, so we drive the
-    /// adaptive ratchet through a deliberately oversized initial batch on
-    /// a model whose forward DOES legitimately throw <see cref="OutOfMemoryException"/>
-    /// at that scale. The probe model is a Transformer at <c>d=128 / L=4 /
-    /// heads=4 / ctx=64</c> with a hostile <c>initialBatchSize = 80_000</c>
-    /// — bigger than the host's working set can fit in attention scores
-    /// (~80k × 4 × 64² × 4 B ≈ 5.2 GB). The non-adaptive path should
-    /// throw; the adaptive default should halve until it fits and return
-    /// a valid output.
+    /// <b>Baseline — adaptive OOM recovery is a no-op when no OOM fires.</b>
+    /// Reliably triggering an actual <see cref="OutOfMemoryException"/>
+    /// inside a CI test is brittle (depends on host RAM, GC state, and
+    /// platform), so this probe asserts the WEAKER invariant that's
+    /// portable: when the requested batch is large enough that the
+    /// model's forward fits without OOM, the adaptive-on and adaptive-off
+    /// paths produce element-equivalent output. Catches a regression
+    /// where the adaptive wrapper somehow corrupts output even on the
+    /// happy path. The actual OOM-retry-and-recover branch is exercised
+    /// by unit tests that mock <see cref="OutOfMemoryException"/> rather
+    /// than allocating real GB-scale tensors.
     /// </summary>
     [Fact(Timeout = 600_000)]
-    public async Task AdaptiveOOMRecovery_RecoversFromHostileInitialBatchSize()
+    public async Task AdaptiveOOMRecovery_NoOOM_NoOpEquivalence()
     {
         await Task.Yield();
         var (arch, x, _) = BuildFixture(sampleCount: 256);
@@ -753,19 +842,14 @@ public class Issue1296LargeXTrainBatchingTests
         for (int s = 0; s < x.Shape[1]; s++) primer[0, s] = x[0, s];
         _ = model.Predict(primer);
 
-        // disableAdaptiveRetry=true must observe ZERO retries: it processes
-        // the input at the requested batch (or in chunks if input > batch).
-        // For sampleCount=256 and batch=80000, all 256 samples fit in one
-        // chunk, no chunking needed. So this branch should succeed.
-        // Conversely, adaptive=true should also succeed and not need to
-        // retry. Both succeed = baseline.
+        // sampleCount=256 with batchSize=80_000: all 256 samples fit in
+        // one chunk, no chunking needed on either path. Both should
+        // succeed and return element-equivalent output.
         var directOutput = NeuralBatchHelper.PredictMaybeBatched(
             model, x, batchSize: 80_000, disableAdaptiveRetry: true);
         var adaptiveOutput = NeuralBatchHelper.PredictMaybeBatched(
             model, x, batchSize: 80_000, disableAdaptiveRetry: false);
 
-        // Both succeeded, outputs equivalent: confirms adaptive is a
-        // pure no-op when no OOM fires.
         Assert.Equal(directOutput.Length, adaptiveOutput.Length);
         const float tol = 1e-3f;
         int mismatches = 0;

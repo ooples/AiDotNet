@@ -47,10 +47,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// exclusively via <see cref="UpdateSolution"/> inside the mini-batched
     /// epoch loop in <c>Optimize()</c> — the initial Train pass would push the
     /// entire <c>XTrain</c> tensor through the model in one shot, ignoring
-    /// <c>BatchSize</c>, which OOMs Transformers (or any layer whose forward
-    /// is O(N²) in batch dim) on any non-trivial corpus. See #1296 for the
-    /// repro. Adam's <c>_m</c> / <c>_v</c> are deferred-allocated until the
-    /// first <see cref="UpdateSolution"/> (#1221), so the model's initial
+    /// the configured <c>BatchSize</c>. For Transformer-style architectures
+    /// the resulting activation footprint scales like <c>O(B · S²)</c> for
+    /// attention scores (B = full-corpus batch, S = sequence length), which
+    /// OOMs on any non-trivial corpus — see #1296 for the repro. Adam's
+    /// <c>_m</c> / <c>_v</c> are deferred-allocated until the first
+    /// <see cref="UpdateSolution"/> (#1221), so the model's initial
     /// untrained-state evaluation is correct as the optimization baseline.
     /// </summary>
     protected override bool SkipTrainingInEvaluation => true;

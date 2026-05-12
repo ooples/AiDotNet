@@ -271,6 +271,25 @@ internal sealed class CompiledModelHost<T> : IDisposable
                 // which will lock + re-acquire a fresh cache.
                 _hotPlan = null;
             }
+            catch (System.Exception ex) when (
+                ex is System.ArgumentException
+                or System.InvalidOperationException
+                or System.IndexOutOfRangeException
+                or System.NullReferenceException)
+            {
+                // Compile-replay should be best-effort: any other recoverable
+                // failure inside SetInputs / Execute (shape / arity mismatch
+                // after an edge-case cache invalidation, intermittent native
+                // backend hiccup, etc.) must fall through to the slow path
+                // instead of bubbling out and bypassing the eager fallback
+                // CompiledModelHost's contract promises. Clear _hotPlan so
+                // the slow path rebuilds against a fresh cache rather than
+                // returning to a known-bad plan on the next call.
+                _hotPlan = null;
+                // OutOfMemoryException / StackOverflowException / other
+                // truly unrecoverable exceptions intentionally NOT caught
+                // here — they should propagate.
+            }
         }
         System.Threading.Interlocked.Increment(ref _slowPathCalls);
 
