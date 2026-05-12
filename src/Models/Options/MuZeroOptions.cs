@@ -33,8 +33,26 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
 {
-    public int ObservationSize { get; init; }
-    public int ActionSize { get; init; }
+    /// <summary>
+    /// Dimensionality of the environment's observation vector. Defaults to
+    /// 4 — the canonical CartPole / cart-pole-balance observation
+    /// (cart position, cart velocity, pole angle, pole angular velocity),
+    /// which is the smallest non-trivial RL benchmark and the size assumed
+    /// by <see cref="AiDotNet.Tests.ModelFamilyTests.Base.ReinforcementLearningTestBase"/>
+    /// for invariant testing. Override for any other environment — Atari
+    /// (96×96×128 framestack), Go (19×19 board), MuJoCo (17-dim joint
+    /// states), etc.
+    /// </summary>
+    public int ObservationSize { get; init; } = 4;
+
+    /// <summary>
+    /// Number of discrete actions the agent can choose from. Defaults to
+    /// 2 — the canonical CartPole action set (push-left, push-right) and
+    /// the smallest non-degenerate discrete action space. Override for
+    /// any environment with more actions — Atari typically 18, Go 362,
+    /// chess ~4672.
+    /// </summary>
+    public int ActionSize { get; init; } = 2;
 
     // Network architecture
     public int LatentStateSize { get; init; } = 256;

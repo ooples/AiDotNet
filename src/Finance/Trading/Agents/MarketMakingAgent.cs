@@ -76,26 +76,39 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     #region Constructors
 
     /// <summary>
-    /// Initializes a new instance of the MarketMakingAgent class.
+    /// Initializes a new instance with paper-default options. Delegates to
+    /// the <see cref="MarketMakingAgent(MarketMakingOptions{T})"/> overload
+    /// which reads <see cref="MarketMakingOptions{T}.StateSize"/> /
+    /// <see cref="MarketMakingOptions{T}.ActionSize"/> (inherited from
+    /// <c>TradingAgentOptions</c>: StateSize=64, ActionSize=3) and
+    /// constructs an architecture matching those dims. Callers that want
+    /// to customize either the network architecture or the
+    /// market-making hyperparameters do so by passing their own
+    /// <see cref="MarketMakingOptions{T}"/> and / or
+    /// <see cref="NeuralNetworkArchitecture{T}"/> to one of the explicit
+    /// ctors below.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MarketMakingAgent model, MarketMakingAgent sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
-    private const int DefaultInputSize = 10;
-    private const int DefaultOutputSize = 1;
+    public MarketMakingAgent() : this(new MarketMakingOptions<T>())
+    {
+    }
 
     /// <summary>
-    /// Initializes a new instance with default settings.
+    /// Initializes a new instance from <see cref="MarketMakingOptions{T}"/>
+    /// alone, building the policy-network architecture from
+    /// <see cref="MarketMakingOptions{T}.StateSize"/> and
+    /// <see cref="MarketMakingOptions{T}.ActionSize"/>. Equivalent to the
+    /// (architecture, options) overload with a sensibly-sized
+    /// <see cref="NeuralNetworkArchitecture{T}"/>; lets callers customize
+    /// trading hyperparameters without having to hand-construct a
+    /// matching architecture.
     /// </summary>
-    public MarketMakingAgent()
+    public MarketMakingAgent(MarketMakingOptions<T> options)
         : this(new NeuralNetworkArchitecture<T>(
-            inputType: AiDotNet.Enums.InputType.OneDimensional,
-            taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression,
-            inputSize: DefaultInputSize,
-            outputSize: DefaultOutputSize),
-            options: new MarketMakingOptions<T>())
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: options.StateSize,
+            outputSize: options.ActionSize),
+            options)
     {
     }
 
