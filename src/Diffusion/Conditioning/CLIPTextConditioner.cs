@@ -459,85 +459,65 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
 
     /// <summary>
     /// Multi-head scaled dot-product self-attention (Vaswani et al. 2017
-    /// Eqs. 1-2). Operates on [seqLen, HiddenSize] flattened to a 1D vector.
+    /// Eqs. 1-2). Operates on the [seqLen, HiddenSize] input through
+    /// engine-accelerated batched matmul / softmax / transpose ops on
+    /// <see cref="Tensor{T}"/> — no scalar inner loops, fully generic in
+    /// <typeparamref name="T"/>, BLAS/GPU-eligible when the engine binds those.
     /// </summary>
     private Vector<T> MultiHeadAttention(Vector<T> input, int qOff, int kOff, int vOff, int oOff,
         int seqLen, int H, int numHeads, int headDim)
     {
-        // Project to Q, K, V via [seqLen, H] @ [H, H] for each.
-        var q = LinearProject(input, TransformerWeights, qOff, H, H, seqLen);
-        var k = LinearProject(input, TransformerWeights, kOff, H, H, seqLen);
-        var v = LinearProject(input, TransformerWeights, vOff, H, H, seqLen);
+        // Project to Q, K, V. LinearProject is already engine-routed (TensorMatMul).
+        var qVec = LinearProject(input, TransformerWeights, qOff, H, H, seqLen);
+        var kVec = LinearProject(input, TransformerWeights, kOff, H, H, seqLen);
+        var vVec = LinearProject(input, TransformerWeights, vOff, H, H, seqLen);
 
-        double scale = 1.0 / Math.Sqrt(headDim);
-        var output = new Vector<T>(seqLen * H);
-        var logits = new double[seqLen];
+        // Split heads: [seqLen, H] → [seqLen, numHeads, headDim] → permute to
+        // [numHeads, seqLen, headDim] so batched matmul iterates over heads.
+        var qHeads = Engine.TensorPermute(
+            Tensor<T>.FromVector(qVec, [seqLen, numHeads, headDim]), [1, 0, 2]);
+        var kHeads = Engine.TensorPermute(
+            Tensor<T>.FromVector(kVec, [seqLen, numHeads, headDim]), [1, 0, 2]);
+        var vHeads = Engine.TensorPermute(
+            Tensor<T>.FromVector(vVec, [seqLen, numHeads, headDim]), [1, 0, 2]);
 
-        for (int h = 0; h < numHeads; h++)
-        {
-            int headOff = h * headDim;
-            for (int sq = 0; sq < seqLen; sq++)
-            {
-                // logits[t] = q[sq, h*headDim:(h+1)*headDim] · k[t, h*headDim:(h+1)*headDim] · scale
-                double maxLogit = double.NegativeInfinity;
-                int qBase = sq * H + headOff;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int kBase = t * H + headOff;
-                    double dot = 0.0;
-                    for (int d = 0; d < headDim; d++)
-                        dot += NumOps.ToDouble(q[qBase + d]) * NumOps.ToDouble(k[kBase + d]);
-                    double l = dot * scale;
-                    logits[t] = l;
-                    if (l > maxLogit) maxLogit = l;
-                }
+        // scores = Q @ K^T / √d_k  →  [numHeads, seqLen, seqLen]
+        // K^T over the last two axes: permute [numHeads, seqLen, headDim] → [numHeads, headDim, seqLen].
+        var kTranspose = Engine.TensorPermute(kHeads, [0, 2, 1]);
+        var scores = Engine.TensorMatMul(qHeads, kTranspose);
+        scores = Engine.TensorMultiplyScalar(scores, NumOps.FromDouble(1.0 / Math.Sqrt(headDim)));
 
-                // Stable softmax over t.
-                double sumExp = 0.0;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    logits[t] = Math.Exp(logits[t] - maxLogit);
-                    sumExp += logits[t];
-                }
-                double invSum = sumExp > 0 ? 1.0 / sumExp : 0.0;
+        // Softmax over the last (key) axis. Engine-accelerated; stable internally.
+        var attn = Engine.TensorSoftmax(scores, axis: 2);
 
-                // Weighted sum of V over t for this head.
-                int outBase = sq * H + headOff;
-                for (int d = 0; d < headDim; d++) output[outBase + d] = NumOps.Zero;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    double w = logits[t] * invSum;
-                    int vBase = t * H + headOff;
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        double contrib = w * NumOps.ToDouble(v[vBase + d]);
-                        output[outBase + d] = NumOps.Add(output[outBase + d], NumOps.FromDouble(contrib));
-                    }
-                }
-            }
-        }
+        // attn @ V → [numHeads, seqLen, headDim]
+        var headOut = Engine.TensorMatMul(attn, vHeads);
 
-        // Output projection.
-        return LinearProject(output, TransformerWeights, oOff, H, H, seqLen);
+        // Concat heads: permute [numHeads, seqLen, headDim] → [seqLen, numHeads, headDim]
+        // → flatten last two into [seqLen, H].
+        var concated = Engine.TensorPermute(headOut, [1, 0, 2]);
+        var flat = Engine.Reshape(concated, [seqLen * H]);
+
+        // Output projection W_o.
+        return LinearProject(flat.ToVector(), TransformerWeights, oOff, H, H, seqLen);
     }
 
     /// <summary>
     /// CLIP MLP block: GELU(x @ W1) @ W2 with the standard 4× hidden expansion
     /// (Radford 2021 §3.1.2 uses GELU; Hendrycks &amp; Gimpel 2016 approximation).
+    /// Routed through the engine's tape-tracked TensorGELU so the activation
+    /// step is BLAS/GPU-eligible and stays generic in <typeparamref name="T"/>.
     /// </summary>
     private Vector<T> MLP(Vector<T> input, int w1Off, int w2Off, int seqLen, int H)
     {
         // hidden = input @ W1   ([seqLen, H] @ [H, 4H] → [seqLen, 4H])
         var hidden = LinearProject(input, TransformerWeights, w1Off, H, 4 * H, seqLen);
-        // GELU.
-        for (int i = 0; i < hidden.Length; i++)
-        {
-            double x = NumOps.ToDouble(hidden[i]);
-            double g = 0.5 * x * (1.0 + Math.Tanh(0.79788456 * (x + 0.044715 * x * x * x)));
-            hidden[i] = NumOps.FromDouble(g);
-        }
+        // GELU via engine. The tape captures this as a single differentiable
+        // op rather than the previous per-element NumOps.ToDouble dance.
+        var hiddenTensor = Tensor<T>.FromVector(hidden);
+        var activated = Engine.TensorGELU(hiddenTensor);
         // output = hidden @ W2   ([seqLen, 4H] @ [4H, H] → [seqLen, H])
-        return LinearProject(hidden, TransformerWeights, w2Off, 4 * H, H, seqLen);
+        return LinearProject(activated.ToVector(), TransformerWeights, w2Off, 4 * H, H, seqLen);
     }
 
     /// <summary>

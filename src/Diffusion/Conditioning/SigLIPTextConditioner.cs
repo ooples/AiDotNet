@@ -231,90 +231,77 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
         return hidden;
     }
 
+    /// <summary>
+    /// Multi-head scaled dot-product self-attention via engine-accelerated
+    /// batched matmul / softmax / permute. Generic in <typeparamref name="T"/>;
+    /// no scalar inner loops or NumOps.ToDouble round-trips.
+    /// </summary>
     private Vector<T> MultiHeadAttention(Vector<T> input, int qOff, int kOff, int vOff, int oOff,
         int seqLen, int H, int numHeads, int headDim)
     {
-        var q = LinearProject(input, TransformerWeights, qOff, H, H, seqLen);
-        var k = LinearProject(input, TransformerWeights, kOff, H, H, seqLen);
-        var v = LinearProject(input, TransformerWeights, vOff, H, H, seqLen);
+        var qVec = LinearProject(input, TransformerWeights, qOff, H, H, seqLen);
+        var kVec = LinearProject(input, TransformerWeights, kOff, H, H, seqLen);
+        var vVec = LinearProject(input, TransformerWeights, vOff, H, H, seqLen);
 
-        double scale = 1.0 / Math.Sqrt(headDim);
-        var output = new Vector<T>(seqLen * H);
-        var logits = new double[seqLen];
+        // Split heads + transpose to [numHeads, seqLen, headDim] for batched matmul.
+        var qHeads = Engine.TensorPermute(
+            Tensor<T>.FromVector(qVec, [seqLen, numHeads, headDim]), [1, 0, 2]);
+        var kHeads = Engine.TensorPermute(
+            Tensor<T>.FromVector(kVec, [seqLen, numHeads, headDim]), [1, 0, 2]);
+        var vHeads = Engine.TensorPermute(
+            Tensor<T>.FromVector(vVec, [seqLen, numHeads, headDim]), [1, 0, 2]);
 
-        for (int h = 0; h < numHeads; h++)
-        {
-            int headOff = h * headDim;
-            for (int sq = 0; sq < seqLen; sq++)
-            {
-                double maxLogit = double.NegativeInfinity;
-                int qBase = sq * H + headOff;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int kBase = t * H + headOff;
-                    double dot = 0.0;
-                    for (int d = 0; d < headDim; d++)
-                        dot += NumOps.ToDouble(q[qBase + d]) * NumOps.ToDouble(k[kBase + d]);
-                    double l = dot * scale;
-                    logits[t] = l;
-                    if (l > maxLogit) maxLogit = l;
-                }
-                double sumExp = 0.0;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    logits[t] = Math.Exp(logits[t] - maxLogit);
-                    sumExp += logits[t];
-                }
-                double invSum = sumExp > 0 ? 1.0 / sumExp : 0.0;
+        // scores = Q @ K^T / √d_k   → [numHeads, seqLen, seqLen]
+        var kTransposed = Engine.TensorPermute(kHeads, [0, 2, 1]);
+        var scores = Engine.TensorMatMul(qHeads, kTransposed);
+        scores = Engine.TensorMultiplyScalar(scores, NumOps.FromDouble(1.0 / Math.Sqrt(headDim)));
 
-                int outBase = sq * H + headOff;
-                for (int d = 0; d < headDim; d++) output[outBase + d] = NumOps.Zero;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    double w = logits[t] * invSum;
-                    int vBase = t * H + headOff;
-                    for (int d = 0; d < headDim; d++)
-                    {
-                        double contrib = w * NumOps.ToDouble(v[vBase + d]);
-                        output[outBase + d] = NumOps.Add(output[outBase + d], NumOps.FromDouble(contrib));
-                    }
-                }
-            }
-        }
+        // Stable softmax over the last (key) axis. Engine-accelerated.
+        var attn = Engine.TensorSoftmax(scores, axis: 2);
 
-        return LinearProject(output, TransformerWeights, oOff, H, H, seqLen);
+        // attn @ V                → [numHeads, seqLen, headDim]
+        var headOut = Engine.TensorMatMul(attn, vHeads);
+
+        // Concat heads back to [seqLen, H].
+        var concatenated = Engine.TensorPermute(headOut, [1, 0, 2]);
+        var flat = Engine.Reshape(concatenated, [seqLen * H]);
+
+        return LinearProject(flat.ToVector(), TransformerWeights, oOff, H, H, seqLen);
     }
 
+    /// <summary>
+    /// MLP block: linear(H→4H) → GELU → linear(4H→H). Both matmuls go through
+    /// the engine; GELU uses Engine.TensorGELU which is BLAS/GPU-accelerated
+    /// and tape-aware.
+    /// </summary>
     private Vector<T> MLP(Vector<T> input, int w1Off, int w2Off, int seqLen, int H)
     {
         var hidden = LinearProject(input, TransformerWeights, w1Off, H, 4 * H, seqLen);
-        for (int i = 0; i < hidden.Length; i++)
-        {
-            double x = NumOps.ToDouble(hidden[i]);
-            double g = 0.5 * x * (1.0 + Math.Tanh(0.79788456 * (x + 0.044715 * x * x * x)));
-            hidden[i] = NumOps.FromDouble(g);
-        }
-        return LinearProject(hidden, TransformerWeights, w2Off, 4 * H, H, seqLen);
+        var activated = Engine.TensorGELU(Tensor<T>.FromVector(hidden));
+        return LinearProject(activated.ToVector(), TransformerWeights, w2Off, 4 * H, H, seqLen);
     }
 
+    /// <summary>
+    /// [seqLen, inDim] @ [inDim, outDim] via Engine.TensorMatMul. The
+    /// scalar implementation it replaces was the dominant per-block cost.
+    /// </summary>
     private Vector<T> LinearProject(Vector<T> input, Vector<T> weights, int weightOffset, int inDim, int outDim, int seqLen)
     {
-        var output = new Vector<T>(seqLen * outDim);
-        for (int s = 0; s < seqLen; s++)
+        var wSize = inDim * outDim;
+        if (weightOffset < 0 || weightOffset + wSize > weights.Length)
         {
-            for (int o = 0; o < outDim; o++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < inDim; i++)
-                {
-                    int wIdx = weightOffset + i * outDim + o;
-                    if (wIdx < weights.Length)
-                        sum = NumOps.Add(sum, NumOps.Multiply(input[s * inDim + i], weights[wIdx]));
-                }
-                output[s * outDim + o] = sum;
-            }
+            throw new ArgumentOutOfRangeException(
+                nameof(weightOffset),
+                $"LinearProject requires {wSize} weights starting at offset {weightOffset}, " +
+                $"but the weight buffer only has {weights.Length} elements.");
         }
-        return output;
+        var wSlice = new Vector<T>(wSize);
+        for (int i = 0; i < wSize; i++) wSlice[i] = weights[weightOffset + i];
+
+        var inputMat = Tensor<T>.FromVector(input, [seqLen, inDim]);
+        var wMat = Tensor<T>.FromVector(wSlice, [inDim, outDim]);
+        var result = Engine.TensorMatMul(inputMat, wMat);
+        return Engine.Reshape(result, [seqLen * outDim]).ToVector();
     }
 
     private static Vector<T> CopyVector(Vector<T> source)
