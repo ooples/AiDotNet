@@ -849,6 +849,32 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Single source of truth for the "resolve adjacency + propagate to every
+    /// graph layer" preamble that <see cref="Train"/> and
+    /// <see cref="GetNamedLayerActivations"/> both need. Centralizing the
+    /// pattern in one helper prevents one call site from drifting and
+    /// silently producing wrong gradients — the original regression
+    /// (#1286: GraphSAGE Training_ShouldChangeParameters returning zero
+    /// gradients) was caused exactly by <c>Train</c> never installing the
+    /// adjacency that <c>TrainWithTape</c>'s per-layer Forward path
+    /// needed.
+    /// </summary>
+    /// <returns>The resolved adjacency matrix that has been installed on
+    /// every <see cref="IGraphConvolutionLayer{T}"/> in <c>Layers</c>.</returns>
+    private Tensor<T> PrepareGraphLayersForForward(Tensor<T> input)
+    {
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
+        }
+        return adjacencyMatrix;
+    }
+
+    /// <summary>
     /// Sets the adjacency matrix for graph operations.
     /// </summary>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
@@ -865,54 +891,30 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
-        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+        // Install adjacency on every graph layer BEFORE the tape forward pass —
+        // TrainWithTape walks `Layers[i].Forward(current)` directly, bypassing
+        // the 2-arg Forward that ordinarily sets adjacency, so graph layers
+        // would otherwise see whatever adjacency was last installed (null on
+        // the first Train call, stale after that). PrepareGraphLayersForForward
+        // is the shared helper that also serves GetNamedLayerActivations.
+        PrepareGraphLayersForForward(input);
 
-        // Set all layers to training mode
-        foreach (var layer in Layers)
+        // Delegate to the tape-based path that the rest of the NN base relies on
+        // — the previous implementation declared "Backward pass through all
+        // layers" in a comment but never actually called Backward, so
+        // GetParameterGradients() returned the layers' zero-initialized gradient
+        // tensors and the optimizer applied no update (Training_ShouldChangeParameters,
+        // GradientFlow_ShouldBeNonZeroAndFinite, LossStrictlyDecreasesOnMemorizationTask
+        // all failed because params didn't move).
+        SetTrainingMode(true);
+        try
         {
-            layer.SetTrainingMode(true);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        // Forward pass
-        var predictions = Forward(input, adjacencyMatrix);
-
-        // Flatten tensors for loss function (which works on vectors)
-        var flattenedPredictions = predictions.ToVector();
-        var flattenedExpected = expectedOutput.ToVector();
-
-        // Compute loss
-        LastLoss = LossFunction.CalculateLoss(flattenedPredictions, flattenedExpected);
-
-        // Compute loss gradient
-        var outputGradients = LossFunction.CalculateDerivative(flattenedPredictions, flattenedExpected);
-        var gradOutput = Tensor<T>.FromVector(outputGradients);
-
-        // Reshape gradient back to tensor shape if needed
-        if (gradOutput.Shape.Length == 1 && predictions.Shape.Length > 1)
+        finally
         {
-            gradOutput = gradOutput.Reshape(predictions._shape);
+            SetTrainingMode(false);
         }
-
-        // Backward pass through all layers
-
-        // Get parameter gradients for all trainable layers and update
-        Vector<T> parameterGradients = GetParameterGradients();
-
-        // Clip gradients to prevent exploding gradients
-        parameterGradients = ClipGradient(parameterGradients);
-
-
-        // Fresh optimizer per step for stable convergence (no momentum oscillation).
-        var stepOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        // Get current parameters
-        Vector<T> currentParameters = GetParameters();
-
-        // Update parameters using the optimizer
-        Vector<T> updatedParameters = stepOptimizer.UpdateParameters(currentParameters, parameterGradients);
-
-        // Apply updated parameters
-        UpdateParameters(updatedParameters);
     }
 
     /// <summary>
@@ -923,13 +925,7 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
-        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
-
-        foreach (var layer in Layers)
-        {
-            if (layer is IGraphConvolutionLayer<T> graphLayer)
-                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
-        }
+        PrepareGraphLayersForForward(input);
 
         var activations = new Dictionary<string, Tensor<T>>();
         var current = input;

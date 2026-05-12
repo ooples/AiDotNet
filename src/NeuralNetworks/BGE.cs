@@ -142,6 +142,12 @@ namespace AiDotNet.NeuralNetworks
 
         private void InitializeLayersCore(bool useVirtualValidation)
         {
+            // Defensive ClearLayers so any future ctor path that forgets the
+            // TE-base typeof gate doesn't double-stack TE encoder + BGE layers
+            // and produce the same mid-pipeline EmbeddingLayer-on-floats bug
+            // that broke SGPT Clone (cloned.Predict() output collapsed to 0).
+            ClearLayers();
+
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
                 Layers.AddRange(Architecture.Layers);

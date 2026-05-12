@@ -124,6 +124,10 @@ namespace AiDotNet.NeuralNetworks
 
         private void InitializeLayersCore(bool useVirtualValidation)
         {
+            // Defensive ClearLayers — see SGPT/BGE for context (TE-base layer
+            // doubling bug).
+            ClearLayers();
+
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
                 Layers.AddRange(Architecture.Layers);

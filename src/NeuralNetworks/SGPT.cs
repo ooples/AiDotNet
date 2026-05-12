@@ -144,6 +144,11 @@ namespace AiDotNet.NeuralNetworks
 
         private void InitializeLayersCore(bool useVirtualValidation)
         {
+            // Defensive: even with the TE base ctor's typeof gate, anyone who
+            // calls this twice (e.g. a future ctor variant that forgets the
+            // gate) would otherwise double the layer stack and break Clone.
+            ClearLayers();
+
             if (Architecture.Layers != null && Architecture.Layers.Count > 0)
             {
                 Layers.AddRange(Architecture.Layers);

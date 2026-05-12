@@ -658,28 +658,26 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             RegisterSubLayer(_feedForwardProjection);
             RegisterSubLayer(_norm3);
 
-            // Propagate the resolved per-sample feature shape to lazy
-            // sub-layers so their ParameterCount reports the real
-            // weight count before each one's first Forward fires.
-            // Without this, sub-MHA / FFN / norm layers report 0 even
-            // after this parent's Forward has driven its own
-            // EnsureInitialized — which the
-            // ParameterCount-vs-GetParameters-Length invariant catches.
-            // Use a rank-2 [seq, features] shape because MHA's
-            // OnFirstForward expects at least rank-2 input.
-            var perSampleSeqShape = new[] { 1, _embeddingSize };
-            foreach (var sub in GetSubLayers())
-            {
-                if (sub is LayerBase<T> lb && !lb.IsShapeResolved)
-                {
-                    try { lb.ResolveShapesOnly(perSampleSeqShape); }
-                    catch
-                    {
-                        try { lb.ResolveShapesOnly(new[] { _embeddingSize }); }
-                        catch { /* skip — sub-layer needs richer shape */ }
-                    }
-                }
-            }
+            // Eagerly resolve each sub-layer with its CORRECT input shape so
+            // its ParameterCount reflects the real weight count before its
+            // first Forward fires. The previous foreach-loop used the same
+            // {1, _embeddingSize} shape for every sub-layer, which silently
+            // resolved _feedForwardProjection as (in=embed, out=embed) — the
+            // wrong shape (the projection's real input is _feedForwardDim).
+            // That bug caused SetParameters' parent-side slicing to be off
+            // by 2304×768 elements after the FFN expand, and Clone produced
+            // divergent outputs even though every byte copied identically.
+            // Mirror TransformerEncoderLayer.EnsureInitialized's exact per-
+            // sub-layer ResolveFromShape pattern (which already gets this
+            // right).
+            int[] subInputShape = new[] { _embeddingSize };
+            _selfAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+            _norm1.ResolveFromShape(subInputShape);
+            _crossAttention.ResolveFromShape(new[] { 1, _embeddingSize });
+            _norm2.ResolveFromShape(subInputShape);
+            _feedForward.ResolveFromShape(subInputShape);
+            _feedForwardProjection.ResolveFromShape(new[] { _feedForwardDim });
+            _norm3.ResolveFromShape(subInputShape);
 
             _isInitialized = true;
         }
@@ -1225,6 +1223,38 @@ public class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         }
 
         return diagnostics;
+    }
+
+    /// <summary>
+    /// Persists ctor parameters that DeserializationHelper needs to reconstruct
+    /// an identical layer post-clone. Without this override, the deserializer
+    /// falls back to <c>ResolveDefaultHeadCount(embeddingSize)</c> — which for
+    /// the SGPT/embed=768 case picks 8 heads instead of the source's 12, splits
+    /// Q/K/V into different per-head subspaces, and produces divergent
+    /// attention outputs even though every weight tensor copies identically.
+    /// (#1279 SGPT Clone_ShouldProduceIdenticalOutput: cloned output[1] = 0.)
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["FeedForwardDim"] = _feedForwardDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["SequenceLength"] = _sequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // Persist the FFN activation so deserialization can reconstruct the
+        // exact same activation function. DeserializationHelper already reads
+        // this key via TryCreateActivationInstance("FfnActivationType", ...);
+        // without writing it, any decoder built with a non-default activation
+        // (e.g. ReLU/SiLU for paper variants) would still round-trip back to
+        // the constructor default (GELU) — leaving clone/deserialize
+        // behaviorally divergent even when every weight tensor copies
+        // identically. The activation lives on the FFN sublayer's resolved
+        // ScalarActivation; serialize its concrete type name.
+        var ffnActivation = _feedForward?.ScalarActivation;
+        if (ffnActivation is not null)
+        {
+            metadata["FfnActivationType"] = ffnActivation.GetType().AssemblyQualifiedName ?? ffnActivation.GetType().FullName ?? string.Empty;
+        }
+        return metadata;
     }
 
     /// <summary>

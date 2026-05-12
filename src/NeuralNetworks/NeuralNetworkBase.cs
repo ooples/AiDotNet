@@ -4708,6 +4708,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // The arena is thread-static and resets on Dispose, so intermediate tensors
             // (conv outputs, attention scores, gradient buffers) are recycled every iteration.
             using var arena = TensorArena.Create();
+            // Non-persistent tape (the default). An earlier iteration of this
+            // method enabled Persistent=true to gate the AutoTrainingCompiler
+            // fast path in
+            // AiDotNet.Tensors.Engines.Compilation.AutoTrainingCompiler, which
+            // replays a compiled CompiledBackwardGraph instead of walking the
+            // tape entry list on subsequent steps. That change was reverted
+            // because the AutoTrainingCompiler is keyed thread-locally and
+            // its compiled backward gets shared across network instances —
+            // Clone-then-Train scenarios (e.g.
+            // HopeNetwork.MoreData_ShouldNotDegrade) saw two independent
+            // models diverge because their compiled backwards collided in
+            // the cross-network cache. The non-persistent default keeps each
+            // Train call fully independent. If the perf win is needed for
+            // a specific workload, enable Persistent at the call site with
+            // explicit lifetime management rather than re-introducing the
+            // shared default.
             using var tape = new GradientTape<T>();
             var output = ForwardForTraining(input);
 

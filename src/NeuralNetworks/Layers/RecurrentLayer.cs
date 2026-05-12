@@ -131,16 +131,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     private int[]? _originalInputShape;
 
     /// <summary>
-    /// Stores the hidden state tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached hidden state is needed during the backward pass to compute gradients. It holds the
-    /// sequence of hidden state vectors that were computed in the most recent forward pass. The tensor
-    /// is null before the first forward pass or after a reset.
-    /// </remarks>
-    private Tensor<T>? _lastHiddenState;
-
-    /// <summary>
     /// Stores the output tensor from the most recent forward pass for use in backpropagation.
     /// </summary>
     /// <remarks>
@@ -409,11 +399,24 @@ public partial class RecurrentLayer<T> : LayerBase<T>
                 nameof(input));
         }
 
-        // Allocate output tensor (cannot rent — reshape at end creates new tensor,
-        // leaving rented buffer unreturned and potentially reused with stale data)
-        var output = new Tensor<T>([sequenceLength, batchSize, hiddenSize]);
-        var hiddenState = new Tensor<T>([sequenceLength + 1, batchSize, hiddenSize]);
-        hiddenState.Fill(NumOps.Zero);
+        // CRITICAL: build per-timestep outputs into a flat array and stack at
+        // the end (an Engine.TensorStack op that records on the autodiff
+        // tape) instead of allocating raw `new Tensor<T>(seq, batch, hidden)`
+        // buffers and mutating them in-place via TensorSetSliceAxis. The
+        // in-place pattern produces an output tensor with NO GradFn —
+        // tape.ComputeGradients walks the backward chain from `loss` and
+        // dead-ends the moment it reaches the recurrent output, so every
+        // upstream parameter (CMS sub-layers, embedding tables, anything
+        // before the recurrence) gets a zero gradient. This was the root
+        // cause of HopeNetwork's "tape returns 6 keys, none of the 49
+        // trainable params match" diagnostic and of the
+        // LossStrictlyDecreasesOnMemorizationTask plateau (params didn't
+        // move because the optimizer never saw a non-zero gradient).
+        //
+        // The functional form below — Stack(per-timestep newHidden) —
+        // keeps every step's tensor in the autodiff graph, so the backward
+        // pass can flow gradients all the way back through
+        // hiddenWeights / inputWeights / biases and into upstream layers.
 
         // Process sequence using tensor operations. All projections via
         // Engine.* so the gradient tape records the forward chain.
@@ -423,17 +426,20 @@ public partial class RecurrentLayer<T> : LayerBase<T>
         var inputWeightsT = Engine.TensorPermute(_inputWeights, new[] { 1, 0 }); // [inputSize, hiddenSize]
         var hiddenWeightsT = Engine.TensorPermute(_hiddenWeights, new[] { 1, 0 }); // [hiddenSize, hiddenSize]
 
+        // Initial hidden state — a zero leaf tensor; no gradient flows into
+        // the recurrence's seed by construction (standard RNN convention).
+        var prevHidden = new Tensor<T>(new[] { batchSize, hiddenSize });
+        prevHidden.Fill(NumOps.Zero);
+
+        var stepOutputs = new Tensor<T>[sequenceLength];
         for (int t = 0; t < sequenceLength; t++)
         {
-            // VECTORIZED: Extract input slice for time step t: [batchSize, inputSize]
-            var inputAtT = Engine.TensorSliceAxis(input3D, 0, t); // [batchSize, inputSize]
-
-            // VECTORIZED: Extract previous hidden state: [batchSize, hiddenSize]
-            var prevHidden = Engine.TensorSliceAxis(hiddenState, 0, t); // [batchSize, hiddenSize]
+            // Extract input slice for time step t: [batchSize, inputSize]
+            var inputAtT = Engine.TensorSliceAxis(input3D, 0, t);
 
             // Compute: h_t = activation(input @ W_input^T + h_{t-1} @ W_hidden^T + biases)
             // Tape-tracked matmul (was .MatrixMultiply which bypasses the tape).
-            var inputContribution = Engine.TensorMatMul(inputAtT, inputWeightsT); // [batchSize, hiddenSize]
+            var inputContribution = Engine.TensorMatMul(inputAtT, inputWeightsT);     // [batchSize, hiddenSize]
             var hiddenContribution = Engine.TensorMatMul(prevHidden, hiddenWeightsT); // [batchSize, hiddenSize]
 
             // Sum contributions and add biases using Engine operations
@@ -443,12 +449,16 @@ public partial class RecurrentLayer<T> : LayerBase<T>
             // Apply activation
             var newHidden = ApplyActivation(preActivation);
 
-            // VECTORIZED: Store results using tensor slice operations
-            Engine.TensorSetSliceAxis(output, newHidden, 0, t);
-            Engine.TensorSetSliceAxis(hiddenState, newHidden, 0, t + 1);
+            stepOutputs[t] = newHidden;
+            prevHidden = newHidden; // recurrent feedback — keeps GradFn chain intact
         }
 
-        _lastHiddenState = hiddenState;
+        // Stack per-step outputs into [sequenceLength, batchSize, hiddenSize].
+        // TensorStack records on the autodiff tape (with StackBackward), so the
+        // backward pass can split gradients back to each stepOutputs[t] and from
+        // there to the per-step matmuls + biases.
+        var output = Engine.TensorStack(stepOutputs, axis: 0);
+
         _lastOutput = output;
 
         // Restore original batch dimensions for any-rank support — via Engine
@@ -937,7 +947,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>
     {
         // Clear cached values from forward and backward passes
         _lastInput = null;
-        _lastHiddenState = null;
         _lastOutput = null;
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;

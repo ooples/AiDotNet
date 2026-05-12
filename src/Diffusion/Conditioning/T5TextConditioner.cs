@@ -317,13 +317,33 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             ffnValue = TensorAllocator.RentUninitialized<T>(new[] { H, F });
             ffnOut   = TensorAllocator.RentUninitialized<T>(new[] { F, H });
 
-            FillXavier(q.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagQ));
-            FillXavier(k.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagK));
-            FillXavier(v.AsWritableSpan(),        H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagV));
-            FillXavier(attnOut.AsWritableSpan(),  H * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagO));
-            FillXavier(ffnGate.AsWritableSpan(),  H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnGate));
-            FillXavier(ffnValue.AsWritableSpan(), H * F, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnVal));
-            FillXavier(ffnOut.AsWritableSpan(),   F * H, DeriveSeed(_baseSeed, layerIdx, MatrixTagFfnOut));
+            // The seven Xavier fills below write into seven independently-
+            // allocated buffers from independently-derived seeds, so they're
+            // a textbook embarrassingly-parallel workload. Running them via
+            // Parallel.Invoke amortizes the ~7×F×H Box-Muller draws across
+            // logical cores — on T5-XXL each layer's seven fills total
+            // ~193M elements × 24 layers; the previous serial fill ran
+            // ~23 s on CI for T5-Large per-ctor, single-handedly enough
+            // to blow the Unit-03 Diffusion shard's wall-time budget.
+            // The captured locals (q/k/v/attnOut/...) are non-null at
+            // this point (assigned just above), so the closure dereferences
+            // are safe.
+            var qLocal = q;
+            var kLocal = k;
+            var vLocal = v;
+            var attnOutLocal = attnOut;
+            var ffnGateLocal = ffnGate;
+            var ffnValueLocal = ffnValue;
+            var ffnOutLocal = ffnOut;
+            int baseSeed = _baseSeed;
+            System.Threading.Tasks.Parallel.Invoke(
+                () => FillXavier(qLocal.AsWritableSpan(),        H * H, DeriveSeed(baseSeed, layerIdx, MatrixTagQ)),
+                () => FillXavier(kLocal.AsWritableSpan(),        H * H, DeriveSeed(baseSeed, layerIdx, MatrixTagK)),
+                () => FillXavier(vLocal.AsWritableSpan(),        H * H, DeriveSeed(baseSeed, layerIdx, MatrixTagV)),
+                () => FillXavier(attnOutLocal.AsWritableSpan(),  H * H, DeriveSeed(baseSeed, layerIdx, MatrixTagO)),
+                () => FillXavier(ffnGateLocal.AsWritableSpan(),  H * F, DeriveSeed(baseSeed, layerIdx, MatrixTagFfnGate)),
+                () => FillXavier(ffnValueLocal.AsWritableSpan(), H * F, DeriveSeed(baseSeed, layerIdx, MatrixTagFfnVal)),
+                () => FillXavier(ffnOutLocal.AsWritableSpan(),   F * H, DeriveSeed(baseSeed, layerIdx, MatrixTagFfnOut)));
 
             // RMSNorm gammas: T5.1.1 initializes every gamma to 1.0 and the
             // forward pass never mutates them, so all 48 per-layer gammas

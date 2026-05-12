@@ -481,6 +481,24 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
+        // PyTorch GradScaler-style anomaly guard runs BEFORE advancing the
+        // step counter or any other state. Otherwise a skipped step would
+        // still bump _tapeStep, which advances bc1/bc2 on the NEXT real step
+        // (Adam's bias correction is step-indexed) and silently distorts
+        // the optimizer's adaptive scale. With this ordering, a skipped
+        // step is a true no-op: no parameters, no moments, no step index.
+        //
+        // The guard is configurable via AdamOptimizerOptions.AnomalyGuardMode:
+        //   Auto    (default for fp32/fp16): scan; rare with bf16/fp64.
+        //   Always  : scan regardless of T.
+        //   Never   : skip the scan (saves the O(total-grad-elements)
+        //             per-Step cost; only safe when upstream NaN/Inf isn't
+        //             expected, e.g. fully-deterministic regression tests).
+        if (ShouldRunAnomalyGuard() && AnyGradientIsAnomalous(context))
+        {
+            return;
+        }
+
         _tapeStep++;
 
         double b1 = _options.Beta1;
@@ -1054,6 +1072,55 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// PyTorch transformer-training default <c>MaxGradientNorm=1.0</c>, the
     /// first-step update is bounded and training converges.
     /// </remarks>
+    /// <summary>
+    /// Returns true iff the anomaly guard's configured mode says to run
+    /// the per-step gradient scan. Default <see cref="AdamAnomalyGuardMode.Auto"/>
+    /// currently behaves identically to <c>Always</c>; reserved for a future
+    /// numeric-type-aware heuristic.
+    /// </summary>
+    private bool ShouldRunAnomalyGuard()
+    {
+        return _options.AnomalyGuardMode switch
+        {
+            AdamAnomalyGuardMode.Never => false,
+            AdamAnomalyGuardMode.Always => true,
+            AdamAnomalyGuardMode.Auto => true,
+            // Unknown values (corrupted config, future enum additions not
+            // yet handled here) fail loudly instead of silently enabling
+            // the guard. Detecting misconfiguration deterministically beats
+            // running with the wrong policy and reporting wrong gradients
+            // downstream.
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(AdamOptimizerOptions<T, TInput, TOutput>.AnomalyGuardMode),
+                _options.AnomalyGuardMode,
+                $"Unknown AdamAnomalyGuardMode value: {_options.AnomalyGuardMode}. " +
+                "Expected one of: Auto, Always, Never."),
+        };
+    }
+
+    /// <summary>
+    /// Scans every gradient tensor for NaN/Inf entries and returns true on
+    /// the first sighting. PyTorch GradScaler-style anomaly guard for the
+    /// Adam <c>m</c>/<c>v</c> moment accumulators: a single NaN gradient
+    /// poisons them permanently, so callers must skip the entire step
+    /// (parameters, moments, AND step index) on a positive return.
+    /// </summary>
+    private bool AnyGradientIsAnomalous(TapeStepContext<T> context)
+    {
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = NumOps.ToDouble(span[i]);
+                if (double.IsNaN(v) || double.IsInfinity(v)) return true;
+            }
+        }
+        return false;
+    }
+
     private static void ApplyGlobalNormGradientClipping(
         TapeStepContext<T> context,
         double maxNorm)
