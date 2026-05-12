@@ -68,6 +68,7 @@ internal static class Program
         }
 
         Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters} dtype={dtype}");
+        Console.WriteLine(AiDotNet.Diagnostics.AccelerationDiagnostics.GetReport());
         Console.WriteLine(
             $"[harness] TensorCodecOptions.EnableCompilation = " +
             $"{AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation}");
@@ -137,6 +138,7 @@ internal static class Program
         Console.WriteLine(
             $"[harness] TensorCodecOptions.EnableCompilation = " +
             $"{AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation}");
+        Console.WriteLine(AiDotNet.Diagnostics.AccelerationDiagnostics.GetReport());
         Trace.Listeners.Add(new ConsoleTraceListener());
         using var arena = TensorArena.Create();
         var (net, input, target) = BuildFloat(model);
