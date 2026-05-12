@@ -1803,8 +1803,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Vision/Video/3D models need [C, H, W]; default is [1, 4].
         // Enum ordinals: General=0, Vision=1, Language=2, Audio=3, Video=4.
         bool isVideoModel = model.Domains.Contains(4); // Video=4 (was incorrectly 3)
-        bool isFrameInterpModel = model.Tasks.Contains(35); // FrameInterpolation
-        bool isOpticalFlowModel = model.Tasks.Contains(20); // OpticalFlow
+        // Recognize two-frame models by EITHER the explicit task tag OR the
+        // base-class chain. RAPIDFlow et al. declare [ModelTask(Regression)]
+        // (their output is a regression target — flow vectors) and don't
+        // re-declare OpticalFlow as a task, so a tasks-only check routes
+        // them through the generic vision path which emits a rank-3
+        // [3, H, W] shape. OpticalFlowBase.Predict requires rank-4
+        // [batch, 2*channels, H, W] (the optical-flow contract — two
+        // consecutive frames stacked along the channel axis) and rejects
+        // anything else with "Input channel dimension must be even, got 3."
+        // The Roslyn base-walk already populates ExtendsOpticalFlowBase /
+        // ExtendsFrameInterpolationBase; use those as the source of truth
+        // so the model author can't silently drift the test scaffold off
+        // the family contract just by labeling the model's task differently.
+        bool isFrameInterpModel = model.Tasks.Contains(35) // FrameInterpolation
+            || model.ExtendsFrameInterpolationBase;
+        bool isOpticalFlowModel = model.Tasks.Contains(20) // OpticalFlow
+            || model.ExtendsOpticalFlowBase;
         // Both frame-interpolation and optical-flow models take a pair of
         // RGB frames stacked channel-wise; share the 2-frame concat path.
         bool isTwoFrameModel = isFrameInterpModel || isOpticalFlowModel;
@@ -1823,16 +1838,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         else if (isTwoFrameModel)
         {
             // Two-frame models (frame-interpolation + optical-flow) take a
-            // pair of RGB frames concatenated channel-wise. Architecture
-            // factory above emits inputDepth=3 (single-frame channels — the
-            // helper / opticalflowbase doubles internally); the test's
-            // InputShape stays at 6 channels (2 frames × 3) so the Predict
-            // input matches what the model's first conv expects.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 6, 64, 64 };");
+            // pair of RGB frames concatenated channel-wise. The
+            // OpticalFlowBase.Predict contract is rank-4
+            // [batch, 2*channels, height, width] — the rank check fires
+            // before the channel-parity check, so a rank-3 [6, 64, 64]
+            // would crash with "Input must be rank 4" instead of running
+            // the model. Emit a batched shape (batch=1) with 2 RGB frames
+            // stacked → 6 channels at 64×64 spatial (small enough that
+            // the 4-level pyramid models like RAPIDFlow still bottom out
+            // at 4×4 without degenerating).
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 6, 64, 64 };");
             // Frame interpolation outputs an interpolated RGB frame
-            // [3, H, W]; optical flow outputs (u, v) flow components
-            // [2, H, W] per the standard convention.
-            string outShape = isOpticalFlowModel ? "2, 64, 64" : "3, 64, 64";
+            // [batch, 3, H, W]; optical flow outputs (u, v) flow
+            // components [batch, 2, H, W] per the standard convention.
+            string outShape = isOpticalFlowModel ? "1, 2, 64, 64" : "1, 3, 64, 64";
             sb.AppendLine($"    protected override int[] OutputShape => new[] {{ {outShape} }};");
         }
         else if (isVisionModel && model.ClassName.StartsWith("ViLBERT", System.StringComparison.Ordinal))
