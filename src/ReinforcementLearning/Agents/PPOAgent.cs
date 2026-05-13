@@ -212,12 +212,22 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
             return action;
         }
 
-        // Inference path: return the full softmax distribution π(·|s).
-        // PPO's policy is stochastic — returning a one-hot at the
-        // argmax discards information that the test base relies on
-        // (DifferentStates_DifferentActions). Same convention as
-        // A3C / MuZero / RainbowDQN inference output.
-        return probs;
+        // Inference path: return a one-hot argmax(π) action. SelectAction's
+        // public contract on discrete envs is "give me the action to take"
+        // — callers feed the result directly into env.Step(action). Returning
+        // a raw softmax distribution here would change the API from
+        // action-selector to policy-diagnostic and break any evaluation
+        // loop that expects a deterministic action. The full π(·|s) is
+        // still observable via the underlying policy network's Predict.
+        int bestIdx = 0;
+        for (int i = 1; i < probs.Length; i++)
+        {
+            if (NumOps.GreaterThan(probs[i], probs[bestIdx]))
+                bestIdx = i;
+        }
+        var oneHot = new Vector<T>(_ppoOptions.ActionSize);
+        oneHot[bestIdx] = NumOps.One;
+        return oneHot;
     }
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)

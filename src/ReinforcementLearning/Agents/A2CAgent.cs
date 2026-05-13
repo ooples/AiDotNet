@@ -186,11 +186,22 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
             return action;
         }
 
-        // Inference: return the full softmax distribution π(·|s). The
-        // argmax-one-hot form collapses distinct distributions that
-        // happen to share their max index into identical vectors. Same
-        // convention as A3C / MuZero / RainbowDQN inference output.
-        return probs;
+        // Inference: return a one-hot argmax(π) action. The IRLAgent<T>
+        // public contract on discrete envs is "give me the action to take"
+        // — callers feed the result directly into env.Step(action).
+        // Returning a raw softmax distribution would change the API from
+        // action-selector to policy-diagnostic and break evaluation loops
+        // that expect a deterministic action. The full π(·|s) is still
+        // observable via the underlying policy network's Predict.
+        int bestIdx = 0;
+        for (int i = 1; i < probs.Length; i++)
+        {
+            if (NumOps.GreaterThan(probs[i], probs[bestIdx]))
+                bestIdx = i;
+        }
+        var oneHot = new Vector<T>(_a2cOptions.ActionSize);
+        oneHot[bestIdx] = NumOps.One;
+        return oneHot;
     }
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)

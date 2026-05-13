@@ -153,12 +153,20 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (_options.UseNoisyNetworks)
         {
             const int hiddenSize = 64;
+            // Each (Noisy)DenseLayer already applies its activation_function
+            // parameter internally; the previous build added a separate
+            // ActivationLayer(ReLU) AFTER each dense, which applied ReLU
+            // twice (ReLU(ReLU(x)) == ReLU(x) mathematically, but the
+            // extra layer still pays the forward / backward dispatch cost
+            // and obscures the intended topology). Pass the activation
+            // through the dense layer directly and drop the redundant
+            // ActivationLayer entries. Final layer keeps IdentityActivation
+            // because the distributional Q-head produces raw logits over
+            // the value atoms.
             layers = new ILayer<T>[]
             {
                 new DenseLayer<T>(hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>),
-                new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>),
                 new NoisyDenseLayer<T>(hiddenSize, hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>),
-                new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>),
                 new NoisyDenseLayer<T>(hiddenSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>)
             };
         }

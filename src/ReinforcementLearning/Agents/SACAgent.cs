@@ -257,9 +257,12 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// a single behavior-cloning step that regresses the actor's mean head against
     /// <paramref name="target"/> (interpreted as a demonstration action of length
     /// <c>ActionSize</c> — first elements are taken when <paramref name="target"/>
-    /// is longer, missing tail elements are zero-padded). The transition is also
-    /// stored in the replay buffer so that downstream RL training in an environment
-    /// loop sees the supervised data as a normal experience.
+    /// is longer, missing tail elements are zero-padded). This is actor-only —
+    /// the implementation deliberately does NOT enqueue a synthetic transition
+    /// into the replay buffer (an earlier version did, but the fabricated
+    /// <c>(reward=1, nextState=state, done=true)</c> tuple poisoned the critic
+    /// targets after warmup). Critic updates still come solely from real
+    /// env-driven <c>StoreExperience</c> calls.
     /// </para>
     /// <para>
     /// This override is necessary because the SAC paper-faithful defaults gate

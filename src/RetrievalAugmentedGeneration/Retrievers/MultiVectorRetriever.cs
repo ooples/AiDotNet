@@ -310,19 +310,28 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
 
     /// <summary>
     /// Returns the fraction of <paramref name="queryTokens"/> present in
-    /// <paramref name="docContent"/> (Jaccard-style overlap on tokens).
-    /// Zero when either side is empty.
+    /// <paramref name="docContent"/> — strict Jaccard-style overlap on the
+    /// SET of distinct doc tokens. Result is always in [0, 1].
     /// </summary>
+    /// <remarks>
+    /// Counting every occurrence in the document and dividing by
+    /// <c>queryTokens.Count</c> would let documents with repeated tokens
+    /// score above 1.0, contradicting both the docstring and any callers
+    /// that compose this with sigmoid/normalised aggregators downstream.
+    /// Using a HashSet of doc tokens caps the numerator at
+    /// <c>queryTokens.Count</c>.
+    /// </remarks>
     private static double ComputeTokenOverlap(HashSet<string> queryTokens, string? docContent)
     {
         if (queryTokens.Count == 0 || string.IsNullOrWhiteSpace(docContent)) return 0.0;
-        var docTokens = (docContent ?? string.Empty)
-            .ToLowerInvariant()
-            .Split(s_overlapSeparators, StringSplitOptions.RemoveEmptyEntries);
+        var docTokens = new HashSet<string>(
+            (docContent ?? string.Empty)
+                .ToLowerInvariant()
+                .Split(s_overlapSeparators, StringSplitOptions.RemoveEmptyEntries));
         int hits = 0;
-        foreach (var token in docTokens)
+        foreach (var qt in queryTokens)
         {
-            if (queryTokens.Contains(token)) hits++;
+            if (docTokens.Contains(qt)) hits++;
         }
         return (double)hits / queryTokens.Count;
     }
