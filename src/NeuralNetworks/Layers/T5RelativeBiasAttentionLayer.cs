@@ -320,12 +320,41 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>
         var biasForAttn = BuildT5RelativeBias(seqLen);
 
         // ---- 3. Scaled dot-product attention with bias added pre-softmax ----
-        var config = FlashAttentionConfig.Default;
-        config.ReturnAttentionWeights = false;
-        var (context4D, _) = FlashAttention<T>.Forward(
-            q, k, v, config,
-            queryOffset: 0,
-            attentionBias: biasForAttn);
+        // Manual SDPA composition via tape-tracked Engine ops only.
+        // (FlashAttention<T>.Forward fills its output via scalar indexing,
+        // so the autodiff tape can't propagate gradients back to Q/K/V —
+        // using it here would silently freeze every parameter upstream of
+        // this layer, including the conditioner's EmbeddingLayer. CLIP's
+        // MultiHeadAttentionLayer hits the same trap and only uses
+        // FlashAttention on its ALiBi path; everywhere else it routes
+        // through Engine.ScaledDotProductAttention. We need bias support,
+        // which the fused engine op doesn't expose, so we compose the
+        // five steps manually — every op below is proven tape-tracked
+        // by its use in other trainable layers.)
+
+        // 3a. scores = Q · K^T over the head dimension.
+        //     k shape [B, H, S, D_h] -> permute to [B, H, D_h, S] so
+        //     MatMul produces [B, H, S, S].
+        var kT = Engine.TensorPermute(k, new[] { 0, 1, 3, 2 });
+        var scoresUnscaled = Engine.TensorMatMul(q, kT);
+
+        // 3b. Scale by 1/√head_dim. BroadcastMultiply with a singleton
+        //     scalar tensor is tape-tracked (proven via RMSNorm's γ
+        //     application); a raw TensorMultiplyScalar is not.
+        var scaleTensor = new Tensor<T>(new[] { 1 });
+        scaleTensor[0] = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
+        var scoresScaled = Engine.TensorBroadcastMultiply(scoresUnscaled, scaleTensor);
+
+        // 3c. Add T5 relative-position bias (Raffel 2020 §2.1) before softmax.
+        //     biasForAttn shape [H, S, S] broadcasts against [B, H, S, S]
+        //     via BroadcastAdd (TensorAdd requires exact shape match).
+        var scoresWithBias = Engine.TensorBroadcastAdd(scoresScaled, biasForAttn);
+
+        // 3d. Row-softmax over keys (last axis). Tape-tracked.
+        var attnProbs = Engine.TensorSoftmax(scoresWithBias, axis: 3);
+
+        // 3e. context = attnProbs · V → [B, H, S, D_h].
+        var context4D = Engine.TensorMatMul(attnProbs, v);
 
         // ---- 4. Merge heads and apply output projection ----
         // [B, H, S, D_h] -> [B, S, H, D_h] -> [B, S, hidden]

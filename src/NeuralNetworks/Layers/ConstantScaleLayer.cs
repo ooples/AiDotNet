@@ -17,17 +17,36 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>
 {
     private readonly T _scale;
 
+    /// <summary>
+    /// Singleton scale held as a Tensor so Forward can use the same
+    /// tape-tracked <see cref="IEngine.TensorBroadcastMultiply{T}"/> path
+    /// that RMSNorm uses for its γ gain. <c>Engine.TensorMultiplyScalar</c>
+    /// records as a unary-scalar op that does NOT propagate gradient back
+    /// to its tensor input on the autodiff tape — using it in Forward
+    /// breaks gradient flow upstream (caught by
+    /// <c>T5Conditioner_Training_ChangesParameters</c>: the EmbeddingLayer
+    /// stops receiving gradients when ConstantScaleLayer sits between it
+    /// and the transformer blocks). <see cref="IEngine.TensorBroadcastMultiply{T}"/>
+    /// IS tape-tracked (used by every Norm/Embedding/MHA forward), so the
+    /// composition <c>broadcastMultiply(input, scaleTensor)</c> preserves
+    /// gradient flow back to <c>input</c> while still producing the same
+    /// scalar-scaled output.
+    /// </summary>
+    private readonly Tensor<T> _scaleTensor;
+
     public override bool SupportsTraining => false;
 
     public ConstantScaleLayer(double scale)
         : base(new[] { -1 }, new[] { -1 })
     {
         _scale = NumOps.FromDouble(scale);
+        _scaleTensor = new Tensor<T>(new[] { 1 });
+        _scaleTensor[0] = _scale;
     }
 
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input) =>
-        Engine.TensorMultiplyScalar(input, _scale);
+        Engine.TensorBroadcastMultiply(input, _scaleTensor);
 
     /// <inheritdoc/>
     public override long ParameterCount => 0;
