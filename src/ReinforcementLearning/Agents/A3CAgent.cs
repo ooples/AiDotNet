@@ -577,7 +577,21 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _trajectory.Add((state, action, reward, nextState, done));
+        // Vector<T> is mutable, and many environments reuse the same
+        // state / action / nextState instances across step calls (e.g.,
+        // an env that maintains a single observation buffer it overwrites
+        // each Step). Without snapshotting, those callers would silently
+        // overwrite earlier trajectory entries before Train() consumes
+        // them. Take defensive copies so the buffered transitions are
+        // immutable from the agent's perspective.
+        _trajectory.Add((CloneVector(state), CloneVector(action), reward, CloneVector(nextState), done));
+    }
+
+    private static Vector<T> CloneVector(Vector<T> source)
+    {
+        var copy = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
+        return copy;
     }
 
     /// <summary>
@@ -612,6 +626,12 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         if (_trajectory.Count == 0)
             return NumOps.Zero;
+
+        // Snapshot the step count BEFORE the reverse-pass loop. The final
+        // divisor below must use this count, not _trajectory.Count after
+        // the loop / Clear() because the buffer is drained and Count
+        // would be 0.
+        int stepCount = _trajectory.Count;
 
         // Bootstrap the n-step return. For the terminal step, R_T = 0.
         // For non-terminal, R_T = V(s_T') per the paper's "Receive reward
@@ -653,12 +673,19 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Second pass: reverse, accumulate discounted returns + per-step advantages.
+        // Reset R at every terminal transition (step.Done == true) so a
+        // multi-episode trajectory doesn't leak rewards backward across
+        // episode boundaries — the discounted-return chain only holds
+        // within a single episode. Matches the standard implementation of
+        // n-step returns in policy-gradient code (Sutton & Barto §13.7).
         var revReturns = new T[_trajectory.Count];
         var revAdvantages = new T[_trajectory.Count];
         for (int i = _trajectory.Count - 1; i >= 0; i--)
         {
             var step = _trajectory[i];
-            R = NumOps.Add(step.Reward, NumOps.Multiply(discountFactor, R));
+            R = step.Done
+                ? step.Reward
+                : NumOps.Add(step.Reward, NumOps.Multiply(discountFactor, R));
             T advantage = NumOps.Subtract(R, trajectoryForUpdate[i].value);
             revReturns[i] = R;
             revAdvantages[i] = advantage;
@@ -675,7 +702,10 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Average squared advantage as a loss proxy. Paper monitors
         // policy + value loss separately; we return a single scalar to fit
         // the abstract Train() : T contract used across the agent base.
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(Math.Max(1, _trajectory.Count + 1)));
+        // Divide by the captured step count (stepCount), not _trajectory
+        // .Count — the trajectory has been Clear()ed above so reading
+        // _trajectory.Count here would always yield 0.
+        return NumOps.Divide(totalLoss, NumOps.FromDouble(Math.Max(1, stepCount)));
     }
 
     public override Dictionary<string, T> GetMetrics()

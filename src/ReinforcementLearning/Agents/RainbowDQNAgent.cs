@@ -153,12 +153,20 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (_options.UseNoisyNetworks)
         {
             const int hiddenSize = 64;
+            // Each (Noisy)DenseLayer already applies its activation_function
+            // parameter internally; the previous build added a separate
+            // ActivationLayer(ReLU) AFTER each dense, which applied ReLU
+            // twice (ReLU(ReLU(x)) == ReLU(x) mathematically, but the
+            // extra layer still pays the forward / backward dispatch cost
+            // and obscures the intended topology). Pass the activation
+            // through the dense layer directly and drop the redundant
+            // ActivationLayer entries. Final layer keeps IdentityActivation
+            // because the distributional Q-head produces raw logits over
+            // the value atoms.
             layers = new ILayer<T>[]
             {
                 new DenseLayer<T>(hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>),
-                new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>),
                 new NoisyDenseLayer<T>(hiddenSize, hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>),
-                new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>),
                 new NoisyDenseLayer<T>(hiddenSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>)
             };
         }
@@ -199,15 +207,23 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             return action;
         }
 
-        // Inference / greedy path: return the full Q-value vector
-        // Q(s, ·) over the action set. The one-hot argmax form collapses
-        // distinct Q-distributions that happen to share their argmax into
-        // identical vectors; returning Q(s, ·) matches the DQN paper's
-        // model-output convention and gives downstream consumers (action
-        // selection, policy improvement, target-network updates) the
-        // information they need. Callers that want the deterministic
-        // action take argmax of the returned vector.
-        return ComputeQValues(state);
+        // Inference / greedy path: return a one-hot argmax(Q) action.
+        // The IRLAgent<T> public contract on discrete envs is action-
+        // commitment — callers feed the result into env.Step(action).
+        // Returning the raw Q vector would change the API from action-
+        // selector to value-diagnostic and would also break the inherited
+        // ReinforcementLearningAgentBase.Train(state, target) contract
+        // which expects target to be a one-hot action vector.
+        var qValues = ComputeQValues(state);
+        int bestIdx = 0;
+        for (int i = 1; i < qValues.Length; i++)
+        {
+            if (NumOps.GreaterThan(qValues[i], qValues[bestIdx]))
+                bestIdx = i;
+        }
+        var oneHot = new Vector<T>(_options.ActionSize);
+        oneHot[bestIdx] = NumOps.One;
+        return oneHot;
     }
 
     private Vector<T> ComputeQValues(Vector<T> state)
@@ -218,19 +234,26 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (_options.UseDistributional)
         {
-            // Distributional RL: convert distribution to Q-values
+            // Distributional RL (C51, Bellemare et al. 2017): convert the
+            // per-action atom distribution to an expected Q-value.
+            // Q(s, a) = Σ_i z_i · p_i(s, a), where p_i is the softmax over
+            // atom logits for that action. The network head emits raw
+            // logits (final layer is IdentityActivation), so we softmax
+            // each action's atom slice BEFORE the expectation — taking
+            // the dot product of raw logits with z would silently produce
+            // mathematically wrong Q-values for both action selection
+            // and TD targets.
             var qValues = new Vector<T>(_options.ActionSize);
             double deltaZ = (_options.VMax - _options.VMin) / (_options.NumAtoms - 1);
 
             for (int action = 0; action < _options.ActionSize; action++)
             {
+                var atomProbs = SoftmaxAtomSlice(output, action * _options.NumAtoms, _options.NumAtoms);
                 T qValue = NumOps.Zero;
                 for (int atom = 0; atom < _options.NumAtoms; atom++)
                 {
-                    int idx = action * _options.NumAtoms + atom;
                     double z = _options.VMin + atom * deltaZ;
-                    var prob = output[idx];
-                    qValue = NumOps.Add(qValue, NumOps.Multiply(prob, NumOps.FromDouble(z)));
+                    qValue = NumOps.Add(qValue, NumOps.Multiply(atomProbs[atom], NumOps.FromDouble(z)));
                 }
                 qValues[action] = qValue;
             }
@@ -239,6 +262,40 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// Numerically-stable softmax over <paramref name="logits"/>[<paramref name="offset"/>..<paramref name="offset"/>+<paramref name="count"/>).
+    /// Returns a Vector of length <paramref name="count"/> with the per-atom
+    /// probabilities for one action's atom slice. Used by both
+    /// <see cref="ComputeQValues"/> and the target-network counterpart so
+    /// expected-Q math is mathematically correct in C51 mode.
+    /// </summary>
+    private Vector<T> SoftmaxAtomSlice(Vector<T> logits, int offset, int count)
+    {
+        // Subtract max for numerical stability before exponentiation.
+        double maxLogit = double.NegativeInfinity;
+        for (int i = 0; i < count; i++)
+        {
+            double l = NumOps.ToDouble(logits[offset + i]);
+            if (l > maxLogit) maxLogit = l;
+        }
+
+        var probs = new Vector<T>(count);
+        double sumExp = 0.0;
+        for (int i = 0; i < count; i++)
+        {
+            double e = Math.Exp(NumOps.ToDouble(logits[offset + i]) - maxLogit);
+            probs[i] = NumOps.FromDouble(e);
+            sumExp += e;
+        }
+        if (sumExp > 0)
+        {
+            T invSum = NumOps.FromDouble(1.0 / sumExp);
+            for (int i = 0; i < count; i++)
+                probs[i] = NumOps.Multiply(probs[i], invSum);
+        }
+        return probs;
     }
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
@@ -421,18 +478,20 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (_options.UseDistributional)
         {
+            // Same softmax-before-expectation correction as the online
+            // ComputeQValues — the C51 head emits raw atom logits and we
+            // need true probabilities to compute Q(s,a) = Σ z·p.
             var qValues = new Vector<T>(_options.ActionSize);
             double deltaZ = (_options.VMax - _options.VMin) / (_options.NumAtoms - 1);
 
             for (int action = 0; action < _options.ActionSize; action++)
             {
+                var atomProbs = SoftmaxAtomSlice(output, action * _options.NumAtoms, _options.NumAtoms);
                 T qValue = NumOps.Zero;
                 for (int atom = 0; atom < _options.NumAtoms; atom++)
                 {
-                    int idx = action * _options.NumAtoms + atom;
                     double z = _options.VMin + atom * deltaZ;
-                    var prob = output[idx];
-                    qValue = NumOps.Add(qValue, NumOps.Multiply(prob, NumOps.FromDouble(z)));
+                    qValue = NumOps.Add(qValue, NumOps.Multiply(atomProbs[atom], NumOps.FromDouble(z)));
                 }
                 qValues[action] = qValue;
             }
