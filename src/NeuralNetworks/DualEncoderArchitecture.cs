@@ -88,7 +88,25 @@ public abstract class DualEncoderArchitecture<T> : NeuralNetworkArchitecture<T>
     {
         if (encoderALayers is null) throw new ArgumentNullException(nameof(encoderALayers));
         if (encoderBLayers is null) throw new ArgumentNullException(nameof(encoderBLayers));
-        EncoderALayers.AddRange(encoderALayers);
-        EncoderBLayers.AddRange(encoderBLayers);
+        // Validate individual layer entries rather than just the enumerable
+        // references — a null inside the sequence would silently corrupt the
+        // encoder stack and only fail during forward/backward traversal much
+        // later (with a much less actionable stack trace). Fail fast here.
+        foreach (var layer in encoderALayers)
+        {
+            if (layer is null)
+                throw new ArgumentException(
+                    $"encoderALayers contains a null element at index {EncoderALayers.Count}.",
+                    nameof(encoderALayers));
+            EncoderALayers.Add(layer);
+        }
+        foreach (var layer in encoderBLayers)
+        {
+            if (layer is null)
+                throw new ArgumentException(
+                    $"encoderBLayers contains a null element at index {EncoderBLayers.Count}.",
+                    nameof(encoderBLayers));
+            EncoderBLayers.Add(layer);
+        }
     }
 }

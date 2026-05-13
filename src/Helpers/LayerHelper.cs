@@ -33900,11 +33900,17 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Four conv stages — paper §3.1 Table 1 channel progression.
+        // Six conv stages — paper §3.1 Table 1 + reference implementation
+        // (qiuqiangkong/audioset_tagging_cnn Cnn14). The reviewer flagged
+        // that earlier builds stopped at 4 stages (64→512); the published
+        // Cnn14 has 6 conv blocks (64→128→256→512→1024→2048) before the
+        // global pool. Pre-pooling channel width = embedding dim.
         foreach (var l in ConvStage(64)) yield return l;
         foreach (var l in ConvStage(128)) yield return l;
         foreach (var l in ConvStage(256)) yield return l;
         foreach (var l in ConvStage(512)) yield return l;
+        foreach (var l in ConvStage(1024)) yield return l;
+        foreach (var l in ConvStage(2048)) yield return l;
 
         // Global average pool over the (time × freq) spatial axes → channel vector.
         yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
@@ -33951,7 +33957,14 @@ public static class LayerHelper<T>
         // Patchify [B, 1, F, T] → [B, numPatches, embeddingDim].
         yield return new PatchEmbeddingLayer<T>(patchSize: patchSize, embeddingDim: embeddingDim);
 
-        // Add learnable position embeddings.
+        // Prepend a learnable [CLS] token — paper §2.2 and ViT (Dosovitskiy
+        // 2020 §3.1): "we prepend a learnable [class] embedding to the
+        // sequence of embedded patches, whose state at the output of the
+        // Transformer encoder serves as the image representation y".
+        // After this layer the sequence becomes [B, numPatches + 1, embDim].
+        yield return new PrependCLSTokenLayer<T>(embedDim: embeddingDim);
+
+        // Add learnable position embeddings (sized for the +1 CLS slot).
         yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxSequenceLength, embeddingSize: embeddingDim);
 
         // N transformer encoder blocks (paper §2.3).
@@ -33963,8 +33976,12 @@ public static class LayerHelper<T>
                 embeddingSize: embeddingDim);
         }
 
-        // Mean-pool the patch tokens → single audio embedding.
-        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
+        // Classify from the CLS token output, NOT the mean of all patch
+        // tokens. Paper §2.2: "The output of the Transformer's [class] token
+        // is then used by the classification head." The previous mean-pool
+        // form averaged the patch tokens — closer to ViT-Pool but not the
+        // published AST head.
+        yield return new SequenceTokenSliceLayer<T>(SequenceTokenSliceLayer<T>.Position.First);
 
         // Linear classification head.
         yield return new DenseLayer<T>(outputSize: numClasses, activationFunction: new IdentityActivation<T>());

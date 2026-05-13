@@ -53,6 +53,7 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     private readonly int _outputSize;
     private readonly double _sigmaInit;
     private readonly Random _rng;
+    private readonly object _rngLock = new();
 
     // Trainable parameters — held as tensor fields so the tape can track them
     // by reference identity. Mutating their contents in-place (via SetParameters
@@ -313,17 +314,31 @@ public class NoisyDenseLayer<T> : LayerBase<T>
         var absX = Engine.TensorAbs(x);
         // √|x|
         var sqrtAbs = Engine.TensorSqrt(absX);
-        // sign(x) — engine sign is available; fall back to safe division
-        // (x / (|x| + ε)) if the engine doesn't expose a TensorSign.
-        var sign = Engine.TensorSign(x);
+        // sign(x) via the documented safe-division fallback x / (|x| + ε).
+        // Avoids dependency on Engine.TensorSign which isn't part of the
+        // baseline IEngine surface (LionOptimizer / FTRLOptimizer use the
+        // same x/(|x|+ε) trick). ε keeps the denominator non-zero for the
+        // exact zero element of the noise vectors.
+        var eps = NumOps.FromDouble(1e-12);
+        var absXPlusEps = Engine.TensorAddScalar(absX, eps);
+        var sign = Engine.TensorDivide(x, absXPlusEps);
         return Engine.TensorMultiply(sign, sqrtAbs);
     }
 
     private double SampleStandardNormal()
     {
         // Box-Muller transform; one of the two outputs is discarded for clarity.
-        double u1 = 1.0 - _rng.NextDouble();
-        double u2 = 1.0 - _rng.NextDouble();
+        // Guard the two _rng calls with a lock — System.Random is not
+        // thread-safe and modern training frameworks (DataParallel, RLlib
+        // workers, etc.) can call Forward concurrently on the same layer.
+        // Without the lock, racing NextDouble calls can corrupt the RNG's
+        // internal state and break reproducibility.
+        double u1, u2;
+        lock (_rngLock)
+        {
+            u1 = 1.0 - _rng.NextDouble();
+            u2 = 1.0 - _rng.NextDouble();
+        }
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 
