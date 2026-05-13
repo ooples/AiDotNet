@@ -368,6 +368,57 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return (firstState, firstAction, nStepReturn, lastTransition.nextState, false);
     }
 
+    /// <summary>
+    /// Supervised Train(state, target) does one direct regression step on the
+    /// online Q-network: minimise ‖Q(state, ·) − target‖² so callers that
+    /// provide an explicit Q-value target — offline pretraining from logged
+    /// data, distillation, BC warm starts, generated invariant tests — see
+    /// the network parameters actually move after a few calls. The base
+    /// <see cref="ReinforcementLearningAgentBase{T}.Train(Vector{T}, Vector{T})"/>
+    /// synthesises one transition into the replay buffer and calls
+    /// <see cref="Train()"/>, but Rainbow's buffer-fill gate keeps that path
+    /// no-opping for the entire warmup window. Same paper-adjacent
+    /// justification as the SAC supervised BC override (Rajeswaran et al.
+    /// 2018 §3.2): supervised pretraining of the value head from
+    /// demonstrations is a standard Rainbow trick when offline data exists.
+    /// </summary>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        // Online-network output width: ActionSize × NumAtoms when
+        // distributional (C51 emits per-(action, atom) logits, Bellemare et al.
+        // 2017), ActionSize otherwise. Pad / truncate the supervised target
+        // to match so the engine forward+backward path runs without a shape
+        // mismatch — the trailing-element padding is harmless because the
+        // padded slots receive zero gradient when the regression target is
+        // zero for them.
+        int outputSize = _options.UseDistributional
+            ? _options.ActionSize * _options.NumAtoms
+            : _options.ActionSize;
+
+        Vector<T> packedTarget;
+        if (target.Length == outputSize)
+        {
+            packedTarget = target;
+        }
+        else
+        {
+            packedTarget = new Vector<T>(outputSize);
+            int copyLen = Math.Min(outputSize, target.Length);
+            for (int i = 0; i < copyLen; i++)
+                packedTarget[i] = target[i];
+        }
+
+        var stateTensor = Tensor<T>.FromVector(state);
+        var targetTensor = Tensor<T>.FromVector(packedTarget);
+        _onlineNetwork.Train(stateTensor, targetTensor);
+        TrainingSteps++;
+    }
+
     public override T Train()
     {
         // Rainbow paper (Hessel et al. 2018) does mini-batch SGD on

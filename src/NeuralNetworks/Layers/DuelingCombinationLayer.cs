@@ -47,11 +47,20 @@ public class DuelingCombinationLayer<T> : LayerBase<T>
     private readonly int _featureDim;
     private readonly int _actionSize;
 
-    // Trainable parameters — tape tracks them by reference identity.
-    private readonly Tensor<T> _valueWeights;
-    private readonly Tensor<T> _valueBias;
-    private readonly Tensor<T> _advantageWeights;
-    private readonly Tensor<T> _advantageBias;
+    // Trainable parameters — tape tracks them by reference identity. Fields
+    // are NOT readonly because NeuralNetworkBase.GetOrCreateParameterBuffer
+    // rebinds them to views into the contiguous ParameterBuffer via
+    // SetTrainableParameters; the tape's TapeStepContext.ValidateBufferAlignment
+    // then requires every tensor it sees during forward to be the same
+    // reference the buffer holds. Copying data into the old standalone
+    // tensors would leave Forward() using standalone-tensor references the
+    // tape rejects with "Parameter N is not a view into the provided
+    // ParameterBuffer" — the supervised RainbowDQNAgent.Train(state, target)
+    // path takes for offline pretraining / BC warm-start.
+    private Tensor<T> _valueWeights;
+    private Tensor<T> _valueBias;
+    private Tensor<T> _advantageWeights;
+    private Tensor<T> _advantageBias;
 
     /// <summary>
     /// Initializes a new dueling combination head.
@@ -109,30 +118,44 @@ public class DuelingCombinationLayer<T> : LayerBase<T>
         new[] { _valueWeights, _valueBias, _advantageWeights, _advantageBias };
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Replaces the field tensor references with the supplied tensors rather
+    /// than copying data into the old ones. ParameterBuffer machinery in
+    /// <see cref="NeuralNetworkBase{T}.GetOrCreateParameterBuffer"/> calls
+    /// this with buffer-backed views; the tape's reference-identity
+    /// alignment check (TapeStepContext.ValidateBufferAlignment) then
+    /// requires Forward() to use those view tensors. Validate per-dim shape
+    /// match first so a same-length but differently-shaped tensor doesn't
+    /// silently scramble the layer's weights.
+    /// </remarks>
     public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
     {
         if (parameters.Count != 4)
             throw new ArgumentException(
                 "Expected exactly 4 parameter tensors (V_w, V_b, A_w, A_b).", nameof(parameters));
-        CopyTensorInPlace(parameters[0], _valueWeights);
-        CopyTensorInPlace(parameters[1], _valueBias);
-        CopyTensorInPlace(parameters[2], _advantageWeights);
-        CopyTensorInPlace(parameters[3], _advantageBias);
+        ValidateShapeMatch(parameters[0], _valueWeights, nameof(_valueWeights));
+        ValidateShapeMatch(parameters[1], _valueBias, nameof(_valueBias));
+        ValidateShapeMatch(parameters[2], _advantageWeights, nameof(_advantageWeights));
+        ValidateShapeMatch(parameters[3], _advantageBias, nameof(_advantageBias));
+        _valueWeights = parameters[0];
+        _valueBias = parameters[1];
+        _advantageWeights = parameters[2];
+        _advantageBias = parameters[3];
     }
 
-    private static void CopyTensorInPlace(Tensor<T> src, Tensor<T> dst)
+    private static void ValidateShapeMatch(Tensor<T> incoming, Tensor<T> existing, string paramName)
     {
-        if (src.Rank != dst.Rank || src.Length != dst.Length)
+        if (incoming.Rank != existing.Rank || incoming.Length != existing.Length)
             throw new ArgumentException(
-                $"Shape mismatch: source rank={src.Rank} length={src.Length}, " +
-                $"destination rank={dst.Rank} length={dst.Length}.");
-        for (int dim = 0; dim < src.Rank; dim++)
+                $"Shape mismatch for {paramName}: incoming rank={incoming.Rank} length={incoming.Length}, " +
+                $"existing rank={existing.Rank} length={existing.Length}.");
+        for (int dim = 0; dim < incoming.Rank; dim++)
         {
-            if (src.Shape[dim] != dst.Shape[dim])
+            if (incoming.Shape[dim] != existing.Shape[dim])
                 throw new ArgumentException(
-                    $"Shape mismatch at dim {dim}: source={src.Shape[dim]}, destination={dst.Shape[dim]}.");
+                    $"Shape mismatch for {paramName} at dim {dim}: incoming={incoming.Shape[dim]}, " +
+                    $"existing={existing.Shape[dim]}.");
         }
-        for (int i = 0; i < src.Length; i++) dst[i] = src[i];
     }
 
     /// <inheritdoc/>
