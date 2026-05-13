@@ -1479,7 +1479,11 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected static void ApplyTapeGlobalNormGradientClipping(
         TapeStepContext<T> context, double maxNorm)
     {
-        if (maxNorm <= 0.0) return;
+        // Reject NaN/Inf maxNorm before computing scale — otherwise `scale =
+        // maxNorm / globalNorm` becomes NaN and the for-loop below silently
+        // overwrites every gradient element with NaN, distorting the next
+        // optimizer step instead of being a no-op.
+        if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
         var numOps = MathHelper.GetNumericOperations<T>();
 
         double globalNormSq = 0.0;

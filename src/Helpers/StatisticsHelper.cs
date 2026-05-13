@@ -974,7 +974,7 @@ public static class StatisticsHelper<T>
     /// through the same continued-fraction beta-function code the t and F CDFs already
     /// use, so the numerical-stability properties are identical.
     /// </remarks>
-    public static T FDistributionPValue(T fStatistic, int numeratorDf, int denominatorDf)
+    internal static T FDistributionPValue(T fStatistic, int numeratorDf, int denominatorDf)
     {
         if (_numOps.LessThanOrEquals(fStatistic, _numOps.Zero) || numeratorDf <= 0 || denominatorDf <= 0)
             return _numOps.One;
@@ -985,8 +985,14 @@ public static class StatisticsHelper<T>
         T _a = _numOps.Divide(_numOps.FromDouble(numeratorDf), _numOps.FromDouble(2));
         T _b = _numOps.Divide(_numOps.FromDouble(denominatorDf), _numOps.FromDouble(2));
 
-        // Upper-tail probability via the symmetry identity above.
-        return RegularizedIncompleteBetaFunction(_numOps.Subtract(_numOps.One, _x), _b, _a);
+        // Upper-tail probability via the symmetry identity above. Clamp to
+        // [0, 1] because the underlying RegularizedIncompleteBetaFunction
+        // can produce values fractionally outside the unit interval under
+        // numerical drift, violating the p-value contract.
+        var p = RegularizedIncompleteBetaFunction(_numOps.Subtract(_numOps.One, _x), _b, _a);
+        if (_numOps.LessThan(p, _numOps.Zero)) return _numOps.Zero;
+        if (_numOps.GreaterThan(p, _numOps.One)) return _numOps.One;
+        return p;
     }
 
     /// <summary>
@@ -1002,12 +1008,18 @@ public static class StatisticsHelper<T>
     /// <c>1 − P(df/2, χ²/2)</c> where <c>P</c> is the regularized lower incomplete
     /// gamma function — reusing the existing <c>GammaRegularized</c> implementation.
     /// </remarks>
-    public static T ChiSquarePValue(T chiSquare, int degreesOfFreedom)
+    internal static T ChiSquarePValue(T chiSquare, int degreesOfFreedom)
     {
         if (_numOps.LessThanOrEquals(chiSquare, _numOps.Zero) || degreesOfFreedom <= 0)
             return _numOps.One;
 
-        return _numOps.Subtract(_numOps.One, ChiSquareCDF(chiSquare, degreesOfFreedom));
+        // Clamp to [0, 1] — small numerical drift in ChiSquareCDF can push
+        // the result fractionally outside the unit interval; the p-value
+        // contract requires a valid probability.
+        var p = _numOps.Subtract(_numOps.One, ChiSquareCDF(chiSquare, degreesOfFreedom));
+        if (_numOps.LessThan(p, _numOps.Zero)) return _numOps.Zero;
+        if (_numOps.GreaterThan(p, _numOps.One)) return _numOps.One;
+        return p;
     }
 
     /// <summary>

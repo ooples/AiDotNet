@@ -68,8 +68,20 @@ internal static class BlasEnvDefault
 #pragma warning restore CA2255
     internal static void EnableBlasFastPathIfUnset()
     {
+        // Documented escape hatch: hosted apps and CI shards that don't
+        // want library-level env-var mutation can set the AppContext
+        // switch "AiDotNet.DisableAutoBlasEnvDefault" to true. Honors the
+        // pre-existing opt-out contract.
+        if (AppContext.TryGetSwitch("AiDotNet.DisableAutoBlasEnvDefault", out var disabled) && disabled)
+        {
+            return;
+        }
+
         var current = Environment.GetEnvironmentVariable("AIDOTNET_USE_BLAS");
-        if (string.IsNullOrEmpty(current))
+        // Treat whitespace-only values the same as unset — a stray space
+        // in a CI config (`AIDOTNET_USE_BLAS=" "`) should not silently
+        // suppress the default-on behaviour.
+        if (string.IsNullOrWhiteSpace(current))
         {
             // Industry-standard default. Mirrors PyTorch / NumPy / TF —
             // they all link against BLAS by default and don't require a

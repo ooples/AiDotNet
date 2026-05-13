@@ -534,8 +534,6 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
     {
-        _tapeStep++;
-
         // Global-norm gradient clipping BEFORE the AdamW update. AdamW is the
         // canonical optimizer for transformer / classifier fine-tuning, and
         // the reference recipes pair it with torch.nn.utils.clip_grad_norm_
@@ -555,7 +553,11 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // update weights, don't poison m/v) when ANY gradient contains NaN/Inf.
         // Without this, a single NaN gradient permanently poisons m/v and
         // every subsequent step produces NaN weights.
+        // The guard runs BEFORE _tapeStep++ so a skipped step doesn't
+        // advance bias-correction time and distort the next real update.
         if (HasAnomalousTapeGradients(context)) return;
+
+        _tapeStep++;
 
         T beta1 = NumOps.FromDouble(_options.Beta1);
         T beta2 = NumOps.FromDouble(_options.Beta2);

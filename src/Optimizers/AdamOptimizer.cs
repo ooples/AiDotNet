@@ -549,35 +549,10 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             ApplyGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
         }
 
-        // PyTorch GradScaler-style anomaly guard: if any gradient contains
-        // NaN or Inf, skip this entire optimizer step (DON'T update weights,
-        // DON'T poison the m/v moment accumulators). Adam's update
-        // m_hat / (sqrt(v_hat) + eps) develops a near-zero denominator on
-        // narrow tasks like single-sample memorization where v_t collapses
-        // toward 0 after the loss converges (HopeNetwork memorization
-        // verified empirically — finite for the first 9 training steps,
-        // then a NaN gradient at step ~10 because of the float-cliff in
-        // sqrt(v_hat) ≈ 0 paired with even a tiny non-zero m_hat). Without
-        // this guard, a single NaN gradient poisons m/v permanently and
-        // every subsequent step produces NaN weights — what previously
-        // surfaced as Hope's ForwardPass_ShouldBeFinite_AfterTraining /
-        // DifferentInputs_AfterTraining / Clone_AfterTraining triple-fail.
-        // Skipping the step preserves the latest finite weights and lets
-        // training proceed once the next iteration produces clean gradients.
-        bool anyAnomalousGrad = false;
-        foreach (var kvp in context.Gradients)
-        {
-            var grad = kvp.Value;
-            if (grad is null) continue;
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = NumOps.ToDouble(span[i]);
-                if (double.IsNaN(v) || double.IsInfinity(v)) { anyAnomalousGrad = true; break; }
-            }
-            if (anyAnomalousGrad) break;
-        }
-        if (anyAnomalousGrad) return;
+        // PyTorch GradScaler-style anomaly guard is already enforced at the
+        // top of Step() via ShouldRunAnomalyGuard() + AnyGradientIsAnomalous().
+        // That single gate respects AnomalyGuardMode and runs BEFORE
+        // _tapeStep++ so a skipped step is a true no-op.
 
         foreach (var param in context.Parameters)
         {

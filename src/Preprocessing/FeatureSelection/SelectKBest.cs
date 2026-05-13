@@ -146,13 +146,22 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // F-statistic with one-way ANOVA degrees of freedom (k-1 numerator,
             // n-k denominator). The p-value is the right-tail F-distribution
             // probability — matches scipy.stats.f_classif.
-            double msb = ssb / (k - 1);
-            double msw = ssw / (n - k);
-            double fStat = msw > 1e-10 ? msb / msw : 0;
+            // Validate degrees of freedom BEFORE computing msb / msw so a
+            // degenerate group structure (k <= 1 or n <= k) can't yield
+            // NaN/Inf scores that destabilise downstream ranking.
+            int dfBetween = k - 1;
+            int dfWithin = n - k;
+            double fStat = 0.0;
+            if (dfBetween > 0 && dfWithin > 0)
+            {
+                double msb = ssb / dfBetween;
+                double msw = ssw / dfWithin;
+                fStat = msw > 1e-10 ? msb / msw : 0.0;
+            }
             scores[j] = fStat;
-            _pValues[j] = (k > 1 && n > k && fStat > 0)
+            _pValues[j] = (dfBetween > 0 && dfWithin > 0 && fStat > 0)
                 ? NumOps.ToDouble(StatisticsHelper<T>.FDistributionPValue(
-                      NumOps.FromDouble(fStat), k - 1, n - k))
+                      NumOps.FromDouble(fStat), dfBetween, dfWithin))
                 : 1.0;
         }
 

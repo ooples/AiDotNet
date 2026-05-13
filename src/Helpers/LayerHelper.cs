@@ -26066,9 +26066,16 @@ public static class LayerHelper<T>
     /// </summary>
     private static int ChooseGroupCount(int numChannels)
     {
+        if (numChannels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numChannels),
+                $"numChannels must be > 0; got {numChannels}. GroupNorm cannot use zero or negative group counts.");
+        }
+
         foreach (int g in new[] { 32, 16, 8, 4, 2, 1 })
         {
-            if (numChannels % g == 0) return Math.Min(g, numChannels);
+            if (numChannels % g == 0) return g;
         }
         return 1;
     }
