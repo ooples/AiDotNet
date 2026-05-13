@@ -759,18 +759,12 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
         else if (input.Rank == expectedInputRank + 1)
         {
-            // Batch of samples - iterate through batch dimension
-            var batchSize = input.Shape[0];
-            var results = new List<Tensor<T>>(batchSize);
-
-            for (int i = 0; i < batchSize; i++)
-            {
-                var sample = input.GetSlice(i);
-                var generatedOutput = Generator.Predict(sample);
-                results.Add(generatedOutput);
-            }
-
-            return Tensor<T>.Stack([.. results]);
+            // Batched input — the generator already understands [batch, …]
+            // layouts (Dense / Reshape / ConvTranspose all treat the leading
+            // axis as batch). Routing through GetSlice + Generator.Predict
+            // re-strips the batch axis and re-triggers the same shape bug
+            // the single-sample branch above had to reshape around.
+            return Generator.Predict(input);
         }
         else
         {
@@ -864,8 +858,12 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Generate fake images with tensor operations
         var fakeImages = Generator.Predict(input);
 
-        // Store batches for feature matching if enabled
-        if (UseFeatureMatching)
+        // Cache real / fake batches whenever any auxiliary loss needs them.
+        // Previously only UseFeatureMatching gated the cache, so the WGAN-GP
+        // gradient-penalty path silently saw null batches and the penalty
+        // contributed nothing — EnableGradientPenalty looked like a working
+        // toggle but never applied a real penalty signal during training.
+        if (UseFeatureMatching || _useGradientPenalty)
         {
             _lastRealBatch = expectedOutput.Clone();
             _lastFakeBatch = fakeImages.Clone();
@@ -1559,6 +1557,13 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        // Persist gradient-penalty configuration so a reloaded checkpoint
+        // continues training with the same WGAN-GP coefficient/enabled state.
+        // Without this, resuming a WGAN-GP run silently falls back to the
+        // default (disabled / λ = 10) and the loss curve changes shape.
+        writer.Write(_useGradientPenalty);
+        writer.Write(_gradientPenaltyLambda);
+
         // Save recent loss history (last 20 entries at most)
         int lossCount = Math.Min(_generatorLosses.Count, 20);
         writer.Write(lossCount);
@@ -1602,6 +1607,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        // Restore gradient-penalty configuration (must match the order in
+        // SerializeNetworkSpecificData above).
+        _useGradientPenalty = reader.ReadBoolean();
+        _gradientPenaltyLambda = reader.ReadDouble();
+
         // Load recent loss history
         int lossCount = reader.ReadInt32();
         _generatorLosses = new List<T>(lossCount);
