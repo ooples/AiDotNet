@@ -328,42 +328,32 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         .ToArray();
 
     /// <summary>
-    /// Gets feature importance scores. Default returns a uniform-prior (all 1.0) —
-    /// the maximum-entropy answer when the agent has no model-specific signal to
-    /// quantify how much each state dimension contributes to its policy / value.
+    /// Gets feature importance scores. Default returns an empty dictionary —
+    /// the industry-standard "no feature-importance signal available" response
+    /// (mirrors scikit-learn estimators that don't expose
+    /// <c>feature_importances_</c> and PyTorch / HuggingFace / Keras which
+    /// don't have a feature-importance API at all). Concrete agents that
+    /// have a discriminative signal MUST override this method to return real
+    /// scores; the base class deliberately does not fabricate uniform-prior
+    /// values that look like real importance to downstream consumers.
     /// </summary>
     /// <remarks>
-    /// Concrete agents that have access to a discriminative signal SHOULD override:
-    /// tabular agents can use per-dimension Q-value variance; neural-net agents can
-    /// use gradient-input saliency (∂Q/∂s ⊙ s, averaged over a replay sample). The
-    /// uniform fallback is intentionally not zero — zero would imply "no feature
-    /// matters" which is strictly worse than "I don't know".
+    /// Examples of real signals concrete agents can use:
+    /// <list type="bullet">
+    /// <item>Tabular Q-learning agents: per-dimension Q-value variance across
+    /// the replay buffer (high variance → that dimension drives policy
+    /// disagreement → high importance).</item>
+    /// <item>Neural-net agents: input-gradient saliency
+    /// (<c>∂Q/∂s ⊙ s</c>, averaged over a replay sample) — the same signal
+    /// used by Integrated Gradients (Sundararajan, Taly &amp; Yan 2017).</item>
+    /// </list>
+    /// Returning an empty dictionary (vs throwing) keeps the interface
+    /// uniform across agents and lets callers test
+    /// <c>importance.ContainsKey(name)</c> to decide whether a real signal
+    /// is available.
     /// </remarks>
     public virtual Dictionary<string, T> GetFeatureImportance()
-    {
-        // Key by FeatureNames[i] rather than the hardcoded "State_{i}" so a
-        // derived agent that overrides FeatureNames stays consistent — the
-        // previous hardcode silently drifted from the override and broke
-        // downstream consumers that looked up importance by name.
-        var importance = new Dictionary<string, T>();
-        var names = FeatureNames ?? Array.Empty<string>();
-        // Always emit FeatureCount entries — if FeatureNames is shorter (or a
-        // particular slot is blank), fall back to "State_{i}" so callers see
-        // every dimension represented instead of silently losing tail features.
-        for (int i = 0; i < FeatureCount; i++)
-        {
-            string baseKey = (i < names.Length && !string.IsNullOrWhiteSpace(names[i]))
-                ? names[i]
-                : $"State_{i}";
-            // Disambiguate duplicate FeatureNames entries by suffixing the
-            // index — a derived agent that reuses a label across slots would
-            // otherwise overwrite earlier entries and silently drop those
-            // dimensions from the importance dictionary again.
-            string key = importance.ContainsKey(baseKey) ? $"{baseKey}_{i}" : baseKey;
-            importance[key] = NumOps.One;
-        }
-        return importance;
-    }
+        => new Dictionary<string, T>();
 
     /// <summary>
     /// Gets the indices of active features.
