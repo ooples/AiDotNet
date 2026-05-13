@@ -33848,4 +33848,93 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region CLAP (Contrastive Language-Audio Pretraining)
+
+    /// <summary>
+    /// Creates the default audio-encoder layers for CLAP (Wu et al. 2023). The
+    /// audio side is HTSAT (Chen et al. 2022 "HTS-AT: A Hierarchical
+    /// Token-Semantic Audio Transformer"), built on the Swin Transformer
+    /// (Liu et al. 2021 §3.2). The encoder consumes a mel-spectrogram patch
+    /// sequence and produces a single audio embedding via global pooling +
+    /// projection.
+    /// </summary>
+    /// <param name="audioHiddenDim">Hidden / embedding dim of the Swin blocks (paper §3.1 HTSAT-S: 768).</param>
+    /// <param name="audioEncoderLayers">Number of Swin Transformer blocks (paper §3.1 HTSAT-S: 4).</param>
+    /// <param name="audioEncoderHeads">Attention heads per block (paper §3.1 HTSAT-S: 12).</param>
+    /// <param name="swinWindowSize">W-MSA / SW-MSA window size (Liu 2021 §3.2: 7).</param>
+    /// <param name="projectionDim">Shared embedding-space dimension (CLAP §3.2: 512).</param>
+    /// <remarks>
+    /// Alternating W-MSA / SW-MSA layers per Swin paper §3.2 — even-indexed
+    /// blocks use regular windowed attention, odd-indexed blocks use the
+    /// shifted-window variant to mix information across window boundaries.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCLAPAudioEncoderLayers(
+        int audioHiddenDim,
+        int audioEncoderLayers,
+        int audioEncoderHeads,
+        int swinWindowSize,
+        int projectionDim)
+    {
+        // Stack of Swin blocks. Each pair alternates W-MSA (shift=0) and
+        // SW-MSA (shift=windowSize/2) per Liu 2021 §3.2.
+        for (int i = 0; i < audioEncoderLayers; i++)
+        {
+            int shiftSize = (i % 2 == 0) ? 0 : swinWindowSize / 2;
+            yield return new SwinTransformerBlockLayer<T>(
+                dim: audioHiddenDim,
+                numHeads: audioEncoderHeads,
+                windowSize: swinWindowSize,
+                shiftSize: shiftSize,
+                mlpRatio: 4);
+        }
+
+        // Mean-pool across the spectrogram patch sequence to get a single
+        // audio embedding, then project into the shared CLAP space.
+        yield return new GlobalPoolingLayer<T>(poolingType: AiDotNet.Enums.PoolingType.Average);
+        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates the default text-encoder layers for CLAP (Wu et al. 2023 §3.2).
+    /// The text side is a RoBERTa-style transformer stack (Liu et al. 2019)
+    /// over BPE token IDs: token + positional embedding → N transformer
+    /// encoder layers → mean pool → projection.
+    /// </summary>
+    /// <param name="vocabSize">BPE vocabulary size (RoBERTa-base: 50,265).</param>
+    /// <param name="maxTextLength">Maximum token sequence length (CLAP §3.2: 77).</param>
+    /// <param name="textHiddenDim">Hidden dim of the transformer (RoBERTa-base: 768).</param>
+    /// <param name="textEncoderLayers">Number of transformer encoder layers (RoBERTa-base: 12).</param>
+    /// <param name="textEncoderHeads">Attention heads per layer (RoBERTa-base: 12).</param>
+    /// <param name="projectionDim">Shared embedding-space dimension (CLAP §3.2: 512).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultCLAPTextEncoderLayers(
+        int vocabSize,
+        int maxTextLength,
+        int textHiddenDim,
+        int textEncoderLayers,
+        int textEncoderHeads,
+        int projectionDim)
+    {
+        // Token embedding: maps token IDs → hidden vectors.
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: textHiddenDim);
+
+        // Positional encoding adds sequence-position information.
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxTextLength, embeddingSize: textHiddenDim);
+
+        // Standard transformer encoder stack. Each block is pre-LN MHA + FFN.
+        // FFN expansion is 4x per Liu 2019 §3.2 / Vaswani 2017 §3.3.
+        for (int i = 0; i < textEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                numHeads: textEncoderHeads,
+                feedForwardDim: textHiddenDim * 4,
+                embeddingSize: textHiddenDim);
+        }
+
+        // Mean-pool tokens → single text embedding, then project into shared space.
+        yield return new GlobalPoolingLayer<T>(poolingType: AiDotNet.Enums.PoolingType.Average);
+        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
+    }
+
+    #endregion
 }

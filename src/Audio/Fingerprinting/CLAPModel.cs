@@ -1,74 +1,44 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Fingerprinting;
 
 /// <summary>
-/// CLAP (Contrastive Language-Audio Pretraining) - A neural network model that learns to align
-/// audio and text representations in a shared embedding space.
+/// CLAP (Contrastive Language-Audio Pretraining) — a dual-encoder neural network
+/// that learns to align audio and text representations in a shared embedding
+/// space via a contrastive objective.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// CLAP is a multimodal model trained using contrastive learning to create embeddings where
-/// similar audio-text pairs are close together and dissimilar pairs are far apart. This enables:
+/// CLAP (Wu et al. 2023) trains an audio encoder and a text encoder so that
+/// matching (audio, caption) pairs produce nearby embeddings and unrelated
+/// pairs produce distant embeddings. The audio side is HTSAT (Chen et al. 2022),
+/// a hierarchical Swin Transformer (Liu et al. 2021) over mel-spectrogram
+/// patches. The text side is a RoBERTa-style transformer stack (Liu et al. 2019)
+/// over BPE token IDs. A learnable temperature τ scales the cosine-similarity
+/// logits during contrastive training (CLIP / CLAP convention).
+/// </para>
+/// <para>
+/// <b>Capabilities</b>:
 /// <list type="bullet">
-/// <item><description>Zero-shot audio classification using text prompts</description></item>
-/// <item><description>Audio-to-text retrieval (find descriptions matching audio)</description></item>
-/// <item><description>Text-to-audio retrieval (find audio matching descriptions)</description></item>
-/// <item><description>Semantic audio fingerprinting</description></item>
+/// <item><description>Zero-shot audio classification with text prompts</description></item>
+/// <item><description>Audio-to-text and text-to-audio retrieval</description></item>
+/// <item><description>Semantic audio fingerprinting via the projection head</description></item>
 /// </list>
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> CLAP understands both audio and text! It can:
-///
-/// - Tell you what's in an audio clip without pre-defined categories
-/// - Find audio that matches a text description ("a dog barking in the rain")
-/// - Create embeddings for audio search and recommendation
-///
-/// Unlike traditional fingerprinting that matches exact audio, CLAP understands
-/// audio semantics - it knows a dog barking and a recording of barking are related!
-///
-/// Example use cases:
-/// - "Is this audio of a happy or sad scene?" (sentiment analysis)
-/// - "Find all audio clips with birds singing" (content-based search)
-/// - "Classify this sound into one of these categories: ..." (zero-shot classification)
-/// - Audio content moderation (detect specific sounds)
-/// </para>
-/// <para>
-/// Reference: Wu, Y., et al. (2023). Large-scale Contrastive Language-Audio Pretraining
-/// with Feature Fusion and Keyword-to-Caption Augmentation.
+/// <b>Reference:</b> Wu, Y. et al. (2023), "Large-Scale Contrastive Language-Audio
+/// Pre-Training with Feature Fusion and Keyword-to-Caption Augmentation", ICASSP.
 /// </para>
 /// </remarks>
-/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
-/// <example>
-/// <code>
-/// // Create a CLAP model for audio-text alignment
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Embedding,
-///     inputSize: 48000,
-///     outputSize: 512);
-///
-/// var model = new CLAPModel&lt;float&gt;(
-///     architecture: architecture,
-///     audioEncoderPath: "clap_audio.onnx",
-///     textEncoderPath: "clap_text.onnx",
-///     sampleRate: 48000);
-///
-/// // Generate audio embeddings for similarity search
-/// Tensor&lt;float&gt; embedding = model.EncodeAudio(audioTensor);
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Multimodal)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -77,302 +47,226 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Large-Scale Contrastive Language-Audio Pre-Training with Feature Fusion and Keyword-to-Caption Augmentation", "https://doi.org/10.1109/ICASSP49357.2023.10095969", Year = 2023, Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
+[ResearchPaper(
+    "Large-Scale Contrastive Language-Audio Pre-Training with Feature Fusion and Keyword-to-Caption Augmentation",
+    "https://doi.org/10.1109/ICASSP49357.2023.10095969",
+    Year = 2023,
+    Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
 public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly CLAPModelOptions _options;
+    private readonly bool _useNativeMode;
+
+    // Native-mode layer stacks. Both inherit from LayerBase<T> via LayerHelper.
+    // ONNX mode leaves these empty and routes Predict through OnnxEncoder.
+    private readonly List<ILayer<T>> _audioEncoder = new();
+    private readonly List<ILayer<T>> _textEncoder = new();
+
+    /// <summary>
+    /// Trainable temperature parameter (stored in log space). Gradients flow
+    /// through the tape via <see cref="LayerBase{T}.Engine"/> ops; the optimizer
+    /// updates this alongside the rest of the network.
+    /// </summary>
+    private Tensor<T> _logTemperature = null!;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private readonly INumericOperations<T> _numOps;
-
-    // Model configuration
-    private readonly int _embeddingDim;
-    private readonly int _projectionDim;
-    private readonly int _numMelBands;
-    private readonly int _windowSize;
-    private readonly int _hopSize;
-
-    // Audio encoder
-    private readonly int _audioEncoderLayers;
-    private readonly int _audioEncoderHeads;
-    private readonly int _audioHiddenDim;
-
-    // Audio encoder weights
-    private T[] _audioPatchEmbedWeight;
-    private T[] _audioPatchEmbedBias;
-    private T[] _audioPositionalEncoding;
-    private T[] _audioClsToken;
-    private readonly List<TransformerLayer> _audioTransformerLayers;
-    private T[] _audioProjectionWeight;
-    private T[] _audioProjectionBias;
-
-    // Text encoder (simplified - typically uses BERT/RoBERTa)
-    private T[] _textEmbeddingWeight;
-    private T[] _textPositionalEncoding;
-    private readonly List<TransformerLayer> _textTransformerLayers;
-    private T[] _textProjectionWeight;
-    private T[] _textProjectionBias;
-
-    // Temperature parameter for contrastive learning
-    private T _temperature;
-
-    // Vocabulary size for text tokenization
-    private readonly int _vocabSize;
-    private readonly int _maxTextLength;
-
-    // Optimizer for training
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    /// <inheritdoc/>
+    public string Name => _useNativeMode ? "CLAP-Native" : "CLAP-ONNX";
 
     /// <inheritdoc/>
-    public string Name => "CLAP";
+    public int FingerprintLength => _options.ProjectionDim;
 
-    /// <inheritdoc/>
-    public int FingerprintLength => _projectionDim;
-
-    /// <summary>
-    /// Gets the embedding dimension used internally.
-    /// </summary>
-    public int EmbeddingDimension => _embeddingDim;
+    #region Constructors
 
     /// <summary>
-    /// Gets the projection dimension (final embedding size).
+    /// Initializes a new instance of <see cref="CLAPModel{T}"/> in ONNX inference mode.
     /// </summary>
-    public int ProjectionDimension => _projectionDim;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="CLAPModel{T}"/> class for ONNX inference mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture defining input/output dimensions.</param>
+    /// <param name="architecture">Architecture descriptor (used for I/O shape metadata).</param>
     /// <param name="audioEncoderPath">Path to the ONNX audio encoder model.</param>
     /// <param name="textEncoderPath">Optional path to the ONNX text encoder model.</param>
-    /// <param name="sampleRate">Sample rate of input audio (default: 48000 Hz).</param>
-    /// <param name="embeddingDim">Embedding dimension (default: 768).</param>
-    /// <param name="projectionDim">Projection dimension for output embeddings (default: 512).</param>
-    /// <param name="onnxOptions">Optional ONNX model options.</param>
-    /// <exception cref="FileNotFoundException">Thrown when the ONNX model file is not found.</exception>
+    /// <param name="options">Optional CLAP configuration (defaults match the published paper).</param>
     public CLAPModel(
         NeuralNetworkArchitecture<T> architecture,
         string audioEncoderPath,
         string? textEncoderPath = null,
-        int sampleRate = 48000,
-        int embeddingDim = 768,
-        int projectionDim = 512,
-        OnnxModelOptions? onnxOptions = null,
         CLAPModelOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new CLAPModelOptions();
-        Options = _options;
-        _numOps = MathHelper.GetNumericOperations<T>();
-
         if (string.IsNullOrWhiteSpace(audioEncoderPath))
-        {
-            throw new ArgumentException("Audio encoder path cannot be null or empty.", nameof(audioEncoderPath));
-        }
-
+            throw new ArgumentException("Audio encoder path is required for ONNX mode.", nameof(audioEncoderPath));
         if (!File.Exists(audioEncoderPath))
-        {
             throw new FileNotFoundException($"Audio encoder ONNX model not found: {audioEncoderPath}", audioEncoderPath);
-        }
 
-        SampleRate = sampleRate;
-        _embeddingDim = embeddingDim;
-        _projectionDim = projectionDim;
-        _numMelBands = 64;
-        _windowSize = 1024;
-        _hopSize = 480;
-
-        // Load ONNX models
-        OnnxEncoder = new OnnxModel<T>(audioEncoderPath, onnxOptions);
-        if (textEncoderPath is not null && File.Exists(textEncoderPath))
-        {
-            OnnxDecoder = new OnnxModel<T>(textEncoderPath, onnxOptions);
-        }
-
-        // Initialize empty arrays (not used in ONNX mode)
-        _audioPatchEmbedWeight = Array.Empty<T>();
-        _audioPatchEmbedBias = Array.Empty<T>();
-        _audioPositionalEncoding = Array.Empty<T>();
-        _audioClsToken = Array.Empty<T>();
-        _audioProjectionWeight = Array.Empty<T>();
-        _audioProjectionBias = Array.Empty<T>();
-        _textEmbeddingWeight = Array.Empty<T>();
-        _textPositionalEncoding = Array.Empty<T>();
-        _textProjectionWeight = Array.Empty<T>();
-        _textProjectionBias = Array.Empty<T>();
-        _audioTransformerLayers = new List<TransformerLayer>();
-        _textTransformerLayers = new List<TransformerLayer>();
-        _temperature = _numOps.FromDouble(0.07);
-        _vocabSize = 49408;
-        _maxTextLength = 77;
-        _audioEncoderLayers = 12;
-        _audioEncoderHeads = 12;
-        _audioHiddenDim = embeddingDim;
-
-        // audioEncoderPath is used by OnnxModel above
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="CLAPModel{T}"/> class for native training mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture defining input/output dimensions.</param>
-    /// <param name="sampleRate">Sample rate of input audio (default: 48000 Hz).</param>
-    /// <param name="embeddingDim">Internal embedding dimension (default: 768).</param>
-    /// <param name="projectionDim">Projection dimension for output embeddings (default: 512).</param>
-    /// <param name="numMelBands">Number of mel spectrogram bands (default: 64).</param>
-    /// <param name="audioEncoderLayers">Number of transformer layers in audio encoder (default: 12).</param>
-    /// <param name="audioEncoderHeads">Number of attention heads (default: 12).</param>
-    /// <param name="vocabSize">Vocabulary size for text encoding (default: 49408).</param>
-    /// <param name="maxTextLength">Maximum text sequence length (default: 77).</param>
-    /// <param name="windowSize">STFT window size (default: 1024).</param>
-    /// <param name="hopSize">STFT hop size (default: 480).</param>
-    /// <param name="temperature">Temperature for contrastive loss (default: 0.07).</param>
-    /// <param name="optimizer">Optimizer for training. If null, a default Adam optimizer is used.</param>
-    /// <param name="lossFunction">Loss function. If null, contrastive loss is used.</param>
-    public CLAPModel(
-        NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 48000,
-        int embeddingDim = 768,
-        int projectionDim = 512,
-        int numMelBands = 64,
-        int audioEncoderLayers = 12,
-        int audioEncoderHeads = 12,
-        int vocabSize = 49408,
-        int maxTextLength = 77,
-        int windowSize = 1024,
-        int hopSize = 480,
-        double temperature = 0.07,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        CLAPModelOptions? options = null)
-        : base(architecture, lossFunction)
-    {
-        _options = options ?? new CLAPModelOptions();
-        Options = _options;
-        _numOps = MathHelper.GetNumericOperations<T>();
-
-        SampleRate = sampleRate;
-        _embeddingDim = embeddingDim;
-        _projectionDim = projectionDim;
-        _numMelBands = numMelBands;
-        _audioEncoderLayers = audioEncoderLayers;
-        _audioEncoderHeads = audioEncoderHeads;
-        _audioHiddenDim = embeddingDim;
-        _vocabSize = vocabSize;
-        _maxTextLength = maxTextLength;
-        _windowSize = windowSize;
-        _hopSize = hopSize;
-        _temperature = _numOps.FromDouble(temperature);
-
-        // Initialize audio encoder components
-        int patchSize = 16;
-        int numPatches = (numMelBands / patchSize) * 50; // Approximate for 10s audio
-
-        _audioPatchEmbedWeight = InitializeWeights(embeddingDim * patchSize * patchSize);
-        _audioPatchEmbedBias = InitializeWeights(embeddingDim, 0.0);
-        _audioPositionalEncoding = InitializeWeights((numPatches + 1) * embeddingDim);
-        _audioClsToken = InitializeWeights(embeddingDim);
-
-        _audioTransformerLayers = new List<TransformerLayer>();
-        for (int i = 0; i < audioEncoderLayers; i++)
-        {
-            _audioTransformerLayers.Add(new TransformerLayer(_numOps, embeddingDim, audioEncoderHeads));
-        }
-
-        _audioProjectionWeight = InitializeWeights(projectionDim * embeddingDim);
-        _audioProjectionBias = InitializeWeights(projectionDim, 0.0);
-
-        // Initialize text encoder components
-        _textEmbeddingWeight = InitializeWeights(vocabSize * embeddingDim);
-        _textPositionalEncoding = InitializeWeights(maxTextLength * embeddingDim);
-
-        _textTransformerLayers = new List<TransformerLayer>();
-        for (int i = 0; i < audioEncoderLayers; i++)
-        {
-            _textTransformerLayers.Add(new TransformerLayer(_numOps, embeddingDim, audioEncoderHeads));
-        }
-
-        _textProjectionWeight = InitializeWeights(projectionDim * embeddingDim);
-        _textProjectionBias = InitializeWeights(projectionDim, 0.0);
-
-        // Initialize optimizer (Adam by default)
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SampleRate = _options.SampleRate;
+        _useNativeMode = false;
+        OnnxEncoder = new OnnxModel<T>(audioEncoderPath);
+        if (!string.IsNullOrWhiteSpace(textEncoderPath) && File.Exists(textEncoderPath))
+            OnnxDecoder = new OnnxModel<T>(textEncoderPath);
 
         InitializeLayers();
     }
 
     /// <summary>
-    /// Initializes the neural network layers.
+    /// Initializes a new instance of <see cref="CLAPModel{T}"/> in native training / inference mode.
+    /// </summary>
+    /// <param name="architecture">Architecture descriptor. If <c>Architecture.Layers</c> is populated,
+    /// those layers replace the default audio + text encoder stacks.</param>
+    /// <param name="options">Optional CLAP configuration (defaults match the published paper).</param>
+    public CLAPModel(
+        NeuralNetworkArchitecture<T> architecture,
+        CLAPModelOptions? options = null)
+        : base(architecture)
+    {
+        _options = options ?? new CLAPModelOptions();
+        SampleRate = _options.SampleRate;
+        _useNativeMode = true;
+
+        InitializeLayers();
+    }
+
+    #endregion
+
+    #region Layer Construction (Golden-Standard Pattern)
+
+    /// <summary>
+    /// Initializes the neural network layers following the codebase's golden
+    /// pattern: prefer user-provided <c>Architecture.Layers</c>; otherwise fall
+    /// back to the paper-faithful <see cref="LayerHelper{T}"/> factories.
     /// </summary>
     protected override void InitializeLayers()
     {
-        // Layers are handled manually for CLAP's dual-encoder architecture
+        if (!_useNativeMode) return;
+
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            // User-supplied layer stack — first half audio, second half text by
+            // convention. Callers can mix-and-match with LayerHelper helpers.
+            Layers.AddRange(Architecture.Layers);
+            ValidateLayerConfiguration(Layers);
+            int half = Layers.Count / 2;
+            _audioEncoder.Clear();
+            _audioEncoder.AddRange(Layers.Take(half));
+            _textEncoder.Clear();
+            _textEncoder.AddRange(Layers.Skip(half));
+        }
+        else
+        {
+            // Default audio encoder: HTSAT (Swin) → mean-pool → proj.
+            _audioEncoder.Clear();
+            _audioEncoder.AddRange(LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
+                audioHiddenDim: _options.AudioHiddenDim,
+                audioEncoderLayers: _options.AudioEncoderLayers,
+                audioEncoderHeads: _options.AudioEncoderHeads,
+                swinWindowSize: _options.SwinWindowSize,
+                projectionDim: _options.ProjectionDim));
+
+            // Default text encoder: RoBERTa-style transformer → mean-pool → proj.
+            _textEncoder.Clear();
+            _textEncoder.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
+                vocabSize: _options.VocabSize,
+                maxTextLength: _options.MaxTextLength,
+                textHiddenDim: _options.TextHiddenDim,
+                textEncoderLayers: _options.TextEncoderLayers,
+                textEncoderHeads: _options.TextEncoderHeads,
+                projectionDim: _options.ProjectionDim));
+
+            // Register everything with the base class's Layers list so the
+            // standard parameter / training infrastructure can walk it.
+            Layers.AddRange(_audioEncoder);
+            Layers.AddRange(_textEncoder);
+        }
+
+        // Learnable temperature τ in log space (CLIP / CLAP convention).
+        // Initialised so exp(_logTemperature) = 1/InitialTemperature; the
+        // contrastive loss uses logits·exp(_logTemperature).
+        _logTemperature = new Tensor<T>([1]);
+        _logTemperature[0] = NumOps.FromDouble(Math.Log(1.0 / _options.InitialTemperature));
     }
 
     /// <summary>
-    /// Preprocesses raw audio waveform for model input.
+    /// Validates that user-supplied layers form a balanced audio + text stack.
+    /// </summary>
+    private static void ValidateLayerConfiguration(List<ILayer<T>> layers)
+    {
+        if (layers.Count < 4 || layers.Count % 2 != 0)
+        {
+            throw new ArgumentException(
+                "CLAP custom layer stacks must contain an even number of layers " +
+                "(>= 4) split equally between the audio encoder (first half) and " +
+                "the text encoder (second half). Use LayerHelper.CreateDefault" +
+                "CLAPAudioEncoderLayers + CreateDefaultCLAPTextEncoderLayers as a reference.",
+                nameof(layers));
+        }
+    }
+
+    #endregion
+
+    #region Preprocessing — Mel Spectrogram
+
+    /// <summary>
+    /// Converts raw audio samples into a log-mel spectrogram. The pipeline
+    /// (Hann window → real FFT → triangular mel filterbank → log) matches
+    /// the librosa-style mel extraction CLAP §3.1 was trained on.
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Convert to mel spectrogram
-        int numSamples = rawAudio.Shape[^1];
-        int numFrames = Math.Max(1, (numSamples - _windowSize) / _hopSize + 1);
-        var melSpec = new T[numFrames * _numMelBands];
+        int windowSize = _options.StftWindowSize;
+        int hop = _options.HopLength;
+        int numMels = _options.NumMelBands;
+        int sampleRate = _options.SampleRate;
 
-        // Real log-mel spectrogram (CLAP paper §3.1 — Wu et al. 2023 uses
-        // librosa-style mel features as the audio encoder input). Pipeline:
-        //   1. Per-frame Hann window
-        //   2. Real-FFT → magnitude spectrum
-        //   3. Triangular mel filterbank (slaney-style HTK mel scale)
-        //   4. Power → log
-        // The previous Gaussian-on-time-samples "Simplified mel" had no
-        // frequency analysis at all — the encoder was being fed acoustically
-        // meaningless features.
-        var frameData = new double[_windowSize];
-        var melFilterbank = ComputeClapMelFilterbank(_windowSize, _numMelBands, SampleRate);
+        if (rawAudio.Shape.Length == 1)
+            rawAudio = Engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
 
-        for (int f = 0; f < numFrames; f++)
+        int batchSize = rawAudio.Shape[0];
+        int numSamples = rawAudio.Shape[1];
+        int numFrames = Math.Max(1, (numSamples - windowSize) / hop + 1);
+
+        var filterbank = ComputeMelFilterbank(windowSize, numMels, sampleRate);
+        var melSpec = new Tensor<T>([batchSize, 1, numFrames, numMels]);
+        var frameData = new double[windowSize];
+
+        for (int b = 0; b < batchSize; b++)
         {
-            int start = f * _hopSize;
-            Array.Clear(frameData, 0, frameData.Length);
-            for (int i = 0; i < _windowSize; i++)
+            for (int f = 0; f < numFrames; f++)
             {
-                int idx = start + i;
-                if (idx >= numSamples || idx >= rawAudio.Length) break;
-                double sample = _numOps.ToDouble(rawAudio.Data.Span[idx]);
-                double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (_windowSize - 1))); // Hann
-                frameData[i] = sample * w;
-            }
-
-            var spectrum = FftSharp.FFT.Forward(frameData);
-            int specLen = _windowSize / 2 + 1;
-            var powerSpectrum = new double[specLen];
-            for (int k = 0; k < specLen; k++)
-                powerSpectrum[k] = spectrum[k].Magnitude * spectrum[k].Magnitude;
-
-            for (int m = 0; m < _numMelBands; m++)
-            {
-                double melEnergy = 0.0;
-                for (int k = 0; k < specLen; k++)
-                    melEnergy += powerSpectrum[k] * melFilterbank[m, k];
-                melSpec[f * _numMelBands + m] = _numOps.FromDouble(Math.Log(Math.Max(melEnergy, 1e-10)));
+                int start = f * hop;
+                Array.Clear(frameData, 0, frameData.Length);
+                for (int i = 0; i < windowSize; i++)
+                {
+                    int idx = start + i;
+                    if (idx >= numSamples) break;
+                    double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (windowSize - 1)));
+                    frameData[i] = Convert.ToDouble(rawAudio[b, idx]) * w;
+                }
+                var spectrum = FftSharp.FFT.Forward(frameData);
+                int specLen = windowSize / 2 + 1;
+                for (int m = 0; m < numMels; m++)
+                {
+                    double energy = 0.0;
+                    for (int k = 0; k < specLen; k++)
+                        energy += spectrum[k].Magnitude * spectrum[k].Magnitude * filterbank[m, k];
+                    melSpec[b, 0, f, m] = NumOps.FromDouble(Math.Log(Math.Max(energy, 1e-10)));
+                }
             }
         }
-
-        return new Tensor<T>(melSpec, new[] { 1, numFrames, _numMelBands });
+        return melSpec;
     }
 
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => L2Normalize(modelOutput);
+
     /// <summary>
-    /// Triangular mel filterbank in the HTK-style mel scale that CLAP's
-    /// audio encoder consumes (librosa default; mel = 2595·log10(1 + Hz/700)).
+    /// Triangular mel filterbank in the HTK-style mel scale (matches librosa
+    /// defaults used by the published CLAP checkpoint).
     /// </summary>
-    private static double[,] ComputeClapMelFilterbank(int windowSize, int numMelBands, int sampleRate)
+    private static double[,] ComputeMelFilterbank(int windowSize, int numMelBands, int sampleRate)
     {
         int numBins = windowSize / 2 + 1;
         var filterbank = new double[numMelBands, numBins];
-
         double melMin = HzToMel(0);
         double melMax = HzToMel(sampleRate / 2.0);
 
@@ -382,918 +276,335 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         var binPoints = new int[numMelBands + 2];
         for (int i = 0; i < melPoints.Length; i++)
-        {
-            double hz = MelToHz(melPoints[i]);
-            binPoints[i] = (int)Math.Floor((windowSize + 1) * hz / sampleRate);
-        }
+            binPoints[i] = (int)Math.Floor((windowSize + 1) * MelToHz(melPoints[i]) / sampleRate);
 
         for (int m = 0; m < numMelBands; m++)
         {
-            int startBin = binPoints[m];
-            int centerBin = binPoints[m + 1];
-            int endBin = binPoints[m + 2];
-
-            for (int k = startBin; k < centerBin && k < numBins; k++)
-            {
-                if (centerBin != startBin)
-                    filterbank[m, k] = (double)(k - startBin) / (centerBin - startBin);
-            }
-            for (int k = centerBin; k < endBin && k < numBins; k++)
-            {
-                if (endBin != centerBin)
-                    filterbank[m, k] = (double)(endBin - k) / (endBin - centerBin);
-            }
+            int s = binPoints[m], c = binPoints[m + 1], e = binPoints[m + 2];
+            for (int k = s; k < c && k < numBins; k++)
+                if (c != s) filterbank[m, k] = (double)(k - s) / (c - s);
+            for (int k = c; k < e && k < numBins; k++)
+                if (e != c) filterbank[m, k] = (double)(e - k) / (e - c);
         }
-
         return filterbank;
     }
 
-    /// <summary>Mel scale (HTK convention): 2595·log10(1 + Hz/700).</summary>
     private static double HzToMel(double hz) => 2595.0 * Math.Log10(1.0 + hz / 700.0);
     private static double MelToHz(double mel) => 700.0 * (Math.Pow(10.0, mel / 2595.0) - 1.0);
 
-    /// <summary>
-    /// Postprocesses model output.
-    /// </summary>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-    {
-        // L2 normalize the embeddings
-        return NormalizeEmbeddings(modelOutput);
-    }
+    #endregion
+
+    #region Public API
 
     /// <summary>
-    /// Encodes audio into an embedding vector.
+    /// Encodes audio into a CLAP embedding vector in the shared text-audio space.
     /// </summary>
-    /// <param name="audio">Audio tensor [samples] or [batch, samples].</param>
-    /// <returns>Audio embedding [batch, projectionDim].</returns>
+    /// <param name="audio">Raw audio tensor [samples] or [batch, samples].</param>
+    /// <returns>Audio embedding [batch, projectionDim], L2-normalised.</returns>
     public Tensor<T> EncodeAudio(Tensor<T> audio)
     {
+        ThrowIfDisposed();
         var preprocessed = PreprocessAudio(audio);
-
-        if (IsOnnxMode && OnnxEncoder is not null)
+        if (!_useNativeMode && OnnxEncoder is not null)
         {
-            var output = OnnxEncoder.Run(preprocessed);
-            return PostprocessOutput(output);
+            return PostprocessOutput(OnnxEncoder.Run(preprocessed));
         }
 
-        return EncodeAudioNative(preprocessed);
+        // Native path: run the audio encoder layers in sequence, then L2 normalise.
+        var hidden = preprocessed;
+        foreach (var layer in _audioEncoder) hidden = layer.Forward(hidden);
+        return L2Normalize(hidden);
     }
 
     /// <summary>
-    /// Encodes text into an embedding vector.
+    /// Encodes a tokenised text caption into a CLAP embedding vector.
     /// </summary>
-    /// <param name="tokens">Text token IDs [batch, seqLen].</param>
-    /// <returns>Text embedding [batch, projectionDim].</returns>
-    public Tensor<T> EncodeText(int[] tokens)
+    /// <param name="tokens">Token IDs [batch, seqLen] or [seqLen].</param>
+    /// <returns>Text embedding [batch, projectionDim], L2-normalised.</returns>
+    public Tensor<T> EncodeText(Tensor<T> tokens)
     {
-        if (IsOnnxMode && OnnxDecoder is not null)
+        ThrowIfDisposed();
+        if (!_useNativeMode && OnnxDecoder is not null)
         {
-            var tokenTensor = new Tensor<T>(
-                tokens.Select(t => _numOps.FromDouble(t)).ToArray(),
-                new[] { 1, tokens.Length });
-            var output = OnnxDecoder.Run(tokenTensor);
-            return PostprocessOutput(output);
+            return PostprocessOutput(OnnxDecoder.Run(tokens));
         }
 
-        return EncodeTextNative(tokens);
+        if (tokens.Shape.Length == 1)
+            tokens = Engine.Reshape(tokens, [1, tokens.Shape[0]]);
+
+        var hidden = tokens;
+        foreach (var layer in _textEncoder) hidden = layer.Forward(hidden);
+        return L2Normalize(hidden);
     }
 
-    /// <summary>
-    /// Native audio encoding implementation.
-    /// </summary>
-    private Tensor<T> EncodeAudioNative(Tensor<T> melSpec)
+    /// <summary>Convenience overload: tokenise + encode.</summary>
+    public Tensor<T> EncodeText(int[] tokenIds)
     {
-        int batchSize = melSpec.Shape[0];
-        int numFrames = melSpec.Shape[1];
-        int numMels = melSpec.Shape[2];
-
-        // Patch embedding (simplified)
-        int patchSize = 16;
-        int numPatchesH = numFrames / patchSize;
-        int numPatchesW = numMels / patchSize;
-        int numPatches = Math.Max(1, numPatchesH * numPatchesW);
-
-        var patches = new T[batchSize * (numPatches + 1) * _embeddingDim]; // +1 for CLS token
-
-        // Add CLS token
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                int idx = b * (numPatches + 1) * _embeddingDim + d;
-                patches[idx] = d < _audioClsToken.Length ? _audioClsToken[d] : _numOps.Zero;
-            }
-        }
-
-        // Embed patches
-        for (int b = 0; b < batchSize; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < numPatchesH && patchIdx < numPatches; ph++)
-            {
-                for (int pw = 0; pw < numPatchesW && patchIdx < numPatches; pw++)
-                {
-                    for (int d = 0; d < _embeddingDim; d++)
-                    {
-                        T sum = d < _audioPatchEmbedBias.Length ? _audioPatchEmbedBias[d] : _numOps.Zero;
-                        for (int i = 0; i < patchSize && ph * patchSize + i < numFrames; i++)
-                        {
-                            for (int j = 0; j < patchSize && pw * patchSize + j < numMels; j++)
-                            {
-                                int specIdx = b * numFrames * numMels +
-                                             (ph * patchSize + i) * numMels +
-                                             (pw * patchSize + j);
-                                int wIdx = d * patchSize * patchSize + i * patchSize + j;
-                                if (specIdx < melSpec.Length && wIdx < _audioPatchEmbedWeight.Length)
-                                {
-                                    sum = _numOps.Add(sum, _numOps.Multiply(
-                                        melSpec.Data.Span[specIdx],
-                                        _audioPatchEmbedWeight[wIdx]));
-                                }
-                            }
-                        }
-                        int outIdx = b * (numPatches + 1) * _embeddingDim +
-                                     (patchIdx + 1) * _embeddingDim + d;
-                        patches[outIdx] = sum;
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        // Add positional encoding
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int p = 0; p < numPatches + 1; p++)
-            {
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    int idx = b * (numPatches + 1) * _embeddingDim + p * _embeddingDim + d;
-                    int posIdx = p * _embeddingDim + d;
-                    if (posIdx < _audioPositionalEncoding.Length)
-                    {
-                        patches[idx] = _numOps.Add(patches[idx], _audioPositionalEncoding[posIdx]);
-                    }
-                }
-            }
-        }
-
-        var hidden = new Tensor<T>(patches, new[] { batchSize, numPatches + 1, _embeddingDim });
-
-        // Transformer layers
-        foreach (var layer in _audioTransformerLayers)
-        {
-            hidden = layer.Forward(hidden);
-        }
-
-        // Extract CLS token and project
-        var clsTokens = new T[batchSize * _embeddingDim];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                int idx = b * (numPatches + 1) * _embeddingDim + d;
-                clsTokens[b * _embeddingDim + d] = hidden.Data.Span[idx];
-            }
-        }
-
-        // Project to embedding space
-        var embeddings = new T[batchSize * _projectionDim];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int p = 0; p < _projectionDim; p++)
-            {
-                T sum = p < _audioProjectionBias.Length ? _audioProjectionBias[p] : _numOps.Zero;
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    int wIdx = p * _embeddingDim + d;
-                    if (wIdx < _audioProjectionWeight.Length)
-                    {
-                        sum = _numOps.Add(sum, _numOps.Multiply(
-                            clsTokens[b * _embeddingDim + d],
-                            _audioProjectionWeight[wIdx]));
-                    }
-                }
-                embeddings[b * _projectionDim + p] = sum;
-            }
-        }
-
-        var result = new Tensor<T>(embeddings, new[] { batchSize, _projectionDim });
-        return NormalizeEmbeddings(result);
+        var tokenTensor = new Tensor<T>([1, tokenIds.Length]);
+        for (int i = 0; i < tokenIds.Length; i++)
+            tokenTensor[0, i] = NumOps.FromDouble(tokenIds[i]);
+        return EncodeText(tokenTensor);
     }
 
     /// <summary>
-    /// Native text encoding implementation.
+    /// Performs zero-shot audio classification: rank each text prompt by its
+    /// CLAP-similarity to the supplied audio clip.
     /// </summary>
-    private Tensor<T> EncodeTextNative(int[] tokens)
+    public Dictionary<string, double> ZeroShotClassify(Tensor<T> audio, string[] labels, Func<string, int[]> tokenize)
     {
-        int seqLen = Math.Min(tokens.Length, _maxTextLength);
+        if (labels is null || labels.Length == 0) throw new ArgumentException("Labels required.", nameof(labels));
+        if (tokenize is null) throw new ArgumentNullException(nameof(tokenize));
 
-        // Token embedding
-        var embedded = new T[seqLen * _embeddingDim];
-        for (int i = 0; i < seqLen; i++)
+        var audioEmb = EncodeAudio(audio);
+        var scores = new Dictionary<string, double>(labels.Length);
+        foreach (var label in labels)
         {
-            int tokenId = tokens[i];
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                int embIdx = tokenId * _embeddingDim + d;
-                int posIdx = i * _embeddingDim + d;
-                T tokenEmbed = embIdx < _textEmbeddingWeight.Length
-                    ? _textEmbeddingWeight[embIdx]
-                    : _numOps.Zero;
-                T posEnc = posIdx < _textPositionalEncoding.Length
-                    ? _textPositionalEncoding[posIdx]
-                    : _numOps.Zero;
-                embedded[i * _embeddingDim + d] = _numOps.Add(tokenEmbed, posEnc);
-            }
+            var textEmb = EncodeText(tokenize(label));
+            scores[label] = ComputeCosineSimilarity(audioEmb, textEmb);
         }
-
-        var hidden = new Tensor<T>(embedded, new[] { 1, seqLen, _embeddingDim });
-
-        // Transformer layers
-        foreach (var layer in _textTransformerLayers)
-        {
-            hidden = layer.Forward(hidden);
-        }
-
-        // Use last token (EOS) for pooling
-        var lastToken = new T[_embeddingDim];
-        for (int d = 0; d < _embeddingDim; d++)
-        {
-            int idx = (seqLen - 1) * _embeddingDim + d;
-            lastToken[d] = hidden.Data.Span[idx];
-        }
-
-        // Project to embedding space
-        var embedding = new T[_projectionDim];
-        for (int p = 0; p < _projectionDim; p++)
-        {
-            T sum = p < _textProjectionBias.Length ? _textProjectionBias[p] : _numOps.Zero;
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                int wIdx = p * _embeddingDim + d;
-                if (wIdx < _textProjectionWeight.Length)
-                {
-                    sum = _numOps.Add(sum, _numOps.Multiply(lastToken[d], _textProjectionWeight[wIdx]));
-                }
-            }
-            embedding[p] = sum;
-        }
-
-        var result = new Tensor<T>(embedding, new[] { 1, _projectionDim });
-        return NormalizeEmbeddings(result);
+        return scores.OrderByDescending(kv => kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value);
     }
 
-    /// <summary>
-    /// Performs zero-shot classification using text prompts.
-    /// </summary>
-    /// <param name="audio">Audio tensor to classify.</param>
-    /// <param name="classLabels">Array of text labels to classify against.</param>
-    /// <param name="tokenizer">Function to tokenize text labels.</param>
-    /// <returns>Classification probabilities for each label.</returns>
-    public Dictionary<string, double> ZeroShotClassify(
-        Tensor<T> audio,
-        string[] classLabels,
-        Func<string, int[]> tokenizer)
-    {
-        // Encode audio
-        var audioEmbedding = EncodeAudio(audio);
-
-        // Encode all text labels
-        var textEmbeddings = new List<Tensor<T>>();
-        foreach (var label in classLabels)
-        {
-            var tokens = tokenizer(label);
-            textEmbeddings.Add(EncodeText(tokens));
-        }
-
-        // Compute cosine similarities
-        var similarities = new double[classLabels.Length];
-        for (int i = 0; i < classLabels.Length; i++)
-        {
-            similarities[i] = ComputeCosineSimilarity(audioEmbedding, textEmbeddings[i]);
-        }
-
-        // Apply softmax with temperature
-        double temp = _numOps.ToDouble(_temperature);
-        double maxSim = similarities.Max();
-        double sumExp = 0;
-        for (int i = 0; i < similarities.Length; i++)
-        {
-            sumExp += Math.Exp((similarities[i] - maxSim) / temp);
-        }
-
-        var results = new Dictionary<string, double>();
-        for (int i = 0; i < classLabels.Length; i++)
-        {
-            results[classLabels[i]] = Math.Exp((similarities[i] - maxSim) / temp) / sumExp;
-        }
-
-        return results;
-    }
-
-    /// <summary>
-    /// Computes cosine similarity between two embeddings.
-    /// </summary>
-    private double ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
-    {
-        return VectorHelper.CosineSimilarity(a.ToVector(), b.ToVector());
-    }
-
-    /// <summary>
-    /// L2 normalizes embeddings.
-    /// </summary>
-    private Tensor<T> NormalizeEmbeddings(Tensor<T> embeddings)
-    {
-        int batchSize = embeddings.Shape.Length > 1 ? embeddings.Shape[0] : 1;
-        int dim = embeddings.Shape[^1];
-
-        var normalized = new T[embeddings.Length];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            double norm = 0;
-            for (int d = 0; d < dim; d++)
-            {
-                int idx = b * dim + d;
-                double val = _numOps.ToDouble(embeddings.Data.Span[idx]);
-                norm += val * val;
-            }
-            norm = Math.Sqrt(norm + 1e-10);
-
-            for (int d = 0; d < dim; d++)
-            {
-                int idx = b * dim + d;
-                normalized[idx] = _numOps.FromDouble(_numOps.ToDouble(embeddings.Data.Span[idx]) / norm);
-            }
-        }
-
-        return new Tensor<T>(normalized, embeddings._shape);
-    }
-
-    /// <summary>
-    /// Predicts audio embedding.
-    /// </summary>
+    /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        ThrowIfDisposed();
         return EncodeAudio(input);
     }
-
-    #region IAudioFingerprinter Implementation
 
     /// <inheritdoc/>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
         var embedding = EncodeAudio(audio);
-        double duration = (double)audio.Shape[^1] / SampleRate;
-
+        var flat = embedding.ToVector();
+        var data = new T[flat.Length];
+        for (int i = 0; i < flat.Length; i++) data[i] = flat[i];
         return new AudioFingerprint<T>
         {
-            Data = embedding.Data.ToArray(),
-            Duration = duration,
+            Data = data,
             SampleRate = SampleRate,
-            Algorithm = Name,
-            FrameCount = 1, // CLAP produces a single embedding
-            Metadata = new Dictionary<string, object>
-            {
-                { "EmbeddingDim", _projectionDim },
-                { "ModelType", "CLAP" }
-            }
+            Duration = audio.Length / (double)SampleRate
         };
     }
 
     /// <inheritdoc/>
-    public AudioFingerprint<T> Fingerprint(Vector<T> audio)
-    {
-        var tensor = new Tensor<T>(audio.ToArray(), new[] { audio.Length });
-        return Fingerprint(tensor);
-    }
+    public AudioFingerprint<T> Fingerprint(Vector<T> audio) =>
+        Fingerprint(Tensor<T>.FromVector(audio));
 
     /// <inheritdoc/>
     public double ComputeSimilarity(AudioFingerprint<T> fp1, AudioFingerprint<T> fp2)
     {
-        var tensor1 = new Tensor<T>(fp1.Data.ToArray(), new[] { fp1.Data.Length });
-        var tensor2 = new Tensor<T>(fp2.Data.ToArray(), new[] { fp2.Data.Length });
-        return ComputeCosineSimilarity(tensor1, tensor2);
+        if (fp1.Data.Length != fp2.Data.Length)
+            throw new ArgumentException("Fingerprint dimensions do not match.");
+        double dot = 0.0, n1 = 0.0, n2 = 0.0;
+        for (int i = 0; i < fp1.Data.Length; i++)
+        {
+            double a = Convert.ToDouble(fp1.Data[i]);
+            double b = Convert.ToDouble(fp2.Data[i]);
+            dot += a * b; n1 += a * a; n2 += b * b;
+        }
+        return dot / (Math.Sqrt(n1) * Math.Sqrt(n2) + 1e-12);
     }
 
     /// <inheritdoc/>
     public IReadOnlyList<FingerprintMatch> FindMatches(
-        AudioFingerprint<T> query,
-        AudioFingerprint<T> reference,
-        int minMatchLength = 10)
+        AudioFingerprint<T> query, AudioFingerprint<T> reference, int minMatchLength = 10)
     {
-        // CLAP produces single embeddings, so we can only do whole-audio matching
+        // CLAP fingerprints are global embeddings — there's no temporal
+        // segmentation to localise inside. We return a single whole-clip match
+        // when the overall similarity exceeds the standard zero-shot threshold;
+        // callers needing time-localised matches should use a segment-level
+        // fingerprinter like ConformerFP or NeuralFP.
         double similarity = ComputeSimilarity(query, reference);
-
-        if (similarity > 0.5) // Threshold for considering a match
+        if (similarity < 0.5) return Array.Empty<FingerprintMatch>();
+        return new[]
         {
-            return new List<FingerprintMatch>
+            new FingerprintMatch
             {
-                new FingerprintMatch
-                {
-                    QueryStartTime = 0,
-                    ReferenceStartTime = 0,
-                    Duration = Math.Min(query.Duration, reference.Duration),
-                    Confidence = similarity,
-                    MatchCount = 1
-                }
-            };
-        }
-
-        return new List<FingerprintMatch>();
+                QueryStartTime = 0.0,
+                ReferenceStartTime = 0.0,
+                Duration = Math.Max(query.Duration, reference.Duration),
+                Confidence = similarity,
+                MatchCount = Math.Min(query.Data.Length, reference.Data.Length)
+            }
+        };
     }
 
     #endregion
 
-    #region Training
+    #region Training (tape-based)
 
-    /// <summary>
-    /// Trains the model on audio-text pairs using contrastive loss.
-    /// </summary>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// CLAP is trained with a symmetric contrastive objective (Radford 2021
+    /// Eq. 1; Wu 2023 §3.2): for a minibatch of (audio, caption) pairs, the
+    /// loss is the average of audio→text and text→audio cross-entropies over
+    /// the temperature-scaled cosine-similarity logit matrix. Implemented via
+    /// the standard tape-based training path so all gradients (including the
+    /// learnable temperature) flow correctly through every layer.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode)
-        {
-            throw new InvalidOperationException("Cannot train in ONNX inference mode.");
-        }
+        if (!_useNativeMode)
+            throw new NotSupportedException(
+                "CLAP training requires native mode. Construct with the (architecture, options) ctor.");
 
-        // For CLAP, expected should contain text embeddings
-        // This is a simplified training loop
         SetTrainingMode(true);
-
-        var audioEmbeddings = EncodeAudioNative(PreprocessAudio(input));
-
-        // Compute contrastive loss
-        // In practice, this would need matching text embeddings
-        var loss = ComputeContrastiveLoss(audioEmbeddings, expected);
-
-        SetTrainingMode(false);
-    }
-
-    private T ComputeContrastiveLoss(Tensor<T> audioEmb, Tensor<T> textEmb)
-    {
-        // InfoNCE loss
-        int batchSize = audioEmb.Shape[0];
-        double totalLoss = 0;
-        double temp = _numOps.ToDouble(_temperature);
-
-        for (int i = 0; i < batchSize; i++)
+        try
         {
-            double positiveScore = 0;
-            double negativeSum = 0;
-
-            for (int d = 0; d < _projectionDim; d++)
-            {
-                int aIdx = i * _projectionDim + d;
-                int tIdx = i * _projectionDim + d; // Positive pair
-                if (aIdx < audioEmb.Length && tIdx < textEmb.Length)
-                {
-                    positiveScore += _numOps.ToDouble(audioEmb.Data.Span[aIdx]) *
-                                    _numOps.ToDouble(textEmb.Data.Span[tIdx]);
-                }
-            }
-
-            for (int j = 0; j < batchSize; j++)
-            {
-                double score = 0;
-                for (int d = 0; d < _projectionDim; d++)
-                {
-                    int aIdx = i * _projectionDim + d;
-                    int tIdx = j * _projectionDim + d;
-                    if (aIdx < audioEmb.Length && tIdx < textEmb.Length)
-                    {
-                        score += _numOps.ToDouble(audioEmb.Data.Span[aIdx]) *
-                                _numOps.ToDouble(textEmb.Data.Span[tIdx]);
-                    }
-                }
-                negativeSum += Math.Exp(score / temp);
-            }
-
-            totalLoss -= positiveScore / temp - Math.Log(negativeSum + 1e-10);
+            TrainWithTape(input, expected);
         }
-
-        return _numOps.FromDouble(totalLoss / batchSize);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     #endregion
 
-    #region Serialization
+    #region Helpers
 
-    public override byte[] Serialize()
+    /// <summary>
+    /// L2-normalises along the last (feature) axis so cosine similarity
+    /// reduces to a plain dot product downstream. Engine-routed to stay
+    /// generic in <typeparamref name="T"/> and BLAS-accelerated.
+    /// </summary>
+    private Tensor<T> L2Normalize(Tensor<T> x)
     {
-        using var stream = new MemoryStream();
-        using var writer = new BinaryWriter(stream);
-
-        writer.Write(SampleRate);
-        writer.Write(_embeddingDim);
-        writer.Write(_projectionDim);
-        writer.Write(_numMelBands);
-        writer.Write(_audioEncoderLayers);
-        writer.Write(_vocabSize);
-
-        WriteArray(writer, _audioPatchEmbedWeight);
-        WriteArray(writer, _audioProjectionWeight);
-        WriteArray(writer, _textEmbeddingWeight);
-        WriteArray(writer, _textProjectionWeight);
-
-        return stream.ToArray();
+        // ||x||² along the last axis, then 1/√(·+ε) via Sqrt + Reciprocal.
+        var sq = Engine.TensorMultiply(x, x);
+        int lastAxis = x.Shape.Length - 1;
+        var sumSq = Engine.ReduceSum(sq, [lastAxis], keepDims: true);
+        var eps = NumOps.FromDouble(1e-12);
+        var sumSqPlusEps = Engine.TensorAddScalar(sumSq, eps);
+        var norm = Engine.TensorSqrt(sumSqPlusEps);
+        var invNorm = Engine.TensorReciprocal(norm);
+        return Engine.TensorMultiply(x, invNorm);
     }
 
-    public override void Deserialize(byte[] data)
+    /// <summary>Cosine similarity between two row-aligned embeddings (already L2-normalised).</summary>
+    private double ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
-        using var stream = new MemoryStream(data);
-        using var reader = new BinaryReader(stream);
-
-        SampleRate = reader.ReadInt32();
-        int embeddingDim = reader.ReadInt32();
-        int projectionDim = reader.ReadInt32();
-        int numMelBands = reader.ReadInt32();
-        int audioEncoderLayers = reader.ReadInt32();
-        int vocabSize = reader.ReadInt32();
-
-        _audioPatchEmbedWeight = ReadArray(reader);
-        _audioProjectionWeight = ReadArray(reader);
-        _textEmbeddingWeight = ReadArray(reader);
-        _textProjectionWeight = ReadArray(reader);
-    }
-
-    private void WriteArray(BinaryWriter writer, T[] array)
-    {
-        writer.Write(array.Length);
-        foreach (var val in array)
-        {
-            writer.Write(_numOps.ToDouble(val));
-        }
-    }
-
-    private T[] ReadArray(BinaryReader reader)
-    {
-        int len = reader.ReadInt32();
-        var array = new T[len];
+        int len = Math.Min(a.Length, b.Length);
+        double dot = 0.0;
         for (int i = 0; i < len; i++)
-        {
-            array[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-        return array;
+            dot += Convert.ToDouble(a[i]) * Convert.ToDouble(b[i]);
+        return dot;
     }
 
-    #endregion
-
-    #region Helper Methods
-
-    private T[] InitializeWeights(int size, double initValue = double.NaN)
+    private void ThrowIfDisposed()
     {
-        var weights = new T[size];
-        if (double.IsNaN(initValue))
-        {
-            double scale = Math.Sqrt(2.0 / size);
-            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-            for (int i = 0; i < size; i++)
-            {
-                weights[i] = _numOps.FromDouble(rand.NextGaussian() * scale);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < size; i++)
-            {
-                weights[i] = _numOps.FromDouble(initValue);
-            }
-        }
-        return weights;
+        // AudioNeuralNetworkBase manages disposal; no extra state to gate.
     }
-
-    #endregion
-
-    #region Abstract Method Implementations
 
     /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    public override void UpdateParameters(Vector<T> parameters)
     {
-        if (IsOnnxMode)
-        {
+        if (!_useNativeMode)
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        // Get current parameters and apply gradient descent
-        var currentParams = GetParameters();
-        T learningRate = _numOps.FromDouble(0.0001);
-        for (int i = 0; i < Math.Min(currentParams.Length, gradients.Length); i++)
+        int idx = 0;
+        foreach (var layer in Layers)
         {
-            currentParams[i] = _numOps.Subtract(currentParams[i], _numOps.Multiply(learningRate, gradients[i]));
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
         }
-        SetParameters(currentParams);
-    }
-
-    /// <inheritdoc/>
-    public override ModelMetadata<T> GetModelMetadata()
-    {
-        var metadata = new ModelMetadata<T>
+        // Update the learnable temperature too (last parameter in the model).
+        if (idx < parameters.Length)
         {
-            Name = "CLAP",
-            Description = $"Contrastive Language-Audio Pretraining ({_embeddingDim}D embedding, {_projectionDim}D projection)",
-            FeatureCount = SampleRate,
-            Complexity = _audioEncoderLayers
-        };
-        metadata.AdditionalInfo["EmbeddingDim"] = _embeddingDim.ToString();
-        metadata.AdditionalInfo["ProjectionDim"] = _projectionDim.ToString();
-        metadata.AdditionalInfo["AudioEncoderLayers"] = _audioEncoderLayers.ToString();
-        metadata.AdditionalInfo["Mode"] = IsOnnxMode ? "ONNX" : "Native";
-        return metadata;
+            _logTemperature[0] = parameters[idx];
+        }
     }
 
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(IsOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(_embeddingDim);
-        writer.Write(_projectionDim);
-        writer.Write(_numMelBands);
-        writer.Write(_windowSize);
-        writer.Write(_hopSize);
-        writer.Write(_audioEncoderLayers);
-        writer.Write(_audioEncoderHeads);
-        writer.Write(_vocabSize);
-        writer.Write(_maxTextLength);
+        writer.Write(_useNativeMode);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.NumMelBands);
+        writer.Write(_options.StftWindowSize);
+        writer.Write(_options.HopLength);
+        writer.Write(_options.AudioPatchSize);
+        writer.Write(_options.AudioHiddenDim);
+        writer.Write(_options.AudioEncoderLayers);
+        writer.Write(_options.AudioEncoderHeads);
+        writer.Write(_options.SwinWindowSize);
+        writer.Write(_options.VocabSize);
+        writer.Write(_options.MaxTextLength);
+        writer.Write(_options.TextHiddenDim);
+        writer.Write(_options.TextEncoderLayers);
+        writer.Write(_options.TextEncoderHeads);
+        writer.Write(_options.ProjectionDim);
+        writer.Write(_options.InitialTemperature);
+        writer.Write(_options.DropoutRate);
+        writer.Write(Convert.ToDouble(_logTemperature[0]));
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Validates that every persisted option matches the constructor option
+    /// supplied for the live instance. CLAPModelOptions is init-only, so we
+    /// can't rebind those — but accepting a mismatched checkpoint would silently
+    /// produce wrong-shape weight loads. Throwing with the offending field
+    /// surfaces the issue immediately.
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // _embeddingDim
-        _ = reader.ReadInt32();   // _projectionDim
-        _ = reader.ReadInt32();   // _numMelBands
-        _ = reader.ReadInt32();   // _windowSize
-        _ = reader.ReadInt32();   // _hopSize
-        _ = reader.ReadInt32();   // _audioEncoderLayers
-        _ = reader.ReadInt32();   // _audioEncoderHeads
-        _ = reader.ReadInt32();   // _vocabSize
-        _ = reader.ReadInt32();   // _maxTextLength
+        bool useNativeMode = reader.ReadBoolean();
+        VerifyEqual(reader.ReadInt32(),    _options.SampleRate,         nameof(_options.SampleRate));
+        VerifyEqual(reader.ReadInt32(),    _options.NumMelBands,        nameof(_options.NumMelBands));
+        VerifyEqual(reader.ReadInt32(),    _options.StftWindowSize,     nameof(_options.StftWindowSize));
+        VerifyEqual(reader.ReadInt32(),    _options.HopLength,          nameof(_options.HopLength));
+        VerifyEqual(reader.ReadInt32(),    _options.AudioPatchSize,     nameof(_options.AudioPatchSize));
+        VerifyEqual(reader.ReadInt32(),    _options.AudioHiddenDim,     nameof(_options.AudioHiddenDim));
+        VerifyEqual(reader.ReadInt32(),    _options.AudioEncoderLayers, nameof(_options.AudioEncoderLayers));
+        VerifyEqual(reader.ReadInt32(),    _options.AudioEncoderHeads,  nameof(_options.AudioEncoderHeads));
+        VerifyEqual(reader.ReadInt32(),    _options.SwinWindowSize,     nameof(_options.SwinWindowSize));
+        VerifyEqual(reader.ReadInt32(),    _options.VocabSize,          nameof(_options.VocabSize));
+        VerifyEqual(reader.ReadInt32(),    _options.MaxTextLength,      nameof(_options.MaxTextLength));
+        VerifyEqual(reader.ReadInt32(),    _options.TextHiddenDim,      nameof(_options.TextHiddenDim));
+        VerifyEqual(reader.ReadInt32(),    _options.TextEncoderLayers,  nameof(_options.TextEncoderLayers));
+        VerifyEqual(reader.ReadInt32(),    _options.TextEncoderHeads,   nameof(_options.TextEncoderHeads));
+        VerifyEqual(reader.ReadInt32(),    _options.ProjectionDim,      nameof(_options.ProjectionDim));
+        VerifyEqual(reader.ReadDouble(),   _options.InitialTemperature, nameof(_options.InitialTemperature));
+        VerifyEqual(reader.ReadDouble(),   _options.DropoutRate,        nameof(_options.DropoutRate));
+
+        double logTau = reader.ReadDouble();
+        _logTemperature[0] = NumOps.FromDouble(logTau);
+    }
+
+    private static void VerifyEqual<TValue>(TValue persisted, TValue current, string name)
+        where TValue : IEquatable<TValue>
+    {
+        if (!persisted.Equals(current))
+            throw new InvalidOperationException(
+                $"Persisted CLAPModelOptions.{name} = {persisted} does not match constructor option {current}. " +
+                "Reconstruct CLAPModel with matching CLAPModelOptions before loading this checkpoint.");
     }
 
     /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
+        new CLAPModel<T>(Architecture, _options);
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        return new CLAPModel<T>(
-            Architecture,
-            sampleRate: SampleRate,
-            embeddingDim: _embeddingDim,
-            projectionDim: _projectionDim,
-            numMelBands: _numMelBands,
-            audioEncoderLayers: _audioEncoderLayers,
-            audioEncoderHeads: _audioEncoderHeads,
-            vocabSize: _vocabSize,
-            maxTextLength: _maxTextLength,
-            windowSize: _windowSize,
-            hopSize: _hopSize);
-    }
-
-    #endregion
-
-    #region Nested Types
-
-    private class TransformerLayer
-    {
-        private readonly INumericOperations<T> _ops;
-        private readonly int _dim;
-        private readonly int _numHeads;
-        private readonly int _headDim;
-
-        private T[] _qWeight, _kWeight, _vWeight, _oWeight;
-        private T[] _ffnW1, _ffnW2;
-        private T[] _norm1Gamma, _norm1Beta, _norm2Gamma, _norm2Beta;
-
-        public TransformerLayer(INumericOperations<T> ops, int dim, int numHeads)
+        return new ModelMetadata<T>
         {
-            _ops = ops;
-            _dim = dim;
-            _numHeads = numHeads;
-            _headDim = dim / numHeads;
-
-            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-            double scale = Math.Sqrt(2.0 / dim);
-
-            _qWeight = InitWeights(dim * dim, rand, scale);
-            _kWeight = InitWeights(dim * dim, rand, scale);
-            _vWeight = InitWeights(dim * dim, rand, scale);
-            _oWeight = InitWeights(dim * dim, rand, scale);
-
-            int ffnDim = dim * 4;
-            _ffnW1 = InitWeights(ffnDim * dim, rand, scale);
-            _ffnW2 = InitWeights(dim * ffnDim, rand, scale);
-
-            _norm1Gamma = Enumerable.Range(0, dim).Select(_ => _ops.FromDouble(1.0)).ToArray();
-            _norm1Beta = new T[dim];
-            _norm2Gamma = Enumerable.Range(0, dim).Select(_ => _ops.FromDouble(1.0)).ToArray();
-            _norm2Beta = new T[dim];
-        }
-
-        private T[] InitWeights(int size, Random rand, double scale)
-        {
-            return Enumerable.Range(0, size).Select(_ => _ops.FromDouble(rand.NextGaussian() * scale)).ToArray();
-        }
-
-        public Tensor<T> Forward(Tensor<T> input)
-        {
-            // Pre-LN Transformer encoder block matching CLAP's audio encoder
-            // architecture (Wu et al. 2023 CLAP §3.1 uses HTSAT — Chen et al.
-            // 2022 — which is built on Swin Transformer blocks, Liu et al. 2021
-            // §3.2). Swin and ViT/CLIP both use Pre-LN (Xiong et al. 2020 §3
-            // showed Pre-LN trains more stably than the Vaswani 2017 Post-LN):
-            //
-            //   x'  = x  + MHA(LN1(x))
-            //   y   = x' + FFN(LN2(x'))
-            //
-            // (For a strict HTSAT replica we'd also need shifted-window
-            // attention; we use global attention here as a close-enough
-            // approximation — it has the same trainable-parameter signature
-            // and reproduces the cross-token information mixing that the
-            // previous identity-copy stub completely bypassed.)
-            int batchSize = input.Shape[0];
-            int seqLen = input.Shape[1];
-            int dim = input.Shape[2];
-
-            var inSpan = input.Data.Span;
-            var xBuf = new double[input.Length];
-            for (int i = 0; i < input.Length; i++)
-                xBuf[i] = _ops.ToDouble(inSpan[i]);
-
-            // ── Pre-LN + Multi-head self-attention ────────────────────────
-            var xNorm1 = LayerNorm1D(xBuf, _norm1Gamma, _norm1Beta, batchSize, seqLen, dim);
-
-            // Q, K, V: [B, S, dim] each, computed as x_norm @ W{q,k,v}^T with W shape [dim, dim].
-            var q = ProjectLinear(xNorm1, _qWeight, batchSize, seqLen, dim);
-            var k = ProjectLinear(xNorm1, _kWeight, batchSize, seqLen, dim);
-            var v = ProjectLinear(xNorm1, _vWeight, batchSize, seqLen, dim);
-
-            // Scaled dot-product attention per head, then concat back to [B, S, dim].
-            double scale = 1.0 / Math.Sqrt(_headDim);
-            var attnOut = new double[input.Length];
-            var logits = new double[seqLen]; // reused per (batch, head, query)
-            for (int b = 0; b < batchSize; b++)
+            Name = Name,
+            Description = "CLAP — Contrastive Language-Audio Pre-training (Wu et al. 2023).",
+            Complexity = _options.AudioEncoderLayers + _options.TextEncoderLayers,
+            AdditionalInfo = new Dictionary<string, object>
             {
-                for (int h = 0; h < _numHeads; h++)
-                {
-                    int headOffset = h * _headDim;
-                    for (int sq = 0; sq < seqLen; sq++)
-                    {
-                        // logits[t] = q[b,sq,h,:] · k[b,t,h,:] * scale
-                        double maxLogit = double.NegativeInfinity;
-                        int qBase = ((b * seqLen) + sq) * dim + headOffset;
-                        for (int t = 0; t < seqLen; t++)
-                        {
-                            int kBase = ((b * seqLen) + t) * dim + headOffset;
-                            double dot = 0.0;
-                            for (int d = 0; d < _headDim; d++)
-                                dot += q[qBase + d] * k[kBase + d];
-                            double l = dot * scale;
-                            logits[t] = l;
-                            if (l > maxLogit) maxLogit = l;
-                        }
-
-                        // Numerically stable softmax over t.
-                        double sumExp = 0.0;
-                        for (int t = 0; t < seqLen; t++)
-                        {
-                            logits[t] = Math.Exp(logits[t] - maxLogit);
-                            sumExp += logits[t];
-                        }
-                        double invSum = sumExp > 0 ? 1.0 / sumExp : 0.0;
-
-                        // weighted sum: attnOut[b,sq,h,:] = Σ_t softmax · v[b,t,h,:]
-                        int outBase = ((b * seqLen) + sq) * dim + headOffset;
-                        for (int d = 0; d < _headDim; d++)
-                            attnOut[outBase + d] = 0.0;
-                        for (int t = 0; t < seqLen; t++)
-                        {
-                            double w = logits[t] * invSum;
-                            int vBase = ((b * seqLen) + t) * dim + headOffset;
-                            for (int d = 0; d < _headDim; d++)
-                                attnOut[outBase + d] += w * v[vBase + d];
-                        }
-                    }
-                }
+                ["AudioHiddenDim"] = _options.AudioHiddenDim,
+                ["TextHiddenDim"] = _options.TextHiddenDim,
+                ["ProjectionDim"] = _options.ProjectionDim,
+                ["SampleRate"] = _options.SampleRate,
+                ["NumMelBands"] = _options.NumMelBands,
+                ["AudioEncoderLayers"] = _options.AudioEncoderLayers,
+                ["TextEncoderLayers"] = _options.TextEncoderLayers,
             }
-
-            // Output projection: attnOut @ Wo^T.
-            var projected = ProjectLinear(attnOut, _oWeight, batchSize, seqLen, dim);
-
-            // ── Residual after MHA: afterAttn = x + projected (no LN — Pre-LN block).
-            var afterAttn = new double[input.Length];
-            for (int i = 0; i < input.Length; i++) afterAttn[i] = xBuf[i] + projected[i];
-
-            // ── Pre-LN + FFN (linear → GELU → linear) ─────────────────────
-            var xNorm2 = LayerNorm1D(afterAttn, _norm2Gamma, _norm2Beta, batchSize, seqLen, dim);
-            int ffnDim = dim * 4;
-            // hidden = xNorm2 @ W1^T   (W1 has shape [ffnDim, dim])
-            var hidden = new double[batchSize * seqLen * ffnDim];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    int xBase = ((b * seqLen) + s) * dim;
-                    int hBase = ((b * seqLen) + s) * ffnDim;
-                    for (int o = 0; o < ffnDim; o++)
-                    {
-                        double sum = 0.0;
-                        int wRow = o * dim;
-                        for (int d = 0; d < dim; d++)
-                            sum += xNorm2[xBase + d] * _ops.ToDouble(_ffnW1[wRow + d]);
-                        // GELU (tanh approximation per Hendrycks & Gimpel 2016).
-                        double x = sum;
-                        hidden[hBase + o] = 0.5 * x * (1.0 + Math.Tanh(0.79788456 * (x + 0.044715 * x * x * x)));
-                    }
-                }
-            }
-            // ffnOut = hidden @ W2^T   (W2 has shape [dim, ffnDim])
-            var ffnOut = new double[input.Length];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    int hBase = ((b * seqLen) + s) * ffnDim;
-                    int yBase = ((b * seqLen) + s) * dim;
-                    for (int o = 0; o < dim; o++)
-                    {
-                        double sum = 0.0;
-                        int wRow = o * ffnDim;
-                        for (int j = 0; j < ffnDim; j++)
-                            sum += hidden[hBase + j] * _ops.ToDouble(_ffnW2[wRow + j]);
-                        ffnOut[yBase + o] = sum;
-                    }
-                }
-            }
-
-            // ── Residual after FFN: final = afterAttn + ffnOut (no LN). ───
-            var final = new double[input.Length];
-            for (int i = 0; i < input.Length; i++) final[i] = afterAttn[i] + ffnOut[i];
-
-            var outArr = new T[input.Length];
-            for (int i = 0; i < input.Length; i++) outArr[i] = _ops.FromDouble(final[i]);
-            return new Tensor<T>(outArr, input._shape);
-        }
-
-        /// <summary>
-        /// LayerNorm applied over the last (channel) axis of a [B, S, D] tensor
-        /// laid out in row-major order, with affine γ/β. Centres + normalises
-        /// per-token across the feature dimension.
-        /// </summary>
-        private double[] LayerNorm1D(double[] x, T[] gamma, T[] beta,
-            int batchSize, int seqLen, int dim)
-        {
-            var output = new double[x.Length];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    int baseIdx = ((b * seqLen) + s) * dim;
-                    double mean = 0.0;
-                    for (int d = 0; d < dim; d++) mean += x[baseIdx + d];
-                    mean /= dim;
-                    double variance = 0.0;
-                    for (int d = 0; d < dim; d++)
-                    {
-                        double v = x[baseIdx + d] - mean;
-                        variance += v * v;
-                    }
-                    double invStd = 1.0 / Math.Sqrt(variance / dim + 1e-5);
-                    for (int d = 0; d < dim; d++)
-                    {
-                        double normalised = (x[baseIdx + d] - mean) * invStd;
-                        output[baseIdx + d] = normalised * _ops.ToDouble(gamma[d]) + _ops.ToDouble(beta[d]);
-                    }
-                }
-            }
-            return output;
-        }
-
-        // Linear projection x @ W^T where x is [B, S, dim] and W is row-major [dim, dim].
-        private double[] ProjectLinear(double[] x, T[] weight, int batchSize, int seqLen, int dim)
-        {
-            var output = new double[x.Length];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    int xBase = ((b * seqLen) + s) * dim;
-                    int yBase = xBase;
-                    for (int o = 0; o < dim; o++)
-                    {
-                        double sum = 0.0;
-                        int wRow = o * dim;
-                        for (int d = 0; d < dim; d++)
-                            sum += x[xBase + d] * _ops.ToDouble(weight[wRow + d]);
-                        output[yBase + o] = sum;
-                    }
-                }
-            }
-            return output;
-        }
-
+        };
     }
 
     #endregion
