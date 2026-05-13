@@ -88,7 +88,10 @@ public class WhisperTokenizer
             var line = rawLine.TrimEnd();
             if (string.IsNullOrEmpty(line)) continue;
             if (line.StartsWith("#", StringComparison.Ordinal)) continue;
-            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            // Use the (char[], StringSplitOptions) overload so this compiles
+            // on net471 too — the (char, StringSplitOptions) overload is
+            // net5+ only.
+            var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length != 2)
             {
                 throw new InvalidDataException(

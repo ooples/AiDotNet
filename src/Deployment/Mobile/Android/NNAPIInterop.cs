@@ -63,6 +63,7 @@ internal static class NNAPIInterop
     /// </summary>
     public static bool TryLoad()
     {
+#if NET5_0_OR_GREATER
         try
         {
             if (!NativeLibrary.TryLoad(LibName, out IntPtr handle))
@@ -76,6 +77,16 @@ internal static class NNAPIInterop
         {
             return false;
         }
+#else
+        // System.Runtime.InteropServices.NativeLibrary is a .NET 5+ API
+        // and isn't available on net471. NNAPI itself is Android-only
+        // and the calling Initialize() path also routes through
+        // RuntimeInformation.IsOSPlatform(OSPlatform.Linux) — on net471
+        // hosts (Windows / desktop only) the probe is unreachable in
+        // practice, so returning false here is the correct "not loadable"
+        // answer.
+        return false;
+#endif
     }
 
     // ─── Device introspection ───────────────────────────────────────────────

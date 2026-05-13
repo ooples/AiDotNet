@@ -100,8 +100,18 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         SampleRate = _options.SampleRate;
         _useNativeMode = false;
         OnnxEncoder = new OnnxModel<T>(audioEncoderPath);
-        if (!string.IsNullOrWhiteSpace(textEncoderPath) && File.Exists(textEncoderPath))
-            OnnxDecoder = new OnnxModel<T>(textEncoderPath);
+        // Pattern-match into a non-null local so the compiler's net471
+        // nullable-flow analysis sees `pathLocal` as definitively non-null
+        // at the construction site. `IsNullOrWhiteSpace` returns false
+        // for null but doesn't update the flow state the same way an
+        // explicit `is not null` check does, hence the CS8604 warning
+        // on net471.
+        if (textEncoderPath is { Length: > 0 } pathLocal
+            && !string.IsNullOrWhiteSpace(pathLocal)
+            && File.Exists(pathLocal))
+        {
+            OnnxDecoder = new OnnxModel<T>(pathLocal);
+        }
 
         InitializeLayers();
     }

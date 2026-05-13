@@ -207,15 +207,23 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             return action;
         }
 
-        // Inference / greedy path: return the full Q-value vector
-        // Q(s, ·) over the action set. The one-hot argmax form collapses
-        // distinct Q-distributions that happen to share their argmax into
-        // identical vectors; returning Q(s, ·) matches the DQN paper's
-        // model-output convention and gives downstream consumers (action
-        // selection, policy improvement, target-network updates) the
-        // information they need. Callers that want the deterministic
-        // action take argmax of the returned vector.
-        return ComputeQValues(state);
+        // Inference / greedy path: return a one-hot argmax(Q) action.
+        // The IRLAgent<T> public contract on discrete envs is action-
+        // commitment — callers feed the result into env.Step(action).
+        // Returning the raw Q vector would change the API from action-
+        // selector to value-diagnostic and would also break the inherited
+        // ReinforcementLearningAgentBase.Train(state, target) contract
+        // which expects target to be a one-hot action vector.
+        var qValues = ComputeQValues(state);
+        int bestIdx = 0;
+        for (int i = 1; i < qValues.Length; i++)
+        {
+            if (NumOps.GreaterThan(qValues[i], qValues[bestIdx]))
+                bestIdx = i;
+        }
+        var oneHot = new Vector<T>(_options.ActionSize);
+        oneHot[bestIdx] = NumOps.One;
+        return oneHot;
     }
 
     private Vector<T> ComputeQValues(Vector<T> state)

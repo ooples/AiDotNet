@@ -167,12 +167,13 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         // Multi-vector retrieval (Khattab et al. 2021 PLAID, Santhanam et al. 2022
         // ColBERTv2) needs a token-level embedder to produce a per-token query
         // matrix — that embedder isn't bundled with this repo. Until one is
-        // wired in, drive candidate selection off the documentstore's GetAll +
-        // metadata-filter rather than a fabricated empty query vector (which
-        // would trip the store's dimension validator). The aggregation step
-        // below — group by base doc ID, combine scores — is the paper-faithful
-        // late-interaction reducer and stays the same regardless of where the
-        // candidate set comes from.
+        // wired in, drive candidate selection off a BOUNDED top-K probe of
+        // the document store (zero-vector + metadata filter) instead of
+        // GetAll(), which is documented as potentially O(N) memory-intensive.
+        // Oversampling by 4× gives the token-overlap aggregator headroom to
+        // reorder tied candidates after the store's first-stage selection.
+        // The aggregation step — group by base doc ID, combine scores — is
+        // the paper-faithful late-interaction reducer and stays the same.
         //
         // Query-dependent fallback scoring: instead of aggregating the stale
         // `doc.RelevanceScore` (which would be unrelated to the current query
@@ -182,9 +183,11 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         // stay query-relevant even without the multi-vector embedder.
         var queryTokens = TokenizeForOverlap(query);
 
+        int oversample = Math.Max(topK * 4, 32);
+        var placeholderQuery = new Vector<T>(_documentStore.VectorDimension);
         var allDocuments = (metadataFilters == null || metadataFilters.Count == 0)
-            ? _documentStore.GetAll()
-            : _documentStore.GetAll().Where(d => MatchesMetadata(d, metadataFilters));
+            ? _documentStore.GetSimilar(placeholderQuery, oversample)
+            : _documentStore.GetSimilarWithFilters(placeholderQuery, oversample, metadataFilters);
 
         // Group documents by ID and aggregate their vector scores. Compute
         // per-document overlap on the fly — bounded-size accumulator per
