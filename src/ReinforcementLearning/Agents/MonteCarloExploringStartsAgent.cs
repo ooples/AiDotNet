@@ -118,7 +118,12 @@ public class MonteCarloExploringStartsAgent<T> : ReinforcementLearningAgentBase<
 
         if (allEqual)
         {
-            bestAction = (stateKey.GetHashCode() & int.MaxValue) % _options.ActionSize;
+            // string.GetHashCode is randomized per-process in .NET Core+
+            // and would silently change the tie-broken action across runs
+            // / platforms / 32-bit-vs-64-bit hosts. Use the inherited
+            // stable SHA1-based HashStateToAction helper so the policy
+            // stays reproducible.
+            bestAction = HashStateToAction(stateKey, _options.ActionSize);
         }
 
         var result = new Vector<T>(_options.ActionSize);

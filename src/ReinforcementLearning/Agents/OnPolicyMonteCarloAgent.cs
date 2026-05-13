@@ -119,7 +119,14 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
             if (allEqual)
             {
-                selectedAction = (stateKey.GetHashCode() & int.MaxValue) % _options.ActionSize;
+                // string.GetHashCode is randomized per-process in .NET Core+
+                // (documented at learn.microsoft.com/.../system.string.gethashcode),
+                // so the tie-breaking action would change across runs and
+                // make the policy non-reproducible even with a fixed RNG
+                // seed. Route through the inherited stable SHA1-based
+                // HashStateToAction helper so the same state always maps
+                // to the same tie-broken action.
+                selectedAction = HashStateToAction(stateKey, _options.ActionSize);
             }
         }
 
