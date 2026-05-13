@@ -1,4 +1,5 @@
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -32804,7 +32805,7 @@ public static class LayerHelper<T>
         // GlobalPoolingLayer with PoolingType.Average on rank-3 [B, numPatches,
         // hiddenDim] input reduces over axis 1 to produce [B, hiddenDim].
         yield return new GlobalPoolingLayer<T>(
-            poolingType: AiDotNet.Enums.PoolingType.Average);
+            poolingType: PoolingType.Average);
         yield return new DenseLayer<T>(
             outputSize: numClasses,
             activationFunction: null);
@@ -33849,6 +33850,61 @@ public static class LayerHelper<T>
 
     #endregion
 
+    #region PANNs (Pretrained Audio Neural Networks)
+
+    /// <summary>
+    /// Creates the default CNN14 audio classifier layers for PANNs (Kong et al.
+    /// 2020 "PANNs: Large-Scale Pretrained Audio Neural Networks for Audio
+    /// Pattern Recognition"). Input is a log-mel spectrogram
+    /// <c>[batch, 1, numFrames, numMels]</c>; output is per-class probabilities
+    /// <c>[batch, numClasses]</c>.
+    /// </summary>
+    /// <param name="numClasses">Output class count (AudioSet: 527).</param>
+    /// <param name="embeddingDim">Embedding head width (CNN14: 2048).</param>
+    /// <param name="dropoutRate">Dropout rate inside the CNN blocks (paper §3).</param>
+    /// <remarks>
+    /// CNN14 architecture per paper Table 1: four conv stages with channel
+    /// progression 64 → 128 → 256 → 512, each stage = Conv(3×3) + BN + ReLU +
+    /// Conv(3×3) + BN + ReLU + AvgPool(2×2). Global average pool over time,
+    /// then dense → embedding → dense → class logits → sigmoid.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPANNsLayers(
+        int numClasses,
+        int embeddingDim,
+        double dropoutRate)
+    {
+        // Helper: one CNN14 "double conv + pool" stage.
+        IEnumerable<ILayer<T>> ConvStage(int outChannels)
+        {
+            yield return new ConvolutionalLayer<T>(outputDepth: outChannels, kernelSize: 3, stride: 1, padding: 1);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(outputDepth: outChannels, kernelSize: 3, stride: 1, padding: 1);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new PoolingLayer<T>(poolSize: 2, stride: 2, type: PoolingType.Average);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Four conv stages — paper §3.1 Table 1 channel progression.
+        foreach (var l in ConvStage(64)) yield return l;
+        foreach (var l in ConvStage(128)) yield return l;
+        foreach (var l in ConvStage(256)) yield return l;
+        foreach (var l in ConvStage(512)) yield return l;
+
+        // Global average pool over the (time × freq) spatial axes → channel vector.
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
+
+        // Embedding head (paper §3.1: 2048-d).
+        yield return new DenseLayer<T>(outputSize: embeddingDim, activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Classification head with sigmoid for multi-label AudioSet output.
+        yield return new DenseLayer<T>(outputSize: numClasses, activationFunction: new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    #endregion
+
     #region AST (Audio Spectrogram Transformer)
 
     /// <summary>
@@ -33894,7 +33950,7 @@ public static class LayerHelper<T>
         }
 
         // Mean-pool the patch tokens → single audio embedding.
-        yield return new GlobalPoolingLayer<T>(poolingType: AiDotNet.Enums.PoolingType.Average);
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
 
         // Linear classification head.
         yield return new DenseLayer<T>(outputSize: numClasses, activationFunction: new IdentityActivation<T>());
@@ -33944,7 +34000,7 @@ public static class LayerHelper<T>
 
         // Mean-pool across the spectrogram patch sequence to get a single
         // audio embedding, then project into the shared CLAP space.
-        yield return new GlobalPoolingLayer<T>(poolingType: AiDotNet.Enums.PoolingType.Average);
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
         yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
     }
 
@@ -33985,7 +34041,7 @@ public static class LayerHelper<T>
         }
 
         // Mean-pool tokens → single text embedding, then project into shared space.
-        yield return new GlobalPoolingLayer<T>(poolingType: AiDotNet.Enums.PoolingType.Average);
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
         yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
     }
 
