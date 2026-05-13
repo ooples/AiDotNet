@@ -312,8 +312,15 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public Tensor<T> EncodeText(Tensor<T> tokens)
     {
         ThrowIfDisposed();
-        if (!_useNativeMode && OnnxDecoder is not null)
+        if (!_useNativeMode)
         {
+            if (OnnxDecoder is null)
+                throw new NotSupportedException(
+                    "CLAPModel.EncodeText() in ONNX mode requires a text encoder. " +
+                    "Construct CLAPModel with both audioEncoderPath and textEncoderPath, " +
+                    "or use a native-mode instance. Falling through to the native layer " +
+                    "stack would walk an empty TextEncoderLayers list and L2-normalise " +
+                    "the raw token IDs — silent garbage output.");
             return PostprocessOutput(OnnxDecoder.Run(tokens));
         }
 
