@@ -23568,7 +23568,8 @@ public static class LayerHelper<T>
         int numResamplerLayers = 4,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 14)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -23577,6 +23578,11 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
+        // Patchify [B, 3, H, W] -> [B, num_patches, visionDim] so the subsequent
+        // MHA sees a sequence of patch tokens at the paper's embedding dim.
+        // Qwen-VL (Bai 2023) / Qwen2-VL (Wang 2024) / KimiVL all use 14x14 patches
+        // on their ViT-bigG/14 (and equivalent) vision encoders.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
@@ -23732,7 +23738,8 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 16)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -23740,6 +23747,11 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (hybrid SigLIP + SAM) ===
+        // Patchify [B, 3, H, W] -> [B, num_patches, visionDim]. DeepSeek-VL
+        // (Lu 2024) uses SigLIP-L/16 + SAM-B/16, so patchSize=16. Without this
+        // the first MHA reads spatial dims as the feature dim and fails the
+        // QKV projection (PR #1290 / #1311 root cause for the VLM family).
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
