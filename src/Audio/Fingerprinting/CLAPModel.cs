@@ -57,17 +57,14 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private readonly CLAPModelOptions _options;
     private readonly bool _useNativeMode;
 
-    // Native-mode layer stacks. Both inherit from LayerBase<T> via LayerHelper.
-    // ONNX mode leaves these empty and routes Predict through OnnxEncoder.
-    private readonly List<ILayer<T>> _audioEncoder = new();
-    private readonly List<ILayer<T>> _textEncoder = new();
-
-    /// <summary>
-    /// Trainable temperature parameter (stored in log space). Gradients flow
-    /// through the tape via <see cref="LayerBase{T}.Engine"/> ops; the optimizer
-    /// updates this alongside the rest of the network.
-    /// </summary>
+    // Trainable temperature parameter (stored in log space). Gradients flow
+    // through the tape via Engine ops; the optimizer updates this alongside
+    // the rest of the network.
     private Tensor<T> _logTemperature = null!;
+
+    // Cached Hann window for the STFT preprocessing step. Built once on the
+    // first PreprocessAudio call and reused across batches.
+    private Tensor<T>? _hannWindow;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -133,50 +130,60 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     /// <summary>
     /// Initializes the neural network layers following the codebase's golden
-    /// pattern: prefer user-provided <c>Architecture.Layers</c>; otherwise fall
-    /// back to the paper-faithful <see cref="LayerHelper{T}"/> factories.
+    /// dual-stream pattern. Prefers an <see cref="AudioTextDualStreamArchitecture{T}"/>
+    /// (modality-specific custom layers per encoder), then falls back to the
+    /// paper-faithful <see cref="LayerHelper{T}"/> factories.
     /// </summary>
+    /// <remarks>
+    /// Audio encoder layers live in the inherited <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// list so the standard tape-training and parameter-iteration infrastructure
+    /// walks them as the primary stream. Text encoder layers live in
+    /// <see cref="AudioNeuralNetworkBase{T}.TextEncoderLayers"/>; subclasses
+    /// (here) walk that collection explicitly inside <see cref="EncodeText(Tensor{T})"/>.
+    /// </remarks>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
 
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        if (Architecture is AudioTextDualStreamArchitecture<T> dual)
         {
-            // User-supplied layer stack — first half audio, second half text by
-            // convention. Callers can mix-and-match with LayerHelper helpers.
-            Layers.AddRange(Architecture.Layers);
-            ValidateLayerConfiguration(Layers);
-            int half = Layers.Count / 2;
-            _audioEncoder.Clear();
-            _audioEncoder.AddRange(Layers.Take(half));
-            _textEncoder.Clear();
-            _textEncoder.AddRange(Layers.Skip(half));
+            // Production path: caller provided custom layer stacks for both
+            // encoders via the proper dual-stream architecture descriptor.
+            Layers.AddRange(dual.AudioLayers);
+            TextEncoderLayers.AddRange(dual.TextLayers);
         }
-        else
+        else if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            // Default audio encoder: HTSAT (Swin) → mean-pool → proj.
-            _audioEncoder.Clear();
-            _audioEncoder.AddRange(LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
-                audioHiddenDim: _options.AudioHiddenDim,
-                audioEncoderLayers: _options.AudioEncoderLayers,
-                audioEncoderHeads: _options.AudioEncoderHeads,
-                swinWindowSize: _options.SwinWindowSize,
-                projectionDim: _options.ProjectionDim));
-
-            // Default text encoder: RoBERTa-style transformer → mean-pool → proj.
-            _textEncoder.Clear();
-            _textEncoder.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
+            // Legacy / single-stack path: user supplied only one Layers list.
+            // We treat that as the audio encoder and use the LayerHelper
+            // default for the text side, so the model is still functional.
+            // Callers wanting full control of BOTH stacks should switch to
+            // AudioTextDualStreamArchitecture.
+            Layers.AddRange(Architecture.Layers);
+            TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
                 vocabSize: _options.VocabSize,
                 maxTextLength: _options.MaxTextLength,
                 textHiddenDim: _options.TextHiddenDim,
                 textEncoderLayers: _options.TextEncoderLayers,
                 textEncoderHeads: _options.TextEncoderHeads,
                 projectionDim: _options.ProjectionDim));
-
-            // Register everything with the base class's Layers list so the
-            // standard parameter / training infrastructure can walk it.
-            Layers.AddRange(_audioEncoder);
-            Layers.AddRange(_textEncoder);
+        }
+        else
+        {
+            // Default both stacks from the paper-faithful LayerHelper factories.
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
+                audioHiddenDim: _options.AudioHiddenDim,
+                audioEncoderLayers: _options.AudioEncoderLayers,
+                audioEncoderHeads: _options.AudioEncoderHeads,
+                swinWindowSize: _options.SwinWindowSize,
+                projectionDim: _options.ProjectionDim));
+            TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
+                vocabSize: _options.VocabSize,
+                maxTextLength: _options.MaxTextLength,
+                textHiddenDim: _options.TextHiddenDim,
+                textEncoderLayers: _options.TextEncoderLayers,
+                textEncoderHeads: _options.TextEncoderHeads,
+                projectionDim: _options.ProjectionDim));
         }
 
         // Learnable temperature τ in log space (CLIP / CLAP convention).
@@ -186,111 +193,74 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _logTemperature[0] = NumOps.FromDouble(Math.Log(1.0 / _options.InitialTemperature));
     }
 
-    /// <summary>
-    /// Validates that user-supplied layers form a balanced audio + text stack.
-    /// </summary>
-    private static void ValidateLayerConfiguration(List<ILayer<T>> layers)
-    {
-        if (layers.Count < 4 || layers.Count % 2 != 0)
-        {
-            throw new ArgumentException(
-                "CLAP custom layer stacks must contain an even number of layers " +
-                "(>= 4) split equally between the audio encoder (first half) and " +
-                "the text encoder (second half). Use LayerHelper.CreateDefault" +
-                "CLAPAudioEncoderLayers + CreateDefaultCLAPTextEncoderLayers as a reference.",
-                nameof(layers));
-        }
-    }
-
     #endregion
 
     #region Preprocessing — Mel Spectrogram
 
     /// <summary>
-    /// Converts raw audio samples into a log-mel spectrogram. The pipeline
-    /// (Hann window → real FFT → triangular mel filterbank → log) matches
-    /// the librosa-style mel extraction CLAP §3.1 was trained on.
+    /// Converts raw audio samples into a log-mel spectrogram via the engine's
+    /// fused <see cref="IEngine.MelSpectrogram{T}"/> kernel (Hann window → STFT
+    /// → triangular HTK mel filterbank → log power). This is the same librosa-
+    /// style pipeline the published CLAP checkpoint was trained on (Wu 2023
+    /// §3.1), routed through a single BLAS / GPU-eligible engine op instead of
+    /// scalar inner loops over <c>double[]</c>.
     /// </summary>
+    /// <param name="rawAudio">Audio samples — shape <c>[samples]</c> or <c>[batch, samples]</c>.</param>
+    /// <returns>Log-mel spectrogram with shape <c>[batch, 1, numFrames, numMels]</c>,
+    /// ready to feed into the HTSAT 2D patch encoder.</returns>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        int windowSize = _options.StftWindowSize;
-        int hop = _options.HopLength;
-        int numMels = _options.NumMelBands;
-        int sampleRate = _options.SampleRate;
-
         if (rawAudio.Shape.Length == 1)
             rawAudio = Engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
 
         int batchSize = rawAudio.Shape[0];
         int numSamples = rawAudio.Shape[1];
-        int numFrames = Math.Max(1, (numSamples - windowSize) / hop + 1);
+        int windowSize = _options.StftWindowSize;
+        int hop = _options.HopLength;
+        int numMels = _options.NumMelBands;
+        int sampleRate = _options.SampleRate;
 
-        var filterbank = ComputeMelFilterbank(windowSize, numMels, sampleRate);
-        var melSpec = new Tensor<T>([batchSize, 1, numFrames, numMels]);
-        var frameData = new double[windowSize];
+        // Hann window built once via NumOps (T-generic; no double[] state).
+        _hannWindow ??= BuildHannWindow(windowSize);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < numFrames; f++)
-            {
-                int start = f * hop;
-                Array.Clear(frameData, 0, frameData.Length);
-                for (int i = 0; i < windowSize; i++)
-                {
-                    int idx = start + i;
-                    if (idx >= numSamples) break;
-                    double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * i / (windowSize - 1)));
-                    frameData[i] = Convert.ToDouble(rawAudio[b, idx]) * w;
-                }
-                var spectrum = FftSharp.FFT.Forward(frameData);
-                int specLen = windowSize / 2 + 1;
-                for (int m = 0; m < numMels; m++)
-                {
-                    double energy = 0.0;
-                    for (int k = 0; k < specLen; k++)
-                        energy += spectrum[k].Magnitude * spectrum[k].Magnitude * filterbank[m, k];
-                    melSpec[b, 0, f, m] = NumOps.FromDouble(Math.Log(Math.Max(energy, 1e-10)));
-                }
-            }
-        }
-        return melSpec;
+        // Single engine op: Hann × STFT → power → mel filterbank → log.
+        // Returns [batch, numFrames, numMels]. Engine-resident throughout —
+        // tape sees one node, BLAS / GPU paths take it when bound.
+        var mel = Engine.MelSpectrogram(
+            input: rawAudio,
+            sampleRate: sampleRate,
+            nFft: windowSize,
+            hopLength: hop,
+            nMels: numMels,
+            fMin: NumOps.Zero,
+            fMax: NumOps.FromDouble(sampleRate / 2.0),
+            window: _hannWindow,
+            powerToDb: true);
+
+        // Reshape to [batch, 1, numFrames, numMels] for the HTSAT 2D patch encoder.
+        int numFrames = mel.Length / (batchSize * numMels);
+        return Engine.Reshape(mel, [batchSize, 1, numFrames, numMels]);
     }
 
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => L2Normalize(modelOutput);
 
     /// <summary>
-    /// Triangular mel filterbank in the HTK-style mel scale (matches librosa
-    /// defaults used by the published CLAP checkpoint).
+    /// Builds a periodic Hann window of length <paramref name="windowSize"/>
+    /// as a <see cref="Tensor{T}"/>: <c>w[n] = 0.5·(1 − cos(2πn/(N−1)))</c>.
+    /// Generic in <typeparamref name="T"/> via <see cref="LayerBase{T}.NumOps"/>;
+    /// no <c>double[]</c> state.
     /// </summary>
-    private static double[,] ComputeMelFilterbank(int windowSize, int numMelBands, int sampleRate)
+    private Tensor<T> BuildHannWindow(int windowSize)
     {
-        int numBins = windowSize / 2 + 1;
-        var filterbank = new double[numMelBands, numBins];
-        double melMin = HzToMel(0);
-        double melMax = HzToMel(sampleRate / 2.0);
-
-        var melPoints = new double[numMelBands + 2];
-        for (int i = 0; i < melPoints.Length; i++)
-            melPoints[i] = melMin + (melMax - melMin) * i / (numMelBands + 1);
-
-        var binPoints = new int[numMelBands + 2];
-        for (int i = 0; i < melPoints.Length; i++)
-            binPoints[i] = (int)Math.Floor((windowSize + 1) * MelToHz(melPoints[i]) / sampleRate);
-
-        for (int m = 0; m < numMelBands; m++)
+        var window = new Tensor<T>([windowSize]);
+        for (int n = 0; n < windowSize; n++)
         {
-            int s = binPoints[m], c = binPoints[m + 1], e = binPoints[m + 2];
-            for (int k = s; k < c && k < numBins; k++)
-                if (c != s) filterbank[m, k] = (double)(k - s) / (c - s);
-            for (int k = c; k < e && k < numBins; k++)
-                if (e != c) filterbank[m, k] = (double)(e - k) / (e - c);
+            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / (windowSize - 1)));
+            window[n] = NumOps.FromDouble(w);
         }
-        return filterbank;
+        return window;
     }
-
-    private static double HzToMel(double hz) => 2595.0 * Math.Log10(1.0 + hz / 700.0);
-    private static double MelToHz(double mel) => 700.0 * (Math.Pow(10.0, mel / 2595.0) - 1.0);
 
     #endregion
 
@@ -310,9 +280,10 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             return PostprocessOutput(OnnxEncoder.Run(preprocessed));
         }
 
-        // Native path: run the audio encoder layers in sequence, then L2 normalise.
+        // Native path: run the audio encoder layers (the inherited Layers list,
+        // populated by InitializeLayers) in sequence, then L2-normalise.
         var hidden = preprocessed;
-        foreach (var layer in _audioEncoder) hidden = layer.Forward(hidden);
+        foreach (var layer in Layers) hidden = layer.Forward(hidden);
         return L2Normalize(hidden);
     }
 
@@ -332,8 +303,10 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         if (tokens.Shape.Length == 1)
             tokens = Engine.Reshape(tokens, [1, tokens.Shape[0]]);
 
+        // Native path: walk the text encoder layers (held on the audio base
+        // class so any future audio-text dual encoder shares the same slot).
         var hidden = tokens;
-        foreach (var layer in _textEncoder) hidden = layer.Forward(hidden);
+        foreach (var layer in TextEncoderLayers) hidden = layer.Forward(hidden);
         return L2Normalize(hidden);
     }
 
@@ -502,14 +475,23 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
+
         int idx = 0;
+        // Audio encoder layers (the inherited Layers list — the primary stream).
         foreach (var layer in Layers)
         {
             int count = (int)layer.ParameterCount;
             layer.UpdateParameters(parameters.Slice(idx, count));
             idx += count;
         }
-        // Update the learnable temperature too (last parameter in the model).
+        // Text encoder layers (the secondary stream on the audio base class).
+        foreach (var layer in TextEncoderLayers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        // Learnable temperature τ (last scalar parameter).
         if (idx < parameters.Length)
         {
             _logTemperature[0] = parameters[idx];
