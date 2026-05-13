@@ -6,8 +6,10 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -373,11 +375,14 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
         {
             for (int batch = 0; batch < numBatches; batch++)
             {
+                // Paper's training schedule: DiscriminatorSteps critic steps
+                // for each generator step. Both run through GradientTape so
+                // gradients propagate through the tape-tracked forwards.
                 for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                 {
-                    TrainDiscriminatorStep(transformedData, numPacks, lr);
+                    TrainDiscriminatorStepBatched(transformedData, numPacks);
                 }
-
+                TrainGeneratorStepBatched(transformedData, numPacks);
             }
         }
 
@@ -426,8 +431,9 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
                 {
                     for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                     {
-                        TrainDiscriminatorStep(transformedData, numPacks, lr);
+                        TrainDiscriminatorStepBatched(transformedData, numPacks);
                     }
+                    TrainGeneratorStepBatched(transformedData, numPacks);
                 }
             }
         }, ct).ConfigureAwait(false);
@@ -559,57 +565,311 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
     #region GAN Training Steps
 
     /// <summary>
-    /// Trains the discriminator for one step using WGAN-GP objective.
+    /// Paper-faithful WGAN-GP critic step (Xu et al. 2019 §3.4, after Gulrajani
+    /// et al. 2017) over <see cref="_options.PacSize"/>-packed samples (PacGAN
+    /// to prevent mode collapse). Uses <see cref="GradientTape{T}"/> +
+    /// <see cref="TapeStepContext{T}"/> so backprop flows through every
+    /// tape-tracked op in <see cref="DiscriminatorForwardBatched"/>. Replaces
+    /// the prior per-row <c>DiscriminatorForward → UpdateParameters</c>
+    /// pattern, which the codebase's autodiff migration (LayerBase.cs:1593)
+    /// made invalid — that path now throws
+    /// "Backward pass must be called before updating parameters."
     /// </summary>
-    private void TrainDiscriminatorStep(Matrix<T> transformedData, int numPacks, T learningRate)
+    private void TrainDiscriminatorStepBatched(Matrix<T> transformedData, int numPacks)
     {
-        if (_sampler is null || _packedRealBuf is null || _packedFakeBuf is null ||
-            _noiseBuf is null || _genInputBuf is null || _realSingleBuf is null ||
-            _fakeSingleBuf is null || _realRowBuf is null || _fakeRowBuf is null ||
-            _oneGrad is null || _negOneGrad is null) return;
+        if (_sampler is null) return;
+
+        var (realPacked, fakePacked) = BuildPackedRealAndFakeBatches(transformedData, numPacks);
+
+        using var tape = new GradientTape<T>();
+        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers);
+
+        var realScores = DiscriminatorForwardBatched(realPacked, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: true);
+
+        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+        var avgReal = Engine.ReduceMean(realScores, allAxes, keepDims: false);
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        // WGAN critic minimizes E[D(fake)] - E[D(real)].
+        var lossTensor = Engine.TensorSubtract(avgFake, avgReal);
+
+        var grads = tape.ComputeGradients(lossTensor, discParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.ReduceMean(pred, allAxes, keepDims: false);
+
+        var context = new TapeStepContext<T>(
+            discParams, grads, lossValue,
+            realPacked, realPacked, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Paper-faithful WGAN-GP generator step (Xu et al. 2019). Minimizes
+    /// <c>-E[D(G(z, c))]</c> so the generator pushes its conditional samples
+    /// into regions the critic scores high. Tape-tracked through
+    /// <see cref="GeneratorForwardWithResidualBatched"/> + the critic's
+    /// frozen forward, so generator parameters get gradients via the critic
+    /// but the critic itself does not update on this step.
+    /// </summary>
+    private void TrainGeneratorStepBatched(Matrix<T> transformedData, int numPacks)
+    {
+        if (_sampler is null) return;
+
+        using var tape = new GradientTape<T>();
+
+        // Generator's trainable surface = Layers + per-layer BN.
+        var generatorLayers = new List<ILayer<T>>();
+        generatorLayers.AddRange(Layers);
+        foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
+        var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
 
         int pacSize = _options.PacSize;
         int singleDim = _dataWidth + _condWidth;
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(learningRate) / numPacks);
+        int genInputDim = _options.EmbeddingDimension + _condWidth;
 
-        for (int p = 0; p < numPacks; p++)
+        // Build the conditional generator input batch [numPacks * pacSize, genInputDim].
+        var noiseBatch = GenerateNoiseBatchTensor(numPacks * pacSize);
+        var condBatch = SampleConditionalBatchTensor(numPacks * pacSize);
+        var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+
+        // Forward through generator → produces [numPacks * pacSize, dataWidth].
+        var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
+        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
+
+        // PacGAN packing: reshape [numPacks * pacSize, singleDim] -> [numPacks, packedInputDim].
+        // Re-attach the conditional vector to each sample, then pack.
+        var fakeWithCond = Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1);
+        var fakePacked = fakeWithCond.Reshape([numPacks, _packedInputDim]);
+
+        var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: false);
+        var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        // Generator minimizes -E[D(G(z, c))].
+        var lossTensor = Engine.TensorNegate(avgFake);
+
+        var grads = tape.ComputeGradients(lossTensor, genParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _)
         {
-            // Zero the packed buffers
-            for (int i = 0; i < _packedInputDim; i++)
+            var faked = GeneratorForwardWithResidualBatched(inp);
+            var act = ApplyOutputActivationsBatched(faked);
+            var withCond = Engine.TensorConcatenate([act, condBatch], axis: 1);
+            var packed = withCond.Reshape([numPacks, _packedInputDim]);
+            return DiscriminatorForwardBatched(packed, false);
+        }
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.TensorNegate(Engine.ReduceMean(pred, allAxes, keepDims: false));
+
+        var context = new TapeStepContext<T>(
+            genParams, grads, lossValue,
+            genInput, genInput, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Builds the packed real + fake batches for one critic step.
+    /// Each pack groups <see cref="_options.PacSize"/> independent samples
+    /// (PacGAN, Lin et al. 2017) so the critic sees the joint distribution
+    /// of pacSize samples instead of one sample at a time — this is what
+    /// prevents mode collapse on tabular distributions with heavily
+    /// imbalanced categorical columns.
+    /// </summary>
+    private (Tensor<T> realPacked, Tensor<T> fakePacked) BuildPackedRealAndFakeBatches(
+        Matrix<T> transformedData,
+        int numPacks)
+    {
+        int pacSize = _options.PacSize;
+        int singleDim = _dataWidth + _condWidth;
+        int totalSamples = numPacks * pacSize;
+
+        // Per-sample noise + conditional vectors that drive the generator.
+        var noiseBatch = GenerateNoiseBatchTensor(totalSamples);
+        var condBatch = SampleConditionalBatchTensor(totalSamples);
+        var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+
+        var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
+        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
+        // [totalSamples, dataWidth] concat [totalSamples, condWidth] -> [totalSamples, singleDim]
+        var fakeSingles = Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1);
+
+        // Real-sample matrix: random rows of transformedData paired with each sample's condVector.
+        var realFlat = new Tensor<T>([totalSamples, _dataWidth]);
+        for (int s = 0; s < totalSamples; s++)
+        {
+            int rowIdx = _sampler!.SampleConditionAndRow().RowIndex;
+            int cols = Math.Min(_dataWidth, transformedData.Columns);
+            for (int j = 0; j < cols; j++) realFlat[s, j] = transformedData[rowIdx, j];
+        }
+        var realSingles = Engine.TensorConcatenate([realFlat, condBatch], axis: 1);
+
+        // Pack into [numPacks, pacSize * singleDim].
+        var realPacked = realSingles.Reshape([numPacks, _packedInputDim]);
+        var fakePacked = fakeSingles.Reshape([numPacks, _packedInputDim]);
+        return (realPacked, fakePacked);
+    }
+
+    /// <summary>
+    /// Batched Box-Muller standard-normal noise generator
+    /// (matches <see cref="GenerativeAdversarialNetwork{T}.GenerateRandomNoiseTensor"/>).
+    /// </summary>
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize)
+    {
+        int embedDim = _options.EmbeddingDimension;
+        int totalElements = batchSize * embedDim;
+        int halfElements = (totalElements + 1) / 2;
+
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
+        var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
+        var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
+        var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
+
+        var noiseData = new T[totalElements];
+        var z1Arr = z1.ToArray();
+        var z2Arr = z2.ToArray();
+        for (int i = 0; i < halfElements; i++)
+        {
+            int idx = i * 2;
+            if (idx < totalElements) noiseData[idx] = z1Arr[i];
+            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
+        }
+        return new Tensor<T>(noiseData, [batchSize, embedDim]);
+    }
+
+    /// <summary>
+    /// Samples a batch of conditional vectors from the CTGAN sampler (one
+    /// per sample). The conditional vector encodes a column-condition for
+    /// training-by-sampling (Xu et al. 2019 §3.2) so the generator learns
+    /// to honour rare categories.
+    /// </summary>
+    private Tensor<T> SampleConditionalBatchTensor(int batchSize)
+    {
+        if (_sampler is null) return new Tensor<T>([batchSize, _condWidth]);
+
+        var batch = new Tensor<T>([batchSize, _condWidth]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, _) = _sampler.SampleConditionAndRow();
+            int cols = Math.Min(_condWidth, cv.Length);
+            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+        }
+        return batch;
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked version of <see cref="GeneratorForwardWithResidual"/>.
+    /// Uses <see cref="Engine.TensorConcatenate"/> for skip connections and
+    /// <see cref="Engine.ReLU"/> for hidden activation. Same paper-faithful
+    /// residual + BN architecture as the per-sample variant.
+    /// </summary>
+    private Tensor<T> GeneratorForwardWithResidualBatched(Tensor<T> input)
+    {
+        if (_usingCustomLayers)
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+
+        var h = input;
+        int numHiddenLayers = Layers.Count - 1;
+        for (int i = 0; i < numHiddenLayers; i++)
+        {
+            if (i > 0) h = Engine.TensorConcatenate([h, input], axis: 1);
+            h = Layers[i].Forward(h);
+            if (i < _genBNLayers.Count) h = _genBNLayers[i].Forward(h);
+            h = Engine.ReLU(h);
+        }
+        h = Engine.TensorConcatenate([h, input], axis: 1);
+        h = Layers[^1].Forward(h);
+        return h;
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked version of <see cref="DiscriminatorForward"/>.
+    /// Uses <see cref="Engine.LeakyReLU"/> (alpha=0.2 per paper) and
+    /// <see cref="DropoutLayer{T}"/>'s tape-tracked Forward when training.
+    /// </summary>
+    private Tensor<T> DiscriminatorForwardBatched(Tensor<T> input, bool isTraining)
+    {
+        var current = input;
+        T leakySlope = NumOps.FromDouble(0.2);
+        int layerIdx = 0;
+
+        for (int i = 0; i < _discLayers.Count; i++)
+        {
+            if (_discLayers[i] is DropoutLayer<T> dropout)
             {
-                _packedRealBuf[i] = NumOps.Zero;
-                _packedFakeBuf[i] = NumOps.Zero;
+                if (isTraining) current = dropout.Forward(current);
+                continue;
             }
 
-            for (int s = 0; s < pacSize; s++)
+            bool isLastDense = layerIdx == _discLayerDims.Count - 1;
+            current = _discLayers[i].Forward(current);
+            if (!isLastDense) current = Engine.LeakyReLU(current, leakySlope);
+            layerIdx++;
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Batched per-column output activations (Xu et al. 2019 §3.1): per the
+    /// VGM column encoding, continuous columns emit a Tanh-bounded mode
+    /// value followed by softmax over mode probabilities; categorical
+    /// columns emit a softmax over the one-hot block. Runs through
+    /// tape-tracked Engine ops so backprop flows from critic to generator.
+    /// </summary>
+    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output)
+    {
+        if (_transformer is null) return Engine.TensorTanh(output);
+
+        int batch = output.Shape[0];
+        int totalWidth = output.Shape[1];
+        var blocks = new List<Tensor<T>>(_columns.Count * 2);
+        int idx = 0;
+
+        for (int col = 0; col < _columns.Count && idx < totalWidth; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+            if (transform.IsContinuous)
             {
-                var (condVector, rowIdx) = _sampler.SampleConditionAndRow();
-                FillRow(transformedData, rowIdx, _realRowBuf);
-                ConcatInto(_realRowBuf, condVector, _realSingleBuf);
+                var valueSlice = Engine.TensorSlice(output, [0, idx], [batch, 1]);
+                blocks.Add(Engine.TensorTanh(valueSlice));
+                idx++;
 
-                FillStandardNormal(_noiseBuf);
-                ConcatInto(_noiseBuf, condVector, _genInputBuf);
-                var fakeTransformed = Predict(VectorToTensor(_genInputBuf));
-                FillFromTensor(fakeTransformed, _fakeRowBuf);
-                ConcatInto(_fakeRowBuf, condVector, _fakeSingleBuf);
-
-                for (int d = 0; d < singleDim; d++)
+                int numModes = transform.Width - 1;
+                int modeLength = Math.Min(numModes, totalWidth - idx);
+                if (modeLength > 0)
                 {
-                    _packedRealBuf[s * singleDim + d] = d < _realSingleBuf.Length ? _realSingleBuf[d] : NumOps.Zero;
-                    _packedFakeBuf[s * singleDim + d] = d < _fakeSingleBuf.Length ? _fakeSingleBuf[d] : NumOps.Zero;
+                    var modeSlice = Engine.TensorSlice(output, [0, idx], [batch, modeLength]);
+                    blocks.Add(Engine.Softmax(modeSlice, axis: 1));
+                    idx += modeLength;
                 }
             }
-
-            // Train on fake: D(fake) should be low
-            _ = DiscriminatorForward(VectorToTensor(_packedFakeBuf), isTraining: true);
-            UpdateDiscriminatorParameters(scaledLr);
-
-            // Train on real: D(real) should be high
-            _ = DiscriminatorForward(VectorToTensor(_packedRealBuf), isTraining: true);
-            UpdateDiscriminatorParameters(scaledLr);
-
-            // Gradient penalty
+            else
+            {
+                int blockLength = Math.Min(transform.Width, totalWidth - idx);
+                var catSlice = Engine.TensorSlice(output, [0, idx], [batch, blockLength]);
+                blocks.Add(Engine.Softmax(catSlice, axis: 1));
+                idx += blockLength;
+            }
         }
+
+        if (idx < totalWidth)
+        {
+            var tail = Engine.TensorSlice(output, [0, idx], [batch, totalWidth - idx]);
+            blocks.Add(Engine.TensorTanh(tail));
+        }
+
+        if (blocks.Count == 1) return blocks[0];
+        return Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
     }
 
     #endregion
