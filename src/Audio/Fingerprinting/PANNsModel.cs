@@ -73,6 +73,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new PANNsModelOptions();
+        ValidateOptions(_options);
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -102,10 +103,35 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new PANNsModelOptions();
+        ValidateOptions(_options);
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = true;
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Validates that every option used in STFT / mel / CNN math is in
+    /// range. Fails fast at construction so bad caller config produces an
+    /// actionable ArgumentOutOfRangeException instead of a downstream
+    /// "shape mismatch" deep inside the first forward.
+    /// </summary>
+    private static void ValidateOptions(PANNsModelOptions o)
+    {
+        if (o.SampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.SampleRate), o.SampleRate, "SampleRate must be > 0.");
+        if (o.StftWindowSize <= 1)
+            throw new ArgumentOutOfRangeException(nameof(o.StftWindowSize), o.StftWindowSize, "StftWindowSize must be > 1.");
+        if (o.HopLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.HopLength), o.HopLength, "HopLength must be > 0.");
+        if (o.NumMelBands <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumMelBands), o.NumMelBands, "NumMelBands must be > 0.");
+        if (o.NumClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumClasses), o.NumClasses, "NumClasses must be > 0.");
+        if (o.EmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.EmbeddingDim), o.EmbeddingDim, "EmbeddingDim must be > 0.");
+        if (o.DropoutRate < 0.0 || o.DropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), o.DropoutRate, "DropoutRate must be in [0, 1).");
     }
 
     #endregion
@@ -233,15 +259,27 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <summary>Returns the top-K class predictions sorted descending.</summary>
     public List<(string Label, double Probability)> GetTopK(Tensor<T> audio, int k = 5)
     {
+        if (k <= 0)
+            throw new ArgumentOutOfRangeException(nameof(k), k, "k must be > 0.");
+
         var probs = Predict(audio);
+        // Same 2-D [batch, classes] contract as Classify — surface a shape
+        // bug as an actionable InvalidOperationException instead of an
+        // IndexOutOfRange one tensor-call deeper.
+        if (probs.Shape.Length != 2)
+            throw new InvalidOperationException(
+                "PANNsModel.GetTopK expects a 2-D [batch, classes] probability output, " +
+                $"but got shape [{string.Join(", ", probs.Shape)}].");
+
         int classCount = probs.Shape[^1];
         var indexed = new (double prob, int idx)[classCount];
         for (int i = 0; i < classCount; i++)
             indexed[i] = (Convert.ToDouble(probs[0, i]), i);
         Array.Sort(indexed, (a, b) => b.prob.CompareTo(a.prob));
 
-        var result = new List<(string, double)>(k);
-        for (int i = 0; i < Math.Min(k, classCount); i++)
+        int take = Math.Min(k, classCount);
+        var result = new List<(string, double)>(take);
+        for (int i = 0; i < take; i++)
             result.Add(($"class_{indexed[i].idx}", indexed[i].prob));
         return result;
     }

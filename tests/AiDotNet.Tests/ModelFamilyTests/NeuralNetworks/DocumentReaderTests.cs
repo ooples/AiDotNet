@@ -43,6 +43,14 @@ public class DocumentReaderTests
         var reader = CreateReader();
         Assert.NotNull(reader);
         Assert.Contains("DocumentReader", reader.Name);
+        // Behavioural assertions: a freshly-constructed reader must be
+        // immediately usable for Predict (no LoadModel call required) and
+        // expose the family-standard Name format. A regression that
+        // breaks default-ctor inference would surface here.
+        var probe = new Tensor<double>([1, 1, 16, 16]);
+        var output = reader.Predict(probe);
+        Assert.NotNull(output);
+        Assert.Equal(probe.Rank, output.Rank);
     }
 
     /// <summary>
@@ -66,12 +74,25 @@ public class DocumentReaderTests
         var output = reader.Predict(image);
 
         Assert.NotNull(output);
+        // Preprocessing preserves the [batch, channels, height, width]
+        // contract exactly — same rank AND same per-axis sizes. Anything
+        // else means the preprocessing pipeline silently reshaped the
+        // input, which would break downstream OCR.
         Assert.Equal(image.Rank, output.Rank);
+        for (int axis = 0; axis < image.Rank; axis++)
+        {
+            Assert.Equal(image.Shape[axis], output.Shape[axis]);
+        }
+        // Output pixels must be finite AND in the standard preprocessing
+        // value range (the contrast-enhanced or binarized output is
+        // expected to land in [0, 1]). Catches NaN / Inf, runaway scaling,
+        // and sign flips.
         for (int i = 0; i < output.Length; i++)
         {
             double v = output[i];
             Assert.False(double.IsNaN(v) || double.IsInfinity(v),
                 $"Preprocessed pixel[{i}] is not finite: {v}");
+            Assert.InRange(v, -0.01, 1.01); // allow tiny float epsilon
         }
     }
 

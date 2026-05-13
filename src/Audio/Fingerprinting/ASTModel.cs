@@ -72,6 +72,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new ASTModelOptions();
+        ValidateOptions(_options);
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -101,10 +102,48 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new ASTModelOptions();
+        ValidateOptions(_options);
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = true;
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Validates that every option used in STFT / mel / patch / transformer
+    /// math is in range. Fails fast at construction so a bad caller config
+    /// produces an actionable ArgumentOutOfRangeException instead of a
+    /// downstream "matrix shape mismatch" deep inside the first forward.
+    /// </summary>
+    private static void ValidateOptions(ASTModelOptions o)
+    {
+        if (o.SampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.SampleRate), o.SampleRate, "SampleRate must be > 0.");
+        if (o.StftWindowSize <= 1)
+            throw new ArgumentOutOfRangeException(nameof(o.StftWindowSize), o.StftWindowSize, "StftWindowSize must be > 1.");
+        if (o.HopLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.HopLength), o.HopLength, "HopLength must be > 0.");
+        if (o.NumMelBands <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumMelBands), o.NumMelBands, "NumMelBands must be > 0.");
+        if (o.TargetLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.TargetLength), o.TargetLength, "TargetLength must be > 0.");
+        if (o.PatchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.PatchSize), o.PatchSize, "PatchSize must be > 0.");
+        if (o.NumClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumClasses), o.NumClasses, "NumClasses must be > 0.");
+        if (o.EmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.EmbeddingDim), o.EmbeddingDim, "EmbeddingDim must be > 0.");
+        if (o.NumLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumLayers), o.NumLayers, "NumLayers must be > 0.");
+        if (o.NumHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumHeads), o.NumHeads, "NumHeads must be > 0.");
+        if (o.EmbeddingDim % o.NumHeads != 0)
+            throw new ArgumentException(
+                $"EmbeddingDim ({o.EmbeddingDim}) must be divisible by NumHeads ({o.NumHeads}) — " +
+                "multi-head attention splits the embedding equally across heads.",
+                nameof(o.EmbeddingDim));
+        if (o.DropoutRate < 0.0 || o.DropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), o.DropoutRate, "DropoutRate must be in [0, 1).");
     }
 
     #endregion
@@ -290,6 +329,18 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public IReadOnlyList<FingerprintMatch> FindMatches(
         AudioFingerprint<T> query, AudioFingerprint<T> reference, int minMatchLength = 10)
     {
+        if (minMatchLength <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(minMatchLength), minMatchLength, "minMatchLength must be > 0.");
+
+        // Honor the caller's minimum-match guard: if the embedding overlap
+        // is shorter than what they asked for, return no matches rather
+        // than silently misreport a global-embedding similarity as a
+        // valid match.
+        int overlap = Math.Min(query.Data.Length, reference.Data.Length);
+        if (overlap < minMatchLength)
+            return Array.Empty<FingerprintMatch>();
+
         // AST produces global embeddings; whole-clip similarity only.
         double similarity = ComputeSimilarity(query, reference);
         if (similarity < 0.5) return Array.Empty<FingerprintMatch>();

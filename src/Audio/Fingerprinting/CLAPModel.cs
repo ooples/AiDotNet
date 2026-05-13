@@ -642,6 +642,38 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     }
 
     /// <inheritdoc/>
+    public override long ParameterCount =>
+        Layers.Sum(l => l.ParameterCount)
+        + TextEncoderLayers.Sum(l => l.ParameterCount)
+        + 1; // _logTemperature (learnable τ scalar)
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// CLAP holds parameters across both encoders + the temperature.
+    /// Override <see cref="NeuralNetworkBase{T}.GetParameters"/> so
+    /// optimizers / checkpointing see the full parameter vector and the
+    /// ordering matches <see cref="UpdateParameters"/> below.
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        var parts = new List<T>((int)ParameterCount);
+        foreach (var layer in Layers)
+        {
+            var p = layer.GetParameters();
+            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
+        }
+        foreach (var layer in TextEncoderLayers)
+        {
+            var p = layer.GetParameters();
+            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
+        }
+        parts.Add(_logTemperature[0]);
+        var result = new Vector<T>(parts.Count);
+        for (int i = 0; i < parts.Count; i++) result[i] = parts[i];
+        return result;
+    }
+
+    /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
         if (!_useNativeMode)

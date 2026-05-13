@@ -257,7 +257,13 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (!SolveHomographyDLT(dx, dy, sx, sy, out double[] h))
         {
             // Degenerate corners (collinear / coincident) — fall back to crop.
-            return Math.Abs(region.RotationAngle) > 45 ? Rotate90(crop) : crop;
+            // Preserve rotation direction: a detector reporting +90° wants a
+            // clockwise correction (Rotate90), -90° wants counter-clockwise
+            // (Rotate270). The previous abs-based form rotated both
+            // directions clockwise, which doubled the misalignment for
+            // negative-rotation regions.
+            if (Math.Abs(region.RotationAngle) <= 45) return crop;
+            return region.RotationAngle >= 0 ? Rotate90(crop) : Rotate270(crop);
         }
 
         // Warp.
@@ -491,6 +497,7 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     private Tensor<T> Rotate90(Tensor<T> input)
     {
+        // 90° clockwise.
         int batch = input.Shape[0];
         int channels = input.Shape[1];
         int height = input.Shape[2];
@@ -507,6 +514,35 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                     for (int w = 0; w < width; w++)
                     {
                         output[b, c, w, height - 1 - h] = input[b, c, h, w];
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private Tensor<T> Rotate270(Tensor<T> input)
+    {
+        // 90° counter-clockwise (== 270° clockwise). Mirrors Rotate90 with
+        // the destination indices flipped along the width axis so a
+        // negative-rotation detector reading still ends up upright.
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        var output = new Tensor<T>(new[] { batch, channels, width, height });
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        output[b, c, width - 1 - w, h] = input[b, c, h, w];
                     }
                 }
             }

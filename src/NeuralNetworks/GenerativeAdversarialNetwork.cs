@@ -846,6 +846,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             expectedOutput = expectedOutput.Reshape(batched);
         }
 
+        // Mismatched latent/real batch sizes would let the discriminator
+        // train against the wrong labels and the loss compute against
+        // shapes that diverge several layers in. Surface it here with an
+        // actionable message instead of a deep shape error.
+        if (input.Shape[0] != expectedOutput.Shape[0])
+            throw new ArgumentException(
+                $"GAN.Train: input batch size {input.Shape[0]} does not match expected " +
+                $"output batch size {expectedOutput.Shape[0]}. Latent and real batches " +
+                "must be aligned.");
+
         // Get batch size from the input tensor
         int batchSize = input.Shape[0];
 
