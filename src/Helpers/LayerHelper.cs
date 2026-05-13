@@ -23788,7 +23788,8 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 14)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -23796,6 +23797,16 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
+        // Patch embedding: [B, 3, H, W] -> [B, num_patches, visionDim].
+        // Required so the downstream MultiHeadAttentionLayers see a sequence
+        // of patch tokens at the paper-specified embedding dim (visionDim)
+        // instead of the raw image's pixel dimensions. Without this the MHA
+        // QKV projection (weights [visionDim, visionDim]) is multiplied
+        // against an embedding-dim equal to the image width — the precise
+        // failure shape "Query [B, H, W] vs Weights [visionDim, visionDim]"
+        // surfaced on PR #1290 (#1311) for Phi3Vision / Gemma3 / Llama3.2-Vision /
+        // Phi4-Multimodal / Pixtral / PixtralLarge.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
