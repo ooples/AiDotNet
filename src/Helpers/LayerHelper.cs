@@ -20494,7 +20494,21 @@ public static class LayerHelper<T>
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Readout + embedding projection
+        // Readout: global mean pooling over graph nodes per Ferraro & Bogdanov
+        // 2023 §3.3 ("We obtain the graph-level representation by applying
+        // global mean pooling over the node embeddings"). Without this, the
+        // model emits per-node embeddings [B, N, gnnHidden] instead of a
+        // single fingerprint per audio segment [B, gnnHidden] — every
+        // downstream FingerprintLength assumption breaks, plus the
+        // generated OutputDimensionality_MatchesEmbeddingDim invariant
+        // observes B×N×embeddingDim elements instead of embeddingDim.
+        // GlobalPoolingLayer.Forward reduces axis 1 for rank-3 inputs,
+        // collapsing the node-sequence dim while keeping batch + features.
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average);
+
+        // Embedding projection (linear, no activation — fingerprints are
+        // L2-normalised downstream so a non-linearity here would distort
+        // the angular geometry).
         yield return new DenseLayer<T>(embeddingDim, identityActivation);
     }
 

@@ -227,10 +227,25 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultGraFPrintLayers(
-            numMels: _options.NumMels, gnnHiddenDim: _options.GnnHiddenDim,
-            numGnnLayers: _options.NumGnnLayers, numAttentionHeads: _options.NumAttentionHeads,
-            embeddingDim: _options.EmbeddingDim, dropoutRate: _options.DropoutRate));
+        else
+        {
+            // Prefer Architecture.OutputSize over the options default when it
+            // was explicitly set on the architecture (the conventional
+            // single-config-point pattern other AudioNN models follow). This
+            // lets the parameterless / architecture-only ctor route surface
+            // the embedding-dim contract via NeuralNetworkArchitecture's own
+            // outputSize parameter instead of forcing callers to also build
+            // a matched GraFPrintOptions. Ferraro & Bogdanov 2023 use
+            // EmbeddingDim=128 by default; that stays the fallback whenever
+            // the architecture leaves outputSize unset (== 0).
+            int embeddingDim = Architecture.OutputSize > 0
+                ? Architecture.OutputSize
+                : _options.EmbeddingDim;
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGraFPrintLayers(
+                numMels: _options.NumMels, gnnHiddenDim: _options.GnnHiddenDim,
+                numGnnLayers: _options.NumGnnLayers, numAttentionHeads: _options.NumAttentionHeads,
+                embeddingDim: embeddingDim, dropoutRate: _options.DropoutRate));
+        }
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
