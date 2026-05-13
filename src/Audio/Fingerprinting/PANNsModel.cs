@@ -279,7 +279,9 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Data = data,
             SampleRate = SampleRate,
-            Duration = audio.Length / (double)SampleRate
+            // Use the last-axis sample count so batched audio reports the
+            // per-clip duration rather than batch * samples / SampleRate.
+            Duration = audio.Shape[audio.Shape.Length - 1] / (double)SampleRate
         };
     }
 
@@ -306,6 +308,12 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public IReadOnlyList<FingerprintMatch> FindMatches(
         AudioFingerprint<T> query, AudioFingerprint<T> reference, int minMatchLength = 10)
     {
+        // PANNs produces a single global embedding per clip rather than a
+        // sequence of frame-local fingerprints, so segment-length filtering
+        // doesn't apply — there are no shorter sub-segments to reject.
+        // The parameter is preserved for IAudioFingerprinter<T> interface
+        // compatibility; discard it explicitly to silence the warning.
+        _ = minMatchLength;
         // PANNs produces global embeddings; whole-clip similarity only.
         double similarity = ComputeSimilarity(query, reference);
         if (similarity < 0.5) return Array.Empty<FingerprintMatch>();
@@ -350,7 +358,19 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     #region Helpers
 
-    private void ThrowIfDisposed() { /* base class manages disposal */ }
+    private bool _disposed;
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _disposed = true;
+        base.Dispose(disposing);
+    }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
@@ -396,6 +416,11 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         bool useNativeMode = reader.ReadBoolean();
+        if (useNativeMode != _useNativeMode)
+            throw new InvalidOperationException(
+                $"Persisted PANNs mode (native={useNativeMode}) does not match this " +
+                $"instance's mode (native={_useNativeMode}). Reconstruct PANNsModel " +
+                $"with the matching constructor before loading this checkpoint.");
         VerifyEqual(reader.ReadInt32(),  _options.SampleRate,     nameof(_options.SampleRate));
         VerifyEqual(reader.ReadInt32(),  _options.StftWindowSize, nameof(_options.StftWindowSize));
         VerifyEqual(reader.ReadInt32(),  _options.HopLength,      nameof(_options.HopLength));

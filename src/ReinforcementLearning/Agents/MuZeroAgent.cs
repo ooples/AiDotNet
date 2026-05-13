@@ -172,12 +172,7 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             var policyValueTensorOutput = _predictionNetwork.Predict(policyValueTensor);
             var policyValue = policyValueTensorOutput.ToVector();
             var policy = ExtractPolicy(policyValue);
-            int bestIdx = 0;
-            for (int i = 1; i < policy.Length; i++)
-            {
-                if (NumOps.GreaterThan(policy[i], policy[bestIdx]))
-                    bestIdx = i;
-            }
+            int bestIdx = ArgMax(policy);
             var oneHot = new Vector<T>(_options.ActionSize);
             oneHot[bestIdx] = NumOps.One;
             return oneHot;

@@ -1243,6 +1243,26 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             }
         }
 
+        // Flush a trailing segment when the stream ends mid-segment (e.g. the
+        // decoder hit max_tokens before a closing timestamp token, or the
+        // generation was truncated). Without this the in-flight text gets
+        // silently dropped because the close-timestamp branch above never
+        // fires for the final segment.
+        if (segStart is not null && pendingTextTokens.Count > 0)
+        {
+            var tailText = _tokenizer.Decode(pendingTextTokens);
+            if (!string.IsNullOrWhiteSpace(tailText))
+            {
+                segments.Add(new TranscriptionSegment<T>
+                {
+                    Text = tailText,
+                    StartTime = segStart.Value,
+                    EndTime = _maxAudioLengthSeconds,
+                    Confidence = NumOps.FromDouble(1.0)
+                });
+            }
+        }
+
         // Fallback: when no timestamp tokens were emitted (e.g., decoded with
         // suppress_timestamps), surface the full transcription as one segment
         // spanning the configured maximum audio length.

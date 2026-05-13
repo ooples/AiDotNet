@@ -94,7 +94,15 @@ public class NoisyDenseLayer<T> : LayerBase<T>
 
         _inputSize = inputSize;
         _outputSize = outputSize;
-        _sigmaInit = sigmaInit ?? (0.5 / Math.Sqrt(inputSize));
+        double resolvedSigmaInit = sigmaInit ?? (0.5 / Math.Sqrt(inputSize));
+        if (double.IsNaN(resolvedSigmaInit) || double.IsInfinity(resolvedSigmaInit) || resolvedSigmaInit < 0d)
+            throw new ArgumentOutOfRangeException(
+                nameof(sigmaInit),
+                resolvedSigmaInit,
+                "sigmaInit must be finite and non-negative — passing NaN / Inf / a negative " +
+                "value would propagate into every _sigma* tensor and corrupt the layer state " +
+                "long before an actionable exception surfaces.");
+        _sigmaInit = resolvedSigmaInit;
         // Route RNG construction through RandomHelper rather than raw
         // `new Random()` — raw Random is not cryptographically secure
         // and its time-seeded default is predictable across closely-spaced

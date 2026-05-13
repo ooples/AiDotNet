@@ -392,6 +392,11 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         bool useNativeMode = reader.ReadBoolean();
+        if (useNativeMode != _useNativeMode)
+            throw new InvalidOperationException(
+                $"Persisted AST mode (native={useNativeMode}) does not match this " +
+                $"instance's mode (native={_useNativeMode}). Reconstruct ASTModel " +
+                $"with the matching constructor before loading this checkpoint.");
         VerifyEqual(reader.ReadInt32(),  _options.SampleRate,     nameof(_options.SampleRate));
         VerifyEqual(reader.ReadInt32(),  _options.StftWindowSize, nameof(_options.StftWindowSize));
         VerifyEqual(reader.ReadInt32(),  _options.HopLength,      nameof(_options.HopLength));

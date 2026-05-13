@@ -352,9 +352,14 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         // every dimension represented instead of silently losing tail features.
         for (int i = 0; i < FeatureCount; i++)
         {
-            string key = (i < names.Length && !string.IsNullOrWhiteSpace(names[i]))
+            string baseKey = (i < names.Length && !string.IsNullOrWhiteSpace(names[i]))
                 ? names[i]
                 : $"State_{i}";
+            // Disambiguate duplicate FeatureNames entries by suffixing the
+            // index — a derived agent that reuses a label across slots would
+            // otherwise overwrite earlier entries and silently drop those
+            // dimensions from the importance dictionary again.
+            string key = importance.ContainsKey(baseKey) ? $"{baseKey}_{i}" : baseKey;
             importance[key] = NumOps.One;
         }
         return importance;

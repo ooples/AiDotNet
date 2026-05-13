@@ -1,5 +1,6 @@
 using AiDotNet.ComputerVision.OCR;
 using AiDotNet.ComputerVision.OCR.EndToEnd;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 

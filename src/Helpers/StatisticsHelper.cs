@@ -910,11 +910,17 @@ public static class StatisticsHelper<T>
         if (_numOps.Equals(leftVariance, _numOps.Zero) && _numOps.Equals(rightVariance, _numOps.Zero))
             throw new InvalidOperationException("Both groups have zero variance. F-test cannot be performed.");
 
-        T fStatistic = _numOps.Divide(_numOps.GreaterThan(leftVariance, rightVariance) ? leftVariance : rightVariance,
-                                     _numOps.LessThan(leftVariance, rightVariance) ? leftVariance : rightVariance);
-
-        int numeratorDf = leftY.Length - 1;
-        int denominatorDf = rightY.Length - 1;
+        // F = larger-variance / smaller-variance, but the degrees of freedom
+        // must follow whichever variance landed in the numerator. Previously
+        // df-numerator/denominator were hard-wired to leftY/rightY which
+        // produced the wrong F distribution (and wrong CI quantiles) whenever
+        // rightVariance > leftVariance.
+        bool leftIsNumerator = _numOps.GreaterThanOrEquals(leftVariance, rightVariance);
+        T numeratorVariance = leftIsNumerator ? leftVariance : rightVariance;
+        T denominatorVariance = leftIsNumerator ? rightVariance : leftVariance;
+        T fStatistic = _numOps.Divide(numeratorVariance, denominatorVariance);
+        int numeratorDf = (leftIsNumerator ? leftY.Length : rightY.Length) - 1;
+        int denominatorDf = (leftIsNumerator ? rightY.Length : leftY.Length) - 1;
 
         // Use the upper-tail FDistributionPValue helper so the result's
         // PValue is the documented "probability of seeing an F at least this
@@ -1019,10 +1025,20 @@ public static class StatisticsHelper<T>
         if (_numOps.LessThanOrEquals(chiSquare, _numOps.Zero) || degreesOfFreedom <= 0)
             return _numOps.One;
 
-        // Clamp to [0, 1] — small numerical drift in ChiSquareCDF can push
-        // the result fractionally outside the unit interval; the p-value
-        // contract requires a valid probability.
-        var p = _numOps.Subtract(_numOps.One, ChiSquareCDF(chiSquare, degreesOfFreedom));
+        // Compute the survival function directly via the regularised upper
+        // incomplete gamma function: chi2.sf(x, df) == Q(df/2, x/2) ==
+        // 1 - P(df/2, x/2). Doing the 1 - CDF subtraction outside the helper
+        // catastrophically cancelled tiny right-tail p-values to 0 when
+        // GammaRegularized's continued-fraction branch had already computed
+        // 1 - Q internally. Calling GammaRegularizedContinuedFraction
+        // directly when we're in the upper-tail regime preserves precision
+        // down to ~1e-15. The series branch and small-x path still need the
+        // 1 - P form, but those are not the precision-sensitive regions.
+        T a = _numOps.Divide(_numOps.FromDouble(degreesOfFreedom), _numOps.FromDouble(2));
+        T x = _numOps.Divide(chiSquare, _numOps.FromDouble(2));
+        T p = _numOps.GreaterThan(x, _numOps.Add(a, _numOps.FromDouble(1)))
+            ? GammaRegularizedContinuedFraction(a, x)
+            : _numOps.Subtract(_numOps.One, GammaRegularizedSeries(a, x));
         if (_numOps.LessThan(p, _numOps.Zero)) return _numOps.Zero;
         if (_numOps.GreaterThan(p, _numOps.One)) return _numOps.One;
         return p;

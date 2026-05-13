@@ -58,8 +58,13 @@ public class NNAPIBackend<T> : IDisposable
 
     /// <summary>
     /// Managed-CPU inference hook invoked when NNAPI is unavailable or
-    /// fails. When unset, <see cref="Execute"/> on the fallback path throws
-    /// rather than silently returning identity — see remarks.
+    /// fails. When unset, <see cref="Execute"/> emits a Trace warning and
+    /// returns an identity-passthrough copy of the input so model.Predict()
+    /// keeps the same nullable-default contract used elsewhere in the
+    /// codebase (industry-standard "do something reasonable + diagnose"
+    /// rather than throw). Wire this property to a real CPU fallback
+    /// (typically the surrounding model's Predict entry point) for a
+    /// meaningful result.
     /// </summary>
     /// <remarks>
     /// Internal — adapter-only plumbing. Setting this AFTER

@@ -239,22 +239,6 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
             });
     }
 
-    private static bool MatchesMetadata(Document<T> doc, Dictionary<string, object> filters)
-    {
-        // Exact-match metadata filter: every key must exist on the doc and equal
-        // the requested value. Mirrors the per-store GetSimilarWithFilters
-        // contract — unknown keys are non-matches.
-        if (doc.Metadata == null) return false;
-        foreach (var kvp in filters)
-        {
-            if (!doc.Metadata.TryGetValue(kvp.Key, out var actual))
-                return false;
-            if (!Equals(actual, kvp.Value))
-                return false;
-        }
-        return true;
-    }
-
     private string GetBaseDocumentId(string vectorDocId)
     {
         // Extract base document ID from vector ID (format: "docId_vector_N")

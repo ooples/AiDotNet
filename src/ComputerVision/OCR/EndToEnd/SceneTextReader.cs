@@ -284,12 +284,6 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     }
 
     /// <summary>
-    /// Orders 4 polygon corners as (top-left, top-right, bottom-right,
-    /// bottom-left) so the homography target rectangle has a consistent
-    /// orientation. Uses centroid-angle sort, which is robust to corner
-    /// permutations from different detectors.
-    /// </summary>
-    /// <summary>
     /// Reduces a polygon with N >= 4 vertices to a stable 4-corner quad using
     /// the canonical extreme-point selection from OpenCV's perspective-correct
     /// pipeline:
@@ -329,6 +323,12 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         };
     }
 
+    /// <summary>
+    /// Orders 4 polygon corners as (top-left, top-right, bottom-right,
+    /// bottom-left) so the homography target rectangle has a consistent
+    /// orientation. Uses centroid-angle sort, which is robust to corner
+    /// permutations from different detectors.
+    /// </summary>
     private static ((double X, double Y) TL, (double X, double Y) TR, (double X, double Y) BR, (double X, double Y) BL)
         OrderQuadCorners(List<(T X, T Y)> poly)
     {

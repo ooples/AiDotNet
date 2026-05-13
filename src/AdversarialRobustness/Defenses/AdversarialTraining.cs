@@ -299,6 +299,21 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             return Apply1DDCTQuantization(input);
         }
 
+        // Track the observed input range so the reconstruction can be
+        // clamped back to whatever the caller fed in, instead of the
+        // hard-wired [0, 1] image-pixel assumption. JPEG defenses are
+        // commonly applied to non-pixel features (preprocessed audio,
+        // tabular embeddings) where a fixed [0, 1] clip would silently
+        // erase legitimate values.
+        double minValue = double.PositiveInfinity;
+        double maxValue = double.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            double v = NumOps.ToDouble(input[i]);
+            if (v < minValue) minValue = v;
+            if (v > maxValue) maxValue = v;
+        }
+
         // Quality factor from quantization level: 0.1 → high compression (Q≈20),
         // 0.05 → moderate (Q≈50). Lower quality = stronger defense.
         double quality = MathHelper.Clamp(100.0 - 800.0 * 0.1, 1.0, 99.0); // ≈20
@@ -373,7 +388,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
         var output = new Vector<T>(n);
         for (int i = 0; i < n; i++)
-            output[i] = NumOps.FromDouble(MathHelper.Clamp(image[i / side, i % side], 0.0, 1.0));
+            output[i] = NumOps.FromDouble(MathHelper.Clamp(image[i / side, i % side], minValue, maxValue));
         return output;
     }
 
