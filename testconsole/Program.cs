@@ -27,6 +27,7 @@ class Program
         ["svc-profile"]         = SVCProfile.Run,
         ["vec-inspect"]         = VecInspect.Run,
         ["grafprint-clone-diag"] = GraFPrintCloneDiag.Run,
+        ["grafprint-continuity-diag"] = GraFPrintContinuityDiag.Run,
     };
 
     static async Task Main(string[] args)

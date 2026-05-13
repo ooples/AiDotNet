@@ -247,6 +247,23 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
 
+        // Auto-flip to eval mode for the forward, matching the base
+        // NeuralNetworkBase.Predict contract that mirrors PyTorch's
+        // model.eval(). The base class's auto-flip is bypassed by this
+        // override, so without an explicit flip here BatchNorm consumes
+        // single-sample batch statistics (degenerate, ~0 variance) and
+        // DropoutLayer samples a random mask per Predict call — both
+        // make output non-deterministic across two Predict calls on the
+        // same input, which is exactly what the generated
+        // SimilarInputs_ProduceSimilarEmbeddings invariant catches
+        // (cosine ~0.31 between embeddings of inputs differing by 1e-6).
+        // Restore the prior training mode in finally so a Predict-inside-
+        // a-training-loop call doesn't permanently flip the network.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+
         // The paper-faithful chain uses BatchNormalizationLayer between every
         // conv. BN's inference broadcast in this codebase
         // (BatchNormalizationLayer.ApplyInferenceAnyRank) assumes the
@@ -280,6 +297,12 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             c = Engine.Reshape(c, newShape);
         }
         return c;
+
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
