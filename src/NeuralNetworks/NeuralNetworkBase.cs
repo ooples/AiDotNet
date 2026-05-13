@@ -2124,17 +2124,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return expectedWithoutLeadingUnits.SequenceEqual(actualWithoutLeadingUnits);
     }
 
-    private static bool AreElementCountsCompatibleAcrossExplicitShapeBoundary(
-        ILayer<T> prevLayer,
-        ILayer<T> currentLayer,
-        int[] prevOutputShape,
-        int[] currentInputShape)
-    {
-        bool explicitShapeBoundary = prevLayer is ReshapeLayer<T> or FlattenLayer<T>
-                                     || currentLayer is ReshapeLayer<T> or FlattenLayer<T>;
-        return explicitShapeBoundary && FlattenedSize(prevOutputShape) == FlattenedSize(currentInputShape);
-    }
-
     private static int[] TrimLeadingUnitDimensions(int[] shape)
     {
         int start = 0;
@@ -2147,15 +2136,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var trimmed = new int[shape.Length - start];
         Array.Copy(shape, start, trimmed, 0, trimmed.Length);
         return trimmed;
-    }
-
-    private static int FlattenedSize(int[] shape)
-    {
-        int size = 1;
-        for (int i = 0; i < shape.Length; i++)
-            size *= shape[i];
-
-        return size;
     }
 
     /// <summary>
@@ -2288,12 +2268,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         bool currentIsLazy = IsDeferredOrAgnosticShape(currentInputShape);
         if (!currentIsLazy
             && !IsDeferredOrAgnosticShape(prevOutputShape)
-            && !AreShapesCompatible(prevOutputShape!, currentInputShape!)
-            && !AreElementCountsCompatibleAcrossExplicitShapeBoundary(
-                prevLayer,
-                currentLayer,
-                prevOutputShape!,
-                currentInputShape!))
+            && !AreShapesCompatible(prevOutputShape!, currentInputShape!))
             return false;
 
         // Special checks for specific layer combinations
