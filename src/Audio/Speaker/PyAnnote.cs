@@ -363,17 +363,54 @@ public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
         var frameScores = new double[numFrames, maxSpk];
         var frameCounts = new int[numFrames];
 
+        // Real per-frame aggregation across overlapping sliding-window chunks
+        // (Bredin et al. 2020 "pyannote.audio" §3 — frame-level posteriograms
+        // are accumulated by adding each chunk's frame activation to the
+        // corresponding global frame, then averaging by overlap count).
+        //
+        // Each chunk's `activations[ci]` is the model output for that chunk.
+        // For PyAnnote, this is shape [batch=1, chunkFrames, numSpeakers].
+        // We map each local chunk frame to its global frame index and
+        // accumulate per-speaker scores there.
         for (int ci = 0; ci < chunks.Count && ci < activations.Count; ci++)
         {
-            int frameIdx = (int)(chunks[ci].StartTime / frameStep);
-            if (frameIdx >= numFrames) frameIdx = numFrames - 1;
-            // Simplified: assign the dominant activation values to frame
-            for (int s = 0; s < maxSpk && s < activations[ci].Length; s++)
+            var act = activations[ci];
+            int rank = act.Shape.Length;
+
+            // Detect frame-axis layout. Shape conventions handled:
+            //   [chunkFrames, numSpeakers]                 (most PyAnnote ONNX exports)
+            //   [batch, chunkFrames, numSpeakers]          (with leading batch axis)
+            //   [numSpeakers] / [batch, numSpeakers]       (chunk-level scalar fallback)
+            int batchOffset = rank >= 3 ? 1 : 0;
+            int chunkFrames = rank >= 2 + batchOffset ? act.Shape[batchOffset] : 1;
+            int speakerAxis = rank - 1;
+            int chunkSpk = act.Shape[speakerAxis];
+
+            double chunkDuration = chunks[ci].EndTime - chunks[ci].StartTime;
+            double chunkFrameStep = chunkDuration / Math.Max(1, chunkFrames);
+
+            for (int f = 0; f < chunkFrames; f++)
             {
-                double val = NumOps.ToDouble(activations[ci][s]);
-                frameScores[frameIdx, s] += val;
+                double globalTime = chunks[ci].StartTime + f * chunkFrameStep;
+                int globalFrameIdx = (int)(globalTime / frameStep);
+                if (globalFrameIdx < 0) globalFrameIdx = 0;
+                if (globalFrameIdx >= numFrames) globalFrameIdx = numFrames - 1;
+
+                for (int s = 0; s < maxSpk && s < chunkSpk; s++)
+                {
+                    int flatIdx = rank switch
+                    {
+                        // [batch=1, chunkFrames, numSpeakers]
+                        3 => f * chunkSpk + s,
+                        // [chunkFrames, numSpeakers]
+                        2 => f * chunkSpk + s,
+                        // [numSpeakers] (chunk-level fallback)
+                        _ => s
+                    };
+                    frameScores[globalFrameIdx, s] += NumOps.ToDouble(act.Data.Span[flatIdx]);
+                }
+                frameCounts[globalFrameIdx]++;
             }
-            frameCounts[frameIdx]++;
         }
 
         // Normalize and find dominant speaker per frame

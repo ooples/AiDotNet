@@ -1177,12 +1177,71 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         return result;
     }
 
+    /// <summary>
+    /// Segments a Whisper token stream into time-aligned text spans by
+    /// parsing the timestamp tokens the model emits between transcribed
+    /// phrases (Whisper §2.3 — timestamp tokens are interleaved with text
+    /// tokens at the <c>TimestampBeginId + n</c> offsets, marking the start
+    /// and end of each segment in 20 ms increments).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Token-stream shape: <c>&lt;|startoftranscript|&gt; &lt;|lang|&gt; &lt;|transcribe|&gt;
+    /// &lt;|t1|&gt; text1 text1 &lt;|t2|&gt; &lt;|t3|&gt; text2 text2 &lt;|t4|&gt; …
+    /// &lt;|endoftext|&gt;</c>, where every pair of timestamp tokens delimits a
+    /// segment whose text is the BPE tokens between them.
+    /// </para>
+    /// </remarks>
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(List<long> tokens, string text)
     {
-        // Simplified segment extraction - actual implementation would parse timestamp tokens
         var segments = new List<TranscriptionSegment<T>>();
 
-        if (text.Length > 0)
+        // Pairs of consecutive timestamp tokens delimit segments. Walk through
+        // and accumulate the text-token run between each pair, decoding it
+        // back into a string via the tokenizer.
+        double? segStart = null;
+        var pendingTextTokens = new List<long>();
+
+        foreach (long tok in tokens)
+        {
+            int tokId = (int)tok;
+            if (_tokenizer.IsTimestampToken(tokId))
+            {
+                double time = _tokenizer.GetTimeFromToken(tokId);
+                if (segStart is null)
+                {
+                    segStart = time;
+                    pendingTextTokens.Clear();
+                }
+                else
+                {
+                    // End of this segment. Decode the accumulated text tokens.
+                    var segText = _tokenizer.Decode(pendingTextTokens);
+                    if (!string.IsNullOrWhiteSpace(segText))
+                    {
+                        segments.Add(new TranscriptionSegment<T>
+                        {
+                            Text = segText,
+                            StartTime = segStart.Value,
+                            EndTime = time,
+                            Confidence = NumOps.FromDouble(1.0)
+                        });
+                    }
+                    // The closing timestamp may also open the next segment.
+                    segStart = time;
+                    pendingTextTokens.Clear();
+                }
+            }
+            else if (segStart is not null && !_tokenizer.IsSpecialToken(tokId))
+            {
+                pendingTextTokens.Add(tok);
+            }
+        }
+
+        // Fallback: when no timestamp tokens were emitted (e.g., decoded with
+        // suppress_timestamps), surface the full transcription as one segment
+        // spanning the configured maximum audio length.
+        if (segments.Count == 0 && !string.IsNullOrWhiteSpace(text))
         {
             segments.Add(new TranscriptionSegment<T>
             {
