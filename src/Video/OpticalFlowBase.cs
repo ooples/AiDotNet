@@ -194,6 +194,7 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
             throw new ArgumentException($"Input must be rank 4 [batch, 2*channels, height, width], got rank {input.Rank}.", nameof(input));
         if (input.Shape[1] % 2 != 0)
             throw new ArgumentException($"Input channel dimension must be even (two frames stacked), got {input.Shape[1]}.", nameof(input));
+        int batch = input.Shape[0];
         int channels = input.Shape[1] / 2;
         int height = input.Shape[2];
         int width = input.Shape[3];
@@ -208,6 +209,22 @@ public abstract class OpticalFlowBase<T> : VideoNeuralNetworkBase<T>
             frame1.Data.Span[i] = input.Data.Span[halfSize + i];
         }
 
-        return EstimateFlow(frame0, frame1);
+        // EstimateFlow returns rank-3 [2, H, W] (single frame-pair flow field
+        // per the public API contract). Promote to rank-4 [B, 2, H, W] so
+        // the Predict output matches the model's training-time forward shape
+        // — the test scaffold's CreateRandomTargetTensor (sized via
+        // EffectiveOutputShape inferred from Predict) needs to align with
+        // what the base class's TrainWithTape feeds into the loss function,
+        // and the framework convention is batched tensors everywhere.
+        // Without this, Predict reports [2, H, W] while ForwardForTraining
+        // emits [B, 2, H, W]; MSE then computes a degenerate flat-span loss
+        // whose gradient direction stays constant across iterations and the
+        // memorization invariant flags the model as "loss not decreasing".
+        var flow = EstimateFlow(frame0, frame1);
+        if (flow.Rank == 3 && batch == 1)
+        {
+            return Engine.Reshape(flow, [1, flow.Shape[0], flow.Shape[1], flow.Shape[2]]);
+        }
+        return flow;
     }
 }
