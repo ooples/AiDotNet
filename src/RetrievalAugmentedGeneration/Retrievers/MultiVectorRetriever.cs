@@ -73,6 +73,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
     private readonly string _aggregationMethod;
 
     private readonly IDocumentStore<T> _documentStore;
+    private readonly IQueryEmbedder<T>? _queryEmbedder;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiVectorRetriever{T}"/> class.
@@ -99,7 +100,8 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
     public MultiVectorRetriever(
         IDocumentStore<T> documentStore,
         int vectorsPerDocument,
-        string aggregationMethod)
+        string aggregationMethod,
+        IQueryEmbedder<T>? queryEmbedder = null)
     {
         Guard.NotNull(documentStore);
         _documentStore = documentStore;
@@ -110,6 +112,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         _vectorsPerDocument = vectorsPerDocument;
         Guard.NotNull(aggregationMethod);
         _aggregationMethod = aggregationMethod;
+        _queryEmbedder = queryEmbedder;
     }
 
     /// <summary>
@@ -164,42 +167,36 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        // Multi-vector retrieval (Khattab et al. 2021 PLAID, Santhanam et al. 2022
-        // ColBERTv2) needs a token-level embedder to produce a per-token query
-        // matrix — that embedder isn't bundled with this repo. Until one is
-        // wired in, drive candidate selection off a BOUNDED top-K probe of
-        // the document store (zero-vector + metadata filter) instead of
-        // GetAll(), which is documented as potentially O(N) memory-intensive.
-        // Oversampling by 4× gives the token-overlap aggregator headroom to
-        // reorder tied candidates after the store's first-stage selection.
-        // The aggregation step — group by base doc ID, combine scores — is
-        // the paper-faithful late-interaction reducer and stays the same.
-        //
-        // Query-dependent fallback scoring: instead of aggregating the stale
-        // `doc.RelevanceScore` (which would be unrelated to the current query
-        // when other queries had previously written into it), compute a
-        // per-token-overlap score against the current query. Matches the
-        // ColBERTRetriever fallback's lexical-overlap composition so results
-        // stay query-relevant even without the multi-vector embedder.
-        var queryTokens = TokenizeForOverlap(query);
+        if (_queryEmbedder is null)
+            throw new NotSupportedException(
+                "MultiVectorRetriever requires an IQueryEmbedder<T> to score documents. " +
+                "The retriever was constructed without one. Pass an embedder that maps " +
+                "the query into the same embedding space as the document store via the " +
+                "constructor's `queryEmbedder` parameter — there is no defensible " +
+                "fallback that would give query-aware multi-vector retrieval without a " +
+                "real query embedding.");
 
-        // Oversample by `topK * _vectorsPerDocument * 2` so the per-base-doc
-        // grouping step below has enough sub-vectors to aggregate. The store
-        // returns ALL sub-vector entries for each underlying document
-        // (vectorsPerDocument per doc), so without this multiplier the
-        // candidate set sees only ~topK*2/vectorsPerDocument distinct base
-        // docs and the late-interaction reducer under-samples — particularly
-        // when vectorsPerDocument > 1, which is the whole point of this
-        // retriever. Floor at 32 keeps the probe meaningful on tiny stores.
+        // 1. Embed the query (real query-aware first stage). Khattab et al.
+        //    2021 PLAID / Santhanam et al. 2022 ColBERTv2 §3.2 use a real
+        //    encoded query for first-stage candidate retrieval; our store
+        //    already returns the per-vector cosine similarity in
+        //    doc.RelevanceScore when called with a real query vector.
+        var queryVec = _queryEmbedder.EmbedQuery(query);
+
+        // 2. Oversample by `topK * _vectorsPerDocument * 2` so the per-base-doc
+        //    grouping step below has enough sub-vectors to aggregate. The store
+        //    returns ALL sub-vector entries for each underlying document
+        //    (vectorsPerDocument per doc), so without this multiplier the
+        //    candidate set sees only ~topK*2/vectorsPerDocument distinct base
+        //    docs and the late-interaction reducer under-samples.
         int oversample = Math.Max(topK * Math.Max(1, _vectorsPerDocument) * 2, 32);
-        var placeholderQuery = new Vector<T>(_documentStore.VectorDimension);
         var allDocuments = (metadataFilters == null || metadataFilters.Count == 0)
-            ? _documentStore.GetSimilar(placeholderQuery, oversample)
-            : _documentStore.GetSimilarWithFilters(placeholderQuery, oversample, metadataFilters);
+            ? _documentStore.GetSimilar(queryVec, oversample)
+            : _documentStore.GetSimilarWithFilters(queryVec, oversample, metadataFilters);
 
-        // Group documents by ID and aggregate their vector scores. Compute
-        // per-document overlap on the fly — bounded-size accumulator per
-        // base doc ID, no full-corpus list materialised.
+        // 3. Group documents by base ID. doc.RelevanceScore is the cosine
+        //    similarity the store computed against the query vector, which
+        //    IS the per-sub-vector query-aware score we want to aggregate.
         var documentScores = new Dictionary<string, (Document<T> doc, List<T> scores)>();
 
         foreach (var doc in allDocuments)
@@ -211,8 +208,10 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
                 documentScores[docId] = (doc, new List<T>());
             }
 
-            double overlap = ComputeTokenOverlap(queryTokens, doc.Content);
-            documentScores[docId].scores.Add(NumOps.FromDouble(overlap));
+            // doc.RelevanceScore is the store's cosine(queryVec, subVec).
+            // Use it directly so the aggregation reflects the real query.
+            T subScore = doc.HasRelevanceScore ? doc.RelevanceScore : NumOps.Zero;
+            documentScores[docId].scores.Add(subScore);
         }
 
         // Aggregate scores based on the specified method
@@ -288,46 +287,4 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         }
     }
 
-    private static readonly char[] s_overlapSeparators = new[] { ' ', '\t', '\n', '\r', ',', '.', '!', '?', ';', ':' };
-
-    /// <summary>
-    /// Lowercases <paramref name="query"/> and splits on whitespace +
-    /// common punctuation to produce the set of overlap tokens used by
-    /// <see cref="ComputeTokenOverlap"/> in the embedder-less fallback.
-    /// </summary>
-    private static HashSet<string> TokenizeForOverlap(string query)
-    {
-        return query
-            .ToLowerInvariant()
-            .Split(s_overlapSeparators, StringSplitOptions.RemoveEmptyEntries)
-            .ToHashSet();
-    }
-
-    /// <summary>
-    /// Returns the fraction of <paramref name="queryTokens"/> present in
-    /// <paramref name="docContent"/> — strict Jaccard-style overlap on the
-    /// SET of distinct doc tokens. Result is always in [0, 1].
-    /// </summary>
-    /// <remarks>
-    /// Counting every occurrence in the document and dividing by
-    /// <c>queryTokens.Count</c> would let documents with repeated tokens
-    /// score above 1.0, contradicting both the docstring and any callers
-    /// that compose this with sigmoid/normalised aggregators downstream.
-    /// Using a HashSet of doc tokens caps the numerator at
-    /// <c>queryTokens.Count</c>.
-    /// </remarks>
-    private static double ComputeTokenOverlap(HashSet<string> queryTokens, string? docContent)
-    {
-        if (queryTokens.Count == 0 || string.IsNullOrWhiteSpace(docContent)) return 0.0;
-        var docTokens = new HashSet<string>(
-            (docContent ?? string.Empty)
-                .ToLowerInvariant()
-                .Split(s_overlapSeparators, StringSplitOptions.RemoveEmptyEntries));
-        int hits = 0;
-        foreach (var qt in queryTokens)
-        {
-            if (docTokens.Contains(qt)) hits++;
-        }
-        return (double)hits / queryTokens.Count;
-    }
 }

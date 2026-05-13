@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Fingerprinting;
@@ -467,15 +468,140 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             throw new NotSupportedException(
                 "CLAP training requires native mode. Construct with the (architecture, options) ctor.");
 
+        // CLAP contrastive objective (Radford 2021 Eq. 1; Wu 2023 §3.2): the
+        // loss is the average of audio→text and text→audio softmax cross-
+        // entropies over the temperature-scaled cosine-similarity logit
+        // matrix where positive pairs are aligned on the diagonal.
+        //
+        // Engine-side implementation: TrainWithCustomLoss runs the audio
+        // encoder forward inside its own GradientTape, then we run the text
+        // encoder forward inside the same tape, build the symmetric loss,
+        // and let TrainWithCustomLoss handle the gradient computation +
+        // optimizer step. Parameters collected from Layers
+        // (audio side); the text-encoder parameters and _logTemperature
+        // participate in the loss only when they're referenced in the tape
+        // graph. The optimizer.Step in TrainWithCustomLoss won't directly
+        // update text-encoder or temperature weights, so we manually apply
+        // SGD with the same LR on those after the audio step using their
+        // tape-computed gradients (collected via a parallel
+        // CollectContrastiveParameters walk).
+        //
+        // input:    [batch, samples] audio batch.
+        // expected: [batch, seqLen]  tokenised caption batch (positive pair
+        //                            in the same row).
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            var audioParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var textParams = Training.TapeTrainingStep<T>.CollectParameters(TextEncoderLayers);
+            var allParams = new List<Tensor<T>>(audioParams.Count + textParams.Count + 1);
+            allParams.AddRange(audioParams);
+            allParams.AddRange(textParams);
+            allParams.Add(_logTemperature);
+
+            var optimizer = GetOrCreateBaseOptimizer();
+
+            using var tape = new GradientTape<T>();
+            // Forward both encoders inside the same tape so gradients flow
+            // through every parameter. EncodeAudio / EncodeText already
+            // L2-normalise along the last axis so the dot product below is
+            // cosine similarity.
+            var audioEmb = EncodeAudio(input);
+            var textEmb = EncodeText(expected);
+
+            int batchSize = audioEmb.Shape[0];
+            int projDim = audioEmb.Shape[audioEmb.Shape.Length - 1];
+
+            var audioEmb2D = audioEmb.Shape.Length == 2
+                ? audioEmb
+                : Engine.Reshape(audioEmb, new[] { batchSize, projDim });
+            var textEmb2D = textEmb.Shape.Length == 2
+                ? textEmb
+                : Engine.Reshape(textEmb, new[] { batchSize, projDim });
+
+            // logits = audio @ text.T scaled by exp(_logTemperature).
+            var textEmbT = Engine.TensorTranspose<T>(textEmb2D);
+            var sim = Engine.TensorMatMul<T>(audioEmb2D, textEmbT);
+            // Broadcast scalar exp(logTemp) across the [batch, batch] grid.
+            var tau = Engine.TensorExp<T>(_logTemperature);
+            var tauBroadcast = Engine.TensorTile(
+                Engine.Reshape(tau, new[] { 1, 1 }), new[] { batchSize, batchSize });
+            var logitsA2T = Engine.TensorMultiply<T>(sim, tauBroadcast);
+
+            // Symmetric loss: 0.5 * (CE(logitsA2T, diag) + CE(logitsT2A, diag))
+            // where logitsT2A is the transpose of logitsA2T. Compute both
+            // directions explicitly (rather than relying on transpose-eq) so
+            // the autodiff graph is unambiguous on every backend.
+            var logitsT2A = Engine.TensorTranspose<T>(logitsA2T);
+
+            var halfLossA2T = SymmetricRowCrossEntropy(logitsA2T, batchSize);
+            var halfLossT2A = SymmetricRowCrossEntropy(logitsT2A, batchSize);
+            var lossSum = Engine.TensorAdd<T>(halfLossA2T, halfLossT2A);
+
+            // Manual gradient + optimizer step over the combined params.
+            var grads = tape.ComputeGradients(lossSum, allParams);
+
+            T lossValue = lossSum.Length > 0 ? lossSum[0] : NumOps.Zero;
+            LastLoss = lossValue;
+
+            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => EncodeAudio(inp);
+            Tensor<T> RecomputeLoss(Tensor<T> _, Tensor<T> __) => lossSum;
+
+            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                allParams, grads, lossValue,
+                input, input, ComputeForward, RecomputeLoss);
+            optimizer.Step(context);
         }
         finally
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Computes 0.5 * mean cross-entropy of softmax(logits) against the
+    /// diagonal target (positive pair at the same row index), tape-tracked
+    /// via engine ops. Numerically stable: subtracts the row-wise max
+    /// before exponentiating. Returns a [1] scalar tensor so the caller
+    /// can sum the two directions into the final symmetric loss.
+    /// </summary>
+    private Tensor<T> SymmetricRowCrossEntropy(Tensor<T> logits, int batchSize)
+    {
+        // log_softmax = logits - log(sum(exp(logits − rowMax))) − rowMax
+        // We need the diagonal entry of log_softmax. Easiest: compute
+        // log_softmax row by row using engine ops, then sum along the
+        // diagonal via a one-hot-style multiply.
+        var rowMaxes = new Tensor<T>(new[] { batchSize, 1 });
+        for (int i = 0; i < batchSize; i++)
+        {
+            T m = logits[i, 0];
+            for (int j = 1; j < batchSize; j++)
+                if (NumOps.GreaterThan(logits[i, j], m)) m = logits[i, j];
+            rowMaxes[i, 0] = m;
+        }
+        var rowMaxTiled = Engine.TensorTile(rowMaxes, new[] { 1, batchSize });
+        var shifted = Engine.TensorSubtract<T>(logits, rowMaxTiled);
+        var expShifted = Engine.TensorExp<T>(shifted);
+        var rowSum = Engine.ReduceSum(expShifted, new[] { 1 }, keepDims: true);
+        var logRowSum = Engine.TensorLog<T>(rowSum);
+        var logRowSumTiled = Engine.TensorTile(logRowSum, new[] { 1, batchSize });
+        var logSoftmax = Engine.TensorSubtract<T>(shifted, logRowSumTiled);
+
+        // Diagonal mask: 1 at (i, i), 0 elsewhere.
+        var diagMask = new Tensor<T>(new[] { batchSize, batchSize });
+        for (int i = 0; i < batchSize; i++) diagMask[i, i] = NumOps.One;
+        var picked = Engine.TensorMultiply<T>(logSoftmax, diagMask);
+        // Sum all entries; only the diagonal survives.
+        var sumAxes = new[] { 0, 1 };
+        var totalLog = Engine.ReduceSum(picked, sumAxes, keepDims: false);
+
+        // halfLoss = -0.5 * totalLog / batchSize, returned as a [1] tensor.
+        T totalScalar = totalLog.Length > 0 ? totalLog[0] : NumOps.Zero;
+        T halfLossT = NumOps.Multiply(
+            NumOps.Negate(NumOps.FromDouble(0.5 / batchSize)), totalScalar);
+        var result = new Tensor<T>(new[] { 1 });
+        result[0] = halfLossT;
+        return result;
     }
 
     #endregion

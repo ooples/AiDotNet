@@ -292,12 +292,41 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         // single-block DCT path.
         int n = input.Length;
         int side = (int)Math.Sqrt(n);
-        if (side * side != n || side < 8)
+        // For non-square inputs, try to factor n into the closest-to-square
+        // (h, w) pair where both dimensions are >= 8 — that lets the 2D
+        // JPEG defense apply to rectangular images (the common case for
+        // 16:9 / 4:3 / 3:4 photos) instead of silently degrading them to
+        // the much weaker 1D path. The factorisation walks h downward from
+        // √n until either it finds a divisor that satisfies h >= 8 and
+        // n/h >= 8, or the search exits the valid range.
+        int rectH = 0, rectW = 0;
+        if (side * side != n)
         {
-            // Can't tile into 8×8 blocks — fall back to a 1D DCT-quantize-
-            // inverse-DCT path that still removes high-frequency components.
+            for (int h = side; h >= 8; h--)
+            {
+                if (n % h == 0 && n / h >= 8)
+                {
+                    rectH = h;
+                    rectW = n / h;
+                    break;
+                }
+            }
+        }
+        if (rectH == 0 && side * side != n)
+        {
+            // No square or rectangular factorisation with both dims >= 8 —
+            // fall back to a 1D DCT-quantize-inverse-DCT path that still
+            // removes high-frequency components.
             return Apply1DDCTQuantization(input);
         }
+        if (side < 8 && rectH == 0)
+        {
+            return Apply1DDCTQuantization(input);
+        }
+        // Use square dims when n is a perfect square, otherwise the
+        // rectangular factorisation found above.
+        int imgH = side * side == n ? side : rectH;
+        int imgW = side * side == n ? side : rectW;
 
         // Track the observed input range so the reconstruction can be
         // clamped back to whatever the caller fed in, instead of the
@@ -337,17 +366,17 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
                 qTable[i, j] = Math.Max(1, Math.Floor((qTable[i, j] * scale + 50) / 100.0));
 
         // Copy pixels into a 2D buffer for in-place block processing.
-        var image = new double[side, side];
+        var image = new double[imgH, imgW];
         for (int i = 0; i < n; i++)
-            image[i / side, i % side] = NumOps.ToDouble(input[i]);
+            image[i / imgW, i % imgW] = NumOps.ToDouble(input[i]);
 
         var block = new double[8, 8];
-        for (int by = 0; by < side; by += 8)
+        for (int by = 0; by < imgH; by += 8)
         {
-            for (int bx = 0; bx < side; bx += 8)
+            for (int bx = 0; bx < imgW; bx += 8)
             {
-                int blockH = Math.Min(8, side - by);
-                int blockW = Math.Min(8, side - bx);
+                int blockH = Math.Min(8, imgH - by);
+                int blockW = Math.Min(8, imgW - bx);
 
                 // Pull block (centred on 0 — JPEG subtracts 128 from [0..255]
                 // range; we keep the [0,1]-style centring symmetric and skip
@@ -388,7 +417,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
         var output = new Vector<T>(n);
         for (int i = 0; i < n; i++)
-            output[i] = NumOps.FromDouble(MathHelper.Clamp(image[i / side, i % side], minValue, maxValue));
+            output[i] = NumOps.FromDouble(MathHelper.Clamp(image[i / imgW, i % imgW], minValue, maxValue));
         return output;
     }
 

@@ -126,7 +126,15 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private NeuralNetwork<T> CreateDuelingNetwork()
     {
-        int outputSize = _options.UseDistributional
+        // For distributional / C51 (Hessel et al. 2018 §3.5), each action
+        // gets a categorical distribution over NumAtoms supports. The
+        // dueling combination still applies per-atom: Q_{atom}(s, a) =
+        // V_{atom}(s) + (A_{atom}(s, a) − mean_a A_{atom}(s, a)). Allocate
+        // the advantage-head width as ActionSize * NumAtoms so the head
+        // emits one logit per (action, atom) pair; the agent reshapes to
+        // [batch, ActionSize, NumAtoms] before applying the per-action
+        // softmax in ComputeQValues.
+        int duelingActionWidth = _options.UseDistributional
             ? _options.ActionSize * _options.NumAtoms
             : _options.ActionSize;
 
@@ -135,44 +143,38 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
-            outputSize: outputSize
+            outputSize: duelingActionWidth
         );
 
-        // Build layers. The current build is a single-stream MLP (not the
-        // paper's dueling architecture with separate value + advantage
-        // streams); when UseNoisyNetworks is on, the trailing dense layers
-        // are swapped for NoisyDenseLayer instances per Hessel et al. 2018
-        // §3.4: "We then replace the linear layers of the dueling
-        // architecture with their noisy equivalents." Keeping the hidden
-        // feature extractor deterministic still matches the published
-        // RainbowDQN setup. Promoting to a true dueling split (separate
-        // V(s) and A(s,a) heads, then Q(s,a) = V(s) + (A(s,a) − mean_a A))
-        // is a separate, larger change tracked in the upstream Rainbow
-        // implementation list.
+        // Paper-faithful Rainbow dueling head (Wang et al. 2016 + Hessel
+        // et al. 2018 §3.4): shared feature trunk → DuelingCombinationLayer.
+        // The combination layer holds its own V(s) and A(s, a) projections
+        // internally and emits Q(s, a) = V(s) + (A − mean_a A) so the
+        // identifiability constraint is enforced without an extra layer.
+        // Hessel §3.4 swaps the dense layers inside the heads for noisy
+        // variants when UseNoisyNetworks is on; we wrap the same idea by
+        // putting a NoisyDenseLayer between the trunk and the dueling head
+        // so the action-conditional projection picks up the exploration
+        // noise.
+        const int trunkHidden = 64;
         IEnumerable<ILayer<T>> layers;
         if (_options.UseNoisyNetworks)
         {
-            const int hiddenSize = 64;
-            // Each (Noisy)DenseLayer already applies its activation_function
-            // parameter internally; the previous build added a separate
-            // ActivationLayer(ReLU) AFTER each dense, which applied ReLU
-            // twice (ReLU(ReLU(x)) == ReLU(x) mathematically, but the
-            // extra layer still pays the forward / backward dispatch cost
-            // and obscures the intended topology). Pass the activation
-            // through the dense layer directly and drop the redundant
-            // ActivationLayer entries. Final layer keeps IdentityActivation
-            // because the distributional Q-head produces raw logits over
-            // the value atoms.
             layers = new ILayer<T>[]
             {
-                new DenseLayer<T>(hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>),
-                new NoisyDenseLayer<T>(hiddenSize, hiddenSize, new ReLUActivation<T>() as IActivationFunction<T>),
-                new NoisyDenseLayer<T>(hiddenSize, outputSize, new IdentityActivation<T>() as IActivationFunction<T>)
+                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
+                new NoisyDenseLayer<T>(trunkHidden, trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
+                new DuelingCombinationLayer<T>(trunkHidden, duelingActionWidth)
             };
         }
         else
         {
-            layers = LayerHelper<T>.CreateDefaultDeepQNetworkLayers(architecture);
+            layers = new ILayer<T>[]
+            {
+                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
+                new DenseLayer<T>(trunkHidden, new ReLUActivation<T>() as IActivationFunction<T>),
+                new DuelingCombinationLayer<T>(trunkHidden, duelingActionWidth)
+            };
         }
 
         var finalArchitecture = new NeuralNetworkArchitecture<T>(
@@ -180,7 +182,7 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             taskType: NeuralNetworkTaskType.Regression,
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
-            outputSize: outputSize,
+            outputSize: duelingActionWidth,
             layers: layers.ToList()
         );
 

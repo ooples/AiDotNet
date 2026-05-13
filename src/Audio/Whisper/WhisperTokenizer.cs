@@ -46,6 +46,37 @@ public class WhisperTokenizer
         (_byteToUnicode, _unicodeToByte) = BuildByteUnicodeMaps();
     }
 
+    /// <summary>
+    /// When <c>true</c> (default <c>false</c>), <see cref="Encode"/> /
+    /// <see cref="Decode"/> throw if the BPE vocab/merges aren't loaded
+    /// instead of falling back to the byte-level identity mode. Production
+    /// callers that need exact Whisper-compatible tokenisation should set
+    /// this so a misconfigured pipeline fails fast rather than silently
+    /// producing token streams that don't match the Whisper reference
+    /// implementation. The lenient default preserves backwards
+    /// compatibility for callers that intentionally use the byte-level
+    /// mode (e.g. fingerprint-style tests).
+    /// </summary>
+    public bool StrictBpeMode { get; set; }
+
+    private void EnforceBpeRequirement(string operation)
+    {
+        if (_vocab is null || _merges is null)
+        {
+            if (StrictBpeMode)
+                throw new InvalidOperationException(
+                    $"WhisperTokenizer.{operation} called in StrictBpeMode without BPE assets " +
+                    "loaded. Construct via the file-path constructor or call LoadVocab(...) " +
+                    "first — the byte-level fallback does NOT produce Whisper-compatible tokens.");
+
+            System.Diagnostics.Trace.TraceWarning(
+                $"WhisperTokenizer.{operation}: BPE vocab/merges not loaded, falling back to " +
+                "byte-level identity mode. Output WILL NOT match the reference Whisper " +
+                "tokenizer. Load vocab.json + merges.txt for production use, or set " +
+                "StrictBpeMode=true to fail fast.");
+        }
+    }
+
     /// <summary>Initializes a tokenizer that loads the official Whisper / GPT-2 BPE vocabulary.</summary>
     /// <param name="vocabPath">Path to vocab.json (token string → ID).</param>
     /// <param name="mergesPath">Path to merges.txt (priority-ordered pair merges).</param>
@@ -357,6 +388,7 @@ public class WhisperTokenizer
     public string Decode(IEnumerable<long> tokenIds)
     {
         if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+        EnforceBpeRequirement(nameof(Decode));
 
         if (_inverseVocab is null)
         {
@@ -417,6 +449,7 @@ public class WhisperTokenizer
     public List<long> Encode(string text)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
+        EnforceBpeRequirement(nameof(Encode));
 
         if (_vocab is null || _merges is null)
         {

@@ -873,9 +873,47 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var realLabels = CreateLabelTensor(batchSize, NumOps.One);
         var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
 
-        // Train discriminator with tape-based autodiff
+        // Train discriminator with tape-based autodiff. Standard BCE step on
+        // real and fake batches first — this is the discriminator's primary
+        // adversarial objective.
         Discriminator.Train(expectedOutput, realLabels);
         Discriminator.Train(fakeImages, fakeLabels);
+
+        // WGAN-GP penalty step (Gulrajani et al. 2017 §4): if gradient
+        // penalty is enabled, run a separate discriminator optimizer step
+        // whose loss is λ · E_x̂[(||∇_x̂ D(x̂)|| − 1)²] where x̂ is a random
+        // interpolation between real and fake. Wiring it as a separate step
+        // (vs folding into the BCE loss in a single backward pass) keeps
+        // the change local to this method; the practical effect on training
+        // dynamics is the same since both gradients land on the
+        // discriminator's parameters before the generator step below.
+        if (_useGradientPenalty && _lastRealBatch is not null && _lastFakeBatch is not null)
+        {
+            var trainableDisc = (NeuralNetworkBase<T>)Discriminator;
+            try
+            {
+                trainableDisc.TrainWithCustomLoss(_lastRealBatch, _ =>
+                {
+                    // ComputeGradientPenalty already applies the λ factor and
+                    // returns the per-batch mean penalty as a scalar T.
+                    // Wrap it in a [1]-shape Tensor so TrainWithCustomLoss
+                    // can treat it as a loss tensor.
+                    T penaltyScalar = ComputeGradientPenalty(
+                        _lastRealBatch, _lastFakeBatch, _gradientPenaltyLambda);
+                    var lossTensor = new Tensor<T>([1]);
+                    lossTensor[0] = penaltyScalar;
+                    return lossTensor;
+                });
+            }
+            catch (Exception ex)
+            {
+                // Surface penalty-step failures via Trace so a malformed
+                // batch (e.g. real/fake shape mismatch) doesn't silently
+                // disable the toggle for the rest of training.
+                System.Diagnostics.Trace.TraceWarning(
+                    "GAN.Train: gradient-penalty discriminator update failed — " + ex.Message);
+            }
+        }
 
         // Compute discriminator loss for monitoring
         var realPred = Discriminator.Predict(expectedOutput);
