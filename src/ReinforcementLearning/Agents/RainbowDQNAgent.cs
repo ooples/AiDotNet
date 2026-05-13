@@ -234,26 +234,19 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (_options.UseDistributional)
         {
-            // Distributional RL (C51, Bellemare et al. 2017): convert the
-            // per-action atom distribution to an expected Q-value.
-            // Q(s, a) = Σ_i z_i · p_i(s, a), where p_i is the softmax over
-            // atom logits for that action. The network head emits raw
-            // logits (final layer is IdentityActivation), so we softmax
-            // each action's atom slice BEFORE the expectation — taking
-            // the dot product of raw logits with z would silently produce
-            // mathematically wrong Q-values for both action selection
-            // and TD targets.
+            // Distributional RL: convert distribution to Q-values
             var qValues = new Vector<T>(_options.ActionSize);
             double deltaZ = (_options.VMax - _options.VMin) / (_options.NumAtoms - 1);
 
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                var atomProbs = SoftmaxAtomSlice(output, action * _options.NumAtoms, _options.NumAtoms);
                 T qValue = NumOps.Zero;
                 for (int atom = 0; atom < _options.NumAtoms; atom++)
                 {
+                    int idx = action * _options.NumAtoms + atom;
                     double z = _options.VMin + atom * deltaZ;
-                    qValue = NumOps.Add(qValue, NumOps.Multiply(atomProbs[atom], NumOps.FromDouble(z)));
+                    var prob = output[idx];
+                    qValue = NumOps.Add(qValue, NumOps.Multiply(prob, NumOps.FromDouble(z)));
                 }
                 qValues[action] = qValue;
             }
@@ -262,40 +255,6 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         return output;
-    }
-
-    /// <summary>
-    /// Numerically-stable softmax over <paramref name="logits"/>[<paramref name="offset"/>..<paramref name="offset"/>+<paramref name="count"/>).
-    /// Returns a Vector of length <paramref name="count"/> with the per-atom
-    /// probabilities for one action's atom slice. Used by both
-    /// <see cref="ComputeQValues"/> and the target-network counterpart so
-    /// expected-Q math is mathematically correct in C51 mode.
-    /// </summary>
-    private Vector<T> SoftmaxAtomSlice(Vector<T> logits, int offset, int count)
-    {
-        // Subtract max for numerical stability before exponentiation.
-        double maxLogit = double.NegativeInfinity;
-        for (int i = 0; i < count; i++)
-        {
-            double l = NumOps.ToDouble(logits[offset + i]);
-            if (l > maxLogit) maxLogit = l;
-        }
-
-        var probs = new Vector<T>(count);
-        double sumExp = 0.0;
-        for (int i = 0; i < count; i++)
-        {
-            double e = Math.Exp(NumOps.ToDouble(logits[offset + i]) - maxLogit);
-            probs[i] = NumOps.FromDouble(e);
-            sumExp += e;
-        }
-        if (sumExp > 0)
-        {
-            T invSum = NumOps.FromDouble(1.0 / sumExp);
-            for (int i = 0; i < count; i++)
-                probs[i] = NumOps.Multiply(probs[i], invSum);
-        }
-        return probs;
     }
 
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
@@ -478,20 +437,18 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (_options.UseDistributional)
         {
-            // Same softmax-before-expectation correction as the online
-            // ComputeQValues — the C51 head emits raw atom logits and we
-            // need true probabilities to compute Q(s,a) = Σ z·p.
             var qValues = new Vector<T>(_options.ActionSize);
             double deltaZ = (_options.VMax - _options.VMin) / (_options.NumAtoms - 1);
 
             for (int action = 0; action < _options.ActionSize; action++)
             {
-                var atomProbs = SoftmaxAtomSlice(output, action * _options.NumAtoms, _options.NumAtoms);
                 T qValue = NumOps.Zero;
                 for (int atom = 0; atom < _options.NumAtoms; atom++)
                 {
+                    int idx = action * _options.NumAtoms + atom;
                     double z = _options.VMin + atom * deltaZ;
-                    qValue = NumOps.Add(qValue, NumOps.Multiply(atomProbs[atom], NumOps.FromDouble(z)));
+                    var prob = output[idx];
+                    qValue = NumOps.Add(qValue, NumOps.Multiply(prob, NumOps.FromDouble(z)));
                 }
                 qValues[action] = qValue;
             }
