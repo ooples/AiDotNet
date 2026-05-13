@@ -23635,7 +23635,8 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int patchSize = 14)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
@@ -23643,6 +23644,11 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (InternViT) ===
+        // Patch embedding: [B, 3, H, W] -> [B, num_patches, visionDim].
+        // Without this the InternViT's MHA receives the raw image's pixel
+        // width as the embedding dim and fails the QKV projection — same
+        // root cause as PR #1290 / #1311's SmolVLM / InternVL failures.
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
