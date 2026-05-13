@@ -90,8 +90,18 @@ public class DocumentReaderTests
         var image = new Tensor<double>([1, 1, 16, 16]);
         var target = new Tensor<double>([1, 1, 16, 16]);
 
+        // Behavioural assertion: Train must be a true no-op, not just
+        // exception-free. Snapshot Predict() output, invoke Train, then
+        // confirm Predict() returns exactly the same tensor. Catches a
+        // future regression where Train silently mutates weights.
+        var before = reader.Predict(image);
         var ex = Record.Exception(() => reader.Train(image, target));
+        var after = reader.Predict(image);
 
         Assert.Null(ex);
+        Assert.Equal(before.Rank, after.Rank);
+        Assert.Equal(before.Length, after.Length);
+        for (int i = 0; i < after.Length; i++)
+            Assert.Equal(before[i], after[i]);
     }
 }
