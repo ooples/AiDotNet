@@ -304,6 +304,80 @@ public class ConditioningModuleTests
 
     #endregion
 
+    #region Gradient-Flow Isolation Tests
+    // These bisect where in the T5 layer stack the gradient stops flowing
+    // back to the EmbeddingLayer. Each test substitutes a minimal custom
+    // layer list via Architecture.Layers (which TextConditioningBase
+    // honours over CreateDefaultLayers), trains for one step, and checks
+    // whether the EmbeddingLayer's first parameters changed.
+    //
+    // Result interpretation:
+    //   * EmbeddingOnly_Train passes  -> EmbeddingLayer + framework training
+    //     plumbing work; bug is in downstream layers.
+    //   * EmbeddingPlusRMSNorm passes -> RMSNorm propagates gradients.
+    //   * EmbeddingPlusScale passes   -> ConstantScale propagates gradients.
+    //   * Add layers one at a time until the first failure pinpoints the
+    //     gradient blocker.
+
+    private static T5TextConditioner<double> NewT5WithLayers(IEnumerable<AiDotNet.Interfaces.ILayer<double>> customLayers)
+    {
+        var arch = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Custom,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 1);
+        foreach (var layer in customLayers) arch.Layers.Add(layer);
+        return new T5TextConditioner<double>(
+            tokenizer: LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5),
+            variant: T5Variant.Small,
+            architecture: arch);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GradientFlowIsolation_EmbeddingOnly_TrainsEmbedding()
+    {
+        TapeTrainingStep<double>.InvalidateCache();
+        var emb = new AiDotNet.NeuralNetworks.Layers.EmbeddingLayer<double>(
+            vocabularySize: 32128, embeddingDimension: 64);
+        emb.InputMode = AiDotNet.NeuralNetworks.Layers.EmbeddingInputMode.Indices;
+
+        var t5 = NewT5WithLayers(new[] { (AiDotNet.Interfaces.ILayer<double>)emb });
+        var tokens = t5.Tokenize("test");
+
+        // EncodeText runs RunLayerStack → InitializeLayers (lazy-init).
+        // Layers now contains the supplied EmbeddingLayer, and
+        // _embeddingTensor has real allocated values (since EmbeddingLayer
+        // resolves from input on first forward).
+        var initial = t5.EncodeText(tokens);
+        Assert.True(initial.Shape.Length == 3, $"expected rank-3 output, got rank {initial.Shape.Length}");
+
+        var rng = new Random(42);
+        var target = new Tensor<double>(initial._shape);
+        for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble() - 0.5;
+
+        var paramsBefore = t5.GetParameters();
+        Assert.True(paramsBefore.Length > 0,
+            $"EmbeddingLayer must report a non-empty parameter list after lazy init. " +
+            $"paramsBefore.Length = {paramsBefore.Length}. Layers.Count = {t5.Layers.Count}.");
+
+        int n = Math.Min(64, paramsBefore.Length);
+        var beforeSample = new double[n];
+        for (int i = 0; i < n; i++) beforeSample[i] = paramsBefore[i];
+
+        t5.Train(tokens, target);
+
+        var paramsAfter = t5.GetParameters();
+        Assert.Equal(paramsBefore.Length, paramsAfter.Length);
+        int changed = 0;
+        for (int i = 0; i < n; i++)
+            if (Math.Abs(beforeSample[i] - paramsAfter[i]) > 1e-12) changed++;
+        Assert.True(changed > 0,
+            $"EmbeddingLayer alone failed to train ({changed}/{n} params changed). " +
+            "Bug is upstream of every diffusion-specific layer.");
+    }
+
+    #endregion
+
     #region Training-Cycle Tests (Forward + Backward + Parameter Update)
     // These exercise the full tape-based training pipeline through the new
     // layers (RMSNorm, T5RelativeBiasAttention, PreLNTransformerBlock,
