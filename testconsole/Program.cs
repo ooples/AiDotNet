@@ -29,6 +29,7 @@ class Program
         ["grafprint-clone-diag"] = GraFPrintCloneDiag.Run,
         ["grafprint-continuity-diag"] = GraFPrintContinuityDiag.Run,
         ["grafprint-perf-diag"] = GraFPrintPerfDiag.Run,
+        ["fused-min-repro"]     = FusedPropagationMinRepro.Run,
     };
 
     static async Task Main(string[] args)

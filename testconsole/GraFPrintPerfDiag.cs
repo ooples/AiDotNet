@@ -33,8 +33,11 @@ public static class GraFPrintPerfDiag
         AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
 
         using var arena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-        // Test with NO DROPOUT to see if dropout is blocking fused path.
-        var opts = new GraFPrintOptions { DropoutRate = 0.0 };
+        // Match the test's default DropoutRate=0.1 path to see whether
+        // dropout's presence is what's making the test "pass" (by falling
+        // back to eager, which propagates params), while no-dropout fused
+        // silently no-ops the parameter writes.
+        var opts = new GraFPrintOptions(); // defaults: DropoutRate=0.1
         dynamic model = ctor!.Invoke(new object?[] { Arch(), opts, null });
 
         var input = new Tensor<double>(new[] { 1, 64, 32 });
@@ -79,16 +82,88 @@ public static class GraFPrintPerfDiag
         double perIterMs = sw.Elapsed.TotalMilliseconds / 10.0;
         Console.WriteLine($"GraFPrint Train: {perIterMs:F1} ms/iter ⇒ {perIterMs * 250 / 1000.0:F1}s for 250 iters (120s budget)");
 
-        // Check if parameters actually changed across training steps
-        var p0 = model.GetParameters() as Vector<double>;
-        double[] before = new double[Math.Min(10, p0!.Length)];
-        for (int i = 0; i < before.Length; i++) before[i] = p0[i];
+        // Per-layer-type profiling
+        Console.WriteLine("\n=== Per-layer profiling ===");
+        int convCount = 0, bnCount = 0, actCount = 0, dropCount = 0, poolCount = 0;
+        foreach (var l in model.Layers)
+        {
+            var name = ((object)l).GetType().Name;
+            if (name.StartsWith("ConvolutionalLayer")) convCount++;
+            else if (name.StartsWith("BatchNormalizationLayer")) bnCount++;
+            else if (name.StartsWith("ActivationLayer")) actCount++;
+            else if (name.StartsWith("DropoutLayer")) dropCount++;
+            else if (name.StartsWith("GlobalPoolingLayer")) poolCount++;
+        }
+        Console.WriteLine($"Layer counts: Conv={convCount}, BN={bnCount}, Activation={actCount}, Dropout={dropCount}, GlobalPool={poolCount}");
+
+        // Verify the fused path actually updates the layer-owned parameters.
+        // We check BOTH paths because they read from different sources:
+        //  * GetParameters() walks Layers, calls layer.GetParameters() (which
+        //    in ConvolutionalLayer reads from its private _kernels / _biases
+        //    fields), then COPIES into a flat Vector<T>.
+        //  * GetParameterChunks() walks CollectTrainableLayers recursively
+        //    and yields each layer's GetTrainableParameters() = _registeredTensors
+        //    by reference (zero-copy).
+        // If the fused path replaces _registeredTensors with buffer views via
+        // SetTrainableParameters but leaves _kernels / _biases pointing at the
+        // pre-fuse tensors, the chunks path will see updates while the flat
+        // GetParameters() path won't. That's the divergence the test suite
+        // catches as a coherence bug (Training_ShouldChangeParameters reads
+        // chunks; SimilarInputs / Predict-driven tests read whatever the
+        // layer's Forward path consumes).
+        Console.WriteLine("\n=== Fused param propagation check ===");
+
+        // (a) Flat GetParameters() snapshot — reads from layer-private fields.
+        var pBefore = model.GetParameters() as Vector<double>;
+        double[] before = new double[Math.Min(20, pBefore!.Length)];
+        for (int i = 0; i < before.Length; i++) before[i] = pBefore[i];
+
+        // (b) Chunks snapshot — sample first chunk's first 1024 values, like
+        // the actual Training_ShouldChangeParameters test does.
+        var chunksBefore = new List<double[]>();
+        foreach (Tensor<double> chunk in model.GetParameterChunks())
+        {
+            if (chunksBefore.Count >= 4) break;
+            int n = Math.Min(chunk.Length, 1024);
+            var arr = new double[n];
+            for (int j = 0; j < n; j++) arr[j] = chunk[j];
+            chunksBefore.Add(arr);
+        }
+
         for (int i = 0; i < 20; i++) model.Train(input, target);
-        var p1 = model.GetParameters() as Vector<double>;
-        double maxParamDelta = 0;
-        for (int i = 0; i < before.Length; i++)
-            maxParamDelta = Math.Max(maxParamDelta, Math.Abs(p1![i] - before[i]));
-        Console.WriteLine($"After 20 fused Train: first-10-params max |Δ|={maxParamDelta:E6}");
+
+        var pAfter = model.GetParameters() as Vector<double>;
+        double maxFlatDelta = 0;
+        int firstChanged = -1;
+        for (int i = 0; i < pBefore.Length; i++)
+        {
+            double d = Math.Abs(pAfter![i] - pBefore[i]);
+            if (d > maxFlatDelta) { maxFlatDelta = d; firstChanged = i; }
+        }
+        Console.WriteLine($"[flat GetParameters()]   After 20 Train: max |Δ|={maxFlatDelta:E6} at index {firstChanged}");
+        Console.WriteLine($"  First 5 BEFORE: {string.Join(",", Enumerable.Range(0, 5).Select(i => pBefore[i].ToString("F8")))}");
+        Console.WriteLine($"  First 5 AFTER:  {string.Join(",", Enumerable.Range(0, 5).Select(i => pAfter![i].ToString("F8")))}");
+
+        // Compare against chunks (matches test's Training_ShouldChangeParameters).
+        double maxChunkDelta = 0;
+        int chunkIdx = 0;
+        foreach (Tensor<double> chunk in model.GetParameterChunks())
+        {
+            if (chunkIdx >= chunksBefore.Count) break;
+            var prev = chunksBefore[chunkIdx];
+            int n = Math.Min(prev.Length, chunk.Length);
+            for (int j = 0; j < n; j++)
+            {
+                double d = Math.Abs(prev[j] - chunk[j]);
+                if (d > maxChunkDelta) maxChunkDelta = d;
+            }
+            chunkIdx++;
+        }
+        Console.WriteLine($"[GetParameterChunks()]  After 20 Train: max |Δ|={maxChunkDelta:E6} across {chunkIdx} chunks");
+        if (maxFlatDelta == 0 && maxChunkDelta > 0)
+        {
+            Console.WriteLine("  *** DIVERGENCE: flat=0, chunks>0. Fused writes to _registeredTensors but layer-private fields stale. ***");
+        }
 
         // Time Predict only
         var sw2 = Stopwatch.StartNew();
