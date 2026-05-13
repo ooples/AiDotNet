@@ -91,6 +91,33 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
     }
 
     [Fact]
+    public void CustomTransformerLayerStack_RejectsPartiallyKnownShapeMismatch()
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new ProjectingCustomLayer([1, 16], [64, -1]),
+            new ProjectingCustomLayer([128, -1], [1, 256])
+        };
+
+        var ex = Assert.Throws<ArgumentException>(() => new Transformer<float>(CreateCustomLayerArchitecture(layers)));
+        Assert.Contains("Layer 0 is not compatible with Layer 1", ex.Message);
+    }
+
+    [Fact]
+    public void CustomTransformerLayerStack_AllowsPartiallyKnownShapeWhenKnownDimensionsMatch()
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new ProjectingCustomLayer([1, 16], [64, -1]),
+            new ProjectingCustomLayer([64, -1], [1, 256])
+        };
+
+        var model = new Transformer<float>(CreateCustomLayerArchitecture(layers));
+
+        Assert.Same(layers[1], model.Layers[1]);
+    }
+
+    [Fact]
     public void CustomTransformerLayerStack_RejectsTransitionInputShapeMetadataFailures()
     {
         var layers = new List<ILayer<float>>

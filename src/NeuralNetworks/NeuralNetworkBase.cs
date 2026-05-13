@@ -2111,17 +2111,31 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private static bool IsDeferredOrAgnosticShape(int[]? shape)
     {
-        return shape is null || shape.Length == 0 || shape.Any(d => d <= 0);
+        return shape is null || shape.Length == 0 || shape.All(d => d <= 0);
     }
 
     private static bool AreShapesCompatible(int[] expectedShape, int[] actualShape)
     {
-        if (expectedShape.SequenceEqual(actualShape))
+        if (ShapesMatchKnownDimensions(expectedShape, actualShape))
             return true;
 
         var expectedWithoutLeadingUnits = TrimLeadingUnitDimensions(expectedShape);
         var actualWithoutLeadingUnits = TrimLeadingUnitDimensions(actualShape);
-        return expectedWithoutLeadingUnits.SequenceEqual(actualWithoutLeadingUnits);
+        return ShapesMatchKnownDimensions(expectedWithoutLeadingUnits, actualWithoutLeadingUnits);
+    }
+
+    private static bool ShapesMatchKnownDimensions(int[] expectedShape, int[] actualShape)
+    {
+        if (expectedShape.Length != actualShape.Length)
+            return false;
+
+        for (int i = 0; i < expectedShape.Length; i++)
+        {
+            if (expectedShape[i] > 0 && actualShape[i] > 0 && expectedShape[i] != actualShape[i])
+                return false;
+        }
+
+        return true;
     }
 
     private static int[] TrimLeadingUnitDimensions(int[] shape)
