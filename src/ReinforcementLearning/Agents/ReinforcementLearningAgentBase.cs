@@ -328,8 +328,17 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         .ToArray();
 
     /// <summary>
-    /// Gets feature importance scores.
+    /// Gets feature importance scores. Default returns a uniform-prior (all 1.0) —
+    /// the maximum-entropy answer when the agent has no model-specific signal to
+    /// quantify how much each state dimension contributes to its policy / value.
     /// </summary>
+    /// <remarks>
+    /// Concrete agents that have access to a discriminative signal SHOULD override:
+    /// tabular agents can use per-dimension Q-value variance; neural-net agents can
+    /// use gradient-input saliency (∂Q/∂s ⊙ s, averaged over a replay sample). The
+    /// uniform fallback is intentionally not zero — zero would imply "no feature
+    /// matters" which is strictly worse than "I don't know".
+    /// </remarks>
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
         // Key by FeatureNames[i] rather than the hardcoded "State_{i}" so a
@@ -337,15 +346,16 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         // previous hardcode silently drifted from the override and broke
         // downstream consumers that looked up importance by name.
         var importance = new Dictionary<string, T>();
-        var names = FeatureNames;
-        if (names is null)
+        var names = FeatureNames ?? Array.Empty<string>();
+        // Always emit FeatureCount entries — if FeatureNames is shorter (or a
+        // particular slot is blank), fall back to "State_{i}" so callers see
+        // every dimension represented instead of silently losing tail features.
+        for (int i = 0; i < FeatureCount; i++)
         {
-            return importance;
-        }
-        int n = Math.Min(FeatureCount, names.Length);
-        for (int i = 0; i < n; i++)
-        {
-            importance[names[i]] = NumOps.One;
+            string key = (i < names.Length && !string.IsNullOrWhiteSpace(names[i]))
+                ? names[i]
+                : $"State_{i}";
+            importance[key] = NumOps.One;
         }
         return importance;
     }

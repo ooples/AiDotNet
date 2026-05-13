@@ -103,13 +103,35 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     /// matching architecture.
     /// </summary>
     public MarketMakingAgent(MarketMakingOptions<T> options)
-        : this(new NeuralNetworkArchitecture<T>(
+        : this(CreateArchitectureFromOptions(options), options)
+    {
+    }
+
+    /// <summary>
+    /// Static factory so the base-constructor initializer can null-check
+    /// <paramref name="options"/> before dereferencing
+    /// <c>StateSize</c> / <c>ActionSize</c> — a null at the convenience-ctor
+    /// path would otherwise NullReferenceException inside the initializer
+    /// rather than throw a clear ArgumentNullException.
+    /// </summary>
+    private static NeuralNetworkArchitecture<T> CreateArchitectureFromOptions(MarketMakingOptions<T> options)
+    {
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (options.StateSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.StateSize,
+                $"{nameof(MarketMakingOptions<T>.StateSize)} must be > 0 (was {options.StateSize}).");
+        if (options.ActionSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.ActionSize,
+                $"{nameof(MarketMakingOptions<T>.ActionSize)} must be > 0 (was {options.ActionSize}).");
+        return new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
             inputSize: options.StateSize,
-            outputSize: options.ActionSize),
-            options)
-    {
+            outputSize: options.ActionSize);
     }
 
     public MarketMakingAgent(NeuralNetworkArchitecture<T> architecture, MarketMakingOptions<T> options)
