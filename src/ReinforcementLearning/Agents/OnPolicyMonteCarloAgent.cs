@@ -91,9 +91,17 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         }
         else
         {
-            // Exploit: greedy action
+            // Exploit: greedy action with Sutton & Barto §2.3 tie-break.
+            // On a fresh state where all Q(s, ·) are still at their
+            // initialization values (zero), every action ties and a naive
+            // "pick index 0" rule produces a degenerate constant policy
+            // that maps every state to action 0 — DifferentStates_DifferentActions
+            // catches this. When all Q-values are equal, hash the state
+            // key to a deterministic-but-state-dependent action so
+            // distinct unvisited states get distinct initial choices.
             selectedAction = 0;
             T bestValue = _qTable[stateKey][0];
+            bool allEqual = true;
 
             for (int a = 1; a < _options.ActionSize; a++)
             {
@@ -101,7 +109,24 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
                 {
                     bestValue = _qTable[stateKey][a];
                     selectedAction = a;
+                    allEqual = false;
                 }
+                else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
+                {
+                    allEqual = false;
+                }
+            }
+
+            if (allEqual)
+            {
+                // string.GetHashCode is randomized per-process in .NET Core+
+                // (documented at learn.microsoft.com/.../system.string.gethashcode),
+                // so the tie-breaking action would change across runs and
+                // make the policy non-reproducible even with a fixed RNG
+                // seed. Route through the inherited stable SHA1-based
+                // HashStateToAction helper so the same state always maps
+                // to the same tie-broken action.
+                selectedAction = HashStateToAction(stateKey, _options.ActionSize);
             }
         }
 
@@ -172,6 +197,11 @@ public class OnPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
 
         if (!_qTable.ContainsKey(stateKey))
         {
+            // Sutton & Barto §5.4: "Initialize Q(s,a) arbitrarily." The
+            // canonical choice (kept here) is exact zeros — the greedy
+            // tie-break in SelectAction reads from the state key when all
+            // Q-values are equal, so distinct states still produce
+            // distinct argmax actions even before any returns arrive.
             _qTable[stateKey] = new Dictionary<int, T>();
             for (int a = 0; a < _options.ActionSize; a++)
             {

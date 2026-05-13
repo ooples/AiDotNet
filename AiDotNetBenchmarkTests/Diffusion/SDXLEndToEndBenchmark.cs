@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Text.Json;
 using AiDotNet.Diffusion.Conditioning;
 using AiDotNet.Diffusion.TextToImage;
+using AiDotNet.Enums;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Diagnosers;
@@ -79,11 +80,15 @@ public class SDXLEndToEndBenchmark : IDisposable
     {
         // Wire the AiDotNet SDXL benchmark instance with the canonical
         // dual-CLIP conditioner pair (ViT-L/14 + ViT-bigG-14, the SDXL
-        // base-1.0 configuration). UNet and VAE are constructed by the
+        // base-1.0 configuration). FromPretrained loads the real HuggingFace
+        // BPE tokenizers that the diffusers Python baseline also uses, so
+        // input token ids match exactly. UNet and VAE are constructed by the
         // SDXLModel ctor's internal defaults using paper-canonical
         // baseChannels=320 and channelMultipliers=[1, 2, 4, 4].
-        var conditioner1 = new CLIPTextConditioner<float>(variant: "ViT-L/14", seed: 42);
-        var conditioner2 = new CLIPTextConditioner<float>(variant: "ViT-bigG-14", seed: 42);
+        var conditioner1 = CLIPTextConditioner<float>.FromPretrained(CLIPVariant.ViTL14);
+        var conditioner2 = CLIPTextConditioner<float>.FromPretrained(
+            CLIPVariant.ViTBigG14,
+            "laion/CLIP-ViT-bigG-14-laion2B-39B-b160k");
         _aidotnetSdxl = new SDXLModel<float>(
             conditioner1: conditioner1,
             conditioner2: conditioner2,

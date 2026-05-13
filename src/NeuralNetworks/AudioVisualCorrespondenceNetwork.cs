@@ -1160,6 +1160,16 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        // Force shape resolution before reading ParameterCount per layer.
+        // Without this, a freshly-cloned model (whose layers are all in lazy
+        // placeholder state until first Forward) would report ParameterCount=0
+        // for every DenseLayer, SetLayerParams would read zero bytes per call,
+        // and the orig→cloned weight transfer would silently drop every
+        // parameter — defeating Clone() and surfacing as "cloned output = 0"
+        // in Clone_ShouldProduceIdenticalOutput. Idempotent: ResolveLazyLayerShapes
+        // short-circuits via _layerShapesResolved on subsequent calls.
+        ResolveLazyLayerShapes();
+
         var offset = 0;
 
         void SetLayerParams(ILayer<T> layer)

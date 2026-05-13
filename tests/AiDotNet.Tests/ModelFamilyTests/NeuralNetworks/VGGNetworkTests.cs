@@ -1,5 +1,3 @@
-using AiDotNet.Configuration;
-using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
@@ -8,42 +6,16 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
 public class VGGNetworkTests : NeuralNetworkModelTestBase
 {
-    // Use a CIFAR-sized VGG11 (32x32x3, 10 classes, no BN) instead of the
-    // parameterless ctor's VGG16_BN + 224x224 + 1000 classes (138M params).
-    // Rationale:
-    //   1. Runtime: VGG16_BN at 224x224 takes ~1m50s per Predict call on CI
-    //      runners; the shard hits the 5-min runner shutdown window before
-    //      finishing the suite (every test after the first gets cancelled).
-    //   2. Dead-neuron invariants: VGG16_BN in eval mode with un-trained
-    //      BatchNorm (running_mean=0, running_var=1) normalizes constant
-    //      inputs to zero, then ReLU collapses them — so
-    //      DifferentInputs_ShouldProduceDifferentOutputs reports "identical
-    //      outputs" even though the underlying dense path has distinct biases.
-    // The VGG architecture itself (Simonyan & Zisserman 2014) is unchanged;
-    // the smoke suite just uses a smaller variant from the same paper family.
-    protected override int[] InputShape => [1, 3, 32, 32];
-    protected override int[] OutputShape => [10];
-
-    // VGG11-CIFAR is small in parameter count compared to VGG16, but still
-    // ~9 M params with two 4096-wide FC layers. Each Predict on 32 × 32 × 3
-    // input takes ~250 ms on consumer hardware. MoreData_ShouldNotDegrade at
-    // the 50 / 200 default = 250 iter × 250 ms ≈ 63 s per network × 2 ≈
-    // 125 s — overflows the 120 s xUnit per-test timeout. Apply the same
-    // paper-scale iteration override the Forecasting Foundation models
-    // and CLIP-family / VoxelCNN use; keeps the "long ≥ short shouldn't
-    // degrade" invariant exercised.
-    protected override int MoreDataShortIterations => 1;
-    protected override int MoreDataLongIterations => 2;
-    protected override double MoreDataTolerance => 0.5;
+    // Paper-canonical VGG16-BN on ImageNet input per Simonyan & Zisserman 2014
+    // ("Very Deep Convolutional Networks for Large-Scale Image Recognition"):
+    // 224 × 224 × 3 → 1000 classes. Matches the parameterless VGGNetwork() ctor.
+    // Production-default iteration counts (10 / 50 / 200) are kept on
+    // purpose — they exist to catch perf regressions in VGG / training
+    // hot paths. If a CI run times out at this scale, fix the perf bug
+    // in the implementation, do not weaken the test.
+    protected override int[] InputShape => [1, 3, 224, 224];
+    protected override int[] OutputShape => [1000];
 
     protected override INeuralNetworkModel<double> CreateNetwork()
-    {
-        var arch = new NeuralNetworkArchitecture<double>(
-            inputType: InputType.ThreeDimensional,
-            taskType: NeuralNetworkTaskType.MultiClassClassification,
-            inputHeight: 32, inputWidth: 32, inputDepth: 3,
-            outputSize: 10);
-        var config = VGGConfiguration.CreateForCIFAR(VGGVariant.VGG11, numClasses: 10);
-        return new VGGNetwork<double>(arch, config);
-    }
+        => new VGGNetwork<double>();
 }

@@ -45,6 +45,20 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     private Func<Vector<T>, Vector<T>, double>? rewardModel;
 
     /// <summary>
+    /// When false (default — industry convention: honesty-on-non-comparable),
+    /// <see cref="IsHonest"/> returns <c>true</c> for inputs the heuristic
+    /// cannot evaluate (null / empty / length-mismatch input vs output) and
+    /// emits a Trace warning so the unscored pair is observable in
+    /// diagnostics. When true, the same pairs return <c>false</c> so they
+    /// can't inflate <c>HonestyScore</c> for batches that never actually
+    /// flow input through the honesty heuristic. Turn this on when you'd
+    /// rather under-count honesty than over-count it (e.g. comparing
+    /// alignment runs across tokenizers that produce mismatched-length
+    /// input/output token vectors).
+    /// </summary>
+    public bool StrictHonestyMode { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of RLHF alignment.
     /// </summary>
     /// <param name="options">The alignment configuration options.</param>
@@ -80,6 +94,10 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         }
 
         var metrics = new AlignmentMetrics<T>();
+        // Reset the per-batch warn-once flag so this evaluation run gets a
+        // fresh chance to surface the diagnostic, but subsequent IsHonest
+        // calls within the run still warn at most once.
+        _hasLoggedNonComparableHonestyWarning = false;
 
         int helpfulCount = 0;
         int harmlessCount = 0;
@@ -251,11 +269,29 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     /// <inheritdoc/>
     public void Reset() { }
 
+    /// <summary>
+    /// Persisted state for serialise/deserialise round-trip — bundles
+    /// options with the behaviour-changing <see cref="StrictHonestyMode"/>
+    /// flag so a saved + reloaded alignment object keeps the same scoring
+    /// semantics. Wrapped in a private class so adding new flags later is
+    /// a backward-compatible JSON extension.
+    /// </summary>
+    private sealed class RlhfAlignmentState
+    {
+        public AlignmentMethodOptions<T>? Options { get; set; }
+        public bool StrictHonestyMode { get; set; }
+    }
+
     /// <inheritdoc/>
     public byte[] Serialize()
     {
         ModelPersistenceGuard.EnforceBeforeSerialize();
-        var json = JsonConvert.SerializeObject(options, Formatting.None);
+        var state = new RlhfAlignmentState
+        {
+            Options = options,
+            StrictHonestyMode = StrictHonestyMode,
+        };
+        var json = JsonConvert.SerializeObject(state, Formatting.None);
         return Encoding.UTF8.GetBytes(json);
     }
 
@@ -269,7 +305,21 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         }
 
         var json = Encoding.UTF8.GetString(data);
-        options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+        // Backward-compat: try the new wrapped state first; fall back to the
+        // raw-options shape so checkpoints written before the StrictHonestyMode
+        // flag was added still load. JsonConvert returns null when the
+        // payload doesn't match the wrapper's properties — in that case
+        // Options stays null and we re-parse as bare AlignmentMethodOptions.
+        var state = JsonConvert.DeserializeObject<RlhfAlignmentState>(json);
+        if (state?.Options is not null)
+        {
+            options = state.Options;
+            StrictHonestyMode = state.StrictHonestyMode;
+        }
+        else
+        {
+            options = JsonConvert.DeserializeObject<AlignmentMethodOptions<T>>(json) ?? new AlignmentMethodOptions<T>();
+        }
 
         // Reset reward model - it cannot be serialized and must be retrained
         // by calling AlignModel with new feedback data
@@ -402,11 +452,75 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
     private bool IsHonest(Vector<T> output, Vector<T> input)
     {
-        // Simplified honesty check
-        _ = output;
-        _ = input;
-        return true; // Placeholder
+        // "Honesty" in the 3H-RLHF sense (Bai et al. 2022 "Training a Helpful and
+        // Harmless Assistant with RLHF" §2.2) requires comparing a claim against
+        // ground truth — not derivable from (output, input) alone without a fact
+        // checker or knowledge base. The structural proxy here flags outputs that
+        // are *clearly* not honest engagement with the input: degenerate outputs
+        // (all-NaN, all-Inf, all-zero) and saturated outputs that ignore the input
+        // entirely. Users who need a true honesty signal should plug a trained
+        // checker into the alignment pipeline; the in-line heuristic here is
+        // strictly a structural sanity gate, not an honesty metric.
+        if (output is null || output.Length == 0) return false;
+
+        bool anyFinite = false;
+        double absMax = 0.0;
+        double sumAbs = 0.0;
+        for (int i = 0; i < output.Length; i++)
+        {
+            double v = NumOps.ToDouble(output[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v)) return false;
+            anyFinite = true;
+            double absV = Math.Abs(v);
+            if (absV > absMax) absMax = absV;
+            sumAbs += absV;
+        }
+        if (!anyFinite || sumAbs == 0.0) return false;
+
+        // Input-conditioned engagement: an output uncorrelated with the input
+        // (cosine ≈ 0) and saturated to one extreme is a tell-tale "ignore the
+        // prompt" pattern. Require some non-trivial directional response.
+        // Length-equality is required by CosineSimilarity — guard explicitly
+        // so a shape mismatch can't throw mid-evaluation and abort the
+        // batch (older callers may pass `input` and `output` from different
+        // tokenizer / vocab paths).
+        if (input is not null && input.Length > 0 && input.Length == output.Length)
+        {
+            double cos = VectorHelper.CosineSimilarity(output, input);
+            if (Math.Abs(cos) < 1e-6 && absMax > 0.99 * (sumAbs / output.Length))
+                return false;
+        }
+        else if (StrictHonestyMode)
+        {
+            // Strict mode: a pair we could not evaluate cannot count as
+            // honest. Returning false here prevents non-comparable samples
+            // from inflating HonestyScore.
+            return false;
+        }
+        else
+        {
+            // Lenient default: surface the unscored pair as a Trace warning
+            // so the inflation risk is observable in diagnostics. Warn at
+            // most once per evaluation run — a large batch with many
+            // non-comparable pairs would otherwise flood diagnostics and
+            // pay the Trace overhead on every IsHonest call.
+            if (!_hasLoggedNonComparableHonestyWarning)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "RLHFAlignment.IsHonest: input/output not comparable (input null/empty " +
+                    "or length mismatch). Counting as honest by default. Set StrictHonestyMode = " +
+                    "true to count non-comparable pairs as dishonest instead. " +
+                    "(This warning is emitted once per evaluation run.)");
+                _hasLoggedNonComparableHonestyWarning = true;
+            }
+        }
+
+        return true;
     }
+
+    // Reset by EvaluateAlignment at the start of each batch so the warning
+    // fires once per call rather than once per process lifetime.
+    private bool _hasLoggedNonComparableHonestyWarning;
 
     private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(Vector<T> response)
     {

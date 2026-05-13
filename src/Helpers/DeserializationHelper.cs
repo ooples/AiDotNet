@@ -541,17 +541,24 @@ public static class DeserializationHelper
             int feedForwardDim = TryGetInt(additionalParams, "FeedForwardDim")
                 ?? TryGetInt(additionalParams, "FeedForwardDimension")
                 ?? embeddingSize * 4;
-            // When SequenceLength isn't in metadata, derive it from the input
-            // shape: rank-2+ inputs expose sequenceLength as dim 0, while
-            // feature-only rank-1 inputs default to 1 (no sequence dim). The
-            // previous fallback of 512 was a significant behavioral change
-            // from the original `: 1` default, and surprised consumers that
-            // deserialize layers from feature-only tensors with a 512×
-            // memory budget out of nowhere. Callers that actually need the
-            // 512-token paper default should write SequenceLength=512 into
-            // the metadata at serialization time.
+            // Fallback hierarchy for sequenceLength:
+            //   1. explicit "SequenceLength" metadata entry  (paper-faithful)
+            //   2. derive from inputShape[0] when input is at least rank-2
+            //   3. fallback to 1 for rank-1 feature-only inputs
+            // The previous fallback used 512 (the transformer paper default)
+            // which silently inflated memory/compute for feature-only inputs
+            // that should be treated as a single token, and could OOM on
+            // large embeddingSize because attention scores scale O(B·S²).
+            // Callers that need a longer sequence must persist
+            // "SequenceLength" explicitly in metadata.
             int sequenceLength = TryGetInt(additionalParams, "SequenceLength")
                 ?? (inputShape.Length >= 2 ? inputShape[0] : 1);
+            // Clamp non-positive sequenceLength to 1. Serialized
+            // inputShape[0] can carry 0 or -1 (lazy / placeholder shapes)
+            // — those would otherwise produce an invalid decoder
+            // configuration that fails later inside the ctor with a less
+            // actionable error.
+            if (sequenceLength <= 0) sequenceLength = 1;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType);
@@ -1277,9 +1284,35 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(SparseLinearLayer<>))
         {
+            // SparseLinearLayer(int, int, double sparsity, IActivationFunction<T>?,
+            //                   IInitializationStrategy<T>?). Restore sparsity +
+            // activation from the saved metadata so a Clone of a layer with a
+            // non-default activation (e.g., the IdentityActivation that
+            // SparseNeuralNetwork uses on its regression output layer) doesn't
+            // silently fall back to the default ReLU and clamp the output to
+            // zero — clone_ShouldProduceIdenticalOutput would otherwise see
+            // original≠0 vs cloned=0 for any negative pre-activation.
             int inputSize = inputShape[0];
             int outputSize = outputShape[0];
-            instance = new SparseLinearLayer<T>(inputSize, outputSize);
+            var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+            object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            // If metadata named an activation but TryCreateActivationInstance
+            // couldn't materialise it (missing type, assembly-load failure,
+            // ctor mismatch), the layer would silently fall back to the
+            // ctor default — reintroducing the clone/output drift this
+            // metadata exists to prevent. Surface the failure instead.
+            if (activation is null
+                && additionalParams is not null
+                && additionalParams.ContainsKey("ScalarActivationType"))
+            {
+                throw new InvalidOperationException(
+                    $"Failed to deserialize activation function of type " +
+                    $"'{additionalParams["ScalarActivationType"]}' for SparseLinearLayer. " +
+                    $"Ensure the assembly providing this activation is loaded before deserialization.");
+            }
+            double sparsity = TryGetDouble(additionalParams, "Sparsity") ?? 0.9;
+            instance = new SparseLinearLayer<T>(inputSize, outputSize, sparsity,
+                (IActivationFunction<T>?)activation);
         }
         else if (genericDef == typeof(OctonionLinearLayer<>))
         {

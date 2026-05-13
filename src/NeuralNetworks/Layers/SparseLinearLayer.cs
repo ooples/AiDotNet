@@ -440,6 +440,21 @@ public partial class SparseLinearLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Adds sparsity to the layer metadata so deserialization rebuilds the
+    /// layer with the same sparsity ratio and activation function. The base
+    /// override already emits <c>ScalarActivationType</c>; without
+    /// <c>Sparsity</c> the deserializer constructs the layer at the default
+    /// 0.9 and any non-default sparsity (e.g., the output-head 0.99 some
+    /// pruned-network papers use) would silently change post-Clone.
+    /// </summary>
+    internal override System.Collections.Generic.Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["Sparsity"] = _sparsity.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
+    /// <summary>
     /// Gets all trainable parameters as a single vector.
     /// </summary>
     /// <returns>A vector containing all non-zero weights and biases.</returns>

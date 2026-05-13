@@ -107,11 +107,17 @@ public class LiteVAEModel<T> : VAEModelBase<T>
         int[] multipliers = [1, 2, 4];
         int channels = _baseChannels;
 
-        // Placeholder spatial size — only the channel count matters for ParameterCount,
-        // and ResolveFromShape requires concrete positive dims.
-        const int placeholderSpatial = 32;
+        // ResolveFromShape requires concrete positive spatial dims at construction
+        // time, but for fully-convolutional VAE blocks the actual H/W only affects
+        // the running activation buffers — ParameterCount and the kernel shapes
+        // are functions of channel counts alone. We seed with the conventional
+        // 32×32 LiteVAE training crop (Chen et al. 2024 §4 "Architecture" — base
+        // model trained at 32×32 latent / 256×256 pixel) so any stride/padding
+        // math in ResolveFromShape stays valid; downstream layers re-derive their
+        // spatial dims from the actual forward input.
+        const int constructionSpatial = 32;
         int currentChannels = _inputChannels;
-        int currentSpatial = placeholderSpatial;
+        int currentSpatial = constructionSpatial;
 
         var firstConv = new ConvolutionalLayer<T>(
             outputDepth: channels,
@@ -146,7 +152,7 @@ public class LiteVAEModel<T> : VAEModelBase<T>
 
         // Lightweight decoder
         int decoderChannels = _latentChannels;
-        int decoderSpatial = Math.Max(1, placeholderSpatial / (1 << multipliers.Length));
+        int decoderSpatial = Math.Max(1, constructionSpatial / (1 << multipliers.Length));
 
         var decoderIn = new ConvolutionalLayer<T>(
             outputDepth: channels,

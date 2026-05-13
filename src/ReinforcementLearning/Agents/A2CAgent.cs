@@ -175,11 +175,33 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
     private Vector<T> SampleDiscreteAction(Vector<T> logits, bool training)
     {
         var probs = Softmax(logits);
-        int actionIndex = training ? SampleCategorical(probs) : ArgMax(probs);
 
-        var action = new Vector<T>(_a2cOptions.ActionSize);
-        action[actionIndex] = NumOps.One;
-        return action;
+        if (training)
+        {
+            // Training: sample a discrete action and return a one-hot
+            // vector so StoreExperience records the commitment.
+            int actionIndex = SampleCategorical(probs);
+            var action = new Vector<T>(_a2cOptions.ActionSize);
+            action[actionIndex] = NumOps.One;
+            return action;
+        }
+
+        // Inference: return a one-hot argmax(π) action. The IRLAgent<T>
+        // public contract on discrete envs is "give me the action to take"
+        // — callers feed the result directly into env.Step(action).
+        // Returning a raw softmax distribution would change the API from
+        // action-selector to policy-diagnostic and break evaluation loops
+        // that expect a deterministic action. The full π(·|s) is still
+        // observable via the underlying policy network's Predict.
+        int bestIdx = 0;
+        for (int i = 1; i < probs.Length; i++)
+        {
+            if (NumOps.GreaterThan(probs[i], probs[bestIdx]))
+                bestIdx = i;
+        }
+        var oneHot = new Vector<T>(_a2cOptions.ActionSize);
+        oneHot[bestIdx] = NumOps.One;
+        return oneHot;
     }
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)
@@ -318,11 +340,11 @@ public class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>
                 int actSize = _a2cOptions.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
                 var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
-                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor!);
+                logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, actionsTensor!);
             }
             else
             {
-                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+                logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
             }
 
             // loss = -mean(logProbs * advantages)

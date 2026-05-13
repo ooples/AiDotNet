@@ -845,7 +845,19 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // LayerBase docs.
         EnsureInitializedFromInput(input);
 
-        _lastInput = input;
+        // _lastInput / _lastOutput are layer-side activation retention for
+        // a backward path that's never reached when training goes through
+        // the autodiff tape (the tape holds its own intermediate refs
+        // already). When a tape is active, skip the assignment so this
+        // field doesn't double-root the activation; null it so the
+        // previous step's tensor is eligible for GC. At VGG paper scale
+        // FC1 takes a [1, 25088] input × 4 B = 100 KB per call, but the
+        // 4096-wide intermediate `preActivation` is the larger cost — 16
+        // KB at fp32 / 32 KB at fp64, and that's the value we'd otherwise
+        // pin into _lastOutput.
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        _lastInput = tapeActive ? null : input;
         _originalInputShape = input._shape;
 
         // Industry standard: Support any-rank input tensors [..., inputSize]
@@ -912,7 +924,14 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             // FusedLinear entry per forward pass (calling FusedLinear twice corrupts tape
             // entries via RemoveLastNTapeEntries).
             var preActivation = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
-            _lastOutput = preActivation;
+            if (!tapeActive)
+            {
+                _lastOutput = preActivation;
+            }
+            else
+            {
+                _lastOutput = null;
+            }
             result = ApplyActivation(preActivation);
         }
 

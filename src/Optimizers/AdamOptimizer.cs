@@ -549,6 +549,11 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             ApplyGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
         }
 
+        // PyTorch GradScaler-style anomaly guard is already enforced at the
+        // top of Step() via ShouldRunAnomalyGuard() + AnyGradientIsAnomalous().
+        // That single gate respects AnomalyGuardMode and runs BEFORE
+        // _tapeStep++ so a skipped step is a true no-op.
+
         foreach (var param in context.Parameters)
         {
             if (!context.Gradients.TryGetValue(param, out var grad))
