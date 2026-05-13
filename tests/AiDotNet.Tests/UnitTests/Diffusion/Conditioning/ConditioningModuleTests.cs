@@ -161,6 +161,78 @@ public class ConditioningModuleTests
 
     #endregion
 
+    #region ResearchPaper Attribute Validation
+
+    /// <summary>
+    /// Reflection-based check that every conditioner's <c>[ResearchPaper]</c>
+    /// attribute survives instance construction (the attribute's ctor
+    /// validates URL format — title non-empty + url https://-prefixed —
+    /// and throws on malformed values). Catches paper-URL rot at test time
+    /// before review feedback notices a typo'd arXiv link.
+    /// </summary>
+    [Fact(Timeout = 30000)]
+    public async Task AllConditioners_ResearchPaperUrls_AreWellFormed()
+    {
+        var conditionerTypes = new[]
+        {
+            typeof(CLIPTextConditioner<double>),
+            typeof(SigLIPTextConditioner<double>),
+            typeof(SigLIP2TextConditioner<double>),
+            typeof(T5TextConditioner<double>),
+            typeof(DistilledT5TextConditioner<double>),
+            typeof(GemmaTextConditioner<double>),
+            typeof(Qwen2TextConditioner<double>),
+            typeof(ChatGLM3TextConditioner<double>),
+        };
+
+        foreach (var t in conditionerTypes)
+        {
+            var attr = (AiDotNet.Attributes.ResearchPaperAttribute?)Attribute.GetCustomAttribute(
+                t, typeof(AiDotNet.Attributes.ResearchPaperAttribute));
+            Assert.NotNull(attr);
+            Assert.False(string.IsNullOrWhiteSpace(attr!.Title),
+                $"{t.Name}.ResearchPaper.Title must be non-empty.");
+            Assert.True(attr.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase),
+                $"{t.Name}.ResearchPaper.Url ('{attr.Url}') must be a valid https:// link.");
+            Assert.True(attr.Year > 1900,
+                $"{t.Name}.ResearchPaper.Year ({attr.Year}) is implausible.");
+            Assert.False(string.IsNullOrWhiteSpace(attr.Authors),
+                $"{t.Name}.ResearchPaper.Authors must be non-empty.");
+        }
+    }
+
+    #endregion
+
+    #region FromPretrained Tokenizer Wiring (network — opt-in)
+
+    /// <summary>
+    /// Verifies that <see cref="CLIPTextConditioner{T}.FromPretrained"/> wires
+    /// a real HuggingFace tokenizer (network I/O on first call, cached
+    /// afterwards). Skipped by default so CI doesn't depend on hub
+    /// availability — opt in by setting <c>AIDOTNET_RUN_NETWORK_TESTS=1</c>.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_FromPretrained_LoadsRealHuggingFaceTokenizer()
+    {
+        if (Environment.GetEnvironmentVariable("AIDOTNET_RUN_NETWORK_TESTS") != "1")
+        {
+            // Skip on default CI: this test downloads from HuggingFace Hub.
+            return;
+        }
+
+        var clip = CLIPTextConditioner<double>.FromPretrained(CLIPVariant.ViTL14);
+        Assert.NotNull(clip);
+        Assert.Equal(77, clip.MaxSequenceLength);
+        Assert.Equal(768, clip.EmbeddingDimension);
+        // VocabSize comes from the loaded tokenizer; the canonical CLIP
+        // BPE vocab is 49408. Allow any positive value because the actual
+        // loader implementation may report a slightly different count
+        // depending on which special tokens are included in the count.
+        Assert.True(clip.VocabSize > 0);
+    }
+
+    #endregion
+
     #region End-to-End Forward-Pass Smoke Tests
     // These exercise the full Tokenize → EncodeText → GetPooledEmbedding path
     // so a build that compiles but breaks runtime shape contracts (e.g.

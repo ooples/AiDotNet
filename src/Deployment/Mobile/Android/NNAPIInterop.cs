@@ -63,6 +63,14 @@ internal static class NNAPIInterop
     /// </summary>
     public static bool TryLoad()
     {
+#if NETFRAMEWORK
+        // NNAPI runs on Android (.NET 6+ / .NET MAUI), not on .NET Framework.
+        // The full .NET Framework target ships only so this codebase can be
+        // referenced from desktop Windows tools; the NNAPI deployment path
+        // is not exercised there, so report unavailable on the framework
+        // target.
+        return false;
+#else
         try
         {
             if (!NativeLibrary.TryLoad(LibName, out IntPtr handle))
@@ -76,6 +84,7 @@ internal static class NNAPIInterop
         {
             return false;
         }
+#endif
     }
 
     // ─── Device introspection ───────────────────────────────────────────────

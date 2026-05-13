@@ -100,8 +100,16 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         SampleRate = _options.SampleRate;
         _useNativeMode = false;
         OnnxEncoder = new OnnxModel<T>(audioEncoderPath);
-        if (!string.IsNullOrWhiteSpace(textEncoderPath) && File.Exists(textEncoderPath))
+        // Explicit `is not null` first so net471's flow analyzer (which
+        // doesn't propagate IsNullOrWhiteSpace's non-null implication
+        // across two parameter uses) sees a proven-non-null reference at
+        // both the File.Exists call and the ctor call.
+        if (textEncoderPath is not null
+            && !string.IsNullOrWhiteSpace(textEncoderPath)
+            && File.Exists(textEncoderPath))
+        {
             OnnxDecoder = new OnnxModel<T>(textEncoderPath);
+        }
 
         InitializeLayers();
     }
