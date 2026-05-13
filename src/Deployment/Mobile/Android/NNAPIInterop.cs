@@ -63,14 +63,7 @@ internal static class NNAPIInterop
     /// </summary>
     public static bool TryLoad()
     {
-#if NETFRAMEWORK
-        // NNAPI runs on Android (.NET 6+ / .NET MAUI), not on .NET Framework.
-        // The full .NET Framework target ships only so this codebase can be
-        // referenced from desktop Windows tools; the NNAPI deployment path
-        // is not exercised there, so report unavailable on the framework
-        // target.
-        return false;
-#else
+#if NET5_0_OR_GREATER
         try
         {
             if (!NativeLibrary.TryLoad(LibName, out IntPtr handle))
@@ -84,90 +77,104 @@ internal static class NNAPIInterop
         {
             return false;
         }
+#else
+        // System.Runtime.InteropServices.NativeLibrary is a .NET 5+ API
+        // and isn't available on net471. NNAPI itself is Android-only
+        // and the calling Initialize() path also routes through
+        // RuntimeInformation.IsOSPlatform(OSPlatform.Linux) — on net471
+        // hosts (Windows / desktop only) the probe is unreachable in
+        // practice, so returning false here is the correct "not loadable"
+        // answer.
+        return false;
 #endif
     }
 
     // ─── Device introspection ───────────────────────────────────────────────
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworks_getDeviceCount")]
+    // All NNAPI exports are C ABI symbols on libneuralnetworks.so. Specifying
+    // CallingConvention.Cdecl explicitly avoids relying on the platform's
+    // default ([DllImport] uses winapi/StdCall on .NET Framework which can
+    // corrupt the stack against a Cdecl-only library). Matches the convention
+    // used elsewhere in the repo for native interop (e.g. NCCL / CUDA).
+    [DllImport(LibName, EntryPoint = "ANeuralNetworks_getDeviceCount", CallingConvention = CallingConvention.Cdecl)]
     public static extern int GetDeviceCount(out uint deviceCount);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworks_getDevice")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworks_getDevice", CallingConvention = CallingConvention.Cdecl)]
     public static extern int GetDevice(uint index, out IntPtr device);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksDevice_getName")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksDevice_getName", CallingConvention = CallingConvention.Cdecl)]
     public static extern int GetDeviceName(IntPtr device, out IntPtr name);
 
     // ─── Model construction ─────────────────────────────────────────────────
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_create")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_create", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ModelCreate(out IntPtr model);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_free")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_free", CallingConvention = CallingConvention.Cdecl)]
     public static extern void ModelFree(IntPtr model);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_addOperand")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_addOperand", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ModelAddOperand(IntPtr model, ref ANeuralNetworksOperandType type);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_setOperandValue")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_setOperandValue", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ModelSetOperandValue(IntPtr model, int index, IntPtr buffer, UIntPtr length);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_addOperation")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_addOperation", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ModelAddOperation(
         IntPtr model, int type,
         uint inputCount, uint[] inputs,
         uint outputCount, uint[] outputs);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_identifyInputsAndOutputs")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_identifyInputsAndOutputs", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ModelIdentifyInputsAndOutputs(
         IntPtr model,
         uint inputCount, uint[] inputs,
         uint outputCount, uint[] outputs);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_finish")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksModel_finish", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ModelFinish(IntPtr model);
 
     // ─── Compilation ────────────────────────────────────────────────────────
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_create")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_create", CallingConvention = CallingConvention.Cdecl)]
     public static extern int CompilationCreate(IntPtr model, out IntPtr compilation);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_createForDevices")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_createForDevices", CallingConvention = CallingConvention.Cdecl)]
     public static extern int CompilationCreateForDevices(
         IntPtr model, IntPtr[] devices, uint numDevices, out IntPtr compilation);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_free")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_free", CallingConvention = CallingConvention.Cdecl)]
     public static extern void CompilationFree(IntPtr compilation);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_setPreference")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_setPreference", CallingConvention = CallingConvention.Cdecl)]
     public static extern int CompilationSetPreference(IntPtr compilation, int preference);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_finish")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksCompilation_finish", CallingConvention = CallingConvention.Cdecl)]
     public static extern int CompilationFinish(IntPtr compilation);
 
     // ─── Execution ──────────────────────────────────────────────────────────
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_create")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_create", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ExecutionCreate(IntPtr compilation, out IntPtr execution);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_free")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_free", CallingConvention = CallingConvention.Cdecl)]
     public static extern void ExecutionFree(IntPtr execution);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_setInput")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_setInput", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ExecutionSetInput(
         IntPtr execution, int index, IntPtr typeOrNull, IntPtr buffer, UIntPtr length);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_setOutput")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_setOutput", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ExecutionSetOutput(
         IntPtr execution, int index, IntPtr typeOrNull, IntPtr buffer, UIntPtr length);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_startCompute")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksExecution_startCompute", CallingConvention = CallingConvention.Cdecl)]
     public static extern int ExecutionStartCompute(IntPtr execution, out IntPtr eventHandle);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksEvent_wait")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksEvent_wait", CallingConvention = CallingConvention.Cdecl)]
     public static extern int EventWait(IntPtr eventHandle);
 
-    [DllImport(LibName, EntryPoint = "ANeuralNetworksEvent_free")]
+    [DllImport(LibName, EntryPoint = "ANeuralNetworksEvent_free", CallingConvention = CallingConvention.Cdecl)]
     public static extern void EventFree(IntPtr eventHandle);
 
     // ─── Operand type struct ────────────────────────────────────────────────

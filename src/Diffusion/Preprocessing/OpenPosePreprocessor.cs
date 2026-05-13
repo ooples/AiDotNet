@@ -59,11 +59,46 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        // Validate at the boundary so malformed external inputs surface a
+        // clear ArgumentException instead of a low-level index-out-of-range
+        // from the inner indexing loop below.
+        if (data is null)
+            throw new ArgumentNullException(nameof(data));
+        var inShape = data._shape;
+        if (inShape.Length != 4)
+            throw new ArgumentException(
+                $"Expected [B, C, H, W] (rank 4) input tensor; got rank {inShape.Length}.",
+                nameof(data));
+        if (inShape[1] < 1)
+            throw new ArgumentException(
+                "Input tensor must contain at least one channel.",
+                nameof(data));
+
         // Production path: delegate to a configured pose extractor that
         // wraps a pretrained OpenPose / DWPose / RTMPose weight bundle.
+        // Validate the returned shape so a malformed extractor surfaces
+        // here at the boundary (with an actionable message) instead of
+        // failing later inside a ControlNet that assumed [B, 3, H, W].
         if (_poseExtractor is not null)
         {
-            return _poseExtractor.ExtractKeypoints(data);
+            var pose = _poseExtractor.ExtractKeypoints(data);
+            if (pose is null)
+            {
+                throw new InvalidOperationException(
+                    "IPoseExtractor<T>.ExtractKeypoints returned null. Expected a [B, 3, H, W] keypoint tensor.");
+            }
+            var outShape = pose._shape;
+            if (outShape.Length != 4
+                || outShape[0] != inShape[0]
+                || outShape[1] != 3
+                || outShape[2] != inShape[2]
+                || outShape[3] != inShape[3])
+            {
+                throw new InvalidOperationException(
+                    $"IPoseExtractor<T>.ExtractKeypoints must return [B={inShape[0]}, 3, H={inShape[2]}, W={inShape[3]}] " +
+                    $"to satisfy the ControlType.Pose contract. Got [{string.Join(",", outShape)}].");
+            }
+            return pose;
         }
 
         // Default path: paper-faithful edge-magnitude proxy from ControlNet
@@ -75,10 +110,9 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
         // for a zero-weight in-repo preprocessor. The edge tensor here
         // preserves silhouette and limb-boundary information that
         // ControlNet conditions on, just without joint labels.
-        var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
+        int batch = inShape[0];
+        int height = inShape[2];
+        int width = inShape[3];
         var result = new Tensor<T>(new[] { batch, 3, height, width });
 
         for (int b = 0; b < batch; b++)

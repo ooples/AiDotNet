@@ -63,13 +63,18 @@ public class ODISETests : NeuralNetworkModelTestBase
         int len = tensor.Length;
         for (int i = 0; i < len; i++)
         {
-            // Additive offset preserves the per-`value` direction in feature
-            // space after mean subtraction: at value=0.1 the sinusoidal term
-            // dominates the spatial pattern; at value=0.9 the offset
-            // dominates and the spatial pattern is closer to uniform with a
-            // smaller sinusoidal ripple. Post-GroupNorm these two patterns
-            // produce different feature directions.
-            tensor[i] = value + 0.25 * Math.Sin(i * Math.PI / Math.Max(1, len - 1));
+            // Make the spatial pattern depend on `value` MULTIPLICATIVELY
+            // through the sinusoid frequency, not just additively through an
+            // offset. GroupNorm subtracts the per-feature mean and divides by
+            // the per-feature std, so any pattern of the form (value + g(i))
+            // collapses to the same normalised feature regardless of `value`.
+            // A frequency-dependent sinusoid produces a distinct spatial
+            // shape per `value` that survives mean+variance normalisation.
+            double pos = (double)i / Math.Max(1, len - 1);
+            tensor[i] =
+                value
+                + 0.20 * Math.Sin((1.0 + value) * Math.PI * pos)
+                + 0.05 * Math.Cos((2.0 + value) * Math.PI * pos);
         }
         return tensor;
     }

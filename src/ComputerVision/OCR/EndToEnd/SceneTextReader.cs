@@ -191,10 +191,15 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             }
         }
 
-        // If polygon available and text is rotated, apply perspective correction
+        // If polygon available and text is rotated, apply perspective correction.
+        // Pass the crop's origin in full-image coordinates so the warp can
+        // translate the polygon's source corners into crop-local space —
+        // without this, `sx`/`sy` would reference positions outside the
+        // crop's bounds and the bilinear sampler would return black for
+        // every region whose box doesn't start at (0, 0).
         if (region.Polygon.Count >= 4 && Math.Abs(region.RotationAngle) > 5)
         {
-            crop = CorrectPerspective(crop, region);
+            crop = CorrectPerspective(crop, region, cropX1, cropY1);
         }
 
         return crop;
@@ -209,7 +214,7 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// dominated by the corner correspondence; for the typical 5°-45°
     /// regime this is the implementation that actually undoes the warp.
     /// </summary>
-    private Tensor<T> CorrectPerspective(Tensor<T> crop, TextRegion<T> region)
+    private Tensor<T> CorrectPerspective(Tensor<T> crop, TextRegion<T> region, int cropX, int cropY)
     {
         if (region.Polygon.Count < 4) return crop;
 
@@ -218,10 +223,14 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int srcH = crop.Shape[2];
         int srcW = crop.Shape[3];
 
-        // Sort the 4 corners into (top-left, top-right, bottom-right, bottom-left)
-        // by angle from the polygon centroid. The detector usually emits them in
-        // some order; rotating into a canonical order makes the homography stable.
-        var (tl, tr, br, bl) = OrderQuadCorners(region.Polygon);
+        // Reduce arbitrary N-gon contours (N >= 4) to 4 quad corners using the
+        // OpenCV-canonical extreme-points approach: tl = argmin(x+y),
+        // br = argmax(x+y), tr = argmax(x-y), bl = argmin(x-y). For N == 4
+        // this is a no-op pass-through to OrderQuadCorners. For N > 4 it
+        // selects a stable quad bounded by the contour's extremes instead of
+        // letting OrderQuadCorners silently consume the first 4 indices.
+        var quad = ReducePolygonToQuad(region.Polygon);
+        var (tl, tr, br, bl) = OrderQuadCorners(quad);
 
         // Target rectangle dimensions: preserve aspect ratio from the quad.
         double topEdge    = Math.Sqrt(SqDist(tl, tr));
@@ -236,13 +245,25 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var (dx, dy) = (
             new[] { 0.0,         dstW - 1.0,  dstW - 1.0,  0.0         },
             new[] { 0.0,         0.0,         dstH - 1.0,  dstH - 1.0  });
+        // Translate the polygon's source corners into CROP-LOCAL coordinates
+        // (subtract the crop origin) because `crop` is indexed from (0, 0).
+        // Using region.Polygon's full-image coordinates directly would make
+        // the bilinear sampler read mostly out-of-bounds and return a
+        // black/garbled rectified crop for any region whose box doesn't
+        // start at the image origin.
         var (sx, sy) = (
-            new[] { tl.X, tr.X, br.X, bl.X },
-            new[] { tl.Y, tr.Y, br.Y, bl.Y });
+            new[] { tl.X - cropX, tr.X - cropX, br.X - cropX, bl.X - cropX },
+            new[] { tl.Y - cropY, tr.Y - cropY, br.Y - cropY, bl.Y - cropY });
         if (!SolveHomographyDLT(dx, dy, sx, sy, out double[] h))
         {
             // Degenerate corners (collinear / coincident) — fall back to crop.
-            return Math.Abs(region.RotationAngle) > 45 ? Rotate90(crop) : crop;
+            // Preserve rotation direction: a detector reporting +90° wants a
+            // clockwise correction (Rotate90), -90° wants counter-clockwise
+            // (Rotate270). The previous abs-based form rotated both
+            // directions clockwise, which doubled the misalignment for
+            // negative-rotation regions.
+            if (Math.Abs(region.RotationAngle) <= 45) return crop;
+            return region.RotationAngle >= 0 ? Rotate90(crop) : Rotate270(crop);
         }
 
         // Warp.
@@ -269,6 +290,76 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     }
 
     /// <summary>
+    /// Reduces a polygon with N >= 4 vertices to a stable 4-corner quad using
+    /// the canonical extreme-point selection from OpenCV's perspective-correct
+    /// pipeline:
+    ///   top-left     = argmin(x + y)
+    ///   bottom-right = argmax(x + y)
+    ///   top-right    = argmax(x - y)
+    ///   bottom-left  = argmin(x - y)
+    /// When N == 4 the result is the same 4 points the detector produced
+    /// (ordering may differ; OrderQuadCorners re-canonicalises afterwards).
+    /// When N > 4 it picks the 4 extremes instead of silently truncating to
+    /// poly[0..3], which OrderQuadCorners would do.
+    /// </summary>
+    private static List<(T X, T Y)> ReducePolygonToQuad(List<(T X, T Y)> poly)
+    {
+        if (poly.Count == 4) return poly;
+        int n = poly.Count;
+        int tlIdx = 0, brIdx = 0, trIdx = 0, blIdx = 0;
+        double minSum = double.PositiveInfinity, maxSum = double.NegativeInfinity;
+        double maxDiff = double.NegativeInfinity, minDiff = double.PositiveInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            double x = NumOps.ToDouble(poly[i].X);
+            double y = NumOps.ToDouble(poly[i].Y);
+            double s = x + y;
+            double d = x - y;
+            if (s < minSum) { minSum = s; tlIdx = i; }
+            if (s > maxSum) { maxSum = s; brIdx = i; }
+            if (d > maxDiff) { maxDiff = d; trIdx = i; }
+            if (d < minDiff) { minDiff = d; blIdx = i; }
+        }
+        // Diamond / rotated-box contours have tied extrema where the same
+        // vertex wins more than one of the four argmin/argmax queries —
+        // returning that as a "quad" makes the homography singular and
+        // CorrectPerspective silently falls back to the unrectified crop.
+        // Detect duplicates and fill the missing slots with the highest-
+        // perimeter vertices not already chosen, so the reduced polygon
+        // stays a non-degenerate quad.
+        var chosen = new int[] { tlIdx, trIdx, brIdx, blIdx };
+        if (HasDistinctValues(chosen))
+        {
+            return new List<(T X, T Y)> { poly[tlIdx], poly[trIdx], poly[brIdx], poly[blIdx] };
+        }
+
+        // Backfill: keep distinct indices in the order encountered, then
+        // pull from poly[] in order to fill any duplicated slot. This
+        // guarantees 4 distinct contour vertices even on degenerate-extrema
+        // shapes (a Manhattan-aligned 5-gon, an exact regular pentagon
+        // centred on the origin, etc.).
+        var used = new HashSet<int>();
+        var quad = new List<(T X, T Y)>(4);
+        foreach (int idx in chosen)
+        {
+            if (used.Add(idx)) quad.Add(poly[idx]);
+        }
+        for (int i = 0; quad.Count < 4 && i < n; i++)
+        {
+            if (used.Add(i)) quad.Add(poly[i]);
+        }
+        return quad;
+    }
+
+    private static bool HasDistinctValues(int[] indices)
+    {
+        for (int i = 0; i < indices.Length; i++)
+            for (int j = i + 1; j < indices.Length; j++)
+                if (indices[i] == indices[j]) return false;
+        return true;
+    }
+
+    /// <summary>
     /// Orders 4 polygon corners as (top-left, top-right, bottom-right,
     /// bottom-left) so the homography target rectangle has a consistent
     /// orientation. Uses centroid-angle sort, which is robust to corner
@@ -288,8 +379,10 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         // Centroid.
         double cx = (pts[0].X + pts[1].X + pts[2].X + pts[3].X) / 4.0;
         double cy = (pts[0].Y + pts[1].Y + pts[2].Y + pts[3].Y) / 4.0;
-        // Sort by angle from centroid (descending), then re-anchor on the
-        // top-left corner (smallest x+y).
+        // Sort by angle from centroid (ascending — Atan2 default ordering),
+        // then re-anchor on the top-left corner (smallest x+y) below. The
+        // re-anchoring step handles any starting position, so functional
+        // correctness doesn't depend on sort direction.
         Array.Sort(pts, (a, b) => Math.Atan2(a.Y - cy, a.X - cx).CompareTo(Math.Atan2(b.Y - cy, b.X - cx)));
         int startIdx = 0;
         double minSum = double.PositiveInfinity;
@@ -404,6 +497,7 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     private Tensor<T> Rotate90(Tensor<T> input)
     {
+        // 90° clockwise.
         int batch = input.Shape[0];
         int channels = input.Shape[1];
         int height = input.Shape[2];
@@ -420,6 +514,35 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                     for (int w = 0; w < width; w++)
                     {
                         output[b, c, w, height - 1 - h] = input[b, c, h, w];
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
+    private Tensor<T> Rotate270(Tensor<T> input)
+    {
+        // 90° counter-clockwise (== 270° clockwise). Mirrors Rotate90 with
+        // the destination indices flipped along the width axis so a
+        // negative-rotation detector reading still ends up upright.
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+
+        var output = new Tensor<T>(new[] { batch, channels, width, height });
+
+        for (int b = 0; b < batch; b++)
+        {
+            for (int c = 0; c < channels; c++)
+            {
+                for (int h = 0; h < height; h++)
+                {
+                    for (int w = 0; w < width; w++)
+                    {
+                        output[b, c, width - 1 - w, h] = input[b, c, h, w];
                     }
                 }
             }

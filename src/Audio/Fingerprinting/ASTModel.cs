@@ -72,6 +72,7 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new ASTModelOptions();
+        ValidateOptions(_options);
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -80,10 +81,19 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = false;
+        _modelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath);
 
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Path to the loaded ONNX model file when constructed in ONNX mode;
+    /// <c>null</c> in native mode. Captured so <see cref="CreateNewInstance"/>
+    /// can reconstruct an ONNX clone without losing its execution-mode
+    /// configuration.
+    /// </summary>
+    private readonly string? _modelPath;
 
     /// <summary>Initializes AST in native training / inference mode.</summary>
     public ASTModel(
@@ -92,10 +102,48 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new ASTModelOptions();
+        ValidateOptions(_options);
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = true;
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Validates that every option used in STFT / mel / patch / transformer
+    /// math is in range. Fails fast at construction so a bad caller config
+    /// produces an actionable ArgumentOutOfRangeException instead of a
+    /// downstream "matrix shape mismatch" deep inside the first forward.
+    /// </summary>
+    private static void ValidateOptions(ASTModelOptions o)
+    {
+        if (o.SampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.SampleRate), o.SampleRate, "SampleRate must be > 0.");
+        if (o.StftWindowSize <= 1)
+            throw new ArgumentOutOfRangeException(nameof(o.StftWindowSize), o.StftWindowSize, "StftWindowSize must be > 1.");
+        if (o.HopLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.HopLength), o.HopLength, "HopLength must be > 0.");
+        if (o.NumMelBands <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumMelBands), o.NumMelBands, "NumMelBands must be > 0.");
+        if (o.TargetLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.TargetLength), o.TargetLength, "TargetLength must be > 0.");
+        if (o.PatchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.PatchSize), o.PatchSize, "PatchSize must be > 0.");
+        if (o.NumClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumClasses), o.NumClasses, "NumClasses must be > 0.");
+        if (o.EmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.EmbeddingDim), o.EmbeddingDim, "EmbeddingDim must be > 0.");
+        if (o.NumLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumLayers), o.NumLayers, "NumLayers must be > 0.");
+        if (o.NumHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumHeads), o.NumHeads, "NumHeads must be > 0.");
+        if (o.EmbeddingDim % o.NumHeads != 0)
+            throw new ArgumentException(
+                $"EmbeddingDim ({o.EmbeddingDim}) must be divisible by NumHeads ({o.NumHeads}) — " +
+                "multi-head attention splits the embedding equally across heads.",
+                nameof(o.EmbeddingDim));
+        if (o.DropoutRate < 0.0 || o.DropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), o.DropoutRate, "DropoutRate must be in [0, 1).");
     }
 
     #endregion
@@ -221,6 +269,21 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
+        // InitializeLayers leaves Layers empty in ONNX mode (the ONNX
+        // graph is executed via OnnxEncoder instead), so the layer-walk
+        // below would exit immediately and serialize the preprocessed
+        // mel spectrogram as the "fingerprint" — silently wrong. Require
+        // native mode here until an ONNX-embedding output is wired
+        // explicitly.
+        if (!_useNativeMode)
+        {
+            throw new NotSupportedException(
+                "ASTModel.Fingerprint() in ONNX mode requires an explicit " +
+                "embedding-producing output to be wired. Use the native " +
+                "constructor or invoke the ONNX encoder directly via the " +
+                "OnnxEncoder property.");
+        }
+
         // For fingerprinting we want the pooled embedding (one layer before the
         // classification head). Run the layer stack and stop at the
         // GlobalPoolingLayer output.
@@ -266,6 +329,18 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public IReadOnlyList<FingerprintMatch> FindMatches(
         AudioFingerprint<T> query, AudioFingerprint<T> reference, int minMatchLength = 10)
     {
+        if (minMatchLength <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(minMatchLength), minMatchLength, "minMatchLength must be > 0.");
+
+        // Honor the caller's minimum-match guard: if the embedding overlap
+        // is shorter than what they asked for, return no matches rather
+        // than silently misreport a global-embedding similarity as a
+        // valid match.
+        int overlap = Math.Min(query.Data.Length, reference.Data.Length);
+        if (overlap < minMatchLength)
+            return Array.Empty<FingerprintMatch>();
+
         // AST produces global embeddings; whole-clip similarity only.
         double similarity = ComputeSimilarity(query, reference);
         if (similarity < 0.5) return Array.Empty<FingerprintMatch>();
@@ -314,11 +389,29 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private Tensor<T> SoftmaxLastAxis(Tensor<T> logits) =>
         Engine.TensorSoftmax(logits, axis: logits.Shape.Length - 1);
 
-    private void ThrowIfDisposed() { /* base class manages disposal */ }
+    private bool _disposed;
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _disposed = true;
+        base.Dispose(disposing);
+    }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new ASTModel<T>(Architecture, _options);
+        _useNativeMode
+            ? new ASTModel<T>(Architecture, _options)
+            // ONNX-backed instance: preserve the loaded model path so the
+            // clone keeps its execution mode. Without this, Clone() of an
+            // ONNX-mode AST silently downgrades to native (no weights,
+            // empty Layers) and changes inference behaviour.
+            : new ASTModel<T>(Architecture, _modelPath!, _options);
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() =>
@@ -362,6 +455,11 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         bool useNativeMode = reader.ReadBoolean();
+        if (useNativeMode != _useNativeMode)
+            throw new InvalidOperationException(
+                $"Persisted AST mode (native={useNativeMode}) does not match this " +
+                $"instance's mode (native={_useNativeMode}). Reconstruct ASTModel " +
+                $"with the matching constructor before loading this checkpoint.");
         VerifyEqual(reader.ReadInt32(),  _options.SampleRate,     nameof(_options.SampleRate));
         VerifyEqual(reader.ReadInt32(),  _options.StftWindowSize, nameof(_options.StftWindowSize));
         VerifyEqual(reader.ReadInt32(),  _options.HopLength,      nameof(_options.HopLength));

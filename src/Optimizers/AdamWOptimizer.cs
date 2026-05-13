@@ -543,10 +543,17 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
         // gradients large enough to drive logits past float range in a few
         // iterations — ODISE diverged 770× (initial MSE 0.24 → final 184.69)
         // before clipping was wired into the tape path.
-        if (GradientOptions.EnableGradientClipping &&
-            GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm)
+        if (GradientOptions.EnableGradientClipping)
         {
-            ApplyTapeGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+            switch (GradientOptions.GradientClippingMethod)
+            {
+                case GradientClippingMethod.ByNorm:
+                    ApplyTapeGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+                    break;
+                case GradientClippingMethod.ByValue:
+                    ApplyTapeValueGradientClipping(context, GradientOptions.MaxGradientValue);
+                    break;
+            }
         }
 
         // PyTorch GradScaler-style anomaly guard: skip the entire step (don't

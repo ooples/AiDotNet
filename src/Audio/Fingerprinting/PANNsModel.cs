@@ -73,6 +73,7 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new PANNsModelOptions();
+        ValidateOptions(_options);
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -81,10 +82,19 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = false;
+        _modelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath);
 
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Path to the loaded ONNX model file when constructed in ONNX mode;
+    /// <c>null</c> in native mode. Captured so <see cref="CreateNewInstance"/>
+    /// can reconstruct an ONNX clone without losing its execution-mode
+    /// configuration.
+    /// </summary>
+    private readonly string? _modelPath;
 
     /// <summary>Initializes PANNs in native training / inference mode.</summary>
     public PANNsModel(
@@ -93,10 +103,35 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new PANNsModelOptions();
+        ValidateOptions(_options);
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = true;
         InitializeLayers();
+    }
+
+    /// <summary>
+    /// Validates that every option used in STFT / mel / CNN math is in
+    /// range. Fails fast at construction so bad caller config produces an
+    /// actionable ArgumentOutOfRangeException instead of a downstream
+    /// "shape mismatch" deep inside the first forward.
+    /// </summary>
+    private static void ValidateOptions(PANNsModelOptions o)
+    {
+        if (o.SampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.SampleRate), o.SampleRate, "SampleRate must be > 0.");
+        if (o.StftWindowSize <= 1)
+            throw new ArgumentOutOfRangeException(nameof(o.StftWindowSize), o.StftWindowSize, "StftWindowSize must be > 1.");
+        if (o.HopLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.HopLength), o.HopLength, "HopLength must be > 0.");
+        if (o.NumMelBands <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumMelBands), o.NumMelBands, "NumMelBands must be > 0.");
+        if (o.NumClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumClasses), o.NumClasses, "NumClasses must be > 0.");
+        if (o.EmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.EmbeddingDim), o.EmbeddingDim, "EmbeddingDim must be > 0.");
+        if (o.DropoutRate < 0.0 || o.DropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), o.DropoutRate, "DropoutRate must be in [0, 1).");
     }
 
     #endregion
@@ -202,6 +237,13 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public Dictionary<string, double> Classify(Tensor<T> audio, double threshold = 0.5)
     {
         var probs = Predict(audio);
+        // PANNs CNN14 emits [batch, classes]. A 3-D output (e.g. a
+        // frame-level audio-tagging variant) would silently index the wrong
+        // axis below — fail fast with a clear shape message instead.
+        if (probs.Shape.Length != 2)
+            throw new InvalidOperationException(
+                "PANNsModel.Classify expects a 2-D [batch, classes] probability output, " +
+                $"but got shape [{string.Join(", ", probs.Shape)}].");
         int classCount = probs.Shape[^1];
         var results = new Dictionary<string, double>();
         for (int i = 0; i < classCount; i++)
@@ -217,15 +259,27 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <summary>Returns the top-K class predictions sorted descending.</summary>
     public List<(string Label, double Probability)> GetTopK(Tensor<T> audio, int k = 5)
     {
+        if (k <= 0)
+            throw new ArgumentOutOfRangeException(nameof(k), k, "k must be > 0.");
+
         var probs = Predict(audio);
+        // Same 2-D [batch, classes] contract as Classify — surface a shape
+        // bug as an actionable InvalidOperationException instead of an
+        // IndexOutOfRange one tensor-call deeper.
+        if (probs.Shape.Length != 2)
+            throw new InvalidOperationException(
+                "PANNsModel.GetTopK expects a 2-D [batch, classes] probability output, " +
+                $"but got shape [{string.Join(", ", probs.Shape)}].");
+
         int classCount = probs.Shape[^1];
         var indexed = new (double prob, int idx)[classCount];
         for (int i = 0; i < classCount; i++)
             indexed[i] = (Convert.ToDouble(probs[0, i]), i);
         Array.Sort(indexed, (a, b) => b.prob.CompareTo(a.prob));
 
-        var result = new List<(string, double)>(k);
-        for (int i = 0; i < Math.Min(k, classCount); i++)
+        int take = Math.Min(k, classCount);
+        var result = new List<(string, double)>(take);
+        for (int i = 0; i < take; i++)
             result.Add(($"class_{indexed[i].idx}", indexed[i].prob));
         return result;
     }
@@ -233,21 +287,44 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
+        // Layers is empty in ONNX mode (the ONNX graph runs via
+        // OnnxEncoder), so the layer-walk below would exit immediately
+        // and return the preprocessed mel spectrogram as the fingerprint
+        // — silently wrong. Require native mode here until an
+        // ONNX-embedding output is wired explicitly.
+        if (!_useNativeMode)
+        {
+            throw new NotSupportedException(
+                "PANNsModel.Fingerprint() in ONNX mode requires an explicit " +
+                "embedding-producing output to be wired. Use the native " +
+                "constructor or invoke the ONNX encoder directly via the " +
+                "OnnxEncoder property.");
+        }
+
         // For fingerprinting we want the pooled embedding (output of the
         // ReLU-activated embedding DenseLayer, just before the classifier).
         // Walk the layer stack and stop after the embedding-dim DenseLayer
         // (which has outputSize == _options.EmbeddingDim).
         var mel = PreprocessAudio(audio);
         var hidden = mel;
+        bool foundEmbedding = false;
         foreach (var layer in Layers)
         {
             hidden = layer.Forward(hidden);
             if (layer is DenseLayer<T> dense && dense.GetOutputShape().Length == 1 &&
                 dense.GetOutputShape()[0] == _options.EmbeddingDim)
             {
+                foundEmbedding = true;
                 break;
             }
         }
+        if (!foundEmbedding)
+            throw new InvalidOperationException(
+                $"PANNsModel.Fingerprint walked the layer stack without finding a DenseLayer " +
+                $"whose output matches EmbeddingDim={_options.EmbeddingDim}. The native layer " +
+                "stack must be built via the standard PANNs CNN14 factory so the embedding " +
+                "head exists — otherwise this would return the 527-class logits instead of " +
+                "the 2048-d embedding (silently wrong fingerprint).");
 
         var flat = hidden.ToVector();
         var data = new T[flat.Length];
@@ -256,7 +333,9 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Data = data,
             SampleRate = SampleRate,
-            Duration = audio.Length / (double)SampleRate
+            // Use the last-axis sample count so batched audio reports the
+            // per-clip duration rather than batch * samples / SampleRate.
+            Duration = audio.Shape[audio.Shape.Length - 1] / (double)SampleRate
         };
     }
 
@@ -283,6 +362,12 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public IReadOnlyList<FingerprintMatch> FindMatches(
         AudioFingerprint<T> query, AudioFingerprint<T> reference, int minMatchLength = 10)
     {
+        // PANNs produces a single global embedding per clip rather than a
+        // sequence of frame-local fingerprints, so segment-length filtering
+        // doesn't apply — there are no shorter sub-segments to reject.
+        // The parameter is preserved for IAudioFingerprinter<T> interface
+        // compatibility; discard it explicitly to silence the warning.
+        _ = minMatchLength;
         // PANNs produces global embeddings; whole-clip similarity only.
         double similarity = ComputeSimilarity(query, reference);
         if (similarity < 0.5) return Array.Empty<FingerprintMatch>();
@@ -327,11 +412,29 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     #region Helpers
 
-    private void ThrowIfDisposed() { /* base class manages disposal */ }
+    private bool _disposed;
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _disposed = true;
+        base.Dispose(disposing);
+    }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new PANNsModel<T>(Architecture, _options);
+        _useNativeMode
+            ? new PANNsModel<T>(Architecture, _options)
+            // ONNX-backed instance: reuse the loaded model path so the
+            // clone preserves its execution mode. Without this, Clone() of
+            // an ONNX-mode PANNs silently downgrades to native and
+            // changes inference behaviour.
+            : new PANNsModel<T>(Architecture, _modelPath!, _options);
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() =>
@@ -367,6 +470,11 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         bool useNativeMode = reader.ReadBoolean();
+        if (useNativeMode != _useNativeMode)
+            throw new InvalidOperationException(
+                $"Persisted PANNs mode (native={useNativeMode}) does not match this " +
+                $"instance's mode (native={_useNativeMode}). Reconstruct PANNsModel " +
+                $"with the matching constructor before loading this checkpoint.");
         VerifyEqual(reader.ReadInt32(),  _options.SampleRate,     nameof(_options.SampleRate));
         VerifyEqual(reader.ReadInt32(),  _options.StftWindowSize, nameof(_options.StftWindowSize));
         VerifyEqual(reader.ReadInt32(),  _options.HopLength,      nameof(_options.HopLength));

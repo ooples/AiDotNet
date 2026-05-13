@@ -58,8 +58,13 @@ public class NNAPIBackend<T> : IDisposable
 
     /// <summary>
     /// Managed-CPU inference hook invoked when NNAPI is unavailable or
-    /// fails. When unset, <see cref="Execute"/> on the fallback path throws
-    /// rather than silently returning identity — see remarks.
+    /// fails. When unset, <see cref="Execute"/> emits a Trace warning and
+    /// returns an identity-passthrough copy of the input so model.Predict()
+    /// keeps the same nullable-default contract used elsewhere in the
+    /// codebase (industry-standard "do something reasonable + diagnose"
+    /// rather than throw). Wire this property to a real CPU fallback
+    /// (typically the surrounding model's Predict entry point) for a
+    /// meaningful result.
     /// </summary>
     /// <remarks>
     /// Internal — adapter-only plumbing. Setting this AFTER
@@ -68,10 +73,22 @@ public class NNAPIBackend<T> : IDisposable
     /// </remarks>
     internal Func<T[], T[]>? CpuExecutor { get; set; }
 
-    public NNAPIBackend(NNAPIConfiguration config)
+    /// <summary>
+    /// Optional graph builder that decodes the loaded model bytes into
+    /// NNAPI operands + operations. When wired, <see cref="LoadModel"/>
+    /// invokes this between <c>Model_create</c> and <c>Model_finish</c>
+    /// so the backend compiles a real NNAPI graph. When unset, the backend
+    /// Trace-warns and routes to <see cref="CpuExecutor"/> (or the
+    /// identity-passthrough fallback) — same nullable-default contract
+    /// used throughout the codebase.
+    /// </summary>
+    internal INNAPIGraphBuilder? GraphBuilder { get; set; }
+
+    public NNAPIBackend(NNAPIConfiguration config, INNAPIGraphBuilder? graphBuilder = null)
     {
         Guard.NotNull(config);
         _config = config;
+        GraphBuilder = graphBuilder;
     }
 
     /// <summary>
@@ -85,8 +102,15 @@ public class NNAPIBackend<T> : IDisposable
     /// blocked even <see cref="NNAPIConfiguration.AllowCpuFallback"/>=true clients
     /// on the desktop, despite the configuration explicitly opting in to that path.
     /// </remarks>
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(NNAPIBackend<T>));
+    }
+
     public void Initialize()
     {
+        ThrowIfDisposed();
         if (_isInitialized) return;
         _hasNative = IsNNAPIAvailable();
         if (!_hasNative && !_config.AllowCpuFallback)
@@ -121,6 +145,7 @@ public class NNAPIBackend<T> : IDisposable
     /// </remarks>
     public void LoadModel(string modelPath)
     {
+        ThrowIfDisposed();
         if (!_isInitialized)
             throw new InvalidOperationException("NNAPI backend not initialized. Call Initialize() first.");
         Guard.NotNull(modelPath);
@@ -136,6 +161,7 @@ public class NNAPIBackend<T> : IDisposable
     /// </summary>
     public T[] Execute(T[] input)
     {
+        ThrowIfDisposed();
         if (!_isInitialized)
             throw new InvalidOperationException("NNAPI backend not initialized. Call Initialize() first.");
         Guard.NotNull(input);
@@ -190,9 +216,21 @@ public class NNAPIBackend<T> : IDisposable
     /// </remarks>
     public static bool IsNNAPIAvailable()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return false;
+        // .NET on Android does NOT return true from
+        // IsOSPlatform(OSPlatform.Linux) — Android is a distinct platform in
+        // .NET 5+ (see dotnet/runtime#51052). Check both the synthetic
+        // "ANDROID" platform string AND Linux so this works on phones (the
+        // only place libneuralnetworks.so actually exists) as well as the
+        // Linux dev host that ships the same SO file for testing.
+        if (!RuntimeInformation.IsOSPlatform(AndroidPlatform)
+            && !RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return false;
+        }
         return NNAPIInterop.TryLoad();
     }
+
+    private static readonly OSPlatform AndroidPlatform = OSPlatform.Create("ANDROID");
 
     /// <summary>Gets NNAPI performance information for the current device.</summary>
     public NNAPIPerformanceInfo GetPerformanceInfo()
@@ -222,11 +260,25 @@ public class NNAPIBackend<T> : IDisposable
     private void CompileForNNAPI(byte[] modelData)
     {
         // Model decomposition (TFLite/ONNX → NNAPI op graph) is a format-specific
-        // adapter that lives upstream — this backend wraps the NNAPI machinery and
-        // accepts whatever ops the caller's adapter has wired. When the native
-        // binding is present and the upstream adapter has populated _model with
-        // operand/operation calls, finishing + compiling is the next step:
+        // adapter that lives upstream — this backend wraps the NNAPI machinery
+        // and lets the caller plug in an INNAPIGraphBuilder. When one is wired,
+        // BuildGraph populates _model with operands + operations directly before
+        // we finish + compile. Without one, ModelFinish will fail (no ops added)
+        // and the Trace warning below makes that observable.
         if (!_hasNative || _model == IntPtr.Zero) return;
+
+        if (GraphBuilder is not null)
+        {
+            bool built = GraphBuilder.BuildGraph(_model, modelData);
+            if (!built)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "NNAPIBackend.CompileForNNAPI: configured INNAPIGraphBuilder returned " +
+                    "false — model bytes could not be decoded. Falling back to " +
+                    "CpuExecutor / identity-passthrough on Execute().");
+                return;
+            }
+        }
 
         int rcFinish = NNAPIInterop.ModelFinish(_model);
         if (rcFinish != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
@@ -258,7 +310,14 @@ public class NNAPIBackend<T> : IDisposable
         if (rcCompile != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
             throw new InvalidOperationException($"ANeuralNetworksCompilation_create failed (rc={rcCompile}).");
 
-        NNAPIInterop.CompilationSetPreference(_compilation, MapPreference());
+        // Check the result like every other NNAPI call — the native API
+        // returns a status code that previously got silently dropped.
+        // A device-side rejection of the requested preference would lose
+        // its real failure point and let CompileForNNAPI keep going.
+        int rcPref = NNAPIInterop.CompilationSetPreference(_compilation, MapPreference());
+        if (rcPref != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+            throw new InvalidOperationException(
+                $"ANeuralNetworksCompilation_setPreference failed (rc={rcPref}).");
         int rcFin = NNAPIInterop.CompilationFinish(_compilation);
         if (rcFin != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
             throw new InvalidOperationException($"ANeuralNetworksCompilation_finish failed (rc={rcFin}).");
@@ -385,13 +444,38 @@ public class NNAPIBackend<T> : IDisposable
     {
         // Element-type dispatch using Marshal.Copy on the typed overload. This
         // avoids unsafe pointer-to-managed-T (which the language forbids for
-        // unconstrained T).
+        // unconstrained T). Maps to NNAPI operand element types:
+        //   float  → ANEURALNETWORKS_TENSOR_FLOAT32
+        //   Half   → ANEURALNETWORKS_TENSOR_FLOAT16
+        //   int    → ANEURALNETWORKS_TENSOR_INT32
+        //   byte   → ANEURALNETWORKS_TENSOR_QUANT8_ASYMM
+        //   short is intentionally rejected — NNAPI's QUANT16_SYMM expects
+        //   quantised int16, not a generic short buffer.
         if (typeof(T) == typeof(float))   { Marshal.Copy((float[])(object)src,  0, dst, src.Length); return; }
         if (typeof(T) == typeof(double))  { Marshal.Copy((double[])(object)src, 0, dst, src.Length); return; }
         if (typeof(T) == typeof(int))     { Marshal.Copy((int[])(object)src,    0, dst, src.Length); return; }
         if (typeof(T) == typeof(short))   { Marshal.Copy((short[])(object)src,  0, dst, src.Length); return; }
         if (typeof(T) == typeof(byte))    { Marshal.Copy((byte[])(object)src,   0, dst, src.Length); return; }
-        throw new NotSupportedException($"NNAPI element type {typeof(T).Name} is not supported.");
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+        {
+            // Marshal.Copy lacks a Half overload, so copy via the raw bit
+            // pattern (2 bytes per element, ANEURALNETWORKS_TENSOR_FLOAT16
+            // layout matches CLR Half memory representation).
+            var halfSrc = (Half[])(object)src;
+            var bytes = new byte[halfSrc.Length * 2];
+            Buffer.BlockCopy(halfSrc, 0, bytes, 0, bytes.Length);
+            Marshal.Copy(bytes, 0, dst, bytes.Length);
+            return;
+        }
+#endif
+        throw new NotSupportedException(
+            $"NNAPI element type {typeof(T).Name} is not supported. Supported types: " +
+            "float (FLOAT32), double, int (INT32), short (raw 16-bit), byte (QUANT8_ASYMM)" +
+#if NET5_0_OR_GREATER
+            ", Half (FLOAT16)" +
+#endif
+            ".");
     }
 
     private static void CopyNativeToManaged(IntPtr src, T[] dst)
@@ -401,7 +485,23 @@ public class NNAPIBackend<T> : IDisposable
         if (typeof(T) == typeof(int))     { Marshal.Copy(src, (int[])(object)dst,    0, dst.Length); return; }
         if (typeof(T) == typeof(short))   { Marshal.Copy(src, (short[])(object)dst,  0, dst.Length); return; }
         if (typeof(T) == typeof(byte))    { Marshal.Copy(src, (byte[])(object)dst,   0, dst.Length); return; }
-        throw new NotSupportedException($"NNAPI element type {typeof(T).Name} is not supported.");
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+        {
+            var halfDst = (Half[])(object)dst;
+            var bytes = new byte[halfDst.Length * 2];
+            Marshal.Copy(src, bytes, 0, bytes.Length);
+            Buffer.BlockCopy(bytes, 0, halfDst, 0, bytes.Length);
+            return;
+        }
+#endif
+        throw new NotSupportedException(
+            $"NNAPI element type {typeof(T).Name} is not supported. Supported types: " +
+            "float, double, int, short, byte" +
+#if NET5_0_OR_GREATER
+            ", Half" +
+#endif
+            ".");
     }
 
     private List<string> GetSupportedOperations()

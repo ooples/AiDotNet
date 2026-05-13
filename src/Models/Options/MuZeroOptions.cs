@@ -66,6 +66,10 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
         WarmupSteps = other.WarmupSteps;
         MaxGradientNorm = other.MaxGradientNorm;
 
+        // ModelOptions base field — reproducibility seed. Missing this
+        // would silently change rng behaviour between original and clone.
+        Seed = other.Seed;
+
         // MuZero-specific fields
         ObservationSize = other.ObservationSize;
         ActionSize = other.ActionSize;
@@ -85,24 +89,39 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     }
 
     /// <summary>
-    /// Dimensionality of the environment's observation vector. Defaults to
-    /// 4 — the canonical CartPole / cart-pole-balance observation
-    /// (cart position, cart velocity, pole angle, pole angular velocity),
-    /// which is the smallest non-trivial RL benchmark and the size assumed
-    /// by <see cref="AiDotNet.Tests.ModelFamilyTests.Base.ReinforcementLearningTestBase"/>
-    /// for invariant testing. Override for any other environment — Atari
-    /// (96×96×128 framestack), Go (19×19 board), MuJoCo (17-dim joint
-    /// states), etc.
+    /// Dimensionality of the environment's observation vector.
     /// </summary>
+    /// <value>Default 4 — the canonical CartPole observation
+    /// (cart position, cart velocity, pole angle, pole angular velocity),
+    /// the smallest non-trivial RL benchmark and the size used by
+    /// the repository's RL invariant tests.</value>
+    /// <remarks>
+    /// <para>Override for any other environment — Atari (96×96×128
+    /// framestack flattened, or use the unflattened framestack with a
+    /// CNN representation network), Go (19×19 = 361 board), MuJoCo
+    /// (17-dim joint states for Walker2d), etc. The representation
+    /// network's input layer reads this dimension; getting it wrong
+    /// produces a shape mismatch in the very first forward pass.</para>
+    /// <para><b>For Beginners:</b> How many numbers describe the state of
+    /// your environment at one timestep. For CartPole that's 4 (cart
+    /// position, cart velocity, pole angle, pole angular velocity).</para>
+    /// </remarks>
     public int ObservationSize { get; init; } = 4;
 
     /// <summary>
-    /// Number of discrete actions the agent can choose from. Defaults to
-    /// 2 — the canonical CartPole action set (push-left, push-right) and
-    /// the smallest non-degenerate discrete action space. Override for
-    /// any environment with more actions — Atari typically 18, Go 362,
-    /// chess ~4672.
+    /// Number of discrete actions the agent can choose from.
     /// </summary>
+    /// <value>Default 2 — the CartPole action set (push-left, push-right)
+    /// and the smallest non-degenerate discrete action space.</value>
+    /// <remarks>
+    /// <para>Override for any environment with more actions — Atari
+    /// typically 18, Go 362 (361 board positions + pass), chess ~4672.
+    /// The prediction network's policy head reads this dimension; the
+    /// MCTS tree branches on this many children per node.</para>
+    /// <para><b>For Beginners:</b> How many different moves your agent
+    /// can pick from at each step. For CartPole that's 2 (left or
+    /// right).</para>
+    /// </remarks>
     public int ActionSize { get; init; } = 2;
 
     // Network architecture

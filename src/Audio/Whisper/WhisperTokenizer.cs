@@ -46,10 +46,46 @@ public class WhisperTokenizer
         (_byteToUnicode, _unicodeToByte) = BuildByteUnicodeMaps();
     }
 
+    /// <summary>
+    /// When <c>true</c> (default <c>false</c>), <see cref="Encode"/> /
+    /// <see cref="Decode"/> throw if the BPE vocab/merges aren't loaded
+    /// instead of falling back to the byte-level identity mode. Production
+    /// callers that need exact Whisper-compatible tokenisation should set
+    /// this so a misconfigured pipeline fails fast rather than silently
+    /// producing token streams that don't match the Whisper reference
+    /// implementation. The lenient default preserves backwards
+    /// compatibility for callers that intentionally use the byte-level
+    /// mode (e.g. fingerprint-style tests).
+    /// </summary>
+    public bool StrictBpeMode { get; set; }
+
+    private void EnforceBpeRequirement(string operation)
+    {
+        if (_vocab is null || _merges is null)
+        {
+            if (StrictBpeMode)
+                throw new InvalidOperationException(
+                    $"WhisperTokenizer.{operation} called in StrictBpeMode without BPE assets " +
+                    "loaded. Construct via the file-path constructor or call LoadVocab(...) " +
+                    "first — the byte-level fallback does NOT produce Whisper-compatible tokens.");
+
+            System.Diagnostics.Trace.TraceWarning(
+                $"WhisperTokenizer.{operation}: BPE vocab/merges not loaded, falling back to " +
+                "byte-level identity mode. Output WILL NOT match the reference Whisper " +
+                "tokenizer. Load vocab.json + merges.txt for production use, or set " +
+                "StrictBpeMode=true to fail fast.");
+        }
+    }
+
     /// <summary>Initializes a tokenizer that loads the official Whisper / GPT-2 BPE vocabulary.</summary>
     /// <param name="vocabPath">Path to vocab.json (token string → ID).</param>
     /// <param name="mergesPath">Path to merges.txt (priority-ordered pair merges).</param>
-    public WhisperTokenizer(string vocabPath, string mergesPath) : this()
+    /// <remarks>
+    /// Internal — asset initialisation is owned by the WhisperModel / model
+    /// builder layer; users go through that facade rather than instantiating
+    /// the tokenizer directly.
+    /// </remarks>
+    internal WhisperTokenizer(string vocabPath, string mergesPath) : this()
     {
         LoadVocab(vocabPath, mergesPath);
     }
@@ -59,9 +95,9 @@ public class WhisperTokenizer
     /// vocab.json maps every byte-unicode token to its integer ID; merges.txt
     /// lists the learned pair merges in priority order (first line = priority
     /// 0 = applied first). Both files are shipped alongside any HuggingFace
-    /// Whisper checkpoint.
+    /// Whisper checkpoint. Internal — see the file-path constructor.
     /// </remarks>
-    public void LoadVocab(string vocabPath, string mergesPath)
+    internal void LoadVocab(string vocabPath, string mergesPath)
     {
         if (vocabPath is null) throw new ArgumentNullException(nameof(vocabPath));
         if (mergesPath is null) throw new ArgumentNullException(nameof(mergesPath));
@@ -88,8 +124,9 @@ public class WhisperTokenizer
             var line = rawLine.TrimEnd();
             if (string.IsNullOrEmpty(line)) continue;
             if (line.StartsWith("#", StringComparison.Ordinal)) continue;
-            // Use the char[] overload so net471 (which lacks Split(char, StringSplitOptions))
-            // sees the same call shape as net10.0.
+            // Use the (char[], StringSplitOptions) overload so this compiles
+            // on net471 too — the (char, StringSplitOptions) overload is
+            // net5+ only.
             var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length != 2)
             {
@@ -97,7 +134,16 @@ public class WhisperTokenizer
                     $"Invalid merges.txt entry at {mergesPath}:{lineNumber}: '{rawLine}'. " +
                     $"Expected exactly two space-separated tokens.");
             }
-            merges[(parts[0], parts[1])] = priority++;
+            // Reject duplicate pairs explicitly with line context instead of
+            // silently overwriting the earlier rank — duplicate entries would
+            // corrupt BPE precedence and produce non-reference tokenisation.
+            var pair = (parts[0], parts[1]);
+            if (merges.ContainsKey(pair))
+            {
+                throw new InvalidDataException(
+                    $"Duplicate merges.txt entry at {mergesPath}:{lineNumber}: '{rawLine}'.");
+            }
+            merges[pair] = priority++;
         }
 
         _vocab = vocab;
@@ -342,6 +388,7 @@ public class WhisperTokenizer
     public string Decode(IEnumerable<long> tokenIds)
     {
         if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+        EnforceBpeRequirement(nameof(Decode));
 
         if (_inverseVocab is null)
         {
@@ -402,6 +449,7 @@ public class WhisperTokenizer
     public List<long> Encode(string text)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
+        EnforceBpeRequirement(nameof(Encode));
 
         if (_vocab is null || _merges is null)
         {

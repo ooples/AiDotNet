@@ -117,6 +117,16 @@ public class MarketMakingAgent<T> : TradingAgentBase<T>
     private static NeuralNetworkArchitecture<T> CreateArchitectureFromOptions(MarketMakingOptions<T> options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
+        if (options.StateSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                $"{nameof(options)}.{nameof(MarketMakingOptions<T>.StateSize)}",
+                options.StateSize,
+                $"{nameof(MarketMakingOptions<T>.StateSize)} must be > 0 (was {options.StateSize}).");
+        if (options.ActionSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                $"{nameof(options)}.{nameof(MarketMakingOptions<T>.ActionSize)}",
+                options.ActionSize,
+                $"{nameof(MarketMakingOptions<T>.ActionSize)} must be > 0 (was {options.ActionSize}).");
         return new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,

@@ -4,67 +4,47 @@ using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 
 /// <summary>
-/// Retrieves documents using ColBERT's token-level late interaction mechanism.
+/// Retrieves documents using ColBERT's token-level late interaction mechanism
+/// (Khattab &amp; Zaharia 2020, "ColBERT: Efficient and Effective Passage Search
+/// via Contextualized Late Interaction over BERT").
 /// </summary>
-/// <typeparam name="T">The numeric data type used for relevance scoring (typically float or double).</typeparam>
+/// <typeparam name="T">The numeric data type used for relevance scoring.</typeparam>
 /// <remarks>
 /// <para>
-/// ColBERT (Contextualized Late Interaction over BERT) represents queries and documents as
-/// multiple contextualized token embeddings rather than a single vector. This enables fine-grained
-/// matching where each query token finds its best match among document tokens (MaxSim operation).
-/// The approach provides significantly better retrieval quality than single-vector methods while
-/// remaining more efficient than full cross-encoder reranking.
+/// ColBERT represents queries and documents as <i>multiple</i> contextualised
+/// token embeddings rather than a single vector. The scoring rule
+/// (paper §3.2 Eq. 1) is
+/// <c>Score(Q, D) = Σ_q max_d cos(E_q, E_d)</c>
+/// — for every query token, take the maximum cosine similarity against any
+/// document token, then sum across query tokens. This "MaxSim" formulation
+/// gives finer-grained matching than single-vector dense retrieval at a
+/// fraction of the cost of full cross-encoder rerankers.
 /// </para>
 /// <para>
-/// This implementation uses a fallback approach with token overlap scoring when the full ColBERT
-/// model is not available, providing reasonable retrieval quality through lexical matching enhanced
-/// with semantic information.
+/// Production usage requires an <see cref="IColBertEmbedder{T}"/> that
+/// embeds query and document strings into per-token tensor banks. Without an
+/// embedder, the retriever throws <see cref="NotSupportedException"/>:
+/// there is no defensible "fallback" for ColBERT because the entire point
+/// of the architecture is the contextual token-level representation. A
+/// lexical-overlap stand-in would silently produce a different relevance
+/// signal under the same class name, which is exactly the kind of silent
+/// behavioural divergence this codebase rejects.
 /// </para>
-/// <para><b>For Beginners:</b> Think of ColBERT like a detailed word-by-word comparison.
-/// 
-/// Traditional retrieval (like Dense Retrieval):
-/// - Entire query → Single number list [0.2, 0.5, ...]
-/// - Entire document → Single number list [0.3, 0.4, ...]
-/// - Compare: Do these lists match?
-/// 
-/// ColBERT retrieval:
-/// - "climate" → [0.2, 0.5, ...]
-/// - "change" → [0.1, 0.3, ...]
-/// - "solutions" → [0.4, 0.2, ...]
-/// - Each query word finds its best match in the document
-/// - More precise matching!
-/// 
-/// For example:
-/// ```csharp
-/// var retriever = new ColBERTRetriever<double>(
-///     documentStore,
-///     modelPath: "colbert-v2.onnx",
-///     maxDocLength: 512,
-///     maxQueryLength: 32
-/// );
-/// var results = retriever.Retrieve("climate change solutions", topK: 10);
-/// ```
-/// 
-/// Why use ColBERT:
-/// - More accurate than dense retrieval (considers individual terms)
-/// - Faster than reranking entire documents
-/// - Better at matching specific phrases
-/// - Handles multi-aspect queries well
-/// 
-/// When to use it:
-/// - You need high precision
-/// - Queries contain multiple distinct concepts
-/// - You have computational resources for token-level matching
-/// </para>
+/// <para><b>For Beginners:</b> Think of ColBERT like a detailed word-by-word
+/// comparison. For each word in your query, ColBERT finds the single
+/// best-matching word in each candidate document, then sums those best-match
+/// scores. The result is a document score that captures whether
+/// <i>every</i> aspect of your query has SOME good match in the document,
+/// not just the overall topic.</para>
 /// </remarks>
 [ComponentType(ComponentType.Retriever)]
 [PipelineStage(PipelineStage.Retrieval)]
@@ -74,30 +54,30 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
     private readonly int _maxDocLength;
     private readonly int _maxQueryLength;
     private readonly IDocumentStore<T> _documentStore;
+    private readonly IColBertEmbedder<T>? _embedder;
 
     /// <summary>
     /// Initializes a new instance of the ColBERTRetriever class.
     /// </summary>
     /// <param name="documentStore">The document store containing indexed documents.</param>
-    /// <param name="modelPath">Path to the ColBERT model file (ONNX format).</param>
+    /// <param name="modelPath">Path to the ColBERT model file (e.g., ONNX). Kept as
+    /// a hint for documentation and serialisation; the actual model is loaded
+    /// via <paramref name="embedder"/>.</param>
     /// <param name="maxDocLength">Maximum document length in tokens (typically 180-512).</param>
     /// <param name="maxQueryLength">Maximum query length in tokens (typically 32-64).</param>
-    /// <exception cref="ArgumentNullException">Thrown when documentStore or modelPath is null.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when maxDocLength or maxQueryLength is not positive.</exception>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> These parameters control how much text ColBERT processes:
-    /// 
-    /// - maxDocLength: How many words/tokens from each document (longer = more context but slower)
-    /// - maxQueryLength: How many words/tokens from query (shorter queries are typical)
-    /// 
-    /// Example: maxDocLength=512 means process up to about 512 words per document.
-    /// </para>
-    /// </remarks>
+    /// <param name="embedder">
+    /// Optional token-level embedder. When provided, <see cref="RetrieveCore"/>
+    /// runs the paper's MaxSim scoring rule over the embedder's per-token
+    /// output. When <c>null</c>, <see cref="RetrieveCore"/> throws
+    /// <see cref="NotSupportedException"/> instead of silently falling back
+    /// to lexical-overlap pseudo-ColBERT scoring.
+    /// </param>
     public ColBERTRetriever(
         IDocumentStore<T> documentStore,
         string modelPath,
         int maxDocLength,
-        int maxQueryLength)
+        int maxQueryLength,
+        IColBertEmbedder<T>? embedder = null)
     {
         Guard.NotNull(documentStore);
         _documentStore = documentStore;
@@ -112,38 +92,22 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
 
         _maxDocLength = maxDocLength;
         _maxQueryLength = maxQueryLength;
+        _embedder = embedder;
     }
 
     /// <summary>
-    /// Retrieves documents using token-level late interaction matching.
+    /// Retrieves documents using ColBERT MaxSim scoring (paper §3.2).
     /// </summary>
     /// <param name="query">The validated query text.</param>
     /// <param name="topK">The validated number of documents to retrieve.</param>
     /// <param name="metadataFilters">The validated metadata filters.</param>
     /// <returns>Documents ordered by ColBERT relevance score (highest first).</returns>
-    /// <remarks>
-    /// <para>
-    /// In a full ColBERT implementation, this method would:
-    /// 1. Tokenize and embed each query token
-    /// 2. For each candidate document, tokenize and embed each document token
-    /// 3. For each query token, find maximum similarity with any document token (MaxSim)
-    /// 4. Sum MaxSim scores across all query tokens to get document score
-    /// 5. Rank documents by total score
-    /// 
-    /// This fallback implementation uses token overlap scoring as an approximation,
-    /// analyzing which query terms appear in documents and how frequently.
-    /// </para>
-    /// <para><b>For Beginners:</b> What happens when you search:
-    /// 
-    /// 1. Your query is split into words: ["climate", "change", "solutions"]
-    /// 2. For each word, find documents containing it
-    /// 3. Documents with more matching words score higher
-    /// 4. Return top-scoring documents
-    /// 
-    /// This fallback approach approximates ColBERT's word-level matching without
-    /// requiring the full neural model.
-    /// </para>
-    /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// Thrown when no <see cref="IColBertEmbedder{T}"/> was provided. ColBERT
+    /// cannot run without per-token contextual embeddings; a lexical-overlap
+    /// "fallback" is not ColBERT and would silently produce different relevance
+    /// scores than the paper describes.
+    /// </exception>
     protected override IEnumerable<Document<T>> RetrieveCore(
         string query,
         int topK,
@@ -155,92 +119,78 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
         if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        // Tokenize query
-        var queryTokens = TokenizeAndTruncate(query, _maxQueryLength);
+        if (_embedder is null)
+            throw new NotSupportedException(
+                "ColBERTRetriever requires an IColBertEmbedder<T> to score documents. " +
+                $"The retriever was constructed without one (modelPath='{_modelPath}'). " +
+                "Pass an embedder that loads your ColBERT / ColBERTv2 / PLAID checkpoint " +
+                "via the constructor's `embedder` parameter — there is no defensible " +
+                "fallback for ColBERT scoring because the entire architecture is the " +
+                "token-level contextual representation.");
 
-        // Full ColBERT (Khattab & Zaharia 2020 §3 "Late Interaction") would:
-        // 1. Generate token-level embeddings for the query
-        // 2. For each candidate document, retrieve token-level embeddings
-        // 3. Compute MaxSim per query token against doc tokens
-        // 4. Sum MaxSim scores across query tokens
-        //
-        // That requires an embedder model loaded from _modelPath — not bundled in
-        // this repo. Until one is wired in, fall back to a corpus-wide token-
-        // overlap re-ranker (essentially BM25-flavoured): pull all metadata-
-        // matching docs from the store and rank them by query / document token
-        // overlap. This is paper-defensible — Khattab & Zaharia 2020 §6.3 use
-        // BM25 as the first-stage retriever in ColBERT-PLAID — and is a real
-        // computation, not a fabricated score. Use GetAll() rather than
-        // GetSimilarWithFilters with an empty vector (which would fail the
-        // store's dimension validation when documents are present).
-        var allDocs = _documentStore.GetAll();
-        var filteredDocs = (metadataFilters == null || metadataFilters.Count == 0)
-            ? allDocs
-            : allDocs.Where(d => MatchesMetadata(d, metadataFilters));
+        // 1. Embed the query into per-token vectors [queryTokens, embedDim].
+        //    Truncate to _maxQueryLength to stay within the embedder's window.
+        var queryEmb = _embedder.EmbedQuery(query);
+        int queryTokens = Math.Min(queryEmb.Shape[0], _maxQueryLength);
+        int embedDim = queryEmb.Shape[1];
 
-        var scoredDocuments = filteredDocs.Select(doc =>
+        // 2. Use the query embedding's [CLS]-like mean vector for the
+        //    first-stage candidate selection. This is a real query-aware
+        //    signal — not a placeholder zero vector — so the candidate set
+        //    is genuinely scoped to the query. Paper §6.3 uses BM25 here;
+        //    a dense mean-pool gets us paper-equivalent first-stage retrieval
+        //    when a BM25 index isn't available.
+        var meanQuery = new Vector<T>(_documentStore.VectorDimension);
+        int effDim = Math.Min(embedDim, _documentStore.VectorDimension);
+        for (int t = 0; t < queryTokens; t++)
+            for (int d = 0; d < effDim; d++)
+                meanQuery[d] = NumOps.Add(meanQuery[d], queryEmb[t, d]);
+        for (int d = 0; d < effDim; d++)
+            meanQuery[d] = NumOps.Divide(meanQuery[d], NumOps.FromDouble(queryTokens));
+
+        // Oversample so MaxSim has room to reorder — Khattab & Zaharia
+        // §4.2 fetch K' = ~1000 with K = 100; ratio ≈ 10×.
+        int oversample = Math.Max(topK * 10, 50);
+        var candidates = (metadataFilters == null || metadataFilters.Count == 0)
+            ? _documentStore.GetSimilar(meanQuery, oversample)
+            : _documentStore.GetSimilarWithFilters(meanQuery, oversample, metadataFilters);
+
+        // 3. Score each candidate with MaxSim against the query's per-token
+        //    embeddings.
+        var scored = candidates.Select(doc =>
         {
-            var docTokens = TokenizeAndTruncate(doc.Content, _maxDocLength);
-            var tokenScore = CalculateTokenOverlapScore(queryTokens, docTokens);
-
-            // Use a request-local anchor of 1.0 — anchoring on
-            // doc.RelevanceScore would pull in stale values written by
-            // earlier queries (this retriever writes relevance back onto
-            // the returned docs), making ranking dependent on query order
-            // rather than on the current query's token overlap.
-            var combinedScore = NumOps.FromDouble(1.0 + tokenScore * 0.5);
-
-            return (doc, combinedScore);
+            string content = doc.Content ?? string.Empty;
+            var docEmb = _embedder.EmbedDocument(content);
+            int docTokens = Math.Min(docEmb.Shape[0], _maxDocLength);
+            // Score = Σ_q max_d cos(E_q, E_d). Embeddings are L2-normalised
+            // by IColBertEmbedder contract, so cosine == dot product.
+            T total = NumOps.Zero;
+            for (int q = 0; q < queryTokens; q++)
+            {
+                T best = NumOps.FromDouble(double.NegativeInfinity);
+                for (int d = 0; d < docTokens; d++)
+                {
+                    T dot = NumOps.Zero;
+                    for (int k = 0; k < embedDim; k++)
+                    {
+                        dot = NumOps.Add(dot,
+                            NumOps.Multiply(queryEmb[q, k], docEmb[d, k]));
+                    }
+                    if (NumOps.GreaterThan(dot, best)) best = dot;
+                }
+                total = NumOps.Add(total, best);
+            }
+            return (doc, score: total);
         }).ToList();
 
-        // Re-rank and return top-K
-        return scoredDocuments
-            .OrderByDescending(x => x.combinedScore)
+        return scored
+            .OrderByDescending(x => x.score)
             .Take(topK)
             .Select(x =>
             {
-                x.doc.RelevanceScore = x.combinedScore;
+                x.doc.RelevanceScore = x.score;
                 x.doc.HasRelevanceScore = true;
                 return x.doc;
             });
-    }
-
-    private List<string> TokenizeAndTruncate(string text, int maxLength)
-    {
-        var tokens = text
-            .ToLower()
-            .Split(new[] { ' ', '\t', '\n', '\r', ',', '.', '!', '?', ';', ':' },
-                   StringSplitOptions.RemoveEmptyEntries)
-            .Take(maxLength)
-            .ToList();
-
-        return tokens;
-    }
-
-    private double CalculateTokenOverlapScore(List<string> queryTokens, List<string> docTokens)
-    {
-        if (queryTokens.Count == 0 || docTokens.Count == 0)
-            return 0.0;
-
-        var docTokenSet = new HashSet<string>(docTokens);
-        var matchCount = queryTokens.Count(qt => docTokenSet.Contains(qt));
-
-        return (double)matchCount / queryTokens.Count;
-    }
-
-    private static bool MatchesMetadata(Document<T> doc, Dictionary<string, object> filters)
-    {
-        // Exact-match metadata filter: every requested key must exist on the doc
-        // and equal the requested value. Mirrors the contract of the per-store
-        // GetSimilarWithFilters validators (an unknown key is a non-match).
-        if (doc.Metadata == null) return false;
-        foreach (var kvp in filters)
-        {
-            if (!doc.Metadata.TryGetValue(kvp.Key, out var actual))
-                return false;
-            if (!Equals(actual, kvp.Value))
-                return false;
-        }
-        return true;
     }
 }

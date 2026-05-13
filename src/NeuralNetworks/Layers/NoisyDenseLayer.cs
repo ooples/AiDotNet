@@ -53,6 +53,7 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     private readonly int _outputSize;
     private readonly double _sigmaInit;
     private readonly Random _rng;
+    private readonly object _rngLock = new();
 
     // Trainable parameters — held as tensor fields so the tape can track them
     // by reference identity. Mutating their contents in-place (via SetParameters
@@ -94,7 +95,15 @@ public class NoisyDenseLayer<T> : LayerBase<T>
 
         _inputSize = inputSize;
         _outputSize = outputSize;
-        _sigmaInit = sigmaInit ?? (0.5 / Math.Sqrt(inputSize));
+        double resolvedSigmaInit = sigmaInit ?? (0.5 / Math.Sqrt(inputSize));
+        if (double.IsNaN(resolvedSigmaInit) || double.IsInfinity(resolvedSigmaInit) || resolvedSigmaInit < 0d)
+            throw new ArgumentOutOfRangeException(
+                nameof(sigmaInit),
+                resolvedSigmaInit,
+                "sigmaInit must be finite and non-negative — passing NaN / Inf / a negative " +
+                "value would propagate into every _sigma* tensor and corrupt the layer state " +
+                "long before an actionable exception surfaces.");
+        _sigmaInit = resolvedSigmaInit;
         // Route RNG construction through RandomHelper rather than raw
         // `new Random()` — raw Random is not cryptographically secure
         // and its time-seeded default is predictable across closely-spaced
@@ -177,6 +186,22 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate at the boundary — the ctor uses inputShape: [-1] so the
+        // base class's Forward never gets a chance to catch a shape mismatch.
+        // Without this guard, a wrong feature size first surfaces as an
+        // engine-specific Reshape or TensorMatMul failure several lines down.
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank == 0)
+            throw new ArgumentException(
+                "NoisyDenseLayer expects an input with at least one dimension.",
+                nameof(input));
+        int featureSize = input.Rank == 1 ? input.Length : input.Shape[input.Rank - 1];
+        if (featureSize != _inputSize)
+            throw new ArgumentException(
+                $"NoisyDenseLayer expects last-dim feature size {_inputSize}, got {featureSize} " +
+                $"(input shape [{string.Join(",", input.Shape)}]).",
+                nameof(input));
+
         // Training mode: resample noise (Fortunato 2017 §3.3 — one resample
         // per environment step / minibatch). Eval mode: use mean weights only
         // (paper §3.4: at evaluation the network uses μ and the σ term is set
@@ -236,8 +261,11 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// Resamples ε_in (size p) and ε_out (size q), applies the signed-sqrt
     /// transform <c>f(x) = sign(x)·√|x|</c>, and builds the per-forward
     /// noise tensors via an engine-accelerated outer product:
-    /// <c>ε_w = f(ε_in)ᵀ · f(ε_out)</c> (Fortunato 2017 §3.2). Public for
-    /// advanced callers that want to sync noise across multiple layers.
+    /// <c>ε_w = f(ε_in)ᵀ · f(ε_out)</c> (Fortunato 2017 §3.2). Internal
+    /// plumbing: Forward() always resamples its own noise, so an external
+    /// "sync the same noise across layers" use case cannot be implemented
+    /// just by calling this helper — exposing it publicly would only let
+    /// callers desync the RNG.
     /// </summary>
     /// <remarks>
     /// Only the Gaussian RNG step runs on the CPU (Box-Muller via
@@ -246,7 +274,7 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// BLAS / GPU acceleration and the gradient tape sees them as part of
     /// the same compute graph as the rest of the forward pass.
     /// </remarks>
-    public (Tensor<T> EpsilonW, Tensor<T> EpsilonB) SampleFactorisedNoise()
+    internal (Tensor<T> EpsilonW, Tensor<T> EpsilonB) SampleFactorisedNoise()
     {
         // Sample raw Gaussian vectors. RNG is intrinsically scalar; we
         // populate two Tensor<T>s in one pass per side.
@@ -286,17 +314,31 @@ public class NoisyDenseLayer<T> : LayerBase<T>
         var absX = Engine.TensorAbs(x);
         // √|x|
         var sqrtAbs = Engine.TensorSqrt(absX);
-        // sign(x) — engine sign is available; fall back to safe division
-        // (x / (|x| + ε)) if the engine doesn't expose a TensorSign.
-        var sign = Engine.TensorSign(x);
+        // sign(x) via the documented safe-division fallback x / (|x| + ε).
+        // Avoids dependency on Engine.TensorSign which isn't part of the
+        // baseline IEngine surface (LionOptimizer / FTRLOptimizer use the
+        // same x/(|x|+ε) trick). ε keeps the denominator non-zero for the
+        // exact zero element of the noise vectors.
+        var eps = NumOps.FromDouble(1e-12);
+        var absXPlusEps = Engine.TensorAddScalar(absX, eps);
+        var sign = Engine.TensorDivide(x, absXPlusEps);
         return Engine.TensorMultiply(sign, sqrtAbs);
     }
 
     private double SampleStandardNormal()
     {
         // Box-Muller transform; one of the two outputs is discarded for clarity.
-        double u1 = 1.0 - _rng.NextDouble();
-        double u2 = 1.0 - _rng.NextDouble();
+        // Guard the two _rng calls with a lock — System.Random is not
+        // thread-safe and modern training frameworks (DataParallel, RLlib
+        // workers, etc.) can call Forward concurrently on the same layer.
+        // Without the lock, racing NextDouble calls can corrupt the RNG's
+        // internal state and break reproducibility.
+        double u1, u2;
+        lock (_rngLock)
+        {
+            u1 = 1.0 - _rng.NextDouble();
+            u2 = 1.0 - _rng.NextDouble();
+        }
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 
@@ -334,7 +376,15 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (ParameterGradients is null || ParameterGradients.Length != ParameterCount) return;
+        // ParameterGradients is allowed to be null (e.g. before the first
+        // backward pass), but a non-null gradient buffer with the wrong
+        // length signals a real wiring bug — silently returning would stall
+        // training without surfacing the cause.
+        if (ParameterGradients is null) return;
+        if (ParameterGradients.Length != ParameterCount)
+            throw new InvalidOperationException(
+                $"NoisyDenseLayer.UpdateParameters: gradient buffer length " +
+                $"{ParameterGradients.Length} does not match ParameterCount {ParameterCount}.");
 
         int idx = 0;
         for (int i = 0; i < _muWeights.Length; i++)

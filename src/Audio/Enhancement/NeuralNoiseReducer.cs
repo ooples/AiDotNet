@@ -496,7 +496,11 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         // implementation always applied full cancellation here, making the
         // user-facing strength parameter silently ineffective on this
         // path. Standard wet/dry mix: out = d + strength * (enhanced - d).
-        double mix = EnhancementStrength;
+        // Clamp defensively because the property has a public setter:
+        // a later assignment like -0.2 or 1.5 would otherwise invert or
+        // amplify the mix instead of just scaling cancellation.
+        // Math.Clamp is net5+ — fall back to Math.Max/Min for net471 compatibility.
+        double mix = Math.Max(0.0, Math.Min(1.0, EnhancementStrength));
         var result = new Tensor<T>(audio._shape);
         for (int i = 0; i < n; i++)
         {

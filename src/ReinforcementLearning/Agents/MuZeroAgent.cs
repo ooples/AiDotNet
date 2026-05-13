@@ -158,20 +158,24 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (!training)
         {
-            // Inference path: return the full policy distribution π(·|s) from
-            // the prediction network. The argmax one-hot version was
-            // collapsing distinct policy distributions that happen to share
-            // their max index into identical vectors — the
-            // DifferentStates_DifferentActions invariant catches this as
-            // "policy degenerate" even when the network is producing
-            // perfectly distinct distributions. The MuZero paper's value/
-            // policy targets (Schrittwieser et al. 2020 §B.2) use the full
-            // policy distribution from the prediction network; the argmax
-            // is a downstream consumer decision, not the model output.
+            // Inference path: return a one-hot argmax(π) action. The
+            // IRLAgent<T> public contract on discrete envs is "give me
+            // the action to take" — callers feed the result directly into
+            // env.Step(action). Returning a raw policy distribution would
+            // change the API from action-selector to policy-diagnostic
+            // and break evaluation loops expecting a deterministic action.
+            // The full π(·|s) from the prediction network is still
+            // observable to callers that need it for diagnostics — they
+            // can invoke _predictionNetwork.Predict directly or wire a
+            // separate GetPolicy(...) method if needed.
             var policyValueTensor = Tensor<T>.FromVector(hiddenState);
             var policyValueTensorOutput = _predictionNetwork.Predict(policyValueTensor);
             var policyValue = policyValueTensorOutput.ToVector();
-            return ExtractPolicy(policyValue);
+            var policy = ExtractPolicy(policyValue);
+            int bestIdx = ArgMax(policy);
+            var oneHot = new Vector<T>(_options.ActionSize);
+            oneHot[bestIdx] = NumOps.One;
+            return oneHot;
         }
 
         // Run MCTS to select action
@@ -757,7 +761,12 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        var copy = new MuZeroAgent<T>(_options);
+        // Deep-copy the options before constructing the clone — _options
+        // contains mutable collections (RepresentationLayers, DynamicsLayers,
+        // PredictionLayers as List<int>) and sharing the same instance
+        // would let post-clone edits on one model silently leak into the
+        // other.
+        var copy = new MuZeroAgent<T>(new MuZeroOptions<T>(_options));
         copy.SetParameters(GetParameters());
         return copy;
     }

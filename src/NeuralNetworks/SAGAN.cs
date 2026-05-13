@@ -717,8 +717,15 @@ public class SAGAN<T> : NeuralNetworkBase<T>
             var loss = CalculateLoss(predicted.ToVector(), actual.ToVector());
             var gradientCpu = CalculateDerivative(predicted.ToVector(), actual.ToVector());
 
+            // The previous code copied into `gradientTensor.Data.ToArray()`
+            // — a NEW array materialised by ToArray() and immediately
+            // discarded after the copy. The tensor's backing storage stayed
+            // zero, so the returned gradient was always all-zeros. Copy
+            // directly into the tensor's writable span instead.
             var gradientTensor = new Tensor<TLoss>(predicted._shape);
-            Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
+            var src = gradientCpu.ToArray();
+            src.AsSpan(0, Math.Min(src.Length, gradientTensor.Data.Length))
+               .CopyTo(gradientTensor.Data.Span);
             return (loss, gradientTensor);
         }
     }

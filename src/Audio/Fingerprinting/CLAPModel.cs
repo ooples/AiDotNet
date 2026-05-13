@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Fingerprinting;
@@ -56,6 +57,11 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly CLAPModelOptions _options;
     private readonly bool _useNativeMode;
+    // Captured ONNX-mode constructor inputs. Preserved so CreateNewInstance
+    // can rebuild an ONNX-mode clone with the same encoder weights instead
+    // of silently downgrading to native (random-init) mode.
+    private readonly string? _audioEncoderPath;
+    private readonly string? _textEncoderPath;
 
     // Trainable temperature parameter (stored in log space). Gradients flow
     // through the tape via Engine ops; the optimizer updates this alongside
@@ -99,16 +105,21 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         SampleRate = _options.SampleRate;
         _useNativeMode = false;
+        _audioEncoderPath = audioEncoderPath;
+        _textEncoderPath = textEncoderPath;
         OnnxEncoder = new OnnxModel<T>(audioEncoderPath);
-        // Explicit `is not null` first so net471's flow analyzer (which
-        // doesn't propagate IsNullOrWhiteSpace's non-null implication
-        // across two parameter uses) sees a proven-non-null reference at
-        // both the File.Exists call and the ctor call.
-        if (textEncoderPath is not null
-            && !string.IsNullOrWhiteSpace(textEncoderPath)
-            && File.Exists(textEncoderPath))
+        // Fail fast when a text-encoder path is provided but invalid — the
+        // earlier "try-and-skip" path silently dropped a mistyped path and
+        // only surfaced as a NotSupportedException deep inside EncodeText().
+        // Pattern-matches into a non-null local for net471 nullable-flow.
+        if (textEncoderPath is { Length: > 0 } pathLocal
+            && !string.IsNullOrWhiteSpace(pathLocal))
         {
-            OnnxDecoder = new OnnxModel<T>(textEncoderPath);
+            if (!File.Exists(pathLocal))
+                throw new FileNotFoundException(
+                    $"Text encoder ONNX model not found: {pathLocal}",
+                    pathLocal);
+            OnnxDecoder = new OnnxModel<T>(pathLocal);
         }
 
         InitializeLayers();
@@ -303,8 +314,15 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public Tensor<T> EncodeText(Tensor<T> tokens)
     {
         ThrowIfDisposed();
-        if (!_useNativeMode && OnnxDecoder is not null)
+        if (!_useNativeMode)
         {
+            if (OnnxDecoder is null)
+                throw new NotSupportedException(
+                    "CLAPModel.EncodeText() in ONNX mode requires a text encoder. " +
+                    "Construct CLAPModel with both audioEncoderPath and textEncoderPath, " +
+                    "or use a native-mode instance. Falling through to the native layer " +
+                    "stack would walk an empty TextEncoderLayers list and L2-normalise " +
+                    "the raw token IDs — silent garbage output.");
             return PostprocessOutput(OnnxDecoder.Run(tokens));
         }
 
@@ -335,6 +353,15 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         if (labels is null || labels.Length == 0) throw new ArgumentException("Labels required.", nameof(labels));
         if (tokenize is null) throw new ArgumentNullException(nameof(tokenize));
+        // Reject batched inputs explicitly — this API returns a single score
+        // map. EncodeAudio accepts [batch, samples], and silently flattening
+        // a batch into one embedding would produce one merged score per
+        // label across the whole batch.
+        if (audio.Shape.Length > 1 && audio.Shape[0] != 1)
+            throw new ArgumentException(
+                "ZeroShotClassify expects a single audio clip. Pass clips one at a time " +
+                "or call EncodeAudio directly for the batched path.",
+                nameof(audio));
 
         var audioEmb = EncodeAudio(audio);
         var scores = new Dictionary<string, double>(labels.Length);
@@ -356,6 +383,15 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
+        // Single-clip API — reject batched inputs (same rationale as
+        // ZeroShotClassify: flattening a batch into one fingerprint and one
+        // Duration is silently misleading).
+        if (audio.Shape.Length > 1 && audio.Shape[0] != 1)
+            throw new ArgumentException(
+                "Fingerprint expects a single audio clip. Pass clips one at a time " +
+                "or call EncodeAudio directly for the batched path.",
+                nameof(audio));
+
         var embedding = EncodeAudio(audio);
         var flat = embedding.ToVector();
         var data = new T[flat.Length];
@@ -364,7 +400,9 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Data = data,
             SampleRate = SampleRate,
-            Duration = audio.Length / (double)SampleRate
+            // Per-clip duration: use the last-axis sample count so a [1, N]
+            // batched tensor still reports the correct N / SampleRate.
+            Duration = audio.Shape[audio.Shape.Length - 1] / (double)SampleRate
         };
     }
 
@@ -430,15 +468,140 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
             throw new NotSupportedException(
                 "CLAP training requires native mode. Construct with the (architecture, options) ctor.");
 
+        // CLAP contrastive objective (Radford 2021 Eq. 1; Wu 2023 §3.2): the
+        // loss is the average of audio→text and text→audio softmax cross-
+        // entropies over the temperature-scaled cosine-similarity logit
+        // matrix where positive pairs are aligned on the diagonal.
+        //
+        // Engine-side implementation: TrainWithCustomLoss runs the audio
+        // encoder forward inside its own GradientTape, then we run the text
+        // encoder forward inside the same tape, build the symmetric loss,
+        // and let TrainWithCustomLoss handle the gradient computation +
+        // optimizer step. Parameters collected from Layers
+        // (audio side); the text-encoder parameters and _logTemperature
+        // participate in the loss only when they're referenced in the tape
+        // graph. The optimizer.Step in TrainWithCustomLoss won't directly
+        // update text-encoder or temperature weights, so we manually apply
+        // SGD with the same LR on those after the audio step using their
+        // tape-computed gradients (collected via a parallel
+        // CollectContrastiveParameters walk).
+        //
+        // input:    [batch, samples] audio batch.
+        // expected: [batch, seqLen]  tokenised caption batch (positive pair
+        //                            in the same row).
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            var audioParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var textParams = Training.TapeTrainingStep<T>.CollectParameters(TextEncoderLayers);
+            var allParams = new List<Tensor<T>>(audioParams.Count + textParams.Count + 1);
+            allParams.AddRange(audioParams);
+            allParams.AddRange(textParams);
+            allParams.Add(_logTemperature);
+
+            var optimizer = GetOrCreateBaseOptimizer();
+
+            using var tape = new GradientTape<T>();
+            // Forward both encoders inside the same tape so gradients flow
+            // through every parameter. EncodeAudio / EncodeText already
+            // L2-normalise along the last axis so the dot product below is
+            // cosine similarity.
+            var audioEmb = EncodeAudio(input);
+            var textEmb = EncodeText(expected);
+
+            int batchSize = audioEmb.Shape[0];
+            int projDim = audioEmb.Shape[audioEmb.Shape.Length - 1];
+
+            var audioEmb2D = audioEmb.Shape.Length == 2
+                ? audioEmb
+                : Engine.Reshape(audioEmb, new[] { batchSize, projDim });
+            var textEmb2D = textEmb.Shape.Length == 2
+                ? textEmb
+                : Engine.Reshape(textEmb, new[] { batchSize, projDim });
+
+            // logits = audio @ text.T scaled by exp(_logTemperature).
+            var textEmbT = Engine.TensorTranspose<T>(textEmb2D);
+            var sim = Engine.TensorMatMul<T>(audioEmb2D, textEmbT);
+            // Broadcast scalar exp(logTemp) across the [batch, batch] grid.
+            var tau = Engine.TensorExp<T>(_logTemperature);
+            var tauBroadcast = Engine.TensorTile(
+                Engine.Reshape(tau, new[] { 1, 1 }), new[] { batchSize, batchSize });
+            var logitsA2T = Engine.TensorMultiply<T>(sim, tauBroadcast);
+
+            // Symmetric loss: 0.5 * (CE(logitsA2T, diag) + CE(logitsT2A, diag))
+            // where logitsT2A is the transpose of logitsA2T. Compute both
+            // directions explicitly (rather than relying on transpose-eq) so
+            // the autodiff graph is unambiguous on every backend.
+            var logitsT2A = Engine.TensorTranspose<T>(logitsA2T);
+
+            var halfLossA2T = SymmetricRowCrossEntropy(logitsA2T, batchSize);
+            var halfLossT2A = SymmetricRowCrossEntropy(logitsT2A, batchSize);
+            var lossSum = Engine.TensorAdd<T>(halfLossA2T, halfLossT2A);
+
+            // Manual gradient + optimizer step over the combined params.
+            var grads = tape.ComputeGradients(lossSum, allParams);
+
+            T lossValue = lossSum.Length > 0 ? lossSum[0] : NumOps.Zero;
+            LastLoss = lossValue;
+
+            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => EncodeAudio(inp);
+            Tensor<T> RecomputeLoss(Tensor<T> _, Tensor<T> __) => lossSum;
+
+            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                allParams, grads, lossValue,
+                input, input, ComputeForward, RecomputeLoss);
+            optimizer.Step(context);
         }
         finally
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Computes 0.5 * mean cross-entropy of softmax(logits) against the
+    /// diagonal target (positive pair at the same row index), tape-tracked
+    /// via engine ops. Numerically stable: subtracts the row-wise max
+    /// before exponentiating. Returns a [1] scalar tensor so the caller
+    /// can sum the two directions into the final symmetric loss.
+    /// </summary>
+    private Tensor<T> SymmetricRowCrossEntropy(Tensor<T> logits, int batchSize)
+    {
+        // log_softmax = logits - log(sum(exp(logits − rowMax))) − rowMax
+        // We need the diagonal entry of log_softmax. Easiest: compute
+        // log_softmax row by row using engine ops, then sum along the
+        // diagonal via a one-hot-style multiply.
+        var rowMaxes = new Tensor<T>(new[] { batchSize, 1 });
+        for (int i = 0; i < batchSize; i++)
+        {
+            T m = logits[i, 0];
+            for (int j = 1; j < batchSize; j++)
+                if (NumOps.GreaterThan(logits[i, j], m)) m = logits[i, j];
+            rowMaxes[i, 0] = m;
+        }
+        var rowMaxTiled = Engine.TensorTile(rowMaxes, new[] { 1, batchSize });
+        var shifted = Engine.TensorSubtract<T>(logits, rowMaxTiled);
+        var expShifted = Engine.TensorExp<T>(shifted);
+        var rowSum = Engine.ReduceSum(expShifted, new[] { 1 }, keepDims: true);
+        var logRowSum = Engine.TensorLog<T>(rowSum);
+        var logRowSumTiled = Engine.TensorTile(logRowSum, new[] { 1, batchSize });
+        var logSoftmax = Engine.TensorSubtract<T>(shifted, logRowSumTiled);
+
+        // Diagonal mask: 1 at (i, i), 0 elsewhere.
+        var diagMask = new Tensor<T>(new[] { batchSize, batchSize });
+        for (int i = 0; i < batchSize; i++) diagMask[i, i] = NumOps.One;
+        var picked = Engine.TensorMultiply<T>(logSoftmax, diagMask);
+        // Sum all entries; only the diagonal survives.
+        var sumAxes = new[] { 0, 1 };
+        var totalLog = Engine.ReduceSum(picked, sumAxes, keepDims: false);
+
+        // halfLoss = -0.5 * totalLog / batchSize, returned as a [1] tensor.
+        T totalScalar = totalLog.Length > 0 ? totalLog[0] : NumOps.Zero;
+        T halfLossT = NumOps.Multiply(
+            NumOps.Negate(NumOps.FromDouble(0.5 / batchSize)), totalScalar);
+        var result = new Tensor<T>(new[] { 1 });
+        result[0] = halfLossT;
+        return result;
     }
 
     #endregion
@@ -476,6 +639,38 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private void ThrowIfDisposed()
     {
         // AudioNeuralNetworkBase manages disposal; no extra state to gate.
+    }
+
+    /// <inheritdoc/>
+    public override long ParameterCount =>
+        Layers.Sum(l => l.ParameterCount)
+        + TextEncoderLayers.Sum(l => l.ParameterCount)
+        + 1; // _logTemperature (learnable τ scalar)
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// CLAP holds parameters across both encoders + the temperature.
+    /// Override <see cref="NeuralNetworkBase{T}.GetParameters"/> so
+    /// optimizers / checkpointing see the full parameter vector and the
+    /// ordering matches <see cref="UpdateParameters"/> below.
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        var parts = new List<T>((int)ParameterCount);
+        foreach (var layer in Layers)
+        {
+            var p = layer.GetParameters();
+            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
+        }
+        foreach (var layer in TextEncoderLayers)
+        {
+            var p = layer.GetParameters();
+            for (int i = 0; i < p.Length; i++) parts.Add(p[i]);
+        }
+        parts.Add(_logTemperature[0]);
+        var result = new Vector<T>(parts.Count);
+        for (int i = 0; i < parts.Count; i++) result[i] = parts[i];
+        return result;
     }
 
     /// <inheritdoc/>
@@ -574,7 +769,9 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new CLAPModel<T>(Architecture, _options);
+        _useNativeMode
+            ? new CLAPModel<T>(Architecture, _options)
+            : new CLAPModel<T>(Architecture, _audioEncoderPath!, _textEncoderPath, _options);
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

@@ -214,6 +214,20 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
     {
         if (disposing)
         {
+            // TextEncoderLayers live outside NeuralNetworkBase<T>.Layers,
+            // so base.Dispose won't reach them. Dispose any disposable
+            // entries explicitly (Conv/Dense/etc. layers wrap pooled
+            // tensor scratch buffers that would otherwise be retained
+            // until process exit on long-running dual-encoder runs).
+            foreach (var layer in TextEncoderLayers)
+            {
+                if (layer is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+            TextEncoderLayers.Clear();
+
             OnnxEncoder?.Dispose();
             OnnxDecoder?.Dispose();
             OnnxModel?.Dispose();

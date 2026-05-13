@@ -759,18 +759,12 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         }
         else if (input.Rank == expectedInputRank + 1)
         {
-            // Batch of samples - iterate through batch dimension
-            var batchSize = input.Shape[0];
-            var results = new List<Tensor<T>>(batchSize);
-
-            for (int i = 0; i < batchSize; i++)
-            {
-                var sample = input.GetSlice(i);
-                var generatedOutput = Generator.Predict(sample);
-                results.Add(generatedOutput);
-            }
-
-            return Tensor<T>.Stack([.. results]);
+            // Batched input — the generator already understands [batch, …]
+            // layouts (Dense / Reshape / ConvTranspose all treat the leading
+            // axis as batch). Routing through GetSlice + Generator.Predict
+            // re-strips the batch axis and re-triggers the same shape bug
+            // the single-sample branch above had to reshape around.
+            return Generator.Predict(input);
         }
         else
         {
@@ -852,6 +846,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             expectedOutput = expectedOutput.Reshape(batched);
         }
 
+        // Mismatched latent/real batch sizes would let the discriminator
+        // train against the wrong labels and the loss compute against
+        // shapes that diverge several layers in. Surface it here with an
+        // actionable message instead of a deep shape error.
+        if (input.Shape[0] != expectedOutput.Shape[0])
+            throw new ArgumentException(
+                $"GAN.Train: input batch size {input.Shape[0]} does not match expected " +
+                $"output batch size {expectedOutput.Shape[0]}. Latent and real batches " +
+                "must be aligned.");
+
         // Get batch size from the input tensor
         int batchSize = input.Shape[0];
 
@@ -864,8 +868,12 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Generate fake images with tensor operations
         var fakeImages = Generator.Predict(input);
 
-        // Store batches for feature matching if enabled
-        if (UseFeatureMatching)
+        // Cache real / fake batches whenever any auxiliary loss needs them.
+        // Previously only UseFeatureMatching gated the cache, so the WGAN-GP
+        // gradient-penalty path silently saw null batches and the penalty
+        // contributed nothing — EnableGradientPenalty looked like a working
+        // toggle but never applied a real penalty signal during training.
+        if (UseFeatureMatching || _useGradientPenalty)
         {
             _lastRealBatch = expectedOutput.Clone();
             _lastFakeBatch = fakeImages.Clone();
@@ -875,9 +883,47 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         var realLabels = CreateLabelTensor(batchSize, NumOps.One);
         var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
 
-        // Train discriminator with tape-based autodiff
+        // Train discriminator with tape-based autodiff. Standard BCE step on
+        // real and fake batches first — this is the discriminator's primary
+        // adversarial objective.
         Discriminator.Train(expectedOutput, realLabels);
         Discriminator.Train(fakeImages, fakeLabels);
+
+        // WGAN-GP penalty step (Gulrajani et al. 2017 §4): if gradient
+        // penalty is enabled, run a separate discriminator optimizer step
+        // whose loss is λ · E_x̂[(||∇_x̂ D(x̂)|| − 1)²] where x̂ is a random
+        // interpolation between real and fake. Wiring it as a separate step
+        // (vs folding into the BCE loss in a single backward pass) keeps
+        // the change local to this method; the practical effect on training
+        // dynamics is the same since both gradients land on the
+        // discriminator's parameters before the generator step below.
+        if (_useGradientPenalty && _lastRealBatch is not null && _lastFakeBatch is not null)
+        {
+            var trainableDisc = (NeuralNetworkBase<T>)Discriminator;
+            try
+            {
+                trainableDisc.TrainWithCustomLoss(_lastRealBatch, _ =>
+                {
+                    // ComputeGradientPenalty already applies the λ factor and
+                    // returns the per-batch mean penalty as a scalar T.
+                    // Wrap it in a [1]-shape Tensor so TrainWithCustomLoss
+                    // can treat it as a loss tensor.
+                    T penaltyScalar = ComputeGradientPenalty(
+                        _lastRealBatch, _lastFakeBatch, _gradientPenaltyLambda);
+                    var lossTensor = new Tensor<T>([1]);
+                    lossTensor[0] = penaltyScalar;
+                    return lossTensor;
+                });
+            }
+            catch (Exception ex)
+            {
+                // Surface penalty-step failures via Trace so a malformed
+                // batch (e.g. real/fake shape mismatch) doesn't silently
+                // disable the toggle for the rest of training.
+                System.Diagnostics.Trace.TraceWarning(
+                    "GAN.Train: gradient-penalty discriminator update failed — " + ex.Message);
+            }
+        }
 
         // Compute discriminator loss for monitoring
         var realPred = Discriminator.Predict(expectedOutput);
@@ -1557,8 +1603,33 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// share trained models with others, or deploy them in applications.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Network-specific binary format version. Bumped whenever the layout
+    /// of <see cref="SerializeNetworkSpecificData"/> /
+    /// <see cref="DeserializeNetworkSpecificData"/> changes so older
+    /// checkpoints can be detected and migrated instead of silently
+    /// mis-aligning into mis-typed reads (a legacy v0 checkpoint without
+    /// the gradient-penalty fields would otherwise read its lossCount
+    /// payload into _useGradientPenalty and cascade-corrupt every
+    /// downstream field).
+    ///
+    /// Version 1: added _useGradientPenalty + _gradientPenaltyLambda.
+    /// </summary>
+    private const int GanSerializationVersion = 1;
+
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        // Format-version header. ALWAYS the first int written by this
+        // method so the deserializer can sniff what fields to expect.
+        writer.Write(GanSerializationVersion);
+
+        // Persist gradient-penalty configuration so a reloaded checkpoint
+        // continues training with the same WGAN-GP coefficient/enabled state.
+        // Without this, resuming a WGAN-GP run silently falls back to the
+        // default (disabled / λ = 10) and the loss curve changes shape.
+        writer.Write(_useGradientPenalty);
+        writer.Write(_gradientPenaltyLambda);
+
         // Save recent loss history (last 20 entries at most)
         int lossCount = Math.Min(_generatorLosses.Count, 20);
         writer.Write(lossCount);
@@ -1602,6 +1673,37 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
+        // Read the format-version header first so we know what fields to
+        // expect. Legacy checkpoints predate the header and start straight
+        // at the lossCount int — a v0 (no header) checkpoint reads the
+        // same first int as `version` but the value will be > 1, so we
+        // fall through to the legacy branch instead of mis-aligning.
+        long headerStart = reader.BaseStream.Position;
+        int version = reader.ReadInt32();
+        if (version == GanSerializationVersion)
+        {
+            // Restore gradient-penalty configuration (must match the order
+            // in SerializeNetworkSpecificData above).
+            _useGradientPenalty = reader.ReadBoolean();
+            _gradientPenaltyLambda = reader.ReadDouble();
+        }
+        else if (version > GanSerializationVersion)
+        {
+            throw new InvalidDataException(
+                $"GAN checkpoint format version {version} is newer than this binary " +
+                $"supports (max version {GanSerializationVersion}). Update the AiDotNet " +
+                "library before loading this checkpoint.");
+        }
+        else
+        {
+            // Pre-versioning (v0) checkpoint — no gradient-penalty fields.
+            // Rewind to the start of the network-specific block so the
+            // legacy code path picks up the lossCount int we just consumed.
+            reader.BaseStream.Position = headerStart;
+            _useGradientPenalty = false;
+            _gradientPenaltyLambda = 10.0;
+        }
+
         // Load recent loss history
         int lossCount = reader.ReadInt32();
         _generatorLosses = new List<T>(lossCount);

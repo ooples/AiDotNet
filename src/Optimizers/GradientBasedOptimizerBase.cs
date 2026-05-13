@@ -1515,6 +1515,36 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
+    /// PyTorch <c>clip_grad_value_</c>-style element-wise clamp across
+    /// every gradient in the tape step's
+    /// <see cref="TapeStepContext{T}.Gradients"/> dictionary: each element
+    /// is bounded to <c>[-maxValue, +maxValue]</c>. Companion to
+    /// <see cref="ApplyTapeGlobalNormGradientClipping"/> — tape-path
+    /// optimizers select between them via
+    /// <see cref="Models.Options.GradientBasedOptimizerOptions{T,TInput,TOutput}.GradientClippingMethod"/>.
+    /// </summary>
+    protected static void ApplyTapeValueGradientClipping(
+        TapeStepContext<T> context, double maxValue)
+    {
+        if (maxValue <= 0.0 || double.IsNaN(maxValue) || double.IsInfinity(maxValue)) return;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            var span = grad.Data.Span;
+            for (int i = 0; i < span.Length; i++)
+            {
+                double v = numOps.ToDouble(span[i]);
+                if (v > maxValue) v = maxValue;
+                else if (v < -maxValue) v = -maxValue;
+                span[i] = numOps.FromDouble(v);
+            }
+        }
+    }
+
+    /// <summary>
     /// PyTorch GradScaler-style anomaly probe across every gradient in the tape
     /// step's <see cref="TapeStepContext{T}.Gradients"/> dictionary: returns
     /// <c>true</c> if any element is NaN or ±Inf. Tape-path optimizers should

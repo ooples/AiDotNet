@@ -36,14 +36,20 @@ namespace AiDotNet.NeuralNetworks;
 public abstract class DualEncoderArchitecture<T> : NeuralNetworkArchitecture<T>
 {
     /// <summary>
-    /// Gets the layer stack for the first encoder stream. Populates the model's
-    /// primary <see cref="NeuralNetworkArchitecture{T}.Layers"/> list.
+    /// Gets the layer stack for the first encoder stream. Models that consume
+    /// this architecture must explicitly read <c>EncoderALayers</c> at
+    /// initialisation time — the base <see cref="NeuralNetworkArchitecture{T}.Layers"/>
+    /// list is intentionally left empty (we pass <c>layers: null</c> to the
+    /// base constructor) so the two encoder streams stay distinct and don't
+    /// silently flatten into the single primary list.
     /// </summary>
     public List<ILayer<T>> EncoderALayers { get; } = new List<ILayer<T>>();
 
     /// <summary>
-    /// Gets the layer stack for the second encoder stream. Populates the model's
-    /// secondary encoder list (typically <c>TextEncoderLayers</c> on the model).
+    /// Gets the layer stack for the second encoder stream. Same contract as
+    /// <see cref="EncoderALayers"/>: models must consume this list directly
+    /// rather than expecting it to be visible through <c>Layers</c>.
+    /// Typically maps to <c>TextEncoderLayers</c> on the concrete model.
     /// </summary>
     public List<ILayer<T>> EncoderBLayers { get; } = new List<ILayer<T>>();
 
@@ -82,7 +88,25 @@ public abstract class DualEncoderArchitecture<T> : NeuralNetworkArchitecture<T>
     {
         if (encoderALayers is null) throw new ArgumentNullException(nameof(encoderALayers));
         if (encoderBLayers is null) throw new ArgumentNullException(nameof(encoderBLayers));
-        EncoderALayers.AddRange(encoderALayers);
-        EncoderBLayers.AddRange(encoderBLayers);
+        // Validate individual layer entries rather than just the enumerable
+        // references — a null inside the sequence would silently corrupt the
+        // encoder stack and only fail during forward/backward traversal much
+        // later (with a much less actionable stack trace). Fail fast here.
+        foreach (var layer in encoderALayers)
+        {
+            if (layer is null)
+                throw new ArgumentException(
+                    $"encoderALayers contains a null element at index {EncoderALayers.Count}.",
+                    nameof(encoderALayers));
+            EncoderALayers.Add(layer);
+        }
+        foreach (var layer in encoderBLayers)
+        {
+            if (layer is null)
+                throw new ArgumentException(
+                    $"encoderBLayers contains a null element at index {EncoderBLayers.Count}.",
+                    nameof(encoderBLayers));
+            EncoderBLayers.Add(layer);
+        }
     }
 }

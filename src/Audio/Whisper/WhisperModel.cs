@@ -1204,6 +1204,11 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         foreach (long tok in tokens)
         {
+            // Token IDs always come from DecodeTokens internally, but the
+            // long->int narrowing is defensive against future callers that
+            // pass external token streams (e.g. an external rescorer feeding
+            // generated IDs back through ExtractSegments).
+            if (tok < int.MinValue || tok > int.MaxValue) continue;
             int tokId = (int)tok;
             if (_tokenizer.IsTimestampToken(tokId))
             {
@@ -1235,6 +1240,26 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             else if (segStart is not null && !_tokenizer.IsSpecialToken(tokId))
             {
                 pendingTextTokens.Add(tok);
+            }
+        }
+
+        // Flush a trailing segment when the stream ends mid-segment (e.g. the
+        // decoder hit max_tokens before a closing timestamp token, or the
+        // generation was truncated). Without this the in-flight text gets
+        // silently dropped because the close-timestamp branch above never
+        // fires for the final segment.
+        if (segStart is not null && pendingTextTokens.Count > 0)
+        {
+            var tailText = _tokenizer.Decode(pendingTextTokens);
+            if (!string.IsNullOrWhiteSpace(tailText))
+            {
+                segments.Add(new TranscriptionSegment<T>
+                {
+                    Text = tailText,
+                    StartTime = segStart.Value,
+                    EndTime = _maxAudioLengthSeconds,
+                    Confidence = NumOps.FromDouble(1.0)
+                });
             }
         }
 

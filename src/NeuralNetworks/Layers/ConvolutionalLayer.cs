@@ -1015,11 +1015,24 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         {
             _lastInput = input4D;
         }
+        else
+        {
+            // Clear the cache when tape is active so prior non-tape steps
+            // can't keep an old activation rooted alongside the tape's
+            // intermediates. Empty-shape sentinel matches the ctor's
+            // initial state and lets ParameterCount / Serialize logic that
+            // reads _lastInput.Shape continue to work without an NRE.
+            _lastInput = new Tensor<T>([0, 0, 0, 0]);
+        }
 
         // === Zero-Allocation Convolution ===
         // Pre-allocate output buffer on first forward pass, then reuse via Conv2DInto
-        int outputHeight = (input4D.Shape[2] + 2 * Padding - KernelSize) / Stride + 1;
-        int outputWidth = (input4D.Shape[3] + 2 * Padding - KernelSize) / Stride + 1;
+        // Use CalculateOutputDimension here too so a forward call with smaller
+        // spatial dims surfaces the same actionable "output would be <= 0"
+        // exception the helper already produces, instead of failing deep inside
+        // TensorAllocator with a non-positive shape.
+        int outputHeight = CalculateOutputDimension(input4D.Shape[2], KernelSize, Stride, Padding);
+        int outputWidth = CalculateOutputDimension(input4D.Shape[3], KernelSize, Stride, Padding);
         int batchSize_conv = input4D.Shape[0];
         int[] expectedShape = [batchSize_conv, OutputDepth, outputHeight, outputWidth];
 
@@ -1087,12 +1100,19 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // Only retain _lastOutput when no tape is active. The tape holds
         // `result` as a node already; layer-side retention would double-root
         // the activation and inflate peak memory through the L-layer chain.
-        // Keep the assignment alive on the inference path (where Conv2D
-        // doesn't hit a tape) for any caller that still reads the layer's
-        // last output for diagnostics.
-        if (IsTrainingMode && !tapeActive)
+        // Keep the assignment alive on BOTH the training-no-tape and the
+        // inference paths (the inference path is the common reader for
+        // _lastOutput diagnostics; gating on IsTrainingMode kept it stale
+        // for the entire inference branch). When the tape IS active, clear
+        // the cache so a prior non-tape step's output can't keep its tensor
+        // rooted in parallel with the tape's intermediates.
+        if (!tapeActive)
         {
             _lastOutput = result;
+        }
+        else
+        {
+            _lastOutput = new Tensor<T>([0, 0, 0, 0]);
         }
 
         // Return with matching dimensions to preserve original tensor rank
