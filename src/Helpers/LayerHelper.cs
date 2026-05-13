@@ -33849,6 +33849,59 @@ public static class LayerHelper<T>
 
     #endregion
 
+    #region AST (Audio Spectrogram Transformer)
+
+    /// <summary>
+    /// Creates the default audio classifier layers for AST (Gong et al. 2021
+    /// "AST: Audio Spectrogram Transformer"). Input is a 2D log-mel spectrogram
+    /// <c>[batch, 1, numFrames, numMels]</c>; output is class logits
+    /// <c>[batch, numClasses]</c>.
+    /// </summary>
+    /// <param name="patchSize">Square patch size for the ViT patch embedding (paper §2.2: 16).</param>
+    /// <param name="embeddingDim">Transformer hidden dimension (AST-Base: 768).</param>
+    /// <param name="numLayers">Number of transformer encoder blocks (AST-Base: 12).</param>
+    /// <param name="numHeads">Attention heads per block (AST-Base: 12).</param>
+    /// <param name="feedForwardDim">FFN hidden dim (4× embedding per Vaswani 2017).</param>
+    /// <param name="numClasses">Output class count (AudioSet: 527).</param>
+    /// <param name="maxSequenceLength">Maximum patch sequence length (positional embedding budget).</param>
+    /// <remarks>
+    /// Pipeline: patchify spectrogram → embed each patch → add positional
+    /// encoding → N transformer encoder layers → global average pool → linear
+    /// classifier. Matches the AST §2 architecture diagram.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultASTLayers(
+        int patchSize,
+        int embeddingDim,
+        int numLayers,
+        int numHeads,
+        int feedForwardDim,
+        int numClasses,
+        int maxSequenceLength = 1024)
+    {
+        // Patchify [B, 1, F, T] → [B, numPatches, embeddingDim].
+        yield return new PatchEmbeddingLayer<T>(patchSize: patchSize, embeddingDim: embeddingDim);
+
+        // Add learnable position embeddings.
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxSequenceLength, embeddingSize: embeddingDim);
+
+        // N transformer encoder blocks (paper §2.3).
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDim,
+                embeddingSize: embeddingDim);
+        }
+
+        // Mean-pool the patch tokens → single audio embedding.
+        yield return new GlobalPoolingLayer<T>(poolingType: AiDotNet.Enums.PoolingType.Average);
+
+        // Linear classification head.
+        yield return new DenseLayer<T>(outputSize: numClasses, activationFunction: new IdentityActivation<T>());
+    }
+
+    #endregion
+
     #region CLAP (Contrastive Language-Audio Pretraining)
 
     /// <summary>
