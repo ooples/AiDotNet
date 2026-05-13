@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
@@ -11,6 +12,13 @@ namespace AiDotNet.Tools.ResNetPerfHarness;
 
 internal static class Program
 {
+    // Models BuildFloat() actually wires up. Kept in sync with the switch
+    // in BuildFloat() — any new case there must add its key here, or the
+    // pre-dispatch validation in Main() will reject it before ever calling
+    // RunFloat(), which is exactly what we want for unsupported names.
+    private static readonly HashSet<string> SupportedFloatModels =
+        new(StringComparer.Ordinal) { "resnet50", "vgg11", "vgg16bn" };
+
     private const string UsageText =
         "Usage: ResNetPerfHarness [--warmup N] [--iters N] [--model NAME] [--dtype double|float]\n" +
         "  --warmup N   Number of warm-up training iterations (default: 1).\n" +
@@ -52,6 +60,7 @@ internal static class Program
                     if (dtype != "double" && dtype != "float")
                     {
                         Console.Error.WriteLine($"[harness] error: --dtype expects 'double' or 'float', got '{dtype}'.");
+                        Console.Error.WriteLine(UsageText);
                         return 2;
                     }
                     break;
@@ -64,6 +73,14 @@ internal static class Program
 
         if (dtype == "float")
         {
+            if (!SupportedFloatModels.Contains(model))
+            {
+                Console.Error.WriteLine(
+                    $"[harness] error: --dtype float does not support model '{model}'. " +
+                    $"Supported: {string.Join(", ", SupportedFloatModels)}.");
+                Console.Error.WriteLine(UsageText);
+                return 2;
+            }
             return RunFloat(model, warmup, iters);
         }
 

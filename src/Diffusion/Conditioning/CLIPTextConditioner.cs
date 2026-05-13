@@ -446,22 +446,6 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     }
 
     /// <summary>
-    /// CLIP head-count map per variant: 768→12, 1024→16, 1280→16, 1664→16
-    /// (matches Hugging Face transformers' clip-vit-{base,large,big-g} configs).
-    /// </summary>
-    private static int ComputeNumHeads(int hiddenSize)
-    {
-        return hiddenSize switch
-        {
-            768 => 12,
-            1024 => 16,
-            1280 => 16,
-            1664 => 16,
-            _ => Math.Max(1, hiddenSize / 64) // Standard ViT convention: head_dim ≈ 64
-        };
-    }
-
-    /// <summary>
     /// Multi-head scaled dot-product self-attention (Vaswani et al. 2017
     /// Eqs. 1-2). Operates on the [seqLen, HiddenSize] input through
     /// engine-accelerated batched matmul / softmax / transpose ops on

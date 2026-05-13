@@ -159,12 +159,18 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
         // Resample only the chosen octave; sum stays roughly constant otherwise.
         _pinkValues[updateOctave] = context.SampleGaussian(0, stdDev);
 
-        double sum = 0.0;
+        // McCartney's "improved" Voss generator refreshes only one held octave
+        // per sample, so the highest-frequency band would be missing from the
+        // sum unless we add an always-resampled white term. Without it the
+        // output drops the top octave and sounds darker than the 1/f target.
+        double whiteTop = context.SampleGaussian(0, stdDev);
+        double sum = whiteTop;
         for (int i = 0; i < PinkOctaves; i++) sum += _pinkValues[i];
-        // Normalise by √NumOctaves so the output variance matches the input
-        // stdDev's intent (summing independent N(0, σ²) RVs scales variance
-        // linearly with N, so divide by √N to restore the requested σ).
-        return sum / Math.Sqrt(PinkOctaves);
+        // Normalise by √(NumOctaves + 1) so the output variance matches the
+        // input stdDev's intent. Summing (PinkOctaves + 1) independent
+        // N(0, σ²) RVs scales variance linearly with the count, so divide by
+        // the sqrt to restore the requested σ.
+        return sum / Math.Sqrt(PinkOctaves + 1);
     }
 
     // Brown noise (random walk)

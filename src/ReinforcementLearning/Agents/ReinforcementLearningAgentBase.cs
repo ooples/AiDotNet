@@ -346,11 +346,16 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         // previous hardcode silently drifted from the override and broke
         // downstream consumers that looked up importance by name.
         var importance = new Dictionary<string, T>();
-        var names = FeatureNames;
-        int n = Math.Min(FeatureCount, names?.Length ?? 0);
-        for (int i = 0; i < n; i++)
+        var names = FeatureNames ?? Array.Empty<string>();
+        // Always emit FeatureCount entries — if FeatureNames is shorter (or a
+        // particular slot is blank), fall back to "State_{i}" so callers see
+        // every dimension represented instead of silently losing tail features.
+        for (int i = 0; i < FeatureCount; i++)
         {
-            importance[names![i]] = NumOps.One;
+            string key = (i < names.Length && !string.IsNullOrWhiteSpace(names[i]))
+                ? names[i]
+                : $"State_{i}";
+            importance[key] = NumOps.One;
         }
         return importance;
     }

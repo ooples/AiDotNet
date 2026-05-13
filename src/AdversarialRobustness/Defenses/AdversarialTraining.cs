@@ -377,6 +377,22 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         return output;
     }
 
+    // Precomputed 8x8 cosine basis: DctBasis[k, i] = cos((2*i + 1) * k * pi / 16).
+    // The 2D type-II DCT/IDCT each touch every (k, i) pair once per block; on a
+    // 224x224 ImageNet input that's 784 8x8 blocks * 8 * 8 * 2 passes * 8 inner
+    // = ~800k Math.Cos calls per defense step. Computing the basis once amortises
+    // that to 64 cosines for the lifetime of the type.
+    private static readonly double[,] DctBasis = BuildDctBasis();
+
+    private static double[,] BuildDctBasis()
+    {
+        var basis = new double[8, 8];
+        for (int k = 0; k < 8; k++)
+            for (int i = 0; i < 8; i++)
+                basis[k, i] = Math.Cos((2 * i + 1) * k * Math.PI / 16.0);
+        return basis;
+    }
+
     /// <summary>
     /// 2D type-II DCT (the JPEG DCT) computed via the separable two-pass form
     /// over an 8×8 block. Operates in-place.
@@ -391,7 +407,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             {
                 double sum = 0.0;
                 for (int x = 0; x < 8; x++)
-                    sum += block[y, x] * Math.Cos((2 * x + 1) * u * Math.PI / 16.0);
+                    sum += block[y, x] * DctBasis[u, x];
                 double cu = u == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
                 tmp[y, u] = 0.5 * cu * sum;
             }
@@ -403,7 +419,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             {
                 double sum = 0.0;
                 for (int y = 0; y < 8; y++)
-                    sum += tmp[y, u] * Math.Cos((2 * y + 1) * v * Math.PI / 16.0);
+                    sum += tmp[y, u] * DctBasis[v, y];
                 double cv = v == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
                 block[v, u] = 0.5 * cv * sum;
             }
@@ -423,7 +439,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
                 for (int v = 0; v < 8; v++)
                 {
                     double cv = v == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
-                    sum += cv * block[v, u] * Math.Cos((2 * y + 1) * v * Math.PI / 16.0);
+                    sum += cv * block[v, u] * DctBasis[v, y];
                 }
                 tmp[y, u] = 0.5 * sum;
             }
@@ -437,7 +453,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
                 for (int u = 0; u < 8; u++)
                 {
                     double cu = u == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
-                    sum += cu * tmp[y, u] * Math.Cos((2 * x + 1) * u * Math.PI / 16.0);
+                    sum += cu * tmp[y, u] * DctBasis[u, x];
                 }
                 block[y, x] = 0.5 * sum;
             }

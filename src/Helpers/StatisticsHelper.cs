@@ -592,8 +592,11 @@ public static class StatisticsHelper<T>
         // Calculate degrees of freedom
         int _degreesOfFreedom = _categoryCount - 1;
 
-        // Calculate p-value using chi-square distribution (upper tail probability)
-        T _pValue = _numOps.Subtract(_numOps.One, ChiSquareCDF(_chiSquare, _degreesOfFreedom));
+        // Use the clamped upper-tail helper rather than inlining 1 - CDF.
+        // ChiSquareCDF returns values that can drift slightly outside [0, 1]
+        // for extreme tail values; ChiSquarePValue both subtracts and clamps,
+        // keeping ChiSquareTestResult.PValue inside a valid probability range.
+        T _pValue = ChiSquarePValue(_chiSquare, _degreesOfFreedom);
 
         // Calculate critical value
         T _criticalValue = InverseChiSquareCDF(_numOps.Subtract(_numOps.FromDouble(1), significanceLevel), _degreesOfFreedom);
@@ -913,8 +916,11 @@ public static class StatisticsHelper<T>
         int numeratorDf = leftY.Length - 1;
         int denominatorDf = rightY.Length - 1;
 
-        // Calculate p-value using F-distribution
-        T pValue = CalculatePValueFromFDistribution(fStatistic, numeratorDf, denominatorDf);
+        // Use the upper-tail FDistributionPValue helper so the result's
+        // PValue is the documented "probability of seeing an F at least this
+        // extreme by chance" instead of the lower-tail CDF that
+        // CalculatePValueFromFDistribution returns.
+        T pValue = FDistributionPValue(fStatistic, numeratorDf, denominatorDf);
 
         // Calculate confidence intervals (95% by default)
         T confidenceLevel = _numOps.FromDouble(0.95);

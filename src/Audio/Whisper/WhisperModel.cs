@@ -1204,6 +1204,11 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         foreach (long tok in tokens)
         {
+            // Token IDs always come from DecodeTokens internally, but the
+            // long->int narrowing is defensive against future callers that
+            // pass external token streams (e.g. an external rescorer feeding
+            // generated IDs back through ExtractSegments).
+            if (tok < int.MinValue || tok > int.MaxValue) continue;
             int tokId = (int)tok;
             if (_tokenizer.IsTimestampToken(tokId))
             {

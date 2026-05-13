@@ -223,10 +223,14 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int srcH = crop.Shape[2];
         int srcW = crop.Shape[3];
 
-        // Sort the 4 corners into (top-left, top-right, bottom-right, bottom-left)
-        // by angle from the polygon centroid. The detector usually emits them in
-        // some order; rotating into a canonical order makes the homography stable.
-        var (tl, tr, br, bl) = OrderQuadCorners(region.Polygon);
+        // Reduce arbitrary N-gon contours (N >= 4) to 4 quad corners using the
+        // OpenCV-canonical extreme-points approach: tl = argmin(x+y),
+        // br = argmax(x+y), tr = argmax(x-y), bl = argmin(x-y). For N == 4
+        // this is a no-op pass-through to OrderQuadCorners. For N > 4 it
+        // selects a stable quad bounded by the contour's extremes instead of
+        // letting OrderQuadCorners silently consume the first 4 indices.
+        var quad = ReducePolygonToQuad(region.Polygon);
+        var (tl, tr, br, bl) = OrderQuadCorners(quad);
 
         // Target rectangle dimensions: preserve aspect ratio from the quad.
         double topEdge    = Math.Sqrt(SqDist(tl, tr));
@@ -285,6 +289,46 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// orientation. Uses centroid-angle sort, which is robust to corner
     /// permutations from different detectors.
     /// </summary>
+    /// <summary>
+    /// Reduces a polygon with N >= 4 vertices to a stable 4-corner quad using
+    /// the canonical extreme-point selection from OpenCV's perspective-correct
+    /// pipeline:
+    ///   top-left     = argmin(x + y)
+    ///   bottom-right = argmax(x + y)
+    ///   top-right    = argmax(x - y)
+    ///   bottom-left  = argmin(x - y)
+    /// When N == 4 the result is the same 4 points the detector produced
+    /// (ordering may differ; OrderQuadCorners re-canonicalises afterwards).
+    /// When N > 4 it picks the 4 extremes instead of silently truncating to
+    /// poly[0..3], which OrderQuadCorners would do.
+    /// </summary>
+    private static List<(T X, T Y)> ReducePolygonToQuad(List<(T X, T Y)> poly)
+    {
+        if (poly.Count == 4) return poly;
+        int n = poly.Count;
+        int tlIdx = 0, brIdx = 0, trIdx = 0, blIdx = 0;
+        double minSum = double.PositiveInfinity, maxSum = double.NegativeInfinity;
+        double maxDiff = double.NegativeInfinity, minDiff = double.PositiveInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            double x = NumOps.ToDouble(poly[i].X);
+            double y = NumOps.ToDouble(poly[i].Y);
+            double s = x + y;
+            double d = x - y;
+            if (s < minSum) { minSum = s; tlIdx = i; }
+            if (s > maxSum) { maxSum = s; brIdx = i; }
+            if (d > maxDiff) { maxDiff = d; trIdx = i; }
+            if (d < minDiff) { minDiff = d; blIdx = i; }
+        }
+        return new List<(T X, T Y)>
+        {
+            poly[tlIdx],
+            poly[trIdx],
+            poly[brIdx],
+            poly[blIdx],
+        };
+    }
+
     private static ((double X, double Y) TL, (double X, double Y) TR, (double X, double Y) BR, (double X, double Y) BL)
         OrderQuadCorners(List<(T X, T Y)> poly)
     {

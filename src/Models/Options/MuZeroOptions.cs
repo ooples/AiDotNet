@@ -66,6 +66,10 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
         WarmupSteps = other.WarmupSteps;
         MaxGradientNorm = other.MaxGradientNorm;
 
+        // ModelOptions base field — reproducibility seed. Missing this
+        // would silently change rng behaviour between original and clone.
+        Seed = other.Seed;
+
         // MuZero-specific fields
         ObservationSize = other.ObservationSize;
         ActionSize = other.ActionSize;

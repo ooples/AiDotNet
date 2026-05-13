@@ -177,6 +177,22 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
+        // Validate at the boundary — the ctor uses inputShape: [-1] so the
+        // base class's Forward never gets a chance to catch a shape mismatch.
+        // Without this guard, a wrong feature size first surfaces as an
+        // engine-specific Reshape or TensorMatMul failure several lines down.
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank == 0)
+            throw new ArgumentException(
+                "NoisyDenseLayer expects an input with at least one dimension.",
+                nameof(input));
+        int featureSize = input.Rank == 1 ? input.Length : input.Shape[input.Rank - 1];
+        if (featureSize != _inputSize)
+            throw new ArgumentException(
+                $"NoisyDenseLayer expects last-dim feature size {_inputSize}, got {featureSize} " +
+                $"(input shape [{string.Join(",", input.Shape)}]).",
+                nameof(input));
+
         // Training mode: resample noise (Fortunato 2017 §3.3 — one resample
         // per environment step / minibatch). Eval mode: use mean weights only
         // (paper §3.4: at evaluation the network uses μ and the σ term is set
@@ -334,7 +350,15 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (ParameterGradients is null || ParameterGradients.Length != ParameterCount) return;
+        // ParameterGradients is allowed to be null (e.g. before the first
+        // backward pass), but a non-null gradient buffer with the wrong
+        // length signals a real wiring bug — silently returning would stall
+        // training without surfacing the cause.
+        if (ParameterGradients is null) return;
+        if (ParameterGradients.Length != ParameterCount)
+            throw new InvalidOperationException(
+                $"NoisyDenseLayer.UpdateParameters: gradient buffer length " +
+                $"{ParameterGradients.Length} does not match ParameterCount {ParameterCount}.");
 
         int idx = 0;
         for (int i = 0; i < _muWeights.Length; i++)

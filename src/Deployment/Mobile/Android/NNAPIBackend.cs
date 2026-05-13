@@ -199,9 +199,21 @@ public class NNAPIBackend<T> : IDisposable
     /// </remarks>
     public static bool IsNNAPIAvailable()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return false;
+        // .NET on Android does NOT return true from
+        // IsOSPlatform(OSPlatform.Linux) — Android is a distinct platform in
+        // .NET 5+ (see dotnet/runtime#51052). Check both the synthetic
+        // "ANDROID" platform string AND Linux so this works on phones (the
+        // only place libneuralnetworks.so actually exists) as well as the
+        // Linux dev host that ships the same SO file for testing.
+        if (!RuntimeInformation.IsOSPlatform(AndroidPlatform)
+            && !RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return false;
+        }
         return NNAPIInterop.TryLoad();
     }
+
+    private static readonly OSPlatform AndroidPlatform = OSPlatform.Create("ANDROID");
 
     /// <summary>Gets NNAPI performance information for the current device.</summary>
     public NNAPIPerformanceInfo GetPerformanceInfo()
