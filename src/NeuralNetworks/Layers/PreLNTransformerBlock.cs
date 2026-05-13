@@ -85,6 +85,19 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>
         // forward, so the FFN expands hidden -> ffnDim, then projects ffnDim -> hidden.
         _ffnUp = new DenseLayer<T>(outputSize: ffnDim, activationFunction: _ffnActivation);
         _ffnDown = new DenseLayer<T>(outputSize: hiddenSize, activationFunction: new IdentityActivation<T>());
+
+        // Register every sublayer so TapeTrainingStep<T>.CollectParameters
+        // recursively discovers their trainable tensors. Without this the
+        // gradient tape only sees the parameters of layers in the top-level
+        // Layers list — every weight inside this block (RMSNorm γ, Q/K/V/O
+        // projections, relative-position bias table, FFN matrices) would
+        // remain frozen during training. Caught by the
+        // T5Conditioner_Training_ChangesParameters test.
+        RegisterSubLayer(_norm1);
+        RegisterSubLayer(_attention);
+        RegisterSubLayer(_norm2);
+        RegisterSubLayer(_ffnUp);
+        RegisterSubLayer(_ffnDown);
     }
 
     /// <summary>

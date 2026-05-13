@@ -1,8 +1,11 @@
 using System.Text;
+using AiDotNet.Attributes;
 using AiDotNet.Diffusion.Conditioning;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tokenization;
+using AiDotNet.Training;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -187,8 +190,8 @@ public class ConditioningModuleTests
 
         foreach (var t in conditionerTypes)
         {
-            var attr = (AiDotNet.Attributes.ResearchPaperAttribute?)Attribute.GetCustomAttribute(
-                t, typeof(AiDotNet.Attributes.ResearchPaperAttribute));
+            var attr = (ResearchPaperAttribute?)Attribute.GetCustomAttribute(
+                t, typeof(ResearchPaperAttribute));
             Assert.NotNull(attr);
             Assert.False(string.IsNullOrWhiteSpace(attr!.Title),
                 $"{t.Name}.ResearchPaper.Title must be non-empty.");
@@ -297,6 +300,104 @@ public class ConditioningModuleTests
         var span = embeddings.AsSpan();
         for (int i = 0; i < Math.Min(200, span.Length); i++)
             Assert.False(double.IsNaN(span[i]), $"T5 embed[{i}] is NaN");
+    }
+
+    #endregion
+
+    #region Training-Cycle Tests (Forward + Backward + Parameter Update)
+    // These exercise the full tape-based training pipeline through the new
+    // layers (RMSNorm, T5RelativeBiasAttention, PreLNTransformerBlock,
+    // ConstantScale, plus EmbeddingLayer in Indices mode). If parameters
+    // don't change after a training step, gradient flow is broken
+    // somewhere in the composed Engine-op graph.
+
+    [Fact(Timeout = 600000)]
+    public async Task T5Conditioner_Training_ChangesParameters()
+    {
+        // TapeTrainingStep<T> caches the CollectParameters result keyed on
+        // (firstLayer-ref, count, fingerprint). Clear it so this test sees
+        // a clean walk regardless of what an earlier test in the suite ran.
+        TapeTrainingStep<double>.InvalidateCache();
+
+        // T5-Small exercises RMSNorm + T5RelativeBiasAttention +
+        // PreLNTransformerBlock + ConstantScale + EmbeddingLayer-with-
+        // Indices-mode through the full tape-based training loop. If
+        // gradients flow correctly through every primitive, a single
+        // Train() step must perturb the parameters at the EARLY end of
+        // the parameter vector (EmbeddingLayer) — that only happens when
+        // the gradient signal makes it all the way back through every
+        // downstream layer's autodiff plumbing.
+        var t5 = NewT5(T5Variant.Small);
+        var tokens = t5.Tokenize("a serene mountain lake");
+
+        var initialEmbeddings = t5.EncodeText(tokens);
+        Assert.Equal(3, initialEmbeddings.Shape.Length);
+
+        var rng = new Random(42);
+        var target = new Tensor<double>(initialEmbeddings._shape);
+        for (int i = 0; i < target.Length; i++)
+            target[i] = (rng.NextDouble() - 0.5) * 0.1;
+
+        var paramsBefore = t5.GetParameters();
+        Assert.True(paramsBefore.Length > 0, "T5-Small should have trainable parameters.");
+        int sampleSize = Math.Min(64, paramsBefore.Length);
+        var beforeSample = new double[sampleSize];
+        for (int i = 0; i < sampleSize; i++) beforeSample[i] = paramsBefore[i];
+
+        t5.Train(tokens, target);
+
+        var paramsAfter = t5.GetParameters();
+        Assert.Equal(paramsBefore.Length, paramsAfter.Length);
+
+        int changedCount = 0;
+        for (int i = 0; i < sampleSize; i++)
+        {
+            if (Math.Abs(beforeSample[i] - paramsAfter[i]) > 1e-12)
+                changedCount++;
+        }
+        Assert.True(changedCount > 0,
+            $"After one training step, 0/{sampleSize} sampled EmbeddingLayer " +
+            "parameters changed. Either gradient flow is broken through one " +
+            "of the new primitives, or the suite-level static-state leak in " +
+            "TapeTrainingStep<T> is masking the gradient on a non-isolated " +
+            "run. The isolated test run passes — fix the state leak rather " +
+            "than weakening this assertion.");
+    }
+
+    [Fact(Timeout = 600000)]
+    public async Task CLIPConditioner_Training_ChangesParameters()
+    {
+        TapeTrainingStep<double>.InvalidateCache();
+        // CLIP exercises the post-LN TransformerEncoderLayer path
+        // (different shape contract than T5's pre-LN block) plus the
+        // separate text_projection DenseLayer applied post-pool.
+        var clip = NewClip();
+        var tokens = clip.Tokenize("a beautiful sunset");
+
+        var initialEmbeddings = clip.EncodeText(tokens);
+        Assert.Equal(3, initialEmbeddings.Shape.Length);
+
+        var rng = new Random(42);
+        var target = new Tensor<double>(initialEmbeddings._shape);
+        for (int i = 0; i < target.Length; i++)
+            target[i] = (rng.NextDouble() - 0.5) * 0.1;
+
+        var paramsBefore = clip.GetParameters();
+        int sampleSize = Math.Min(64, paramsBefore.Length);
+        var beforeSample = new double[sampleSize];
+        for (int i = 0; i < sampleSize; i++) beforeSample[i] = paramsBefore[i];
+
+        clip.Train(tokens, target);
+
+        var paramsAfter = clip.GetParameters();
+        int changedCount = 0;
+        for (int i = 0; i < sampleSize; i++)
+        {
+            if (Math.Abs(beforeSample[i] - paramsAfter[i]) > 1e-12)
+                changedCount++;
+        }
+        Assert.True(changedCount > 0,
+            $"After one training step, 0/{sampleSize} sampled CLIP parameters changed.");
     }
 
     #endregion
