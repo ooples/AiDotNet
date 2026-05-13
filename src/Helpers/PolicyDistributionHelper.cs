@@ -67,9 +67,30 @@ public static class PolicyDistributionHelper<T>
         // the selected log-prob per sample — all engine ops, all tape-tracked.
         int batchSize = actionIndices.Length;
         int numActions = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Length;
+        // Explicit bounds validation here gives a clear ArgumentException
+        // before the per-element mask write. The previous implementation
+        // failed late with a less actionable IndexOutOfRangeException at
+        // `maskData[i * numActions + actionIndices[i]]` when an index
+        // was out of range, and never caught a batch-size mismatch at all.
+        int logitsBatch = logits.Shape.Length > 1 ? logits.Shape[0] : 1;
+        if (batchSize != logitsBatch)
+        {
+            throw new ArgumentException(
+                $"actionIndices length ({batchSize}) must match logits batch size ({logitsBatch}).",
+                nameof(actionIndices));
+        }
         var maskData = new T[batchSize * numActions];
         for (int i = 0; i < batchSize; i++)
-            maskData[i * numActions + actionIndices[i]] = NumOps.One;
+        {
+            int idx = actionIndices[i];
+            if ((uint)idx >= (uint)numActions)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(actionIndices),
+                    $"Action index {idx} at sample {i} is outside [0, {numActions - 1}].");
+            }
+            maskData[i * numActions + idx] = NumOps.One;
+        }
         var mask = new Tensor<T>(maskData, [batchSize, numActions]);
         var masked = engine.TensorMultiply(logProbs, mask);
         return engine.ReduceSum(masked, [1], keepDims: false);

@@ -130,6 +130,21 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
     private long _pinkCounter;
     private double GeneratePinkNoise(AugmentationContext<T> context, double stdDev)
     {
+        // Seed every octave on the very first sample. The default state is
+        // all-zeros, and the McCartney "improved" variant below only refreshes
+        // ONE octave per sample (k=0 every step, k=1 every 2, …, k=15 every
+        // 32768). Without this initial seed, the first 2^15 samples ramp into
+        // the spectrum and clips shorter than 32 768 samples (≈ 2 s at
+        // 16 kHz) never populate the slowest octaves at all — the injected
+        // "pink" noise comes out too quiet and missing low-frequency content.
+        if (_pinkCounter == 0)
+        {
+            for (int i = 0; i < PinkOctaves; i++)
+            {
+                _pinkValues[i] = context.SampleGaussian(0, stdDev);
+            }
+        }
+
         _pinkCounter++;
         // Trailing-zero count of the counter — the lowest octave that needs
         // updating at this sample (McCartney's "improved" variant). Octave 0

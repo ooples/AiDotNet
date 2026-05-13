@@ -450,6 +450,23 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         Validation.Guard.NotNull(audio);
         Validation.Guard.NotNull(reference);
 
+        // Reject multi-channel / unexpected shapes BEFORE flattening — the
+        // documented contract is mono signals shaped [N], [1, N] or [N, 1].
+        // A tensor like [2, N] would otherwise be flattened into a single
+        // NLMS stream and corrupt both channels by interleaving samples.
+        if (!IsMonoVectorLike(audio))
+        {
+            throw new ArgumentException(
+                "EnhanceWithReference currently supports only mono tensors shaped [N], [1, N], or [N, 1].",
+                nameof(audio));
+        }
+        if (!IsMonoVectorLike(reference))
+        {
+            throw new ArgumentException(
+                "EnhanceWithReference currently supports only mono tensors shaped [N], [1, N], or [N, 1].",
+                nameof(reference));
+        }
+
         // Flatten both signals to a contiguous sample buffer. Shapes accepted:
         // [N] or [1, N] or [N, 1] — anything whose Length equals total samples.
         int n = audio.Length;
@@ -465,12 +482,38 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         var x = new double[refLen];
         for (int i = 0; i < refLen; i++) x[i] = NumOps.ToDouble(reference[i]);
 
-        var enhanced = NLMSEchoCancel(d, x, filterLength: 512, mu: 0.5, regularisation: 1e-6);
+        // Sample-rate-aware filter length: NLMS filter taps cover a fixed
+        // impulse-response DURATION (~32 ms), not a fixed sample count.
+        // Hardcoding 512 only happens to be 32 ms at 16 kHz; at 48 kHz it
+        // covers ~10.7 ms which is too short for typical in-room echo.
+        int filterLength = Math.Max(64, (SampleRate * 32) / 1000);
+        const double mu = 0.5;             // canonical NLMS step size (Haykin §6.4)
+        const double regularisation = 1e-6;
 
+        var enhanced = NLMSEchoCancel(d, x, filterLength, mu, regularisation);
+
+        // Honor the public EnhancementStrength knob — the previous
+        // implementation always applied full cancellation here, making the
+        // user-facing strength parameter silently ineffective on this
+        // path. Standard wet/dry mix: out = d + strength * (enhanced - d).
+        double mix = EnhancementStrength;
         var result = new Tensor<T>(audio._shape);
-        for (int i = 0; i < n; i++) result[i] = NumOps.FromDouble(enhanced[i]);
+        for (int i = 0; i < n; i++)
+        {
+            double value = d[i] + mix * (enhanced[i] - d[i]);
+            result[i] = NumOps.FromDouble(value);
+        }
         return result;
     }
+
+    /// <summary>
+    /// Returns <c>true</c> when <paramref name="tensor"/> is a mono vector
+    /// — shape [N], [1, N], or [N, 1] — i.e. genuinely a single audio
+    /// channel rather than an interleaved or stacked multichannel tensor.
+    /// </summary>
+    private static bool IsMonoVectorLike(Tensor<T> tensor) =>
+        tensor._shape.Length == 1
+        || (tensor._shape.Length == 2 && (tensor._shape[0] == 1 || tensor._shape[1] == 1));
 
     /// <summary>
     /// Normalised LMS (NLMS) acoustic echo canceller. Per Haykin 2002 §6.4:

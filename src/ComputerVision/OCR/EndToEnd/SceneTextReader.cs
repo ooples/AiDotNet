@@ -221,7 +221,7 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         // Sort the 4 corners into (top-left, top-right, bottom-right, bottom-left)
         // by angle from the polygon centroid. The detector usually emits them in
         // some order; rotating into a canonical order makes the homography stable.
-        var (tl, tr, br, bl) = OrderQuadCorners(region.Polygon, srcW, srcH);
+        var (tl, tr, br, bl) = OrderQuadCorners(region.Polygon);
 
         // Target rectangle dimensions: preserve aspect ratio from the quad.
         double topEdge    = Math.Sqrt(SqDist(tl, tr));
@@ -275,12 +275,15 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// permutations from different detectors.
     /// </summary>
     private static ((double X, double Y) TL, (double X, double Y) TR, (double X, double Y) BR, (double X, double Y) BL)
-        OrderQuadCorners(List<(T X, T Y)> poly, int srcW, int srcH)
+        OrderQuadCorners(List<(T X, T Y)> poly)
     {
+        // Use the base class's protected static NumOps instead of
+        // Convert.ToDouble — Convert.ToDouble throws on non-IConvertible
+        // generic T types and bypasses the library's numeric abstraction.
         var pts = new (double X, double Y)[4];
         for (int i = 0; i < 4; i++)
         {
-            pts[i] = (Convert.ToDouble(poly[i].X), Convert.ToDouble(poly[i].Y));
+            pts[i] = (NumOps.ToDouble(poly[i].X), NumOps.ToDouble(poly[i].Y));
         }
         // Centroid.
         double cx = (pts[0].X + pts[1].X + pts[2].X + pts[3].X) / 4.0;
@@ -385,10 +388,13 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int x1 = Math.Min(x0 + 1, srcW - 1);
         int y1 = Math.Min(y0 + 1, srcH - 1);
         double dxw = xs - x0, dyw = ys - y0;
-        double v00 = Convert.ToDouble(src[b, c, y0, x0]);
-        double v01 = Convert.ToDouble(src[b, c, y0, x1]);
-        double v10 = Convert.ToDouble(src[b, c, y1, x0]);
-        double v11 = Convert.ToDouble(src[b, c, y1, x1]);
+        // Route every T → double via the library's NumericOperations rather
+        // than Convert.ToDouble, which throws on non-IConvertible T types
+        // (e.g. when a custom NumericOperations<T> is installed).
+        double v00 = NumOps.ToDouble(src[b, c, y0, x0]);
+        double v01 = NumOps.ToDouble(src[b, c, y0, x1]);
+        double v10 = NumOps.ToDouble(src[b, c, y1, x0]);
+        double v11 = NumOps.ToDouble(src[b, c, y1, x1]);
         double v = v00 * (1 - dxw) * (1 - dyw)
                  + v01 * dxw * (1 - dyw)
                  + v10 * (1 - dxw) * dyw

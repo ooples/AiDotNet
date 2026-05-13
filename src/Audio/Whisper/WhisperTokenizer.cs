@@ -74,16 +74,28 @@ public class WhisperTokenizer
             ?? throw new InvalidDataException("vocab.json could not be parsed as a string→int dictionary.");
 
         // merges.txt: optional "#version: ..." header line then pair-per-line.
+        // Reject malformed rows with a precise line-number diagnostic. The
+        // previous `continue` swallowed bad rows and built a partial merge
+        // table — BPE tokenization would then run silently with corrupted
+        // priority ranks, producing token streams subtly different from
+        // the reference Whisper tokenizer.
         var merges = new Dictionary<(string, string), int>();
         int priority = 0;
+        int lineNumber = 0;
         foreach (var rawLine in File.ReadLines(mergesPath))
         {
+            lineNumber++;
             var line = rawLine.TrimEnd();
             if (string.IsNullOrEmpty(line)) continue;
             if (line.StartsWith("#", StringComparison.Ordinal)) continue;
-            int sp = line.IndexOf(' ');
-            if (sp <= 0 || sp >= line.Length - 1) continue;
-            merges[(line[..sp], line[(sp + 1)..])] = priority++;
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 2)
+            {
+                throw new InvalidDataException(
+                    $"Invalid merges.txt entry at {mergesPath}:{lineNumber}: '{rawLine}'. " +
+                    $"Expected exactly two space-separated tokens.");
+            }
+            merges[(parts[0], parts[1])] = priority++;
         }
 
         _vocab = vocab;

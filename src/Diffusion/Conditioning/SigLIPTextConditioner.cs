@@ -195,7 +195,11 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
         int H = HiddenSize;
         int H2 = H * H;
         int weightsPerLayer = 12 * H2 + 4 * H;
-        int numHeads = Math.Max(1, H / 64);     // SigLIP follows ViT's head_dim=64 convention
+        // Use the configured NumHeads instead of deriving from H/64. The
+        // H/64 heuristic produced 18 heads for So400M (H=1152) where the
+        // variant config specifies 16 — silently breaking topology for
+        // that one variant.
+        int numHeads = NumHeads;
         int headDim = H / numHeads;
 
         for (int layer = 0; layer < NumLayers; layer++)

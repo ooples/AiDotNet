@@ -704,25 +704,22 @@ public class SAGAN<T> : NeuralNetworkBase<T>
 
         public (TLoss Loss, Tensor<TLoss> Gradient) CalculateLossAndGradientGpu(Tensor<TLoss> predicted, Tensor<TLoss> actual)
         {
-            // Fall back to CPU for now
-            var predictedCpu = predicted;
-            var actualCpu = actual;
+            // CPU-only implementation. The GPU fast-path here previously
+            // resolved its backend through AiDotNetEngine.Current — a
+            // global singleton that can bind gradients to the wrong
+            // backend under concurrent / multi-model execution. Until
+            // an explicit IEngine is threaded through the loss class
+            // (currently a pure nested-loss type with no model-instance
+            // reference), the CPU computation IS the correct fallback
+            // and produces an equivalent gradient tensor. Callers running
+            // SAGAN on GPU still pay the CPU↔GPU copy for the gradient
+            // round-trip, but never the wrong-backend hazard.
+            var loss = CalculateLoss(predicted.ToVector(), actual.ToVector());
+            var gradientCpu = CalculateDerivative(predicted.ToVector(), actual.ToVector());
 
-            var loss = CalculateLoss(predictedCpu.ToVector(), actualCpu.ToVector());
-            var gradientCpu = CalculateDerivative(predictedCpu.ToVector(), actualCpu.ToVector());
-
-            var gradientTensor = new Tensor<TLoss>(predictedCpu._shape);
+            var gradientTensor = new Tensor<TLoss>(predicted._shape);
             Array.Copy(gradientCpu.ToArray(), gradientTensor.Data.ToArray(), gradientCpu.Length);
-
-            // Nested loss class with no outer reference — falls back to the
-            // singleton. Threading IEngine through the loss constructor is a
-            // bigger refactor; the call site already enforces that GPU mode
-            // requires a DirectGpuTensorEngine.
-            var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-            var backend = engine?.GetBackend() ?? throw new InvalidOperationException("GPU backend not available");
-            var gradientGpu = GpuTensorHelper.UploadToGpu<TLoss>(backend, gradientTensor, GpuTensorRole.Gradient);
-
-            return (loss, gradientGpu);
+            return (loss, gradientTensor);
         }
     }
 

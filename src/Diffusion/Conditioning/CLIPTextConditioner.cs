@@ -405,7 +405,11 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         int H = HiddenSize;
         int H2 = H * H;
         int weightsPerLayer = 12 * H2 + 4 * H;
-        int numHeads = ComputeNumHeads(H);
+        // Use the configured NumHeads instead of recomputing it from
+        // HiddenSize. ComputeNumHeads(1280) returns 16 but ViT-bigG/14's
+        // config specifies 20 heads — the recomputation silently broke
+        // bigG topology.
+        int numHeads = NumHeads;
         int headDim = H / numHeads;
 
         for (int layer = 0; layer < NumLayers; layer++)

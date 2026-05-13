@@ -430,7 +430,11 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         // Input-conditioned engagement: an output uncorrelated with the input
         // (cosine ≈ 0) and saturated to one extreme is a tell-tale "ignore the
         // prompt" pattern. Require some non-trivial directional response.
-        if (input is not null && input.Length > 0)
+        // Length-equality is required by CosineSimilarity — guard explicitly
+        // so a shape mismatch can't throw mid-evaluation and abort the
+        // batch (older callers may pass `input` and `output` from different
+        // tokenizer / vocab paths).
+        if (input is not null && input.Length > 0 && input.Length == output.Length)
         {
             double cos = VectorHelper.CosineSimilarity(output, input);
             if (Math.Abs(cos) < 1e-6 && absMax > 0.99 * (sumAbs / output.Length))

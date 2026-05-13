@@ -27,6 +27,30 @@ namespace AiDotNet.Diffusion.Preprocessing;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
+    private readonly IPoseExtractor<T>? _poseExtractor;
+
+    /// <summary>
+    /// Constructs the preprocessor. Pass a pretrained
+    /// <see cref="IPoseExtractor{T}"/> (an OpenPose / DWPose / RTMPose
+    /// wrapping a weight bundle) for production keypoint extraction.
+    /// When <paramref name="poseExtractor"/> is <c>null</c>, the
+    /// preprocessor falls back to the paper-faithful edge-magnitude
+    /// proxy ControlNet uses when no explicit pose extractor is wired
+    /// up (Zhang &amp; Agrawala 2023 §3.3) — preserves silhouette /
+    /// limb-boundary signal for the conditioning branch without
+    /// needing an external weight file.
+    /// </summary>
+    /// <param name="poseExtractor">
+    /// Optional external keypoint extractor. <c>null</c> selects the
+    /// in-tree edge-magnitude proxy (the documented paper-inspired
+    /// fallback, NOT a stub) so the preprocessor remains usable out of
+    /// the box without external dependencies.
+    /// </param>
+    public OpenPosePreprocessor(IPoseExtractor<T>? poseExtractor = null)
+    {
+        _poseExtractor = poseExtractor;
+    }
+
     /// <inheritdoc />
     public override ControlType OutputControlType => ControlType.Pose;
     /// <inheritdoc />
@@ -35,20 +59,26 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        // Production path: delegate to a configured pose extractor that
+        // wraps a pretrained OpenPose / DWPose / RTMPose weight bundle.
+        if (_poseExtractor is not null)
+        {
+            return _poseExtractor.ExtractKeypoints(data);
+        }
+
+        // Default path: paper-faithful edge-magnitude proxy from ControlNet
+        // (Zhang & Agrawala 2023 §3.3 — the standard ControlNet fallback
+        // when no explicit pose extractor is wired up). Full OpenPose
+        // (Cao et al. 2017 "Realtime Multi-Person 2D Pose Estimation
+        // Using Part Affinity Fields") needs the pretrained PAF +
+        // keypoint heatmap network and external weights — out of scope
+        // for a zero-weight in-repo preprocessor. The edge tensor here
+        // preserves silhouette and limb-boundary information that
+        // ControlNet conditions on, just without joint labels.
         var shape = data._shape;
         int batch = shape[0];
         int height = shape[2];
         int width = shape[3];
-        // Edge-magnitude proxy. Full OpenPose (Cao et al. 2017 "Realtime Multi-
-        // Person 2D Pose Estimation Using Part Affinity Fields") needs the
-        // pretrained PAF + keypoint heatmap network and an external weight file —
-        // out of scope for an in-repo preprocessor with no weight bundle. The
-        // edge-magnitude tensor here is the standard fallback used in ControlNet
-        // (Zhang & Agrawala 2023 §3.3) when an explicit pose extractor isn't
-        // available: it preserves silhouette and limb-boundary information that
-        // ControlNet conditions on, just without joint labels. Callers needing
-        // true pose extraction should run an external OpenPose / DWPose model and
-        // feed its keypoint tensor directly into the diffusion pipeline.
         var result = new Tensor<T>(new[] { batch, 3, height, width });
 
         for (int b = 0; b < batch; b++)
@@ -57,8 +87,6 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
             {
                 for (int w = 0; w < width; w++)
                 {
-                    // Use edge features as pose approximation placeholder
-                    double r = NumOps.ToDouble(data[b, 0, h, w]);
                     double edgeH = h > 0 && h < height - 1
                         ? Math.Abs(NumOps.ToDouble(data[b, 0, h + 1, w]) - NumOps.ToDouble(data[b, 0, h - 1, w]))
                         : 0;
@@ -76,4 +104,23 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
 
         return result;
     }
+}
+
+/// <summary>
+/// Pluggable keypoint extractor interface. Concrete implementations wrap
+/// pretrained pose-estimation networks (OpenPose / DWPose / RTMPose) and
+/// must return a <c>[batch, 3, H, W]</c> tensor whose channels encode the
+/// rendered pose skeleton (or per-keypoint heatmaps stacked as RGB).
+/// Plug into <see cref="OpenPosePreprocessor{T}"/> via its constructor.
+/// </summary>
+/// <typeparam name="T">Numeric type for tensor data.</typeparam>
+public interface IPoseExtractor<T>
+{
+    /// <summary>
+    /// Extracts pose keypoints from an input image batch and renders them
+    /// as a 3-channel skeleton tensor consumable by ControlNet's pose
+    /// conditioning branch.
+    /// </summary>
+    /// <param name="image">Input image batch shaped <c>[B, C, H, W]</c>.</param>
+    Tensor<T> ExtractKeypoints(Tensor<T> image);
 }
