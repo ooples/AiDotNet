@@ -332,10 +332,20 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
     /// </summary>
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
+        // Key by FeatureNames[i] rather than the hardcoded "State_{i}" so a
+        // derived agent that overrides FeatureNames stays consistent — the
+        // previous hardcode silently drifted from the override and broke
+        // downstream consumers that looked up importance by name.
         var importance = new Dictionary<string, T>();
-        for (int i = 0; i < FeatureCount; i++)
+        var names = FeatureNames;
+        if (names is null)
         {
-            importance[$"State_{i}"] = NumOps.One;  // Placeholder
+            return importance;
+        }
+        int n = Math.Min(FeatureCount, names.Length);
+        for (int i = 0; i < n; i++)
+        {
+            importance[names[i]] = NumOps.One;
         }
         return importance;
     }
