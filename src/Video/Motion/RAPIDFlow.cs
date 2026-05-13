@@ -244,10 +244,47 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Called by <see cref="NeuralNetworkBase{T}.Deserialize"/> AFTER the
+    /// base class has fully reconstructed <see cref="NeuralNetworkBase{T}.Layers"/>
+    /// from the serialized blob — which means it has discarded RAPIDFlow's
+    /// pre-deserialize layer references (the ones our private
+    /// <c>_featureExtract</c> / <c>_processingBlocks</c> / <c>_outputConv</c>
+    /// fields still point at) and replaced them with brand-new layer
+    /// instances holding the deserialized weights. <see cref="EstimateFlow"/>
+    /// reads forward through those private fields, so without a re-bind the
+    /// cloned model would silently run inference against the freshly-
+    /// constructed (lazy / random-init) layer objects rather than the
+    /// trained weights — exactly the issue-#1221-class divergence the
+    /// generated Clone_AfterTraining_ShouldPreserveLearnedWeights and
+    /// Clone_ShouldProduceIdenticalOutput invariants catch (||Δ|| ~
+    /// ||trained||, not the ~1e-10 of a clean clone).
+    /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
         _numFeatures = reader.ReadInt32();
         _numLayers = reader.ReadInt32();
+
+        // Re-bind private layer references to the post-deserialize Layers
+        // collection. Expected layout (matching InitializeLayers): index 0
+        // is the feature-extract head, indices 1..N are the processing
+        // blocks (where N == _numLayers), index N+1 is the output
+        // projection. Defensive: only re-bind if the count matches the
+        // expected layout so a future serialization-format extension that
+        // adds auxiliary layers doesn't silently mis-route the head into
+        // the wrong slot.
+        int expectedCount = 1 + _numLayers + 1;
+        if (Layers.Count == expectedCount)
+        {
+            _featureExtract = Layers[0] as ConvolutionalLayer<T>;
+            _processingBlocks.Clear();
+            for (int i = 0; i < _numLayers; i++)
+            {
+                if (Layers[1 + i] is ConvolutionalLayer<T> block)
+                    _processingBlocks.Add(block);
+            }
+            _outputConv = Layers[expectedCount - 1] as ConvolutionalLayer<T>;
+        }
     }
 
     /// <inheritdoc/>
