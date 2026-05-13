@@ -2006,10 +2006,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var errors = new List<string>();
 
-        // Check input layer
-        if (!IsValidInputLayer(layers[0]))
+        // Check input shape. Custom layers should be accepted by contract,
+        // not by concrete layer type: if the first layer can consume the
+        // architecture input shape, it is a valid boundary layer.
+        if (!IsFirstLayerShapeCompatible(layers[0]))
         {
-            errors.Add("The first layer must be a valid input layer.");
+            errors.Add("The first layer's input shape must be compatible with the architecture input shape.");
         }
 
         // Check layer connections
@@ -2027,10 +2029,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
         }
 
-        // Check output layer
-        if (!IsValidOutputLayer(layers[layers.Count - 1]))
+        // Check output shape. The final layer may be a custom readout that
+        // produces the expected target representation without being a Dense
+        // or activation layer.
+        if (!IsLastLayerShapeCompatible(layers[layers.Count - 1], out var outputShapeError))
         {
-            errors.Add("The last layer must be a valid output layer.");
+            errors.Add(outputShapeError);
         }
 
         // Throw exception if any errors were found
@@ -2038,6 +2042,108 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             throw new ArgumentException($"Invalid layer configuration:\n{string.Join("\n", errors)}");
         }
+    }
+
+    private bool IsFirstLayerShapeCompatible(ILayer<T> layer)
+    {
+        int[]? layerInputShape = TryGetLayerShape(layer, shapeSelector: static l => l.GetInputShape());
+        if (IsDeferredOrAgnosticShape(layerInputShape))
+            return true;
+
+        int[]? architectureInputShape = TryGetArchitectureDeclaredInputShape();
+        if (IsDeferredOrAgnosticShape(architectureInputShape))
+            return true;
+
+        return AreShapesCompatible(architectureInputShape!, layerInputShape!);
+    }
+
+    private bool IsLastLayerShapeCompatible(ILayer<T> layer, out string error)
+    {
+        int[]? layerOutputShape = TryGetLayerShape(layer, shapeSelector: static l => l.GetOutputShape());
+        if (IsDeferredOrAgnosticShape(layerOutputShape))
+        {
+            error = string.Empty;
+            return true;
+        }
+
+        int[] outputShape = layerOutputShape!;
+
+        if (Architecture.OutputSize > 0 && !AreShapesCompatible([Architecture.OutputSize], outputShape))
+        {
+            error = $"The last layer's output shape [{string.Join(", ", outputShape)}] must match the architecture output size ({Architecture.OutputSize}).";
+            return false;
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    private int[]? TryGetArchitectureDeclaredInputShape()
+    {
+        if (Architecture.IsLayerOnly)
+            return null;
+
+        try
+        {
+            return Architecture.GetInputShape();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static int[]? TryGetLayerShape(ILayer<T> layer, Func<ILayer<T>, int[]> shapeSelector)
+    {
+        try
+        {
+            return shapeSelector(layer);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsDeferredOrAgnosticShape(int[]? shape)
+    {
+        return shape is null || shape.Length == 0 || shape.Any(d => d <= 0);
+    }
+
+    private static bool AreShapesCompatible(int[] expectedShape, int[] actualShape)
+    {
+        if (expectedShape.SequenceEqual(actualShape))
+            return true;
+
+        var expectedWithoutLeadingUnits = TrimLeadingUnitDimensions(expectedShape);
+        var actualWithoutLeadingUnits = TrimLeadingUnitDimensions(actualShape);
+        if (expectedWithoutLeadingUnits.SequenceEqual(actualWithoutLeadingUnits))
+            return true;
+
+        return FlattenedSize(expectedShape) == FlattenedSize(actualShape);
+    }
+
+    private static int[] TrimLeadingUnitDimensions(int[] shape)
+    {
+        int start = 0;
+        while (start < shape.Length - 1 && shape[start] == 1)
+            start++;
+
+        if (start == 0)
+            return shape;
+
+        var trimmed = new int[shape.Length - start];
+        Array.Copy(shape, start, trimmed, 0, trimmed.Length);
+        return trimmed;
+    }
+
+    private static int FlattenedSize(int[] shape)
+    {
+        int size = 1;
+        for (int i = 0; i < shape.Length; i++)
+            size *= shape[i];
+
+        return size;
     }
 
     /// <summary>
@@ -2168,7 +2274,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         var currentInputShape = currentLayer.GetInputShape();
         bool currentIsLazy = currentInputShape.Length == 0
                              || currentInputShape.Any(d => d <= 0);
-        if (!currentIsLazy && !Enumerable.SequenceEqual(prevLayer.GetOutputShape(), currentInputShape))
+        if (!currentIsLazy && !AreShapesCompatible(prevLayer.GetOutputShape(), currentInputShape))
             return false;
 
         // Special checks for specific layer combinations
