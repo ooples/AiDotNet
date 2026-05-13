@@ -100,13 +100,11 @@ public class DualTextConditioner<T> : IConditioningModule<T>
     /// </code>
     /// </example>
     public DualTextConditioner(
-        string clipVariant = "ViT-L/14",
-        string t5Variant = "T5-XXL",
-        int t5MaxSequenceLength = 256,
-        int? seed = null)
+        CLIPVariant clipVariant = CLIPVariant.ViTL14,
+        T5Variant t5Variant = T5Variant.XXL)
     {
-        _clipEncoder = new CLIPTextConditioner<T>(variant: clipVariant, seed: seed);
-        _t5Encoder = new T5TextConditioner<T>(variant: t5Variant, maxSequenceLength: t5MaxSequenceLength, seed: seed);
+        _clipEncoder = new CLIPTextConditioner<T>(variant: clipVariant);
+        _t5Encoder = new T5TextConditioner<T>(variant: t5Variant);
     }
 
     /// <inheritdoc />

@@ -116,15 +116,13 @@ public class TripleTextConditioner<T> : CompositeConditioningBase<T>
     /// </code>
     /// </example>
     public TripleTextConditioner(
-        string clipLVariant = "ViT-L/14",
-        string clipGVariant = "ViT-bigG/14",
-        string t5Variant = "T5-XXL",
-        int t5MaxSequenceLength = 256,
-        int? seed = null)
+        CLIPVariant clipLVariant = CLIPVariant.ViTL14,
+        CLIPVariant clipGVariant = CLIPVariant.ViTBigG14,
+        T5Variant t5Variant = T5Variant.XXL)
     {
-        _clipLEncoder = new CLIPTextConditioner<T>(variant: clipLVariant, seed: seed);
-        _clipGEncoder = new CLIPTextConditioner<T>(variant: clipGVariant, seed: seed);
-        _t5Encoder = new T5TextConditioner<T>(variant: t5Variant, maxSequenceLength: t5MaxSequenceLength, seed: seed);
+        _clipLEncoder = new CLIPTextConditioner<T>(variant: clipLVariant);
+        _clipGEncoder = new CLIPTextConditioner<T>(variant: clipGVariant);
+        _t5Encoder = new T5TextConditioner<T>(variant: t5Variant);
     }
 
     /// <inheritdoc />

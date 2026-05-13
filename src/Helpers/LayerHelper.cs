@@ -34053,4 +34053,165 @@ public static class LayerHelper<T>
     }
 
     #endregion
+
+    #region Diffusion-Conditioning Text Encoders
+
+    /// <summary>
+    /// Paper-faithful CLIP text encoder stack (Radford et al., ICML 2021).
+    /// Embedding → learned absolute positional encoding → N × post-LN
+    /// Transformer encoder (standard MHA, GELU FFN @ 4× hidden) → final
+    /// LayerNorm → optional text projection into the shared image-text
+    /// embedding space.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultCLIPTextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        int projectionDim)
+    {
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxSeqLen, embeddingSize: hiddenSize);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                numHeads: numHeads, feedForwardDim: hiddenSize * 4, embeddingSize: hiddenSize);
+        }
+        yield return new LayerNormalizationLayer<T>();
+        // CLIP's text_projection: hidden → embedding (no bias, no activation).
+        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Paper-faithful SigLIP text encoder stack (Zhai et al., ICCV 2023).
+    /// Same encoder architecture as CLIP (post-LN, GELU FFN); difference is
+    /// the loss function (sigmoid vs softmax), which is upstream of this
+    /// stack so does not appear here.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSigLIPTextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        int projectionDim) =>
+        CreateDefaultCLIPTextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads, projectionDim);
+
+    /// <summary>
+    /// Paper-faithful SigLIP2 text encoder stack (Tschannen et al. 2025).
+    /// Extends SigLIP with additional improvements (captioning loss, MAP-head),
+    /// but the text-encoder body remains a standard CLIP-style stack.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSigLIP2TextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        int projectionDim) =>
+        CreateDefaultCLIPTextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads, projectionDim);
+
+    /// <summary>
+    /// Paper-faithful T5 text encoder stack (Raffel et al., JMLR 2020).
+    /// Embedding → N × pre-LN RMSNorm Transformer block with T5 relative-bias
+    /// attention (Q/K/V/O bias-free) and GELU FFN @ 4× hidden → final RMSNorm.
+    /// One shared relative-position bias table is threaded through every
+    /// block (Raffel 2020 §2.1 footnote 5).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultT5TextLayers(
+        int vocabSize, int hiddenSize, int numLayers, int numHeads,
+        int numRelativePositionBuckets = 32, int relativePositionMaxDistance = 128)
+    {
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+
+        // Paper-canonical T5: one shared bias table across all encoder blocks.
+        var sharedBias = new Tensor<T>(new[] { numRelativePositionBuckets, numHeads });
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            var attn = new T5RelativeBiasAttentionLayer<T>(
+                hiddenSize: hiddenSize,
+                numHeads: numHeads,
+                numBuckets: numRelativePositionBuckets,
+                maxDistance: relativePositionMaxDistance,
+                bidirectional: true,
+                sharedRelativeBiasTable: i == 0 ? null : sharedBias);
+            if (i == 0) sharedBias = attn.GetRelativeBiasTable();
+
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: hiddenSize,
+                ffnDim: hiddenSize * 4,
+                attention: attn,
+                ffnActivation: new GELUActivation<T>());
+        }
+        yield return new RMSNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Paper-faithful DistilledT5 text encoder stack. Same architecture as
+    /// T5 but with half the layers, per the distillation recipe in
+    /// Sanh et al. 2019 (DistilBERT-style).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDistilledT5TextLayers(
+        int vocabSize, int hiddenSize, int numLayers, int numHeads,
+        int numRelativePositionBuckets = 32, int relativePositionMaxDistance = 128) =>
+        CreateDefaultT5TextLayers(vocabSize, hiddenSize, numLayers, numHeads,
+            numRelativePositionBuckets, relativePositionMaxDistance);
+
+    /// <summary>
+    /// Paper-faithful Gemma text encoder stack (Gemma Team 2024).
+    /// Embedding → N × pre-LN RMSNorm Transformer block with RoPE multi-head
+    /// attention (bias-free) and SiLU FFN @ 4× hidden → final RMSNorm.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultGemmaTextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        double ropeTheta = 10000.0)
+    {
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        int headDim = hiddenSize / numHeads;
+        for (int i = 0; i < numLayers; i++)
+        {
+            var attn = new MultiHeadAttentionLayer<T>(headCount: numHeads, headDimension: headDim);
+            attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
+
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: hiddenSize,
+                ffnDim: hiddenSize * 4,
+                attention: attn,
+                ffnActivation: new SiLUActivation<T>());
+        }
+        yield return new RMSNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Paper-faithful Qwen2 text encoder stack (Yang et al. 2024).
+    /// Embedding → N × pre-LN RMSNorm Transformer block with RoPE
+    /// grouped-query attention (bias-free) and SiLU FFN → final RMSNorm.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultQwen2TextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        int numKvHeads, double ropeTheta = 10000.0)
+    {
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Qwen2 uses Grouped-Query Attention: numKvHeads < numHeads, with
+            // KV heads broadcast across query-head groups.
+            var attn = new GroupedQueryAttentionLayer<T>(
+                sequenceLength: maxSeqLen,
+                embeddingDimension: hiddenSize,
+                numHeads: numHeads,
+                numKVHeads: numKvHeads);
+            attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
+
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: hiddenSize,
+                ffnDim: hiddenSize * 4,
+                attention: attn,
+                ffnActivation: new SiLUActivation<T>());
+        }
+        yield return new RMSNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Paper-faithful ChatGLM3 text encoder stack (Zeng et al. 2023).
+    /// Same shape as Qwen2 but typically with multi-query attention
+    /// (<paramref name="numKvHeads"/>=1 is the GLM convention).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultChatGLM3TextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        int numKvHeads = 1, double ropeTheta = 10000.0) =>
+        CreateDefaultQwen2TextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads,
+            numKvHeads, ropeTheta);
+
+    #endregion
 }
