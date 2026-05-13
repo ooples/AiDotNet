@@ -116,14 +116,28 @@ public class TripleTextConditioner<T> : CompositeConditioningBase<T>
     /// </code>
     /// </example>
     public TripleTextConditioner(
+        CLIPTextConditioner<T> clipLEncoder,
+        CLIPTextConditioner<T> clipGEncoder,
+        T5TextConditioner<T> t5Encoder)
+    {
+        _clipLEncoder = clipLEncoder ?? throw new ArgumentNullException(nameof(clipLEncoder));
+        _clipGEncoder = clipGEncoder ?? throw new ArgumentNullException(nameof(clipGEncoder));
+        _t5Encoder = t5Encoder ?? throw new ArgumentNullException(nameof(t5Encoder));
+    }
+
+    /// <summary>
+    /// Loads a paper-canonical SDXL-style triple encoder with its real
+    /// pretrained tokenizers from HuggingFace (CLIP-L + CLIP-G + T5).
+    /// </summary>
+    public static TripleTextConditioner<T> FromPretrained(
         CLIPVariant clipLVariant = CLIPVariant.ViTL14,
         CLIPVariant clipGVariant = CLIPVariant.ViTBigG14,
-        T5Variant t5Variant = T5Variant.XXL)
-    {
-        _clipLEncoder = new CLIPTextConditioner<T>(variant: clipLVariant);
-        _clipGEncoder = new CLIPTextConditioner<T>(variant: clipGVariant);
-        _t5Encoder = new T5TextConditioner<T>(variant: t5Variant);
-    }
+        T5Variant t5Variant = T5Variant.XXL,
+        string? cacheDir = null) =>
+        new TripleTextConditioner<T>(
+            clipLEncoder: CLIPTextConditioner<T>.FromPretrained(clipLVariant, cacheDir: cacheDir),
+            clipGEncoder: CLIPTextConditioner<T>.FromPretrained(clipGVariant, cacheDir: cacheDir),
+            t5Encoder: T5TextConditioner<T>.FromPretrained(t5Variant, cacheDir: cacheDir));
 
     /// <inheritdoc />
     public override Tensor<T> Encode(Tensor<T> input)

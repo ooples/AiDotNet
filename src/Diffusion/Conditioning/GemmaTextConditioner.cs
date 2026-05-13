@@ -3,8 +3,9 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -33,20 +34,35 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
     public override bool ProducesPooledOutput => false;
 
     public GemmaTextConditioner(
+        ITokenizer tokenizer,
         GemmaVariant variant = GemmaVariant.TwoB,
-        ITokenizer? tokenizer = null,
         NeuralNetworkArchitecture<T>? architecture = null)
         : base(
             architecture: architecture ?? BuildDefaultArchitecture(variant),
-            // Gemma uses SentencePiece — we use the LLaMA-style tokenizer
-            // factory as the closest SentencePiece-based default. Production
-            // pipelines should pass a real Gemma tokenizer via the tokenizer
-            // parameter (e.g. AutoTokenizer.FromPretrained("google/gemma-2b")).
-            tokenizer: tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.LLaMA),
-            maxSequenceLength: 256,
+            tokenizer: tokenizer,
+            maxSequenceLength: 8192,
             embeddingDimension: GetEmbeddingDim(variant))
     {
+        Guard.NotNull(tokenizer);
         _variant = variant;
+    }
+
+    /// <summary>
+    /// Loads a paper-canonical Gemma conditioner with its real pretrained
+    /// SentencePiece tokenizer from HuggingFace.
+    /// </summary>
+    public static GemmaTextConditioner<T> FromPretrained(
+        GemmaVariant variant = GemmaVariant.TwoB,
+        string? huggingFaceModelName = null,
+        string? cacheDir = null)
+    {
+        string modelName = huggingFaceModelName ?? variant switch
+        {
+            GemmaVariant.SevenB => "google/gemma-7b",
+            _ => "google/gemma-2b",
+        };
+        var tokenizer = AutoTokenizer.FromPretrained(modelName, cacheDir);
+        return new GemmaTextConditioner<T>(tokenizer, variant);
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
@@ -58,7 +74,7 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
             numHeads: GetNumHeads(_variant));
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new GemmaTextConditioner<T>(_variant, Tokenizer, Architecture);
+        new GemmaTextConditioner<T>(Tokenizer, _variant, Architecture);
 
     /// <summary>
     /// Decoder-style models pool by extracting the embedding at the last
@@ -86,8 +102,7 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
-            inputSize: 256,
-            outputSize: GetEmbeddingDim(variant));
+            inputSize: 1);
 
     private static int GetEmbeddingDim(GemmaVariant variant) => variant switch
     {

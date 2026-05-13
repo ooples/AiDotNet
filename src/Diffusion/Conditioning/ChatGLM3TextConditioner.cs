@@ -3,8 +3,9 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -34,21 +35,30 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
     public override bool ProducesPooledOutput => false;
 
     public ChatGLM3TextConditioner(
+        ITokenizer tokenizer,
         ChatGLM3Variant variant = ChatGLM3Variant.SixB,
-        ITokenizer? tokenizer = null,
         NeuralNetworkArchitecture<T>? architecture = null)
         : base(
             architecture: architecture ?? BuildDefaultArchitecture(variant),
-            // ChatGLM uses its own SentencePiece tokenizer; no exact match in
-            // LanguageModelTokenizerFactory yet, so the closest available
-            // SentencePiece default is the LLaMA-family tokenizer. Production
-            // pipelines should pass a real ChatGLM tokenizer via the
-            // constructor parameter (AutoTokenizer.FromPretrained("THUDM/chatglm3-6b")).
-            tokenizer: tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.LLaMA),
+            tokenizer: tokenizer,
             maxSequenceLength: 512,
             embeddingDimension: GetEmbeddingDim(variant))
     {
+        Guard.NotNull(tokenizer);
         _variant = variant;
+    }
+
+    /// <summary>
+    /// Loads a paper-canonical ChatGLM3 conditioner with its real
+    /// pretrained SentencePiece tokenizer from HuggingFace.
+    /// </summary>
+    public static ChatGLM3TextConditioner<T> FromPretrained(
+        ChatGLM3Variant variant = ChatGLM3Variant.SixB,
+        string huggingFaceModelName = "THUDM/chatglm3-6b",
+        string? cacheDir = null)
+    {
+        var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
+        return new ChatGLM3TextConditioner<T>(tokenizer, variant);
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
@@ -61,7 +71,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
             numKvHeads: GetNumKvHeads(_variant));
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new ChatGLM3TextConditioner<T>(_variant, Tokenizer, Architecture);
+        new ChatGLM3TextConditioner<T>(Tokenizer, _variant, Architecture);
 
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
@@ -84,8 +94,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
-            inputSize: 512,
-            outputSize: GetEmbeddingDim(variant));
+            inputSize: 1);
 
     private static int GetEmbeddingDim(ChatGLM3Variant _) => 4096;
     private static int GetHiddenSize(ChatGLM3Variant variant) => GetEmbeddingDim(variant);

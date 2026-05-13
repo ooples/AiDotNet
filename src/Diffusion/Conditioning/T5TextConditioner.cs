@@ -3,8 +3,9 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -34,16 +35,41 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     public override bool ProducesPooledOutput => false;
 
     public T5TextConditioner(
+        ITokenizer tokenizer,
         T5Variant variant = T5Variant.Base,
-        ITokenizer? tokenizer = null,
         NeuralNetworkArchitecture<T>? architecture = null)
         : base(
             architecture: architecture ?? BuildDefaultArchitecture(variant),
-            tokenizer: tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5),
+            tokenizer: tokenizer,
             maxSequenceLength: 512,
             embeddingDimension: GetEmbeddingDim(variant))
     {
+        Guard.NotNull(tokenizer);
         _variant = variant;
+    }
+
+    /// <summary>
+    /// Loads a paper-canonical T5 conditioner with its real pretrained
+    /// SentencePiece tokenizer from HuggingFace. Default
+    /// <paramref name="huggingFaceModelName"/> is variant-aware:
+    /// <c>google/t5-v1_1-base</c> for Base, <c>google/t5-v1_1-xxl</c> for XXL, etc.
+    /// </summary>
+    public static T5TextConditioner<T> FromPretrained(
+        T5Variant variant = T5Variant.Base,
+        string? huggingFaceModelName = null,
+        string? cacheDir = null)
+    {
+        string modelName = huggingFaceModelName ?? variant switch
+        {
+            T5Variant.Small => "google/t5-v1_1-small",
+            T5Variant.Base  => "google/t5-v1_1-base",
+            T5Variant.Large => "google/t5-v1_1-large",
+            T5Variant.XL    => "google/t5-v1_1-xl",
+            T5Variant.XXL   => "google/t5-v1_1-xxl",
+            _ => "google/t5-v1_1-base",
+        };
+        var tokenizer = AutoTokenizer.FromPretrained(modelName, cacheDir);
+        return new T5TextConditioner<T>(tokenizer, variant);
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
@@ -54,7 +80,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             numHeads: GetNumHeads(_variant));
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new T5TextConditioner<T>(_variant, Tokenizer, Architecture);
+        new T5TextConditioner<T>(Tokenizer, _variant, Architecture);
 
     /// <summary>
     /// T5 pools by mean over non-pad tokens. With fixed-length padding (the
@@ -69,8 +95,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
-            inputSize: 512,
-            outputSize: GetEmbeddingDim(variant));
+            inputSize: 1);
 
     private static int GetEmbeddingDim(T5Variant variant) => variant switch
     {

@@ -3,8 +3,9 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -33,16 +34,31 @@ public class DistilledT5TextConditioner<T> : TextConditioningBase<T>
     public override bool ProducesPooledOutput => false;
 
     public DistilledT5TextConditioner(
+        ITokenizer tokenizer,
         DistilledT5Variant variant = DistilledT5Variant.Base,
-        ITokenizer? tokenizer = null,
         NeuralNetworkArchitecture<T>? architecture = null)
         : base(
             architecture: architecture ?? BuildDefaultArchitecture(variant),
-            tokenizer: tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5),
+            tokenizer: tokenizer,
             maxSequenceLength: 512,
             embeddingDimension: GetEmbeddingDim(variant))
     {
+        Guard.NotNull(tokenizer);
         _variant = variant;
+    }
+
+    /// <summary>
+    /// Loads a paper-canonical DistilledT5 conditioner with its real
+    /// pretrained tokenizer (shares the T5 SentencePiece vocab from
+    /// <c>google/t5-v1_1-base</c>).
+    /// </summary>
+    public static DistilledT5TextConditioner<T> FromPretrained(
+        DistilledT5Variant variant = DistilledT5Variant.Base,
+        string huggingFaceModelName = "google/t5-v1_1-base",
+        string? cacheDir = null)
+    {
+        var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
+        return new DistilledT5TextConditioner<T>(tokenizer, variant);
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
@@ -53,15 +69,14 @@ public class DistilledT5TextConditioner<T> : TextConditioningBase<T>
             numHeads: GetNumHeads(_variant));
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new DistilledT5TextConditioner<T>(_variant, Tokenizer, Architecture);
+        new DistilledT5TextConditioner<T>(Tokenizer, _variant, Architecture);
 
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(DistilledT5Variant variant) =>
         new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Medium,
-            inputSize: 512,
-            outputSize: GetEmbeddingDim(variant));
+            inputSize: 1);
 
     private static int GetEmbeddingDim(DistilledT5Variant variant) => variant switch
     {

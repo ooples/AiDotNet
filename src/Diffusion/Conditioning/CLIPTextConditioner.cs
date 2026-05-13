@@ -1,10 +1,13 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tokenization;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -30,19 +33,62 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
 {
     private readonly CLIPVariant _variant;
 
+    /// <summary>
+    /// CLIP text_projection: a separate learnable hidden→embedding linear
+    /// projection applied ONLY to the EOS-pooled output (Radford 2021 §3.1),
+    /// NOT to every sequence position. Kept outside the layer stack so the
+    /// per-token attention path runs over hidden-dim representations and the
+    /// pooled output gets projected to the shared image-text space.
+    /// </summary>
+    private readonly DenseLayer<T> _textProjection;
+
     public override bool ProducesPooledOutput => true;
 
+    /// <summary>
+    /// Constructs a CLIP text conditioner with an explicit paper-canonical
+    /// tokenizer. PyTorch-style: model construction and tokenizer loading
+    /// are separate concerns — no silent test-vocab default. Use
+    /// <see cref="FromPretrained"/> for the production convenience path
+    /// that loads the canonical HuggingFace CLIP tokenizer.
+    /// </summary>
+    /// <param name="tokenizer">The paper-canonical CLIP tokenizer (byte-level BPE).</param>
+    /// <param name="variant">CLIP variant (selects hidden size / num layers / num heads).</param>
+    /// <param name="architecture">Optional architecture override; pass user-supplied
+    /// <see cref="NeuralNetworkArchitecture{T}.Layers"/> to bypass the default factory.</param>
     public CLIPTextConditioner(
+        ITokenizer tokenizer,
         CLIPVariant variant = CLIPVariant.ViTL14,
-        ITokenizer? tokenizer = null,
         NeuralNetworkArchitecture<T>? architecture = null)
         : base(
             architecture: architecture ?? BuildDefaultArchitecture(variant),
-            tokenizer: tokenizer ?? ClipTokenizerFactory.CreateSimple(),
+            tokenizer: tokenizer,
             maxSequenceLength: 77,
             embeddingDimension: GetEmbeddingDim(variant))
     {
+        Guard.NotNull(tokenizer);
         _variant = variant;
+        _textProjection = new DenseLayer<T>(
+            outputSize: GetEmbeddingDim(variant),
+            activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Loads a paper-canonical CLIP text conditioner with its real pretrained
+    /// HuggingFace tokenizer. Network I/O happens here (the tokenizer is
+    /// downloaded and cached on first call to <see cref="AutoTokenizer.FromPretrained(string, string?)"/>),
+    /// so construction is explicit about its cost rather than hiding it
+    /// inside a default constructor.
+    /// </summary>
+    /// <param name="variant">CLIP variant.</param>
+    /// <param name="huggingFaceModelName">HuggingFace model ID (default: <c>openai/clip-vit-large-patch14</c>).</param>
+    /// <param name="cacheDir">Optional cache directory for downloaded tokenizer files.</param>
+    public static CLIPTextConditioner<T> FromPretrained(
+        CLIPVariant variant = CLIPVariant.ViTL14,
+        string huggingFaceModelName = "openai/clip-vit-large-patch14",
+        string? cacheDir = null)
+    {
+        var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
+        return new CLIPTextConditioner<T>(tokenizer, variant);
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
@@ -51,16 +97,16 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
             maxSeqLen: MaxSequenceLength,
             hiddenSize: GetHiddenSize(_variant),
             numLayers: GetNumLayers(_variant),
-            numHeads: GetNumHeads(_variant),
-            projectionDim: EmbeddingDimension);
+            numHeads: GetNumHeads(_variant));
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new CLIPTextConditioner<T>(_variant, Tokenizer, Architecture);
+        new CLIPTextConditioner<T>(Tokenizer, _variant, Architecture);
 
     /// <summary>
     /// CLIP pools by extracting the embedding at the EOS token position
-    /// (Radford 2021 §3.1). Diffusion pipelines pad to fixed length so the
-    /// canonical EOS placement is the last sequence position.
+    /// (Radford 2021 §3.1) and then applying <see cref="_textProjection"/>
+    /// to map hidden-dim → embedding-dim. Diffusion pipelines pad to fixed
+    /// length so the canonical EOS placement is the last sequence position.
     /// </summary>
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
@@ -72,23 +118,74 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
         int seqLen = sequenceEmbeddings.Shape[1];
         int dim = sequenceEmbeddings.Shape[2];
 
-        var pooled = new Vector<T>(batch * dim);
+        // Gather the EOS-position embedding into a [B, hiddenSize] tensor.
+        var eosPooled = new Vector<T>(batch * dim);
         for (int b = 0; b < batch; b++)
         {
             int eosPos = seqLen - 1;
             for (int d = 0; d < dim; d++)
-                pooled[b * dim + d] = sequenceEmbeddings[b * seqLen * dim + eosPos * dim + d];
+                eosPooled[b * dim + d] = sequenceEmbeddings[b * seqLen * dim + eosPos * dim + d];
         }
-        return new Tensor<T>(new[] { batch, dim }, pooled);
+        var eosTensor = new Tensor<T>(new[] { batch, dim }, eosPooled);
+
+        // Project to the shared image-text embedding space.
+        return _textProjection.Forward(eosTensor);
     }
 
+    /// <summary>
+    /// CLIP parameter count = layer-stack params + the post-pool projection.
+    /// </summary>
+    public override long ParameterCount
+    {
+        get
+        {
+            long basePc = 0;
+            foreach (var layer in Layers) basePc += layer.ParameterCount;
+            return basePc + _textProjection.ParameterCount;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override Vector<T> GetParameters()
+    {
+        var basePart = base.GetParameters();
+        return Vector<T>.Concatenate(basePart, _textProjection.GetParameters());
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        int idx = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            if (count == 0) continue;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+        int projCount = (int)_textProjection.ParameterCount;
+        if (projCount > 0)
+            _textProjection.UpdateParameters(parameters.Slice(idx, projCount));
+    }
+
+    /// <summary>
+    /// PyTorch-style lazy architecture: no fixed inputSize / outputSize
+    /// passed in. The layer stack resolves token-sequence and feature
+    /// dimensions on first forward, matching the behaviour of
+    /// <see cref="EmbeddingLayer{T}"/> / <see cref="DenseLayer{T}"/> /
+    /// <see cref="MultiHeadAttentionLayer{T}"/> which all support lazy
+    /// shape resolution.
+    /// </summary>
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(CLIPVariant variant) =>
         new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
-            inputSize: 77,
-            outputSize: GetEmbeddingDim(variant));
+            // inputSize=1 is the lazy sentinel — the architecture validator
+            // requires InputSize > 0 for OneDimensional inputs, but the
+            // layer stack (EmbeddingLayer-led) resolves the real sequence
+            // and feature dims from input.Shape on first forward.
+            inputSize: 1);
 
     private static int GetEmbeddingDim(CLIPVariant variant) => variant switch
     {

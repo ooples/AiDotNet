@@ -3,8 +3,9 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Tokenization;
+using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
@@ -34,16 +35,35 @@ public class Qwen2TextConditioner<T> : TextConditioningBase<T>
     public override bool ProducesPooledOutput => false;
 
     public Qwen2TextConditioner(
+        ITokenizer tokenizer,
         Qwen2Variant variant = Qwen2Variant.OnePointFiveB,
-        ITokenizer? tokenizer = null,
         NeuralNetworkArchitecture<T>? architecture = null)
         : base(
             architecture: architecture ?? BuildDefaultArchitecture(variant),
-            tokenizer: tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.Qwen),
+            tokenizer: tokenizer,
             maxSequenceLength: 512,
             embeddingDimension: GetEmbeddingDim(variant))
     {
+        Guard.NotNull(tokenizer);
         _variant = variant;
+    }
+
+    /// <summary>
+    /// Loads a paper-canonical Qwen2 conditioner with its real pretrained
+    /// BPE tokenizer from HuggingFace.
+    /// </summary>
+    public static Qwen2TextConditioner<T> FromPretrained(
+        Qwen2Variant variant = Qwen2Variant.OnePointFiveB,
+        string? huggingFaceModelName = null,
+        string? cacheDir = null)
+    {
+        string modelName = huggingFaceModelName ?? variant switch
+        {
+            Qwen2Variant.SevenB => "Qwen/Qwen2-7B",
+            _ => "Qwen/Qwen2-1.5B",
+        };
+        var tokenizer = AutoTokenizer.FromPretrained(modelName, cacheDir);
+        return new Qwen2TextConditioner<T>(tokenizer, variant);
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
@@ -56,7 +76,7 @@ public class Qwen2TextConditioner<T> : TextConditioningBase<T>
             numKvHeads: GetNumKvHeads(_variant));
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new Qwen2TextConditioner<T>(_variant, Tokenizer, Architecture);
+        new Qwen2TextConditioner<T>(Tokenizer, _variant, Architecture);
 
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
@@ -79,8 +99,7 @@ public class Qwen2TextConditioner<T> : TextConditioningBase<T>
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
-            inputSize: 512,
-            outputSize: GetEmbeddingDim(variant));
+            inputSize: 1);
 
     private static int GetEmbeddingDim(Qwen2Variant variant) => variant switch
     {

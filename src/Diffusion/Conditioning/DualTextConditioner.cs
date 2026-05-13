@@ -100,12 +100,24 @@ public class DualTextConditioner<T> : IConditioningModule<T>
     /// </code>
     /// </example>
     public DualTextConditioner(
-        CLIPVariant clipVariant = CLIPVariant.ViTL14,
-        T5Variant t5Variant = T5Variant.XXL)
+        CLIPTextConditioner<T> clipEncoder,
+        T5TextConditioner<T> t5Encoder)
     {
-        _clipEncoder = new CLIPTextConditioner<T>(variant: clipVariant);
-        _t5Encoder = new T5TextConditioner<T>(variant: t5Variant);
+        _clipEncoder = clipEncoder ?? throw new ArgumentNullException(nameof(clipEncoder));
+        _t5Encoder = t5Encoder ?? throw new ArgumentNullException(nameof(t5Encoder));
     }
+
+    /// <summary>
+    /// Loads a paper-canonical SD3-style dual encoder with its real
+    /// pretrained tokenizers from HuggingFace (CLIP + T5).
+    /// </summary>
+    public static DualTextConditioner<T> FromPretrained(
+        CLIPVariant clipVariant = CLIPVariant.ViTL14,
+        T5Variant t5Variant = T5Variant.XXL,
+        string? cacheDir = null) =>
+        new DualTextConditioner<T>(
+            clipEncoder: CLIPTextConditioner<T>.FromPretrained(clipVariant, cacheDir: cacheDir),
+            t5Encoder: T5TextConditioner<T>.FromPretrained(t5Variant, cacheDir: cacheDir));
 
     /// <inheritdoc />
     public Tensor<T> Encode(Tensor<T> input)

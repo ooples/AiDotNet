@@ -34060,12 +34060,17 @@ public static class LayerHelper<T>
     /// Paper-faithful CLIP text encoder stack (Radford et al., ICML 2021).
     /// Embedding → learned absolute positional encoding → N × post-LN
     /// Transformer encoder (standard MHA, GELU FFN @ 4× hidden) → final
-    /// LayerNorm → optional text projection into the shared image-text
-    /// embedding space.
+    /// LayerNorm.
     /// </summary>
+    /// <remarks>
+    /// The CLIP <c>text_projection</c> (hidden → embedding) is NOT part of
+    /// this stack. Per Radford 2021 §3.1 it is applied only to the
+    /// EOS-pooled output, not to every sequence position; the
+    /// <see cref="AiDotNet.Diffusion.Conditioning.CLIPTextConditioner{T}.GetPooledEmbedding"/>
+    /// override applies it post-pool.
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCLIPTextLayers(
-        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
-        int projectionDim)
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads)
     {
         yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
         yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxSeqLen, embeddingSize: hiddenSize);
@@ -34075,30 +34080,25 @@ public static class LayerHelper<T>
                 numHeads: numHeads, feedForwardDim: hiddenSize * 4, embeddingSize: hiddenSize);
         }
         yield return new LayerNormalizationLayer<T>();
-        // CLIP's text_projection: hidden → embedding (no bias, no activation).
-        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
     }
 
     /// <summary>
     /// Paper-faithful SigLIP text encoder stack (Zhai et al., ICCV 2023).
-    /// Same encoder architecture as CLIP (post-LN, GELU FFN); difference is
-    /// the loss function (sigmoid vs softmax), which is upstream of this
-    /// stack so does not appear here.
+    /// Same encoder body as CLIP. SigLIP does not have a separate
+    /// post-encoder text projection — the encoder output is used directly,
+    /// so this factory omits the projection layer.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultSigLIPTextLayers(
-        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
-        int projectionDim) =>
-        CreateDefaultCLIPTextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads, projectionDim);
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads) =>
+        CreateDefaultCLIPTextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads);
 
     /// <summary>
     /// Paper-faithful SigLIP2 text encoder stack (Tschannen et al. 2025).
-    /// Extends SigLIP with additional improvements (captioning loss, MAP-head),
-    /// but the text-encoder body remains a standard CLIP-style stack.
+    /// Same encoder body as SigLIP.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultSigLIP2TextLayers(
-        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
-        int projectionDim) =>
-        CreateDefaultCLIPTextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads, projectionDim);
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads) =>
+        CreateDefaultCLIPTextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads);
 
     /// <summary>
     /// Paper-faithful T5 text encoder stack (Raffel et al., JMLR 2020).
@@ -34112,6 +34112,8 @@ public static class LayerHelper<T>
         int numRelativePositionBuckets = 32, int relativePositionMaxDistance = 128)
     {
         yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        // Vaswani 2017 §3.4 token-embedding scaling, preserved by Raffel 2020.
+        yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
 
         // Paper-canonical T5: one shared bias table across all encoder blocks.
         var sharedBias = new Tensor<T>(new[] { numRelativePositionBuckets, numHeads });
@@ -34157,6 +34159,8 @@ public static class LayerHelper<T>
         double ropeTheta = 10000.0)
     {
         yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        // Gemma normalizes embeddings by √hiddenSize (Gemma Team 2024 §2.3).
+        yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
         int headDim = hiddenSize / numHeads;
         for (int i = 0; i < numLayers; i++)
         {
@@ -34179,9 +34183,11 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultQwen2TextLayers(
         int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
-        int numKvHeads, double ropeTheta = 10000.0)
+        int numKvHeads, double ropeTheta = 1000000.0)
     {
         yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        // Qwen2 token-embedding scaling (Vaswani 2017 §3.4 convention).
+        yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
         for (int i = 0; i < numLayers; i++)
         {
             // Qwen2 uses Grouped-Query Attention: numKvHeads < numHeads, with
@@ -34209,7 +34215,7 @@ public static class LayerHelper<T>
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultChatGLM3TextLayers(
         int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
-        int numKvHeads = 1, double ropeTheta = 10000.0) =>
+        int numKvHeads = 2, double ropeTheta = 10000.0) =>
         CreateDefaultQwen2TextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads,
             numKvHeads, ropeTheta);
 

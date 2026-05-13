@@ -1,5 +1,7 @@
 using AiDotNet.Diffusion.Conditioning;
 using AiDotNet.Diffusion.NoisePredictors;
+using AiDotNet.Enums;
+using AiDotNet.Tokenization;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -7,15 +9,18 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 
 /// <summary>
 /// Contract tests for Phase 1 conditioning infrastructure: text conditioners and noise predictors.
+/// Tests pass an explicit (small-vocab) tokenizer — the conditioner ctors now require one,
+/// matching the PyTorch convention where model construction and tokenizer loading are
+/// separate concerns.
 /// </summary>
 public class NewConditionerContractTests : DiffusionUnitTestBase
 {
     #region Text Conditioner Constructor Tests
 
     [Fact(Timeout = 120000)]
-    public async Task SigLIPTextConditioner_DefaultConstructor_CreatesValidConditioner()
+    public async Task SigLIPTextConditioner_Construct_CreatesValidConditioner()
     {
-        var conditioner = new SigLIPTextConditioner<double>();
+        var conditioner = new SigLIPTextConditioner<double>(ClipTokenizerFactory.CreateSimple());
 
         Assert.NotNull(conditioner);
         Assert.True(conditioner.ProducesPooledOutput);
@@ -23,9 +28,9 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SigLIP2TextConditioner_DefaultConstructor_CreatesValidConditioner()
+    public async Task SigLIP2TextConditioner_Construct_CreatesValidConditioner()
     {
-        var conditioner = new SigLIP2TextConditioner<double>();
+        var conditioner = new SigLIP2TextConditioner<double>(ClipTokenizerFactory.CreateSimple());
 
         Assert.NotNull(conditioner);
         Assert.True(conditioner.ProducesPooledOutput);
@@ -33,27 +38,30 @@ public class NewConditionerContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task DistilledT5TextConditioner_DefaultConstructor_CreatesValidConditioner()
+    public async Task DistilledT5TextConditioner_Construct_CreatesValidConditioner()
     {
-        var conditioner = new DistilledT5TextConditioner<double>();
+        var tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
+        var conditioner = new DistilledT5TextConditioner<double>(tokenizer);
 
         Assert.NotNull(conditioner);
         Assert.True(conditioner.EmbeddingDimension > 0);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GemmaTextConditioner_DefaultConstructor_CreatesValidConditioner()
+    public async Task GemmaTextConditioner_Construct_CreatesValidConditioner()
     {
-        var conditioner = new GemmaTextConditioner<double>();
+        var tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.LLaMA);
+        var conditioner = new GemmaTextConditioner<double>(tokenizer);
 
         Assert.NotNull(conditioner);
         Assert.True(conditioner.EmbeddingDimension > 0);
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Qwen2TextConditioner_DefaultConstructor_CreatesValidConditioner()
+    public async Task Qwen2TextConditioner_Construct_CreatesValidConditioner()
     {
-        var conditioner = new Qwen2TextConditioner<double>();
+        var tokenizer = LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.Qwen);
+        var conditioner = new Qwen2TextConditioner<double>(tokenizer);
 
         Assert.NotNull(conditioner);
         Assert.True(conditioner.EmbeddingDimension > 0);
