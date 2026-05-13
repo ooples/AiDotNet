@@ -252,8 +252,11 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// Resamples ε_in (size p) and ε_out (size q), applies the signed-sqrt
     /// transform <c>f(x) = sign(x)·√|x|</c>, and builds the per-forward
     /// noise tensors via an engine-accelerated outer product:
-    /// <c>ε_w = f(ε_in)ᵀ · f(ε_out)</c> (Fortunato 2017 §3.2). Public for
-    /// advanced callers that want to sync noise across multiple layers.
+    /// <c>ε_w = f(ε_in)ᵀ · f(ε_out)</c> (Fortunato 2017 §3.2). Internal
+    /// plumbing: Forward() always resamples its own noise, so an external
+    /// "sync the same noise across layers" use case cannot be implemented
+    /// just by calling this helper — exposing it publicly would only let
+    /// callers desync the RNG.
     /// </summary>
     /// <remarks>
     /// Only the Gaussian RNG step runs on the CPU (Box-Muller via
@@ -262,7 +265,7 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     /// BLAS / GPU acceleration and the gradient tape sees them as part of
     /// the same compute graph as the rest of the forward pass.
     /// </remarks>
-    public (Tensor<T> EpsilonW, Tensor<T> EpsilonB) SampleFactorisedNoise()
+    internal (Tensor<T> EpsilonW, Tensor<T> EpsilonB) SampleFactorisedNoise()
     {
         // Sample raw Gaussian vectors. RNG is intrinsically scalar; we
         // populate two Tensor<T>s in one pass per side.

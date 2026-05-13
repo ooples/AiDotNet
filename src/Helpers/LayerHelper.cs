@@ -26044,14 +26044,21 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
+            // Conv -> GroupNorm -> Activation: GN must see raw pre-activation
+            // tensors (Wu & He 2018 §3 — normalising the linear projection's
+            // outputs before the nonlinearity). Passing relu into the Conv
+            // would push GN downstream of the nonlinearity and change the
+            // encoder block's distributional behaviour.
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, activationFunction: null);
             h /= stride; w /= stride;
             yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+            yield return new ActivationLayer<T>(relu);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null);
                 yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+                yield return new ActivationLayer<T>(relu);
             }
 
             inC = outC;

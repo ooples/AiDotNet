@@ -49,7 +49,12 @@ public class WhisperTokenizer
     /// <summary>Initializes a tokenizer that loads the official Whisper / GPT-2 BPE vocabulary.</summary>
     /// <param name="vocabPath">Path to vocab.json (token string → ID).</param>
     /// <param name="mergesPath">Path to merges.txt (priority-ordered pair merges).</param>
-    public WhisperTokenizer(string vocabPath, string mergesPath) : this()
+    /// <remarks>
+    /// Internal — asset initialisation is owned by the WhisperModel / model
+    /// builder layer; users go through that facade rather than instantiating
+    /// the tokenizer directly.
+    /// </remarks>
+    internal WhisperTokenizer(string vocabPath, string mergesPath) : this()
     {
         LoadVocab(vocabPath, mergesPath);
     }
@@ -59,9 +64,9 @@ public class WhisperTokenizer
     /// vocab.json maps every byte-unicode token to its integer ID; merges.txt
     /// lists the learned pair merges in priority order (first line = priority
     /// 0 = applied first). Both files are shipped alongside any HuggingFace
-    /// Whisper checkpoint.
+    /// Whisper checkpoint. Internal — see the file-path constructor.
     /// </remarks>
-    public void LoadVocab(string vocabPath, string mergesPath)
+    internal void LoadVocab(string vocabPath, string mergesPath)
     {
         if (vocabPath is null) throw new ArgumentNullException(nameof(vocabPath));
         if (mergesPath is null) throw new ArgumentNullException(nameof(mergesPath));

@@ -24,15 +24,17 @@ public class AudioTextDualStreamArchitecture<T> : DualEncoderArchitecture<T>
 {
     /// <summary>
     /// Gets the layer stack for the audio encoder. Alias for
-    /// <see cref="DualEncoderArchitecture{T}.EncoderALayers"/>.
+    /// <see cref="DualEncoderArchitecture{T}.EncoderALayers"/>. Read-only view
+    /// so callers can inspect the encoder without mutating internals.
     /// </summary>
-    public List<ILayer<T>> AudioLayers => EncoderALayers;
+    public IReadOnlyList<ILayer<T>> AudioLayers => EncoderALayers;
 
     /// <summary>
     /// Gets the layer stack for the text encoder. Alias for
-    /// <see cref="DualEncoderArchitecture{T}.EncoderBLayers"/>.
+    /// <see cref="DualEncoderArchitecture{T}.EncoderBLayers"/>. Read-only view
+    /// (see <see cref="AudioLayers"/> for rationale).
     /// </summary>
-    public List<ILayer<T>> TextLayers => EncoderBLayers;
+    public IReadOnlyList<ILayer<T>> TextLayers => EncoderBLayers;
 
     /// <summary>
     /// Initializes a new audio-text dual-stream architecture with explicit
