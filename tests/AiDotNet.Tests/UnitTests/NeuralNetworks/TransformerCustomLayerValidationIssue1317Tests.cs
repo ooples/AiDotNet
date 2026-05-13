@@ -18,7 +18,7 @@ public class TransformerCustomLayerValidationIssue1317Tests
         };
 
         var architecture = new TransformerArchitecture<float>(
-            inputType: InputType.TwoDimensional,
+            inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
             numEncoderLayers: 1,
             numDecoderLayers: 0,

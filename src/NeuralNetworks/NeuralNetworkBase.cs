@@ -2087,9 +2087,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             return Architecture.GetInputShape();
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            throw new ArgumentException(
+                "Failed to resolve the architecture input shape for custom-layer validation.",
+                ex);
         }
     }
 
@@ -2099,9 +2101,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             return shapeSelector(layer);
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            throw new ArgumentException(
+                $"Failed to resolve shape metadata from layer '{layer.GetType().Name}' during custom-layer validation.",
+                ex);
         }
     }
 
@@ -2117,10 +2121,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         var expectedWithoutLeadingUnits = TrimLeadingUnitDimensions(expectedShape);
         var actualWithoutLeadingUnits = TrimLeadingUnitDimensions(actualShape);
-        if (expectedWithoutLeadingUnits.SequenceEqual(actualWithoutLeadingUnits))
-            return true;
+        return expectedWithoutLeadingUnits.SequenceEqual(actualWithoutLeadingUnits);
+    }
 
-        return FlattenedSize(expectedShape) == FlattenedSize(actualShape);
+    private static bool AreElementCountsCompatibleAcrossExplicitShapeBoundary(
+        ILayer<T> prevLayer,
+        ILayer<T> currentLayer,
+        int[] prevOutputShape,
+        int[] currentInputShape)
+    {
+        bool explicitShapeBoundary = prevLayer is ReshapeLayer<T> or FlattenLayer<T>
+                                     || currentLayer is ReshapeLayer<T> or FlattenLayer<T>;
+        return explicitShapeBoundary && FlattenedSize(prevOutputShape) == FlattenedSize(currentInputShape);
     }
 
     private static int[] TrimLeadingUnitDimensions(int[] shape)
@@ -2271,10 +2283,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // DropoutLayer, ActivationLayer constructed without an explicit
         // InputShape) and would have been incorrectly rejected by the
         // SequenceEqual check otherwise.
-        var currentInputShape = currentLayer.GetInputShape();
-        bool currentIsLazy = currentInputShape.Length == 0
-                             || currentInputShape.Any(d => d <= 0);
-        if (!currentIsLazy && !AreShapesCompatible(prevLayer.GetOutputShape(), currentInputShape))
+        var currentInputShape = TryGetLayerShape(currentLayer, shapeSelector: static l => l.GetInputShape());
+        var prevOutputShape = TryGetLayerShape(prevLayer, shapeSelector: static l => l.GetOutputShape());
+        bool currentIsLazy = IsDeferredOrAgnosticShape(currentInputShape);
+        if (!currentIsLazy
+            && !IsDeferredOrAgnosticShape(prevOutputShape)
+            && !AreShapesCompatible(prevOutputShape!, currentInputShape!)
+            && !AreElementCountsCompatibleAcrossExplicitShapeBoundary(
+                prevLayer,
+                currentLayer,
+                prevOutputShape!,
+                currentInputShape!))
             return false;
 
         // Special checks for specific layer combinations
@@ -2295,7 +2314,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (prevLayer is ReshapeLayer<T> reshapeLayer && !currentIsLazy)
         {
             return reshapeLayer.GetOutputShape().Aggregate((a, b) => a * b) ==
-                   currentLayer.GetInputShape().Aggregate((a, b) => a * b);
+                   currentInputShape!.Aggregate((a, b) => a * b);
         }
 
         // If no incompatibilities found, layers are considered compatible
