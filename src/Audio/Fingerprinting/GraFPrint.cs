@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("GraFPrint: A GNN-Based Approach for Audio Fingerprinting", "https://arxiv.org/abs/2311.02483", Year = 2023, Authors = "Andres Ferraro, Dmitry Bogdanov")]
+[ResearchPaper("GraFPrint: A GNN-Based Approach for Audio Identification", "https://arxiv.org/abs/2410.10994", Year = 2025, Authors = "Aditya Bhattacharjee, Shubhr Singh, Emmanouil Benetos")]
 internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     #region Fields
@@ -246,16 +246,69 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+
+        // The paper-faithful chain uses BatchNormalizationLayer between every
+        // conv. BN's inference broadcast in this codebase
+        // (BatchNormalizationLayer.ApplyInferenceAnyRank) assumes the
+        // canonical NCHW layout — dim 0 = batch, dim 1 = channels. For a
+        // rank-3 unbatched [C, H, W] image the broadcast picks the wrong
+        // axis and the shape mismatches at the first BN. Force a leading
+        // batch dim so the entire chain stays in [B, C, H, W] form,
+        // matching what NeuralNetworkBase.NormalizeBatchDim would emit for
+        // Train's tape forward — inference and training shape-consistent.
+        var batched = input.Rank == 3
+            ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]])
+            : input;
+
+        var c = batched;
+        foreach (var l in Layers) c = l.Forward(c);
+
+        // Paper's graph_encoder.py finishes with
+        //   x = self.proj(x)            # [B, C, N, 1]
+        //   x = torch.mean(x, dim=2)    # [B, C, 1]
+        //   x = x.squeeze(-1).squeeze(-1)  # [B, C]
+        // i.e. the public output is rank-2 [B, embeddingDim]. GlobalPooling
+        // with keepDims=true yields rank-4 [B, embeddingDim, 1, 1]; squeeze
+        // trailing singleton dims so the base test class's warm-up infers
+        // a rank-2 EffectiveOutputShape that downstream
+        // CreateRandomTargetTensor calls can use without a rank mismatch
+        // against the loss target.
+        while (c.Rank > 2 && c.Shape[c.Rank - 1] == 1)
+        {
+            var newShape = new int[c.Rank - 1];
+            for (int i = 0; i < c.Rank - 1; i++) newShape[i] = c.Shape[i];
+            c = Engine.Reshape(c, newShape);
+        }
+        return c;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+
+        // Same rank-3 → rank-4 promotion Predict applies, so the training-
+        // time ForwardForTraining walk sees the same shape sequence as
+        // inference. Without this, BN's any-rank inference path picks the
+        // wrong channel axis on rank-3 input and the broadcast mismatches.
+        var batchedInput = input.Rank == 3
+            ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]])
+            : input;
+
+        // ForwardForTraining walks Layers in order without the post-chain
+        // squeeze Predict applies. The chain ends at GlobalPoolingLayer
+        // with keepDims=true → rank-4 [B, embeddingDim, 1, 1]. Reshape the
+        // expected target to match so MSE / cross-entropy see same-rank
+        // tensors. Element count is preserved.
+        Tensor<T> alignedTarget = expected;
+        if (expected.Rank == 1)
+            alignedTarget = Engine.Reshape(expected, [1, expected.Shape[0], 1, 1]);
+        else if (expected.Rank == 2)
+            alignedTarget = Engine.Reshape(expected, [expected.Shape[0], expected.Shape[1], 1, 1]);
+
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(batchedInput, alignedTarget);
         }
         finally
         {
