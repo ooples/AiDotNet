@@ -289,6 +289,29 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
     /// [seqLen, inDim] @ [inDim, outDim] via Engine.TensorMatMul. The
     /// scalar implementation it replaces was the dominant per-block cost.
     /// </summary>
+    /// <summary>
+    /// Cache of pre-sliced weight matrices keyed by (weightOffset, inDim,
+    /// outDim). <see cref="LinearProject"/> is called 6× per transformer
+    /// layer per encode (Q/K/V/O + MLP w1/w2), and previously allocated +
+    /// copied a fresh slice on every call — at NumLayers transformer
+    /// blocks × 6 projections × per-call cost, this dominated encode-time
+    /// allocations and GC pressure. The cache reuses the same
+    /// <see cref="Tensor{T}"/> view across every encode for a given layer
+    /// position, so the slice is materialised once and the matmul reads
+    /// the same backing storage thereafter.
+    /// </summary>
+    private readonly Dictionary<(int Offset, int InDim, int OutDim), Tensor<T>> _projectionWeightCache = new();
+
+    /// <summary>
+    /// Source-vector reference observed at cache-fill time. If
+    /// <see cref="TextConditioningBase{T}.TransformerWeights"/> ever gets
+    /// rebound to a fresh <see cref="Vector{T}"/> (Deserialize replacing
+    /// the weight buffer wholesale, optimizer rebinding via a buffer
+    /// alias, etc.) the cached slices would still point at the old
+    /// storage. Reference-equality invalidates the cache in that case.
+    /// </summary>
+    private Vector<T>? _projectionWeightSource;
+
     private Vector<T> LinearProject(Vector<T> input, Vector<T> weights, int weightOffset, int inDim, int outDim, int seqLen)
     {
         var wSize = inDim * outDim;
@@ -299,11 +322,27 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
                 $"LinearProject requires {wSize} weights starting at offset {weightOffset}, " +
                 $"but the weight buffer only has {weights.Length} elements.");
         }
-        var wSlice = new Vector<T>(wSize);
-        for (int i = 0; i < wSize; i++) wSlice[i] = weights[weightOffset + i];
+
+        // Invalidate the cache if the underlying weight buffer was rebound
+        // (e.g. by Deserialize or a buffer-alias swap). Adam-style in-place
+        // gradient descent leaves the reference intact, so steady-state
+        // training paths hit the cache.
+        if (!ReferenceEquals(_projectionWeightSource, weights))
+        {
+            _projectionWeightCache.Clear();
+            _projectionWeightSource = weights;
+        }
+
+        var cacheKey = (weightOffset, inDim, outDim);
+        if (!_projectionWeightCache.TryGetValue(cacheKey, out var wMat))
+        {
+            var slice = new Vector<T>(wSize);
+            for (int i = 0; i < wSize; i++) slice[i] = weights[weightOffset + i];
+            wMat = Tensor<T>.FromVector(slice, [inDim, outDim]);
+            _projectionWeightCache[cacheKey] = wMat;
+        }
 
         var inputMat = Tensor<T>.FromVector(input, [seqLen, inDim]);
-        var wMat = Tensor<T>.FromVector(wSlice, [inDim, outDim]);
         var result = Engine.TensorMatMul(inputMat, wMat);
         return Engine.Reshape(result, [seqLen * outDim]).ToVector();
     }

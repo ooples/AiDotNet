@@ -183,8 +183,14 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (!_useNativeMode) return PredictOnnx(input);
-        var logits = Forward(input);
+        // Both modes must return the same semantics — per-pixel class
+        // probabilities along the class dim (Xu et al. 2023 §3 paper
+        // formulation). The ONNX path used to return raw output, making
+        // Predict() behave differently between native and ONNX modes and
+        // breaking SegmentPanoptic's confidence math (which assumes values
+        // in [0, 1]). Apply the same softmax in both paths so the public
+        // contract is consistent.
+        var logits = _useNativeMode ? Forward(input) : PredictOnnx(input);
         return Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
     }
 

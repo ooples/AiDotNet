@@ -183,7 +183,15 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         // stay query-relevant even without the multi-vector embedder.
         var queryTokens = TokenizeForOverlap(query);
 
-        int oversample = Math.Max(topK * 4, 32);
+        // Oversample by `topK * _vectorsPerDocument * 2` so the per-base-doc
+        // grouping step below has enough sub-vectors to aggregate. The store
+        // returns ALL sub-vector entries for each underlying document
+        // (vectorsPerDocument per doc), so without this multiplier the
+        // candidate set sees only ~topK*2/vectorsPerDocument distinct base
+        // docs and the late-interaction reducer under-samples — particularly
+        // when vectorsPerDocument > 1, which is the whole point of this
+        // retriever. Floor at 32 keeps the probe meaningful on tiny stores.
+        int oversample = Math.Max(topK * Math.Max(1, _vectorsPerDocument) * 2, 32);
         var placeholderQuery = new Vector<T>(_documentStore.VectorDimension);
         var allDocuments = (metadataFilters == null || metadataFilters.Count == 0)
             ? _documentStore.GetSimilar(placeholderQuery, oversample)

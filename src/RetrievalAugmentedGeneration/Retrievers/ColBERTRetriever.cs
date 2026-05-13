@@ -232,19 +232,4 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
         return (double)matchCount / queryTokens.Count;
     }
 
-    private static bool MatchesMetadata(Document<T> doc, Dictionary<string, object> filters)
-    {
-        // Exact-match metadata filter: every requested key must exist on the doc
-        // and equal the requested value. Mirrors the contract of the per-store
-        // GetSimilarWithFilters validators (an unknown key is a non-match).
-        if (doc.Metadata == null) return false;
-        foreach (var kvp in filters)
-        {
-            if (!doc.Metadata.TryGetValue(kvp.Key, out var actual))
-                return false;
-            if (!Equals(actual, kvp.Value))
-                return false;
-        }
-        return true;
-    }
 }

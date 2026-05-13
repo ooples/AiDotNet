@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// </summary>
 /// <remarks>
 /// Paper-faithful configuration: <see cref="TransfusionOptions"/>'s own
-/// defaults reflect the paper's hyperparameters (ImageSize=224, DecoderDim,
+/// defaults reflect the paper's hyperparameters (ImageSize=256, DecoderDim,
 /// NumVisionLayers, NumHeads, VocabSize, etc.). Do not override them —
 /// per the project's never-shrink-tests rule, slow or saturating tests
 /// at paper scale are model-side performance bugs to be fixed in the
@@ -25,24 +25,24 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 /// </remarks>
 public class TransfusionTests : VisionLanguageTestBase
 {
-    // Paper-faithful image size (224×224 RGB per Transfusion paper §3).
-    // Transfusion's VisionLanguageModelBase contract treats input as
-    // [batch, channels=3, height, width].
-    protected override int[] InputShape => [1, 3, 224, 224];
+    // Paper-faithful image size — matches TransfusionOptions's default
+    // ImageSize = 256 (Transfusion paper §3 VAE+DiT image-patch size).
+    // VisionLanguageModelBase treats input as [batch, channels=3, height, width].
+    protected override int[] InputShape => [1, 3, 256, 256];
 
     protected override INeuralNetworkModel<double> CreateNetwork()
     {
         // VisionLanguageModelBase wants a real NeuralNetworkArchitecture
         // even in native mode. Match the architecture's image dims to
-        // TransfusionOptions's paper defaults (ImageSize=224, 3 channels).
+        // TransfusionOptions's paper defaults (ImageSize=256, 3 channels).
         // OutputSize is left at the paper's VocabSize-derived next-token
         // classification head; the architecture's actual layer
         // construction is delegated to TransfusionOptions.
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.ImageClassification,
-            inputHeight: 224,
-            inputWidth: 224,
+            inputHeight: 256,
+            inputWidth: 256,
             inputDepth: 3,
             outputSize: 512);
 
