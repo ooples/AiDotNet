@@ -157,9 +157,21 @@ public class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>
             return action;
         }
 
-        // Inference: return the full softmax distribution π(·|s). Same
-        // convention as A3C / MuZero / RainbowDQN inference output.
-        return probs;
+        // Inference: return a discrete one-hot action by argmax over π(·|s).
+        // The public SelectAction contract is "give me the action to take"
+        // — callers feed the result directly into env.Step(action). Returning
+        // a raw probability vector here would change SelectAction from an
+        // action selector to a policy-diagnostic API and break evaluation
+        // loops that expect a deterministic discrete action.
+        int bestIdx = 0;
+        for (int i = 1; i < probs.Length; i++)
+        {
+            if (NumOps.GreaterThan(probs[i], probs[bestIdx]))
+                bestIdx = i;
+        }
+        var deterministic = new Vector<T>(_reinforceOptions.ActionSize);
+        deterministic[bestIdx] = NumOps.One;
+        return deterministic;
     }
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)

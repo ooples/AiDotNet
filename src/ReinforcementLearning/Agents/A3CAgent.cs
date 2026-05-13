@@ -217,18 +217,24 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Discrete action space
             if (!training)
             {
-                // Inference path: return the policy's softmax probability
-                // distribution π(·|s) (the actual model output), not a
-                // one-hot argmax. Argmax collapses distinct distributions
-                // that happen to share their max index into identical
-                // vectors and silently hides whether the policy can
-                // distinguish states. Returning π itself matches the
-                // continuous-action branch above (which returns the mean
-                // vector, not a sampled point) and gives downstream
-                // consumers the information needed for policy entropy /
-                // KL diagnostics. Callers that need the deterministic
-                // action choice can take argmax of the returned vector.
-                return policyOutput;
+                // Inference path: return a discrete one-hot action by argmax
+                // over the softmax distribution. SelectAction's contract on
+                // discrete envs is "return the action to take" so callers
+                // can pipe the result straight into env.Step(action) — a
+                // raw probability vector would change the API from action-
+                // selector to policy-diagnostic and break any evaluation
+                // loop expecting a deterministic action. The full π(·|s)
+                // remains observable via the underlying policy network's
+                // Predict for diagnostics that genuinely need it.
+                int bestIdx = 0;
+                for (int i = 1; i < policyOutput.Length; i++)
+                {
+                    if (NumOps.GreaterThan(policyOutput[i], policyOutput[bestIdx]))
+                        bestIdx = i;
+                }
+                var oneHot = new Vector<T>(_options.ActionSize);
+                oneHot[bestIdx] = NumOps.One;
+                return oneHot;
             }
 
             // Sample from distribution
@@ -630,43 +636,44 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Walk the trajectory in REVERSE accumulating discounted returns,
         // then apply one supervised update per step. Paper Algorithm 1
         // does `for i ∈ {t-1, ..., t_start}: R ← r_i + γR`.
+        // Walk trajectory in reverse to compute returns + advantages, then
+        // delegate the actual gradient step to UpdateGlobalNetworks which
+        // already implements the paper-correct policy-gradient loss
+        // (log π(a|s) · A via PolicyDistributionHelper). The previous
+        // per-step supervised-target loop here was a surrogate that
+        // (a) interpolated π toward a one-hot target weighted by advantage,
+        // and (b) silently mis-typed the continuous-action [mean, logStd]
+        // head as discrete probabilities — neither matches the A3C
+        // objective in Mnih et al. 2016 Algorithm 1.
+        var trajectoryForUpdate = new List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)>(_trajectory.Count);
+        var returns = new List<T>(_trajectory.Count);
+        var advantages = new List<T>(_trajectory.Count);
+
+        // First pass: forward order, snapshot the value-estimate for each step.
+        for (int i = 0; i < _trajectory.Count; i++)
+        {
+            var step = _trajectory[i];
+            var stateTensor = Tensor<T>.FromVector(step.State);
+            var valuePred = _globalValueNetwork.Predict(stateTensor).ToVector()[0];
+            trajectoryForUpdate.Add((step.State, step.Action, step.Reward, step.Done, valuePred));
+        }
+
+        // Second pass: reverse, accumulate discounted returns + per-step advantages.
+        var revReturns = new T[_trajectory.Count];
+        var revAdvantages = new T[_trajectory.Count];
         for (int i = _trajectory.Count - 1; i >= 0; i--)
         {
             var step = _trajectory[i];
             R = NumOps.Add(step.Reward, NumOps.Multiply(discountFactor, R));
-
-            var stateTensor = Tensor<T>.FromVector(step.State);
-            var valuePred = _globalValueNetwork.Predict(stateTensor).ToVector()[0];
-
-            // Advantage A(s_i, a_i) = R_i − V(s_i; θ_v). Negative advantage
-            // means the action was worse than the value estimate; positive
-            // means better.
-            T advantage = NumOps.Subtract(R, valuePred);
-
-            // Value-head supervised target: scalar return R_i.
-            var valueTarget = Tensor<T>.FromVector(new Vector<T>(new[] { R }));
-            _globalValueNetwork.Train(stateTensor, valueTarget);
-
-            // Policy-head supervised target: nudge the softmax output
-            // toward the action taken (positive advantage) or away from it
-            // (negative advantage). For one-hot action a_i the per-class
-            // target equals `π(s_i) + advantage · (one_hot(a_i) − π(s_i))`,
-            // a linear interpolation between the current policy and the
-            // one-hot action weighted by the signed advantage. This
-            // matches the sign of the paper's ∇log π · A gradient under
-            // softmax cross-entropy.
-            var policyPred = _globalPolicyNetwork.Predict(stateTensor).ToVector();
-            var policyTargetVec = new Vector<T>(policyPred.Length);
-            for (int j = 0; j < policyPred.Length; j++)
-            {
-                T oneHot = j < step.Action.Length ? step.Action[j] : NumOps.Zero;
-                T delta = NumOps.Multiply(advantage, NumOps.Subtract(oneHot, policyPred[j]));
-                policyTargetVec[j] = NumOps.Add(policyPred[j], delta);
-            }
-            _globalPolicyNetwork.Train(stateTensor, Tensor<T>.FromVector(policyTargetVec));
-
+            T advantage = NumOps.Subtract(R, trajectoryForUpdate[i].value);
+            revReturns[i] = R;
+            revAdvantages[i] = advantage;
             totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(advantage, advantage));
         }
+        returns.AddRange(revReturns);
+        advantages.AddRange(revAdvantages);
+
+        UpdateGlobalNetworks(trajectoryForUpdate, returns, advantages, _globalPolicyNetwork, _globalValueNetwork);
 
         _trajectory.Clear();
         _globalSteps++;

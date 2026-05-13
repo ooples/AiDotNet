@@ -90,31 +90,12 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
         else
         {
             // Target policy: greedy with Sutton & Barto §2.3 tie-break.
-            // See OnPolicyMonteCarloAgent.SelectAction for the rationale —
-            // an all-zero Q-table at init makes every action tie and a
-            // naive "pick index 0" produces a degenerate constant policy.
-            selectedAction = 0;
-            T bestValue = _qTable[stateKey][0];
-            bool allEqual = true;
-
-            for (int a = 1; a < _options.ActionSize; a++)
-            {
-                if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-                {
-                    bestValue = _qTable[stateKey][a];
-                    selectedAction = a;
-                    allEqual = false;
-                }
-                else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-                {
-                    allEqual = false;
-                }
-            }
-
-            if (allEqual)
-            {
-                selectedAction = (stateKey.GetHashCode() & int.MaxValue) % _options.ActionSize;
-            }
+            // Routed through SelectGreedyActionForStateKey so SelectAction
+            // and GetGreedyAction stay perfectly consistent — a mismatch
+            // there silently truncated importance-sampling episodes in
+            // UpdateFromEpisode (the greedy gate would break out even when
+            // behaviour matched the target policy under the equal-Q case).
+            selectedAction = SelectGreedyActionForStateKey(stateKey);
         }
 
         var result = new Vector<T>(_options.ActionSize);
@@ -183,10 +164,22 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
     private int GetGreedyAction(Vector<T> state)
     {
         EnsureStateExists(state);
-        string stateKey = GetStateKey(state);
+        return SelectGreedyActionForStateKey(GetStateKey(state));
+    }
 
+    /// <summary>
+    /// Shared greedy-with-tie-break selector used by both <see cref="SelectAction"/>
+    /// and <see cref="GetGreedyAction"/>. Tie-broken by a deterministic FNV-1a
+    /// hash of <paramref name="stateKey"/> so the choice is stable across
+    /// process runs, .NET versions, and 32-bit/64-bit hosts — string.GetHashCode()
+    /// is randomized in .NET Core+ and would make UpdateFromEpisode's
+    /// behaviour-equals-target check non-reproducible.
+    /// </summary>
+    private int SelectGreedyActionForStateKey(string stateKey)
+    {
         int greedyAction = 0;
         T bestValue = _qTable[stateKey][0];
+        bool allEqual = true;
 
         for (int a = 1; a < _options.ActionSize; a++)
         {
@@ -194,10 +187,41 @@ public class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 bestValue = _qTable[stateKey][a];
                 greedyAction = a;
+                allEqual = false;
+            }
+            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
+            {
+                allEqual = false;
             }
         }
 
+        if (allEqual)
+        {
+            greedyAction = (StableFnv1aHash(stateKey) & int.MaxValue) % _options.ActionSize;
+        }
+
         return greedyAction;
+    }
+
+    /// <summary>
+    /// Deterministic 32-bit FNV-1a hash. Stable across process runs and
+    /// .NET versions, unlike <see cref="string.GetHashCode()"/> which is
+    /// randomized per-process in .NET Core+ (documented at
+    /// https://learn.microsoft.com/dotnet/api/system.string.gethashcode).
+    /// Used here for tie-breaking on all-equal Q-values so the policy
+    /// stays reproducible across processes.
+    /// </summary>
+    private static int StableFnv1aHash(string s)
+    {
+        const uint FnvOffsetBasis = 2166136261;
+        const uint FnvPrime = 16777619;
+        uint hash = FnvOffsetBasis;
+        for (int i = 0; i < s.Length; i++)
+        {
+            hash ^= s[i];
+            hash *= FnvPrime;
+        }
+        return unchecked((int)hash);
     }
 
     private void EnsureStateExists(Vector<T> state)

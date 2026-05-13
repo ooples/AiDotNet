@@ -138,13 +138,17 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
             outputSize: outputSize
         );
 
-        // Build layers. When UseNoisyNetworks is on, swap the final two dense
-        // layers (the value/advantage heads in the dueling architecture) for
-        // NoisyDenseLayer instances per Hessel et al. 2018 §3.4: "We then
-        // replace the linear layers of the dueling architecture with their
-        // noisy equivalents." Keeping the hidden feature extractor
-        // deterministic matches the published RainbowDQN setup and avoids
-        // injecting noise where it isn't paper-required.
+        // Build layers. The current build is a single-stream MLP (not the
+        // paper's dueling architecture with separate value + advantage
+        // streams); when UseNoisyNetworks is on, the trailing dense layers
+        // are swapped for NoisyDenseLayer instances per Hessel et al. 2018
+        // §3.4: "We then replace the linear layers of the dueling
+        // architecture with their noisy equivalents." Keeping the hidden
+        // feature extractor deterministic still matches the published
+        // RainbowDQN setup. Promoting to a true dueling split (separate
+        // V(s) and A(s,a) heads, then Q(s,a) = V(s) + (A(s,a) − mean_a A))
+        // is a separate, larger change tracked in the upstream Rainbow
+        // implementation list.
         IEnumerable<ILayer<T>> layers;
         if (_options.UseNoisyNetworks)
         {
@@ -310,6 +314,18 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         // fills WarmupSteps random transitions before the first Train
         // call sees the paper's pure-exploration warmup phase.
         if (_replayBuffer.Count == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        // Honor the documented warmup gate: the agent should be in pure-
+        // exploration mode (no Q-network updates) until the buffer has
+        // accumulated at least min(WarmupSteps, BatchSize) transitions.
+        // Without this gate, early-training updates run against a near-
+        // empty buffer with high-variance gradients and can destabilise
+        // the network before the warmup phase even finishes.
+        if (_replayBuffer.Count < _options.WarmupSteps &&
+            _replayBuffer.Count < _options.BatchSize)
         {
             return NumOps.Zero;
         }

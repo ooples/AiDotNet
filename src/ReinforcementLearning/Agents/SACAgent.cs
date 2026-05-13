@@ -318,10 +318,16 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
             return Engine.TensorMSELoss(means, batchDemoAction);
         });
 
-        // Preserve RL semantics for the env-driven loop: store this as a terminal
-        // transition with reward 1 (the demo is "good"). Subsequent Train() calls
-        // after enough warmup/replay accumulation will pick it up normally.
-        StoreExperience(state, demoActionVec, NumOps.One, state, done: true);
+        // DO NOT synthesize an RL transition from a supervised label. The
+        // previous code enqueued `(state, demoActionVec, reward=1,
+        // nextState=state, done=true)` into the replay buffer. That fabricates
+        // a critic target (reward=1, V(s')=0) that was never observed from
+        // the environment — after warmup, both Q-networks would train on
+        // those synthetic returns and drift away from the actual task
+        // objective. Behavior cloning here is supervised actor-only;
+        // critic updates remain the responsibility of real env-driven
+        // (s, a, r, s', done) transitions stored via StoreExperience from
+        // the rollout loop.
     }
 
     /// <inheritdoc/>
