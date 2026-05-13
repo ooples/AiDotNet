@@ -338,7 +338,19 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private Tensor<T> SoftmaxLastAxis(Tensor<T> logits) =>
         Engine.TensorSoftmax(logits, axis: logits.Shape.Length - 1);
 
-    private void ThrowIfDisposed() { /* base class manages disposal */ }
+    private bool _disposed;
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
+    }
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _disposed = true;
+        base.Dispose(disposing);
+    }
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>

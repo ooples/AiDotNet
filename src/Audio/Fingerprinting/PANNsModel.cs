@@ -211,6 +211,13 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     public Dictionary<string, double> Classify(Tensor<T> audio, double threshold = 0.5)
     {
         var probs = Predict(audio);
+        // PANNs CNN14 emits [batch, classes]. A 3-D output (e.g. a
+        // frame-level audio-tagging variant) would silently index the wrong
+        // axis below — fail fast with a clear shape message instead.
+        if (probs.Shape.Length != 2)
+            throw new InvalidOperationException(
+                "PANNsModel.Classify expects a 2-D [batch, classes] probability output, " +
+                $"but got shape [{string.Join(", ", probs.Shape)}].");
         int classCount = probs.Shape[^1];
         var results = new Dictionary<string, double>();
         for (int i = 0; i < classCount; i++)
@@ -262,15 +269,24 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         // (which has outputSize == _options.EmbeddingDim).
         var mel = PreprocessAudio(audio);
         var hidden = mel;
+        bool foundEmbedding = false;
         foreach (var layer in Layers)
         {
             hidden = layer.Forward(hidden);
             if (layer is DenseLayer<T> dense && dense.GetOutputShape().Length == 1 &&
                 dense.GetOutputShape()[0] == _options.EmbeddingDim)
             {
+                foundEmbedding = true;
                 break;
             }
         }
+        if (!foundEmbedding)
+            throw new InvalidOperationException(
+                $"PANNsModel.Fingerprint walked the layer stack without finding a DenseLayer " +
+                $"whose output matches EmbeddingDim={_options.EmbeddingDim}. The native layer " +
+                "stack must be built via the standard PANNs CNN14 factory so the embedding " +
+                "head exists — otherwise this would return the 527-class logits instead of " +
+                "the 2048-d embedding (silently wrong fingerprint).");
 
         var flat = hidden.ToVector();
         var data = new T[flat.Length];

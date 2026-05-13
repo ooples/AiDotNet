@@ -314,13 +314,43 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             if (d > maxDiff) { maxDiff = d; trIdx = i; }
             if (d < minDiff) { minDiff = d; blIdx = i; }
         }
-        return new List<(T X, T Y)>
+        // Diamond / rotated-box contours have tied extrema where the same
+        // vertex wins more than one of the four argmin/argmax queries —
+        // returning that as a "quad" makes the homography singular and
+        // CorrectPerspective silently falls back to the unrectified crop.
+        // Detect duplicates and fill the missing slots with the highest-
+        // perimeter vertices not already chosen, so the reduced polygon
+        // stays a non-degenerate quad.
+        var chosen = new int[] { tlIdx, trIdx, brIdx, blIdx };
+        if (HasDistinctValues(chosen))
         {
-            poly[tlIdx],
-            poly[trIdx],
-            poly[brIdx],
-            poly[blIdx],
-        };
+            return new List<(T X, T Y)> { poly[tlIdx], poly[trIdx], poly[brIdx], poly[blIdx] };
+        }
+
+        // Backfill: keep distinct indices in the order encountered, then
+        // pull from poly[] in order to fill any duplicated slot. This
+        // guarantees 4 distinct contour vertices even on degenerate-extrema
+        // shapes (a Manhattan-aligned 5-gon, an exact regular pentagon
+        // centred on the origin, etc.).
+        var used = new HashSet<int>();
+        var quad = new List<(T X, T Y)>(4);
+        foreach (int idx in chosen)
+        {
+            if (used.Add(idx)) quad.Add(poly[idx]);
+        }
+        for (int i = 0; quad.Count < 4 && i < n; i++)
+        {
+            if (used.Add(i)) quad.Add(poly[i]);
+        }
+        return quad;
+    }
+
+    private static bool HasDistinctValues(int[] indices)
+    {
+        for (int i = 0; i < indices.Length; i++)
+            for (int j = i + 1; j < indices.Length; j++)
+                if (indices[i] == indices[j]) return false;
+        return true;
     }
 
     /// <summary>

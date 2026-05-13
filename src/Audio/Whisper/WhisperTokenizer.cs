@@ -103,7 +103,16 @@ public class WhisperTokenizer
                     $"Invalid merges.txt entry at {mergesPath}:{lineNumber}: '{rawLine}'. " +
                     $"Expected exactly two space-separated tokens.");
             }
-            merges[(parts[0], parts[1])] = priority++;
+            // Reject duplicate pairs explicitly with line context instead of
+            // silently overwriting the earlier rank — duplicate entries would
+            // corrupt BPE precedence and produce non-reference tokenisation.
+            var pair = (parts[0], parts[1]);
+            if (merges.ContainsKey(pair))
+            {
+                throw new InvalidDataException(
+                    $"Duplicate merges.txt entry at {mergesPath}:{lineNumber}: '{rawLine}'.");
+            }
+            merges[pair] = priority++;
         }
 
         _vocab = vocab;

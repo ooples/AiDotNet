@@ -918,7 +918,13 @@ public static class StatisticsHelper<T>
         bool leftIsNumerator = _numOps.GreaterThanOrEquals(leftVariance, rightVariance);
         T numeratorVariance = leftIsNumerator ? leftVariance : rightVariance;
         T denominatorVariance = leftIsNumerator ? rightVariance : leftVariance;
-        T fStatistic = _numOps.Divide(numeratorVariance, denominatorVariance);
+        // Single-zero-variance case: F is unbounded ("the variances are
+        // infinitely different"). Return positive-infinity so
+        // FDistributionPValue picks the upper-tail limit (≈ 0) instead of
+        // propagating a NaN from a Divide-by-zero.
+        T fStatistic = _numOps.Equals(denominatorVariance, _numOps.Zero)
+            ? _numOps.FromDouble(double.PositiveInfinity)
+            : _numOps.Divide(numeratorVariance, denominatorVariance);
         int numeratorDf = (leftIsNumerator ? leftY.Length : rightY.Length) - 1;
         int denominatorDf = (leftIsNumerator ? rightY.Length : leftY.Length) - 1;
 
@@ -991,17 +997,26 @@ public static class StatisticsHelper<T>
         if (_numOps.LessThanOrEquals(fStatistic, _numOps.Zero) || numeratorDf <= 0 || denominatorDf <= 0)
             return _numOps.One;
 
-        T _x = _numOps.Divide(
-            _numOps.Multiply(_numOps.FromDouble(numeratorDf), fStatistic),
-            _numOps.Add(_numOps.Multiply(_numOps.FromDouble(numeratorDf), fStatistic), _numOps.FromDouble(denominatorDf)));
+        // Compute the upper-tail beta input directly as 1 - x = ν2 / (ν1·F + ν2)
+        // instead of subtracting x from 1 afterwards. The subtraction form
+        // catastrophically cancels tiny p-values for large F-statistics: when
+        // x ≈ 1 - ε with ε ~ machine epsilon, `1 - x` loses all precision and
+        // collapses non-zero p-values to 0. The direct form keeps the small
+        // factor as the primary variable so the precision survives all the
+        // way into the regularized incomplete beta call. Same fix as the
+        // chi-square survival helper.
+        T nu1F = _numOps.Multiply(_numOps.FromDouble(numeratorDf), fStatistic);
+        T denom = _numOps.Add(nu1F, _numOps.FromDouble(denominatorDf));
+        T _xUpper = _numOps.Divide(_numOps.FromDouble(denominatorDf), denom);
         T _a = _numOps.Divide(_numOps.FromDouble(numeratorDf), _numOps.FromDouble(2));
         T _b = _numOps.Divide(_numOps.FromDouble(denominatorDf), _numOps.FromDouble(2));
 
-        // Upper-tail probability via the symmetry identity above. Clamp to
-        // [0, 1] because the underlying RegularizedIncompleteBetaFunction
-        // can produce values fractionally outside the unit interval under
-        // numerical drift, violating the p-value contract.
-        var p = RegularizedIncompleteBetaFunction(_numOps.Subtract(_numOps.One, _x), _b, _a);
+        // Upper-tail probability via the symmetry identity 1 - I_x(a, b) =
+        // I_{1−x}(b, a). Clamp to [0, 1] because the underlying
+        // RegularizedIncompleteBetaFunction can produce values fractionally
+        // outside the unit interval under numerical drift, violating the
+        // p-value contract.
+        var p = RegularizedIncompleteBetaFunction(_xUpper, _b, _a);
         if (_numOps.LessThan(p, _numOps.Zero)) return _numOps.Zero;
         if (_numOps.GreaterThan(p, _numOps.One)) return _numOps.One;
         return p;

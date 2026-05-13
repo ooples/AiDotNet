@@ -107,16 +107,17 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _audioEncoderPath = audioEncoderPath;
         _textEncoderPath = textEncoderPath;
         OnnxEncoder = new OnnxModel<T>(audioEncoderPath);
-        // Pattern-match into a non-null local so the compiler's net471
-        // nullable-flow analysis sees `pathLocal` as definitively non-null
-        // at the construction site. `IsNullOrWhiteSpace` returns false
-        // for null but doesn't update the flow state the same way an
-        // explicit `is not null` check does, hence the CS8604 warning
-        // on net471.
+        // Fail fast when a text-encoder path is provided but invalid — the
+        // earlier "try-and-skip" path silently dropped a mistyped path and
+        // only surfaced as a NotSupportedException deep inside EncodeText().
+        // Pattern-matches into a non-null local for net471 nullable-flow.
         if (textEncoderPath is { Length: > 0 } pathLocal
-            && !string.IsNullOrWhiteSpace(pathLocal)
-            && File.Exists(pathLocal))
+            && !string.IsNullOrWhiteSpace(pathLocal))
         {
+            if (!File.Exists(pathLocal))
+                throw new FileNotFoundException(
+                    $"Text encoder ONNX model not found: {pathLocal}",
+                    pathLocal);
             OnnxDecoder = new OnnxModel<T>(pathLocal);
         }
 
@@ -351,6 +352,15 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         if (labels is null || labels.Length == 0) throw new ArgumentException("Labels required.", nameof(labels));
         if (tokenize is null) throw new ArgumentNullException(nameof(tokenize));
+        // Reject batched inputs explicitly — this API returns a single score
+        // map. EncodeAudio accepts [batch, samples], and silently flattening
+        // a batch into one embedding would produce one merged score per
+        // label across the whole batch.
+        if (audio.Shape.Length > 1 && audio.Shape[0] != 1)
+            throw new ArgumentException(
+                "ZeroShotClassify expects a single audio clip. Pass clips one at a time " +
+                "or call EncodeAudio directly for the batched path.",
+                nameof(audio));
 
         var audioEmb = EncodeAudio(audio);
         var scores = new Dictionary<string, double>(labels.Length);
@@ -372,6 +382,15 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
+        // Single-clip API — reject batched inputs (same rationale as
+        // ZeroShotClassify: flattening a batch into one fingerprint and one
+        // Duration is silently misleading).
+        if (audio.Shape.Length > 1 && audio.Shape[0] != 1)
+            throw new ArgumentException(
+                "Fingerprint expects a single audio clip. Pass clips one at a time " +
+                "or call EncodeAudio directly for the batched path.",
+                nameof(audio));
+
         var embedding = EncodeAudio(audio);
         var flat = embedding.ToVector();
         var data = new T[flat.Length];
@@ -380,7 +399,9 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         {
             Data = data,
             SampleRate = SampleRate,
-            Duration = audio.Length / (double)SampleRate
+            // Per-clip duration: use the last-axis sample count so a [1, N]
+            // batched tensor still reports the correct N / SampleRate.
+            Duration = audio.Shape[audio.Shape.Length - 1] / (double)SampleRate
         };
     }
 
