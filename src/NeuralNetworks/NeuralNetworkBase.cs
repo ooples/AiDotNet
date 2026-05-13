@@ -3645,32 +3645,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// [Obsolete] Compile-on-first-eval auto-prewarm flag. Removed when the
-    /// compiled-plan cache moved to <see cref="CompiledModelHost{T}"/> +
-    /// explicit <c>PredictCompiled</c> routing — the AutoCompileOnEval
-    /// flag-flip path bound to trace-time tensor references and produced
-    /// stale outputs when called with a fresh tensor of the same shape.
-    /// </summary>
-    /// <remarks>
-    /// Kept as a non-functional forwarder for source compatibility so
-    /// callers that read or set this property at compile time still
-    /// compile; the value is ignored. Callers that need explicit
-    /// pre-warming should invoke <see cref="CompileForward"/> on a
-    /// representative input shape instead.
-    /// </remarks>
-    [Obsolete(
-        "AutoCompileOnEval is a no-op; the compiled-plan cache is now " +
-        "managed by CompiledModelHost. Call CompileForward(...) on a " +
-        "representative input shape to pre-warm explicitly, or invoke " +
-        "PredictCompiled for the compile-replay path.",
-        error: false)]
-    public bool AutoCompileOnEval
-    {
-        get => false;
-        set { /* no-op — see [Obsolete] note above */ }
-    }
-
-    /// <summary>
     /// Enables mixed-precision training for the neural network.
     /// </summary>
     /// <param name="config">Configuration for mixed-precision training (optional, uses defaults if null).</param>
