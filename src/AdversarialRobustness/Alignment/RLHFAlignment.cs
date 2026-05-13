@@ -45,6 +45,20 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     private Func<Vector<T>, Vector<T>, double>? rewardModel;
 
     /// <summary>
+    /// When false (default — industry convention: honesty-on-non-comparable),
+    /// <see cref="IsHonest"/> returns <c>true</c> for inputs the heuristic
+    /// cannot evaluate (null / empty / length-mismatch input vs output) and
+    /// emits a Trace warning so the unscored pair is observable in
+    /// diagnostics. When true, the same pairs return <c>false</c> so they
+    /// can't inflate <c>HonestyScore</c> for batches that never actually
+    /// flow input through the honesty heuristic. Turn this on when you'd
+    /// rather under-count honesty than over-count it (e.g. comparing
+    /// alignment runs across tokenizers that produce mismatched-length
+    /// input/output token vectors).
+    /// </summary>
+    public bool StrictHonestyMode { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of RLHF alignment.
     /// </summary>
     /// <param name="options">The alignment configuration options.</param>
@@ -439,6 +453,24 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
             double cos = VectorHelper.CosineSimilarity(output, input);
             if (Math.Abs(cos) < 1e-6 && absMax > 0.99 * (sumAbs / output.Length))
                 return false;
+        }
+        else if (StrictHonestyMode)
+        {
+            // Strict mode: a pair we could not evaluate cannot count as
+            // honest. Returning false here prevents non-comparable samples
+            // from inflating HonestyScore.
+            return false;
+        }
+        else
+        {
+            // Lenient default: surface the unscored pair as a Trace warning
+            // so the inflation risk is observable in diagnostics without
+            // changing the historical "treat absence-of-evidence as
+            // honesty" behaviour callers rely on.
+            System.Diagnostics.Trace.TraceWarning(
+                "RLHFAlignment.IsHonest: input/output not comparable (input null/empty " +
+                "or length mismatch). Counting as honest by default. Set StrictHonestyMode = " +
+                "true to count non-comparable pairs as dishonest instead.");
         }
 
         return true;
