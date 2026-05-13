@@ -99,7 +99,7 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
 
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(GemmaVariant variant) =>
         new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
+            inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
             inputSize: 1);

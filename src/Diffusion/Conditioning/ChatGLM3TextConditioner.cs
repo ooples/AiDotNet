@@ -91,7 +91,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
 
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(ChatGLM3Variant variant) =>
         new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
+            inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
             inputSize: 1);

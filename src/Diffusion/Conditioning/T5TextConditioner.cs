@@ -92,7 +92,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
 
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(T5Variant variant) =>
         new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
+            inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
             inputSize: 1);

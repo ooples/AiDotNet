@@ -34072,7 +34072,15 @@ public static class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultCLIPTextLayers(
         int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads)
     {
-        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        // Force EmbeddingInputMode.Indices so the auto-detect doesn't misfire
+        // when a tokenizer (with its own vocab size) produces token IDs that
+        // exceed the EmbeddingLayer's vocabSize — in that case the auto-detect
+        // wrongly switches into Continuous mode and projects [B, S] → [B, D]
+        // (collapsing the sequence axis). Conditioner inputs are ALWAYS
+        // discrete token IDs.
+        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        embedding.InputMode = EmbeddingInputMode.Indices;
+        yield return embedding;
         yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxSeqLen, embeddingSize: hiddenSize);
         for (int i = 0; i < numLayers; i++)
         {
@@ -34111,7 +34119,9 @@ public static class LayerHelper<T>
         int vocabSize, int hiddenSize, int numLayers, int numHeads,
         int numRelativePositionBuckets = 32, int relativePositionMaxDistance = 128)
     {
-        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        embedding.InputMode = EmbeddingInputMode.Indices;
+        yield return embedding;
         // Vaswani 2017 §3.4 token-embedding scaling, preserved by Raffel 2020.
         yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
 
@@ -34158,7 +34168,9 @@ public static class LayerHelper<T>
         int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
         double ropeTheta = 10000.0)
     {
-        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        embedding.InputMode = EmbeddingInputMode.Indices;
+        yield return embedding;
         // Gemma normalizes embeddings by √hiddenSize (Gemma Team 2024 §2.3).
         yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
         int headDim = hiddenSize / numHeads;
@@ -34185,7 +34197,9 @@ public static class LayerHelper<T>
         int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
         int numKvHeads, double ropeTheta = 1000000.0)
     {
-        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        embedding.InputMode = EmbeddingInputMode.Indices;
+        yield return embedding;
         // Qwen2 token-embedding scaling (Vaswani 2017 §3.4 convention).
         yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
         for (int i = 0; i < numLayers; i++)

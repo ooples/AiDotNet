@@ -100,11 +100,38 @@ public abstract class TextConditioningBase<T> : NeuralNetworkBase<T>, ICondition
 
     /// <inheritdoc />
     public virtual Tensor<T> Encode(Tensor<T> input) =>
-        EncodeCompiled(input, () => Predict(input));
+        EncodeCompiled(input, () => RunLayerStack(input));
 
     /// <inheritdoc />
     public virtual Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null) =>
-        Predict(tokenIds);
+        RunLayerStack(tokenIds);
+
+    /// <summary>
+    /// PyTorch-style direct forward pass: walk the inherited
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> list in order and let each
+    /// layer's <c>Forward</c> handle its own shape contract. Deliberately
+    /// bypasses <see cref="NeuralNetworkBase{T}.Predict"/>'s auto-batch-promote /
+    /// auto-squeeze logic — that path infers an "unbatched rank" from the
+    /// architecture's <c>InputSize</c> / <c>InputHeight</c> / <c>InputWidth</c>
+    /// and squeezes the layer-stack output's leading unit dim when it thinks
+    /// the caller passed an unbatched sample. Token-ID conditioner inputs
+    /// are always <c>[batch, seqLen]</c> and the layer stack returns
+    /// <c>[batch, seqLen, embeddingDim]</c>; we want that rank-3 shape
+    /// preserved verbatim, not silently squeezed to rank-2.
+    /// </summary>
+    private Tensor<T> RunLayerStack(Tensor<T> input)
+    {
+        // Lazy layer init: defer materialising the layer stack until the
+        // first forward pass. Cheap construction of large variants (T5-XXL,
+        // CLIP-bigG, Qwen2-7B) — caller pays only when they actually run
+        // a forward, not when they merely build the object. Matches the
+        // PyTorch convention where nn.Module subclasses build their
+        // submodules eagerly but weights are lazy.
+        if (Layers.Count == 0) InitializeLayers();
+        var x = input;
+        foreach (var layer in Layers) x = layer.Forward(x);
+        return x;
+    }
 
     /// <summary>
     /// Default pooling: mean over the sequence axis. Concrete subclasses

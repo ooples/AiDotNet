@@ -169,22 +169,21 @@ public class CLIPTextConditioner<T> : TextConditioningBase<T>
     }
 
     /// <summary>
-    /// PyTorch-style lazy architecture: no fixed inputSize / outputSize
-    /// passed in. The layer stack resolves token-sequence and feature
-    /// dimensions on first forward, matching the behaviour of
-    /// <see cref="EmbeddingLayer{T}"/> / <see cref="DenseLayer{T}"/> /
-    /// <see cref="MultiHeadAttentionLayer{T}"/> which all support lazy
-    /// shape resolution.
+    /// PyTorch-style lazy architecture: token-ID inputs are rank-2
+    /// <c>[batch, seqLen]</c>. We use <see cref="InputType.TwoDimensional"/>
+    /// with <c>inputSize=1</c> (inferred to <c>[1, 1]</c>) so the architecture
+    /// validator's "InputSize &gt; 0 for OneDimensional" gate is satisfied
+    /// AND <see cref="NeuralNetworkBase{T}"/>'s auto-batch-promote /
+    /// squeeze logic (which resolves an unbatched rank from <c>InputSize</c>)
+    /// does NOT strip the rank-3 layer-stack output back to rank-2 — the
+    /// expectedUnbatchedRank becomes 3, so our rank-2 token input never
+    /// triggers promotion.
     /// </summary>
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(CLIPVariant variant) =>
         new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
+            inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
-            // inputSize=1 is the lazy sentinel — the architecture validator
-            // requires InputSize > 0 for OneDimensional inputs, but the
-            // layer stack (EmbeddingLayer-led) resolves the real sequence
-            // and feature dims from input.Shape on first forward.
             inputSize: 1);
 
     private static int GetEmbeddingDim(CLIPVariant variant) => variant switch

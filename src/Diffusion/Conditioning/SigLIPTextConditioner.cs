@@ -75,7 +75,7 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
 
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(SigLIPVariant variant) =>
         new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
+            inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.Custom,
             complexity: NetworkComplexity.Deep,
             inputSize: 1);

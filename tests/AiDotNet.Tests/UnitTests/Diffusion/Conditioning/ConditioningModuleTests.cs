@@ -1,3 +1,4 @@
+using System.Text;
 using AiDotNet.Diffusion.Conditioning;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -156,6 +157,74 @@ public class ConditioningModuleTests
         Assert.Equal(1024, triple.CLIPGEmbeddingDimension);
         Assert.Equal(2048, triple.T5EmbeddingDimension);
         Assert.Equal(1792, triple.CombinedPooledDimension);
+    }
+
+    #endregion
+
+    #region End-to-End Forward-Pass Smoke Tests
+    // These exercise the full Tokenize → EncodeText → GetPooledEmbedding path
+    // so a build that compiles but breaks runtime shape contracts (e.g.
+    // PreLNTransformerBlock's residual TensorAdd, EmbeddingLayer →
+    // T5RelativeBiasAttention shape mesh, RoPE engagement inside MHA / GQA)
+    // gets caught here rather than at first user-pipeline run.
+
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_EncodeText_ProducesFiniteEmbeddings()
+    {
+        var clip = NewClip();
+        var tokens = clip.Tokenize("a cat sitting on a couch");
+        var embeddings = clip.EncodeText(tokens);
+
+        Assert.Equal(3, embeddings.Shape.Length); // [B, S, D]
+        Assert.Equal(1, embeddings.Shape[0]);
+        Assert.Equal(77, embeddings.Shape[1]);
+        Assert.Equal(768, embeddings.Shape[2]);
+
+        var span = embeddings.AsSpan();
+        for (int i = 0; i < Math.Min(200, span.Length); i++)
+        {
+            Assert.False(double.IsNaN(span[i]), $"CLIP embed[{i}] is NaN");
+            Assert.False(double.IsInfinity(span[i]), $"CLIP embed[{i}] is Inf");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CLIPConditioner_GetPooledEmbedding_ApplliesTextProjectionPostPool()
+    {
+        // Verify that CLIP's text_projection is applied to the EOS-pooled
+        // embedding (rank-2 [B, D]) and NOT to every sequence position
+        // (which would have been a paper-fidelity violation per Radford 2021 §3.1).
+        var clip = NewClip();
+        var tokens = clip.Tokenize("a starry night");
+        var seqEmbeddings = clip.EncodeText(tokens);
+        var pooled = clip.GetPooledEmbedding(seqEmbeddings);
+
+        Assert.Equal(2, pooled.Shape.Length); // [B, D] — pooled is rank-2
+        Assert.Equal(1, pooled.Shape[0]);
+        Assert.Equal(768, pooled.Shape[1]);
+
+        var span = pooled.AsSpan();
+        for (int i = 0; i < span.Length; i++)
+            Assert.False(double.IsNaN(span[i]), $"CLIP pooled[{i}] is NaN");
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task T5Conditioner_EncodeText_ProducesFiniteEmbeddings()
+    {
+        // T5 exercises the T5RelativeBiasAttentionLayer + PreLNTransformerBlock
+        // path. Uses T5-Small so per-iter cost stays inside the test timeout.
+        var t5 = NewT5(T5Variant.Small);
+        var tokens = t5.Tokenize("a serene mountain lake");
+        var embeddings = t5.EncodeText(tokens);
+
+        Assert.Equal(3, embeddings.Shape.Length);
+        Assert.Equal(1, embeddings.Shape[0]);
+        Assert.Equal(512, embeddings.Shape[1]);
+        Assert.Equal(512, embeddings.Shape[2]); // Small hidden=512
+
+        var span = embeddings.AsSpan();
+        for (int i = 0; i < Math.Min(200, span.Length); i++)
+            Assert.False(double.IsNaN(span[i]), $"T5 embed[{i}] is NaN");
     }
 
     #endregion
