@@ -31,10 +31,23 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
 
         var output = model.Predict(input);
 
-        Assert.Equal([1, 256], output.Shape);
+        Assert.Equal(new[] { 1, 256 }, output.Shape.ToArray());
         Assert.DoesNotContain(model.Layers, layer => layer is MultiHeadAttentionLayer<float>);
         Assert.DoesNotContain(model.Layers, layer => layer is LayerNormalizationLayer<float>);
         Assert.True(output[0, 1] > output[0, 0]);
+    }
+
+    [Fact]
+    public void CustomTransformerLayerStack_RejectsFirstLayerInputShapeMismatch()
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new ProjectingCustomLayer([2, 8], [1, 32]),
+            new ProjectingCustomLayer([32], [1, 256])
+        };
+
+        var ex = Assert.Throws<ArgumentException>(() => new Transformer<float>(CreateCustomLayerArchitecture(layers)));
+        Assert.Contains("first layer's input shape", ex.Message);
     }
 
     [Fact]
@@ -87,6 +100,21 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
 
         var model = new Transformer<float>(CreateCustomLayerArchitecture(layers));
 
+        Assert.Same(layers[1], model.Layers[1]);
+    }
+
+    [Fact]
+    public void CustomTransformerLayerStack_AllowsDynamicLeadingBatchAxis()
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new ProjectingCustomLayer([-1, 16], [-1, 32]),
+            new ProjectingCustomLayer([32], [1, 256])
+        };
+
+        var model = new Transformer<float>(CreateCustomLayerArchitecture(layers));
+
+        Assert.Same(layers[0], model.Layers[0]);
         Assert.Same(layers[1], model.Layers[1]);
     }
 

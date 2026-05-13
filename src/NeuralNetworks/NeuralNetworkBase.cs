@@ -2119,9 +2119,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (ShapesMatchKnownDimensions(expectedShape, actualShape))
             return true;
 
-        var expectedWithoutLeadingUnits = TrimLeadingUnitDimensions(expectedShape);
-        var actualWithoutLeadingUnits = TrimLeadingUnitDimensions(actualShape);
-        return ShapesMatchKnownDimensions(expectedWithoutLeadingUnits, actualWithoutLeadingUnits);
+        var expectedWithoutLeadingBatch = TrimLeadingBatchLikeDimensions(expectedShape);
+        if (ShapesMatchKnownDimensions(expectedWithoutLeadingBatch, actualShape))
+            return true;
+
+        var actualWithoutLeadingBatch = TrimLeadingBatchLikeDimensions(actualShape);
+        if (ShapesMatchKnownDimensions(expectedShape, actualWithoutLeadingBatch))
+            return true;
+
+        return ShapesMatchKnownDimensions(expectedWithoutLeadingBatch, actualWithoutLeadingBatch);
     }
 
     private static bool ShapesMatchKnownDimensions(int[] expectedShape, int[] actualShape)
@@ -2138,10 +2144,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return true;
     }
 
-    private static int[] TrimLeadingUnitDimensions(int[] shape)
+    private static int[] TrimLeadingBatchLikeDimensions(int[] shape)
     {
         int start = 0;
-        while (start < shape.Length - 1 && shape[start] == 1)
+        while (start < shape.Length - 1 && shape[start] <= 1)
             start++;
 
         if (start == 0)
