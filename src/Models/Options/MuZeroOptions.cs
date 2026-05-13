@@ -93,9 +93,8 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     /// <value>Default 4 — the canonical CartPole observation
     /// (cart position, cart velocity, pole angle, pole angular velocity),
-    /// the smallest non-trivial RL benchmark and the size assumed by
-    /// <see cref="AiDotNet.Tests.ModelFamilyTests.Base.ReinforcementLearningTestBase"/>
-    /// for invariant testing.</value>
+    /// the smallest non-trivial RL benchmark and the size used by
+    /// the repository's RL invariant tests.</value>
     /// <remarks>
     /// <para>Override for any other environment — Atari (96×96×128
     /// framestack flattened, or use the unflattened framestack with a

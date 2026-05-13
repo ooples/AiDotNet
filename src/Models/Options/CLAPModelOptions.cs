@@ -31,6 +31,11 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
     public CLAPModelOptions(CLAPModelOptions other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
+        // Inherited properties — copy explicitly because none of the base
+        // classes expose a copy constructor. Missing these would silently
+        // drop Seed (reproducibility) and EncoderLayerCount on Clone.
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
         NumMelBands = other.NumMelBands;
         StftWindowSize = other.StftWindowSize;
         HopLength = other.HopLength;

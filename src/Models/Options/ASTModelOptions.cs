@@ -31,6 +31,9 @@ public class ASTModelOptions : AudioNeuralNetworkOptions
     public ASTModelOptions(ASTModelOptions other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
+        // Inherited properties — base classes don't expose a copy ctor.
+        Seed = other.Seed;
+        EncoderLayerCount = other.EncoderLayerCount;
         SampleRate = other.SampleRate;
         StftWindowSize = other.StftWindowSize;
         HopLength = other.HopLength;

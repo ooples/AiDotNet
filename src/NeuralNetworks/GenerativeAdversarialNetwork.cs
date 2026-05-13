@@ -1603,8 +1603,26 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// share trained models with others, or deploy them in applications.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Network-specific binary format version. Bumped whenever the layout
+    /// of <see cref="SerializeNetworkSpecificData"/> /
+    /// <see cref="DeserializeNetworkSpecificData"/> changes so older
+    /// checkpoints can be detected and migrated instead of silently
+    /// mis-aligning into mis-typed reads (a legacy v0 checkpoint without
+    /// the gradient-penalty fields would otherwise read its lossCount
+    /// payload into _useGradientPenalty and cascade-corrupt every
+    /// downstream field).
+    ///
+    /// Version 1: added _useGradientPenalty + _gradientPenaltyLambda.
+    /// </summary>
+    private const int GanSerializationVersion = 1;
+
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
+        // Format-version header. ALWAYS the first int written by this
+        // method so the deserializer can sniff what fields to expect.
+        writer.Write(GanSerializationVersion);
+
         // Persist gradient-penalty configuration so a reloaded checkpoint
         // continues training with the same WGAN-GP coefficient/enabled state.
         // Without this, resuming a WGAN-GP run silently falls back to the
@@ -1655,10 +1673,36 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        // Restore gradient-penalty configuration (must match the order in
-        // SerializeNetworkSpecificData above).
-        _useGradientPenalty = reader.ReadBoolean();
-        _gradientPenaltyLambda = reader.ReadDouble();
+        // Read the format-version header first so we know what fields to
+        // expect. Legacy checkpoints predate the header and start straight
+        // at the lossCount int — a v0 (no header) checkpoint reads the
+        // same first int as `version` but the value will be > 1, so we
+        // fall through to the legacy branch instead of mis-aligning.
+        long headerStart = reader.BaseStream.Position;
+        int version = reader.ReadInt32();
+        if (version == GanSerializationVersion)
+        {
+            // Restore gradient-penalty configuration (must match the order
+            // in SerializeNetworkSpecificData above).
+            _useGradientPenalty = reader.ReadBoolean();
+            _gradientPenaltyLambda = reader.ReadDouble();
+        }
+        else if (version > GanSerializationVersion)
+        {
+            throw new InvalidDataException(
+                $"GAN checkpoint format version {version} is newer than this binary " +
+                $"supports (max version {GanSerializationVersion}). Update the AiDotNet " +
+                "library before loading this checkpoint.");
+        }
+        else
+        {
+            // Pre-versioning (v0) checkpoint — no gradient-penalty fields.
+            // Rewind to the start of the network-specific block so the
+            // legacy code path picks up the lossCount int we just consumed.
+            reader.BaseStream.Position = headerStart;
+            _useGradientPenalty = false;
+            _gradientPenaltyLambda = 10.0;
+        }
 
         // Load recent loss history
         int lossCount = reader.ReadInt32();
