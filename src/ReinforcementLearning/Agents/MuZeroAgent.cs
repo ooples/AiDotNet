@@ -553,9 +553,23 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         // No episode-specific state
     }
 
+    /// <summary>
+    /// IFullModel.Predict surfaces the raw prediction-network output
+    /// (policy logits + value) for the input observation rather than the
+    /// one-hot committed action. Action commitment is the job of
+    /// <see cref="SelectAction"/>; Predict is the policy + value diagnostic
+    /// — needed by evaluation harnesses inspecting policy distinguishability
+    /// across observations, by MCTS warm-start callers that consume the
+    /// raw priors / value estimate, and by off-policy targets.
+    /// </summary>
     public override Vector<T> Predict(Vector<T> input)
     {
-        return SelectAction(input, training: false);
+        var obsTensor = Tensor<T>.FromVector(input);
+        var hiddenStateTensorOutput = _representationNetwork.Predict(obsTensor);
+        var hiddenState = hiddenStateTensorOutput.ToVector();
+        var hiddenStateTensor = Tensor<T>.FromVector(hiddenState);
+        var policyValueTensorOutput = _predictionNetwork.Predict(hiddenStateTensor);
+        return policyValueTensorOutput.ToVector();
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)

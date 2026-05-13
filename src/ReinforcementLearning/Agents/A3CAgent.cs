@@ -721,9 +721,25 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         // No episode-level state to reset
     }
 
+    /// <summary>
+    /// IFullModel.Predict surfaces the raw policy-network output (softmax
+    /// over discrete actions, or [mean | logStd] for continuous actions)
+    /// rather than the one-hot committed action. Action commitment is the
+    /// job of <see cref="SelectAction"/>; Predict is the policy-function
+    /// diagnostic — needed by evaluation harnesses inspecting policy
+    /// distinguishability across states, by off-policy importance-weighting
+    /// learners, and by callers that need π(·|s) rather than just argmax π.
+    /// </summary>
     public override Vector<T> Predict(Vector<T> input)
     {
-        return SelectAction(input, training: false);
+        Vector<T> policyOutput;
+        lock (_globalLock)
+        {
+            var stateTensor = Tensor<T>.FromVector(input);
+            var policyOutputTensor = _globalPolicyNetwork.Predict(stateTensor);
+            policyOutput = policyOutputTensor.ToVector();
+        }
+        return policyOutput;
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)

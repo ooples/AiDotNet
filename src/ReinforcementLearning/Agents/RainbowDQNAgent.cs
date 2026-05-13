@@ -189,6 +189,17 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new NeuralNetwork<T>(finalArchitecture, lossFunction: LossFunction);
     }
 
+    /// <summary>
+    /// IFullModel.Predict surfaces the raw Q-value vector (one element per
+    /// discrete action) rather than the one-hot committed action. Action
+    /// commitment for env.Step is the job of <see cref="SelectAction"/>;
+    /// Predict is the value-function diagnostic — needed by off-policy
+    /// learners that consume Q(s, ·) directly, by evaluation harnesses
+    /// inspecting policy distinguishability, and by callers that want to
+    /// compare two states' value vectors instead of just their argmaxes.
+    /// </summary>
+    public override Vector<T> Predict(Vector<T> input) => ComputeQValues(input);
+
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         // Fortunato et al. 2017 ("Noisy Networks for Exploration") replaces
