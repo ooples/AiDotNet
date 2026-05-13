@@ -81,10 +81,19 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = false;
+        _modelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath);
 
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Path to the loaded ONNX model file when constructed in ONNX mode;
+    /// <c>null</c> in native mode. Captured so <see cref="CreateNewInstance"/>
+    /// can reconstruct an ONNX clone without losing its execution-mode
+    /// configuration.
+    /// </summary>
+    private readonly string? _modelPath;
 
     /// <summary>Initializes PANNs in native training / inference mode.</summary>
     public PANNsModel(
@@ -233,6 +242,20 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
+        // Layers is empty in ONNX mode (the ONNX graph runs via
+        // OnnxEncoder), so the layer-walk below would exit immediately
+        // and return the preprocessed mel spectrogram as the fingerprint
+        // — silently wrong. Require native mode here until an
+        // ONNX-embedding output is wired explicitly.
+        if (!_useNativeMode)
+        {
+            throw new NotSupportedException(
+                "PANNsModel.Fingerprint() in ONNX mode requires an explicit " +
+                "embedding-producing output to be wired. Use the native " +
+                "constructor or invoke the ONNX encoder directly via the " +
+                "OnnxEncoder property.");
+        }
+
         // For fingerprinting we want the pooled embedding (output of the
         // ReLU-activated embedding DenseLayer, just before the classifier).
         // Walk the layer stack and stop after the embedding-dim DenseLayer
@@ -331,7 +354,13 @@ public class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new PANNsModel<T>(Architecture, _options);
+        _useNativeMode
+            ? new PANNsModel<T>(Architecture, _options)
+            // ONNX-backed instance: reuse the loaded model path so the
+            // clone preserves its execution mode. Without this, Clone() of
+            // an ONNX-mode PANNs silently downgrades to native and
+            // changes inference behaviour.
+            : new PANNsModel<T>(Architecture, _modelPath!, _options);
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() =>

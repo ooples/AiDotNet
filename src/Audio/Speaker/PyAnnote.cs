@@ -381,6 +381,19 @@ public class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T>
             //   [chunkFrames, numSpeakers]                 (most PyAnnote ONNX exports)
             //   [batch, chunkFrames, numSpeakers]          (with leading batch axis)
             //   [numSpeakers] / [batch, numSpeakers]       (chunk-level scalar fallback)
+            // Reject unsupported ranks and non-batch=1 rank-3 outputs at
+            // the boundary so a malformed ONNX export surfaces here
+            // instead of silently mis-aggregating diarization scores.
+            if (rank is < 1 or > 3)
+            {
+                throw new InvalidOperationException(
+                    $"PyAnnote activation has unsupported rank {rank}. Expected 1, 2, or 3.");
+            }
+            if (rank == 3 && act.Shape[0] != 1)
+            {
+                throw new InvalidOperationException(
+                    $"PyAnnote rank-3 activation must have batch=1; got batch={act.Shape[0]}.");
+            }
             int batchOffset = rank >= 3 ? 1 : 0;
             int chunkFrames = rank >= 2 + batchOffset ? act.Shape[batchOffset] : 1;
             int speakerAxis = rank - 1;

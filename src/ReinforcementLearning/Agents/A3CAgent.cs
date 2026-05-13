@@ -577,7 +577,21 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _trajectory.Add((state, action, reward, nextState, done));
+        // Vector<T> is mutable, and many environments reuse the same
+        // state / action / nextState instances across step calls (e.g.,
+        // an env that maintains a single observation buffer it overwrites
+        // each Step). Without snapshotting, those callers would silently
+        // overwrite earlier trajectory entries before Train() consumes
+        // them. Take defensive copies so the buffered transitions are
+        // immutable from the agent's perspective.
+        _trajectory.Add((CloneVector(state), CloneVector(action), reward, CloneVector(nextState), done));
+    }
+
+    private static Vector<T> CloneVector(Vector<T> source)
+    {
+        var copy = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
+        return copy;
     }
 
     /// <summary>
@@ -659,12 +673,19 @@ public class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         // Second pass: reverse, accumulate discounted returns + per-step advantages.
+        // Reset R at every terminal transition (step.Done == true) so a
+        // multi-episode trajectory doesn't leak rewards backward across
+        // episode boundaries — the discounted-return chain only holds
+        // within a single episode. Matches the standard implementation of
+        // n-step returns in policy-gradient code (Sutton & Barto §13.7).
         var revReturns = new T[_trajectory.Count];
         var revAdvantages = new T[_trajectory.Count];
         for (int i = _trajectory.Count - 1; i >= 0; i--)
         {
             var step = _trajectory[i];
-            R = NumOps.Add(step.Reward, NumOps.Multiply(discountFactor, R));
+            R = step.Done
+                ? step.Reward
+                : NumOps.Add(step.Reward, NumOps.Multiply(discountFactor, R));
             T advantage = NumOps.Subtract(R, trajectoryForUpdate[i].value);
             revReturns[i] = R;
             revAdvantages[i] = advantage;

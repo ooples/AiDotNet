@@ -61,9 +61,30 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
     {
         // Production path: delegate to a configured pose extractor that
         // wraps a pretrained OpenPose / DWPose / RTMPose weight bundle.
+        // Validate the returned shape so a malformed extractor surfaces
+        // here at the boundary (with an actionable message) instead of
+        // failing later inside a ControlNet that assumed [B, 3, H, W].
         if (_poseExtractor is not null)
         {
-            return _poseExtractor.ExtractKeypoints(data);
+            var pose = _poseExtractor.ExtractKeypoints(data);
+            if (pose is null)
+            {
+                throw new InvalidOperationException(
+                    "IPoseExtractor<T>.ExtractKeypoints returned null. Expected a [B, 3, H, W] keypoint tensor.");
+            }
+            var inShape = data._shape;
+            var outShape = pose._shape;
+            if (outShape.Length != 4
+                || outShape[0] != inShape[0]
+                || outShape[1] != 3
+                || outShape[2] != inShape[2]
+                || outShape[3] != inShape[3])
+            {
+                throw new InvalidOperationException(
+                    $"IPoseExtractor<T>.ExtractKeypoints must return [B={inShape[0]}, 3, H={inShape[2]}, W={inShape[3]}] " +
+                    $"to satisfy the ControlType.Pose contract. Got [{string.Join(",", outShape)}].");
+            }
+            return pose;
         }
 
         // Default path: paper-faithful edge-magnitude proxy from ControlNet

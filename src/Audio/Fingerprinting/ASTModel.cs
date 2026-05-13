@@ -80,10 +80,19 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMelBands;
         _useNativeMode = false;
+        _modelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath);
 
         InitializeLayers();
     }
+
+    /// <summary>
+    /// Path to the loaded ONNX model file when constructed in ONNX mode;
+    /// <c>null</c> in native mode. Captured so <see cref="CreateNewInstance"/>
+    /// can reconstruct an ONNX clone without losing its execution-mode
+    /// configuration.
+    /// </summary>
+    private readonly string? _modelPath;
 
     /// <summary>Initializes AST in native training / inference mode.</summary>
     public ASTModel(
@@ -221,6 +230,21 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     /// <inheritdoc/>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
+        // InitializeLayers leaves Layers empty in ONNX mode (the ONNX
+        // graph is executed via OnnxEncoder instead), so the layer-walk
+        // below would exit immediately and serialize the preprocessed
+        // mel spectrogram as the "fingerprint" — silently wrong. Require
+        // native mode here until an ONNX-embedding output is wired
+        // explicitly.
+        if (!_useNativeMode)
+        {
+            throw new NotSupportedException(
+                "ASTModel.Fingerprint() in ONNX mode requires an explicit " +
+                "embedding-producing output to be wired. Use the native " +
+                "constructor or invoke the ONNX encoder directly via the " +
+                "OnnxEncoder property.");
+        }
+
         // For fingerprinting we want the pooled embedding (one layer before the
         // classification head). Run the layer stack and stop at the
         // GlobalPoolingLayer output.
@@ -318,7 +342,13 @@ public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new ASTModel<T>(Architecture, _options);
+        _useNativeMode
+            ? new ASTModel<T>(Architecture, _options)
+            // ONNX-backed instance: preserve the loaded model path so the
+            // clone keeps its execution mode. Without this, Clone() of an
+            // ONNX-mode AST silently downgrades to native (no weights,
+            // empty Layers) and changes inference behaviour.
+            : new ASTModel<T>(Architecture, _modelPath!, _options);
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata() =>

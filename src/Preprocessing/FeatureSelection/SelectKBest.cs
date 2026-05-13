@@ -214,14 +214,23 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // F-test for univariate regression: 1 numerator df (the slope) and
             // n-2 denominator df (after intercept + slope). Matches
             // scipy.stats.f_regression's degrees-of-freedom convention.
-            double ssRegression = ssTotal - ssResidual;
-            double msRegression = ssRegression;
-            double msResidual = ssResidual / Math.Max(1, n - 2);
-            double fStat = msResidual > 1e-10 ? msRegression / msResidual : 0;
+            // Guard non-positive df up front so degenerate `n <= 2` cases
+            // don't yield non-neutral scores from an invalid F-test path
+            // (previously msResidual was computed against Math.Max(1, n-2)
+            // and assigned to scores[j] even when the underlying test was
+            // ill-defined).
+            int dfResidual = n - 2;
+            double fStat = 0.0;
+            if (dfResidual > 0)
+            {
+                double ssRegression = Math.Max(0.0, ssTotal - ssResidual);
+                double msResidual = ssResidual / dfResidual;
+                fStat = msResidual > 1e-10 ? ssRegression / msResidual : 0.0;
+            }
             scores[j] = fStat;
-            _pValues[j] = (n > 2 && fStat > 0)
+            _pValues[j] = (dfResidual > 0 && fStat > 0)
                 ? NumOps.ToDouble(StatisticsHelper<T>.FDistributionPValue(
-                      NumOps.FromDouble(fStat), 1, n - 2))
+                      NumOps.FromDouble(fStat), 1, dfResidual))
                 : 1.0;
         }
 
@@ -266,9 +275,12 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             // Pearson chi-square test, df = (#categories - 1). For univariate
             // tabulation against the target classes there are classSums.Count rows
             // and one column, so df = classSums.Count - 1.
-            int chi2Df = Math.Max(1, classSums.Count - 1);
+            // Don't force df to 1 when there's only one class — the test is
+            // degenerate at that point and should return a neutral p-value
+            // rather than a misleading non-neutral one from a 1-df distribution.
+            int chi2Df = classSums.Count - 1;
             scores[j] = chi2;
-            _pValues[j] = (chi2 > 0)
+            _pValues[j] = (chi2Df > 0 && chi2 > 0)
                 ? NumOps.ToDouble(StatisticsHelper<T>.ChiSquarePValue(
                       NumOps.FromDouble(chi2), chi2Df))
                 : 1.0;

@@ -184,7 +184,10 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
 
         var scoredDocuments = candidateSet.Select(doc =>
         {
-            var docTokens = TokenizeAndTruncate(doc.Content, _maxDocLength);
+            // Guard against null doc.Content — TokenizeAndTruncate calls
+            // ToLower(), which NREs on null. Empty content yields zero
+            // tokens, which naturally scores 0 in CalculateTokenOverlapScore.
+            var docTokens = TokenizeAndTruncate(doc.Content ?? string.Empty, _maxDocLength);
             var tokenScore = CalculateTokenOverlapScore(queryTokens, docTokens);
 
             // Use a request-local anchor of 1.0 — anchoring on

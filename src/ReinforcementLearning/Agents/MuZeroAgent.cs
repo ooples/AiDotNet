@@ -766,7 +766,12 @@ public class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// </summary>
     public override IFullModel<T, Vector<T>, Vector<T>> Clone()
     {
-        var copy = new MuZeroAgent<T>(_options);
+        // Deep-copy the options before constructing the clone — _options
+        // contains mutable collections (RepresentationLayers, DynamicsLayers,
+        // PredictionLayers as List<int>) and sharing the same instance
+        // would let post-clone edits on one model silently leak into the
+        // other.
+        var copy = new MuZeroAgent<T>(new MuZeroOptions<T>(_options));
         copy.SetParameters(GetParameters());
         return copy;
     }

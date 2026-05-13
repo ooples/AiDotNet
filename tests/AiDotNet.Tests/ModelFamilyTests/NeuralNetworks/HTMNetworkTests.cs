@@ -125,6 +125,11 @@ public class HTMNetworkTests : NeuralNetworkModelTestBase
         for (int i = 0; i < longIters; i++) network.Train(input, target);
 
         var output = network.Predict(input);
+        // Assert output size BEFORE iterating — an empty Predict result
+        // would otherwise loop zero times and let the test pass with no
+        // finite-value checks actually running.
+        Assert.True(output.Length > 0,
+            "HTM Predict returned an empty tensor — every finite-value assertion below would no-op.");
         for (int i = 0; i < output.Length; i++)
             Assert.True(!double.IsNaN(output[i]) && !double.IsInfinity(output[i]),
                 $"HTM Predict[{i}] became non-finite ({output[i]}) after {longIters} "
@@ -145,6 +150,10 @@ public class HTMNetworkTests : NeuralNetworkModelTestBase
             network.Train(input, target);
 
         var output = network.Predict(input);
+        // Assert output size BEFORE iterating so an empty Predict result
+        // can't make the test pass with zero finite-value assertions.
+        Assert.True(output.Length > 0,
+            "HTM Predict returned an empty tensor — every finite-value assertion below would no-op.");
         for (int i = 0; i < output.Length; i++)
             Assert.True(!double.IsNaN(output[i]) && !double.IsInfinity(output[i]),
                 $"HTM Predict[{i}] is non-finite ({output[i]}) after {TrainingIterations * 3} "

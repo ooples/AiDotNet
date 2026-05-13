@@ -1015,6 +1015,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         {
             _lastInput = input4D;
         }
+        else
+        {
+            // Clear the cache when tape is active so prior non-tape steps
+            // can't keep an old activation rooted alongside the tape's
+            // intermediates. Empty-shape sentinel matches the ctor's
+            // initial state and lets ParameterCount / Serialize logic that
+            // reads _lastInput.Shape continue to work without an NRE.
+            _lastInput = new Tensor<T>([0, 0, 0, 0]);
+        }
 
         // === Zero-Allocation Convolution ===
         // Pre-allocate output buffer on first forward pass, then reuse via Conv2DInto
@@ -1089,10 +1098,16 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // the activation and inflate peak memory through the L-layer chain.
         // Keep the assignment alive on the inference path (where Conv2D
         // doesn't hit a tape) for any caller that still reads the layer's
-        // last output for diagnostics.
+        // last output for diagnostics. When the tape IS active, clear the
+        // cache so a prior non-tape step's output can't keep its tensor
+        // rooted in parallel with the tape's intermediates.
         if (IsTrainingMode && !tapeActive)
         {
             _lastOutput = result;
+        }
+        else if (tapeActive)
+        {
+            _lastOutput = new Tensor<T>([0, 0, 0, 0]);
         }
 
         // Return with matching dimensions to preserve original tensor rank

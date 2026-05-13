@@ -553,6 +553,12 @@ public static class DeserializationHelper
             // "SequenceLength" explicitly in metadata.
             int sequenceLength = TryGetInt(additionalParams, "SequenceLength")
                 ?? (inputShape.Length >= 2 ? inputShape[0] : 1);
+            // Clamp non-positive sequenceLength to 1. Serialized
+            // inputShape[0] can carry 0 or -1 (lazy / placeholder shapes)
+            // — those would otherwise produce an invalid decoder
+            // configuration that fails later inside the ctor with a less
+            // actionable error.
+            if (sequenceLength <= 0) sequenceLength = 1;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType);

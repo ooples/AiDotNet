@@ -798,14 +798,19 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
     {
         var results = new Dictionary<ModalityType, (bool IsSafe, IEnumerable<string> Flags)>();
 
+        if (inputs is null)
+            throw new ArgumentNullException(nameof(inputs));
+
         foreach (var input in inputs)
         {
-            // Skip null entries — there's no Modality bucket to assign them
-            // to (ModalityType has no Unknown / Custom value), and the
-            // previous unconditional `input.Modality` dereference NRE'd on
-            // null. Callers that want null-input visibility should filter
-            // upstream; this loop now only aggregates by genuine modality.
-            if (input is null) continue;
+            // Reject null entries explicitly — SafetyCheck is a safety
+            // gate, and silently dropping a null input would hide a
+            // malformed sample from the aggregated flags. Throw instead
+            // so the caller learns about the bad entry up front.
+            if (input is null)
+                throw new ArgumentException(
+                    "SafetyCheck does not accept null entries — every element of `inputs` must be a valid MultimodalInput<T>.",
+                    nameof(inputs));
 
             // Aggregate by modality: if any input of a modality fails, the
             // modality is flagged unsafe with the union of every input's flags.

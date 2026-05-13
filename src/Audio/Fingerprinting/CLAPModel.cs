@@ -56,6 +56,11 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly CLAPModelOptions _options;
     private readonly bool _useNativeMode;
+    // Captured ONNX-mode constructor inputs. Preserved so CreateNewInstance
+    // can rebuild an ONNX-mode clone with the same encoder weights instead
+    // of silently downgrading to native (random-init) mode.
+    private readonly string? _audioEncoderPath;
+    private readonly string? _textEncoderPath;
 
     // Trainable temperature parameter (stored in log space). Gradients flow
     // through the tape via Engine ops; the optimizer updates this alongside
@@ -99,6 +104,8 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
         SampleRate = _options.SampleRate;
         _useNativeMode = false;
+        _audioEncoderPath = audioEncoderPath;
+        _textEncoderPath = textEncoderPath;
         OnnxEncoder = new OnnxModel<T>(audioEncoderPath);
         // Pattern-match into a non-null local so the compiler's net471
         // nullable-flow analysis sees `pathLocal` as definitively non-null
@@ -576,7 +583,9 @@ public class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 
     /// <inheritdoc/>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
-        new CLAPModel<T>(Architecture, _options);
+        _useNativeMode
+            ? new CLAPModel<T>(Architecture, _options)
+            : new CLAPModel<T>(Architecture, _audioEncoderPath!, _textEncoderPath, _options);
 
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

@@ -191,10 +191,15 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             }
         }
 
-        // If polygon available and text is rotated, apply perspective correction
+        // If polygon available and text is rotated, apply perspective correction.
+        // Pass the crop's origin in full-image coordinates so the warp can
+        // translate the polygon's source corners into crop-local space —
+        // without this, `sx`/`sy` would reference positions outside the
+        // crop's bounds and the bilinear sampler would return black for
+        // every region whose box doesn't start at (0, 0).
         if (region.Polygon.Count >= 4 && Math.Abs(region.RotationAngle) > 5)
         {
-            crop = CorrectPerspective(crop, region);
+            crop = CorrectPerspective(crop, region, cropX1, cropY1);
         }
 
         return crop;
@@ -209,7 +214,7 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// dominated by the corner correspondence; for the typical 5°-45°
     /// regime this is the implementation that actually undoes the warp.
     /// </summary>
-    private Tensor<T> CorrectPerspective(Tensor<T> crop, TextRegion<T> region)
+    private Tensor<T> CorrectPerspective(Tensor<T> crop, TextRegion<T> region, int cropX, int cropY)
     {
         if (region.Polygon.Count < 4) return crop;
 
@@ -236,9 +241,15 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var (dx, dy) = (
             new[] { 0.0,         dstW - 1.0,  dstW - 1.0,  0.0         },
             new[] { 0.0,         0.0,         dstH - 1.0,  dstH - 1.0  });
+        // Translate the polygon's source corners into CROP-LOCAL coordinates
+        // (subtract the crop origin) because `crop` is indexed from (0, 0).
+        // Using region.Polygon's full-image coordinates directly would make
+        // the bilinear sampler read mostly out-of-bounds and return a
+        // black/garbled rectified crop for any region whose box doesn't
+        // start at the image origin.
         var (sx, sy) = (
-            new[] { tl.X, tr.X, br.X, bl.X },
-            new[] { tl.Y, tr.Y, br.Y, bl.Y });
+            new[] { tl.X - cropX, tr.X - cropX, br.X - cropX, bl.X - cropX },
+            new[] { tl.Y - cropY, tr.Y - cropY, br.Y - cropY, bl.Y - cropY });
         if (!SolveHomographyDLT(dx, dy, sx, sy, out double[] h))
         {
             // Degenerate corners (collinear / coincident) — fall back to crop.
@@ -288,8 +299,10 @@ public class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         // Centroid.
         double cx = (pts[0].X + pts[1].X + pts[2].X + pts[3].X) / 4.0;
         double cy = (pts[0].Y + pts[1].Y + pts[2].Y + pts[3].Y) / 4.0;
-        // Sort by angle from centroid (descending), then re-anchor on the
-        // top-left corner (smallest x+y).
+        // Sort by angle from centroid (ascending — Atan2 default ordering),
+        // then re-anchor on the top-left corner (smallest x+y) below. The
+        // re-anchoring step handles any starting position, so functional
+        // correctness doesn't depend on sort direction.
         Array.Sort(pts, (a, b) => Math.Atan2(a.Y - cy, a.X - cx).CompareTo(Math.Atan2(b.Y - cy, b.X - cx)));
         int startIdx = 0;
         double minSum = double.PositiveInfinity;

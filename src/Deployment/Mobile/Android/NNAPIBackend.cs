@@ -85,8 +85,15 @@ public class NNAPIBackend<T> : IDisposable
     /// blocked even <see cref="NNAPIConfiguration.AllowCpuFallback"/>=true clients
     /// on the desktop, despite the configuration explicitly opting in to that path.
     /// </remarks>
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(NNAPIBackend<T>));
+    }
+
     public void Initialize()
     {
+        ThrowIfDisposed();
         if (_isInitialized) return;
         _hasNative = IsNNAPIAvailable();
         if (!_hasNative && !_config.AllowCpuFallback)
@@ -121,6 +128,7 @@ public class NNAPIBackend<T> : IDisposable
     /// </remarks>
     public void LoadModel(string modelPath)
     {
+        ThrowIfDisposed();
         if (!_isInitialized)
             throw new InvalidOperationException("NNAPI backend not initialized. Call Initialize() first.");
         Guard.NotNull(modelPath);
@@ -136,6 +144,7 @@ public class NNAPIBackend<T> : IDisposable
     /// </summary>
     public T[] Execute(T[] input)
     {
+        ThrowIfDisposed();
         if (!_isInitialized)
             throw new InvalidOperationException("NNAPI backend not initialized. Call Initialize() first.");
         Guard.NotNull(input);
@@ -258,7 +267,14 @@ public class NNAPIBackend<T> : IDisposable
         if (rcCompile != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
             throw new InvalidOperationException($"ANeuralNetworksCompilation_create failed (rc={rcCompile}).");
 
-        NNAPIInterop.CompilationSetPreference(_compilation, MapPreference());
+        // Check the result like every other NNAPI call — the native API
+        // returns a status code that previously got silently dropped.
+        // A device-side rejection of the requested preference would lose
+        // its real failure point and let CompileForNNAPI keep going.
+        int rcPref = NNAPIInterop.CompilationSetPreference(_compilation, MapPreference());
+        if (rcPref != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+            throw new InvalidOperationException(
+                $"ANeuralNetworksCompilation_setPreference failed (rc={rcPref}).");
         int rcFin = NNAPIInterop.CompilationFinish(_compilation);
         if (rcFin != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
             throw new InvalidOperationException($"ANeuralNetworksCompilation_finish failed (rc={rcFin}).");
