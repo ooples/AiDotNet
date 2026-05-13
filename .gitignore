@@ -422,3 +422,5 @@ traces/
 # scripts). Keep out of the index so contributors don't accidentally
 # commit 25 MB binaries / multi-MB trace artifacts.
 /.tools/
+/tools/_profiles
+/.ci-failures
