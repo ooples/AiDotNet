@@ -2109,6 +2109,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return noisyDense.GetOutputShape().Length == 1 && noisyDense.GetOutputShape()[0] > 0;
         }
 
+        // DuelingCombinationLayer is the output head of a Wang et al. 2016
+        // dueling-DQN architecture (also Hessel et al. 2018 §3.4 in Rainbow):
+        // it internally projects the trunk features into V(s) and A(s, a) and
+        // emits Q(s, a) = V(s) + (A − mean_a A). The emitted Q vector is the
+        // network's final output — same shape contract as a regular dense
+        // output layer.
+        if (layer is Layers.DuelingCombinationLayer<T> dueling)
+        {
+            return dueling.GetOutputShape().Length == 1 && dueling.GetOutputShape()[0] > 0;
+        }
+
         // For some specific tasks, the output might be from other layer types
         // For example, in sequence-to-sequence models, it could be LSTM or GRU
         if (layer is LSTMLayer<T> || layer is GRULayer<T>)
