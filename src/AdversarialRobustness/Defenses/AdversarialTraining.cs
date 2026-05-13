@@ -333,13 +333,25 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             {
                 int blockH = Math.Min(8, side - by);
                 int blockW = Math.Min(8, side - bx);
-                if (blockH < 8 || blockW < 8) continue;  // skip edge fragments
 
-                // Pull block (centred on 0 — JPEG subtracts 128 from [0..255] range;
-                // we keep the [0,1]-style centring symmetric and skip the shift).
+                // Pull block (centred on 0 — JPEG subtracts 128 from [0..255]
+                // range; we keep the [0,1]-style centring symmetric and skip
+                // the shift). For partial edge blocks (image side not a
+                // multiple of 8), use edge-replication so the DCT still
+                // processes every pixel. The previous `continue` left edge
+                // fragments unmodified — an adversary could concentrate
+                // perturbations there to bypass the JPEG compression
+                // defense entirely. Standard JPEG implementations
+                // replicate / mirror edge pixels to complete the 8×8 block.
                 for (int y = 0; y < 8; y++)
+                {
+                    int srcY = by + Math.Min(y, blockH - 1);
                     for (int x = 0; x < 8; x++)
-                        block[y, x] = image[by + y, bx + x];
+                    {
+                        int srcX = bx + Math.Min(x, blockW - 1);
+                        block[y, x] = image[srcY, srcX];
+                    }
+                }
 
                 Dct2D(block);
 
@@ -350,8 +362,11 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
                 InverseDct2D(block);
 
-                for (int y = 0; y < 8; y++)
-                    for (int x = 0; x < 8; x++)
+                // Write only the cells within the original image extent
+                // (don't overrun past the right/bottom edge with the
+                // replicated pixels).
+                for (int y = 0; y < blockH; y++)
+                    for (int x = 0; x < blockW; x++)
                         image[by + y, bx + x] = block[y, x];
             }
         }

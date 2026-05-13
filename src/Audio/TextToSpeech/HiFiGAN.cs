@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Audio.TextToSpeech;
 
@@ -301,9 +302,27 @@ public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         int numMels = _options.NumMels;
         var mel = new Tensor<T>(new[] { numFrames, numMels });
 
+        // Seed every frame to the silence floor (silentDb) up front. When
+        // text is empty the character loop below never runs and the tensor
+        // would otherwise stay zero-filled — which is NOT silence on the
+        // log-mel scale (zero is amplitude 1.0 in the linear mel space)
+        // and would feed a non-silent frame into the vocoder.
+        var silentT = NumOps.FromDouble(silentDb);
+        for (int frame = 0; frame < numFrames; frame++)
+        {
+            for (int m = 0; m < numMels; m++)
+            {
+                mel[frame, m] = silentT;
+            }
+        }
+
         // Deterministic per-text pitch jitter so identical successive letters
         // produce slightly different frames (matches natural prosody at ±5%).
-        var rng = new Random(text.GetHashCode());
+        // Seed via a stable FNV-1a hash of the text — string.GetHashCode is
+        // randomized per-process in .NET Core+ and would make the jitter
+        // pattern differ across processes / versions / 32-bit vs 64-bit
+        // hosts, breaking reproducibility of the synthesised mel frames.
+        var rng = RandomHelper.CreateSeededRandom(StableFnv1aHash(text));
         var classes = HiFiGANPhoneticTable.Instance;
 
         for (int i = 0; i < text.Length; i++)
@@ -339,6 +358,27 @@ public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
         }
 
         return mel;
+    }
+
+    /// <summary>
+    /// Deterministic 32-bit FNV-1a hash. Unlike <see cref="string.GetHashCode()"/>,
+    /// which is randomized per-process in .NET Core+ and can differ across
+    /// .NET versions / 32-bit vs 64-bit hosts (per
+    /// https://learn.microsoft.com/dotnet/api/system.string.gethashcode),
+    /// FNV-1a is stable across runs / processes so the per-text pitch
+    /// jitter pattern stays reproducible.
+    /// </summary>
+    private static int StableFnv1aHash(string s)
+    {
+        const uint FnvOffsetBasis = 2166136261;
+        const uint FnvPrime = 16777619;
+        uint hash = FnvOffsetBasis;
+        for (int i = 0; i < s.Length; i++)
+        {
+            hash ^= s[i];
+            hash *= FnvPrime;
+        }
+        return unchecked((int)hash);
     }
 
     /// <summary>

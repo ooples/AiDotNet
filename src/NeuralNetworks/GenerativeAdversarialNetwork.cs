@@ -811,13 +811,46 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // both diverge from each other (labels [latentDim] vs predictions
         // [channels]) and `LossFunction.CalculateLoss` throws
         // "Predicted and actual vectors must have the same length". Reshape
-        // to [1, latentDim] / [1, C, H, W] so batchSize=1 is consistent
-        // through the whole forward+backward+loss path.
-        if (input.Rank == 1)
-            input = input.Reshape(new[] { 1, input.Shape[0] });
-        if (expectedOutput.Rank == 3)
-            expectedOutput = expectedOutput.Reshape(
-                new[] { 1, expectedOutput.Shape[0], expectedOutput.Shape[1], expectedOutput.Shape[2] });
+        // to [1, ...] so batchSize=1 is consistent through the whole
+        // forward+backward+loss path.
+        //
+        // Promote unbatched single-sample inputs to a [1, …] tensor based
+        // on the architecture's expected unbatched rank instead of the
+        // previous hardcoded `Rank == 1` / `Rank == 3` pair — DCGAN ships
+        // [C,H,W] images (rank 3) but other GAN variants ship 1D outputs
+        // (rank 1) for the discriminator, and 2D outputs (e.g. sequence-
+        // GAN). The architecture-driven promotion handles all of them
+        // uniformly without silently bypassing the batch dimension on
+        // unfamiliar shapes.
+        int expectedGenRank = Generator.Architecture.InputType switch
+        {
+            InputType.OneDimensional => 1,
+            InputType.TwoDimensional => 2,
+            InputType.ThreeDimensional => 3,
+            _ => 1
+        };
+        if (input.Rank == expectedGenRank)
+        {
+            var batched = new int[input.Rank + 1];
+            batched[0] = 1;
+            for (int i = 0; i < input.Rank; i++) batched[i + 1] = input.Shape[i];
+            input = input.Reshape(batched);
+        }
+
+        int expectedDiscRank = Discriminator.Architecture.InputType switch
+        {
+            InputType.OneDimensional => 1,
+            InputType.TwoDimensional => 2,
+            InputType.ThreeDimensional => 3,
+            _ => 1
+        };
+        if (expectedOutput.Rank == expectedDiscRank)
+        {
+            var batched = new int[expectedOutput.Rank + 1];
+            batched[0] = 1;
+            for (int i = 0; i < expectedOutput.Rank; i++) batched[i + 1] = expectedOutput.Shape[i];
+            expectedOutput = expectedOutput.Reshape(batched);
+        }
 
         // Get batch size from the input tensor
         int batchSize = input.Shape[0];

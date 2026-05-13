@@ -541,8 +541,18 @@ public static class DeserializationHelper
             int feedForwardDim = TryGetInt(additionalParams, "FeedForwardDim")
                 ?? TryGetInt(additionalParams, "FeedForwardDimension")
                 ?? embeddingSize * 4;
+            // Fallback hierarchy for sequenceLength:
+            //   1. explicit "SequenceLength" metadata entry  (paper-faithful)
+            //   2. derive from inputShape[0] when input is at least rank-2
+            //   3. fallback to 1 for rank-1 feature-only inputs
+            // The previous fallback used 512 (the transformer paper default)
+            // which silently inflated memory/compute for feature-only inputs
+            // that should be treated as a single token, and could OOM on
+            // large embeddingSize because attention scores scale O(B·S²).
+            // Callers that need a longer sequence must persist
+            // "SequenceLength" explicitly in metadata.
             int sequenceLength = TryGetInt(additionalParams, "SequenceLength")
-                ?? (inputShape.Length >= 2 ? inputShape[0] : 512);
+                ?? (inputShape.Length >= 2 ? inputShape[0] : 1);
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType);
@@ -1280,6 +1290,20 @@ public static class DeserializationHelper
             int outputSize = outputShape[0];
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
+            // If metadata named an activation but TryCreateActivationInstance
+            // couldn't materialise it (missing type, assembly-load failure,
+            // ctor mismatch), the layer would silently fall back to the
+            // ctor default — reintroducing the clone/output drift this
+            // metadata exists to prevent. Surface the failure instead.
+            if (activation is null
+                && additionalParams is not null
+                && additionalParams.ContainsKey("ScalarActivationType"))
+            {
+                throw new InvalidOperationException(
+                    $"Failed to deserialize activation function of type " +
+                    $"'{additionalParams["ScalarActivationType"]}' for SparseLinearLayer. " +
+                    $"Ensure the assembly providing this activation is loaded before deserialization.");
+            }
             double sparsity = TryGetDouble(additionalParams, "Sparsity") ?? 0.9;
             instance = new SparseLinearLayer<T>(inputSize, outputSize, sparsity,
                 (IActivationFunction<T>?)activation);
