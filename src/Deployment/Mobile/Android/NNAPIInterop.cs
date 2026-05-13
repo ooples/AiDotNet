@@ -51,16 +51,26 @@ internal static class NNAPIInterop
     public const int ANEURALNETWORKS_PREFER_SUSTAINED_SPEED = 2;
 
     /// <summary>
-    /// Probes the loader for libneuralnetworks.so on the current platform.
+    /// Probes the loader for libneuralnetworks on the current platform.
     /// Returns true if the library is present and loadable, false otherwise —
     /// the C# P/Invoke layer does not throw on lazy bind, only on first call,
-    /// so we proactively probe with NativeLibrary.TryLoad.
+    /// so we proactively probe with <see cref="NativeLibrary.TryLoad(string, out IntPtr)"/>.
+    /// Captures and immediately frees the probe handle so repeated
+    /// IsNNAPIAvailable() calls don't leak a native reference per
+    /// invocation. Uses <see cref="LibName"/> directly (matching the
+    /// DllImport name) so the load path is consistent between the probe
+    /// and the actual P/Invoke calls.
     /// </summary>
     public static bool TryLoad()
     {
         try
         {
-            return NativeLibrary.TryLoad(LibName + ".so", out _);
+            if (!NativeLibrary.TryLoad(LibName, out IntPtr handle))
+            {
+                return false;
+            }
+            NativeLibrary.Free(handle);
+            return true;
         }
         catch
         {

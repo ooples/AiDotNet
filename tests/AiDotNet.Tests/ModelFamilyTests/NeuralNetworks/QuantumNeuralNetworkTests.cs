@@ -36,9 +36,10 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
     // can translate constant scalars..."). Apply the same idea here: shape
     // the "constant" value with a position-dependent modulation so two
     // different scalars produce two different DIRECTIONS in state space.
-    // The modulation amplitude is small (±10 %) so the test still
-    // exercises the "is the network input-sensitive" question rather than
-    // turning into an unrelated stress test.
+    // The modulation amplitude is bounded (±0.5 absolute, set by the
+    // 0.5 * Sin(...) term below) so the test still exercises the
+    // "is the network input-sensitive" question rather than turning
+    // into an unrelated stress test.
     // </para>
     protected override Tensor<double> CreateConstantTensor(int[] shape, double value)
     {
@@ -71,6 +72,7 @@ public class QuantumNeuralNetworkTests : NeuralNetworkModelTestBase
     // base test cares about — "Forward pass actually consumes input
     // values, isn't a constant function" — still holds, just via a quantum-
     // appropriate probe.
+    [Fact(Timeout = 120_000)]
     public override async System.Threading.Tasks.Task ScaledInput_ShouldChangeOutput()
     {
         await System.Threading.Tasks.Task.Yield();

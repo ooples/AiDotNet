@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -27,6 +28,17 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// Initialisation follows Fortunato 2017 Eqs. 17–18:
 /// <c>μ ~ U(-1/√p, 1/√p)</c>, <c>σ_init = 0.5/√p</c> for both weights and biases.
 /// </para>
+/// <para><b>For Beginners:</b> A regular dense (fully-connected) layer
+/// learns one weight per (input, output) pair. NoisyDenseLayer learns TWO
+/// per pair — a base value <c>μ</c> and a noise scale <c>σ</c> — and at
+/// training time draws a fresh random ε every forward pass to form the
+/// effective weight <c>W = μ + σ · ε</c>. The network learns when to make
+/// σ small (confident, deterministic predictions) vs large (uncertain,
+/// exploring different actions). This replaces hand-tuned exploration
+/// strategies like ε-greedy in reinforcement-learning agents — the
+/// exploration noise is built into the weights and decays naturally as
+/// training converges. At evaluation time σ is zeroed out (paper §3.4)
+/// so the network is deterministic given a fixed state.</para>
 /// <para>
 /// All forward arithmetic is routed through <see cref="LayerBase{T}.Engine"/>
 /// ops on the same tensor instances returned by <see cref="GetTrainableParameters"/>,
@@ -83,7 +95,16 @@ public class NoisyDenseLayer<T> : LayerBase<T>
         _inputSize = inputSize;
         _outputSize = outputSize;
         _sigmaInit = sigmaInit ?? (0.5 / Math.Sqrt(inputSize));
-        _rng = seed.HasValue ? new Random(seed.Value) : new Random();
+        // Route RNG construction through RandomHelper rather than raw
+        // `new Random()` — raw Random is not cryptographically secure
+        // and its time-seeded default is predictable across closely-spaced
+        // instances. RandomHelper.CreateSeededRandom preserves reproducibility
+        // when a seed is supplied (Fortunato 2017 §3.3 noise tests rely on
+        // deterministic resampling); CreateSecureRandom is the cryptographic
+        // default otherwise.
+        _rng = seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         _muWeights = new Tensor<T>([inputSize, outputSize]);
         _sigmaWeights = new Tensor<T>([inputSize, outputSize]);
@@ -135,9 +156,21 @@ public class NoisyDenseLayer<T> : LayerBase<T>
 
     private static void CopyTensorInPlace(Tensor<T> src, Tensor<T> dst)
     {
-        if (src.Length != dst.Length)
+        // Validate full shape, not just flat length. A [2, 6] source has the
+        // same Length as a [3, 4] destination but copying the elements
+        // straight across would silently scramble the layer's weight matrix
+        // by row/column. Reject rank and per-dim mismatches explicitly.
+        if (src.Rank != dst.Rank || src.Length != dst.Length)
             throw new ArgumentException(
-                $"Shape mismatch: source has {src.Length} elements, destination has {dst.Length}.");
+                $"Shape mismatch: source rank={src.Rank} length={src.Length}, " +
+                $"destination rank={dst.Rank} length={dst.Length}.");
+        for (int dim = 0; dim < src.Rank; dim++)
+        {
+            if (src.Shape[dim] != dst.Shape[dim])
+                throw new ArgumentException(
+                    $"Shape mismatch at dim {dim}: source={src.Shape[dim]}, destination={dst.Shape[dim]}. " +
+                    "Full shape must match — same-length tensors of different ranks/shapes would scramble weights.");
+        }
         for (int i = 0; i < src.Length; i++) dst[i] = src[i];
     }
 
@@ -320,4 +353,23 @@ public class NoisyDenseLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override void ResetState() { /* no per-forward state cached outside the tape */ }
+
+    /// <summary>
+    /// Persists the constructor parameters needed by
+    /// <c>DeserializationHelper</c> to reconstruct an identical layer
+    /// post-Clone. Without this override, a Clone would fall back to the
+    /// constructor's defaults and lose the configured InputSize /
+    /// OutputSize / SigmaInit. The activation type is already covered by
+    /// the base override (which writes ScalarActivationType /
+    /// VectorActivationType).
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        metadata["InputSize"] = _inputSize.ToString(inv);
+        metadata["OutputSize"] = _outputSize.ToString(inv);
+        metadata["SigmaInit"] = _sigmaInit.ToString("R", inv);
+        return metadata;
+    }
 }

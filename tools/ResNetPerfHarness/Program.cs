@@ -77,6 +77,17 @@ internal static class Program
         // warnings to the console so fused-path compile failures aren't
         // silently swallowed during a harness run.
         Trace.Listeners.Add(new ConsoleTraceListener());
+
+        // ctor-probe modes measure construction cost only and exit early
+        // BEFORE the harness's TensorArena / Build / training-loop setup
+        // runs. Keeping them in Main means the timing doesn't include
+        // unrelated arena setup and no resources are allocated that
+        // would be skipped by the explicit Exit() path inside Build.
+        if (TryRunCtorProbe(model))
+        {
+            return 0;
+        }
+
         using var arena = TensorArena.Create();
         var (net, input, target) = Build(model);
         Console.WriteLine($"[harness] ParameterCount={net.ParameterCount}, Layers={net.Layers.Count}");
@@ -187,6 +198,46 @@ internal static class Program
                 : $"[harness] fused-compiled training path did NOT engage — every step ran on the eager tape (see TryStepWithFusedOptimizer gates)");
 
         return 0;
+    }
+
+    /// <summary>
+    /// Runs the *-ctor probe modes and returns <c>true</c> when one fired.
+    /// Probe modes measure construction wall-time only — they intentionally
+    /// run BEFORE the harness's <see cref="TensorArena"/> + Build + train-loop
+    /// setup so the measured cost reflects the constructor alone, and so no
+    /// arena resources are leaked by an early process exit.
+    /// </summary>
+    private static bool TryRunCtorProbe(string model)
+    {
+        switch (model)
+        {
+            case "siglip2-ctor":
+            {
+                var sw = Stopwatch.StartNew();
+                _ = new AiDotNet.Diffusion.Conditioning.SigLIP2TextConditioner<double>();
+                sw.Stop();
+                Console.WriteLine($"[harness] SigLIP2TextConditioner ctor: {sw.ElapsedMilliseconds} ms");
+                return true;
+            }
+            case "sd15-ctor":
+            {
+                var sw = Stopwatch.StartNew();
+                _ = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
+                sw.Stop();
+                Console.WriteLine($"[harness] StableDiffusion15Model ctor: {sw.ElapsedMilliseconds} ms");
+                return true;
+            }
+            case "t5xxl-ctor":
+            {
+                var sw = Stopwatch.StartNew();
+                _ = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>("T5-XXL");
+                sw.Stop();
+                Console.WriteLine($"[harness] T5TextConditioner(T5-XXL) ctor: {sw.ElapsedMilliseconds} ms");
+                return true;
+            }
+            default:
+                return false;
+        }
     }
 
     private static (NeuralNetworkBase<float> net, Tensor<float> input, Tensor<float> target) BuildFloat(string model)
@@ -300,33 +351,11 @@ internal static class Program
                 for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
                 return (net, input, target);
             }
-            case "siglip2-ctor":
-            {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                var conditioner = new AiDotNet.Diffusion.Conditioning.SigLIP2TextConditioner<double>();
-                sw.Stop();
-                Console.WriteLine($"[harness] SigLIP2TextConditioner ctor: {sw.ElapsedMilliseconds} ms");
-                System.Environment.Exit(0);
-                return default;
-            }
-            case "sd15-ctor":
-            {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                var sd = new AiDotNet.Diffusion.TextToImage.StableDiffusion15Model<double>();
-                sw.Stop();
-                Console.WriteLine($"[harness] StableDiffusion15Model ctor: {sw.ElapsedMilliseconds} ms");
-                System.Environment.Exit(0);
-                return default;
-            }
-            case "t5xxl-ctor":
-            {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                var t5 = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>("T5-XXL");
-                sw.Stop();
-                Console.WriteLine($"[harness] T5TextConditioner(T5-XXL) ctor: {sw.ElapsedMilliseconds} ms");
-                System.Environment.Exit(0);
-                return default;
-            }
+            // Note: the "*-ctor" probe modes are handled in Main via
+            // TryRunCtorProbe before this switch runs. Falling through to the
+            // default below would mean a probe model was requested AFTER the
+            // ctor probe already exited — unreachable in practice, but
+            // listed here so the switch is exhaustive for documented values.
             default:
                 throw new ArgumentException($"Unknown model: {model}");
         }
@@ -353,11 +382,13 @@ internal static class Program
                 System.Globalization.CultureInfo.InvariantCulture, out value))
         {
             Console.Error.WriteLine($"[harness] error: '{flag}' expects an integer, got '{args[i]}'.");
+            Console.Error.WriteLine(UsageText);
             return false;
         }
         if (value < minInclusive)
         {
             Console.Error.WriteLine($"[harness] error: '{flag}' must be >= {minInclusive}, got {value}.");
+            Console.Error.WriteLine(UsageText);
             return false;
         }
         return true;

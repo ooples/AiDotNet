@@ -28,10 +28,11 @@ namespace AiDotNet.Deployment.Mobile.Android;
 /// defensible behaviour without a real model handle.
 /// </para>
 /// </remarks>
-public class NNAPIBackend<T>
+public class NNAPIBackend<T> : IDisposable
 {
     private readonly NNAPIConfiguration _config;
     private bool _isInitialized;
+    private bool _disposed;
 
     // Native NNAPI handles — non-zero only when running on Android with a real binding.
     private IntPtr _model = IntPtr.Zero;
@@ -48,19 +49,24 @@ public class NNAPIBackend<T>
     /// when the adapter hasn't populated it (the only safe assumption without
     /// op-graph introspection).
     /// </summary>
-    public int OutputElementCount { get; set; }
+    /// <remarks>
+    /// Internal — backend-only plumbing wired up by a model-format adapter
+    /// (TFLite / ONNX → NNAPI). End users go through
+    /// <see cref="NNAPIConfiguration"/> or the facade, not this property.
+    /// </remarks>
+    internal int OutputElementCount { get; set; }
 
     /// <summary>
     /// Managed-CPU inference hook invoked when NNAPI is unavailable or
-    /// fails. The default returns the input unchanged (identity); production
-    /// callers should set this to their model's <c>Predict</c> entry point
-    /// so the fallback runs the same network as NNAPI would have.
+    /// fails. When unset, <see cref="Execute"/> on the fallback path throws
+    /// rather than silently returning identity — see remarks.
     /// </summary>
     /// <remarks>
-    /// Setting this AFTER <see cref="Execute"/> calls have already happened
-    /// still affects subsequent calls.
+    /// Internal — adapter-only plumbing. Setting this AFTER
+    /// <see cref="Execute"/> calls have already happened still affects
+    /// subsequent calls.
     /// </remarks>
-    public Func<T[], T[]>? CpuExecutor { get; set; }
+    internal Func<T[], T[]>? CpuExecutor { get; set; }
 
     public NNAPIBackend(NNAPIConfiguration config)
     {
@@ -225,11 +231,27 @@ public class NNAPIBackend<T>
         int rcFinish = NNAPIInterop.ModelFinish(_model);
         if (rcFinish != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
         {
-            // Finish fails when no operands/operations have been added — that
-            // means the upstream adapter hasn't wired up an op graph yet. Hold
-            // the bytes for it; caller can call back into a populated-model
-            // build path before re-invoking Initialize → Execute.
+            // ModelFinish failed — usually because the upstream adapter
+            // hasn't added operands/operations to _model yet. Emit a Trace
+            // warning so the misconfiguration is observable in diagnostics
+            // (it WAS silent before), then fall through. Execute() will
+            // route to CpuExecutor or to the documented identity fallback,
+            // matching the codebase's nullable-default contract instead of
+            // bubbling out a hard failure here.
+            System.Diagnostics.Trace.TraceWarning(
+                $"NNAPIBackend.CompileForNNAPI: ANeuralNetworksModel_finish failed " +
+                $"(rc={rcFinish}). No NNAPI op graph compiled — Execute() will route " +
+                $"through CpuExecutor when set or identity-passthrough otherwise.");
             return;
+        }
+
+        // Release any previously-bound compilation before overwriting the
+        // handle — repeated LoadModel calls would otherwise leak each prior
+        // compilation's native resources.
+        if (_compilation != IntPtr.Zero)
+        {
+            NNAPIInterop.CompilationFree(_compilation);
+            _compilation = IntPtr.Zero;
         }
 
         int rcCompile = NNAPIInterop.CompilationCreate(_model, out _compilation);
@@ -242,6 +264,34 @@ public class NNAPIBackend<T>
             throw new InvalidOperationException($"ANeuralNetworksCompilation_finish failed (rc={rcFin}).");
     }
 
+    /// <summary>
+    /// Releases the native NNAPI handles. Safe to call multiple times.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        if (_compilation != IntPtr.Zero)
+        {
+            NNAPIInterop.CompilationFree(_compilation);
+            _compilation = IntPtr.Zero;
+        }
+        if (_model != IntPtr.Zero)
+        {
+            NNAPIInterop.ModelFree(_model);
+            _model = IntPtr.Zero;
+        }
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
+    ~NNAPIBackend()
+    {
+        // Finalizer-safe: only touches native handles, not managed state.
+        if (_disposed) return;
+        if (_compilation != IntPtr.Zero) NNAPIInterop.CompilationFree(_compilation);
+        if (_model != IntPtr.Zero) NNAPIInterop.ModelFree(_model);
+    }
+
     private T[] ExecuteOnNNAPI(T[] input)
     {
         // Real NNAPI path: only available when a compiled graph exists.
@@ -250,12 +300,21 @@ public class NNAPIBackend<T>
             return ExecuteNativeNNAPI(input);
         }
 
-        // Managed-CPU fallback. Invoke the registered executor if any; otherwise
-        // return a passthrough copy — this is the only mathematically defensible
-        // answer when no model is wired. Callers SHOULD set CpuExecutor before
-        // Execute() to the surrounding model's Predict path.
+        // Managed-CPU fallback. Invoke the registered executor if any;
+        // otherwise return identity-passthrough. CpuExecutor is the
+        // "industry-standard" plug-in slot the surrounding adapter (or the
+        // model facade) populates with its real Predict path. The
+        // identity-passthrough default is intentionally a documented
+        // limitation rather than a throw — it preserves the codebase's
+        // nullable-default contract, but Trace-warns so the unconfigured
+        // state is observable in diagnostics instead of silent.
         var executor = CpuExecutor;
         if (executor != null) return executor(input);
+        System.Diagnostics.Trace.TraceWarning(
+            "NNAPIBackend.Execute: no compiled NNAPI graph and no CpuExecutor " +
+            "configured — returning identity-passthrough. Wire CpuExecutor to " +
+            "the surrounding model's Predict entry point for a meaningful " +
+            "CPU fallback.");
         var copy = new T[input.Length];
         Array.Copy(input, copy, input.Length);
         return copy;

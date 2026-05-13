@@ -183,17 +183,12 @@ public class ColBERTRetriever<T> : RetrieverBase<T>
             var docTokens = TokenizeAndTruncate(doc.Content, _maxDocLength);
             var tokenScore = CalculateTokenOverlapScore(queryTokens, docTokens);
 
-            // Anchor on the stored relevance score (defaults to 1.0 when not
-            // populated) and modulate by token overlap. Matches the existing
-            // first-stage + token-overlap composition the previous fallback
-            // intended, without the empty-vector indirection.
-            var anchor = NumOps.GreaterThan(doc.RelevanceScore, NumOps.Zero)
-                ? doc.RelevanceScore
-                : NumOps.One;
-            var combinedScore = NumOps.Multiply(
-                anchor,
-                NumOps.FromDouble(1.0 + tokenScore * 0.5)
-            );
+            // Use a request-local anchor of 1.0 — anchoring on
+            // doc.RelevanceScore would pull in stale values written by
+            // earlier queries (this retriever writes relevance back onto
+            // the returned docs), making ranking dependent on query order
+            // rather than on the current query's token overlap.
+            var combinedScore = NumOps.FromDouble(1.0 + tokenScore * 0.5);
 
             return (doc, combinedScore);
         }).ToList();

@@ -173,11 +173,22 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         // below — group by base doc ID, combine scores — is the paper-faithful
         // late-interaction reducer and stays the same regardless of where the
         // candidate set comes from.
-        var allDocuments = (metadataFilters == null || metadataFilters.Count == 0)
-            ? _documentStore.GetAll().ToList()
-            : _documentStore.GetAll().Where(d => MatchesMetadata(d, metadataFilters)).ToList();
+        //
+        // Query-dependent fallback scoring: instead of aggregating the stale
+        // `doc.RelevanceScore` (which would be unrelated to the current query
+        // when other queries had previously written into it), compute a
+        // per-token-overlap score against the current query. Matches the
+        // ColBERTRetriever fallback's lexical-overlap composition so results
+        // stay query-relevant even without the multi-vector embedder.
+        var queryTokens = TokenizeForOverlap(query);
 
-        // Group documents by ID and aggregate their vector scores
+        var allDocuments = (metadataFilters == null || metadataFilters.Count == 0)
+            ? _documentStore.GetAll()
+            : _documentStore.GetAll().Where(d => MatchesMetadata(d, metadataFilters));
+
+        // Group documents by ID and aggregate their vector scores. Compute
+        // per-document overlap on the fly — bounded-size accumulator per
+        // base doc ID, no full-corpus list materialised.
         var documentScores = new Dictionary<string, (Document<T> doc, List<T> scores)>();
 
         foreach (var doc in allDocuments)
@@ -189,7 +200,8 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
                 documentScores[docId] = (doc, new List<T>());
             }
 
-            documentScores[docId].scores.Add(doc.RelevanceScore);
+            double overlap = ComputeTokenOverlap(queryTokens, doc.Content);
+            documentScores[docId].scores.Add(NumOps.FromDouble(overlap));
         }
 
         // Aggregate scores based on the specified method
@@ -279,5 +291,39 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
                 // Default to max
                 return scores.Max() ?? NumOps.Zero;
         }
+    }
+
+    private static readonly char[] s_overlapSeparators = new[] { ' ', '\t', '\n', '\r', ',', '.', '!', '?', ';', ':' };
+
+    /// <summary>
+    /// Lowercases <paramref name="query"/> and splits on whitespace +
+    /// common punctuation to produce the set of overlap tokens used by
+    /// <see cref="ComputeTokenOverlap"/> in the embedder-less fallback.
+    /// </summary>
+    private static HashSet<string> TokenizeForOverlap(string query)
+    {
+        return query
+            .ToLowerInvariant()
+            .Split(s_overlapSeparators, StringSplitOptions.RemoveEmptyEntries)
+            .ToHashSet();
+    }
+
+    /// <summary>
+    /// Returns the fraction of <paramref name="queryTokens"/> present in
+    /// <paramref name="docContent"/> (Jaccard-style overlap on tokens).
+    /// Zero when either side is empty.
+    /// </summary>
+    private static double ComputeTokenOverlap(HashSet<string> queryTokens, string? docContent)
+    {
+        if (queryTokens.Count == 0 || string.IsNullOrWhiteSpace(docContent)) return 0.0;
+        var docTokens = (docContent ?? string.Empty)
+            .ToLowerInvariant()
+            .Split(s_overlapSeparators, StringSplitOptions.RemoveEmptyEntries);
+        int hits = 0;
+        foreach (var token in docTokens)
+        {
+            if (queryTokens.Contains(token)) hits++;
+        }
+        return (double)hits / queryTokens.Count;
     }
 }

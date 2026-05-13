@@ -64,6 +64,7 @@ public class HTMNetworkTests : NeuralNetworkModelTestBase
     // ignores input magnitude beyond permanence threshold). Probe via a
     // spatial perturbation that changes WHICH inputs cross permanence,
     // not a scalar scaling that doesn't.
+    [Fact(Timeout = 120_000)]
     public override async Task ScaledInput_ShouldChangeOutput()
     {
         await Task.Yield();
@@ -108,6 +109,7 @@ public class HTMNetworkTests : NeuralNetworkModelTestBase
     // invariant trips on legitimate TM-state-accumulation that drives the
     // unsupervised readout off-distribution in 200 steps. Override to assert
     // the analogous HTM contract: Predict stays finite under 200 Train calls.
+    [Fact(Timeout = 120_000)]
     public override async Task MoreData_ShouldNotDegrade()
     {
         await Task.Yield();
@@ -129,6 +131,7 @@ public class HTMNetworkTests : NeuralNetworkModelTestBase
                 + "Train calls. SP permanence overflow or TM state divergence.");
     }
 
+    [Fact(Timeout = 120_000)]
     public override async Task Training_ShouldReduceLoss()
     {
         await Task.Yield();
