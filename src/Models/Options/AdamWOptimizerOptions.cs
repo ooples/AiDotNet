@@ -44,6 +44,36 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     }
 
     /// <summary>
+    /// Copy constructor — required by the Options golden pattern so Clone()
+    /// faithfully preserves every property. Without it, a Cloned model
+    /// silently re-runs the default constructor and loses any customised
+    /// hyperparameters.
+    /// </summary>
+    public AdamWOptimizerOptions(AdamWOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        // Base / inherited gradient-clipping options.
+        EnableGradientClipping = other.EnableGradientClipping;
+        MaxGradientNorm = other.MaxGradientNorm;
+        GradientClippingMethod = other.GradientClippingMethod;
+
+        // AdamW-specific options
+        BatchSize = other.BatchSize;
+        InitialLearningRate = other.InitialLearningRate;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        Epsilon = other.Epsilon;
+        WeightDecay = other.WeightDecay;
+        UseAMSGrad = other.UseAMSGrad;
+        UseAdaptiveBetas = other.UseAdaptiveBetas;
+        MinBeta1 = other.MinBeta1;
+        MaxBeta1 = other.MaxBeta1;
+        MinBeta2 = other.MinBeta2;
+        MaxBeta2 = other.MaxBeta2;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
     /// <value>A positive integer, defaulting to 32.</value>

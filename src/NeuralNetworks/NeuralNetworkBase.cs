@@ -4947,11 +4947,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // The arena is thread-static and resets on Dispose, so intermediate tensors
             // (conv outputs, attention scores, gradient buffers) are recycled every iteration.
             using var arena = TensorArena.Create();
-            // Persistent tape: gates the AutoTrainingCompiler fast path in
-            // AiDotNet.Tensors.Engines.Compilation.AutoTrainingCompiler. With
-            // Persistent=true, after the first training step the compiler
-            // records the forward op pattern; on subsequent steps with a
-            // matching pattern, ComputeGradients replays a compiled
+            // Persistent tape (the parameterless GradientTape<T> ctor picks
+            // up GradientTapeOptions.Default which sets Persistent = true):
+            // gates the AutoTrainingCompiler fast path in
+            // AiDotNet.Tensors.Engines.Compilation.AutoTrainingCompiler.
+            // With Persistent = true, after the first training step the
+            // compiler records the forward op pattern; on subsequent steps
+            // with a matching pattern, ComputeGradients replays a compiled
             // CompiledBackwardGraph instead of walking the tape entry list +
             // dispatching dictionary-keyed gradient lookups per op. Profiling
             // (dotnet-trace + GC.GetTotalAllocatedBytes) showed gradient-tape

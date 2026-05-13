@@ -1284,10 +1284,16 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </param>
     public void EnableGradientPenalty(bool enable, double lambda)
     {
+        // Only validate lambda when actually enabling — a caller disabling
+        // the penalty doesn't care about the magnitude argument and should
+        // not be forced to pass a positive sentinel.
+        if (enable)
+        {
+            if (lambda <= 0)
+                throw new ArgumentOutOfRangeException(nameof(lambda), "λ must be > 0.");
+            _gradientPenaltyLambda = lambda;
+        }
         _useGradientPenalty = enable;
-        if (lambda <= 0)
-            throw new ArgumentOutOfRangeException(nameof(lambda), "λ must be > 0.");
-        _gradientPenaltyLambda = lambda;
     }
 
     /// <summary>

@@ -1105,6 +1105,15 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public T ComputeAuxiliaryLoss()
     {
+        // Honor the public UseAuxiliaryLoss toggle so callers that turn the
+        // regulariser off don't get a non-zero penalty value mixed into the
+        // training loss.
+        if (!UseAuxiliaryLoss)
+        {
+            _lastTransformationLoss = NumOps.Zero;
+            return _lastTransformationLoss;
+        }
+
         var theta = _lastTransformationMatrix;
         if (theta == null)
         {

@@ -800,6 +800,13 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
 
         foreach (var input in inputs)
         {
+            // Skip null entries — there's no Modality bucket to assign them
+            // to (ModalityType has no Unknown / Custom value), and the
+            // previous unconditional `input.Modality` dereference NRE'd on
+            // null. Callers that want null-input visibility should filter
+            // upstream; this loop now only aggregates by genuine modality.
+            if (input is null) continue;
+
             // Aggregate by modality: if any input of a modality fails, the
             // modality is flagged unsafe with the union of every input's flags.
             var (sampleSafe, sampleFlags) = StructuralSafetyCheck(input);
@@ -817,7 +824,7 @@ public class UnifiedMultimodalNetwork<T> : NeuralNetworkBase<T>, IUnifiedMultimo
         return results;
     }
 
-    private (bool IsSafe, IEnumerable<string> Flags) StructuralSafetyCheck(MultimodalInput<T> input)
+    private (bool IsSafe, IEnumerable<string> Flags) StructuralSafetyCheck(MultimodalInput<T>? input)
     {
         var flags = new List<string>();
         if (input == null)

@@ -217,9 +217,14 @@ namespace AiDotNet.NeuralNetworks
             // for Word2Vec's 2M-parameter embedding table starves the
             // memorization update enough that LossStrictlyDecreasesOnMemorization
             // only achieves ~0.5% drop vs the test's ≥1% floor. Disable
-            // clipping AND step the lr up to the paper-prescribed 0.025 so the
-            // optimizer matches the paper while remaining tape-compatible
-            // with the network's TrainWithTape path.
+            // clipping AND step the lr up to the paper-prescribed 0.025 so
+            // the optimizer aligns the paper's key hyperparameters (lr =
+            // 0.025, no gradient clipping) while remaining tape-compatible
+            // via TrainWithTape. The optimizer itself is still Adam — the
+            // original Mikolov 2013 paper uses SGD with linear LR decay;
+            // we accept the deviation because Adam is the tape-supported
+            // path in this codebase and the resulting embeddings preserve
+            // the paper's training signal modulo Adam's adaptive scaling.
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
                 this,
                 new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>

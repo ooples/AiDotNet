@@ -170,6 +170,8 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
     /// </summary>
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        // Pass the current LossFunction through so cloning a model trained
+        // with a custom objective doesn't silently downgrade to the default.
         return new DCGAN<T>(
             _latentSize,
             _imageChannels,
@@ -177,7 +179,7 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             _imageWidth,
             _generatorFeatureMaps,
             _discriminatorFeatureMaps,
-            lossFunction: null,
+            lossFunction: LossFunction,
             options: _options);
     }
 

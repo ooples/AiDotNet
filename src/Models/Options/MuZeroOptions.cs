@@ -34,6 +34,57 @@ namespace AiDotNet.Models.Options;
 public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
 {
     /// <summary>
+    /// Default constructor — required for object-initializer syntax.
+    /// </summary>
+    public MuZeroOptions()
+    {
+    }
+
+    /// <summary>
+    /// Copy constructor — required by the Options golden pattern so
+    /// Clone() faithfully preserves every property. Mirrors every base
+    /// <see cref="ReinforcementLearningOptions{T}"/> field plus every
+    /// MuZero-specific field. Without it, a Cloned agent silently
+    /// re-runs the default constructor and loses any customised
+    /// hyperparameters.
+    /// </summary>
+    public MuZeroOptions(MuZeroOptions<T> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        // Base ReinforcementLearningOptions<T> fields
+        LearningRate = other.LearningRate;
+        DiscountFactor = other.DiscountFactor;
+        LossFunction = other.LossFunction;
+        BatchSize = other.BatchSize;
+        ReplayBufferSize = other.ReplayBufferSize;
+        TargetUpdateFrequency = other.TargetUpdateFrequency;
+        UsePrioritizedReplay = other.UsePrioritizedReplay;
+        EpsilonStart = other.EpsilonStart;
+        EpsilonEnd = other.EpsilonEnd;
+        EpsilonDecay = other.EpsilonDecay;
+        WarmupSteps = other.WarmupSteps;
+        MaxGradientNorm = other.MaxGradientNorm;
+
+        // MuZero-specific fields
+        ObservationSize = other.ObservationSize;
+        ActionSize = other.ActionSize;
+        LatentStateSize = other.LatentStateSize;
+        RepresentationLayers = new List<int>(other.RepresentationLayers);
+        DynamicsLayers = new List<int>(other.DynamicsLayers);
+        PredictionLayers = new List<int>(other.PredictionLayers);
+        NumSimulations = other.NumSimulations;
+        PUCTConstant = other.PUCTConstant;
+        RootDirichletAlpha = other.RootDirichletAlpha;
+        RootExplorationFraction = other.RootExplorationFraction;
+        UnrollSteps = other.UnrollSteps;
+        TDSteps = other.TDSteps;
+        PriorityAlpha = other.PriorityAlpha;
+        UseValuePrefix = other.UseValuePrefix;
+        Optimizer = other.Optimizer;
+    }
+
+    /// <summary>
     /// Dimensionality of the environment's observation vector. Defaults to
     /// 4 — the canonical CartPole / cart-pole-balance observation
     /// (cart position, cart velocity, pole angle, pole angular velocity),
