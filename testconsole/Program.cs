@@ -26,6 +26,7 @@ class Program
         ["ngboost-profile"]     = NGBoostProfile.Run,
         ["svc-profile"]         = SVCProfile.Run,
         ["vec-inspect"]         = VecInspect.Run,
+        ["grafprint-clone-diag"] = GraFPrintCloneDiag.Run,
     };
 
     static async Task Main(string[] args)
