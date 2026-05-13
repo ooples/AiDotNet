@@ -1061,15 +1061,29 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
         else if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-                 && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+                 && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed
+                 || IsTrainingMode)
         {
             // Tape-tracked path: zero-alloc Into/InPlace variants bypass the gradient
             // tape, so while a tape is active we must use the non-in-place Engine ops
             // (Conv2D + TensorBroadcastAdd) so the backward pass can follow the
             // gradient chain back to the kernel and bias tensors.
             //
-            // Check the tape directly rather than IsTrainingMode because not every
-            // caller flips IsTrainingMode before invoking the forward pass —
+            // The IsTrainingMode branch additionally covers the **compiled training
+            // path** — CompiledTapeTrainingStep traces the forward graph under
+            // GraphMode (which is not GradientTape.Current). Without this condition
+            // the layer would fall through to the in-place inference fast path,
+            // and `_kernels` / `_biases` would never appear as graph leaves
+            // connected to the loss output node — the fused optimizer would then
+            // see those parameters as having permanent zero gradients and never
+            // update them. (Bug isolated via testconsole/FusedPropagationMinRepro:
+            // Conv kernels/biases stayed at init values across 20 fused Adam
+            // steps before this fix; loss stayed flat at 22.81. With the fix
+            // the kernel updates and loss decreases like Dense and BatchNorm
+            // already do.)
+            //
+            // Check the tape directly rather than IsTrainingMode alone because not
+            // every caller flips IsTrainingMode before invoking the forward pass —
             // DiffusionModelBase.Train opens a GradientTape without ever calling
             // SetTrainingMode, which caused this branch to be silently skipped.
             //
