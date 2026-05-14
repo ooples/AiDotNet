@@ -5271,7 +5271,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// state consistent for the rest of the run. Cleared in
     /// <see cref="ResetState"/> and <see cref="InvalidateParameterCountCache"/>.
     /// </summary>
-    private bool _fusedTrainingDisabled;
+    /// <remarks>
+    /// Promoted from <c>private</c> to <c>protected</c> so models with
+    /// architecture-specific fused-Adam divergence (e.g. GraFPrint's
+    /// 53-layer BatchNorm pyramid hits a CompiledTrainingPlan
+    /// per-parameter gradient propagation residual that v0.80.1's #351
+    /// two-bug repair didn't fully close) can opt OUT of fused-Adam
+    /// while keeping every other compile-mode optimization (ConvBnFusion,
+    /// dataflow fusion, algebraic backward, forward CSE, etc.) engaged.
+    /// Setting this in the model constructor avoids the much heavier
+    /// hammer of globally toggling <c>TensorCodecOptions.EnableCompilation</c>,
+    /// which would also disable those orthogonal compile-mode
+    /// optimizations and tank training-step performance.
+    /// </remarks>
+    protected bool _fusedTrainingDisabled;
 
     /// <summary>
     /// Tracks whether the fused compiled training path has EVER successfully

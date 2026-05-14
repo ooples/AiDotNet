@@ -109,6 +109,26 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         base.SampleRate = _options.SampleRate;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
             _options.FftSize, _options.HopLength);
+
+        // Targeted opt-out from the fused-Adam optimizer step ONLY. The
+        // 53-layer paper-faithful BatchNorm pyramid (Bhattacharjee 2023 §3.3)
+        // hits a CompiledTrainingPlan per-parameter gradient propagation
+        // residual: eager and fused move params by near-identical magnitude
+        // on step 1 (||Δparams|| 2.43 vs 2.44 — 0.4% delta) but loss
+        // trajectories diverge by 22× immediately and ~10⁶× by step 8 —
+        // see the chore(#1316) diagnostic-harness commits earlier in this
+        // branch. Tensors v0.80.1's #351 two-bug repair closed two related
+        // bugs but a third symptom remains for BN-pyramid topologies.
+        //
+        // Setting _fusedTrainingDisabled here (vs the previous Train-time
+        // toggle of TensorCodecOptions.EnableCompilation = false) keeps
+        // every other compile-mode optimization engaged: ConvBnFusion,
+        // dataflow fusion, algebraic backward, forward CSE, BLAS batch,
+        // pointwise fusion. Those orthogonal optimizations are what give
+        // the 53-layer chain its per-step throughput; only the optimizer
+        // step itself falls back to eager Adam, which is correct.
+        _fusedTrainingDisabled = true;
+
         InitializeLayers();
     }
 
@@ -328,25 +348,15 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         else if (expected.Rank == 2)
             alignedTarget = Engine.Reshape(expected, [expected.Shape[0], expected.Shape[1], 1, 1]);
 
-        // Force eager training (compile-mode disabled) for the duration of
-        // this Train call. The paper-faithful BN-pyramid (Bhattacharjee 2023
-        // §3.3 — 53 layers heavy in BatchNorm) hits a fused-Adam divergence
-        // in CompiledTrainingPlan's per-parameter gradient propagation: eager
-        // and fused move params by near-identical magnitude on step 1
-        // (||Δparams|| 2.43 vs 2.44), but loss trajectories diverge by 22×
-        // immediately and ~10⁶× by step 8. Tensors v0.78's eligibility gate
-        // auto-engages fused-Adam for industry-default Adam (UseAdaptiveLR=true
-        // — the GraFPrint paper default), which exposes the bug; v0.80.1's
-        // CompiledTrainingPlan two-bug repair (#351) closed two related
-        // propagation bugs but a third symptom remains for BN-pyramid models.
-        // See chore(#1316) commits earlier in this branch for the diagnostic
-        // harness that isolates the divergence to direction-of-update, not
-        // step-size. Until Tensors lands a full fix, force eager here so
-        // GraFPrint training matches the paper's reproducible behaviour.
-        var savedCodec = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
-        var eagerCodec = WithCompilationDisabled(savedCodec);
-        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(eagerCodec);
-
+        // Note: the per-model _fusedTrainingDisabled flag is set in the
+        // constructor (see ctor for the BN-pyramid divergence rationale).
+        // That bypasses ONLY the fused-Adam optimizer-step path while
+        // leaving every other compile-mode optimization engaged
+        // (ConvBnFusion, dataflow fusion, algebraic backward, etc.).
+        // Earlier revisions of this Train method scoped a global
+        // TensorCodecOptions.EnableCompilation = false around TrainWithTape;
+        // that hammered ALL compile-mode optimizations off and tanked
+        // throughput. The targeted flag is the right scope.
         SetTrainingMode(true);
         try
         {
@@ -355,33 +365,8 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         finally
         {
             SetTrainingMode(false);
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(savedCodec);
         }
     }
-
-    /// <summary>
-    /// Returns a copy of <paramref name="src"/> with <c>EnableCompilation</c>
-    /// forced to false, all other tunables preserved. Setting
-    /// <c>Current.EnableCompilation</c> directly is a no-op because
-    /// <c>Current</c> returns a snapshot — we have to construct and re-assign.
-    /// </summary>
-    private static AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions
-        WithCompilationDisabled(AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions src)
-        => new()
-        {
-            EnableCompilation = false,
-            EnableDataflowFusion = src.EnableDataflowFusion,
-            EnableAlgebraicBackward = src.EnableAlgebraicBackward,
-            EnableSpectralDecomposition = src.EnableSpectralDecomposition,
-            SpectralErrorTolerance = src.SpectralErrorTolerance,
-            DataflowFusionMaxHidden = src.DataflowFusionMaxHidden,
-            EnableConvBnFusion = src.EnableConvBnFusion,
-            EnableAttentionFusion = src.EnableAttentionFusion,
-            EnablePointwiseFusion = src.EnablePointwiseFusion,
-            EnableForwardCSE = src.EnableForwardCSE,
-            EnableBlasBatch = src.EnableBlasBatch,
-            EnableMixedPrecision = src.EnableMixedPrecision,
-        };
 
     public override void UpdateParameters(Vector<T> parameters)
     {
