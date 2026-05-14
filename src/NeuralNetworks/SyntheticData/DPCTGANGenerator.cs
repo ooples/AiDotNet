@@ -576,13 +576,11 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// <summary>
     /// Paper-faithful DP-SGD critic step (Abadi et al. 2016
     /// "Deep Learning with Differential Privacy" §3, layered over Xu et al.
-    /// 2019 CTGAN's PacGAN-packed WGAN). Computes the WGAN critic loss
-    /// gradient via <see cref="GradientTape{T}"/>, then applies the
-    /// canonical DP-SGD primitive:
-    ///   1. Per-parameter L2 clip to <see cref="_options.ClipNorm"/>
-    ///   2. Add Gaussian noise N(0, (clip * sigma)^2 * I) to the clipped
-    ///      gradient.
-    ///   3. Hand the noised gradient to the optimizer via TapeStepContext.
+    /// 2019 CTGAN's PacGAN-packed WGAN). Computes per-packed-example WGAN
+    /// critic gradients, then applies the canonical DP-SGD primitive:
+    ///   1. Clip each example's full gradient vector to <see cref="_options.ClipNorm"/>.
+    ///   2. Average the clipped gradients and add Gaussian noise.
+    ///   3. Hand the noised averaged gradient to the optimizer via TapeStepContext.
     /// Replaces the prior <c>UpdateDiscriminatorParametersDP</c> path that
     /// clipped/noised the parameters directly (not paper-faithful — DP-SGD
     /// operates on gradients) and threw "Backward pass must be called…" on
@@ -594,7 +592,6 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
         var (realPacked, fakePacked) = BuildPackedRealAndFakeBatches(transformedData, numPacks);
 
-        using var tape = new GradientTape<T>();
         var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers);
 
         var realScores = DiscriminatorForwardBatched(realPacked, isTraining: true);
@@ -605,14 +602,7 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
         var lossTensor = Engine.TensorSubtract(avgFake, avgReal);
 
-        var grads = tape.ComputeGradients(lossTensor, discParams);
-
-        // DP-SGD primitive: clip per-parameter gradient norm, then add
-        // Gaussian noise scaled by ClipNorm × noiseMultiplier. Operates on
-        // the gradient tensors in `grads` in-place; the optimizer's Step
-        // then sees the noised gradients (privacy budget is consumed per
-        // step via ComputeStepPrivacyCost in the outer Fit loop).
-        var noisedGrads = ClipAndNoiseGradients(grads);
+        var noisedGrads = ComputePerExampleNoisedGradients(realPacked, fakePacked, discParams);
 
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
@@ -677,40 +667,89 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     }
 
     /// <summary>
-    /// DP-SGD gradient post-processing (Abadi et al. 2016 §3): per-parameter
-    /// L2 clip to <see cref="_options.ClipNorm"/>, then add Gaussian noise
-    /// with std = <c>ClipNorm * noiseMultiplier</c>. Returns a new dict so
-    /// the original tape-recorded grads are not mutated.
+    /// DP-SGD gradient post-processing (Abadi et al. 2016 §3): compute each
+    /// packed example's critic gradient, clip that example's full parameter
+    /// vector to <see cref="_options.ClipNorm"/>, average clipped gradients,
+    /// then add Gaussian noise to the averaged gradient.
     /// </summary>
-    private Dictionary<Tensor<T>, Tensor<T>> ClipAndNoiseGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    private Dictionary<Tensor<T>, Tensor<T>> ComputePerExampleNoisedGradients(
+        Tensor<T> realPacked,
+        Tensor<T> fakePacked,
+        IReadOnlyList<Tensor<T>> discParams)
     {
-        var noised = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-        double clipNorm = _options.ClipNorm;
-        double noiseStd = _options.ClipNorm * _computedNoiseMultiplier;
+        int exampleCount = Math.Max(1, realPacked.Shape[0]);
+        var clippedSums = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var param in discParams)
+            clippedSums[param] = new Tensor<T>(param._shape);
 
-        foreach (var kvp in grads)
+        for (int example = 0; example < exampleCount; example++)
         {
-            var g = kvp.Value;
-            // L2 norm of this parameter's gradient tensor.
-            double sq = 0;
-            for (int i = 0; i < g.Length; i++)
-            {
-                double v = NumOps.ToDouble(g[i]);
-                sq += v * v;
-            }
-            double norm = Math.Sqrt(sq + 1e-12);
-            double clipFactor = Math.Min(1.0, clipNorm / norm);
+            var realExample = ExtractPackedExample(realPacked, example);
+            var fakeExample = ExtractPackedExample(fakePacked, example);
 
-            var clipped = new Tensor<T>(g._shape);
-            for (int i = 0; i < g.Length; i++)
+            Dictionary<Tensor<T>, Tensor<T>> grads;
+            using (var tape = new GradientTape<T>())
             {
-                double cv = NumOps.ToDouble(g[i]) * clipFactor;
-                double noise = NumOps.ToDouble(SampleStandardNormal()) * noiseStd;
-                clipped[i] = NumOps.FromDouble(cv + noise);
+                var realScores = DiscriminatorForwardBatched(realExample, isTraining: true);
+                var fakeScores = DiscriminatorForwardBatched(fakeExample, isTraining: true);
+                var axes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+                var loss = Engine.TensorSubtract(
+                    Engine.ReduceMean(fakeScores, axes, keepDims: false),
+                    Engine.ReduceMean(realScores, axes, keepDims: false));
+                grads = tape.ComputeGradients(loss, discParams);
             }
-            noised[kvp.Key] = clipped;
+
+            double normSquared = 0;
+            foreach (var grad in grads.Values)
+            {
+                for (int i = 0; i < grad.Length; i++)
+                {
+                    double value = NumOps.ToDouble(grad[i]);
+                    normSquared += value * value;
+                }
+            }
+
+            double norm = Math.Sqrt(normSquared + 1e-12);
+            double clipFactor = Math.Min(1.0, _options.ClipNorm / norm);
+
+            foreach (var param in discParams)
+            {
+                if (!grads.TryGetValue(param, out var grad))
+                    continue;
+
+                var sum = clippedSums[param];
+                for (int i = 0; i < grad.Length; i++)
+                {
+                    double value = NumOps.ToDouble(sum[i]) + NumOps.ToDouble(grad[i]) * clipFactor;
+                    sum[i] = NumOps.FromDouble(value);
+                }
+            }
         }
-        return noised;
+
+        var noisedAverage = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        double inverseCount = 1.0 / exampleCount;
+        double noiseStd = _options.ClipNorm * _computedNoiseMultiplier * inverseCount;
+        foreach (var param in discParams)
+        {
+            var sum = clippedSums[param];
+            var averaged = new Tensor<T>(sum._shape);
+            for (int i = 0; i < sum.Length; i++)
+            {
+                double noise = NumOps.ToDouble(SampleStandardNormal()) * noiseStd;
+                averaged[i] = NumOps.FromDouble(NumOps.ToDouble(sum[i]) * inverseCount + noise);
+            }
+            noisedAverage[param] = averaged;
+        }
+
+        return noisedAverage;
+    }
+
+    private Tensor<T> ExtractPackedExample(Tensor<T> packed, int rowIndex)
+    {
+        var row = new Tensor<T>([1, _packedInputDim]);
+        for (int j = 0; j < _packedInputDim; j++)
+            row[0, j] = packed[rowIndex, j];
+        return row;
     }
 
     private (Tensor<T> realPacked, Tensor<T> fakePacked) BuildPackedRealAndFakeBatches(
@@ -720,7 +759,7 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         int pacSize = _options.PacSize;
         int total = numPacks * pacSize;
         var noiseBatch = GenerateNoiseBatchTensor(total);
-        var condBatch = SampleConditionalBatchTensor(total);
+        var (condBatch, rowIndices) = SampleConditionalBatchWithRows(total);
         var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
         var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
         var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
@@ -729,7 +768,7 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var realFlat = new Tensor<T>([total, _dataWidth]);
         for (int s = 0; s < total; s++)
         {
-            int rowIdx = _sampler!.SampleConditionAndRow().RowIndex;
+            int rowIdx = rowIndices[s];
             int cols = Math.Min(_dataWidth, transformedData.Columns);
             for (int j = 0; j < cols; j++) realFlat[s, j] = transformedData[rowIdx, j];
         }
@@ -773,6 +812,23 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
         }
         return batch;
+    }
+
+    private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int batchSize)
+    {
+        var batch = new Tensor<T>([batchSize, _condWidth]);
+        var rowIndices = new int[batchSize];
+        if (_sampler is null) return (batch, rowIndices);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, rowIndex) = _sampler.SampleConditionAndRow();
+            int cols = Math.Min(_condWidth, cv.Length);
+            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+            rowIndices[b] = rowIndex;
+        }
+
+        return (batch, rowIndices);
     }
 
     private Tensor<T> GeneratorForwardWithResidualBatched(Tensor<T> input)

@@ -21,6 +21,12 @@ public static class LayerHelper<T>
     /// </summary>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static void ValidatePatchSize(int patchSize)
+    {
+        if (patchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchSize), patchSize, "patchSize must be greater than 0.");
+    }
+
     /// <summary>
     /// Creates the default layer configuration for a Deep Portfolio Management model.
     /// </summary>
@@ -23442,6 +23448,8 @@ public static class LayerHelper<T>
         int patchSize = 14,
         int inputChannels = 3)
     {
+        ValidatePatchSize(patchSize);
+
         if (inputChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputChannels), "inputChannels must be positive.");
 
@@ -23512,6 +23520,8 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int patchSize = 14)
     {
+        ValidatePatchSize(patchSize);
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
@@ -23571,6 +23581,8 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int patchSize = 14)
     {
+        ValidatePatchSize(patchSize);
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
@@ -23642,6 +23654,9 @@ public static class LayerHelper<T>
         int numHeads = 32,
         double dropoutRate = 0.1)
     {
+        if (patchDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patchDim), patchDim, "patchDim must be greater than 0.");
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int decoderFfnDim = decoderDim * 4;
@@ -23677,6 +23692,8 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int patchSize = 14)
     {
+        ValidatePatchSize(patchSize);
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;

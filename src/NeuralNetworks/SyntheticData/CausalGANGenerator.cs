@@ -745,10 +745,10 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     }
 
     /// <summary>
-    /// Applies the learned causal adjacency matrix to a batch of fake
-    /// samples (Kocaoglu et al. 2018 §4). For each sample row x ∈ R^d,
-    /// emits x' = x ⊙ (I + A) where A is the dataWidth × dataWidth causal
-    /// adjacency matrix. Implemented as a tape-tracked TensorMatMul.
+    /// Applies the learned causal adjacency matrix to a batch of fake samples
+    /// (Kocaoglu et al. 2018). Each sample row x is multiplied by
+    /// (I + A), where A is the dataWidth x dataWidth causal adjacency matrix.
+    /// Implemented as a tape-tracked TensorMatMul.
     /// </summary>
     private Tensor<T> ApplyCausalStructureBatched(Tensor<T> fakeBatch)
     {

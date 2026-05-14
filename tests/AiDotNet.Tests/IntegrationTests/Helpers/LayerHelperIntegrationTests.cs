@@ -16,6 +16,26 @@ namespace AiDotNet.Tests.IntegrationTests.Helpers;
 /// </summary>
 public class LayerHelperIntegrationTests
 {
+    [Fact(Timeout = 120000)]
+    public async Task VisionLanguagePatchFactories_InvalidPatchSize_ThrowAtFactoryBoundary()
+    {
+        var factories = new Action[]
+        {
+            () => LayerHelper<double>.CreateDefaultLLaVAMLPProjectorLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultPixelShuffleProjectorLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultCrossAttentionResamplerVLMLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultVisionAdapterLayers(patchSize: 0).ToList()
+        };
+
+        foreach (var factory in factories)
+        {
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(factory);
+            Assert.Contains("greater than 0", ex.Message);
+        }
+
+        await Task.CompletedTask;
+    }
+
     #region CreateDefaultLayers Tests
 
     [Fact(Timeout = 120000)]
