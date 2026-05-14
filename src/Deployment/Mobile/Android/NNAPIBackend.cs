@@ -297,10 +297,16 @@ internal class NNAPIBackend<T> : IDisposable
                 rc = NNAPIInterop.ExecutionStartCompute(execution, out IntPtr evt);
                 if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
                     throw new InvalidOperationException($"ExecutionStartCompute failed (rc={rc}).");
-                rc = NNAPIInterop.EventWait(evt);
-                NNAPIInterop.EventFree(evt);
-                if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
-                    throw new InvalidOperationException($"EventWait failed (rc={rc}).");
+                try
+                {
+                    rc = NNAPIInterop.EventWait(evt);
+                    if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+                        throw new InvalidOperationException($"EventWait failed (rc={rc}).");
+                }
+                finally
+                {
+                    NNAPIInterop.EventFree(evt);
+                }
 
                 var output = new T[outElems];
                 CopyNativeToManaged(outputPtr, output);
