@@ -30,6 +30,7 @@ class Program
         ["grafprint-continuity-diag"] = GraFPrintContinuityDiag.Run,
         ["grafprint-perf-diag"] = GraFPrintPerfDiag.Run,
         ["fused-min-repro"]     = FusedPropagationMinRepro.Run,
+        ["grafprint-divergence"] = GraFPrintFusedDivergence.Run,
     };
 
     static async Task Main(string[] args)
