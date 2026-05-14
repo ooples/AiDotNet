@@ -606,7 +606,13 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.ReduceMean(pred, allAxes, keepDims: false);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
+            var recomputedFakeScores = DiscriminatorForwardBatched(fakePacked, true);
+            var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
+            return Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+        }
 
         var context = new TapeStepContext<T>(
             discParams, noisedGrads, lossValue,

@@ -4,7 +4,9 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.SyntheticData;
+using AiDotNet.Tensors;
 using Xunit;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace AiDotNet.Tests.IntegrationTests.SyntheticData;
@@ -99,6 +101,13 @@ public class SyntheticTabularGeneratorIntegrationTests
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
     }
 
+    private static TField GetPrivateField<TField>(object instance, string fieldName)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException(instance.GetType().Name, fieldName);
+        return (TField)field.GetValue(instance)!;
+    }
+
     /// <summary>
     /// Creates a NeuralNetworkArchitecture for GAN/NN-based generators.
     /// </summary>
@@ -134,8 +143,8 @@ public class SyntheticTabularGeneratorIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task CTGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
-        var (data, columns) = CreateTestData();
-        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var (data, columns) = CreateImbalancedData();
+        var arch = CreateArchitecture(data.Columns, data.Columns);
         var options = new CTGANOptions<double>
         {
             Seed = Seed,
@@ -290,6 +299,50 @@ public class SyntheticTabularGeneratorIntegrationTests
 
         var generated = generator.Generate(GenSamples);
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TableGAN");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task TableGANGenerator_ClassificationTargets_UseTransformedLabelSlice()
+    {
+        await Task.Yield();
+        var (data, columns) = CreateTestData();
+        var arch = CreateArchitecture(TotalCols, TotalCols);
+        var options = new TableGANOptions<double>
+        {
+            Seed = Seed,
+            EmbeddingDimension = 16,
+            GeneratorDimensions = [32],
+            DiscriminatorDimensions = [32],
+            BatchSize = 25,
+            LabelColumnIndex = 3,
+            ClassificationWeight = 0.5,
+            InformationWeight = 0.1,
+            VGMModes = 3
+        };
+
+        var generator = new TableGANGenerator<double>(arch, options);
+        generator.Fit(data, columns, 1);
+
+        var transformer = GetPrivateField<TabularDataTransformer<double>>(generator, "_transformer");
+        var labelTransform = transformer.GetTransformInfo(options.LabelColumnIndex);
+        int expectedClass = 1;
+
+        var realBatch = new Tensor<double>([1, transformer.TransformedWidth]);
+        realBatch[0, labelTransform.StartOffset + expectedClass] = 1.0;
+
+        var logits = new Tensor<double>([1, columns[options.LabelColumnIndex].Categories.Count]);
+        var targetBuilder = typeof(TableGANGenerator<double>).GetMethod(
+            "BuildClassificationTargetTensor",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+        var targets = (Tensor<double>)targetBuilder.Invoke(generator, [realBatch, logits])!;
+
+        Assert.Equal(1.0, targets[0, expectedClass], 6);
+        for (int c = 0; c < labelTransform.Width; c++)
+        {
+            if (c != expectedClass)
+                Assert.Equal(0.0, targets[0, c], 6);
+        }
     }
 
     [Fact(Timeout = 120000)]
