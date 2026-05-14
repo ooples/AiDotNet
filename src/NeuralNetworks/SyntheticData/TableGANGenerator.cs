@@ -291,7 +291,8 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
                 }
 
                 var genNoise = GenerateNoiseBatchTensor(batchSize);
-                TrainGeneratorStepBatched(genNoise);
+                var generatorTargetBatch = BuildRealBatchTensor(transformedData, batchSize);
+                TrainGeneratorStepBatched(genNoise, generatorTargetBatch);
             }
         }
 
@@ -457,7 +458,7 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// expressed in tape-tracked engine ops so they participate in the
     /// single <see cref="GradientTape{T}.ComputeGradients"/> call.
     /// </summary>
-    private void TrainGeneratorStepBatched(Tensor<T> noiseBatch)
+    private void TrainGeneratorStepBatched(Tensor<T> noiseBatch, Tensor<T> realBatch)
     {
         using var tape = new GradientTape<T>();
 
@@ -469,42 +470,136 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
         var fakeBatch = GeneratorForwardBatched(noiseBatch);
         var fakeActivated = ApplyOutputActivationsBatched(fakeBatch);
-        var fakeScores = DiscriminatorForwardBatched(fakeActivated, isTraining: false);
-
-        var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
-        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
-        // Generator minimizes -E[D(G(z))] — high critic score is the objective.
-        var lossTensor = Engine.TensorNegate(avgFake);
-
-        // Information loss (Park et al. 2018 §3.2): minimize the L2 distance
-        // between fake-sample feature statistics and real-sample statistics.
-        if (_realMean is not null && _options.InformationWeight > 0)
-        {
-            var fakeFeatureAxes = Enumerable.Range(0, fakeActivated.Shape.Length - 1).ToArray();
-            var fakeMean = Engine.ReduceMean(fakeActivated, fakeFeatureAxes, keepDims: false);
-            var realMeanTensor = VectorToTensor(_realMean);
-            var meanDiff = Engine.TensorSubtract(fakeMean, realMeanTensor);
-            var meanSq = Engine.TensorMultiply(meanDiff, meanDiff);
-            var meanAllAxes = Enumerable.Range(0, meanSq.Shape.Length).ToArray();
-            var meanLoss = Engine.ReduceMean(meanSq, meanAllAxes, keepDims: false);
-            var infoWeight = NumOps.FromDouble(_options.InformationWeight);
-            var scaledMeanLoss = Engine.TensorMultiplyScalar(meanLoss, infoWeight);
-            lossTensor = Engine.TensorAdd(lossTensor, scaledMeanLoss);
-        }
-
+        var lossTensor = ComputeGeneratorLoss(fakeActivated, realBatch);
         var grads = tape.ComputeGradients(lossTensor, genParams);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) =>
-            DiscriminatorForwardBatched(ApplyOutputActivationsBatched(GeneratorForwardBatched(inp)), false);
+            ApplyOutputActivationsBatched(GeneratorForwardBatched(inp));
         Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) =>
-            Engine.TensorNegate(Engine.ReduceMean(pred, allAxes, keepDims: false));
+            ComputeGeneratorLoss(pred, realBatch);
 
         var context = new TapeStepContext<T>(
             genParams, grads, lossValue,
             noiseBatch, noiseBatch, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
         _optimizer.Step(context);
+    }
+
+    private Tensor<T> ComputeGeneratorLoss(Tensor<T> fakeActivated, Tensor<T> realBatch)
+    {
+        var fakeScores = DiscriminatorForwardBatched(fakeActivated, isTraining: false);
+        var scoreAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var avgFake = Engine.ReduceMean(fakeScores, scoreAxes, keepDims: false);
+        var lossTensor = Engine.TensorNegate(avgFake);
+
+        if (_realMean is not null && _realVar is not null && _options.InformationWeight > 0)
+        {
+            var weightedInformationLoss = Engine.TensorMultiplyScalar(
+                ComputeInformationLoss(fakeActivated),
+                NumOps.FromDouble(_options.InformationWeight));
+            lossTensor = Engine.TensorAdd(
+                lossTensor,
+                MatchLossShape(weightedInformationLoss, lossTensor));
+        }
+
+        if (_classOutput is not null && _numClasses > 1 && _options.ClassificationWeight > 0)
+        {
+            var weightedClassificationLoss = Engine.TensorMultiplyScalar(
+                ComputeClassificationLoss(fakeActivated, realBatch),
+                NumOps.FromDouble(_options.ClassificationWeight));
+            lossTensor = Engine.TensorAdd(
+                lossTensor,
+                MatchLossShape(weightedClassificationLoss, lossTensor));
+        }
+
+        return lossTensor;
+    }
+
+    private static Tensor<T> MatchLossShape(Tensor<T> term, Tensor<T> reference)
+    {
+        if (ShapesEqual(term.Shape.ToArray(), reference.Shape.ToArray()))
+            return term;
+
+        if (term.Length == 1 && reference.Length == 1)
+            return new Tensor<T>([term[0]], reference._shape);
+
+        return term;
+    }
+
+    private static bool ShapesEqual(IReadOnlyList<int> left, IReadOnlyList<int> right)
+    {
+        if (left.Count != right.Count)
+            return false;
+
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (left[i] != right[i])
+                return false;
+        }
+
+        return true;
+    }
+
+    private Tensor<T> ComputeInformationLoss(Tensor<T> fakeActivated)
+    {
+        var fakeFeatureAxes = Enumerable.Range(0, fakeActivated.Shape.Length - 1).ToArray();
+        var fakeMean = Engine.ReduceMean(fakeActivated, fakeFeatureAxes, keepDims: false);
+        var fakeMeanBroadcast = Engine.TensorTile(fakeMean.Reshape([1, fakeMean.Length]), [fakeActivated.Shape[0], 1]);
+        var centered = Engine.TensorSubtract(fakeActivated, fakeMeanBroadcast);
+        var fakeVariance = Engine.ReduceMean(Engine.TensorMultiply(centered, centered), fakeFeatureAxes, keepDims: false);
+
+        var realMeanTensor = VectorToTensor(_realMean!);
+        var realVarianceTensor = VectorToTensor(_realVar!);
+        var meanDiff = Engine.TensorSubtract(fakeMean, realMeanTensor);
+        var varianceDiff = Engine.TensorSubtract(fakeVariance, realVarianceTensor);
+        var meanSq = Engine.TensorMultiply(meanDiff, meanDiff);
+        var varianceSq = Engine.TensorMultiply(varianceDiff, varianceDiff);
+        var infoLoss = Engine.TensorAdd(meanSq, varianceSq);
+        var infoAxes = Enumerable.Range(0, infoLoss.Shape.Length).ToArray();
+        return Engine.ReduceMean(infoLoss, infoAxes, keepDims: false);
+    }
+
+    private Tensor<T> ComputeClassificationLoss(Tensor<T> fakeActivated, Tensor<T> realBatch)
+    {
+        var logits = ClassifierForwardBatched(fakeActivated);
+        var probabilities = Engine.Softmax(logits, axis: logits.Shape.Length - 1);
+        var targets = BuildClassificationTargetTensor(realBatch, logits);
+        var logProbabilities = Engine.TensorLog(Engine.TensorAddScalar(probabilities, NumOps.FromDouble(1e-8)));
+        var crossEntropyTerms = Engine.TensorMultiply(targets, logProbabilities);
+        var allAxes = Enumerable.Range(0, crossEntropyTerms.Shape.Length).ToArray();
+        var summed = Engine.ReduceSum(crossEntropyTerms, allAxes, keepDims: false);
+        return Engine.TensorMultiplyScalar(summed, NumOps.FromDouble(-1.0 / Math.Max(1, realBatch.Shape[0])));
+    }
+
+    private Tensor<T> ClassifierForwardBatched(Tensor<T> input)
+    {
+        var current = input;
+        for (int i = 0; i < _classLayers.Count; i++)
+        {
+            current = _classLayers[i].Forward(current);
+            current = Engine.ReLU(current);
+        }
+
+        return _classOutput is null ? current : _classOutput.Forward(current);
+    }
+
+    private Tensor<T> BuildClassificationTargetTensor(Tensor<T> realBatch, Tensor<T> logits)
+    {
+        var targets = new Tensor<T>(logits._shape);
+        int batch = Math.Min(realBatch.Shape[0], logits.Shape[0]);
+        int classCount = logits.Shape[^1];
+        int labelIdx = Math.Max(0, Math.Min(_options.LabelColumnIndex, realBatch.Shape[^1] - 1));
+
+        for (int b = 0; b < batch; b++)
+        {
+            int targetClass = Math.Min(
+                Math.Max((int)Math.Round(NumOps.ToDouble(realBatch[b, labelIdx])), 0),
+                classCount - 1);
+            targets[b, targetClass] = NumOps.One;
+        }
+
+        return targets;
     }
 
     /// <summary>

@@ -591,13 +591,28 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
         var avgReal = Engine.ReduceMean(realScores, allAxes, keepDims: false);
         var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
         // WGAN critic minimizes E[D(fake)] - E[D(real)].
-        var lossTensor = Engine.TensorSubtract(avgFake, avgReal);
+        var wassersteinLoss = Engine.TensorSubtract(avgFake, avgReal);
+        var gradientPenalty = ComputeGradientPenalty(realPacked, fakePacked);
+        var weightedGradientPenalty = Engine.TensorMultiplyScalar(
+            gradientPenalty,
+            NumOps.FromDouble(_options.GradientPenaltyWeight));
+        var lossTensor = Engine.TensorAdd(wassersteinLoss, weightedGradientPenalty);
 
         var grads = tape.ComputeGradients(lossTensor, discParams);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.ReduceMean(pred, allAxes, keepDims: false);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
+            var recomputedFakeScores = DiscriminatorForwardBatched(fakePacked, true);
+            var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
+            var recomputedWasserstein = Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+            var recomputedGradientPenalty = ComputeGradientPenalty(realPacked, fakePacked);
+            return Engine.TensorAdd(
+                recomputedWasserstein,
+                Engine.TensorMultiplyScalar(recomputedGradientPenalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+        }
 
         var context = new TapeStepContext<T>(
             discParams, grads, lossValue,
@@ -688,7 +703,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
 
         // Per-sample noise + conditional vectors that drive the generator.
         var noiseBatch = GenerateNoiseBatchTensor(totalSamples);
-        var condBatch = SampleConditionalBatchTensor(totalSamples);
+        var (condBatch, rowIndices) = SampleConditionalBatchWithRows(totalSamples);
         var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
 
         var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
@@ -700,7 +715,7 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
         var realFlat = new Tensor<T>([totalSamples, _dataWidth]);
         for (int s = 0; s < totalSamples; s++)
         {
-            int rowIdx = _sampler!.SampleConditionAndRow().RowIndex;
+            int rowIdx = rowIndices[s];
             int cols = Math.Min(_dataWidth, transformedData.Columns);
             for (int j = 0; j < cols; j++) realFlat[s, j] = transformedData[rowIdx, j];
         }
@@ -760,6 +775,65 @@ public class CTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenerato
             for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
         }
         return batch;
+    }
+
+    private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int batchSize)
+    {
+        var batch = new Tensor<T>([batchSize, _condWidth]);
+        var rowIndices = new int[batchSize];
+        if (_sampler is null) return (batch, rowIndices);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, rowIndex) = _sampler.SampleConditionAndRow();
+            int cols = Math.Min(_condWidth, cv.Length);
+            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+            rowIndices[b] = rowIndex;
+        }
+
+        return (batch, rowIndices);
+    }
+
+    private Tensor<T> ComputeGradientPenalty(Tensor<T> realPacked, Tensor<T> fakePacked)
+    {
+        int batchSize = Math.Max(1, realPacked.Shape[0]);
+        int elementsPerSample = Math.Max(1, realPacked.Length / batchSize);
+
+        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
+        var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realPacked.Length]);
+        var ones = new Tensor<T>([realPacked.Length]);
+        Engine.TensorFill(ones, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(ones, epsilonBroadcast);
+
+        var realFlat = realPacked.Reshape([realPacked.Length]);
+        var fakeFlat = fakePacked.Reshape([fakePacked.Length]);
+        var interpolatedFlat = Engine.TensorAdd(
+            Engine.TensorMultiply(epsilonBroadcast, realFlat),
+            Engine.TensorMultiply(oneMinusEpsilon, fakeFlat));
+        var interpolated = interpolatedFlat.Reshape(realPacked._shape);
+
+        Tensor<T> inputGradients;
+        using (var gradientTape = new GradientTape<T>())
+        {
+            var scores = DiscriminatorForwardBatched(interpolated, true);
+            var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated]);
+            inputGradients = gradients.TryGetValue(interpolated, out var gradient)
+                ? gradient
+                : new Tensor<T>(interpolated._shape);
+        }
+
+        var gradientsReshaped = inputGradients.Reshape([batchSize, elementsPerSample]);
+        var gradientSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
+        var gradientNormSquared = Engine.ReduceSum(gradientSquared, [1], keepDims: false);
+        var gradientNorm = Engine.TensorSqrt(Engine.TensorAddScalar(gradientNormSquared, NumOps.FromDouble(1e-12)));
+        var targetNorm = new Tensor<T>(gradientNorm._shape);
+        Engine.TensorFill(targetNorm, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradientNorm, targetNorm);
+        var penalty = Engine.TensorMultiply(deviation, deviation);
+        var penaltyAxes = Enumerable.Range(0, penalty.Shape.Length).ToArray();
+        return Engine.ReduceMean(penalty, penaltyAxes, keepDims: false);
     }
 
     /// <summary>
