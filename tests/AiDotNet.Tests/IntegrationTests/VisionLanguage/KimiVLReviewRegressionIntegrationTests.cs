@@ -1,10 +1,12 @@
 #nullable disable
+using System;
+using System.Collections.Generic;
+using System.Reflection;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.VisionLanguage.Reasoning;
-using System.Collections.Generic;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.VisionLanguage;
@@ -26,9 +28,29 @@ public class KimiVLReviewRegressionIntegrationTests
     [Fact]
     public void Constructor_WithTinyNativeConfiguration_UsesSharedBoundaryHelpers()
     {
-        var model = new KimiVL<double>(CreateDefaultLayerArchitecture(), CreateOptions());
+        var options = CreateOptions();
+        var model = new KimiVL<double>(CreateDefaultLayerArchitecture(), options);
 
         Assert.NotEmpty(model.Layers);
+        int encoderLayerEnd = GetPrivateIntField(model, "_encoderLayerEnd");
+        int transformerBlockLayerCount = options.DropoutRate > 0 ? 6 : 5;
+        int resamplerBlockLayerCount = options.DropoutRate > 0 ? 8 : 7;
+        int expectedBoundary = 2 + options.NumVisionLayers * transformerBlockLayerCount + 4 * resamplerBlockLayerCount + 1;
+        Assert.Equal(expectedBoundary, encoderLayerEnd);
+        Assert.InRange(encoderLayerEnd, 1, model.Layers.Count - 1);
+    }
+
+    [Fact]
+    public void Constructor_WithNonDivisibleTokenBudget_RoundsPatchSizeUp()
+    {
+        var options = CreateOptions();
+        options.ImageSize = 31;
+        options.MaxVisualTokens = 16;
+        var model = new KimiVL<double>(CreateArchitectureWithCustomLayers(), options);
+
+        int patchSize = InvokePrivateIntMethod(model, "ComputeKimiPatchSize");
+
+        Assert.Equal(8, patchSize);
     }
 
     private static KimiVLOptions CreateOptions()
@@ -74,5 +96,19 @@ public class KimiVLReviewRegressionIntegrationTests
             inputDepth: 3,
             outputSize: 8,
             layers: layers);
+    }
+
+    private static int GetPrivateIntField(object instance, string fieldName)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return (int)field!.GetValue(instance)!;
+    }
+
+    private static int InvokePrivateIntMethod(object instance, string methodName)
+    {
+        var method = instance.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+        return (int)method!.Invoke(instance, Array.Empty<object>())!;
     }
 }
