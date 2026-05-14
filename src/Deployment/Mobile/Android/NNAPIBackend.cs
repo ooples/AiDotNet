@@ -64,6 +64,7 @@ internal class NNAPIBackend<T> : IDisposable
     public NNAPIBackend(NNAPIConfiguration config)
     {
         Guard.NotNull(config);
+        ValidateElementType();
         _config = config;
     }
 
@@ -328,12 +329,10 @@ internal class NNAPIBackend<T> : IDisposable
     private static int ElementSize()
     {
         if (typeof(T) == typeof(float)) return sizeof(float);
-        if (typeof(T) == typeof(double)) return sizeof(double);
         if (typeof(T) == typeof(int)) return sizeof(int);
         if (typeof(T) == typeof(short)) return sizeof(short);
         if (typeof(T) == typeof(byte)) return sizeof(byte);
-        throw new NotSupportedException(
-            $"NNAPI element type {typeof(T).Name} is not supported. Use float / double / int / short / byte.");
+        throw new NotSupportedException(UnsupportedElementTypeMessage());
     }
 
     private static void CopyManagedToNative(T[] src, IntPtr dst)
@@ -342,22 +341,36 @@ internal class NNAPIBackend<T> : IDisposable
         // avoids unsafe pointer-to-managed-T (which the language forbids for
         // unconstrained T).
         if (typeof(T) == typeof(float))   { Marshal.Copy((float[])(object)src,  0, dst, src.Length); return; }
-        if (typeof(T) == typeof(double))  { Marshal.Copy((double[])(object)src, 0, dst, src.Length); return; }
         if (typeof(T) == typeof(int))     { Marshal.Copy((int[])(object)src,    0, dst, src.Length); return; }
         if (typeof(T) == typeof(short))   { Marshal.Copy((short[])(object)src,  0, dst, src.Length); return; }
         if (typeof(T) == typeof(byte))    { Marshal.Copy((byte[])(object)src,   0, dst, src.Length); return; }
-        throw new NotSupportedException($"NNAPI element type {typeof(T).Name} is not supported.");
+        throw new NotSupportedException(UnsupportedElementTypeMessage());
     }
 
     private static void CopyNativeToManaged(IntPtr src, T[] dst)
     {
         if (typeof(T) == typeof(float))   { Marshal.Copy(src, (float[])(object)dst,  0, dst.Length); return; }
-        if (typeof(T) == typeof(double))  { Marshal.Copy(src, (double[])(object)dst, 0, dst.Length); return; }
         if (typeof(T) == typeof(int))     { Marshal.Copy(src, (int[])(object)dst,    0, dst.Length); return; }
         if (typeof(T) == typeof(short))   { Marshal.Copy(src, (short[])(object)dst,  0, dst.Length); return; }
         if (typeof(T) == typeof(byte))    { Marshal.Copy(src, (byte[])(object)dst,   0, dst.Length); return; }
-        throw new NotSupportedException($"NNAPI element type {typeof(T).Name} is not supported.");
+        throw new NotSupportedException(UnsupportedElementTypeMessage());
     }
+
+    private static void ValidateElementType()
+    {
+        if (typeof(T) == typeof(float) ||
+            typeof(T) == typeof(int) ||
+            typeof(T) == typeof(short) ||
+            typeof(T) == typeof(byte))
+        {
+            return;
+        }
+
+        throw new NotSupportedException(UnsupportedElementTypeMessage());
+    }
+
+    private static string UnsupportedElementTypeMessage() =>
+        $"NNAPI element type {typeof(T).Name} is not supported. Use float / int / short / byte.";
 
     public void Dispose()
     {

@@ -37,4 +37,13 @@ public class NNAPIBackendReviewRegressionIntegrationTests
 
         Assert.Throws<ObjectDisposedException>(() => backend.Execute([1f]));
     }
+
+    [Fact]
+    public void Constructor_WithDoubleElementType_ThrowsNotSupportedException()
+    {
+        var ex = Assert.Throws<NotSupportedException>(() =>
+            new NNAPIBackend<double>(new NNAPIConfiguration { AllowCpuFallback = true }));
+
+        Assert.Contains("Use float / int / short / byte", ex.Message);
+    }
 }
