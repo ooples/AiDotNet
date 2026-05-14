@@ -123,7 +123,10 @@ public class InputLayerMultiDimShapeIssue1325IntegrationTests
     [Fact]
     public void Issue1325_InputLayerWithShape_CtorThrowsOnNull()
     {
-        Assert.Throws<ArgumentNullException>(() => new InputLayer<float>((int[])null!));
+        // ParamName should match the public constructor parameter name ("inputShape"),
+        // not the private helper's internal name ("shape"). CodeRabbit feedback on PR #1326.
+        var ex = Assert.Throws<ArgumentNullException>(() => new InputLayer<float>((int[])null!));
+        Assert.Equal("inputShape", ex.ParamName);
     }
 
     [Fact]
@@ -131,6 +134,7 @@ public class InputLayerMultiDimShapeIssue1325IntegrationTests
     {
         var ex = Assert.Throws<ArgumentException>(() => new InputLayer<float>(Array.Empty<int>()));
         Assert.Contains("at least one dimension", ex.Message);
+        Assert.Equal("inputShape", ex.ParamName);
     }
 
     [Fact]
@@ -138,6 +142,7 @@ public class InputLayerMultiDimShapeIssue1325IntegrationTests
     {
         var ex = Assert.Throws<ArgumentException>(() => new InputLayer<float>(new[] { 4, 0, 16 }));
         Assert.Contains("must be positive", ex.Message);
+        Assert.Equal("inputShape", ex.ParamName);
     }
 
     [Fact]
@@ -145,6 +150,7 @@ public class InputLayerMultiDimShapeIssue1325IntegrationTests
     {
         var ex = Assert.Throws<ArgumentException>(() => new InputLayer<float>(new[] { 4, -2, 16 }));
         Assert.Contains("must be positive", ex.Message);
+        Assert.Equal("inputShape", ex.ParamName);
     }
 
     // ====================================================================

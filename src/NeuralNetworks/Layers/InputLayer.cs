@@ -116,23 +116,24 @@ public class InputLayer<T> : LayerBase<T>
     /// <exception cref="ArgumentException">Thrown when <paramref name="inputShape"/> is empty
     /// or contains a non-positive dimension.</exception>
     public InputLayer(int[] inputShape)
-        : base(ValidateAndCloneShape(inputShape), ValidateAndCloneShape(inputShape),
+        : base(ValidateAndCloneShape(inputShape, nameof(inputShape)),
+               ValidateAndCloneShape(inputShape, nameof(inputShape)),
                new IdentityActivation<T>() as IActivationFunction<T>)
     {
     }
 
-    private static int[] ValidateAndCloneShape(int[] shape)
+    private static int[] ValidateAndCloneShape(int[] shape, string paramName)
     {
         if (shape is null)
-            throw new ArgumentNullException(nameof(shape));
+            throw new ArgumentNullException(paramName);
         if (shape.Length == 0)
-            throw new ArgumentException("InputLayer shape must have at least one dimension.", nameof(shape));
+            throw new ArgumentException("InputLayer shape must have at least one dimension.", paramName);
         for (int i = 0; i < shape.Length; i++)
         {
             if (shape[i] <= 0)
                 throw new ArgumentException(
                     $"InputLayer shape dimensions must be positive (got shape[{i}] = {shape[i]}).",
-                    nameof(shape));
+                    paramName);
         }
         return (int[])shape.Clone();
     }
