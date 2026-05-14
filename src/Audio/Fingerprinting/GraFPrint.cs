@@ -110,23 +110,26 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
             _options.FftSize, _options.HopLength);
 
-        // Targeted opt-out from the fused-Adam optimizer step ONLY. The
-        // 53-layer paper-faithful BatchNorm pyramid (Bhattacharjee 2023 §3.3)
-        // hits a CompiledTrainingPlan per-parameter gradient propagation
-        // residual: eager and fused move params by near-identical magnitude
-        // on step 1 (||Δparams|| 2.43 vs 2.44 — 0.4% delta) but loss
-        // trajectories diverge by 22× immediately and ~10⁶× by step 8 —
-        // see the chore(#1316) diagnostic-harness commits earlier in this
-        // branch. Tensors v0.80.1's #351 two-bug repair closed two related
-        // bugs but a third symptom remains for BN-pyramid topologies.
+        // Targeted opt-out from the fused-Adam optimizer step ONLY.
         //
-        // Setting _fusedTrainingDisabled here (vs the previous Train-time
-        // toggle of TensorCodecOptions.EnableCompilation = false) keeps
-        // every other compile-mode optimization engaged: ConvBnFusion,
-        // dataflow fusion, algebraic backward, forward CSE, BLAS batch,
-        // pointwise fusion. Those orthogonal optimizations are what give
-        // the 53-layer chain its per-step throughput; only the optimizer
-        // step itself falls back to eager Adam, which is correct.
+        // GraFPrint uses T=double for the model-family invariant tests. The
+        // BatchNorm fused divergence we tracked under Tensors#350 has at
+        // least two distinct sub-bugs:
+        //
+        //   (a) rank-2 / batched-rank-4 BatchNormInferenceUnsafe layout
+        //       assumption — fixed by Tensors PR #352. Float-only path.
+        //   (b) a separate divergence path that affects T=double — surfaces
+        //       on this 53-layer paper-faithful BN pyramid as the same
+        //       loss-explosion pattern the diagnostic harness captured.
+        //       Empirically verified: applying the #352 patch and removing
+        //       this workaround still makes Training_ShouldReduceLoss fail
+        //       with loss going 66 → 440891 over the test's iteration count.
+        //
+        // Until the double-precision path is also tracked and fixed, keep
+        // the per-model fused-Adam opt-out. ConvBnFusion / dataflow fusion /
+        // algebraic backward / forward CSE / BLAS batch / pointwise fusion
+        // all stay engaged — only the optimizer step itself runs through
+        // eager Adam, which is correct.
         _fusedTrainingDisabled = true;
 
         InitializeLayers();
