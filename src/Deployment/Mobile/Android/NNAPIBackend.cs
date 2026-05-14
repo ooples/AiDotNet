@@ -26,7 +26,7 @@ namespace AiDotNet.Deployment.Mobile.Android;
 /// the surrounding IFullModel.Predict) for the fallback case.
 /// </para>
 /// </remarks>
-public class NNAPIBackend<T> : IDisposable
+internal class NNAPIBackend<T> : IDisposable
 {
     private readonly NNAPIConfiguration _config;
     private bool _isInitialized;

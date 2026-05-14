@@ -400,12 +400,24 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(Vector<T> parameters)
     {
+        int expectedLength = 0;
+        foreach (var layer in Layers)
+        {
+            expectedLength = checked(expectedLength + layer.GetParameters().Length);
+        }
+
+        if (parameters.Length != expectedLength)
+        {
+            throw new ArgumentException(
+                $"Expected {expectedLength} parameters, but got {parameters.Length}.",
+                nameof(parameters));
+        }
+
         int offset = 0;
         foreach (var layer in Layers)
         {
             var p = layer.GetParameters();
             if (p.Length == 0) continue;
-            if (offset + p.Length > parameters.Length) break;
             var sub = new Vector<T>(p.Length);
             for (int i = 0; i < p.Length; i++) sub[i] = parameters[offset + i];
             layer.SetParameters(sub);
@@ -464,22 +476,34 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
         // serialization-format extension that adds auxiliary layers
         // fails loudly rather than silently mis-routing layer slots.
         int expectedCount = 3 + _numRefinementIterations + 3;
-        if (Layers.Count == expectedCount)
+        if (Layers.Count != expectedCount)
         {
-            _encoderLevel1 = Layers[0] as ConvolutionalLayer<T>;
-            _encoderLevel2 = Layers[1] as ConvolutionalLayer<T>;
-            _encoderLevel3 = Layers[2] as ConvolutionalLayer<T>;
-            _refinementBlocks.Clear();
-            for (int i = 0; i < _numRefinementIterations; i++)
-            {
-                if (Layers[3 + i] is ConvolutionalLayer<T> block)
-                    _refinementBlocks.Add(block);
-            }
-            int decoderStart = 3 + _numRefinementIterations;
-            _decoderLevel2 = Layers[decoderStart] as DeconvolutionalLayer<T>;
-            _decoderLevel1 = Layers[decoderStart + 1] as DeconvolutionalLayer<T>;
-            _flowHead = Layers[decoderStart + 2] as DeconvolutionalLayer<T>;
+            throw new InvalidDataException(
+                $"Expected {expectedCount} RAPIDFlow layers after deserialization, found {Layers.Count}.");
         }
+
+        _encoderLevel1 = Layers[0] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("Layer 0 is not a ConvolutionalLayer.");
+        _encoderLevel2 = Layers[1] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("Layer 1 is not a ConvolutionalLayer.");
+        _encoderLevel3 = Layers[2] as ConvolutionalLayer<T>
+            ?? throw new InvalidDataException("Layer 2 is not a ConvolutionalLayer.");
+
+        _refinementBlocks.Clear();
+        for (int i = 0; i < _numRefinementIterations; i++)
+        {
+            _refinementBlocks.Add(
+                Layers[3 + i] as ConvolutionalLayer<T>
+                ?? throw new InvalidDataException($"Layer {3 + i} is not a refinement ConvolutionalLayer."));
+        }
+
+        int decoderStart = 3 + _numRefinementIterations;
+        _decoderLevel2 = Layers[decoderStart] as DeconvolutionalLayer<T>
+            ?? throw new InvalidDataException($"Layer {decoderStart} is not a DeconvolutionalLayer.");
+        _decoderLevel1 = Layers[decoderStart + 1] as DeconvolutionalLayer<T>
+            ?? throw new InvalidDataException($"Layer {decoderStart + 1} is not a DeconvolutionalLayer.");
+        _flowHead = Layers[decoderStart + 2] as DeconvolutionalLayer<T>
+            ?? throw new InvalidDataException($"Layer {decoderStart + 2} is not a DeconvolutionalLayer.");
     }
 
     /// <inheritdoc/>
