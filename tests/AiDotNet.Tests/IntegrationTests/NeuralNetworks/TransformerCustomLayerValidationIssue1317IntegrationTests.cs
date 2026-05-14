@@ -104,6 +104,22 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
     }
 
     [Fact]
+    public void CustomTransformerLayerStack_AllowsExplicitReshapeBeforeDynamicLeadingBatchAxis()
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new ProjectingCustomLayer([1, 16], [2, 8]),
+            new ReshapeLayer<float>([16]),
+            new ProjectingCustomLayer([-1, 16], [1, 256])
+        };
+
+        var model = new Transformer<float>(CreateCustomLayerArchitecture(layers));
+
+        Assert.Same(layers[1], model.Layers[1]);
+        Assert.Same(layers[2], model.Layers[2]);
+    }
+
+    [Fact]
     public void CustomTransformerLayerStack_AllowsDynamicLeadingBatchAxis()
     {
         var layers = new List<ILayer<float>>

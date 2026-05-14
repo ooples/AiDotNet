@@ -2308,8 +2308,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Lazy current layers carry -1 placeholders; defer the product check to first forward.
         if (prevLayer is ReshapeLayer<T> reshapeLayer && !currentIsLazy)
         {
-            return reshapeLayer.GetOutputShape().Aggregate((a, b) => a * b) ==
-                   currentInputShape!.Aggregate((a, b) => a * b);
+            var reshapeOutputShape = TrimLeadingBatchLikeDimensions(reshapeLayer.GetOutputShape());
+            var normalizedCurrentInputShape = TrimLeadingBatchLikeDimensions(currentInputShape!);
+
+            if (reshapeOutputShape.Any(d => d <= 0) || normalizedCurrentInputShape.Any(d => d <= 0))
+                return true;
+
+            return reshapeOutputShape.Aggregate((a, b) => a * b) ==
+                   normalizedCurrentInputShape.Aggregate((a, b) => a * b);
         }
 
         // If no incompatibilities found, layers are considered compatible
