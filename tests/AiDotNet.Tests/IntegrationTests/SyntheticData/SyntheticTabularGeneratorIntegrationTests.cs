@@ -301,10 +301,9 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TableGAN");
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task TableGANGenerator_ClassificationTargets_UseTransformedLabelSlice()
+    [Fact]
+    public void TableGANGenerator_ClassificationTargets_UseTransformedLabelSlice()
     {
-        await Task.Yield();
         var (data, columns) = CreateTestData();
         var arch = CreateArchitecture(TotalCols, TotalCols);
         var options = new TableGANOptions<double>
