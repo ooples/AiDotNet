@@ -31,6 +31,7 @@ class Program
         ["grafprint-perf-diag"] = GraFPrintPerfDiag.Run,
         ["fused-min-repro"]     = FusedPropagationMinRepro.Run,
         ["grafprint-divergence"] = GraFPrintFusedDivergence.Run,
+        ["bn-fused-grad-diff"]  = BnFusedGradDiff.Run,
     };
 
     static async Task Main(string[] args)
