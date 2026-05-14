@@ -912,6 +912,30 @@ public class SelfOrganizingMap<T> : NeuralNetworkBase<T>
         return parameters;
     }
 
+    /// <summary>
+    /// Yields the SOM codebook as a single parameter chunk. Override is
+    /// necessary because the base <see cref="NeuralNetworkBase{T}.GetParameterChunks"/>
+    /// walks <see cref="NeuralNetworkBase{T}.Layers"/> to collect trainable
+    /// chunks, and SOM stores its weights in the <c>_weights</c> matrix
+    /// field — outside the layer chain by design (Kohonen 1982 §3: the
+    /// SOM is a single competitive-learning codebook, not a stack of
+    /// trainable layers). Without this override the base enumeration yields
+    /// no chunks, so the invariant tests that snapshot parameters before
+    /// training and compare them after (Training_ShouldChangeParameters,
+    /// GradientFlow_ShouldBeNonZeroAndFinite) compare empty sequences and
+    /// false-fail "no parameters changed" even when the BMU + neighborhood
+    /// updates have legitimately moved the codebook.
+    /// </summary>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        int totalNeurons = _mapWidth * _mapHeight;
+        var tensor = new Tensor<T>(new[] { totalNeurons, _inputDimension });
+        for (int i = 0; i < totalNeurons; i++)
+            for (int j = 0; j < _inputDimension; j++)
+                tensor[i, j] = _weights[i, j];
+        yield return tensor;
+    }
+
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {

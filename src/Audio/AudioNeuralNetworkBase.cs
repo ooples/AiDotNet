@@ -81,6 +81,29 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
     protected OnnxModel<T>? OnnxModel { get; set; }
 
     /// <summary>
+    /// Text-encoder layer stack for dual-encoder audio-text models (CLAP and
+    /// similar contrastive audio-language models). Lives outside the inherited
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> list so the standard
+    /// <see cref="NeuralNetworkBase{T}.Predict"/> / <c>TrainWithTape</c> paths
+    /// operate on the audio-only stack; subclasses walk this collection
+    /// explicitly inside their <c>EncodeText</c> implementations.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors <c>VisionLanguageModelBase.TextEncoderLayers</c> on the vision
+    /// side — keeping the slot on this base means any future audio-text dual
+    /// encoder (audio-side of an ImageBind-style multimodal model, CLAP
+    /// derivatives, etc.) inherits a uniform two-encoder structure without
+    /// re-declaring the field locally.
+    /// </para>
+    /// <para>
+    /// Audio-only models (PANNsModel, ConformerFP, …) simply leave this empty;
+    /// the slot has no effect on single-encoder code paths.
+    /// </para>
+    /// </remarks>
+    protected readonly List<ILayer<T>> TextEncoderLayers = new List<ILayer<T>>();
+
+    /// <summary>
     /// Gets the mel spectrogram extractor for preprocessing.
     /// </summary>
     protected MelSpectrogram<T>? MelSpec { get; set; }
@@ -191,6 +214,20 @@ public abstract class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>
     {
         if (disposing)
         {
+            // TextEncoderLayers live outside NeuralNetworkBase<T>.Layers,
+            // so base.Dispose won't reach them. Dispose any disposable
+            // entries explicitly (Conv/Dense/etc. layers wrap pooled
+            // tensor scratch buffers that would otherwise be retained
+            // until process exit on long-running dual-encoder runs).
+            foreach (var layer in TextEncoderLayers)
+            {
+                if (layer is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+            TextEncoderLayers.Clear();
+
             OnnxEncoder?.Dispose();
             OnnxDecoder?.Dispose();
             OnnxModel?.Dispose();

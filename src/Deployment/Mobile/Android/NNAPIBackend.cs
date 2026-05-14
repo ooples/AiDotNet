@@ -15,74 +15,61 @@ namespace AiDotNet.Deployment.Mobile.Android;
 /// <b>For Beginners:</b> NNAPI is the Android-side API that exposes hardware
 /// accelerators (GPU / DSP / NPU) for neural network inference. This backend
 /// binds to the native <c>libneuralnetworks.so</c> via P/Invoke; if the library
-/// is not present (e.g., on desktop hosts or pre-API-27 Android) the backend
-/// honestly reports unavailability and routes execution through a managed
-/// CPU fallback when one has been configured.
+/// is not present, the backend reports unavailability and routes execution
+/// through a managed CPU fallback when one has been configured.
 /// </para>
 /// <para>
-/// Default values follow the original Android NNAPI guidance: relaxed FP32,
-/// FP16 allowed, CPU fallback enabled. The <see cref="CpuExecutor"/> hook
-/// lets the deployment pipeline plug in any managed inference path (e.g.,
-/// the surrounding IFullModel.Predict) for the fallback case.
+/// Default values follow the Android NNAPI guidance: relaxed FP32, optional
+/// FP16, and CPU fallback support. The <see cref="CpuExecutor"/> hook lets
+/// callers plug in a real managed inference path for fallback execution.
 /// </para>
 /// </remarks>
-internal class NNAPIBackend<T> : IDisposable
+public class NNAPIBackend<T> : IDisposable
 {
+    private static readonly OSPlatform AndroidPlatform = OSPlatform.Create("ANDROID");
+
     private readonly NNAPIConfiguration _config;
     private bool _isInitialized;
     private bool _disposed;
 
-    // Native NNAPI handles — non-zero only when running on Android with a real binding.
     private IntPtr _model = IntPtr.Zero;
     private IntPtr _compilation = IntPtr.Zero;
-    // Native execution graph metadata. When _hasNative is true, ExecuteOnNNAPI
-    // runs the compiled NNAPI graph; otherwise it routes through CpuExecutor.
     private bool _hasNative;
-
-    // Buffered model bytes / shape info from the most recent LoadModel call.
     private byte[]? _modelBytes;
+
     /// <summary>
-    /// Output element count. Set by an upstream model-format adapter that knows
-    /// the model's output dimensions; defaults to mirroring the input length
-    /// when the adapter hasn't populated it (the only safe assumption without
-    /// op-graph introspection).
+    /// Output element count set by an upstream model-format adapter.
     /// </summary>
     internal int OutputElementCount { get; set; }
 
     /// <summary>
-    /// Managed-CPU inference hook invoked when NNAPI is unavailable or
-    /// fails. The deployment pipeline sets this to the model's
-    /// <c>Predict</c> entry point so the fallback runs the same network as
-    /// NNAPI would have.
+    /// Managed-CPU inference hook invoked when NNAPI is unavailable or no
+    /// compiled native graph is available.
     /// </summary>
-    /// <remarks>
-    /// Setting this AFTER <see cref="Execute"/> calls have already happened
-    /// still affects subsequent calls.
-    /// </remarks>
     internal Func<T[], T[]>? CpuExecutor { get; set; }
 
-    public NNAPIBackend(NNAPIConfiguration config)
+    /// <summary>
+    /// Optional graph builder that decodes loaded model bytes into NNAPI
+    /// operands and operations before compilation.
+    /// </summary>
+    internal INNAPIGraphBuilder? GraphBuilder { get; set; }
+
+    public NNAPIBackend(NNAPIConfiguration config, INNAPIGraphBuilder? graphBuilder = null)
     {
         Guard.NotNull(config);
         ValidateElementType();
         _config = config;
+        GraphBuilder = graphBuilder;
     }
 
     /// <summary>
     /// Initializes the NNAPI backend.
     /// </summary>
-    /// <remarks>
-    /// When the native binding is available, opens NNAPI's model surface and
-    /// applies the configured <see cref="NNAPIConfiguration.ExecutionPreference"/>.
-    /// When it isn't, switches to managed-CPU mode rather than throwing — the
-    /// previous behavior of throwing PlatformNotSupportedException unconditionally
-    /// blocked even <see cref="NNAPIConfiguration.AllowCpuFallback"/>=true clients
-    /// on the desktop, despite the configuration explicitly opting in to that path.
-    /// </remarks>
     public void Initialize()
     {
         ThrowIfDisposed();
         if (_isInitialized) return;
+
         _hasNative = IsNNAPIAvailable();
         if (!_hasNative && !_config.AllowCpuFallback)
         {
@@ -106,15 +93,6 @@ internal class NNAPIBackend<T> : IDisposable
     /// <summary>
     /// Loads a model for NNAPI execution.
     /// </summary>
-    /// <param name="modelPath">Path to the model file (TFLite or ONNX).</param>
-    /// <remarks>
-    /// Reads the file into memory and (when NNAPI is bound) populates the model
-    /// surface for compilation. The actual op decomposition (TFLite/ONNX → NNAPI
-    /// ops) is the responsibility of an upstream model-format adapter; this
-    /// backend stores the bytes so that adapter or a native binding override
-    /// can walk them. On managed-CPU fallback, the bytes are retained for the
-    /// CpuExecutor's use.
-    /// </remarks>
     public void LoadModel(string modelPath)
     {
         ThrowIfDisposed();
@@ -129,7 +107,7 @@ internal class NNAPIBackend<T> : IDisposable
     }
 
     /// <summary>
-    /// Executes inference using NNAPI (native) or the managed CPU fallback.
+    /// Executes inference using NNAPI or the managed CPU fallback.
     /// </summary>
     public T[] Execute(T[] input)
     {
@@ -148,13 +126,6 @@ internal class NNAPIBackend<T> : IDisposable
     }
 
     /// <summary>Gets the supported acceleration devices on this Android device.</summary>
-    /// <remarks>
-    /// Returns the real device names enumerated via
-    /// <c>ANeuralNetworks_getDeviceCount</c> / <c>_getDevice</c> /
-    /// <c>ANeuralNetworksDevice_getName</c> when the native binding is available;
-    /// returns a generic list when the binding is missing so config-driven UIs
-    /// still have something to display.
-    /// </remarks>
     public List<string> GetSupportedDevices()
     {
         ThrowIfDisposed();
@@ -174,22 +145,20 @@ internal class NNAPIBackend<T> : IDisposable
             return names.Count > 0 ? names : ["nnapi-cpu"];
         }
 
-        // Managed-CPU fallback advertises only what it really has.
         return ["cpu"];
     }
 
     /// <summary>
     /// Checks if NNAPI is available on the current device.
     /// </summary>
-    /// <remarks>
-    /// Returns true only when both (a) we're on a Linux/Android host (the
-    /// only platform where NNAPI exists) AND (b) <c>libneuralnetworks.so</c>
-    /// is loadable. Either failure returns false so callers can route through
-    /// the managed CPU fallback.
-    /// </remarks>
     public static bool IsNNAPIAvailable()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return false;
+        if (!RuntimeInformation.IsOSPlatform(AndroidPlatform)
+            && !RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return false;
+        }
+
         return NNAPIInterop.TryLoad();
     }
 
@@ -207,37 +176,45 @@ internal class NNAPIBackend<T> : IDisposable
         };
     }
 
-    /// <summary>Map our NNAPIExecutionPreference enum to NNAPI's preference codes.</summary>
     private int MapPreference()
     {
         return _config.ExecutionPreference switch
         {
-            NNAPIExecutionPreference.SustainedSpeed   => NNAPIInterop.ANEURALNETWORKS_PREFER_SUSTAINED_SPEED,
-            NNAPIExecutionPreference.LowPower         => NNAPIInterop.ANEURALNETWORKS_PREFER_LOW_POWER,
+            NNAPIExecutionPreference.SustainedSpeed => NNAPIInterop.ANEURALNETWORKS_PREFER_SUSTAINED_SPEED,
+            NNAPIExecutionPreference.LowPower => NNAPIInterop.ANEURALNETWORKS_PREFER_LOW_POWER,
             NNAPIExecutionPreference.FastSingleAnswer => NNAPIInterop.ANEURALNETWORKS_PREFER_FAST_SINGLE_ANSWER,
-            _                                          => NNAPIInterop.ANEURALNETWORKS_PREFER_FAST_SINGLE_ANSWER
+            _ => NNAPIInterop.ANEURALNETWORKS_PREFER_FAST_SINGLE_ANSWER
         };
     }
 
     private void CompileForNNAPI(byte[] modelData)
     {
         Guard.NotNull(modelData);
-        // Model decomposition (TFLite/ONNX → NNAPI op graph) is a format-specific
-        // adapter that lives upstream — this backend wraps the NNAPI machinery and
-        // accepts whatever ops the caller's adapter has wired. When the native
-        // binding is present and the upstream adapter has populated _model with
-        // operand/operation calls, finishing + compiling is the next step:
         if (!_hasNative || _model == IntPtr.Zero) return;
+
+        if (GraphBuilder is not null)
+        {
+            bool built = GraphBuilder.BuildGraph(_model, modelData);
+            if (!built)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "NNAPIBackend.CompileForNNAPI: configured INNAPIGraphBuilder returned false. " +
+                    "Execute() will use CpuExecutor when configured.");
+                return;
+            }
+        }
 
         int rcFinish = NNAPIInterop.ModelFinish(_model);
         if (rcFinish != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
         {
-            throw new InvalidOperationException(
-                $"ANeuralNetworksModel_finish failed (rc={rcFinish}). " +
-                "LoadModel cannot succeed until model bytes have been translated into a populated NNAPI graph.");
+            System.Diagnostics.Trace.TraceWarning(
+                $"NNAPIBackend.CompileForNNAPI: ANeuralNetworksModel_finish failed (rc={rcFinish}). " +
+                "No NNAPI op graph was compiled; Execute() will use CpuExecutor when configured.");
+            return;
         }
 
         ReleaseCompilationHandle();
+
         int rcCompile = NNAPIInterop.CompilationCreate(_model, out _compilation);
         if (rcCompile != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
         {
@@ -245,7 +222,14 @@ internal class NNAPIBackend<T> : IDisposable
             throw new InvalidOperationException($"ANeuralNetworksCompilation_create failed (rc={rcCompile}).");
         }
 
-        NNAPIInterop.CompilationSetPreference(_compilation, MapPreference());
+        int rcPref = NNAPIInterop.CompilationSetPreference(_compilation, MapPreference());
+        if (rcPref != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+        {
+            ReleaseCompilationHandle();
+            throw new InvalidOperationException(
+                $"ANeuralNetworksCompilation_setPreference failed (rc={rcPref}).");
+        }
+
         int rcFin = NNAPIInterop.CompilationFinish(_compilation);
         if (rcFin != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
         {
@@ -256,16 +240,14 @@ internal class NNAPIBackend<T> : IDisposable
 
     private T[] ExecuteOnNNAPI(T[] input)
     {
-        // Real NNAPI path: only available when a compiled graph exists.
         if (_hasNative && _compilation != IntPtr.Zero)
         {
             return ExecuteNativeNNAPI(input);
         }
 
-        // Managed-CPU fallback. Invoke the registered executor if any; otherwise
-        // fail fast rather than returning placeholder predictions.
         var executor = CpuExecutor;
         if (executor != null) return executor(input);
+
         throw new InvalidOperationException(
             "NNAPIBackend.Execute cannot run: no compiled NNAPI graph is available and CpuExecutor is not configured.");
     }
@@ -284,6 +266,7 @@ internal class NNAPIBackend<T> : IDisposable
             int outBytes = outElems * elemSize;
             IntPtr inputPtr = Marshal.AllocHGlobal(inBytes);
             IntPtr outputPtr = Marshal.AllocHGlobal(outBytes);
+
             try
             {
                 CopyManagedToNative(input, inputPtr);
@@ -291,6 +274,7 @@ internal class NNAPIBackend<T> : IDisposable
                 rc = NNAPIInterop.ExecutionSetInput(execution, 0, IntPtr.Zero, inputPtr, (UIntPtr)(uint)inBytes);
                 if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
                     throw new InvalidOperationException($"ExecutionSetInput failed (rc={rc}).");
+
                 rc = NNAPIInterop.ExecutionSetOutput(execution, 0, IntPtr.Zero, outputPtr, (UIntPtr)(uint)outBytes);
                 if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
                     throw new InvalidOperationException($"ExecutionSetOutput failed (rc={rc}).");
@@ -298,6 +282,7 @@ internal class NNAPIBackend<T> : IDisposable
                 rc = NNAPIInterop.ExecutionStartCompute(execution, out IntPtr evt);
                 if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
                     throw new InvalidOperationException($"ExecutionStartCompute failed (rc={rc}).");
+
                 try
                 {
                     rc = NNAPIInterop.EventWait(evt);
@@ -325,34 +310,49 @@ internal class NNAPIBackend<T> : IDisposable
         }
     }
 
-    /// <summary>Element size of T in bytes — supported for the numeric types NNAPI accepts.</summary>
     private static int ElementSize()
     {
         if (typeof(T) == typeof(float)) return sizeof(float);
         if (typeof(T) == typeof(int)) return sizeof(int);
-        if (typeof(T) == typeof(short)) return sizeof(short);
         if (typeof(T) == typeof(byte)) return sizeof(byte);
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half)) return 2;
+#endif
         throw new NotSupportedException(UnsupportedElementTypeMessage());
     }
 
     private static void CopyManagedToNative(T[] src, IntPtr dst)
     {
-        // Element-type dispatch using Marshal.Copy on the typed overload. This
-        // avoids unsafe pointer-to-managed-T (which the language forbids for
-        // unconstrained T).
-        if (typeof(T) == typeof(float))   { Marshal.Copy((float[])(object)src,  0, dst, src.Length); return; }
-        if (typeof(T) == typeof(int))     { Marshal.Copy((int[])(object)src,    0, dst, src.Length); return; }
-        if (typeof(T) == typeof(short))   { Marshal.Copy((short[])(object)src,  0, dst, src.Length); return; }
-        if (typeof(T) == typeof(byte))    { Marshal.Copy((byte[])(object)src,   0, dst, src.Length); return; }
+        if (typeof(T) == typeof(float)) { Marshal.Copy((float[])(object)src, 0, dst, src.Length); return; }
+        if (typeof(T) == typeof(int)) { Marshal.Copy((int[])(object)src, 0, dst, src.Length); return; }
+        if (typeof(T) == typeof(byte)) { Marshal.Copy((byte[])(object)src, 0, dst, src.Length); return; }
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+        {
+            var halfSrc = (Half[])(object)src;
+            var bytes = MemoryMarshal.AsBytes(halfSrc.AsSpan()).ToArray();
+            Marshal.Copy(bytes, 0, dst, bytes.Length);
+            return;
+        }
+#endif
         throw new NotSupportedException(UnsupportedElementTypeMessage());
     }
 
     private static void CopyNativeToManaged(IntPtr src, T[] dst)
     {
-        if (typeof(T) == typeof(float))   { Marshal.Copy(src, (float[])(object)dst,  0, dst.Length); return; }
-        if (typeof(T) == typeof(int))     { Marshal.Copy(src, (int[])(object)dst,    0, dst.Length); return; }
-        if (typeof(T) == typeof(short))   { Marshal.Copy(src, (short[])(object)dst,  0, dst.Length); return; }
-        if (typeof(T) == typeof(byte))    { Marshal.Copy(src, (byte[])(object)dst,   0, dst.Length); return; }
+        if (typeof(T) == typeof(float)) { Marshal.Copy(src, (float[])(object)dst, 0, dst.Length); return; }
+        if (typeof(T) == typeof(int)) { Marshal.Copy(src, (int[])(object)dst, 0, dst.Length); return; }
+        if (typeof(T) == typeof(byte)) { Marshal.Copy(src, (byte[])(object)dst, 0, dst.Length); return; }
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+        {
+            var halfDst = (Half[])(object)dst;
+            var bytes = new byte[halfDst.Length * 2];
+            Marshal.Copy(src, bytes, 0, bytes.Length);
+            MemoryMarshal.Cast<byte, Half>(bytes.AsSpan()).CopyTo(halfDst.AsSpan());
+            return;
+        }
+#endif
         throw new NotSupportedException(UnsupportedElementTypeMessage());
     }
 
@@ -360,17 +360,24 @@ internal class NNAPIBackend<T> : IDisposable
     {
         if (typeof(T) == typeof(float) ||
             typeof(T) == typeof(int) ||
-            typeof(T) == typeof(short) ||
             typeof(T) == typeof(byte))
         {
             return;
         }
 
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half)) return;
+#endif
+
         throw new NotSupportedException(UnsupportedElementTypeMessage());
     }
 
     private static string UnsupportedElementTypeMessage() =>
-        $"NNAPI element type {typeof(T).Name} is not supported. Use float / int / short / byte.";
+        "NNAPI element type " + typeof(T).Name + " is not supported. Supported types: float, int, byte" +
+#if NET5_0_OR_GREATER
+        ", Half" +
+#endif
+        ".";
 
     public void Dispose()
     {
@@ -379,6 +386,11 @@ internal class NNAPIBackend<T> : IDisposable
         _hasNative = false;
         _disposed = true;
         GC.SuppressFinalize(this);
+    }
+
+    ~NNAPIBackend()
+    {
+        ReleaseNativeHandles();
     }
 
     private void ThrowIfDisposed()
@@ -395,28 +407,20 @@ internal class NNAPIBackend<T> : IDisposable
 
     private void ReleaseCompilationHandle()
     {
-        if (_compilation == IntPtr.Zero)
-            return;
-
+        if (_compilation == IntPtr.Zero) return;
         NNAPIInterop.CompilationFree(_compilation);
         _compilation = IntPtr.Zero;
     }
 
     private void ReleaseModelHandle()
     {
-        if (_model == IntPtr.Zero)
-            return;
-
+        if (_model == IntPtr.Zero) return;
         NNAPIInterop.ModelFree(_model);
         _model = IntPtr.Zero;
     }
 
     private List<string> GetSupportedOperations()
     {
-        // The NDK doesn't expose a "list of supported ops" query — capability
-        // is queried per-op via ANeuralNetworksModel_getSupportedOperationsForDevices
-        // after the model is built. The list below is the canonical NNAPI 1.0
-        // op surface that all API-27+ devices support.
         return
         [
             "CONV_2D", "DEPTHWISE_CONV_2D", "FULLY_CONNECTED",

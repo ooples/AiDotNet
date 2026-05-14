@@ -44,6 +44,15 @@ public class NNAPIBackendReviewRegressionIntegrationTests
         var ex = Assert.Throws<NotSupportedException>(() =>
             new NNAPIBackend<double>(new NNAPIConfiguration { AllowCpuFallback = true }));
 
-        Assert.Contains("Use float / int / short / byte", ex.Message);
+        Assert.Contains("Supported types: float, int, byte", ex.Message);
+    }
+
+    [Fact]
+    public void Constructor_WithShortElementType_ThrowsNotSupportedException()
+    {
+        var ex = Assert.Throws<NotSupportedException>(() =>
+            new NNAPIBackend<short>(new NNAPIConfiguration { AllowCpuFallback = true }));
+
+        Assert.Contains("Supported types: float, int, byte", ex.Message);
     }
 }

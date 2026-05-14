@@ -53,6 +53,32 @@ public enum DistilledT5Variant
 }
 
 /// <summary>
+/// Variants for the T5 text encoder used in SD3 / FLUX / Imagen pipelines.
+/// </summary>
+public enum T5Variant
+{
+    /// <summary>T5-Small: 512-dim hidden, 6 layers, 8 heads.</summary>
+    Small,
+    /// <summary>T5-Base: 768-dim hidden, 12 layers, 12 heads.</summary>
+    Base,
+    /// <summary>T5-Large: 1024-dim hidden, 24 layers, 16 heads.</summary>
+    Large,
+    /// <summary>T5-XL: 2048-dim hidden, 24 layers, 32 heads.</summary>
+    XL,
+    /// <summary>T5-XXL: 4096-dim hidden, 24 layers, 64 heads. Used by SD3 / FLUX (auto-streams via #1222).</summary>
+    XXL
+}
+
+/// <summary>
+/// Variants for the ChatGLM3 text encoder.
+/// </summary>
+public enum ChatGLM3Variant
+{
+    /// <summary>ChatGLM3 6B: 4096-dim hidden, 28 layers, 32 heads, MQA (KV heads = 1).</summary>
+    SixB
+}
+
+/// <summary>
 /// Variants for Gemma text encoder models.
 /// </summary>
 public enum GemmaVariant

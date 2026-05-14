@@ -41,14 +41,21 @@ public class Word2VecTests : NeuralNetworkModelTestBase
         return tensor;
     }
 
-    // Word2Vec's default loss is BinaryCrossEntropy, which expects targets
-    // in [0, 1] (probabilities / one-hot encoding) — NOT the integer token
-    // IDs that the input-side CreateRandomTensor emits. Override the target
-    // factory to fall back to the base's default continuous [0, 1) sampler
-    // so the target tensor stays compatible with BCE. Without this override,
-    // the base's default CreateRandomTargetTensor delegates to our
-    // CreateRandomTensor and the target gets out-of-range integer values
-    // (0..999) that BCE then computes nonsensical log probabilities over.
+    /// <summary>
+    /// Targets for Word2Vec invariant tests must be continuous values in
+    /// <c>[0, 1)</c> because Word2Vec defaults to
+    /// <c>BinaryCrossEntropyLoss</c> over the softmax output (one logit per
+    /// vocabulary token, treated as an independent Bernoulli for the
+    /// invariant suite). Without this override the default
+    /// <c>CreateRandomTargetTensor</c> delegates to <c>CreateRandomTensor</c>
+    /// which we override above to emit integer token IDs in [0, 1000) —
+    /// far outside BCE's valid target domain. Plugging those into BCE
+    /// (which computes <c>−t·log(p) − (1−t)·log(1−p)</c>) yields
+    /// hundreds-of-magnitude losses, exploding gradients, and
+    /// non-monotonic loss-decrease invariants. Continuous [0, 1)
+    /// targets keep BCE well-defined and let the invariant assertions
+    /// measure real training signal rather than numeric blow-up.
+    /// </summary>
     protected override Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)
     {
         var tensor = new Tensor<double>(shape);

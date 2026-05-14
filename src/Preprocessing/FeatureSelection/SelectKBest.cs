@@ -143,11 +143,26 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 }
             }
 
-            // F-statistic
-            double msb = ssb / (k - 1);
-            double msw = ssw / (n - k);
-            scores[j] = msw > 1e-10 ? msb / msw : 0;
-            _pValues[j] = 0.05; // Placeholder
+            // F-statistic with one-way ANOVA degrees of freedom (k-1 numerator,
+            // n-k denominator). The p-value is the right-tail F-distribution
+            // probability — matches scipy.stats.f_classif.
+            // Validate degrees of freedom BEFORE computing msb / msw so a
+            // degenerate group structure (k <= 1 or n <= k) can't yield
+            // NaN/Inf scores that destabilise downstream ranking.
+            int dfBetween = k - 1;
+            int dfWithin = n - k;
+            double fStat = 0.0;
+            if (dfBetween > 0 && dfWithin > 0)
+            {
+                double msb = ssb / dfBetween;
+                double msw = ssw / dfWithin;
+                fStat = msw > 1e-10 ? msb / msw : 0.0;
+            }
+            scores[j] = fStat;
+            _pValues[j] = (dfBetween > 0 && dfWithin > 0 && fStat > 0)
+                ? NumOps.ToDouble(StatisticsHelper<T>.FDistributionPValue(
+                      NumOps.FromDouble(fStat), dfBetween, dfWithin))
+                : 1.0;
         }
 
         return scores;
@@ -196,12 +211,27 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 ssResidual += residual * residual;
             }
 
-            double ssRegression = ssTotal - ssResidual;
-            double msRegression = ssRegression;
-            double msResidual = ssResidual / Math.Max(1, n - 2);
-
-            scores[j] = msResidual > 1e-10 ? msRegression / msResidual : 0;
-            _pValues[j] = 0.05;
+            // F-test for univariate regression: 1 numerator df (the slope) and
+            // n-2 denominator df (after intercept + slope). Matches
+            // scipy.stats.f_regression's degrees-of-freedom convention.
+            // Guard non-positive df up front so degenerate `n <= 2` cases
+            // don't yield non-neutral scores from an invalid F-test path
+            // (previously msResidual was computed against Math.Max(1, n-2)
+            // and assigned to scores[j] even when the underlying test was
+            // ill-defined).
+            int dfResidual = n - 2;
+            double fStat = 0.0;
+            if (dfResidual > 0)
+            {
+                double ssRegression = Math.Max(0.0, ssTotal - ssResidual);
+                double msResidual = ssResidual / dfResidual;
+                fStat = msResidual > 1e-10 ? ssRegression / msResidual : 0.0;
+            }
+            scores[j] = fStat;
+            _pValues[j] = (dfResidual > 0 && fStat > 0)
+                ? NumOps.ToDouble(StatisticsHelper<T>.FDistributionPValue(
+                      NumOps.FromDouble(fStat), 1, dfResidual))
+                : 1.0;
         }
 
         return scores;
@@ -242,8 +272,18 @@ public class SelectKBest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     chi2 += (kvp.Value - expected) * (kvp.Value - expected) / expected;
             }
 
+            // Pearson chi-square test, df = (#categories - 1). For univariate
+            // tabulation against the target classes there are classSums.Count rows
+            // and one column, so df = classSums.Count - 1.
+            // Don't force df to 1 when there's only one class — the test is
+            // degenerate at that point and should return a neutral p-value
+            // rather than a misleading non-neutral one from a 1-df distribution.
+            int chi2Df = classSums.Count - 1;
             scores[j] = chi2;
-            _pValues[j] = 0.05;
+            _pValues[j] = (chi2Df > 0 && chi2 > 0)
+                ? NumOps.ToDouble(StatisticsHelper<T>.ChiSquarePValue(
+                      NumOps.FromDouble(chi2), chi2Df))
+                : 1.0;
         }
 
         return scores;

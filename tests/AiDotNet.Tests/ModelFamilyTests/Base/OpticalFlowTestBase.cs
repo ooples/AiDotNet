@@ -13,10 +13,10 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 public abstract class OpticalFlowTestBase : VideoNNModelTestBase
 {
     // Optical-flow input contract (OpticalFlowBase.Predict): rank-4
-    // [batch, 2*channels, height, width] — two consecutive frames stacked
+    // [batch, 2*channels, height, width] with two consecutive frames stacked
     // along the channel axis. The default NeuralNetworkModelTestBase shape
     // is [1, 4] and inherited bases default to odd channel counts (3 = RGB),
-    // both of which fail OpticalFlowBase's rank-and-parity validation. Use
+    // both of which fail OpticalFlowBase's rank-and-parity validation.
     // 64x64 keeps the inherited video/model-family invariants at smoke-test
     // scale. Paper-scale crops belong in model-specific tests so one model
     // does not make every optical-flow invariant prohibitively expensive.
@@ -45,7 +45,7 @@ public abstract class OpticalFlowTestBase : VideoNNModelTestBase
         double rms = Math.Sqrt(magnitude / Math.Max(1, output.Length));
 
         Assert.True(rms < 10.0,
-            $"Optical flow RMS = {rms:F4} for constant input — expected near-zero flow for no motion.");
+            $"Optical flow RMS = {rms:F4} for constant input - expected near-zero flow for no motion.");
     }
 
     [Fact(Timeout = 120000)]
@@ -61,9 +61,9 @@ public abstract class OpticalFlowTestBase : VideoNNModelTestBase
         for (int i = 0; i < output.Length; i++)
         {
             Assert.False(double.IsNaN(output[i]),
-                $"Flow vector[{i}] is NaN — broken motion estimation.");
+                $"Flow vector[{i}] is NaN - broken motion estimation.");
             Assert.True(Math.Abs(output[i]) < 1e6,
-                $"Flow vector[{i}] = {output[i]:E4} is unbounded — unrealistic motion magnitude.");
+                $"Flow vector[{i}] = {output[i]:E4} is unbounded - unrealistic motion magnitude.");
         }
     }
 }

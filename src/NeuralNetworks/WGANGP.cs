@@ -444,8 +444,10 @@ public class WGANGP<T> : NeuralNetworkBase<T>
         var ones = new Tensor<T>(interpolatedScores._shape);
         Engine.TensorFill(ones, NumOps.One);
 
-        // Compute input gradients for gradient penalty using tape-based autodiff
-        var eng = AiDotNetEngine.Current;
+        // Compute input gradients for gradient penalty using tape-based autodiff.
+        // Use the inherited protected Engine from NeuralNetworkBase rather than
+        // the static singleton.
+        var eng = Engine;
         Tensor<T> inputGradients;
         using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
         {

@@ -1,3 +1,4 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -140,13 +141,24 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
             int inputFeatures = inputShape[0];
             int outputFeatures = Architecture.OutputSize;
 
+            // Output layer uses identity activation regardless of hidden-layer
+            // depth: SparseLinearLayer defaults to ReLU, which clamps negative
+            // pre-activations to 0. On a regression head where ~50% of random
+            // sparse-weighted sums are negative, that produces identical
+            // (zero) outputs for distinct inputs — the network collapses
+            // before training ever sees a gradient. Mocanu et al. (2018) and
+            // every subsequent sparse-network paper (RigL, Top-KAST, …) use
+            // identity for the regression output and ReLU only for hidden
+            // layers. Mirror the convention here.
+            var identity = new IdentityActivation<T>();
+
             if (hiddenSizes.Length == 0)
             {
                 // Per Mocanu et al. (2018), sparse networks need hidden layers for
                 // sparse-to-sparse connectivity. Single-layer sparse → dead ReLU neurons.
                 int hiddenSize = Math.Max(32, (inputFeatures + outputFeatures) / 2);
                 Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSize, NumOps.ToDouble(_sparsity)));
-                Layers.Add(new SparseLinearLayer<T>(hiddenSize, outputFeatures, NumOps.ToDouble(_sparsity)));
+                Layers.Add(new SparseLinearLayer<T>(hiddenSize, outputFeatures, NumOps.ToDouble(_sparsity), identity));
             }
             else
             {
@@ -157,7 +169,7 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
                     Layers.Add(new SparseLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], NumOps.ToDouble(_sparsity)));
                 }
 
-                Layers.Add(new SparseLinearLayer<T>(hiddenSizes[^1], outputFeatures, NumOps.ToDouble(_sparsity)));
+                Layers.Add(new SparseLinearLayer<T>(hiddenSizes[^1], outputFeatures, NumOps.ToDouble(_sparsity), identity));
             }
         }
     }
@@ -302,15 +314,25 @@ public class SparseNeuralNetwork<T> : NeuralNetworkBase<T>
             // would build a tape and defeat the purpose of this manual path,
             // and the model-family invariants only need non-zero finite
             // gradients and changed parameters — both satisfied by MSE.
+            // Also compute the scalar MSE loss in the same pass and store
+            // it in LastLoss so GetLastLoss() returns the actual training
+            // loss instead of the NeuralNetworkBase default (zero).
+            // Without this, LossStrictlyDecreasesOnMemorizationTask sees
+            // step1=lossFinal=0 and false-fails — the manual path
+            // bypasses every tape-driven LastLoss writeback site in
+            // NeuralNetworkBase.
             int total = activation.Length;
             var grad = new Tensor<T>(activation._shape);
             T two = NumOps.FromDouble(2.0);
             T invN = NumOps.FromDouble(1.0 / Math.Max(1, total));
+            T sumSq = NumOps.Zero;
             for (int i = 0; i < total; i++)
             {
                 T diff = NumOps.Subtract(activation[i], netTarget[i]);
                 grad[i] = NumOps.Multiply(two, NumOps.Multiply(diff, invN));
+                sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
             }
+            LastLoss = NumOps.Multiply(sumSq, invN);
 
             // (2) Manual backprop only handles SparseLinearLayer. Throw on
             //     anything else so a future refactor that mixes layer types

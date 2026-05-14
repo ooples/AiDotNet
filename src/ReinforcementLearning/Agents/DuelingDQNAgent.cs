@@ -203,10 +203,9 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
             // Backward pass through dueling architecture
             var gradients = LossFunction.CalculateDerivative(currentQValues, targetQValues);
-            /* _qNetwork.Backward(experience.State, gradients) removed — tape-based */ ;
 
             // Update parameters
-            _qNetwork.UpdateWeights(LearningRate);
+            _qNetwork.UpdateWeights(gradients, LearningRate);
         }
 
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_options.BatchSize));
@@ -300,6 +299,7 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        _qNetwork.EnsureInitialized();
         var matrix = new Matrix<T>(parameters.Length, 1);
         for (int i = 0; i < parameters.Length; i++)
             matrix[i, 0] = parameters[i];
@@ -372,6 +372,8 @@ public class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
     // Helper methods
     private void CopyNetworkWeights(DuelingNetwork<T> source, DuelingNetwork<T> target)
     {
+        source.EnsureInitialized();
+        target.EnsureInitialized();
         var sourceParams = source.GetFlattenedParameters();
         target.SetFlattenedParameters(sourceParams);
     }
@@ -424,11 +426,18 @@ internal class DuelingNetwork<T>
     private readonly List<DenseLayer<T>> _sharedLayers;
     private readonly List<DenseLayer<T>> _valueLayers;
     private readonly List<DenseLayer<T>> _advantageLayers;
+    private readonly int _stateSize;
     private readonly int _actionSize;
 
     private Vector<T>? _lastSharedOutput;
     private Vector<T>? _lastValueOutput;
     private Vector<T>? _lastAdvantageOutput;
+    private readonly List<Vector<T>> _lastSharedInputs = new();
+    private readonly List<Vector<T>> _lastSharedOutputs = new();
+    private readonly List<Vector<T>> _lastValueInputs = new();
+    private readonly List<Vector<T>> _lastValueOutputs = new();
+    private readonly List<Vector<T>> _lastAdvantageInputs = new();
+    private readonly List<Vector<T>> _lastAdvantageOutputs = new();
 
     public DuelingNetwork(
         int stateSize,
@@ -439,6 +448,7 @@ internal class DuelingNetwork<T>
         INumericOperations<T> numOps)
     {
         _numOps = numOps;
+        _stateSize = stateSize;
         _actionSize = actionSize;
         _sharedLayers = new List<DenseLayer<T>>();
         _valueLayers = new List<DenseLayer<T>>();
@@ -473,13 +483,28 @@ internal class DuelingNetwork<T>
         _advantageLayers.Add(new DenseLayer<T>(actionSize, (IActivationFunction<T>)new IdentityActivation<T>())); // Output per-action advantages
     }
 
+    public void EnsureInitialized()
+    {
+        if (GetFlattenedParameters().Rows > 0) return;
+        Forward(new Vector<T>(_stateSize));
+    }
+
     public Vector<T> Forward(Vector<T> state)
     {
+        _lastSharedInputs.Clear();
+        _lastSharedOutputs.Clear();
+        _lastValueInputs.Clear();
+        _lastValueOutputs.Clear();
+        _lastAdvantageInputs.Clear();
+        _lastAdvantageOutputs.Clear();
+
         // Shared layers
         var sharedTensor = Tensor<T>.FromVector(state);
         foreach (var layer in _sharedLayers)
         {
+            _lastSharedInputs.Add(sharedTensor.ToVector());
             sharedTensor = layer.Forward(sharedTensor);
+            _lastSharedOutputs.Add(sharedTensor.ToVector());
         }
         var sharedOutput = sharedTensor.ToVector();
         _lastSharedOutput = sharedOutput;
@@ -488,7 +513,9 @@ internal class DuelingNetwork<T>
         var valueTensor = sharedTensor;
         foreach (var layer in _valueLayers)
         {
+            _lastValueInputs.Add(valueTensor.ToVector());
             valueTensor = layer.Forward(valueTensor);
+            _lastValueOutputs.Add(valueTensor.ToVector());
         }
         var valueOutput = valueTensor.ToVector();
         _lastValueOutput = valueOutput;
@@ -498,7 +525,9 @@ internal class DuelingNetwork<T>
         var advantageTensor = sharedTensor;
         foreach (var layer in _advantageLayers)
         {
+            _lastAdvantageInputs.Add(advantageTensor.ToVector());
             advantageTensor = layer.Forward(advantageTensor);
+            _lastAdvantageOutputs.Add(advantageTensor.ToVector());
         }
         var advantageOutput = advantageTensor.ToVector();
         _lastAdvantageOutput = advantageOutput;
@@ -535,25 +564,165 @@ internal class DuelingNetwork<T>
         return Forward(input);
     }
 
-    public void UpdateWeights(T learningRate)
+    public void UpdateWeights(Vector<T> outputGradient, T learningRate)
     {
-        // Update shared layers using UpdateParameters method
-        foreach (var layer in _sharedLayers)
+        if (outputGradient.Length != _actionSize)
+            throw new ArgumentException(
+                $"Expected {_actionSize} output gradients, got {outputGradient.Length}.",
+                nameof(outputGradient));
+        if (_lastSharedOutput is null || _lastValueOutput is null || _lastAdvantageOutput is null)
+            throw new InvalidOperationException("Forward must be called before updating DuelingNetwork weights.");
+
+        T valueGradient = _numOps.Zero;
+        T meanOutputGradient = _numOps.Zero;
+        for (int i = 0; i < _actionSize; i++)
         {
-            layer.UpdateParameters(learningRate);
+            valueGradient = _numOps.Add(valueGradient, outputGradient[i]);
+            meanOutputGradient = _numOps.Add(meanOutputGradient, outputGradient[i]);
+        }
+        meanOutputGradient = _numOps.Divide(meanOutputGradient, _numOps.FromDouble(_actionSize));
+
+        var valueStreamGradient = new Vector<T>(1);
+        valueStreamGradient[0] = valueGradient;
+
+        var advantageStreamGradient = new Vector<T>(_actionSize);
+        for (int i = 0; i < _actionSize; i++)
+        {
+            advantageStreamGradient[i] = _numOps.Subtract(outputGradient[i], meanOutputGradient);
         }
 
-        // Update value stream layers
-        foreach (var layer in _valueLayers)
+        var sharedGradientFromValue = BackpropagateLayers(
+            _valueLayers,
+            _lastValueInputs,
+            _lastValueOutputs,
+            valueStreamGradient,
+            learningRate,
+            finalLayerIsIdentity: true);
+
+        var sharedGradientFromAdvantage = BackpropagateLayers(
+            _advantageLayers,
+            _lastAdvantageInputs,
+            _lastAdvantageOutputs,
+            advantageStreamGradient,
+            learningRate,
+            finalLayerIsIdentity: true);
+
+        var sharedGradient = AddVectors(sharedGradientFromValue, sharedGradientFromAdvantage);
+        BackpropagateLayers(
+            _sharedLayers,
+            _lastSharedInputs,
+            _lastSharedOutputs,
+            sharedGradient,
+            learningRate,
+            finalLayerIsIdentity: false);
+    }
+
+    private Vector<T> BackpropagateLayers(
+        IReadOnlyList<DenseLayer<T>> layers,
+        IReadOnlyList<Vector<T>> inputs,
+        IReadOnlyList<Vector<T>> outputs,
+        Vector<T> outputGradient,
+        T learningRate,
+        bool finalLayerIsIdentity)
+    {
+        if (layers.Count == 0) return outputGradient;
+        if (inputs.Count != layers.Count || outputs.Count != layers.Count)
+            throw new InvalidOperationException("DuelingNetwork forward cache does not match its layer count.");
+
+        var gradient = outputGradient;
+        for (int layerIndex = layers.Count - 1; layerIndex >= 0; layerIndex--)
         {
-            layer.UpdateParameters(learningRate);
+            bool useReluDerivative = !finalLayerIsIdentity || layerIndex != layers.Count - 1;
+            gradient = BackpropagateLayer(
+                layers[layerIndex],
+                inputs[layerIndex],
+                outputs[layerIndex],
+                gradient,
+                learningRate,
+                useReluDerivative);
         }
 
-        // Update advantage stream layers
-        foreach (var layer in _advantageLayers)
+        return gradient;
+    }
+
+    private Vector<T> BackpropagateLayer(
+        DenseLayer<T> layer,
+        Vector<T> input,
+        Vector<T> output,
+        Vector<T> outputGradient,
+        T learningRate,
+        bool useReluDerivative)
+    {
+        if (outputGradient.Length != output.Length)
+            throw new InvalidOperationException(
+                $"Gradient length {outputGradient.Length} does not match layer output length {output.Length}.");
+
+        var parameters = layer.GetParameters();
+        int inputSize = input.Length;
+        int outputSize = output.Length;
+        int weightCount = inputSize * outputSize;
+        int expectedParameterCount = weightCount + outputSize;
+
+        if (parameters.Length != expectedParameterCount)
+            throw new InvalidOperationException(
+                $"Dense layer parameter count {parameters.Length} does not match expected {expectedParameterCount}.");
+
+        var localGradient = new Vector<T>(outputSize);
+        for (int j = 0; j < outputSize; j++)
         {
-            layer.UpdateParameters(learningRate);
+            localGradient[j] = useReluDerivative && !_numOps.GreaterThan(output[j], _numOps.Zero)
+                ? _numOps.Zero
+                : outputGradient[j];
         }
+
+        var inputGradient = new Vector<T>(inputSize);
+        var updatedParameters = new Vector<T>(parameters.Length);
+
+        for (int i = 0; i < inputSize; i++)
+        {
+            T accumulatedInputGradient = _numOps.Zero;
+            for (int j = 0; j < outputSize; j++)
+            {
+                int weightIndex = i * outputSize + j;
+                T weight = parameters[weightIndex];
+                accumulatedInputGradient = _numOps.Add(
+                    accumulatedInputGradient,
+                    _numOps.Multiply(weight, localGradient[j]));
+
+                T parameterGradient = _numOps.Multiply(input[i], localGradient[j]);
+                updatedParameters[weightIndex] = _numOps.Subtract(
+                    weight,
+                    _numOps.Multiply(learningRate, parameterGradient));
+            }
+
+            inputGradient[i] = accumulatedInputGradient;
+        }
+
+        for (int j = 0; j < outputSize; j++)
+        {
+            int biasIndex = weightCount + j;
+            updatedParameters[biasIndex] = _numOps.Subtract(
+                parameters[biasIndex],
+                _numOps.Multiply(learningRate, localGradient[j]));
+        }
+
+        layer.SetParameters(updatedParameters);
+        return inputGradient;
+    }
+
+    private Vector<T> AddVectors(Vector<T> left, Vector<T> right)
+    {
+        if (left.Length != right.Length)
+            throw new InvalidOperationException(
+                $"Cannot add gradients with lengths {left.Length} and {right.Length}.");
+
+        var result = new Vector<T>(left.Length);
+        for (int i = 0; i < left.Length; i++)
+        {
+            result[i] = _numOps.Add(left[i], right[i]);
+        }
+
+        return result;
     }
 
     public Matrix<T> GetFlattenedParameters()

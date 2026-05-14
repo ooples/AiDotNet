@@ -624,22 +624,6 @@ internal partial class MambaBlock<T> : LayerBase<T>
         }
     }
 
-    /// <summary>
-    /// Concatenates two tensors along a specified axis.
-    /// </summary>
-    private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b, int axis)
-    {
-        return AiDotNetEngine.Current.TensorConcatenate([a, b], axis: axis);
-    }
-
-    /// <summary>
-    /// Concatenates three tensors along a specified axis.
-    /// </summary>
-    private static Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b, Tensor<T> c, int axis)
-    {
-        return AiDotNetEngine.Current.TensorConcatenate([a, b, c], axis: axis);
-    }
-
     #endregion
 
     #region Parameter Management
