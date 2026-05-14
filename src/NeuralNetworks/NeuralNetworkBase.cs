@@ -2077,14 +2077,37 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// broadcast-friendly shapes).
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Used by both first-layer-vs-architecture and layer-to-layer
     /// compatibility checks so a custom chain like
     /// <c>InputLayer(64) → EmbeddingLayer(vocab, dim) → ...</c> validates
     /// without false rejection — the <c>[64]</c>-vs-<c>[1]</c> mismatch is
     /// a contract feature, not a bug. Closes #1321 / #1323.
+    /// </para>
+    /// <para>
+    /// Recognition is intentionally broader than the LayerBase&lt;T&gt;
+    /// category check alone: custom embedding / positional layers that
+    /// implement <see cref="ILayer{T}"/> directly (without inheriting
+    /// LayerBase&lt;T&gt;) don't expose <c>GetLayerCategory()</c>, so a
+    /// category-only check would still reject the broadcast-input
+    /// contract for them. The name-based fallback matches the same
+    /// convention LayerBase.GetLayerCategory uses for its default
+    /// classification, so the two recognition paths agree.
+    /// </para>
     /// </remarks>
     private static bool IsBroadcastInputCategory(ILayer<T> layer)
-        => layer is LayerBase<T> lb && lb.GetLayerCategory() == LayerCategory.Embedding;
+    {
+        if (layer is LayerBase<T> lb && lb.GetLayerCategory() == LayerCategory.Embedding)
+            return true;
+
+        // Name-based fallback for custom ILayer<T> implementations not
+        // derived from LayerBase<T>. Matches the same heuristic
+        // LayerBase.GetLayerCategory uses (typeName.Contains "Embedding" /
+        // "Positional", case-insensitive).
+        var layerName = layer.GetType().Name;
+        return layerName.Contains("Embedding", StringComparison.OrdinalIgnoreCase)
+            || layerName.Contains("Positional", StringComparison.OrdinalIgnoreCase);
+    }
 
     private bool IsLastLayerShapeCompatible(ILayer<T> layer, out string error)
     {

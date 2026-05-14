@@ -303,6 +303,54 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         Assert.Equal(3, network.Layers.Count);
     }
 
+    [Fact]
+    public void EdgeCase_NonLayerBaseEmbedding_RecognisedByNameFallback()
+    {
+        // Custom layer whose category-via-LayerBase recognition is BLOCKED
+        // (the layer doesn't override GetLayerCategory and its type name
+        // wouldn't normally hit the LayerBase name heuristic — but we DO
+        // name it so that the Embedding-name fallback in the validators
+        // can recognise it). This proves the broader recognition path
+        // covers custom embeddings whose authors didn't override
+        // GetLayerCategory.
+        const int VocabSize = 32;
+        const int CtxLen = 8;
+
+        // Use a name that explicitly contains "Embedding" so the name-based
+        // fallback path fires. The type itself derives from LayerBase but
+        // does NOT override GetLayerCategory — so reaching the name-based
+        // recognition exercises the ILayer-side fallback we added per the
+        // CodeRabbit review (custom embeddings outside LayerBase still
+        // pass through, since the name match is the safety net).
+        var firstLayer = new NameOnlyEmbeddingLayer(VocabSize);
+        Assert.NotEqual(LayerCategory.Embedding,
+            // sanity: this layer's GetLayerCategory does NOT report Embedding,
+            // so the only path the validator can use to bypass strict shape
+            // is the name-based fallback.
+            new ProbeForCategoryReporter(firstLayer).Reported);
+
+        var layers = new List<ILayer<float>>
+        {
+            firstLayer,
+            new DenseLayer<float>(VocabSize, (IActivationFunction<float>)new IdentityActivation<float>()),
+        };
+
+        // ValidateInputDimensions runs in the NeuralNetworkArchitecture
+        // constructor — its bypass via IsBroadcastInputLayerCategory must
+        // accept the name-matched embedding layer even when the category
+        // override doesn't say Embedding. If the bypass were category-only,
+        // this construction would throw the #1321 strict-size error.
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: CtxLen,
+            outputSize: VocabSize,
+            layers: layers);
+
+        Assert.NotNull(arch);
+        Assert.Same(firstLayer, arch.Layers![0]);
+    }
+
     // ====================================================================
     // ISSUE #1322 — CalibratedProbabilityFitDetector returns empty
     //               calibration (instead of throwing) when predicted-vs-
@@ -334,14 +382,21 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         var result = detector.DetectFit(evalData);
 
         Assert.NotNull(result);
-        Assert.Equal(FitType.GoodFit, result.FitType);
+        // Empty-calibration sentinel: error = MaxCalibrationError → FitType
+        // routes to Overfit (worst-case) and ConfidenceLevel = 0 (no signal).
+        // This pair is the explicit "we can't evaluate calibration here"
+        // verdict — never the false-perfect FitType.GoodFit + confidence=1
+        // that the previous Zero-error fallback would have produced.
+        Assert.Equal(FitType.Overfit, result.FitType);
+        Assert.Equal(0f, result.ConfidenceLevel, precision: 5);
     }
 
     [Fact]
     public void Issue1322_FitDetector_RankDiscordantTensors_DoesNotThrow()
     {
         // Off-by-one shape drift — predicted [10], actual [13]. Not
-        // multiclass-divisible, not equal. Same lenient handling.
+        // multiclass-divisible, not equal. Same lenient handling: empty
+        // calibration → MaxCalibrationError → Overfit + zero confidence.
         var detector = new CalibratedProbabilityFitDetector<float, Tensor<float>, Tensor<float>>();
 
         var predicted = new Tensor<float>([10]);
@@ -354,7 +409,8 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         var result = detector.DetectFit(evalData);
 
         Assert.NotNull(result);
-        Assert.Equal(FitType.GoodFit, result.FitType);
+        Assert.Equal(FitType.Overfit, result.FitType);
+        Assert.Equal(0f, result.ConfidenceLevel, precision: 5);
     }
 
     [Fact]
@@ -381,10 +437,16 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         var result = detector.DetectFit(evalData);
 
         Assert.NotNull(result);
-        // Well-calibrated random data should land in GoodFit (default
-        // thresholds are loose enough that non-pathological calibration
-        // passes).
-        Assert.Contains(result.FitType, new[] { FitType.GoodFit, FitType.Underfit, FitType.Overfit });
+        // The empty-calibration fallback (predicted/actual shape mismatch)
+        // produces a known sentinel: ConfidenceLevel == 0 exactly. Real
+        // calibration on well-formed binary data must NOT hit that sentinel
+        // — assert ConfidenceLevel is strictly positive to prove we exercised
+        // the real binning loop, not the empty fallback regressing through.
+        Assert.True(result.ConfidenceLevel > 0f,
+            $"Matched-shape calibration should produce a real (non-empty) signal, " +
+            $"not the empty-calibration sentinel (ConfidenceLevel == 0). " +
+            $"Got ConfidenceLevel = {result.ConfidenceLevel}, FitType = {result.FitType}.");
+        Assert.InRange(result.ConfidenceLevel, 0f, 1f);
     }
 
     [Fact]
@@ -414,7 +476,19 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 
         // Should NOT throw — existing multiclass reduction path still applies.
         var result = detector.DetectFit(evalData);
+
         Assert.NotNull(result);
+        // Same anti-fallback assertion as the binary regression guard above:
+        // multiclass reduction MUST yield real calibration, not silently
+        // regress to the empty-calibration sentinel (ConfidenceLevel == 0).
+        // For a strongly-confident-and-correct synthetic classifier (0.7
+        // for true class, 0.1 for others), expected & observed calibration
+        // should both populate at least one bin → ConfidenceLevel > 0.
+        Assert.True(result.ConfidenceLevel > 0f,
+            $"Multiclass reduction should yield real calibration, " +
+            $"not the empty-calibration sentinel (ConfidenceLevel == 0). " +
+            $"Got ConfidenceLevel = {result.ConfidenceLevel}, FitType = {result.FitType}.");
+        Assert.InRange(result.ConfidenceLevel, 0f, 1f);
     }
 
     // ====================================================================
@@ -451,6 +525,57 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
     // the stock EmbeddingLayer<T>. Naming triggers the name-based fallback
     // in LayerBase.GetLayerCategory; an explicit override would also work.
     // ====================================================================
+
+    /// <summary>
+    /// A custom embedding-like layer whose only signal of "Embedding"-ness
+    /// is its CLASS NAME ("...EmbeddingLayer"). Critically, it overrides
+    /// GetLayerCategory to return something OTHER than Embedding so we can
+    /// prove the validator's name-based fallback (added per CodeRabbit
+    /// review on PR #1324) is what's recognising it — not the
+    /// category-based path.
+    /// </summary>
+    private sealed class NameOnlyEmbeddingLayer : LayerBase<float>
+    {
+        private readonly int _vocabSize;
+
+        public NameOnlyEmbeddingLayer(int vocabSize)
+            : base([1], [vocabSize])
+        {
+            _vocabSize = vocabSize;
+        }
+
+        public override bool SupportsTraining => false;
+
+        // Deliberately NOT Embedding — proves the name-based fallback is
+        // the recognition path. If only the category-based check existed,
+        // this layer would fail #1321's outer-input-size validation.
+        public override LayerCategory GetLayerCategory() => LayerCategory.Other;
+
+        public override Tensor<float> Forward(Tensor<float> input)
+            => new Tensor<float>([_vocabSize]);
+
+        public override void UpdateParameters(float learningRate) { }
+
+        public override Vector<float> GetParameters() => Vector<float>.Empty();
+
+        public override void ResetState() { }
+    }
+
+    /// <summary>
+    /// Helper to read back a layer's reported category for the
+    /// <see cref="EdgeCase_NonLayerBaseEmbedding_RecognisedByNameFallback"/>
+    /// sanity assertion — keeps the test's intent visible (we WANT the
+    /// reported category to NOT be Embedding so the name-based fallback
+    /// is the only path that could possibly accept this layer).
+    /// </summary>
+    private sealed class ProbeForCategoryReporter
+    {
+        public LayerCategory Reported { get; }
+        public ProbeForCategoryReporter(LayerBase<float> layer)
+        {
+            Reported = layer.GetLayerCategory();
+        }
+    }
 
     private sealed class CustomTokenEmbeddingLayer : LayerBase<float>
     {

@@ -365,11 +365,23 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
     {
         // Empty calibration vectors arise when CalculateCalibration could
         // not reconcile predicted-vs-actual shapes (see #1322). Avoid the
-        // 0/0 NaN that the divide-by-Length below would produce; return
-        // zero error so DetermineFitType / CalculateConfidenceLevel see a
-        // "no signal" baseline rather than a NaN-poisoned fit type.
+        // 0/0 NaN that the divide-by-Length below would produce.
+        //
+        // Return MaxCalibrationError so the no-data case is interpreted as
+        // a worst-case fit rather than a perfect one. Returning Zero here
+        // would route DetermineFitType to FitType.GoodFit (error <
+        // GoodFitThreshold) and CalculateConfidenceLevel to 1.0
+        // (1 - 0/MaxError = 1) — i.e. "the model is perfectly calibrated
+        // with maximum confidence" exactly when we have no calibration
+        // data to verify that. With MaxCalibrationError instead,
+        // DetermineFitType returns FitType.Overfit (error > OverfitThreshold)
+        // and CalculateConfidenceLevel returns 0 (1 - MaxError/MaxError),
+        // which the optimizer correctly reads as "low-confidence
+        // worst-case verdict" — pair this with the Trace warning emitted
+        // by CalculateCalibration's mismatch branch to surface the real
+        // shape-contract issue without falsely flattering the model.
         if (expected.Length == 0)
-            return NumOps.Zero;
+            return NumOps.FromDouble(_options.MaxCalibrationError);
 
         var squaredErrors = new Vector<T>(expected.Length);
         for (int i = 0; i < expected.Length; i++)
