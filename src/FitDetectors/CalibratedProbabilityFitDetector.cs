@@ -270,13 +270,39 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
         }
         else if (predicted.Length != actual.Length)
         {
-            // Non-multiclass mismatch (e.g. rank-discordant tensors). Guard
-            // with a clear error rather than an opaque OOR from the bin loop.
-            throw new InvalidOperationException(
+            // Non-multiclass mismatch (e.g. rank-discordant tensors, or
+            // model emits per-sample output while batch labels are stacked
+            // — the inverse of the multiclass case above). Two scenarios
+            // we surface gracefully here so the optimizer's per-iteration
+            // loop doesn't unconditionally throw:
+            //
+            //   1. actual.Length is an integer multiple of predicted.Length
+            //      (the inverse-multiclass case from #1322 — model returns
+            //      one sample's output but labels carry the full batch).
+            //      Calibration is genuinely undefined here: we have one
+            //      prediction and many ground-truth values, so binning
+            //      cannot align them. Return EMPTY calibration vectors so
+            //      DetermineFitType / CalculateConfidenceLevel see a
+            //      no-data signal rather than a thrown exception.
+            //   2. Anything else (rank-discordant tensors, off-by-one
+            //      shape drift). Same handling — empty calibration —
+            //      with a Trace warning so the developer can find the
+            //      shape-contract issue without losing the training run.
+            //
+            // The earlier always-throw behaviour blocked legitimate
+            // research / custom-architecture training under the default
+            // FitDetector setting (#1322). Industry-standard pattern:
+            // lenient default + diagnostic trace + the strict gate only
+            // applies when shape can be reconciled. Closes #1322.
+            System.Diagnostics.Trace.WriteLine(
                 $"CalibratedProbabilityFitDetector: predicted length ({predicted.Length}) and actual "
-                + $"length ({actual.Length}) are incompatible. Either predicted-probability length must "
-                + "equal actual length (binary calibration), or predicted.Length must be an integer "
-                + "multiple of actual.Length (multiclass probabilities + class-index labels).");
+                + $"length ({actual.Length}) cannot be reconciled. Calibration metrics will be empty "
+                + "for this evaluation step. Either the model's Predict output and the labels disagree "
+                + "on batch axis (per-sample vs stacked), or the prediction tensor rank doesn't match "
+                + "the label tensor rank. Override OptimizationAlgorithmOptions.FitDetector with a "
+                + "task-appropriate detector (or null, if calibration isn't meaningful for this model) "
+                + "to silence this warning.");
+            return (Vector<T>.Empty(), Vector<T>.Empty());
         }
 
         var numBins = _options.NumCalibrationBins;
@@ -337,6 +363,14 @@ public class CalibratedProbabilityFitDetector<T, TInput, TOutput> : FitDetectorB
     /// </remarks>
     private T CalculateCalibrationError(Vector<T> expected, Vector<T> observed)
     {
+        // Empty calibration vectors arise when CalculateCalibration could
+        // not reconcile predicted-vs-actual shapes (see #1322). Avoid the
+        // 0/0 NaN that the divide-by-Length below would produce; return
+        // zero error so DetermineFitType / CalculateConfidenceLevel see a
+        // "no signal" baseline rather than a NaN-poisoned fit type.
+        if (expected.Length == 0)
+            return NumOps.Zero;
+
         var squaredErrors = new Vector<T>(expected.Length);
         for (int i = 0; i < expected.Length; i++)
         {

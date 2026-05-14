@@ -1042,6 +1042,19 @@ public class NeuralNetworkArchitecture<T>
         if (Layers != null && Layers.Count > 0)
         {
             var firstLayer = Layers[0];
+
+            // Embedding-category layers (token / positional / patch / time)
+            // declare their input shape as a per-element broadcast contract
+            // (e.g. EmbeddingLayer<T> reports [1] = "I take one token at a
+            // time" while EmbeddingLayer<T>.Forward actually accepts any-rank
+            // token tensor [seqLen] / [batch, seqLen] / [batch, seqLen, 1]).
+            // The strict product-vs-InputSize check would reject this
+            // legitimate broadcast contract; recognise the category up front
+            // and let the runtime shape inference handle dimensional
+            // compatibility. Closes #1321.
+            if (IsBroadcastInputLayerCategory(firstLayer))
+                return;
+
             var firstShape = firstLayer.GetInputShape();
             // Lazy layers carry -1 placeholders until first Forward; skip the strict
             // size check and let runtime shape resolution validate the dimensions.
@@ -1056,6 +1069,17 @@ public class NeuralNetworkArchitecture<T>
             }
         }
     }
+
+    /// <summary>
+    /// True when <paramref name="layer"/> is an Embedding-category layer
+    /// whose declared input shape is a per-element broadcast contract.
+    /// Mirrors <c>NeuralNetworkBase&lt;T&gt;.IsBroadcastInputCategory</c> —
+    /// kept here as a static private helper so the architecture-level
+    /// validator stays self-contained without introducing a new dependency
+    /// on NeuralNetworkBase. Closes #1321.
+    /// </summary>
+    private static bool IsBroadcastInputLayerCategory(ILayer<T> layer)
+        => layer is Layers.LayerBase<T> lb && lb.GetLayerCategory() == Interfaces.LayerCategory.Embedding;
 
     /// <summary>
     /// Indicates whether this architecture declares dynamic (lazy) spatial dimensions —
