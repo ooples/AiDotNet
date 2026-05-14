@@ -350,57 +350,31 @@ public class Transformer<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
     }
 
     /// <summary>
-    /// Ensures that custom layers provided for the Transformer meet the minimum requirements.
+    /// Ensures that custom layers provided for the Transformer are shape-compatible.
     /// </summary>
     /// <param name="layers">The list of layers to validate.</param>
     /// <remarks>
     /// <para>
-    /// A valid Transformer must include at least one attention layer and one normalization layer.
-    /// Attention layers allow the model to focus on different parts of the input sequence.
-    /// Normalization layers help stabilize training by normalizing the activations.
+    /// Custom Transformer layer lists are validated by input/output shape compatibility.
+    /// This allows research architectures to replace the standard attention, normalization,
+    /// and readout substrate with domain-specific layers while still catching broken
+    /// layer-to-layer shape contracts.
     /// </para>
-    /// <para><b>For Beginners:</b> This method checks if your custom layers will actually work as a Transformer.
-    /// 
-    /// For a Transformer to function properly, it needs at minimum:
-    /// - An attention layer (which helps the model focus on important parts of the input)
-    /// - A normalization layer (which keeps the numbers stable during training)
-    /// 
-    /// If either of these is missing, it's like trying to build a house without walls or a foundation - it won't work!
-    /// 
-    /// This method checks for these essential components and raises an error if they're missing.
+    /// <para><b>For Beginners:</b> This method checks whether your custom layers fit together.
+    /// It verifies that each layer can receive the previous layer's output and that the final
+    /// layer produces the expected output size.
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the custom layers don't include required layer types.
+    /// Thrown when derived Transformer implementations add additional validation failures.
     /// </exception>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
+        // Custom Transformer layer lists may replace the classical
+        // attention/norm/readout substrate with domain-specific layers.
+        // The framework contract is shape compatibility; concrete layer-type
+        // identity is not a valid extensibility boundary.
         base.ValidateCustomLayers(layers);
-
-        bool hasAttentionLayer = false;
-        bool hasLayerNorm = false;
-
-        for (int i = 0; i < layers.Count; i++)
-        {
-            if (layers[i] is MultiHeadAttentionLayer<T>)
-            {
-                hasAttentionLayer = true;
-            }
-            else if (layers[i] is LayerNormalizationLayer<T>)
-            {
-                hasLayerNorm = true;
-            }
-        }
-
-        if (!hasAttentionLayer)
-        {
-            throw new InvalidOperationException("Custom Transformer must include at least one MultiHeadAttentionLayer.");
-        }
-
-        if (!hasLayerNorm)
-        {
-            throw new InvalidOperationException("Custom Transformer must include at least one LayerNormalizationLayer.");
-        }
     }
 
     /// <summary>
