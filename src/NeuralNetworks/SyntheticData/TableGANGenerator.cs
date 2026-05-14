@@ -438,7 +438,13 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.ReduceMean(pred, allAxes, keepDims: false);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
+            var recomputedFakeScores = DiscriminatorForwardBatched(fakeBatch, true);
+            var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
+            return Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+        }
 
         var context = new TapeStepContext<T>(
             discParams, grads, lossValue,
@@ -587,19 +593,46 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private Tensor<T> BuildClassificationTargetTensor(Tensor<T> realBatch, Tensor<T> logits)
     {
         var targets = new Tensor<T>(logits._shape);
+        if (_transformer is null ||
+            _options.LabelColumnIndex < 0 ||
+            _options.LabelColumnIndex >= _columns.Count)
+        {
+            return targets;
+        }
+
+        var labelTransform = _transformer.GetTransformInfo(_options.LabelColumnIndex);
         int batch = Math.Min(realBatch.Shape[0], logits.Shape[0]);
         int classCount = logits.Shape[^1];
-        int labelIdx = Math.Max(0, Math.Min(_options.LabelColumnIndex, realBatch.Shape[^1] - 1));
+        int labelWidth = Math.Min(labelTransform.Width, classCount);
 
         for (int b = 0; b < batch; b++)
         {
-            int targetClass = Math.Min(
-                Math.Max((int)Math.Round(NumOps.ToDouble(realBatch[b, labelIdx])), 0),
-                classCount - 1);
+            int targetClass = labelTransform.IsContinuous
+                ? Math.Min(
+                    Math.Max((int)Math.Round(NumOps.ToDouble(realBatch[b, labelTransform.StartOffset])), 0),
+                    classCount - 1)
+                : ArgMaxTransformedLabel(realBatch, b, labelTransform.StartOffset, labelWidth);
             targets[b, targetClass] = NumOps.One;
         }
 
         return targets;
+    }
+
+    private int ArgMaxTransformedLabel(Tensor<T> realBatch, int row, int startOffset, int labelWidth)
+    {
+        int targetClass = 0;
+        double bestValue = double.NegativeInfinity;
+        for (int c = 0; c < labelWidth; c++)
+        {
+            double value = NumOps.ToDouble(realBatch[row, startOffset + c]);
+            if (value > bestValue)
+            {
+                bestValue = value;
+                targetClass = c;
+            }
+        }
+
+        return targetClass;
     }
 
     /// <summary>
