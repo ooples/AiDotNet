@@ -17,11 +17,17 @@ public abstract class OpticalFlowTestBase : VideoNNModelTestBase
     // along the channel axis. The default NeuralNetworkModelTestBase shape
     // is [1, 4] and inherited bases default to odd channel counts (3 = RGB),
     // both of which fail OpticalFlowBase's rank-and-parity validation. Use
-    // RAPIDFlow's paper-default evaluation crop (256x256, RGB → 2*3 = 6
-    // channels stacked, 2-channel dx/dy flow output) so every optical-flow
-    // model in this base sees a shape its forward pass actually accepts.
-    protected override int[] InputShape => [1, 6, 256, 256];
-    protected override int[] OutputShape => [1, 2, 256, 256];
+    // 64x64 keeps the inherited video/model-family invariants at smoke-test
+    // scale. Paper-scale crops belong in model-specific tests so one model
+    // does not make every optical-flow invariant prohibitively expensive.
+    protected override int[] InputShape => [1, 6, 64, 64];
+    protected override int[] OutputShape => [1, 2, 64, 64];
+
+    // Optical-flow train steps run a full encoder/refinement/decoder pyramid
+    // over image tensors. Keep MoreData meaningful without spending the base
+    // neural-network default of 250 full image-to-image updates in one test.
+    protected override int MoreDataShortIterations => 10;
+    protected override int MoreDataLongIterations => 20;
 
     [Fact(Timeout = 120000)]
     public async Task IdenticalFrames_NearZeroFlow()
