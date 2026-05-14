@@ -274,13 +274,16 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         var network = new FeedForwardNeuralNetwork<float>(arch);
         Assert.Equal(2, network.Layers.Count);
 
-        // Assert first layer is PositionalEncodingLayer with correct config
+        // Assert first layer is PositionalEncodingLayer with correct config.
+        // GetOutputShape() is the public API; OutputShape is protected.
         var posLayer = Assert.IsType<PositionalEncodingLayer<float>>(network.Layers[0]);
-        Assert.Equal(Dim, posLayer.OutputShape[^1]); // embeddingSize/OutputDimension is last dimension
+        var posOutShape = posLayer.GetOutputShape();
+        Assert.Equal(Dim, posOutShape[^1]); // embeddingSize/OutputDimension is last dimension
 
-        // Assert second layer is DenseLayer with correct shape
+        // Assert second layer is DenseLayer with correct shape.
         var denseLayer = Assert.IsAssignableFrom<DenseLayer<float>>(network.Layers[1]);
-        Assert.Equal(CtxLen, denseLayer.OutputShape[0]);
+        var denseOutShape = denseLayer.GetOutputShape();
+        Assert.Equal(CtxLen, denseOutShape[0]);
 
         // Assert architecture properties match
         Assert.Equal(InputType.OneDimensional, arch.InputType);
@@ -635,6 +638,29 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         public Dictionary<string, string> GetDiagnostics() => new Dictionary<string, string>();
         public void LoadWeights(string path) { }
         public void SaveWeights(string path) { }
+
+        // IWeightLoadable<float> members. This stub layer has no named
+        // parameters — the validator-bypass test path doesn't exercise
+        // weight loading, so empty / no-op responses keep the contract
+        // satisfied without inventing a parameter namespace.
+        public IEnumerable<string> GetParameterNames() => Array.Empty<string>();
+        public bool TryGetParameter(string name, out Tensor<float>? tensor)
+        {
+            tensor = null;
+            return false;
+        }
+        public bool SetParameter(string name, Tensor<float> value) => false;
+        public int[]? GetParameterShape(string name) => null;
+        public int NamedParameterCount => 0;
+        public AiDotNet.Interfaces.WeightLoadValidation ValidateWeights(
+            IEnumerable<string> weightNames,
+            Func<string, string?>? mapping = null)
+            => new AiDotNet.Interfaces.WeightLoadValidation();
+        public AiDotNet.Interfaces.WeightLoadResult LoadWeights(
+            Dictionary<string, Tensor<float>> weights,
+            Func<string, string?>? mapping = null,
+            bool strict = false)
+            => new AiDotNet.Interfaces.WeightLoadResult { Success = true };
     }
 
     /// <summary>
