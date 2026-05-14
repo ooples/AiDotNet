@@ -98,13 +98,27 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
     /// <summary>
     /// Fast pathway layers (high temporal resolution, low channel capacity).
+    /// Held in BOTH this list (for explicit DAG routing in Forward) AND in
+    /// the base Layers list (so framework parameter collection / training-mode
+    /// propagation / serialization sees them). The two views point at the
+    /// same ILayer instances — single ownership, dual indexing.
     /// </summary>
     private readonly List<ILayer<T>> _fastLayers = [];
 
     /// <summary>
     /// Fusion layers that combine slow and fast pathway outputs for classification.
+    /// Same dual-indexing contract as <see cref="_fastLayers"/>.
     /// </summary>
     private readonly List<ILayer<T>> _fusionLayers = [];
+
+    /// <summary>
+    /// Index range markers into the unified Layers list. Layers is laid out as
+    /// [slow... | fast... | fusion...]; these counts let Forward / ForwardForTraining
+    /// route the dual-pathway DAG without separate-list lookups.
+    /// </summary>
+    private int _slowLayerCount;
+    private int _fastLayerCount;
+    private int _fusionLayerCount;
 
     /// <summary>
     /// Custom fast pathway layers provided by user (null = use default).
@@ -328,7 +342,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
     private Tensor<T> Forward(Tensor<T> input)
     {
         // Validate dual pathways are initialized
-        if (Layers.Count == 0)
+        if (_slowLayerCount == 0)
             throw new InvalidOperationException("Slow pathway not initialized. Layers collection is empty.");
         if (_fastLayers.Count == 0)
             throw new InvalidOperationException("Fast pathway not initialized. Fast layers collection is empty.");
@@ -339,13 +353,17 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         // Input is expected as [batch, channels, frames, height, width] or [batch, channels * frames, height, width]
         // Slow pathway: subsampled frames (every alpha-th frame)
         // Fast pathway: all frames
+        //
+        // Layers is laid out as [slow... | fast... | fusion...] (see InitializeLayers).
+        // Forward routes the DAG by indexing into Layers ranges plus the per-pathway
+        // mirror lists (which point at the same instances).
 
-        // Run slow pathway (Layers contains slow pathway layers)
+        // Run slow pathway: Layers[0 .. _slowLayerCount)
         var slowInput = SubsampleFrames(input, _alpha);
         var slowResult = slowInput;
-        foreach (var layer in Layers)
+        for (int i = 0; i < _slowLayerCount; i++)
         {
-            slowResult = layer.Forward(slowResult);
+            slowResult = Layers[i].Forward(slowResult);
         }
 
         // Run fast pathway
@@ -366,6 +384,21 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         return fused;
     }
+
+    /// <summary>
+    /// Tape-aware forward pass for training. Routes through the same
+    /// slow → fast → fusion DAG as <see cref="Forward"/> so the gradient
+    /// tape sees ALL three pathways' parameters.
+    /// </summary>
+    /// <remarks>
+    /// Without this override, base.ForwardForTraining iterates Layers as a
+    /// flat sequential chain, which (now that Layers contains the unified
+    /// [slow | fast | fusion] flat layout) would compose the layers in the
+    /// wrong topology. The DAG must be honored both at inference (Forward)
+    /// and during training (this method) — same routing logic, single source
+    /// of truth.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
     /// <summary>
     /// Subsamples frames by taking every n-th frame.
@@ -538,18 +571,25 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             ClearLayers();
             _fastLayers.Clear();
             _fusionLayers.Clear();
+            _slowLayerCount = 0;
+            _fastLayerCount = 0;
+            _fusionLayerCount = 0;
             return;
         }
 
         // Check if custom layers are provided (validation already done in constructor)
         bool hasCustomLayers = Architecture.Layers != null && Architecture.Layers.Count > 0;
 
+        IEnumerable<ILayer<T>> slowSrc;
+        IEnumerable<ILayer<T>> fastSrc;
+        IEnumerable<ILayer<T>> fusionSrc;
+
         if (hasCustomLayers && Architecture.Layers != null && _customFastLayers != null && _customFusionLayers != null)
         {
             // Use custom layers for all three pathways
-            Layers.AddRange(Architecture.Layers);
-            _fastLayers.AddRange(_customFastLayers);
-            _fusionLayers.AddRange(_customFusionLayers);
+            slowSrc = Architecture.Layers;
+            fastSrc = _customFastLayers;
+            fusionSrc = _customFusionLayers;
         }
         else
         {
@@ -558,22 +598,43 @@ public class SlowFast<T> : NeuralNetworkBase<T>
             int inputHeight = Architecture.InputHeight > 0 ? Architecture.InputHeight : 224;
             int inputWidth = Architecture.InputWidth > 0 ? Architecture.InputWidth : 224;
 
-            // SlowFast dual-pathway architecture:
-            // 1. Slow pathway: low temporal resolution (subsampled frames), high channel capacity
-            Layers.AddRange(LayerHelper<T>.CreateSlowFastSlowPathwayLayers(
-                inputChannels, inputHeight, inputWidth, _slowChannels));
-
-            // 2. Fast pathway: high temporal resolution (all frames), low channel capacity
-            _fastLayers.AddRange(LayerHelper<T>.CreateSlowFastFastPathwayLayers(
-                inputChannels, inputHeight, inputWidth, _fastChannels));
-
-            // 3. Fusion layers: combine slow and fast pathway outputs for classification
             // Feature map size after pathways (typically 14x14 for 224x224 input after 4 downsampling stages)
             int featureHeight = inputHeight / 16;
             int featureWidth = inputWidth / 16;
-            _fusionLayers.AddRange(LayerHelper<T>.CreateSlowFastFusionLayers(
-                _slowChannels, _fastChannels, featureHeight, featureWidth, _numClasses));
+
+            slowSrc = LayerHelper<T>.CreateSlowFastSlowPathwayLayers(
+                inputChannels, inputHeight, inputWidth, _slowChannels);
+            fastSrc = LayerHelper<T>.CreateSlowFastFastPathwayLayers(
+                inputChannels, inputHeight, inputWidth, _fastChannels);
+            fusionSrc = LayerHelper<T>.CreateSlowFastFusionLayers(
+                _slowChannels, _fastChannels, featureHeight, featureWidth, _numClasses);
         }
+
+        // Materialize once. Each ILayer instance gets shared by both the
+        // unified Layers list (framework view) and the per-pathway list
+        // (DAG-routing view) — the framework owns parameter / training-mode /
+        // serialization walks via Layers, and Forward/ForwardForTraining use
+        // the per-pathway lists for the slow/fast/fusion DAG topology.
+        var slowList = slowSrc.ToList();
+        var fastList = fastSrc.ToList();
+        var fusionList = fusionSrc.ToList();
+
+        _slowLayerCount = slowList.Count;
+        _fastLayerCount = fastList.Count;
+        _fusionLayerCount = fusionList.Count;
+
+        // Unified flat layout in Layers: [slow... | fast... | fusion...]. This
+        // makes base.GetParameters / base.ParameterCount / base.SetTrainingMode /
+        // TapeTrainingStep.CollectParameters(Layers) cover all three pathways
+        // without per-method overrides — the previous design hid fast and
+        // fusion pathways from the framework, so their gradients were never
+        // collected and their parameters never updated during training.
+        Layers.AddRange(slowList);
+        Layers.AddRange(fastList);
+        Layers.AddRange(fusionList);
+
+        _fastLayers.AddRange(fastList);
+        _fusionLayers.AddRange(fusionList);
     }
 
     #endregion
@@ -587,36 +648,11 @@ public class SlowFast<T> : NeuralNetworkBase<T>
 
         int offset = 0;
 
-        // Update slow pathway layers
+        // Layers now contains [slow... | fast... | fusion...] (see InitializeLayers).
+        // A single walk covers all three pathways in the same partition order
+        // base.GetParameters / TapeTrainingStep.CollectParameters use, so the
+        // serialized layout matches what the optimizer round-trips through.
         foreach (var layer in Layers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-
-        // Update fast pathway layers
-        foreach (var layer in _fastLayers)
-        {
-            var layerParams = layer.GetParameters();
-            int paramCount = layerParams.Length;
-            if (paramCount > 0 && offset + paramCount <= parameters.Length)
-            {
-                var slice = new Vector<T>(paramCount);
-                for (int i = 0; i < paramCount; i++) slice[i] = parameters[offset + i];
-                layer.SetParameters(slice);
-                offset += paramCount;
-            }
-        }
-
-        // Update fusion layers
-        foreach (var layer in _fusionLayers)
         {
             var layerParams = layer.GetParameters();
             int paramCount = layerParams.Length;
@@ -675,6 +711,15 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         writer.Write(_alpha);
         writer.Write(_imageSize);
 
+        // Per-pathway range markers needed by deserialize to reconstruct
+        // the _fastLayers / _fusionLayers mirror views into the unified
+        // Layers list. Without these, the deserialize side cannot tell where
+        // the slow pathway ends and the fast pathway begins from the flat
+        // [slow... | fast... | fusion...] layout.
+        writer.Write(_slowLayerCount);
+        writer.Write(_fastLayerCount);
+        writer.Write(_fusionLayerCount);
+
         // Training component type names for restoration
         writer.Write(_lossFunction.GetType().AssemblyQualifiedName ?? throw new InvalidOperationException(
             $"Cannot resolve AssemblyQualifiedName for loss function type '{_lossFunction.GetType().FullName}'."));
@@ -709,6 +754,13 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         _fastChannels = reader.ReadInt32();
         _alpha = reader.ReadInt32();
         _imageSize = reader.ReadInt32();
+
+        // Per-pathway range markers — must match what the serialize side wrote
+        // so the _fastLayers / _fusionLayers mirror views can be rebuilt as
+        // slices of the unified Layers list below.
+        _slowLayerCount = reader.ReadInt32();
+        _fastLayerCount = reader.ReadInt32();
+        _fusionLayerCount = reader.ReadInt32();
 
         // Restore training component types
         string lossFunctionTypeName = reader.ReadString();
@@ -777,11 +829,22 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         _customFastLayers = null;
         _customFusionLayers = null;
 
-        // Reinitialize layers with restored configuration
-        ClearLayers();
+        // Rebuild the per-pathway mirror lists as slices of the freshly-
+        // deserialized Layers. Do NOT call InitializeLayers — base
+        // DeserializeInternalUnchecked already populated Layers with the
+        // saved [slow... | fast... | fusion...] flat layout (with TRAINED
+        // weights). Re-running InitializeLayers would Clear + rebuild with
+        // random-init weights, dropping all the trained state on the floor
+        // (issue #1221 class — exactly what Clone_AfterTraining_*
+        // is designed to catch).
         _fastLayers.Clear();
         _fusionLayers.Clear();
-        InitializeLayers();
+        int slowEnd = _slowLayerCount;
+        int fastEnd = slowEnd + _fastLayerCount;
+        for (int i = slowEnd; i < fastEnd && i < Layers.Count; i++)
+            _fastLayers.Add(Layers[i]);
+        for (int i = fastEnd; i < Layers.Count; i++)
+            _fusionLayers.Add(Layers[i]);
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
