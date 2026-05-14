@@ -269,16 +269,27 @@ public class RAPIDFlow<T> : OpticalFlowBase<T>
                 SetTrainingMode(wasTraining);
             }
         }
-        catch
+        catch (Exception ex) when (IsExpectedWarmupShapeException(ex))
         {
-            // A warmup failure here is non-fatal; the first user-driven
-            // forward will trigger the same lazy-resolve path. We only
-            // swallow the warmup exception (not propagate) because some
-            // call sites construct the model in unusual contexts (custom
-            // architecture, non-default options) where the canonical
-            // [1, 2C, H, W] probe may not be a legal input. Real input-
-            // shape errors will resurface on the next real forward.
+            // Shape-only warmup failures are non-fatal for custom architectures;
+            // real input-shape errors will resurface on the next real forward.
+            System.Diagnostics.Debug.WriteLine(
+                $"RAPIDFlow lazy-layer warmup skipped due to shape mismatch: {ex.Message}");
         }
+    }
+
+    private static bool IsExpectedWarmupShapeException(Exception ex)
+    {
+        if (ex is not ArgumentException and not InvalidOperationException)
+            return false;
+
+        string message = ex.Message;
+        return message.Contains("shape", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("rank", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("dimension", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("matrix", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("tensor", StringComparison.OrdinalIgnoreCase) ||
+               message.Contains("size", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Tensor<T> SliceFrame(Tensor<T> twoFrameBatched, int channels, int channelOffset)

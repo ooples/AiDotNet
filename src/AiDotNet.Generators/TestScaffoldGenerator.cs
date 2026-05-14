@@ -2589,10 +2589,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 yield return exprBody;
                 yield break;
             }
-            // Block-bodied: walk every return statement.
+            // Block-bodied: walk only returns owned by the factory body itself.
+            // Nested local functions/lambdas are helper bodies, not factory coverage.
             if (methodDecl.Body is { } body)
             {
-                foreach (var ret in body.DescendantNodes().OfType<ReturnStatementSyntax>())
+                foreach (var ret in body
+                    .DescendantNodes(static node =>
+                        node is not LocalFunctionStatementSyntax &&
+                        node is not AnonymousFunctionExpressionSyntax)
+                    .OfType<ReturnStatementSyntax>())
                 {
                     if (ret.Expression is { } e) yield return e;
                 }

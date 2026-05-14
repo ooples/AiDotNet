@@ -56,6 +56,10 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private bool _useNativeMode;
     private bool _disposed;
 
+    private int EffectiveEmbeddingDim => Architecture.OutputSize > 0
+        ? Architecture.OutputSize
+        : _options.EmbeddingDim;
+
     #endregion
 
     #region IAudioFingerprinter Properties
@@ -81,6 +85,7 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new GraFPrintOptions();
+        NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -98,6 +103,7 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new GraFPrintOptions();
+        NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
@@ -229,22 +235,10 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
         else
         {
-            // Prefer Architecture.OutputSize over the options default when it
-            // was explicitly set on the architecture (the conventional
-            // single-config-point pattern other AudioNN models follow). This
-            // lets the parameterless / architecture-only ctor route surface
-            // the embedding-dim contract via NeuralNetworkArchitecture's own
-            // outputSize parameter instead of forcing callers to also build
-            // a matched GraFPrintOptions. Ferraro & Bogdanov 2023 use
-            // EmbeddingDim=128 by default; that stays the fallback whenever
-            // the architecture leaves outputSize unset (== 0).
-            int embeddingDim = Architecture.OutputSize > 0
-                ? Architecture.OutputSize
-                : _options.EmbeddingDim;
             Layers.AddRange(LayerHelper<T>.CreateDefaultGraFPrintLayers(
                 numMels: _options.NumMels, gnnHiddenDim: _options.GnnHiddenDim,
                 numGnnLayers: _options.NumGnnLayers, numAttentionHeads: _options.NumAttentionHeads,
-                embeddingDim: embeddingDim, dropoutRate: _options.DropoutRate));
+                embeddingDim: _options.EmbeddingDim, dropoutRate: _options.DropoutRate));
         }
     }
 
@@ -314,8 +308,18 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _options.EmbeddingDim = r.ReadInt32(); _options.GnnHiddenDim = r.ReadInt32();
         _options.NumGnnLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
         _options.KNeighbors = r.ReadInt32(); _options.Temperature = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
+        NormalizeEmbeddingDimFromArchitecture();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength);
+    }
+
+    private void NormalizeEmbeddingDimFromArchitecture()
+    {
+        int embeddingDim = EffectiveEmbeddingDim;
+        if (embeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.EmbeddingDim), embeddingDim, "EmbeddingDim must be greater than 0.");
+
+        _options.EmbeddingDim = embeddingDim;
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
