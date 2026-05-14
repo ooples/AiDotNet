@@ -272,7 +272,21 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
             layers: layers);
 
         var network = new FeedForwardNeuralNetwork<float>(arch);
-        Assert.NotEmpty(network.Layers);
+        Assert.Equal(2, network.Layers.Count);
+
+        // Assert first layer is PositionalEncodingLayer with correct config
+        var posLayer = Assert.IsType<PositionalEncodingLayer<float>>(network.Layers[0]);
+        Assert.Equal(Dim, posLayer.OutputShape[^1]); // embeddingSize/OutputDimension is last dimension
+
+        // Assert second layer is DenseLayer with correct shape
+        var denseLayer = Assert.IsAssignableFrom<DenseLayer<float>>(network.Layers[1]);
+        Assert.Equal(CtxLen, denseLayer.OutputShape[0]);
+
+        // Assert architecture properties match
+        Assert.Equal(InputType.OneDimensional, arch.InputType);
+        Assert.Equal(NeuralNetworkTaskType.Regression, arch.TaskType);
+        Assert.Equal(CtxLen, arch.InputSize);
+        Assert.Equal(CtxLen, arch.OutputSize);
     }
 
     [Fact]
@@ -306,28 +320,17 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
     [Fact]
     public void EdgeCase_NonLayerBaseEmbedding_RecognisedByNameFallback()
     {
-        // Custom layer whose category-via-LayerBase recognition is BLOCKED
-        // (the layer doesn't override GetLayerCategory and its type name
-        // wouldn't normally hit the LayerBase name heuristic — but we DO
-        // name it so that the Embedding-name fallback in the validators
-        // can recognise it). This proves the broader recognition path
-        // covers custom embeddings whose authors didn't override
-        // GetLayerCategory.
+        // Custom layer that implements ILayer<float> directly WITHOUT
+        // inheriting from LayerBase<float>. This proves the name-based
+        // fallback works for true ILayer implementations (not just
+        // LayerBase subclasses). The layer's name contains "Embedding"
+        // so the validators' name-based fallback should recognize it.
         const int VocabSize = 32;
         const int CtxLen = 8;
 
-        // Use a name that explicitly contains "Embedding" so the name-based
-        // fallback path fires. The type itself derives from LayerBase but
-        // does NOT override GetLayerCategory — so reaching the name-based
-        // recognition exercises the ILayer-side fallback we added per the
-        // CodeRabbit review (custom embeddings outside LayerBase still
-        // pass through, since the name match is the safety net).
-        var firstLayer = new NameOnlyEmbeddingLayer(VocabSize);
-        Assert.NotEqual(LayerCategory.Embedding,
-            // sanity: this layer's GetLayerCategory does NOT report Embedding,
-            // so the only path the validator can use to bypass strict shape
-            // is the name-based fallback.
-            new ProbeForCategoryReporter(firstLayer).Reported);
+        // Use the non-LayerBase implementation to exercise the name-based
+        // fallback for a true ILayer<float> (not a LayerBase subclass).
+        var firstLayer = new NameOnlyEmbeddingLayerNonLayerBase(VocabSize);
 
         var layers = new List<ILayer<float>>
         {
@@ -337,9 +340,10 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 
         // ValidateInputDimensions runs in the NeuralNetworkArchitecture
         // constructor — its bypass via IsBroadcastInputLayerCategory must
-        // accept the name-matched embedding layer even when the category
-        // override doesn't say Embedding. If the bypass were category-only,
-        // this construction would throw the #1321 strict-size error.
+        // accept the name-matched embedding layer even when the layer
+        // doesn't inherit from LayerBase and can't report a category.
+        // If the bypass were category-only, this construction would throw
+        // the #1321 strict-size error.
         var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
@@ -349,6 +353,30 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
 
         Assert.NotNull(arch);
         Assert.Same(firstLayer, arch.Layers![0]);
+
+        // Also test with the LayerBase-derived version to ensure both paths work
+        var layerBaseDerived = new NameOnlyEmbeddingLayer(VocabSize);
+        Assert.NotEqual(LayerCategory.Embedding,
+            // sanity: this layer's GetLayerCategory does NOT report Embedding,
+            // so the only path the validator can use to bypass strict shape
+            // is the name-based fallback.
+            new ProbeForCategoryReporter(layerBaseDerived).Reported);
+
+        var layers2 = new List<ILayer<float>>
+        {
+            layerBaseDerived,
+            new DenseLayer<float>(VocabSize, (IActivationFunction<float>)new IdentityActivation<float>()),
+        };
+
+        var arch2 = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: CtxLen,
+            outputSize: VocabSize,
+            layers: layers2);
+
+        Assert.NotNull(arch2);
+        Assert.Same(layerBaseDerived, arch2.Layers![0]);
     }
 
     // ====================================================================
@@ -559,6 +587,54 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
         public override Vector<float> GetParameters() => Vector<float>.Empty();
 
         public override void ResetState() { }
+    }
+
+    /// <summary>
+    /// A test double that implements ILayer&lt;float&gt; directly WITHOUT
+    /// inheriting from LayerBase&lt;float&gt;. This exercises the name-based
+    /// fallback for a true ILayer&lt;float&gt; (not a LayerBase subclass).
+    /// </summary>
+    private sealed class NameOnlyEmbeddingLayerNonLayerBase : ILayer<float>
+    {
+        private readonly int _vocabSize;
+
+        public NameOnlyEmbeddingLayerNonLayerBase(int vocabSize)
+        {
+            _vocabSize = vocabSize;
+        }
+
+        public int[] GetInputShape() => [1];
+        public int[] GetOutputShape() => [_vocabSize];
+        public bool IsShapeResolved => true;
+        public Tensor<float>? GetWeights() => null;
+        public Tensor<float>? GetBiases() => null;
+        public Tensor<float> Forward(Tensor<float> input) => new Tensor<float>([_vocabSize]);
+        public Tensor<float> ForwardWithPrecisionCheck(Tensor<float> input) => Forward(input);
+        public string LayerName => "NameOnlyEmbeddingLayerNonLayerBase";
+        public Tensor<float> ForwardGpu(params Tensor<float>[] inputs) => throw new NotSupportedException();
+        public bool CanExecuteOnGpu => false;
+        public void UpdateParameters(float learningRate) { }
+        public void UpdateParameters(Vector<float> parameters) { }
+        public long ParameterCount => 0;
+        public void Serialize(BinaryWriter writer) { }
+        public void Deserialize(BinaryReader reader) { }
+        public IEnumerable<ActivationFunction> GetActivationTypes() => Array.Empty<ActivationFunction>();
+        public Vector<float> GetParameters() => Vector<float>.Empty();
+        public bool SupportsTraining => false;
+        public void SetTrainingMode(bool isTraining) { }
+        public IReadOnlyList<ILayer<float>> GetSubLayers() => Array.Empty<ILayer<float>>();
+        public Vector<float> GetParameterGradients() => Vector<float>.Empty();
+        public void ClearGradients() { }
+        public void SetParameters(Vector<float> parameters) { }
+        public void ResetState() { }
+        public bool SupportsGpuTraining => false;
+        public void UpdateParametersGpu(IGpuOptimizerConfig config) => throw new NotSupportedException();
+        public void UploadWeightsToGpu() => throw new NotSupportedException();
+        public void DownloadWeightsFromGpu() => throw new NotSupportedException();
+        public void ZeroGradientsGpu() => throw new NotSupportedException();
+        public Dictionary<string, string> GetDiagnostics() => new Dictionary<string, string>();
+        public void LoadWeights(string path) { }
+        public void SaveWeights(string path) { }
     }
 
     /// <summary>
