@@ -13,9 +13,8 @@ public class EmotiVoiceOptions : EndToEndTtsOptions
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public EmotiVoiceOptions(EmotiVoiceOptions other) : base(other)
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
+        // base(other) runs before this body and throws ArgumentNullException
+        // if other is null, so a local null-check here is unreachable.
         EmotionDim = other.EmotionDim;
         NumEmotionLayers = other.NumEmotionLayers;
         OptimizerBeta1 = other.OptimizerBeta1;

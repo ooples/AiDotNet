@@ -163,7 +163,11 @@ public class SyntheticTabularGeneratorIntegrationTests
         Assert.True(generator.IsFitted);
 
         var generated = generator.Generate(GenSamples);
-        ValidateGeneratedData(generated, GenSamples, TotalCols, "CTGAN");
+        // CTGAN trains on CreateImbalancedData() output (4 cols), not the
+        // 5-col CreateTestData(). Asserting against TotalCols (5) would
+        // fail for the wrong reason on a successful generation; use the
+        // actual arranged dataset width.
+        ValidateGeneratedData(generated, GenSamples, data.Columns, "CTGAN");
     }
 
     [Fact(Timeout = 120000)]

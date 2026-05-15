@@ -1888,6 +1888,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Targeted invalidation for parameter-shape changes that do NOT change
+    /// the layer count / identity — only the per-layer parameter counts and
+    /// the tensors backing them. Used by <see cref="ResolveLazyLayerShapes"/>
+    /// after lazy <c>[-1]</c>-shaped layers materialize their parameter
+    /// tensors. Unlike <see cref="InvalidateParameterCountCache"/> it does
+    /// NOT reset the sticky <c>_fusedTrainingDisabled</c> /
+    /// <c>_fusedTrainingCommitted</c> flags, so a deliberate
+    /// fused-path-disable from a prior training call survives a lazy-shape
+    /// resolve. The layer-structure version IS bumped (so version-keyed
+    /// caches re-key), and the parameter buffer / compiled plans are still
+    /// invalidated since they hold references to the pre-resolve tensors.
+    /// </summary>
+    protected void InvalidateAfterParameterShapeChange()
+    {
+        _cachedParameterCount = null;
+        _layerStructureVersion++;
+        _parameterBuffer = null;
+        _skipParameterBuffer = false;
+        _skipParameterBufferVersion = -1;
+        Training.TapeTrainingStep<T>.InvalidateCache();
+        InvalidateLayerInfoCache();
+        _compileHost.Invalidate();
+        Training.CompiledTapeTrainingStep<T>.Invalidate();
+        // Intentionally NOT resetting _fusedTrainingDisabled /
+        // _fusedTrainingCommitted: those are sticky decisions tied to
+        // training-time behavior, not to parameter-shape state.
+    }
+
+    /// <summary>
     /// Invalidates the parameter count cache.
     /// Call this method whenever layers are added, removed, or modified.
     /// </summary>
@@ -2594,7 +2623,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // DenseLayer.EnsureInitialized → TensorAllocator.Rent against a
         // [DecoderDim, 4×DecoderDim] weight allocation that should have
         // routed through WeightRegistry.AllocateStreaming instead.
-        InvalidateParameterCountCache();
+        //
+        // Use the targeted invalidator: lazy-shape resolution only changes
+        // parameter shapes / counts (NOT layer count or identity), so we
+        // shouldn't reset sticky fused-training flags that may have been
+        // deliberately disabled by a prior training run.
+        InvalidateAfterParameterShapeChange();
     }
 
     /// <summary>
