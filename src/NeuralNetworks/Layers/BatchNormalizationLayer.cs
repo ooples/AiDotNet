@@ -551,7 +551,32 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         _lastInput = tapeActive ? null : input;
 
-        if (IsTrainingMode)
+        // Training-mode BN at batch=1 is mathematically degenerate: with one
+        // sample the batch mean equals the sample, batch variance is zero, and
+        // the normalised output collapses to `beta` regardless of input. The
+        // gradient signal through that step is also pathological — d/d_input
+        // of `(x - mean(x)) / sqrt(var(x) + eps)` is exactly 0 when N=1 because
+        // mean(x) ≡ x and the numerator is identically zero for every input.
+        // Networks built from BN layers (paper-faithful ResNet/VGG/UNet/DCGAN
+        // discriminator, plus every model in OccupancyNN's family before the
+        // LayerNorm switch) therefore produce input-invariant output and
+        // zero-gradient training at batch=1, which is the exact "loss did not
+        // strictly decrease on memorization task" / "output didn't change when
+        // input was scaled 10x" / "network produces identical output for
+        // distinct inputs" cluster the per-sample invariants catch.
+        //
+        // The fix matches PyTorch's documented workaround for batch=1: fall
+        // back to the inference path (use running stats) when N=1 even in
+        // training mode. Running stats start at (0, 1) per Ioffe & Szegedy
+        // 2015 §3.2 so the first call effectively applies y = gamma*x + beta,
+        // which is well-defined and input-sensitive. Running stats still get
+        // updated by every batch>=2 step that follows. This does NOT change
+        // batch>=2 training behaviour — only the degenerate N=1 case is routed
+        // to the inference path.
+        bool batchTooSmallForTraining = IsTrainingMode
+            && input.Rank >= 2
+            && input.Shape[0] == 1;
+        if (IsTrainingMode && !batchTooSmallForTraining)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
