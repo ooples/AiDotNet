@@ -107,6 +107,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     private Tensor<T>? _cachedInferenceShift;
     private bool _inferenceScaleDirty = true;
 
+    // Tape-bound cache: the cached scale/shift tensors above are bound to the
+    // tape that created them (their producer ops are recorded on that tape).
+    // Reusing them on a later, distinct tape breaks the gradient chain —
+    // backward can't traverse them. Track the producing tape via a weak
+    // reference so we rebuild exactly once per fresh tape, not per forward.
+    // (Per-forward rebuild on every tape-active call was the previous safe
+    // fallback; it costs 4 extra engine ops × every BN layer × every forward
+    // on the tape, which is meaningful for BN-heavy stacks like VGG-BN.)
+    private WeakReference? _tapeBoundCacheRef;
+    private Tensor<T>? _tapeBoundInferenceScale;
+    private Tensor<T>? _tapeBoundInferenceShift;
+
     /// <summary>
     /// The input from the last forward pass.
     /// </summary>
@@ -653,21 +665,40 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // (recomputing creates new tensor allocations that can cause SIMD
             // alignment differences across calls.)
             //
-            // The cache MUST NOT be reused when a fresh GradientTape is active —
-            // cached scale/shift tensors carry the tape state from the call that
-            // built them. Reusing those tensors on a NEW tape (later training
-            // step that routes through here, e.g. the batch=1 training-mode
-            // fallback path above) breaks the gradient chain: backward on the
-            // current tape can't reach _gamma / _beta through cached tensors
-            // owned by a stale tape, and the optimizer step leaves both
-            // unchanged. Recompute per-forward whenever a tape is active.
-            bool tapeActiveForBn = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            // Two-cache strategy, separated by tape ownership:
+            //   - Tape-free path: persistent cache, invalidated by
+            //     _inferenceScaleDirty when params or running stats change.
+            //   - Tape-active path: per-tape cache. Cached tensors are
+            //     produced by Engine ops that record on the active tape;
+            //     reusing them on a DIFFERENT tape breaks backward (it can't
+            //     traverse ops owned by a stale tape and the optimizer leaves
+            //     _gamma / _beta unchanged). We bind the cache to the
+            //     producing tape via a weak reference: on the next forward,
+            //     if it's the same tape AND params haven't changed, reuse;
+            //     otherwise rebuild and rebind. This rebuilds exactly once
+            //     per tape (typical: one rebuild per training step) rather
+            //     than once per forward.
+            var currentTape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
+            bool tapeActiveForBn = currentTape is not null
                 && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
             Tensor<T> inferenceScale;
             Tensor<T> inferenceShift;
-            if (_inferenceScaleDirty || tapeActiveForBn
-                || _cachedInferenceScale is null || _cachedInferenceShift is null)
+
+            // Tape-active path with a still-valid per-tape cache: reuse.
+            if (tapeActiveForBn
+                && !_inferenceScaleDirty
+                && _tapeBoundInferenceScale is { } cachedTapeScale
+                && _tapeBoundInferenceShift is { } cachedTapeShift
+                && _tapeBoundCacheRef is { IsAlive: true } cacheRef
+                && ReferenceEquals(cacheRef.Target, currentTape))
             {
+                inferenceScale = cachedTapeScale;
+                inferenceShift = cachedTapeShift;
+            }
+            else if (tapeActiveForBn)
+            {
+                // Tape-active rebuild: bind the new cache to this tape so
+                // subsequent forwards on the same tape can reuse it.
                 var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
                 var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
                 var stdDev = Engine.TensorSqrt(variancePlusEps);
@@ -675,20 +706,29 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 inferenceScale = Engine.TensorDivide(_gamma, stdDev);
                 var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
                 inferenceShift = Engine.TensorSubtract(_beta, term2);
-                // Only persist the rebuild into the cache when the call came
-                // from a tape-free inference path. Tape-active rebuilds
-                // intentionally don't persist — the resulting tensors are
-                // bound to the active tape and reusing them on a fresh tape
-                // would break the gradient chain again.
-                if (!tapeActiveForBn)
-                {
-                    _cachedInferenceScale = inferenceScale;
-                    _cachedInferenceShift = inferenceShift;
-                    _inferenceScaleDirty = false;
-                }
+                _tapeBoundInferenceScale = inferenceScale;
+                _tapeBoundInferenceShift = inferenceShift;
+                _tapeBoundCacheRef = new WeakReference(currentTape);
+            }
+            else if (_inferenceScaleDirty
+                     || _cachedInferenceScale is null
+                     || _cachedInferenceShift is null)
+            {
+                // Tape-free rebuild: cache persistently.
+                var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
+                var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
+                var stdDev = Engine.TensorSqrt(variancePlusEps);
+
+                inferenceScale = Engine.TensorDivide(_gamma, stdDev);
+                var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
+                inferenceShift = Engine.TensorSubtract(_beta, term2);
+                _cachedInferenceScale = inferenceScale;
+                _cachedInferenceShift = inferenceShift;
+                _inferenceScaleDirty = false;
             }
             else
             {
+                // Tape-free path with a valid persistent cache: reuse.
                 inferenceScale = _cachedInferenceScale;
                 inferenceShift = _cachedInferenceShift;
             }

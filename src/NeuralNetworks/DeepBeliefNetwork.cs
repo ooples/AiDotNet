@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Optimizers;
 
@@ -226,7 +227,24 @@ public class DeepBeliefNetwork<T> : NeuralNetworkBase<T>
         DeepBeliefNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Hinton 2006 ("A fast learning algorithm for deep belief nets") and
+        // Hinton & Salakhutdinov 2006 ("Reducing the Dimensionality of Data
+        // with Neural Networks") fine-tune the post-CD stack with SGD +
+        // momentum (β=0.9, lr~0.1), NOT Adam. Adam's per-parameter adaptive
+        // step amplifies the (vanishingly small) backprop signal coming out
+        // of the deep sigmoid stack into noise, and long-run loss diverges
+        // above short-run loss (the failure mode the
+        // MoreData_ShouldNotDegrade invariant catches). Default to the
+        // paper-canonical optimizer so the post-pretrain backprop stays in
+        // the regime the original DBN authors validated.
+        _optimizer = optimizer ?? new MomentumOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 0.1,
+                InitialMomentum = 0.9,
+                BatchSize = batchSize
+            });
         _options = options ?? new DeepBeliefNetworkOptions();
         Options = _options;
 
