@@ -2383,6 +2383,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         _layerShapesResolved = true;
+
+        // Shape resolution can change every lazy layer's reported
+        // ParameterCount (DenseLayer / FullyConnectedLayer / Conv variants
+        // return shape-based estimates when not yet initialized). A prior
+        // ParameterCount read (e.g. from a Parameters_ShouldBeNonEmpty
+        // smoke test that ran BEFORE InitializeLayers materialized the
+        // architecture) cached 0; without invalidating that cache,
+        // TryAutoEnableWeightStreaming reads the stale 0 and stays under
+        // the 125M streaming threshold even when the resolved architecture
+        // is multi-billion-parameter scale (Phi-3-Vision, Transfusion,
+        // SmolVLM at paper defaults). The first Forward then OOMs on
+        // DenseLayer.EnsureInitialized → TensorAllocator.Rent against a
+        // [DecoderDim, 4×DecoderDim] weight allocation that should have
+        // routed through WeightRegistry.AllocateStreaming instead.
+        InvalidateParameterCountCache();
     }
 
     /// <summary>
