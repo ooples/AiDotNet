@@ -32134,6 +32134,8 @@ public static class LayerHelper<T>
         // weights mismatch the input embedding dim and downstream
         // `DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs` /
         // `SpeakerConsistency` tests observe degenerate / inconsistent outputs.
+        // Applies to all style/emotion TTS front ends that expose mel /
+        // prosody feature tensors instead of already-projected hidden states.
         if (inputFeatureDim > 0 && inputFeatureDim != encoderDim)
             yield return new DenseLayer<T>(encoderDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
