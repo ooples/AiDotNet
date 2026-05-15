@@ -885,22 +885,26 @@ public static class DeserializationHelper
             // InputChannels and matches the saved parameter count.
             // inputShape is rank-4 [channels, depth, height, width] for the layer-only
             // OutputShape, or rank-5 [batch, channels, depth, height, width] post-batch.
-            if (instance is Conv3DLayer<T> conv3d && inputShape != null && inputShape.Length >= 4)
+            // Only resolve when every dim is positive — same lazy-sentinel rationale
+            // as ConvolutionalLayer above. Defers to the post-deserialization
+            // Architecture-based fallback for layers serialised before first forward.
+            if (instance is Conv3DLayer<T> conv3d && inputShape != null && inputShape.Length >= 4
+                && inputShape.All(d => d > 0))
             {
                 int inC, inD, inH, inW;
                 if (inputShape.Length == 5)
                 {
-                    inC = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inD = inputShape[2] > 0 ? inputShape[2] : 1;
-                    inH = inputShape[3] > 0 ? inputShape[3] : 1;
-                    inW = inputShape[4] > 0 ? inputShape[4] : 1;
+                    inC = inputShape[1];
+                    inD = inputShape[2];
+                    inH = inputShape[3];
+                    inW = inputShape[4];
                 }
                 else
                 {
-                    inC = inputShape[0] > 0 ? inputShape[0] : 1;
-                    inD = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
-                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                    inC = inputShape[0];
+                    inD = inputShape[1];
+                    inH = inputShape[2];
+                    inW = inputShape[3];
                 }
                 conv3d.ResolveShapesOnly(new[] { inC, inD, inH, inW });
             }
