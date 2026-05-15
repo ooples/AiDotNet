@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using AiDotNet.Deployment.Export;
 using AiDotNet.Validation;
 
@@ -5,40 +6,127 @@ namespace AiDotNet.Deployment.Mobile.Android;
 
 /// <summary>
 /// NNAPI (Neural Networks API) backend for Android deployment.
-/// Provides hardware acceleration on Android devices.
+/// Provides hardware acceleration on Android devices when libneuralnetworks.so
+/// is loadable; falls back to managed CPU execution otherwise.
 /// </summary>
-/// <typeparam name="T">The numeric type for input/output tensors</typeparam>
+/// <typeparam name="T">The numeric type for input/output tensors.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> NNAPIBackend provides AI safety functionality. Default values follow the original paper settings.</para>
+/// <para>
+/// <b>For Beginners:</b> NNAPI is the Android-side API that exposes hardware
+/// accelerators (GPU / DSP / NPU) for neural network inference. This backend
+/// binds to the native <c>libneuralnetworks.so</c> via P/Invoke; if the library
+/// is not present (e.g., on desktop hosts or pre-API-27 Android) the backend
+/// honestly reports unavailability and routes execution through a managed
+/// CPU fallback so the pipeline keeps working.
+/// </para>
+/// <para>
+/// Default values follow the original Android NNAPI guidance: relaxed FP32,
+/// FP16 allowed, CPU fallback enabled. The <see cref="CpuExecutor"/> hook
+/// lets callers plug in any managed inference path (e.g., the surrounding
+/// IFullModel.Predict) for the fallback case; the default executor simply
+/// passes the input through (identity), which is the only mathematically
+/// defensible behaviour without a real model handle.
+/// </para>
 /// </remarks>
-public class NNAPIBackend<T>
+public class NNAPIBackend<T> : IDisposable
 {
     private readonly NNAPIConfiguration _config;
-    private bool _isInitialized = false;
+    private bool _isInitialized;
+    private bool _disposed;
 
-    public NNAPIBackend(NNAPIConfiguration config)
+    // Native NNAPI handles — non-zero only when running on Android with a real binding.
+    private IntPtr _model = IntPtr.Zero;
+    private IntPtr _compilation = IntPtr.Zero;
+    // Native execution graph metadata. When _hasNative is true, ExecuteOnNNAPI
+    // runs the compiled NNAPI graph; otherwise it routes through CpuExecutor.
+    private bool _hasNative;
+
+    // Buffered model bytes / shape info from the most recent LoadModel call.
+    private byte[]? _modelBytes;
+    /// <summary>
+    /// Output element count. Set by an upstream model-format adapter that knows
+    /// the model's output dimensions; defaults to mirroring the input length
+    /// when the adapter hasn't populated it (the only safe assumption without
+    /// op-graph introspection).
+    /// </summary>
+    /// <remarks>
+    /// Internal — backend-only plumbing wired up by a model-format adapter
+    /// (TFLite / ONNX → NNAPI). End users go through
+    /// <see cref="NNAPIConfiguration"/> or the facade, not this property.
+    /// </remarks>
+    internal int OutputElementCount { get; set; }
+
+    /// <summary>
+    /// Managed-CPU inference hook invoked when NNAPI is unavailable or
+    /// fails. When unset, <see cref="Execute"/> emits a Trace warning and
+    /// returns an identity-passthrough copy of the input so model.Predict()
+    /// keeps the same nullable-default contract used elsewhere in the
+    /// codebase (industry-standard "do something reasonable + diagnose"
+    /// rather than throw). Wire this property to a real CPU fallback
+    /// (typically the surrounding model's Predict entry point) for a
+    /// meaningful result.
+    /// </summary>
+    /// <remarks>
+    /// Internal — adapter-only plumbing. Setting this AFTER
+    /// <see cref="Execute"/> calls have already happened still affects
+    /// subsequent calls.
+    /// </remarks>
+    internal Func<T[], T[]>? CpuExecutor { get; set; }
+
+    /// <summary>
+    /// Optional graph builder that decodes the loaded model bytes into
+    /// NNAPI operands + operations. When wired, <see cref="LoadModel"/>
+    /// invokes this between <c>Model_create</c> and <c>Model_finish</c>
+    /// so the backend compiles a real NNAPI graph. When unset, the backend
+    /// Trace-warns and routes to <see cref="CpuExecutor"/> (or the
+    /// identity-passthrough fallback) — same nullable-default contract
+    /// used throughout the codebase.
+    /// </summary>
+    internal INNAPIGraphBuilder? GraphBuilder { get; set; }
+
+    public NNAPIBackend(NNAPIConfiguration config, INNAPIGraphBuilder? graphBuilder = null)
     {
         Guard.NotNull(config);
         _config = config;
+        GraphBuilder = graphBuilder;
     }
 
     /// <summary>
     /// Initializes the NNAPI backend.
     /// </summary>
+    /// <remarks>
+    /// When the native binding is available, opens NNAPI's model surface and
+    /// applies the configured <see cref="NNAPIConfiguration.ExecutionPreference"/>.
+    /// When it isn't, switches to managed-CPU mode rather than throwing — the
+    /// previous behavior of throwing PlatformNotSupportedException unconditionally
+    /// blocked even <see cref="NNAPIConfiguration.AllowCpuFallback"/>=true clients
+    /// on the desktop, despite the configuration explicitly opting in to that path.
+    /// </remarks>
+    private void ThrowIfDisposed()
+    {
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(NNAPIBackend<T>));
+    }
+
     public void Initialize()
     {
-        if (_isInitialized)
-            return;
-
-        // Check NNAPI availability
-        if (!IsNNAPIAvailable())
+        ThrowIfDisposed();
+        if (_isInitialized) return;
+        _hasNative = IsNNAPIAvailable();
+        if (!_hasNative && !_config.AllowCpuFallback)
         {
             throw new PlatformNotSupportedException(
-                "NNAPI is not available on this device. Requires Android 8.1 (API level 27) or higher.");
+                "NNAPI native binding (libneuralnetworks.so) is not loadable on this host, " +
+                "and NNAPIConfiguration.AllowCpuFallback is false. Set AllowCpuFallback=true or " +
+                "run on Android API 27+ with NNAPI present.");
         }
 
-        // Initialize NNAPI runtime
-        InitializeRuntime();
+        if (_hasNative)
+        {
+            int rc = NNAPIInterop.ModelCreate(out _model);
+            if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+                throw new InvalidOperationException($"ANeuralNetworksModel_create failed (rc={rc}).");
+        }
 
         _isInitialized = true;
     }
@@ -46,80 +134,105 @@ public class NNAPIBackend<T>
     /// <summary>
     /// Loads a model for NNAPI execution.
     /// </summary>
-    /// <param name="modelPath">Path to the model file (TFLite or ONNX)</param>
+    /// <param name="modelPath">Path to the model file (TFLite or ONNX).</param>
+    /// <remarks>
+    /// Reads the file into memory and (when NNAPI is bound) populates the model
+    /// surface for compilation. The actual op decomposition (TFLite/ONNX → NNAPI
+    /// ops) is the responsibility of an upstream model-format adapter; this
+    /// backend stores the bytes so that adapter or a native binding override
+    /// can walk them. On managed-CPU fallback, the bytes are retained for the
+    /// CpuExecutor's use.
+    /// </remarks>
     public void LoadModel(string modelPath)
     {
+        ThrowIfDisposed();
         if (!_isInitialized)
             throw new InvalidOperationException("NNAPI backend not initialized. Call Initialize() first.");
-
+        Guard.NotNull(modelPath);
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"Model file not found: {modelPath}");
 
-        // Load and compile model for NNAPI
-        var modelData = File.ReadAllBytes(modelPath);
-        CompileForNNAPI(modelData);
+        _modelBytes = File.ReadAllBytes(modelPath);
+        CompileForNNAPI(_modelBytes);
     }
 
     /// <summary>
-    /// Executes inference using NNAPI.
+    /// Executes inference using NNAPI (native) or the managed CPU fallback.
     /// </summary>
-    /// <param name="input">Input tensor data</param>
-    /// <returns>Output tensor data</returns>
     public T[] Execute(T[] input)
     {
+        ThrowIfDisposed();
         if (!_isInitialized)
             throw new InvalidOperationException("NNAPI backend not initialized. Call Initialize() first.");
-
-        // Execute inference on NNAPI
+        Guard.NotNull(input);
         return ExecuteOnNNAPI(input);
     }
 
-    /// <summary>
-    /// Executes inference asynchronously.
-    /// </summary>
+    /// <summary>Executes inference asynchronously.</summary>
     public async Task<T[]> ExecuteAsync(T[] input)
     {
+        Guard.NotNull(input);
         return await Task.Run(() => Execute(input));
     }
 
-    /// <summary>
-    /// Gets the supported acceleration devices on this Android device.
-    /// </summary>
+    /// <summary>Gets the supported acceleration devices on this Android device.</summary>
+    /// <remarks>
+    /// Returns the real device names enumerated via
+    /// <c>ANeuralNetworks_getDeviceCount</c> / <c>_getDevice</c> /
+    /// <c>ANeuralNetworksDevice_getName</c> when the native binding is available;
+    /// returns a generic list when the binding is missing so config-driven UIs
+    /// still have something to display.
+    /// </remarks>
     public List<string> GetSupportedDevices()
     {
-        var devices = new List<string>();
-
-        // Query available NNAPI accelerators
-        // This would interface with Android NNAPI to enumerate devices
-        if (_config.PreferredDevice == NNAPIDevice.Auto)
+        if (IsNNAPIAvailable())
         {
-            devices.Add("CPU");
-            devices.Add("GPU");
-            devices.Add("DSP");
-            devices.Add("NPU");
-        }
-        else
-        {
-            devices.Add(_config.PreferredDevice.ToString());
+            var names = new List<string>();
+            if (NNAPIInterop.GetDeviceCount(out uint count) == NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+            {
+                for (uint i = 0; i < count; i++)
+                {
+                    if (NNAPIInterop.GetDevice(i, out IntPtr device) != NNAPIInterop.ANEURALNETWORKS_NO_ERROR) continue;
+                    if (NNAPIInterop.GetDeviceName(device, out IntPtr namePtr) != NNAPIInterop.ANEURALNETWORKS_NO_ERROR) continue;
+                    var name = Marshal.PtrToStringAnsi(namePtr);
+                    if (!string.IsNullOrEmpty(name)) names.Add(name);
+                }
+            }
+            return names.Count > 0 ? names : ["nnapi-cpu"];
         }
 
-        return devices;
+        // Managed-CPU fallback advertises only what it really has.
+        return ["cpu"];
     }
 
     /// <summary>
     /// Checks if NNAPI is available on the current device.
     /// </summary>
+    /// <remarks>
+    /// Returns true only when both (a) we're on a Linux/Android host (the
+    /// only platform where NNAPI exists) AND (b) <c>libneuralnetworks.so</c>
+    /// is loadable. Either failure returns false so callers can route through
+    /// the managed CPU fallback.
+    /// </remarks>
     public static bool IsNNAPIAvailable()
     {
-        // Check Android API level
-        // NNAPI was introduced in Android 8.1 (API level 27)
-        // This would check the actual Android API level at runtime
-        return true; // Placeholder
+        // .NET on Android does NOT return true from
+        // IsOSPlatform(OSPlatform.Linux) — Android is a distinct platform in
+        // .NET 5+ (see dotnet/runtime#51052). Check both the synthetic
+        // "ANDROID" platform string AND Linux so this works on phones (the
+        // only place libneuralnetworks.so actually exists) as well as the
+        // Linux dev host that ships the same SO file for testing.
+        if (!RuntimeInformation.IsOSPlatform(AndroidPlatform)
+            && !RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            return false;
+        }
+        return NNAPIInterop.TryLoad();
     }
 
-    /// <summary>
-    /// Gets NNAPI performance information for the current device.
-    /// </summary>
+    private static readonly OSPlatform AndroidPlatform = OSPlatform.Create("ANDROID");
+
+    /// <summary>Gets NNAPI performance information for the current device.</summary>
     public NNAPIPerformanceInfo GetPerformanceInfo()
     {
         return new NNAPIPerformanceInfo
@@ -127,50 +240,281 @@ public class NNAPIBackend<T>
             SupportedOperations = GetSupportedOperations(),
             PreferredDevice = _config.PreferredDevice.ToString(),
             SupportsInt8 = true,
-            SupportsFp16 = true,
-            SupportsRelaxedFp32 = true
+            SupportsFp16 = _config.AllowFp16,
+            SupportsRelaxedFp32 = _config.UseRelaxedFloat32
         };
     }
 
-    private void InitializeRuntime()
+    /// <summary>Map our NNAPIExecutionPreference enum to NNAPI's preference codes.</summary>
+    private int MapPreference()
     {
-        // Initialize NNAPI runtime with configuration
-        // This would call Android NNAPI initialization functions
+        return _config.ExecutionPreference switch
+        {
+            NNAPIExecutionPreference.SustainedSpeed   => NNAPIInterop.ANEURALNETWORKS_PREFER_SUSTAINED_SPEED,
+            NNAPIExecutionPreference.LowPower         => NNAPIInterop.ANEURALNETWORKS_PREFER_LOW_POWER,
+            NNAPIExecutionPreference.FastSingleAnswer => NNAPIInterop.ANEURALNETWORKS_PREFER_FAST_SINGLE_ANSWER,
+            _                                          => NNAPIInterop.ANEURALNETWORKS_PREFER_FAST_SINGLE_ANSWER
+        };
     }
 
     private void CompileForNNAPI(byte[] modelData)
     {
-        // Compile the model for NNAPI execution
-        // This involves:
-        // 1. Parsing the model format (TFLite or ONNX)
-        // 2. Creating NNAPI model
-        // 3. Adding operations
-        // 4. Compiling for target device
+        // Model decomposition (TFLite/ONNX → NNAPI op graph) is a format-specific
+        // adapter that lives upstream — this backend wraps the NNAPI machinery
+        // and lets the caller plug in an INNAPIGraphBuilder. When one is wired,
+        // BuildGraph populates _model with operands + operations directly before
+        // we finish + compile. Without one, ModelFinish will fail (no ops added)
+        // and the Trace warning below makes that observable.
+        if (!_hasNative || _model == IntPtr.Zero) return;
+
+        if (GraphBuilder is not null)
+        {
+            bool built = GraphBuilder.BuildGraph(_model, modelData);
+            if (!built)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    "NNAPIBackend.CompileForNNAPI: configured INNAPIGraphBuilder returned " +
+                    "false — model bytes could not be decoded. Falling back to " +
+                    "CpuExecutor / identity-passthrough on Execute().");
+                return;
+            }
+        }
+
+        int rcFinish = NNAPIInterop.ModelFinish(_model);
+        if (rcFinish != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+        {
+            // ModelFinish failed — usually because the upstream adapter
+            // hasn't added operands/operations to _model yet. Emit a Trace
+            // warning so the misconfiguration is observable in diagnostics
+            // (it WAS silent before), then fall through. Execute() will
+            // route to CpuExecutor or to the documented identity fallback,
+            // matching the codebase's nullable-default contract instead of
+            // bubbling out a hard failure here.
+            System.Diagnostics.Trace.TraceWarning(
+                $"NNAPIBackend.CompileForNNAPI: ANeuralNetworksModel_finish failed " +
+                $"(rc={rcFinish}). No NNAPI op graph compiled — Execute() will route " +
+                $"through CpuExecutor when set or identity-passthrough otherwise.");
+            return;
+        }
+
+        // Release any previously-bound compilation before overwriting the
+        // handle — repeated LoadModel calls would otherwise leak each prior
+        // compilation's native resources.
+        if (_compilation != IntPtr.Zero)
+        {
+            NNAPIInterop.CompilationFree(_compilation);
+            _compilation = IntPtr.Zero;
+        }
+
+        int rcCompile = NNAPIInterop.CompilationCreate(_model, out _compilation);
+        if (rcCompile != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+            throw new InvalidOperationException($"ANeuralNetworksCompilation_create failed (rc={rcCompile}).");
+
+        // Check the result like every other NNAPI call — the native API
+        // returns a status code that previously got silently dropped.
+        // A device-side rejection of the requested preference would lose
+        // its real failure point and let CompileForNNAPI keep going.
+        int rcPref = NNAPIInterop.CompilationSetPreference(_compilation, MapPreference());
+        if (rcPref != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+            throw new InvalidOperationException(
+                $"ANeuralNetworksCompilation_setPreference failed (rc={rcPref}).");
+        int rcFin = NNAPIInterop.CompilationFinish(_compilation);
+        if (rcFin != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+            throw new InvalidOperationException($"ANeuralNetworksCompilation_finish failed (rc={rcFin}).");
+    }
+
+    /// <summary>
+    /// Releases the native NNAPI handles. Safe to call multiple times.
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        if (_compilation != IntPtr.Zero)
+        {
+            NNAPIInterop.CompilationFree(_compilation);
+            _compilation = IntPtr.Zero;
+        }
+        if (_model != IntPtr.Zero)
+        {
+            NNAPIInterop.ModelFree(_model);
+            _model = IntPtr.Zero;
+        }
+        _disposed = true;
+        GC.SuppressFinalize(this);
+    }
+
+    ~NNAPIBackend()
+    {
+        // Finalizer-safe: only touches native handles, not managed state.
+        if (_disposed) return;
+        if (_compilation != IntPtr.Zero) NNAPIInterop.CompilationFree(_compilation);
+        if (_model != IntPtr.Zero) NNAPIInterop.ModelFree(_model);
     }
 
     private T[] ExecuteOnNNAPI(T[] input)
     {
-        // Execute inference using NNAPI
-        // This would:
-        // 1. Set input tensors
-        // 2. Execute computation
-        // 3. Get output tensors
-        // 4. Return results
+        // Real NNAPI path: only available when a compiled graph exists.
+        if (_hasNative && _compilation != IntPtr.Zero)
+        {
+            return ExecuteNativeNNAPI(input);
+        }
 
-        // Placeholder implementation
-        var output = new T[input.Length];
-        Array.Copy(input, output, input.Length);
-        return output;
+        // Managed-CPU fallback. Invoke the registered executor if any;
+        // otherwise return identity-passthrough. CpuExecutor is the
+        // "industry-standard" plug-in slot the surrounding adapter (or the
+        // model facade) populates with its real Predict path. The
+        // identity-passthrough default is intentionally a documented
+        // limitation rather than a throw — it preserves the codebase's
+        // nullable-default contract, but Trace-warns so the unconfigured
+        // state is observable in diagnostics instead of silent.
+        var executor = CpuExecutor;
+        if (executor != null) return executor(input);
+        System.Diagnostics.Trace.TraceWarning(
+            "NNAPIBackend.Execute: no compiled NNAPI graph and no CpuExecutor " +
+            "configured — returning identity-passthrough. Wire CpuExecutor to " +
+            "the surrounding model's Predict entry point for a meaningful " +
+            "CPU fallback.");
+        var copy = new T[input.Length];
+        Array.Copy(input, copy, input.Length);
+        return copy;
+    }
+
+    private T[] ExecuteNativeNNAPI(T[] input)
+    {
+        int rc = NNAPIInterop.ExecutionCreate(_compilation, out IntPtr execution);
+        if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+            throw new InvalidOperationException($"ANeuralNetworksExecution_create failed (rc={rc}).");
+
+        try
+        {
+            int outElems = OutputElementCount > 0 ? OutputElementCount : input.Length;
+            int elemSize = ElementSize();
+            int inBytes = input.Length * elemSize;
+            int outBytes = outElems * elemSize;
+            IntPtr inputPtr = Marshal.AllocHGlobal(inBytes);
+            IntPtr outputPtr = Marshal.AllocHGlobal(outBytes);
+            try
+            {
+                CopyManagedToNative(input, inputPtr);
+
+                rc = NNAPIInterop.ExecutionSetInput(execution, 0, IntPtr.Zero, inputPtr, (UIntPtr)(uint)inBytes);
+                if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+                    throw new InvalidOperationException($"ExecutionSetInput failed (rc={rc}).");
+                rc = NNAPIInterop.ExecutionSetOutput(execution, 0, IntPtr.Zero, outputPtr, (UIntPtr)(uint)outBytes);
+                if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+                    throw new InvalidOperationException($"ExecutionSetOutput failed (rc={rc}).");
+
+                rc = NNAPIInterop.ExecutionStartCompute(execution, out IntPtr evt);
+                if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+                    throw new InvalidOperationException($"ExecutionStartCompute failed (rc={rc}).");
+                rc = NNAPIInterop.EventWait(evt);
+                NNAPIInterop.EventFree(evt);
+                if (rc != NNAPIInterop.ANEURALNETWORKS_NO_ERROR)
+                    throw new InvalidOperationException($"EventWait failed (rc={rc}).");
+
+                var output = new T[outElems];
+                CopyNativeToManaged(outputPtr, output);
+                return output;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(inputPtr);
+                Marshal.FreeHGlobal(outputPtr);
+            }
+        }
+        finally
+        {
+            NNAPIInterop.ExecutionFree(execution);
+        }
+    }
+
+    /// <summary>Element size of T in bytes — supported for the numeric types NNAPI accepts.</summary>
+    private static int ElementSize()
+    {
+        if (typeof(T) == typeof(float)) return sizeof(float);
+        if (typeof(T) == typeof(double)) return sizeof(double);
+        if (typeof(T) == typeof(int)) return sizeof(int);
+        if (typeof(T) == typeof(short)) return sizeof(short);
+        if (typeof(T) == typeof(byte)) return sizeof(byte);
+        throw new NotSupportedException(
+            $"NNAPI element type {typeof(T).Name} is not supported. Use float / double / int / short / byte.");
+    }
+
+    private static void CopyManagedToNative(T[] src, IntPtr dst)
+    {
+        // Element-type dispatch using Marshal.Copy on the typed overload. This
+        // avoids unsafe pointer-to-managed-T (which the language forbids for
+        // unconstrained T). Maps to NNAPI operand element types:
+        //   float  → ANEURALNETWORKS_TENSOR_FLOAT32
+        //   Half   → ANEURALNETWORKS_TENSOR_FLOAT16
+        //   int    → ANEURALNETWORKS_TENSOR_INT32
+        //   byte   → ANEURALNETWORKS_TENSOR_QUANT8_ASYMM
+        //   short is intentionally rejected — NNAPI's QUANT16_SYMM expects
+        //   quantised int16, not a generic short buffer.
+        if (typeof(T) == typeof(float))   { Marshal.Copy((float[])(object)src,  0, dst, src.Length); return; }
+        if (typeof(T) == typeof(double))  { Marshal.Copy((double[])(object)src, 0, dst, src.Length); return; }
+        if (typeof(T) == typeof(int))     { Marshal.Copy((int[])(object)src,    0, dst, src.Length); return; }
+        if (typeof(T) == typeof(short))   { Marshal.Copy((short[])(object)src,  0, dst, src.Length); return; }
+        if (typeof(T) == typeof(byte))    { Marshal.Copy((byte[])(object)src,   0, dst, src.Length); return; }
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+        {
+            // Marshal.Copy lacks a Half overload, so copy via the raw bit
+            // pattern (2 bytes per element, ANEURALNETWORKS_TENSOR_FLOAT16
+            // layout matches CLR Half memory representation).
+            var halfSrc = (Half[])(object)src;
+            var bytes = new byte[halfSrc.Length * 2];
+            Buffer.BlockCopy(halfSrc, 0, bytes, 0, bytes.Length);
+            Marshal.Copy(bytes, 0, dst, bytes.Length);
+            return;
+        }
+#endif
+        throw new NotSupportedException(
+            $"NNAPI element type {typeof(T).Name} is not supported. Supported types: " +
+            "float (FLOAT32), double, int (INT32), short (raw 16-bit), byte (QUANT8_ASYMM)" +
+#if NET5_0_OR_GREATER
+            ", Half (FLOAT16)" +
+#endif
+            ".");
+    }
+
+    private static void CopyNativeToManaged(IntPtr src, T[] dst)
+    {
+        if (typeof(T) == typeof(float))   { Marshal.Copy(src, (float[])(object)dst,  0, dst.Length); return; }
+        if (typeof(T) == typeof(double))  { Marshal.Copy(src, (double[])(object)dst, 0, dst.Length); return; }
+        if (typeof(T) == typeof(int))     { Marshal.Copy(src, (int[])(object)dst,    0, dst.Length); return; }
+        if (typeof(T) == typeof(short))   { Marshal.Copy(src, (short[])(object)dst,  0, dst.Length); return; }
+        if (typeof(T) == typeof(byte))    { Marshal.Copy(src, (byte[])(object)dst,   0, dst.Length); return; }
+#if NET5_0_OR_GREATER
+        if (typeof(T) == typeof(Half))
+        {
+            var halfDst = (Half[])(object)dst;
+            var bytes = new byte[halfDst.Length * 2];
+            Marshal.Copy(src, bytes, 0, bytes.Length);
+            Buffer.BlockCopy(bytes, 0, halfDst, 0, bytes.Length);
+            return;
+        }
+#endif
+        throw new NotSupportedException(
+            $"NNAPI element type {typeof(T).Name} is not supported. Supported types: " +
+            "float, double, int, short, byte" +
+#if NET5_0_OR_GREATER
+            ", Half" +
+#endif
+            ".");
     }
 
     private List<string> GetSupportedOperations()
     {
-        // Query NNAPI for supported operations on this device
-        return new List<string>
-        {
+        // The NDK doesn't expose a "list of supported ops" query — capability
+        // is queried per-op via ANeuralNetworksModel_getSupportedOperationsForDevices
+        // after the model is built. The list below is the canonical NNAPI 1.0
+        // op surface that all API-27+ devices support.
+        return
+        [
             "CONV_2D", "DEPTHWISE_CONV_2D", "FULLY_CONNECTED",
             "MAX_POOL_2D", "AVERAGE_POOL_2D", "SOFTMAX",
             "RELU", "RELU6", "ADD", "MUL"
-        };
+        ];
     }
 }

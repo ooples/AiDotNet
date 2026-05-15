@@ -426,16 +426,157 @@ public class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Reference-based enhancement is acoustic echo cancellation: given the
+    /// near-end microphone signal <paramref name="audio"/> (which contains
+    /// the local talker plus an echoed copy of the far-end <paramref name="reference"/>),
+    /// estimate the echo path and subtract its contribution. Implemented as
+    /// a Normalised Least Mean Squares (NLMS) adaptive filter — the standard
+    /// classical-DSP echo canceller from Haykin 2002 "Adaptive Filter Theory"
+    /// Ch. 6 and ITU-T G.168. NLMS does not need a pretrained model; the
+    /// filter coefficients converge online from the streaming input.
+    /// </para>
+    /// <para>
+    /// Filter length M defaults to 512 taps — at the 16 kHz <see cref="SampleRate"/>
+    /// the noise reducer is configured for, that's 32 ms of impulse response,
+    /// which covers typical headset / loudspeaker echo delays for in-room
+    /// scenarios. Normalised step size μ = 0.5 is the canonical value for
+    /// fast convergence without divergence on speech-like inputs.
+    /// </para>
+    /// </remarks>
     public Tensor<T> EnhanceWithReference(Tensor<T> audio, Tensor<T> reference)
     {
-        // Reference-based enhancement (e.g., echo cancellation) requires:
-        // 1. Time-alignment between audio and reference signals
-        // 2. Adaptive filtering to estimate the echo path
-        // 3. Subtracting the estimated echo from the audio
-        // This is a significant feature that is not yet implemented.
-        throw new NotImplementedException(
-            "Reference-based enhancement (echo cancellation) is not yet implemented. " +
-            "Use Enhance() for basic noise reduction.");
+        Validation.Guard.NotNull(audio);
+        Validation.Guard.NotNull(reference);
+
+        // Reject multi-channel / unexpected shapes BEFORE flattening — the
+        // documented contract is mono signals shaped [N], [1, N] or [N, 1].
+        // A tensor like [2, N] would otherwise be flattened into a single
+        // NLMS stream and corrupt both channels by interleaving samples.
+        if (!IsMonoVectorLike(audio))
+        {
+            throw new ArgumentException(
+                "EnhanceWithReference currently supports only mono tensors shaped [N], [1, N], or [N, 1].",
+                nameof(audio));
+        }
+        if (!IsMonoVectorLike(reference))
+        {
+            throw new ArgumentException(
+                "EnhanceWithReference currently supports only mono tensors shaped [N], [1, N], or [N, 1].",
+                nameof(reference));
+        }
+
+        // Flatten both signals to a contiguous sample buffer. Shapes accepted:
+        // [N] or [1, N] or [N, 1] — anything whose Length equals total samples.
+        int n = audio.Length;
+        int refLen = reference.Length;
+        if (refLen == 0 || n == 0)
+        {
+            return audio.Clone();
+        }
+
+        var d = new double[n];
+        for (int i = 0; i < n; i++) d[i] = NumOps.ToDouble(audio[i]);
+
+        var x = new double[refLen];
+        for (int i = 0; i < refLen; i++) x[i] = NumOps.ToDouble(reference[i]);
+
+        // Sample-rate-aware filter length: NLMS filter taps cover a fixed
+        // impulse-response DURATION (~32 ms), not a fixed sample count.
+        // Hardcoding 512 only happens to be 32 ms at 16 kHz; at 48 kHz it
+        // covers ~10.7 ms which is too short for typical in-room echo.
+        int filterLength = Math.Max(64, (SampleRate * 32) / 1000);
+        const double mu = 0.5;             // canonical NLMS step size (Haykin §6.4)
+        const double regularisation = 1e-6;
+
+        var enhanced = NLMSEchoCancel(d, x, filterLength, mu, regularisation);
+
+        // Honor the public EnhancementStrength knob — the previous
+        // implementation always applied full cancellation here, making the
+        // user-facing strength parameter silently ineffective on this
+        // path. Standard wet/dry mix: out = d + strength * (enhanced - d).
+        // Clamp defensively because the property has a public setter:
+        // a later assignment like -0.2 or 1.5 would otherwise invert or
+        // amplify the mix instead of just scaling cancellation.
+        // Math.Clamp is net5+ — fall back to Math.Max/Min for net471 compatibility.
+        double mix = Math.Max(0.0, Math.Min(1.0, EnhancementStrength));
+        var result = new Tensor<T>(audio._shape);
+        for (int i = 0; i < n; i++)
+        {
+            double value = d[i] + mix * (enhanced[i] - d[i]);
+            result[i] = NumOps.FromDouble(value);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when <paramref name="tensor"/> is a mono vector
+    /// — shape [N], [1, N], or [N, 1] — i.e. genuinely a single audio
+    /// channel rather than an interleaved or stacked multichannel tensor.
+    /// </summary>
+    private static bool IsMonoVectorLike(Tensor<T> tensor) =>
+        tensor._shape.Length == 1
+        || (tensor._shape.Length == 2 && (tensor._shape[0] == 1 || tensor._shape[1] == 1));
+
+    /// <summary>
+    /// Normalised LMS (NLMS) acoustic echo canceller. Per Haykin 2002 §6.4:
+    /// <code>
+    ///   y[n]   = Σ_{k=0..M-1} w_k · x[n-k]
+    ///   e[n]   = d[n] - y[n]
+    ///   w_k   += μ · e[n] · x[n-k] / (Σ_j x[n-j]² + ε)
+    /// </code>
+    /// The output is the error signal e[n], which is the near-end audio with
+    /// the estimated echo subtracted out.
+    /// </summary>
+    /// <param name="d">Microphone signal (near-end + echo).</param>
+    /// <param name="x">Far-end reference signal that produced the echo.</param>
+    /// <param name="filterLength">Number of filter taps (impulse response length in samples).</param>
+    /// <param name="mu">Normalised step size; must be in (0, 2) for stability — 0.5 is the canonical value.</param>
+    /// <param name="regularisation">Small constant added to the input-power denominator to avoid division-by-zero on silent reference.</param>
+    private static double[] NLMSEchoCancel(double[] d, double[] x, int filterLength, double mu, double regularisation)
+    {
+        int n = d.Length;
+        int m = filterLength;
+        var w = new double[m];
+        var buf = new double[m];      // circular tap-delay line
+        var output = new double[n];
+        double powerWindow = 0.0;     // running ||x[n-M..n]||²
+
+        for (int t = 0; t < n; t++)
+        {
+            // Slide tap-delay line: oldest sample drops out, newest sample comes in.
+            int idx = t % m;
+            double oldest = buf[idx];
+            double sample = t < x.Length ? x[t] : 0.0;
+            buf[idx] = sample;
+            powerWindow += sample * sample - oldest * oldest;
+            if (powerWindow < 0.0) powerWindow = 0.0; // guard against float drift
+
+            // y[t] = Σ_k w[k] * x[t-k] using the circular buffer.
+            double y = 0.0;
+            for (int k = 0; k < m; k++)
+            {
+                int bufIdx = idx - k;
+                if (bufIdx < 0) bufIdx += m;
+                y += w[k] * buf[bufIdx];
+            }
+
+            // e[t] = d[t] - y[t]
+            double e = d[t] - y;
+            output[t] = e;
+
+            // w[k] += μ · e · x[t-k] / (||x[t-M..t]||² + ε)
+            double normalised = mu * e / (powerWindow + regularisation);
+            for (int k = 0; k < m; k++)
+            {
+                int bufIdx = idx - k;
+                if (bufIdx < 0) bufIdx += m;
+                w[k] += normalised * buf[bufIdx];
+            }
+        }
+
+        return output;
     }
 
     /// <inheritdoc/>

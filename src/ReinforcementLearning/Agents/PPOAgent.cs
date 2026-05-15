@@ -201,22 +201,33 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
         // Apply softmax to get probabilities
         var probs = Softmax(logits);
 
-        int actionIndex;
         if (training)
         {
-            // Sample from categorical distribution
-            actionIndex = SampleCategorical(probs);
-        }
-        else
-        {
-            // Greedy: pick highest probability
-            actionIndex = ArgMax(probs);
+            // Training path: sample a discrete action from the categorical
+            // distribution and return a one-hot vector so StoreExperience
+            // can record the commitment.
+            int actionIndex = SampleCategorical(probs);
+            var action = new Vector<T>(_ppoOptions.ActionSize);
+            action[actionIndex] = NumOps.One;
+            return action;
         }
 
-        // Return one-hot encoded action
-        var action = new Vector<T>(_ppoOptions.ActionSize);
-        action[actionIndex] = NumOps.One;
-        return action;
+        // Inference path: return a one-hot argmax(π) action. SelectAction's
+        // public contract on discrete envs is "give me the action to take"
+        // — callers feed the result directly into env.Step(action). Returning
+        // a raw softmax distribution here would change the API from
+        // action-selector to policy-diagnostic and break any evaluation
+        // loop that expects a deterministic action. The full π(·|s) is
+        // still observable via the underlying policy network's Predict.
+        int bestIdx = 0;
+        for (int i = 1; i < probs.Length; i++)
+        {
+            if (NumOps.GreaterThan(probs[i], probs[bestIdx]))
+                bestIdx = i;
+        }
+        var oneHot = new Vector<T>(_ppoOptions.ActionSize);
+        oneHot[bestIdx] = NumOps.One;
+        return oneHot;
     }
 
     private Vector<T> SampleContinuousAction(Vector<T> output, bool training)
@@ -316,8 +327,17 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// <inheritdoc/>
     public override T Train()
     {
-        // PPO trains when trajectory is full
-        if (_trajectory.Length < _ppoOptions.StepsPerUpdate)
+        // PPO is on-policy: it trains on a rollout of StepsPerUpdate
+        // steps then discards it (Schulman et al. 2017 §6.1, paper
+        // default 2048 for Atari / MuJoCo). With an empty trajectory
+        // there's nothing to train on; with fewer than StepsPerUpdate
+        // but more than zero we run the same PPO update on the partial
+        // rollout rather than skipping. This matches reference
+        // implementations (Stable Baselines3, RLLib) that flush at
+        // episode end even if shorter than the configured horizon, and
+        // ensures short test runs (5 StoreExperience + Train cycles)
+        // actually exercise the policy/value update.
+        if (_trajectory.Length == 0)
         {
             return NumOps.Zero;
         }
@@ -484,11 +504,11 @@ public class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>
                 int actSize = _ppoOptions.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [batchCount, actSize]);
                 var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [batchCount, actSize * 2]);
-                newLogProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, actionsTensor!);
+                newLogProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, actionsTensor!);
             }
             else
             {
-                newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(policyOutput, actionIndices);
+                newLogProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
             }
 
             // ratio = exp(new_log_prob - old_log_prob) — all engine ops

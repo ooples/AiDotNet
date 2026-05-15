@@ -12,6 +12,17 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </summary>
 public abstract class OpticalFlowTestBase : VideoNNModelTestBase
 {
+    // Optical-flow input contract (OpticalFlowBase.Predict): rank-4
+    // [batch, 2*channels, height, width] — two consecutive frames stacked
+    // along the channel axis. The default NeuralNetworkModelTestBase shape
+    // is [1, 4] and inherited bases default to odd channel counts (3 = RGB),
+    // both of which fail OpticalFlowBase's rank-and-parity validation. Use
+    // RAPIDFlow's paper-default evaluation crop (256x256, RGB → 2*3 = 6
+    // channels stacked, 2-channel dx/dy flow output) so every optical-flow
+    // model in this base sees a shape its forward pass actually accepts.
+    protected override int[] InputShape => [1, 6, 256, 256];
+    protected override int[] OutputShape => [1, 2, 256, 256];
+
     [Fact(Timeout = 120000)]
     public async Task IdenticalFrames_NearZeroFlow()
     {

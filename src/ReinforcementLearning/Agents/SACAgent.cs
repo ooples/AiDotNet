@@ -251,6 +251,89 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Supervised <see cref="IFullModel{T, TInput, TOutput}"/> entry point. Performs
+    /// a single behavior-cloning step that regresses the actor's mean head against
+    /// <paramref name="target"/> (interpreted as a demonstration action of length
+    /// <c>ActionSize</c> — first elements are taken when <paramref name="target"/>
+    /// is longer, missing tail elements are zero-padded). This is actor-only —
+    /// the implementation deliberately does NOT enqueue a synthetic transition
+    /// into the replay buffer (an earlier version did, but the fabricated
+    /// <c>(reward=1, nextState=state, done=true)</c> tuple poisoned the critic
+    /// targets after warmup). Critic updates still come solely from real
+    /// env-driven <c>StoreExperience</c> calls.
+    /// </para>
+    /// <para>
+    /// This override is necessary because the SAC paper-faithful defaults gate
+    /// gradient updates behind <c>WarmupSteps=10000</c> and <c>BatchSize=256</c>
+    /// (Haarnoja et al. 2018), which means a few supervised calls would silently
+    /// no-op. Behavior-cloning pretraining is a standard SAC trick — see
+    /// Rajeswaran et al. 2018 "Learning Complex Dexterous Manipulation with Deep
+    /// Reinforcement Learning and Demonstrations" — so this override is paper-
+    /// adjacent rather than a contract hack.
+    /// </para>
+    /// </remarks>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        Guard.NotNull(state);
+        Guard.NotNull(target);
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        int stateSize = _sacOptions.StateSize;
+        int actionSize = _sacOptions.ActionSize;
+
+        // Pack target into an ActionSize-shaped demonstration action: take the first
+        // ActionSize components, zero-pad the tail if target is shorter. Length match
+        // means we can hand the vector straight to Tensor<T>.FromVector below; the
+        // padding path only allocates a fresh vector when reshaping is needed.
+        Vector<T> demoActionVec;
+        if (target.Length == actionSize)
+        {
+            demoActionVec = target;
+        }
+        else
+        {
+            demoActionVec = new Vector<T>(actionSize);
+            int copyLen = Math.Min(actionSize, target.Length);
+            for (int i = 0; i < copyLen; i++)
+                demoActionVec[i] = target[i];
+        }
+
+        // Reshape via Tensor<T>.FromVector — this shares the underlying buffer with
+        // the source vector instead of running an indexer-copy loop, so the input
+        // is set up in O(1) regardless of state size. The engine then takes over
+        // for the forward/backward pass (BLAS / GPU when enabled). FromVector
+        // validates length against the requested shape, so a mis-sized state fails
+        // fast here rather than silently corrupting the forward pass downstream.
+        var batchState = Tensor<T>.FromVector(state, [1, stateSize]);
+        var batchDemoAction = Tensor<T>.FromVector(demoActionVec, [1, actionSize]);
+
+        // Behavior-cloning loss: MSE between actor mean head and the demo action.
+        // Engine.TensorMSELoss is the tape-tracked, BLAS-accelerated fused op —
+        // equivalent to PyTorch's F.mse_loss — instead of a manual
+        // diff/multiply/reduce chain that allocates two intermediate tensors.
+        var trainableActor = (NeuralNetworkBase<T>)_policyNetwork;
+        trainableActor.TrainWithCustomLoss(batchState, actorOutput =>
+        {
+            var means = Engine.TensorSlice(actorOutput, [0, 0], [1, actionSize]);
+            return Engine.TensorMSELoss(means, batchDemoAction);
+        });
+
+        // DO NOT synthesize an RL transition from a supervised label. The
+        // previous code enqueued `(state, demoActionVec, reward=1,
+        // nextState=state, done=true)` into the replay buffer. That fabricates
+        // a critic target (reward=1, V(s')=0) that was never observed from
+        // the environment — after warmup, both Q-networks would train on
+        // those synthetic returns and drift away from the actual task
+        // objective. Behavior cloning here is supervised actor-only;
+        // critic updates remain the responsibility of real env-driven
+        // (s, a, r, s', done) transitions stored via StoreExperience from
+        // the rollout loop.
+    }
+
+    /// <inheritdoc/>
     public override T Train()
     {
         _steps++;
@@ -327,7 +410,7 @@ public class SACAgent<T> : DeepReinforcementLearningAgentBase<T>
                     noise[i] = NumOps.FromDouble(rng.NextDouble() * 2.0 - 1.0);
                 var sampledActions = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
 
-                var logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(means, logStds, sampledActions);
+                var logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, sampledActions);
 
                 // Build state-action for Q evaluation
                 var stateActionForQ = new Tensor<T>([batchCount, stateSize + actionSize]);

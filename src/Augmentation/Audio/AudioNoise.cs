@@ -72,7 +72,8 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
         var result = waveform.Clone();
 
         // Reset noise state for each audio clip to prevent bleed between clips
-        _pinkNoiseState = 0;
+        Array.Clear(_pinkValues, 0, _pinkValues.Length);
+        _pinkCounter = 0;
         _brownNoiseState = 0;
 
         // Calculate signal power
@@ -117,14 +118,59 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
         };
     }
 
-    // Simplified pink noise using Voss-McCartney algorithm approximation
-    private double _pinkNoiseState = 0;
+    // Voss-McCartney pink-noise generator (McCartney 1999, refined version).
+    // Maintains a set of independent random "octave" sources updated at
+    // geometrically decreasing rates: octave k flips every 2^k samples.
+    // Summing the octaves yields a power spectrum that approximates 1/f over
+    // about log2(NumOctaves) decades — far closer to true pink noise than a
+    // single first-order IIR (which only approximates 1/f near one corner
+    // frequency). Using 16 octaves covers the full audible range at 44.1 kHz.
+    private const int PinkOctaves = 16;
+    private readonly double[] _pinkValues = new double[PinkOctaves];
+    private long _pinkCounter;
     private double GeneratePinkNoise(AugmentationContext<T> context, double stdDev)
     {
-        // Pink noise has 1/f spectrum - simplified implementation
-        double white = context.SampleGaussian(0, stdDev);
-        _pinkNoiseState = 0.997 * _pinkNoiseState + 0.029 * white;
-        return _pinkNoiseState + white * 0.1;
+        // Seed every octave on the very first sample. The default state is
+        // all-zeros, and the McCartney "improved" variant below only refreshes
+        // ONE octave per sample (k=0 every step, k=1 every 2, …, k=15 every
+        // 32768). Without this initial seed, the first 2^15 samples ramp into
+        // the spectrum and clips shorter than 32 768 samples (≈ 2 s at
+        // 16 kHz) never populate the slowest octaves at all — the injected
+        // "pink" noise comes out too quiet and missing low-frequency content.
+        if (_pinkCounter == 0)
+        {
+            for (int i = 0; i < PinkOctaves; i++)
+            {
+                _pinkValues[i] = context.SampleGaussian(0, stdDev);
+            }
+        }
+
+        _pinkCounter++;
+        // Trailing-zero count of the counter — the lowest octave that needs
+        // updating at this sample (McCartney's "improved" variant). Octave 0
+        // updates every sample; octave 1 every other; octave k every 2^k.
+        int updateOctave = 0;
+        long c = _pinkCounter;
+        while (((c & 1L) == 0) && updateOctave < PinkOctaves - 1)
+        {
+            updateOctave++;
+            c >>= 1;
+        }
+        // Resample only the chosen octave; sum stays roughly constant otherwise.
+        _pinkValues[updateOctave] = context.SampleGaussian(0, stdDev);
+
+        // McCartney's "improved" Voss generator refreshes only one held octave
+        // per sample, so the highest-frequency band would be missing from the
+        // sum unless we add an always-resampled white term. Without it the
+        // output drops the top octave and sounds darker than the 1/f target.
+        double whiteTop = context.SampleGaussian(0, stdDev);
+        double sum = whiteTop;
+        for (int i = 0; i < PinkOctaves; i++) sum += _pinkValues[i];
+        // Normalise by √(NumOctaves + 1) so the output variance matches the
+        // input stdDev's intent. Summing (PinkOctaves + 1) independent
+        // N(0, σ²) RVs scales variance linearly with the count, so divide by
+        // the sqrt to restore the requested σ.
+        return sum / Math.Sqrt(PinkOctaves + 1);
     }
 
     // Brown noise (random walk)

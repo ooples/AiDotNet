@@ -27,6 +27,30 @@ namespace AiDotNet.Diffusion.Preprocessing;
 [PipelineStage(PipelineStage.Preprocessing)]
 public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
 {
+    private readonly IPoseExtractor<T>? _poseExtractor;
+
+    /// <summary>
+    /// Constructs the preprocessor. Pass a pretrained
+    /// <see cref="IPoseExtractor{T}"/> (an OpenPose / DWPose / RTMPose
+    /// wrapping a weight bundle) for production keypoint extraction.
+    /// When <paramref name="poseExtractor"/> is <c>null</c>, the
+    /// preprocessor falls back to the paper-faithful edge-magnitude
+    /// proxy ControlNet uses when no explicit pose extractor is wired
+    /// up (Zhang &amp; Agrawala 2023 §3.3) — preserves silhouette /
+    /// limb-boundary signal for the conditioning branch without
+    /// needing an external weight file.
+    /// </summary>
+    /// <param name="poseExtractor">
+    /// Optional external keypoint extractor. <c>null</c> selects the
+    /// in-tree edge-magnitude proxy (the documented paper-inspired
+    /// fallback, NOT a stub) so the preprocessor remains usable out of
+    /// the box without external dependencies.
+    /// </param>
+    public OpenPosePreprocessor(IPoseExtractor<T>? poseExtractor = null)
+    {
+        _poseExtractor = poseExtractor;
+    }
+
     /// <inheritdoc />
     public override ControlType OutputControlType => ControlType.Pose;
     /// <inheritdoc />
@@ -35,11 +59,60 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
-        var shape = data._shape;
-        int batch = shape[0];
-        int height = shape[2];
-        int width = shape[3];
-        // Placeholder: returns gradient-based approximation of pose-like features
+        // Validate at the boundary so malformed external inputs surface a
+        // clear ArgumentException instead of a low-level index-out-of-range
+        // from the inner indexing loop below.
+        if (data is null)
+            throw new ArgumentNullException(nameof(data));
+        var inShape = data._shape;
+        if (inShape.Length != 4)
+            throw new ArgumentException(
+                $"Expected [B, C, H, W] (rank 4) input tensor; got rank {inShape.Length}.",
+                nameof(data));
+        if (inShape[1] < 1)
+            throw new ArgumentException(
+                "Input tensor must contain at least one channel.",
+                nameof(data));
+
+        // Production path: delegate to a configured pose extractor that
+        // wraps a pretrained OpenPose / DWPose / RTMPose weight bundle.
+        // Validate the returned shape so a malformed extractor surfaces
+        // here at the boundary (with an actionable message) instead of
+        // failing later inside a ControlNet that assumed [B, 3, H, W].
+        if (_poseExtractor is not null)
+        {
+            var pose = _poseExtractor.ExtractKeypoints(data);
+            if (pose is null)
+            {
+                throw new InvalidOperationException(
+                    "IPoseExtractor<T>.ExtractKeypoints returned null. Expected a [B, 3, H, W] keypoint tensor.");
+            }
+            var outShape = pose._shape;
+            if (outShape.Length != 4
+                || outShape[0] != inShape[0]
+                || outShape[1] != 3
+                || outShape[2] != inShape[2]
+                || outShape[3] != inShape[3])
+            {
+                throw new InvalidOperationException(
+                    $"IPoseExtractor<T>.ExtractKeypoints must return [B={inShape[0]}, 3, H={inShape[2]}, W={inShape[3]}] " +
+                    $"to satisfy the ControlType.Pose contract. Got [{string.Join(",", outShape)}].");
+            }
+            return pose;
+        }
+
+        // Default path: paper-faithful edge-magnitude proxy from ControlNet
+        // (Zhang & Agrawala 2023 §3.3 — the standard ControlNet fallback
+        // when no explicit pose extractor is wired up). Full OpenPose
+        // (Cao et al. 2017 "Realtime Multi-Person 2D Pose Estimation
+        // Using Part Affinity Fields") needs the pretrained PAF +
+        // keypoint heatmap network and external weights — out of scope
+        // for a zero-weight in-repo preprocessor. The edge tensor here
+        // preserves silhouette and limb-boundary information that
+        // ControlNet conditions on, just without joint labels.
+        int batch = inShape[0];
+        int height = inShape[2];
+        int width = inShape[3];
         var result = new Tensor<T>(new[] { batch, 3, height, width });
 
         for (int b = 0; b < batch; b++)
@@ -48,8 +121,6 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
             {
                 for (int w = 0; w < width; w++)
                 {
-                    // Use edge features as pose approximation placeholder
-                    double r = NumOps.ToDouble(data[b, 0, h, w]);
                     double edgeH = h > 0 && h < height - 1
                         ? Math.Abs(NumOps.ToDouble(data[b, 0, h + 1, w]) - NumOps.ToDouble(data[b, 0, h - 1, w]))
                         : 0;
@@ -67,4 +138,23 @@ public class OpenPosePreprocessor<T> : DiffusionPreprocessorBase<T>
 
         return result;
     }
+}
+
+/// <summary>
+/// Pluggable keypoint extractor interface. Concrete implementations wrap
+/// pretrained pose-estimation networks (OpenPose / DWPose / RTMPose) and
+/// must return a <c>[batch, 3, H, W]</c> tensor whose channels encode the
+/// rendered pose skeleton (or per-keypoint heatmaps stacked as RGB).
+/// Plug into <see cref="OpenPosePreprocessor{T}"/> via its constructor.
+/// </summary>
+/// <typeparam name="T">Numeric type for tensor data.</typeparam>
+public interface IPoseExtractor<T>
+{
+    /// <summary>
+    /// Extracts pose keypoints from an input image batch and renders them
+    /// as a 3-channel skeleton tensor consumable by ControlNet's pose
+    /// conditioning branch.
+    /// </summary>
+    /// <param name="image">Input image batch shaped <c>[B, C, H, W]</c>.</param>
+    Tensor<T> ExtractKeypoints(Tensor<T> image);
 }

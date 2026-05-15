@@ -1,4 +1,5 @@
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Initialization;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Layers.SSM;
@@ -26069,6 +26070,16 @@ public static class LayerHelper<T>
         int inputChannels, int inputHeight, int inputWidth,
         int[] channelDims, int[] depths, double dropRate)
     {
+        // ODISE per Xu et al. 2023 §3 derives its encoder features from
+        // Stable Diffusion's U-Net, which uses GroupNormalization (Wu &
+        // He 2018) throughout — not BatchNorm. GroupNorm is also batch-
+        // size-independent, so a single-sample inference (B=1) still
+        // produces non-degenerate per-channel features. BatchNorm with
+        // B=1 collapses variance to ~0 and (after eps stabilisation)
+        // emits zero features that propagate as zero gradients via
+        // the chain rule — manifesting in tests as "Network produces
+        // identical output for inputs [0.1,...] and [0.9,...]" (zero
+        // L2 distance between distinct-input outputs).
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
         int h = inputHeight, w = inputWidth, inC = inputChannels;
 
@@ -26079,18 +26090,47 @@ public static class LayerHelper<T>
             int kernel = stage == 0 ? 7 : 3;
             int pad = stage == 0 ? 3 : 1;
 
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
+            // Conv -> GroupNorm -> Activation: GN must see raw pre-activation
+            // tensors (Wu & He 2018 §3 — normalising the linear projection's
+            // outputs before the nonlinearity). Passing relu into the Conv
+            // would push GN downstream of the nonlinearity and change the
+            // encoder block's distributional behaviour.
+            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, activationFunction: null);
             h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
+            yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+            yield return new ActivationLayer<T>(relu);
 
             for (int d = 1; d < depths[stage]; d++)
             {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
+                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, activationFunction: null);
+                yield return new GroupNormalizationLayer<T>(ChooseGroupCount(outC), outC);
+                yield return new ActivationLayer<T>(relu);
             }
 
             inC = outC;
         }
+    }
+
+    /// <summary>
+    /// Picks a GroupNormalization group count that evenly divides
+    /// <paramref name="numChannels"/>. Follows Wu &amp; He 2018 §3.1 which
+    /// recommends 32 groups by default, falling back to 16 / 8 / 4 / 2 / 1
+    /// when 32 isn't a divisor (small-channel stages early in a backbone).
+    /// </summary>
+    private static int ChooseGroupCount(int numChannels)
+    {
+        if (numChannels <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(numChannels),
+                $"numChannels must be > 0; got {numChannels}. GroupNorm cannot use zero or negative group counts.");
+        }
+
+        foreach (int g in new[] { 32, 16, 8, 4, 2, 1 })
+        {
+            if (numChannels % g == 0) return g;
+        }
+        return 1;
     }
 
     /// <summary>
@@ -31969,6 +32009,8 @@ public static class LayerHelper<T>
         // weights mismatch the input embedding dim and downstream
         // `DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs` /
         // `SpeakerConsistency` tests observe degenerate / inconsistent outputs.
+        // Applies to all style/emotion TTS front ends that expose mel /
+        // prosody feature tensors instead of already-projected hidden states.
         if (inputFeatureDim > 0 && inputFeatureDim != encoderDim)
             yield return new DenseLayer<T>(encoderDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
@@ -32836,7 +32878,7 @@ public static class LayerHelper<T>
         // GlobalPoolingLayer with PoolingType.Average on rank-3 [B, numPatches,
         // hiddenDim] input reduces over axis 1 to produce [B, hiddenDim].
         yield return new GlobalPoolingLayer<T>(
-            poolingType: AiDotNet.Enums.PoolingType.Average);
+            poolingType: PoolingType.Average);
         yield return new DenseLayer<T>(
             outputSize: numClasses,
             activationFunction: null);
@@ -33878,6 +33920,401 @@ public static class LayerHelper<T>
         // Forecast head
         yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
     }
+
+    #endregion
+
+    #region PANNs (Pretrained Audio Neural Networks)
+
+    /// <summary>
+    /// Creates the default CNN14 audio classifier layers for PANNs (Kong et al.
+    /// 2020 "PANNs: Large-Scale Pretrained Audio Neural Networks for Audio
+    /// Pattern Recognition"). Input is a log-mel spectrogram
+    /// <c>[batch, 1, numFrames, numMels]</c>; output is per-class probabilities
+    /// <c>[batch, numClasses]</c>.
+    /// </summary>
+    /// <param name="numClasses">Output class count (AudioSet: 527).</param>
+    /// <param name="embeddingDim">Embedding head width (CNN14: 2048).</param>
+    /// <param name="dropoutRate">Dropout rate inside the CNN blocks (paper §3).</param>
+    /// <remarks>
+    /// CNN14 architecture per paper Table 1: four conv stages with channel
+    /// progression 64 → 128 → 256 → 512, each stage = Conv(3×3) + BN + ReLU +
+    /// Conv(3×3) + BN + ReLU + AvgPool(2×2). Global average pool over time,
+    /// then dense → embedding → dense → class logits → sigmoid.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPANNsLayers(
+        int numClasses,
+        int embeddingDim,
+        double dropoutRate)
+    {
+        // Helper: one CNN14 "double conv + pool" stage.
+        IEnumerable<ILayer<T>> ConvStage(int outChannels)
+        {
+            yield return new ConvolutionalLayer<T>(outputDepth: outChannels, kernelSize: 3, stride: 1, padding: 1);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new ConvolutionalLayer<T>(outputDepth: outChannels, kernelSize: 3, stride: 1, padding: 1);
+            yield return new BatchNormalizationLayer<T>();
+            yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+            yield return new PoolingLayer<T>(poolSize: 2, stride: 2, type: PoolingType.Average);
+            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Six conv stages — paper §3.1 Table 1 + reference implementation
+        // (qiuqiangkong/audioset_tagging_cnn Cnn14). The reviewer flagged
+        // that earlier builds stopped at 4 stages (64→512); the published
+        // Cnn14 has 6 conv blocks (64→128→256→512→1024→2048) before the
+        // global pool. Pre-pooling channel width = embedding dim.
+        foreach (var l in ConvStage(64)) yield return l;
+        foreach (var l in ConvStage(128)) yield return l;
+        foreach (var l in ConvStage(256)) yield return l;
+        foreach (var l in ConvStage(512)) yield return l;
+        foreach (var l in ConvStage(1024)) yield return l;
+        foreach (var l in ConvStage(2048)) yield return l;
+
+        // Global average pool over the (time × freq) spatial axes → channel vector.
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
+
+        // Embedding head (paper §3.1: 2048-d).
+        yield return new DenseLayer<T>(outputSize: embeddingDim, activationFunction: new ReLUActivation<T>() as IActivationFunction<T>);
+        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+
+        // Classification head with sigmoid for multi-label AudioSet output.
+        yield return new DenseLayer<T>(outputSize: numClasses, activationFunction: new SigmoidActivation<T>() as IActivationFunction<T>);
+    }
+
+    #endregion
+
+    #region AST (Audio Spectrogram Transformer)
+
+    /// <summary>
+    /// Creates the default audio classifier layers for AST (Gong et al. 2021
+    /// "AST: Audio Spectrogram Transformer"). Input is a 2D log-mel spectrogram
+    /// <c>[batch, 1, numFrames, numMels]</c>; output is class logits
+    /// <c>[batch, numClasses]</c>.
+    /// </summary>
+    /// <param name="patchSize">Square patch size for the ViT patch embedding (paper §2.2: 16).</param>
+    /// <param name="embeddingDim">Transformer hidden dimension (AST-Base: 768).</param>
+    /// <param name="numLayers">Number of transformer encoder blocks (AST-Base: 12).</param>
+    /// <param name="numHeads">Attention heads per block (AST-Base: 12).</param>
+    /// <param name="feedForwardDim">FFN hidden dim (4× embedding per Vaswani 2017).</param>
+    /// <param name="numClasses">Output class count (AudioSet: 527).</param>
+    /// <param name="maxSequenceLength">Maximum patch sequence length (positional embedding budget).</param>
+    /// <remarks>
+    /// Pipeline: patchify spectrogram → embed each patch → add positional
+    /// encoding → N transformer encoder layers → global average pool → linear
+    /// classifier. Matches the AST §2 architecture diagram.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultASTLayers(
+        int patchSize,
+        int embeddingDim,
+        int numLayers,
+        int numHeads,
+        int feedForwardDim,
+        int numClasses,
+        int maxSequenceLength = 1024)
+    {
+        // Patchify [B, 1, F, T] → [B, numPatches, embeddingDim].
+        yield return new PatchEmbeddingLayer<T>(patchSize: patchSize, embeddingDim: embeddingDim);
+
+        // Prepend a learnable [CLS] token — paper §2.2 and ViT (Dosovitskiy
+        // 2020 §3.1): "we prepend a learnable [class] embedding to the
+        // sequence of embedded patches, whose state at the output of the
+        // Transformer encoder serves as the image representation y".
+        // After this layer the sequence becomes [B, numPatches + 1, embDim].
+        yield return new PrependCLSTokenLayer<T>(embedDim: embeddingDim);
+
+        // Add learnable position embeddings (sized for the +1 CLS slot).
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxSequenceLength, embeddingSize: embeddingDim);
+
+        // N transformer encoder blocks (paper §2.3).
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                numHeads: numHeads,
+                feedForwardDim: feedForwardDim,
+                embeddingSize: embeddingDim);
+        }
+
+        // Classify from the CLS token output, NOT the mean of all patch
+        // tokens. Paper §2.2: "The output of the Transformer's [class] token
+        // is then used by the classification head." The previous mean-pool
+        // form averaged the patch tokens — closer to ViT-Pool but not the
+        // published AST head.
+        yield return new SequenceTokenSliceLayer<T>(SequenceTokenSliceLayer<T>.Position.First);
+
+        // Linear classification head.
+        yield return new DenseLayer<T>(outputSize: numClasses, activationFunction: new IdentityActivation<T>());
+    }
+
+    #endregion
+
+    #region CLAP (Contrastive Language-Audio Pretraining)
+
+    /// <summary>
+    /// Creates the default audio-encoder layers for CLAP (Wu et al. 2023). The
+    /// audio side is HTSAT (Chen et al. 2022 "HTS-AT: A Hierarchical
+    /// Token-Semantic Audio Transformer"), built on the Swin Transformer
+    /// (Liu et al. 2021 §3.2). The encoder consumes a mel-spectrogram patch
+    /// sequence and produces a single audio embedding via global pooling +
+    /// projection.
+    /// </summary>
+    /// <param name="audioHiddenDim">Hidden / embedding dim of the Swin blocks (paper §3.1 HTSAT-S: 768).</param>
+    /// <param name="audioEncoderLayers">Number of Swin Transformer blocks (paper §3.1 HTSAT-S: 4).</param>
+    /// <param name="audioEncoderHeads">Attention heads per block (paper §3.1 HTSAT-S: 12).</param>
+    /// <param name="swinWindowSize">W-MSA / SW-MSA window size (Liu 2021 §3.2: 7).</param>
+    /// <param name="projectionDim">Shared embedding-space dimension (CLAP §3.2: 512).</param>
+    /// <remarks>
+    /// Alternating W-MSA / SW-MSA layers per Swin paper §3.2 — even-indexed
+    /// blocks use regular windowed attention, odd-indexed blocks use the
+    /// shifted-window variant to mix information across window boundaries.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCLAPAudioEncoderLayers(
+        int audioHiddenDim,
+        int audioEncoderLayers,
+        int audioEncoderHeads,
+        int swinWindowSize,
+        int projectionDim)
+    {
+        // Stack of Swin blocks. Each pair alternates W-MSA (shift=0) and
+        // SW-MSA (shift=windowSize/2) per Liu 2021 §3.2.
+        for (int i = 0; i < audioEncoderLayers; i++)
+        {
+            int shiftSize = (i % 2 == 0) ? 0 : swinWindowSize / 2;
+            yield return new SwinTransformerBlockLayer<T>(
+                dim: audioHiddenDim,
+                numHeads: audioEncoderHeads,
+                windowSize: swinWindowSize,
+                shiftSize: shiftSize,
+                mlpRatio: 4);
+        }
+
+        // Mean-pool across the spectrogram patch sequence to get a single
+        // audio embedding, then project into the shared CLAP space.
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
+        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
+    }
+
+    /// <summary>
+    /// Creates the default text-encoder layers for CLAP (Wu et al. 2023 §3.2).
+    /// The text side is a RoBERTa-style transformer stack (Liu et al. 2019)
+    /// over BPE token IDs: token + positional embedding → N transformer
+    /// encoder layers → mean pool → projection.
+    /// </summary>
+    /// <param name="vocabSize">BPE vocabulary size (RoBERTa-base: 50,265).</param>
+    /// <param name="maxTextLength">Maximum token sequence length (CLAP §3.2: 77).</param>
+    /// <param name="textHiddenDim">Hidden dim of the transformer (RoBERTa-base: 768).</param>
+    /// <param name="textEncoderLayers">Number of transformer encoder layers (RoBERTa-base: 12).</param>
+    /// <param name="textEncoderHeads">Attention heads per layer (RoBERTa-base: 12).</param>
+    /// <param name="projectionDim">Shared embedding-space dimension (CLAP §3.2: 512).</param>
+    public static IEnumerable<ILayer<T>> CreateDefaultCLAPTextEncoderLayers(
+        int vocabSize,
+        int maxTextLength,
+        int textHiddenDim,
+        int textEncoderLayers,
+        int textEncoderHeads,
+        int projectionDim)
+    {
+        // Token embedding: maps token IDs → hidden vectors.
+        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: textHiddenDim);
+
+        // Positional encoding adds sequence-position information.
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxTextLength, embeddingSize: textHiddenDim);
+
+        // Standard transformer encoder stack. Each block is pre-LN MHA + FFN.
+        // FFN expansion is 4x per Liu 2019 §3.2 / Vaswani 2017 §3.3.
+        for (int i = 0; i < textEncoderLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                numHeads: textEncoderHeads,
+                feedForwardDim: textHiddenDim * 4,
+                embeddingSize: textHiddenDim);
+        }
+
+        // Mean-pool tokens → single text embedding, then project into shared space.
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
+        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
+    }
+
+    #endregion
+
+    #region Diffusion-Conditioning Text Encoders
+
+    /// <summary>
+    /// Paper-faithful CLIP text encoder stack (Radford et al., ICML 2021).
+    /// Embedding → learned absolute positional encoding → N × post-LN
+    /// Transformer encoder (standard MHA, GELU FFN @ 4× hidden) → final
+    /// LayerNorm.
+    /// </summary>
+    /// <remarks>
+    /// The CLIP <c>text_projection</c> (hidden → embedding) is NOT part of
+    /// this stack. Per Radford 2021 §3.1 it is applied only to the
+    /// EOS-pooled output, not to every sequence position; the
+    /// <see cref="AiDotNet.Diffusion.Conditioning.CLIPTextConditioner{T}.GetPooledEmbedding"/>
+    /// override applies it post-pool.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultCLIPTextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads)
+    {
+        // Force EmbeddingInputMode.Indices so the auto-detect doesn't misfire
+        // when a tokenizer (with its own vocab size) produces token IDs that
+        // exceed the EmbeddingLayer's vocabSize — in that case the auto-detect
+        // wrongly switches into Continuous mode and projects [B, S] → [B, D]
+        // (collapsing the sequence axis). Conditioner inputs are ALWAYS
+        // discrete token IDs.
+        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        embedding.InputMode = EmbeddingInputMode.Indices;
+        yield return embedding;
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxSeqLen, embeddingSize: hiddenSize);
+        for (int i = 0; i < numLayers; i++)
+        {
+            yield return new TransformerEncoderLayer<T>(
+                numHeads: numHeads, feedForwardDim: hiddenSize * 4, embeddingSize: hiddenSize);
+        }
+        yield return new LayerNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Paper-faithful SigLIP text encoder stack (Zhai et al., ICCV 2023).
+    /// Same encoder body as CLIP. SigLIP does not have a separate
+    /// post-encoder text projection — the encoder output is used directly,
+    /// so this factory omits the projection layer.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSigLIPTextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads) =>
+        CreateDefaultCLIPTextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads);
+
+    /// <summary>
+    /// Paper-faithful SigLIP2 text encoder stack (Tschannen et al. 2025).
+    /// Same encoder body as SigLIP.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultSigLIP2TextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads) =>
+        CreateDefaultCLIPTextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads);
+
+    /// <summary>
+    /// Paper-faithful T5 text encoder stack (Raffel et al., JMLR 2020).
+    /// Embedding → N × pre-LN RMSNorm Transformer block with T5 relative-bias
+    /// attention (Q/K/V/O bias-free) and GELU FFN @ 4× hidden → final RMSNorm.
+    /// One shared relative-position bias table is threaded through every
+    /// block (Raffel 2020 §2.1 footnote 5).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultT5TextLayers(
+        int vocabSize, int hiddenSize, int numLayers, int numHeads,
+        int numRelativePositionBuckets = 32, int relativePositionMaxDistance = 128)
+    {
+        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        embedding.InputMode = EmbeddingInputMode.Indices;
+        yield return embedding;
+        // Vaswani 2017 §3.4 token-embedding scaling, preserved by Raffel 2020.
+        yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
+
+        // Paper-canonical T5: one shared bias table across all encoder blocks.
+        var sharedBias = new Tensor<T>(new[] { numRelativePositionBuckets, numHeads });
+
+        for (int i = 0; i < numLayers; i++)
+        {
+            var attn = new T5RelativeBiasAttentionLayer<T>(
+                hiddenSize: hiddenSize,
+                numHeads: numHeads,
+                numBuckets: numRelativePositionBuckets,
+                maxDistance: relativePositionMaxDistance,
+                bidirectional: true,
+                sharedRelativeBiasTable: i == 0 ? null : sharedBias);
+            if (i == 0) sharedBias = attn.GetRelativeBiasTable();
+
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: hiddenSize,
+                ffnDim: hiddenSize * 4,
+                attention: attn,
+                ffnActivation: new GELUActivation<T>());
+        }
+        yield return new RMSNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Paper-faithful DistilledT5 text encoder stack. Same architecture as
+    /// T5 but with half the layers, per the distillation recipe in
+    /// Sanh et al. 2019 (DistilBERT-style).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultDistilledT5TextLayers(
+        int vocabSize, int hiddenSize, int numLayers, int numHeads,
+        int numRelativePositionBuckets = 32, int relativePositionMaxDistance = 128) =>
+        CreateDefaultT5TextLayers(vocabSize, hiddenSize, numLayers, numHeads,
+            numRelativePositionBuckets, relativePositionMaxDistance);
+
+    /// <summary>
+    /// Paper-faithful Gemma text encoder stack (Gemma Team 2024).
+    /// Embedding → N × pre-LN RMSNorm Transformer block with RoPE multi-head
+    /// attention (bias-free) and SiLU FFN @ 4× hidden → final RMSNorm.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultGemmaTextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        double ropeTheta = 10000.0)
+    {
+        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        embedding.InputMode = EmbeddingInputMode.Indices;
+        yield return embedding;
+        // Gemma normalizes embeddings by √hiddenSize (Gemma Team 2024 §2.3).
+        yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
+        int headDim = hiddenSize / numHeads;
+        for (int i = 0; i < numLayers; i++)
+        {
+            var attn = new MultiHeadAttentionLayer<T>(headCount: numHeads, headDimension: headDim);
+            attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
+
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: hiddenSize,
+                ffnDim: hiddenSize * 4,
+                attention: attn,
+                ffnActivation: new SiLUActivation<T>());
+        }
+        yield return new RMSNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Paper-faithful Qwen2 text encoder stack (Yang et al. 2024).
+    /// Embedding → N × pre-LN RMSNorm Transformer block with RoPE
+    /// grouped-query attention (bias-free) and SiLU FFN → final RMSNorm.
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultQwen2TextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        int numKvHeads, double ropeTheta = 1000000.0)
+    {
+        var embedding = new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: hiddenSize);
+        embedding.InputMode = EmbeddingInputMode.Indices;
+        yield return embedding;
+        // Qwen2 token-embedding scaling (Vaswani 2017 §3.4 convention).
+        yield return new ConstantScaleLayer<T>(Math.Sqrt(hiddenSize));
+        for (int i = 0; i < numLayers; i++)
+        {
+            // Qwen2 uses Grouped-Query Attention: numKvHeads < numHeads, with
+            // KV heads broadcast across query-head groups.
+            var attn = new GroupedQueryAttentionLayer<T>(
+                sequenceLength: maxSeqLen,
+                embeddingDimension: hiddenSize,
+                numHeads: numHeads,
+                numKVHeads: numKvHeads);
+            attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
+
+            yield return new PreLNTransformerBlock<T>(
+                hiddenSize: hiddenSize,
+                ffnDim: hiddenSize * 4,
+                attention: attn,
+                ffnActivation: new SiLUActivation<T>());
+        }
+        yield return new RMSNormalizationLayer<T>();
+    }
+
+    /// <summary>
+    /// Paper-faithful ChatGLM3 text encoder stack (Zeng et al. 2023).
+    /// Same shape as Qwen2 but typically with multi-query attention
+    /// (<paramref name="numKvHeads"/>=1 is the GLM convention).
+    /// </summary>
+    public static IEnumerable<ILayer<T>> CreateDefaultChatGLM3TextLayers(
+        int vocabSize, int maxSeqLen, int hiddenSize, int numLayers, int numHeads,
+        int numKvHeads = 2, double ropeTheta = 10000.0) =>
+        CreateDefaultQwen2TextLayers(vocabSize, maxSeqLen, hiddenSize, numLayers, numHeads,
+            numKvHeads, ropeTheta);
 
     #endregion
 }

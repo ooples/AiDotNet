@@ -6,6 +6,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Audio.TextToSpeech;
 
@@ -266,20 +267,169 @@ public class HiFiGAN<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
 
     #region Private Helpers
 
+    /// <summary>
+    /// Converts text to a mel-spectrogram suitable for the HiFi-GAN vocoder
+    /// via a phonetic-class projection. Each character is classified into a
+    /// coarse phoneme category (vowel/nasal/liquid/voiced-stop/unvoiced-stop/
+    /// sibilant/silence), and the category's typical spectral envelope is
+    /// laid into the mel-bin axis using formant frequencies from standard
+    /// phonetics references (Ladefoged &amp; Johnson 2010 "A Course in Phonetics"
+    /// Chs. 4 and 8). Output is on the log-mel scale (~[-12, 4]) that the
+    /// LibriTTS-trained HiFi-GAN was conditioned on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is NOT a pretrained TTS acoustic model — it does not reproduce
+    /// natural speech. It IS a real, deterministic, structurally-correct
+    /// text→mel mapping that the vocoder can consume: vowel-heavy text
+    /// concentrates energy in low-mid bins (around the first three formants),
+    /// sibilants concentrate energy in the 4–6 kHz mel range, plosives appear
+    /// as brief broadband bursts, and whitespace renders as silent floor.
+    /// Output dimensionality and dynamic range match what the HiFi-GAN
+    /// generator expects, so the vocoder pipeline is end-to-end functional
+    /// even without an upstream Tacotron2 / FastSpeech2 / VITS acoustic model.
+    /// </para>
+    /// <para>
+    /// For natural-sounding speech, wire a real acoustic model upstream and
+    /// call <see cref="VocoderForward"/> directly with its mel output.
+    /// </para>
+    /// </remarks>
     private Tensor<T> TextToMelFeatures(string text)
     {
-        // Placeholder: map text to mel-shaped features for vocoder
-        int numFrames = text.Length * 5; // rough estimate
+        const int framesPerChar = 5;                  // ~50 ms at 10 ms hop (LibriTTS HiFi-GAN config)
+        const double silentDb = -11.5;                // log of the ~1e-5 mel floor used in extraction
+        int numFrames = Math.Max(1, text.Length * framesPerChar);
         int numMels = _options.NumMels;
-        var mel = new Tensor<T>(new[] { numFrames * numMels });
+        var mel = new Tensor<T>(new[] { numFrames, numMels });
+
+        // Seed every frame to the silence floor (silentDb) up front. When
+        // text is empty the character loop below never runs and the tensor
+        // would otherwise stay zero-filled — which is NOT silence on the
+        // log-mel scale (zero is amplitude 1.0 in the linear mel space)
+        // and would feed a non-silent frame into the vocoder.
+        var silentT = NumOps.FromDouble(silentDb);
+        for (int frame = 0; frame < numFrames; frame++)
+        {
+            for (int m = 0; m < numMels; m++)
+            {
+                mel[frame, m] = silentT;
+            }
+        }
+
+        // Deterministic per-text pitch jitter so identical successive letters
+        // produce slightly different frames (matches natural prosody at ±5%).
+        // Seed via a stable FNV-1a hash of the text — string.GetHashCode is
+        // randomized per-process in .NET Core+ and would make the jitter
+        // pattern differ across processes / versions / 32-bit vs 64-bit
+        // hosts, breaking reproducibility of the synthesised mel frames.
+        var rng = RandomHelper.CreateSeededRandom(StableFnv1aHash(text));
+        var classes = HiFiGANPhoneticTable.Instance;
+
         for (int i = 0; i < text.Length; i++)
         {
-            int frame = i * 5;
-            int bin = text[i] % numMels;
-            if (frame * numMels + bin < mel.Length)
-                mel[frame * numMels + bin] = NumOps.FromDouble(1.0);
+            var cls = classes.Classify(text[i]);
+            double pitchJitter = 1.0 + (rng.NextDouble() - 0.5) * 0.1;
+
+            for (int f = 0; f < framesPerChar; f++)
+            {
+                // Smooth sin attack/release across the character's frames
+                // avoids clicky transients between adjacent phonemes.
+                double envelope = Math.Sin(Math.PI * (f + 0.5) / framesPerChar);
+                int frameIdx = i * framesPerChar + f;
+
+                for (int m = 0; m < numMels; m++)
+                {
+                    // Mel-bin distance to each spectral peak (Gaussian).
+                    // Peak coordinates are on an 80-bin grid and rescale to
+                    // numMels so configurations like 64- or 128-mel still
+                    // produce the right relative formant pattern.
+                    double activation = 0.0;
+                    foreach (var peak in cls.Peaks)
+                    {
+                        double scaledPeak = peak.Bin * pitchJitter * numMels / 80.0;
+                        double scaledWidth = peak.Width * numMels / 80.0;
+                        double dz = (m - scaledPeak) / scaledWidth;
+                        activation += peak.Amplitude * Math.Exp(-0.5 * dz * dz);
+                    }
+                    double logMel = silentDb + activation * envelope * cls.Energy;
+                    mel[frameIdx, m] = NumOps.FromDouble(logMel);
+                }
+            }
         }
+
         return mel;
+    }
+
+    /// <summary>
+    /// Deterministic 32-bit FNV-1a hash. Unlike <see cref="string.GetHashCode()"/>,
+    /// which is randomized per-process in .NET Core+ and can differ across
+    /// .NET versions / 32-bit vs 64-bit hosts (per
+    /// https://learn.microsoft.com/dotnet/api/system.string.gethashcode),
+    /// FNV-1a is stable across runs / processes so the per-text pitch
+    /// jitter pattern stays reproducible.
+    /// </summary>
+    private static int StableFnv1aHash(string s)
+    {
+        const uint FnvOffsetBasis = 2166136261;
+        const uint FnvPrime = 16777619;
+        uint hash = FnvOffsetBasis;
+        for (int i = 0; i < s.Length; i++)
+        {
+            hash ^= s[i];
+            hash *= FnvPrime;
+        }
+        return unchecked((int)hash);
+    }
+
+    /// <summary>
+    /// Phonetic-class spectral envelope table. Peaks are in mel-bin
+    /// coordinates on an 80-bin grid mapped to 0–8 kHz (LibriTTS HiFi-GAN
+    /// config); values derive from formant frequencies in Ladefoged &amp; Johnson
+    /// 2010 (vowels, Ch. 8; fricatives, Ch. 4).
+    /// </summary>
+    private sealed class HiFiGANPhoneticTable
+    {
+        public readonly struct Peak
+        {
+            public readonly double Bin;
+            public readonly double Width;
+            public readonly double Amplitude;
+            public Peak(double bin, double width, double amp) { Bin = bin; Width = width; Amplitude = amp; }
+        }
+
+        public sealed class PhoneticClass
+        {
+            public Peak[] Peaks { get; }
+            public double Energy { get; }
+            public PhoneticClass(double energy, Peak[] peaks) { Energy = energy; Peaks = peaks; }
+        }
+
+        private static readonly PhoneticClass Silence       = new(0.0,  Array.Empty<Peak>());
+        private static readonly PhoneticClass Vowel         = new(11.0, [new(10, 4, 1.0), new(24, 5, 0.8), new(40, 6, 0.4)]);   // F1≈500Hz, F2≈1500Hz, F3≈2500Hz
+        private static readonly PhoneticClass Nasal         = new(8.0,  [new(8,  3, 0.9), new(32, 5, 0.4)]);
+        private static readonly PhoneticClass VoicedStop    = new(7.0,  [new(6,  3, 1.0)]);                                       // low-bin voice bar
+        private static readonly PhoneticClass UnvoicedStop  = new(6.0,  [new(55, 8, 1.0)]);                                       // brief broadband burst high
+        private static readonly PhoneticClass Sibilant      = new(10.0, [new(62, 6, 1.0), new(70, 4, 0.6)]);                      // 4–6 kHz fricative peak
+        private static readonly PhoneticClass Liquid        = new(9.0,  [new(12, 4, 0.9), new(28, 5, 0.6)]);
+
+        public static readonly HiFiGANPhoneticTable Instance = new();
+
+        public PhoneticClass Classify(char c)
+        {
+            if (char.IsWhiteSpace(c) || char.IsPunctuation(c) || char.IsControl(c))
+                return Silence;
+            char lower = char.ToLowerInvariant(c);
+            return lower switch
+            {
+                'a' or 'e' or 'i' or 'o' or 'u' or 'y' => Vowel,
+                'm' or 'n'                              => Nasal,
+                'l' or 'r' or 'w'                       => Liquid,
+                'b' or 'd' or 'g' or 'v' or 'z' or 'j' => VoicedStop,
+                'p' or 't' or 'k' or 'c' or 'q'         => UnvoicedStop,
+                's' or 'f' or 'h' or 'x'                => Sibilant,
+                _                                       => Vowel  // best default for digits / unknown letters
+            };
+        }
     }
 
     #endregion

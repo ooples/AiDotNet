@@ -40,6 +40,8 @@
     <InternalsVisibleTo Include="AiDotNet.Serving.Tests" />
     <InternalsVisibleTo Include="AiDotNet.ProgramSynthesis.Tooling" />
     <InternalsVisibleTo Include="AiDotNetBenchmarkTests" />
+    <InternalsVisibleTo Include="HarmonicEngine" />
+    <InternalsVisibleTo Include="HarmonicEngine.Tests" />
   </ItemGroup>
 
   <!-- Exclude other projects from this build -->

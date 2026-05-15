@@ -328,17 +328,32 @@ public abstract class ReinforcementLearningAgentBase<T> : IRLAgent<T>, IConfigur
         .ToArray();
 
     /// <summary>
-    /// Gets feature importance scores.
+    /// Gets feature importance scores. Default returns an empty dictionary —
+    /// the industry-standard "no feature-importance signal available" response
+    /// (mirrors scikit-learn estimators that don't expose
+    /// <c>feature_importances_</c> and PyTorch / HuggingFace / Keras which
+    /// don't have a feature-importance API at all). Concrete agents that
+    /// have a discriminative signal MUST override this method to return real
+    /// scores; the base class deliberately does not fabricate uniform-prior
+    /// values that look like real importance to downstream consumers.
     /// </summary>
+    /// <remarks>
+    /// Examples of real signals concrete agents can use:
+    /// <list type="bullet">
+    /// <item>Tabular Q-learning agents: per-dimension Q-value variance across
+    /// the replay buffer (high variance → that dimension drives policy
+    /// disagreement → high importance).</item>
+    /// <item>Neural-net agents: input-gradient saliency
+    /// (<c>∂Q/∂s ⊙ s</c>, averaged over a replay sample) — the same signal
+    /// used by Integrated Gradients (Sundararajan, Taly &amp; Yan 2017).</item>
+    /// </list>
+    /// Returning an empty dictionary (vs throwing) keeps the interface
+    /// uniform across agents and lets callers test
+    /// <c>importance.ContainsKey(name)</c> to decide whether a real signal
+    /// is available.
+    /// </remarks>
     public virtual Dictionary<string, T> GetFeatureImportance()
-    {
-        var importance = new Dictionary<string, T>();
-        for (int i = 0; i < FeatureCount; i++)
-        {
-            importance[$"State_{i}"] = NumOps.One;  // Placeholder
-        }
-        return importance;
-    }
+        => new Dictionary<string, T>();
 
     /// <summary>
     /// Gets the indices of active features.

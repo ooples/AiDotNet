@@ -2,6 +2,8 @@ using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -605,7 +607,208 @@ public abstract class LayerTestBase
     }
 
     // =========================================================================
-    // INVARIANTS 11-14: (Removed — Backward deleted in tape-based autodiff migration)
-    // Gradient correctness tests will be reimplemented using GradientTape<T>.
+    // INVARIANT 11: Tape-based gradient flow — for layers with trainable
+    // parameters, a real Engine-op-composed loss against the layer's forward
+    // output must produce a non-zero gradient on at least one trainable
+    // parameter. This is the modern equivalent of the pre-tape "Backward
+    // produces non-zero parameter gradients" invariant. Catches tape-blocking
+    // forward composition bugs (e.g. FlashAttention<T>.Forward filling its
+    // output via scalar indexing, TensorMultiplyScalar in Forward paths,
+    // or composite layers that fail to RegisterSubLayer their inner trainable
+    // sub-layers).
     // =========================================================================
+
+    [Fact(Timeout = 60000)]
+    public async Task TapeGradient_ShouldReachAtLeastOneTrainableParameter()
+    {
+        await Task.Yield();
+        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
+
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        layer.SetTrainingMode(true);
+        var input = CreateRandomTensor(InputShape);
+
+        // ITrainableLayer<double> exposes the per-tensor trainable references
+        // the source generator emits from [TrainableParameter] fields. If
+        // the layer doesn't implement it, the layer truly has nothing to
+        // train and the invariant is vacuously satisfied.
+        if (layer is not AiDotNet.Interfaces.ITrainableLayer<double> trainable) return;
+
+        using var tape = new GradientTape<double>();
+        var output = layer.Forward(input);
+
+        // Collect trainable parameters AFTER Forward — lazy-init layers
+        // (RMSNorm, DenseLayer with `[-1, -1]` input shape, etc.) reassign
+        // their internal Tensor<T> fields inside OnFirstForward, so the
+        // pre-Forward references are stale [0]-shape placeholders the
+        // tape never sees. Production code at NeuralNetworkBase.ComputeGradients
+        // (line 7319) follows the same Forward-then-collect ordering.
+        var trainableParams = trainable.GetTrainableParameters();
+        if (trainableParams.Count == 0) return;
+
+        // Tape-tracked random-projection loss: L = Σᵢ (output[i] · r[i]).
+        // Engine.TensorMultiply + Engine.TensorSum are both standard tape-
+        // tracked ops, so dL/doutput = r everywhere with no zero entries
+        // (the RNG produces a [-1, 1] dense vector). Any trainable parameter
+        // that's actually wired into the forward graph must therefore see
+        // a non-zero gradient back-propagated to it.
+        var projection = CreateRandomTensor(output.Shape.ToArray(), seed: 12345);
+        var elementwise = AiDotNetEngine.Current.TensorMultiply(output, projection);
+        // ReduceSum over all axes returns a tape-tracked scalar-rank-0 tensor;
+        // Engine.TensorSum unwraps to a raw double which the tape can't consume.
+        var allAxes = new int[elementwise.Shape.Length];
+        for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+        var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        bool foundNonZeroGrad = false;
+        foreach (var kvp in grads)
+        {
+            var grad = kvp.Value;
+            if (grad is null) continue;
+            for (int i = 0; i < grad.Length; i++)
+            {
+                if (Math.Abs(grad[i]) > Tolerance)
+                {
+                    foundNonZeroGrad = true;
+                    break;
+                }
+            }
+            if (foundNonZeroGrad) break;
+        }
+
+        Assert.True(foundNonZeroGrad,
+            "After Forward + tape-based ComputeGradients on a random-projection " +
+            "loss, every trainable parameter received a zero gradient. The layer's " +
+            "Forward composition is using Engine ops that don't propagate gradients " +
+            "on the autodiff tape, OR a composite layer failed to register its " +
+            "inner trainable sub-layers via RegisterSubLayer. Common causes: " +
+            "Engine.TensorMultiplyScalar in Forward (not tape-tracked), " +
+            "FlashAttention<T>.Forward (allocates output then fills via scalar " +
+            "indexing — invisible to the tape), or `new Tensor<T>(...)` followed " +
+            "by manual data fills inside a Forward override.");
+    }
+
+    // =========================================================================
+    // INVARIANT 12: Numerical gradient correctness (finite differences).
+    // For a sampled subset of trainable parameters (full sweep would be O(N×forward)
+    // for N trainable scalars), verify the analytical gradient from the
+    // autodiff tape matches the central-difference numerical gradient:
+    //     dL/dw ≈ (L(w+ε) - L(w-ε)) / (2ε)
+    // This is the gold standard for "did the backward implementation
+    // correctly compute the derivative?" Layers that pass this AND the
+    // existing forward-invariants 1-10 can be trusted to train.
+    // =========================================================================
+
+    [Fact(Timeout = 120000)]
+    public async Task TapeGradient_ShouldMatchNumericalGradient()
+    {
+        await Task.Yield();
+        if (!ExpectsTrainableParameters || !ExpectsNonZeroGradients) return;
+
+        using var _arena = TensorArena.Create();
+        var layer = CreateLayer();
+        layer.SetTrainingMode(true);
+        var input = CreateRandomTensor(InputShape);
+
+        if (layer is not AiDotNet.Interfaces.ITrainableLayer<double> trainable) return;
+
+        // --- Analytical gradient via tape ---
+        using var tape = new GradientTape<double>();
+        var output = layer.Forward(input);
+        // Lazy-init layers reassign their trainable tensor refs inside
+        // Forward, so always collect AFTER Forward.
+        var trainableParams = trainable.GetTrainableParameters();
+        if (trainableParams.Count == 0) return;
+        // Fix the projection BEFORE both gradient computations so the
+        // analytical and numerical paths see the same loss surface.
+        var projection = CreateRandomTensor(output.Shape.ToArray(), seed: 12345);
+        var elementwise = AiDotNetEngine.Current.TensorMultiply(output, projection);
+        // ReduceSum over all axes returns a tape-tracked scalar-rank-0 tensor;
+        // Engine.TensorSum unwraps to a raw double which the tape can't consume.
+        var allAxes = new int[elementwise.Shape.Length];
+        for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+        var lossTensor = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
+        var analyticalGrads = tape.ComputeGradients(lossTensor, trainableParams);
+
+        // --- Numerical gradient via central differences ---
+        // Sample a small number of (param, index) pairs to keep the test
+        // wall-time reasonable. A layer with broken backward will fail this
+        // check on most sampled coordinates, so the sample doesn't need to
+        // be exhaustive — it just needs to hit *some* trainable scalar.
+        const double Eps = 1e-5;
+        const double NumericalTolerance = 1e-3;
+        const int MaxSampledPerParam = 6;
+
+        int paramsChecked = 0;
+        int paramsAgreed = 0;
+        var deltas = new System.Text.StringBuilder();
+
+        var rng = RandomHelper.CreateSeededRandom(7777);
+
+        foreach (var param in trainableParams)
+        {
+            if (param is null || param.Length == 0) continue;
+            if (!analyticalGrads.TryGetValue(param, out var analyticalGrad) || analyticalGrad is null)
+                continue;
+
+            int sampleCount = Math.Min(MaxSampledPerParam, param.Length);
+            for (int s = 0; s < sampleCount; s++)
+            {
+                int idx = rng.Next(0, param.Length);
+
+                double original = param[idx];
+                param[idx] = original + Eps;
+                var lossPlus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                param[idx] = original - Eps;
+                var lossMinus = ComputeProjectionLossScalar(layer.Forward(input), projection);
+                param[idx] = original;
+
+                double numerical = (lossPlus - lossMinus) / (2.0 * Eps);
+                double analytical = analyticalGrad[idx];
+                double absDiff = Math.Abs(numerical - analytical);
+                double scale = Math.Max(Math.Max(Math.Abs(numerical), Math.Abs(analytical)), 1.0);
+
+                paramsChecked++;
+                if (absDiff / scale < NumericalTolerance)
+                {
+                    paramsAgreed++;
+                }
+                else if (deltas.Length < 1000)
+                {
+                    deltas.Append($"  idx={idx} numerical={numerical:G6} analytical={analytical:G6} reldiff={absDiff / scale:G3}\n");
+                }
+            }
+        }
+
+        if (paramsChecked == 0) return; // no comparable parameter scalars
+        // At least 2/3 of sampled params must agree. A more lenient threshold
+        // tolerates layers that intentionally produce different-shaped
+        // gradients (e.g. STE-style surrogates) — those should set
+        // ExpectsNonZeroGradients=false anyway, so reaching this assertion
+        // already means the layer claims paper-faithful backward.
+        Assert.True(paramsAgreed * 3 >= paramsChecked * 2,
+            $"Tape-based analytical gradient disagrees with finite-difference " +
+            $"numerical gradient on {paramsChecked - paramsAgreed}/{paramsChecked} " +
+            $"sampled trainable scalars. First mismatches:\n{deltas}" +
+            "Likely the layer's Forward composition records the wrong derivative " +
+            "for some Engine op, OR a non-tape-tracked op is silently used as " +
+            "an identity for the gradient.");
+    }
+
+    /// <summary>
+    /// Scalar projection-loss for the finite-difference path. Mirrors what
+    /// the tape-side TapeGradient_ShouldMatchNumericalGradient computes via
+    /// Engine.TensorMultiply + Engine.TensorSum, but on detached output
+    /// (no tape recording — we just want the scalar value for L(w±ε)).
+    /// </summary>
+    private static double ComputeProjectionLossScalar(Tensor<double> output, Tensor<double> projection)
+    {
+        double sum = 0;
+        int len = Math.Min(output.Length, projection.Length);
+        for (int i = 0; i < len; i++) sum += output[i] * projection[i];
+        return sum;
+    }
 }

@@ -468,15 +468,29 @@ public class VAEDetector<T> : AnomalyDetectorBase<T>
             dLogVar_KL[j] = 0.5 * (Math.Exp(logVarVal) - 1);
         }
 
-        // Reconstruction gradient through reparameterization
+        // Reconstruction gradient through the reparameterization trick
+        // (Kingma & Welling 2014 "Auto-Encoding Variational Bayes" §2.4):
+        //   z = μ + σ · ε,    σ = exp(0.5 · logVar)
+        // Exact gradients:
+        //   ∂z/∂μ      = 1
+        //   ∂z/∂logVar = ε · 0.5 · σ
+        // ε was sampled during the forward pass but not cached separately;
+        // we recover it exactly from the saved (z, μ, logVar) via
+        //   ε = (z − μ) / σ
+        // so the backward pass uses the SAME ε as the forward — no
+        // "averages out" approximation that previously substituted 0 for ε
+        // and silently zeroed the recon-side σ gradient component.
         var dMean_recon = new double[_latentDim];
         var dLogVar_recon = new double[_latentDim];
         for (int j = 0; j < _latentDim; j++)
         {
             dMean_recon[j] = dZ[j];
-            // Simplified: assume epsilon contribution averages out
             double logVarVal = NumOps.ToDouble(logVar[j]);
-            dLogVar_recon[j] = dZ[j] * 0.5 * Math.Exp(0.5 * logVarVal);
+            double std = Math.Exp(0.5 * logVarVal);
+            double epsilon = std > 1e-12
+                ? (NumOps.ToDouble(z[j]) - NumOps.ToDouble(mean[j])) / std
+                : 0.0;
+            dLogVar_recon[j] = dZ[j] * 0.5 * std * epsilon;
         }
 
         // Total gradient

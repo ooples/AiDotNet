@@ -849,32 +849,6 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Single source of truth for the "resolve adjacency + propagate to every
-    /// graph layer" preamble that <see cref="Train"/> and
-    /// <see cref="GetNamedLayerActivations"/> both need. Centralizing the
-    /// pattern in one helper prevents one call site from drifting and
-    /// silently producing wrong gradients — the original regression
-    /// (#1286: GraphSAGE Training_ShouldChangeParameters returning zero
-    /// gradients) was caused exactly by <c>Train</c> never installing the
-    /// adjacency that <c>TrainWithTape</c>'s per-layer Forward path
-    /// needed.
-    /// </summary>
-    /// <returns>The resolved adjacency matrix that has been installed on
-    /// every <see cref="IGraphConvolutionLayer{T}"/> in <c>Layers</c>.</returns>
-    private Tensor<T> PrepareGraphLayersForForward(Tensor<T> input)
-    {
-        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
-        foreach (var layer in Layers)
-        {
-            if (layer is IGraphConvolutionLayer<T> graphLayer)
-            {
-                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
-            }
-        }
-        return adjacencyMatrix;
-    }
-
-    /// <summary>
     /// Sets the adjacency matrix for graph operations.
     /// </summary>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
@@ -891,13 +865,21 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
-        // Install adjacency on every graph layer BEFORE the tape forward pass —
-        // TrainWithTape walks `Layers[i].Forward(current)` directly, bypassing
-        // the 2-arg Forward that ordinarily sets adjacency, so graph layers
-        // would otherwise see whatever adjacency was last installed (null on
-        // the first Train call, stale after that). PrepareGraphLayersForForward
-        // is the shared helper that also serves GetNamedLayerActivations.
-        PrepareGraphLayersForForward(input);
+        // Set the adjacency matrix on every graph layer BEFORE the tape forward
+        // pass — TrainWithTape walks `Layers[i].Forward(current)` directly,
+        // bypassing the 2-arg Forward that ordinarily sets adjacency, so graph
+        // layers would otherwise see whatever adjacency was last installed (null
+        // on the first Train call, stale after that). Mirrors the
+        // adjacency-setup branch inside Forward(input, adjacency).
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+        _cachedAdjacencyMatrix = adjacencyMatrix;
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            {
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+            }
+        }
 
         // Delegate to the tape-based path that the rest of the NN base relies on
         // — the previous implementation declared "Backward pass through all
@@ -925,7 +907,13 @@ public class GraphSAGENetwork<T> : NeuralNetworkBase<T>
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
-        PrepareGraphLayersForForward(input);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+        }
 
         var activations = new Dictionary<string, Tensor<T>>();
         var current = input;

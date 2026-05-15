@@ -1,1146 +1,486 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
-using AiDotNet.Extensions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Audio.Fingerprinting;
 
 /// <summary>
-/// AST (Audio Spectrogram Transformer) - A pure attention-based model for audio classification.
+/// AST (Audio Spectrogram Transformer) — a single-stream Vision-Transformer
+/// applied to log-mel spectrograms, trained for audio event classification
+/// and fingerprinting (Gong et al. 2021).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// The Audio Spectrogram Transformer applies Vision Transformer (ViT) architecture directly
-/// to audio spectrograms. It treats audio as a 2D image (time x frequency) and processes it
-/// using self-attention mechanisms, achieving state-of-the-art results on audio classification.
+/// AST applies the standard ViT recipe (Dosovitskiy et al. 2021) directly to
+/// audio: convert the waveform to a log-mel spectrogram, treat it as a 2-D
+/// image, slice it into 16×16 patches, embed each patch linearly, add
+/// positional encodings, run N=12 transformer encoder layers, mean-pool, and
+/// classify. AST-Base (768-dim, 12-layer, 12-head) initialised from a
+/// DeiT/ViT ImageNet checkpoint achieves SOTA on AudioSet.
 /// </para>
 /// <para>
-/// Key features:
-/// <list type="bullet">
-/// <item><description>Pure attention-based architecture (no convolutions)</description></item>
-/// <item><description>Transfer learning from ImageNet-pretrained ViT</description></item>
-/// <item><description>Excellent for audio event detection and classification</description></item>
-/// <item><description>Captures long-range temporal dependencies</description></item>
-/// </list>
-/// </para>
-/// <para>
-/// <b>For Beginners:</b> AST treats audio like an image and uses the same technology
-/// that powers modern image recognition!
-///
-/// How it works:
-/// 1. Audio is converted to a spectrogram (a "picture" of sound frequencies over time)
-/// 2. The spectrogram is divided into small patches (like puzzle pieces)
-/// 3. Each patch is processed through attention layers that learn relationships
-/// 4. The model predicts what sounds are present
-///
-/// Why it's powerful:
-/// - Attention can capture patterns across the entire audio clip
-/// - Benefits from decades of vision model research
-/// - Highly accurate for both short and long audio
-///
-/// Use cases:
-/// - Audio event detection (gunshot, glass breaking, baby crying)
-/// - Environmental sound classification
-/// - Music genre classification
-/// - Speech command recognition
-/// </para>
-/// <para>
-/// Reference: Gong, Y., Chung, Y. A., &amp; Glass, J. (2021). AST: Audio Spectrogram Transformer.
+/// <b>Reference:</b> Gong, Y., Chung, Y.-A. &amp; Glass, J. (2021),
+/// "AST: Audio Spectrogram Transformer", Interspeech.
 /// </para>
 /// </remarks>
-/// <para><b>Recommended:</b> Use <c>AiModelBuilder</c> for the simplest entry point.</para>
-/// <example>
-/// <code>
-/// // Create an AST model for audio classification
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
-///     inputSize: 128,
-///     outputSize: 527);
-///
-/// var model = new ASTModel&lt;float&gt;(
-///     architecture: architecture,
-///     modelPath: "ast_model.onnx",
-///     sampleRate: 16000,
-///     numClasses: 527);
-///
-/// // Classify audio events
-/// Tensor&lt;float&gt; predictions = model.Predict(audioTensor);
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
-[ModelCategory(ModelCategory.EmbeddingModel)]
+[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelTask(ModelTask.Embedding)]
-[ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("AST: Audio Spectrogram Transformer", "https://arxiv.org/abs/2104.01778", Year = 2021, Authors = "Yuan Gong, Yu-An Chung, James Glass")]
+[ResearchPaper(
+    "AST: Audio Spectrogram Transformer",
+    "https://arxiv.org/abs/2104.01778",
+    Year = 2021,
+    Authors = "Yuan Gong, Yu-An Chung, James Glass")]
 public class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     private readonly ASTModelOptions _options;
+    private readonly bool _useNativeMode;
+
+    /// <summary>
+    /// Cached Hann window for the STFT preprocessing step. Built once on the
+    /// first <see cref="PreprocessAudio"/> call and reused.
+    /// </summary>
+    private Tensor<T>? _hannWindow;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private readonly INumericOperations<T> _numOps;
-
-    // Model configuration
-    private readonly int _numClasses;
-    private readonly int _embeddingDim;
-    private readonly int _numLayers;
-    private readonly int _numHeads;
-    private readonly int _patchSize;
-    private readonly int _numMelBands;
-    private readonly int _targetLength;
-
-    // Patch embedding
-    private T[] _patchEmbedWeight;
-    private T[] _patchEmbedBias;
-
-    // Position embeddings
-    private T[] _positionEmbedding;
-    private T[] _clsToken;
-    private T[] _distToken;
-
-    // Transformer layers
-    private readonly List<TransformerBlock> _transformerBlocks;
-
-    // Classification head
-    private T[] _normGamma;
-    private T[] _normBeta;
-    private T[] _headWeight;
-    private T[] _headBias;
-
-    // Class labels
-    private readonly string[] _classLabels;
-
-    // Optimizer for training
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    /// <inheritdoc/>
+    public string Name => _useNativeMode ? "AST-Native" : "AST-ONNX";
 
     /// <inheritdoc/>
-    public string Name => "AST";
+    public int FingerprintLength => _options.EmbeddingDim;
 
-    /// <inheritdoc/>
-    public int FingerprintLength => _embeddingDim;
+    #region Constructors
 
-    /// <summary>
-    /// Gets the number of output classes.
-    /// </summary>
-    public int NumClasses => _numClasses;
-
-    /// <summary>
-    /// Gets the embedding dimension.
-    /// </summary>
-    public int EmbeddingDimension => _embeddingDim;
-
-    /// <summary>
-    /// Gets the number of transformer layers.
-    /// </summary>
-    public int NumLayers => _numLayers;
-
-    /// <summary>
-    /// Gets the patch size used for embedding.
-    /// </summary>
-    public int PatchSize => _patchSize;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ASTModel{T}"/> class for ONNX inference mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture defining input/output dimensions.</param>
-    /// <param name="modelPath">Path to the ONNX model file.</param>
-    /// <param name="sampleRate">Sample rate of input audio (default: 16000 Hz).</param>
-    /// <param name="numClasses">Number of output classes (default: 527 for AudioSet).</param>
-    /// <param name="embeddingDim">Embedding dimension (default: 768).</param>
-    /// <param name="onnxOptions">Optional ONNX model options.</param>
-    /// <exception cref="FileNotFoundException">Thrown when the ONNX model file is not found.</exception>
+    /// <summary>Initializes AST in ONNX inference mode.</summary>
     public ASTModel(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        int sampleRate = 16000,
-        int numClasses = 527,
-        int embeddingDim = 768,
-        OnnxModelOptions? onnxOptions = null,
         ASTModelOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new ASTModelOptions();
-        Options = _options;
-        _numOps = MathHelper.GetNumericOperations<T>();
-
+        ValidateOptions(_options);
         if (string.IsNullOrWhiteSpace(modelPath))
-        {
-            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        }
-
+            throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
         if (!File.Exists(modelPath))
-        {
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        }
 
-        SampleRate = sampleRate;
-        _numClasses = numClasses;
-        _embeddingDim = embeddingDim;
-        _numLayers = 12;
-        _numHeads = 12;
-        _patchSize = 16;
-        _numMelBands = 128;
-        _targetLength = 1024;
-
-        // Load ONNX model
-        OnnxModel = new OnnxModel<T>(modelPath, onnxOptions);
-
-        // Initialize empty arrays (not used in ONNX mode)
-        _patchEmbedWeight = Array.Empty<T>();
-        _patchEmbedBias = Array.Empty<T>();
-        _positionEmbedding = Array.Empty<T>();
-        _clsToken = Array.Empty<T>();
-        _distToken = Array.Empty<T>();
-        _normGamma = Array.Empty<T>();
-        _normBeta = Array.Empty<T>();
-        _headWeight = Array.Empty<T>();
-        _headBias = Array.Empty<T>();
-        _transformerBlocks = new List<TransformerBlock>();
-        _classLabels = GetDefaultClassLabels();
-
-        // modelPath is used by OnnxModel above
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ASTModel{T}"/> class for native training mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture defining input/output dimensions.</param>
-    /// <param name="sampleRate">Sample rate of input audio (default: 16000 Hz).</param>
-    /// <param name="numClasses">Number of output classes (default: 527 for AudioSet).</param>
-    /// <param name="embeddingDim">Embedding dimension (default: 768 for base model).</param>
-    /// <param name="numLayers">Number of transformer layers (default: 12).</param>
-    /// <param name="numHeads">Number of attention heads (default: 12).</param>
-    /// <param name="patchSize">Patch size for embedding (default: 16).</param>
-    /// <param name="numMelBands">Number of mel frequency bands (default: 128).</param>
-    /// <param name="targetLength">Target spectrogram length in frames (default: 1024).</param>
-    /// <param name="mlpRatio">MLP hidden dimension ratio (default: 4.0).</param>
-    /// <param name="dropout">Dropout rate (default: 0.0).</param>
-    /// <param name="useDistillation">Whether to use knowledge distillation token (default: true).</param>
-    /// <param name="optimizer">Optimizer for training. If null, a default Adam optimizer is used.</param>
-    /// <param name="lossFunction">Loss function. If null, cross-entropy is used.</param>
-    public ASTModel(
-        NeuralNetworkArchitecture<T> architecture,
-        int sampleRate = 16000,
-        int numClasses = 527,
-        int embeddingDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int patchSize = 16,
-        int numMelBands = 128,
-        int targetLength = 1024,
-        double mlpRatio = 4.0,
-        double dropout = 0.0,
-        bool useDistillation = true,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        ASTModelOptions? options = null)
-        : base(architecture, lossFunction)
-    {
-        _options = options ?? new ASTModelOptions();
-        Options = _options;
-        _numOps = MathHelper.GetNumericOperations<T>();
-
-        SampleRate = sampleRate;
-        _numClasses = numClasses;
-        _embeddingDim = embeddingDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _patchSize = patchSize;
-        _numMelBands = numMelBands;
-        _targetLength = targetLength;
-
-        // Calculate number of patches
-        int numPatchesTime = targetLength / patchSize;
-        int numPatchesFreq = numMelBands / patchSize;
-        int numPatches = numPatchesTime * numPatchesFreq;
-
-        // Initialize patch embedding (linear projection of flattened patches)
-        int patchDim = patchSize * patchSize;
-        _patchEmbedWeight = InitializeWeights(embeddingDim * patchDim);
-        _patchEmbedBias = InitializeWeights(embeddingDim, 0.0);
-
-        // Position embedding (+2 for CLS and distillation tokens)
-        int totalTokens = numPatches + (useDistillation ? 2 : 1);
-        _positionEmbedding = InitializeWeights(totalTokens * embeddingDim, scale: 0.02);
-        _clsToken = InitializeWeights(embeddingDim, scale: 0.02);
-        _distToken = useDistillation ? InitializeWeights(embeddingDim, scale: 0.02) : Array.Empty<T>();
-
-        // Transformer blocks
-        _transformerBlocks = new List<TransformerBlock>();
-        int mlpDim = (int)(embeddingDim * mlpRatio);
-        for (int i = 0; i < numLayers; i++)
-        {
-            _transformerBlocks.Add(new TransformerBlock(_numOps, embeddingDim, numHeads, mlpDim, dropout));
-        }
-
-        // Final layer norm
-        _normGamma = InitializeWeights(embeddingDim, 1.0);
-        _normBeta = InitializeWeights(embeddingDim, 0.0);
-
-        // Classification head
-        _headWeight = InitializeWeights(numClasses * embeddingDim);
-        _headBias = InitializeWeights(numClasses, 0.0);
-
-        _classLabels = GetDefaultClassLabels();
-
-        // Initialize optimizer (Adam by default)
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMelBands;
+        _useNativeMode = false;
+        _modelPath = modelPath;
+        OnnxEncoder = new OnnxModel<T>(modelPath);
 
         InitializeLayers();
     }
 
     /// <summary>
-    /// Initializes the neural network layers.
+    /// Path to the loaded ONNX model file when constructed in ONNX mode;
+    /// <c>null</c> in native mode. Captured so <see cref="CreateNewInstance"/>
+    /// can reconstruct an ONNX clone without losing its execution-mode
+    /// configuration.
+    /// </summary>
+    private readonly string? _modelPath;
+
+    /// <summary>Initializes AST in native training / inference mode.</summary>
+    public ASTModel(
+        NeuralNetworkArchitecture<T> architecture,
+        ASTModelOptions? options = null)
+        : base(architecture)
+    {
+        _options = options ?? new ASTModelOptions();
+        ValidateOptions(_options);
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMelBands;
+        _useNativeMode = true;
+        InitializeLayers();
+    }
+
+    /// <summary>
+    /// Validates that every option used in STFT / mel / patch / transformer
+    /// math is in range. Fails fast at construction so a bad caller config
+    /// produces an actionable ArgumentOutOfRangeException instead of a
+    /// downstream "matrix shape mismatch" deep inside the first forward.
+    /// </summary>
+    private static void ValidateOptions(ASTModelOptions o)
+    {
+        if (o.SampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.SampleRate), o.SampleRate, "SampleRate must be > 0.");
+        if (o.StftWindowSize <= 1)
+            throw new ArgumentOutOfRangeException(nameof(o.StftWindowSize), o.StftWindowSize, "StftWindowSize must be > 1.");
+        if (o.HopLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.HopLength), o.HopLength, "HopLength must be > 0.");
+        if (o.NumMelBands <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumMelBands), o.NumMelBands, "NumMelBands must be > 0.");
+        if (o.TargetLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.TargetLength), o.TargetLength, "TargetLength must be > 0.");
+        if (o.PatchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.PatchSize), o.PatchSize, "PatchSize must be > 0.");
+        if (o.NumClasses <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumClasses), o.NumClasses, "NumClasses must be > 0.");
+        if (o.EmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.EmbeddingDim), o.EmbeddingDim, "EmbeddingDim must be > 0.");
+        if (o.NumLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumLayers), o.NumLayers, "NumLayers must be > 0.");
+        if (o.NumHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.NumHeads), o.NumHeads, "NumHeads must be > 0.");
+        if (o.EmbeddingDim % o.NumHeads != 0)
+            throw new ArgumentException(
+                $"EmbeddingDim ({o.EmbeddingDim}) must be divisible by NumHeads ({o.NumHeads}) — " +
+                "multi-head attention splits the embedding equally across heads.",
+                nameof(o.EmbeddingDim));
+        if (o.DropoutRate < 0.0 || o.DropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), o.DropoutRate, "DropoutRate must be in [0, 1).");
+    }
+
+    #endregion
+
+    #region Layer Construction (Golden-Standard Pattern)
+
+    /// <summary>
+    /// Initializes the AST layer stack following the codebase's golden
+    /// single-stream pattern: prefer user-supplied <c>Architecture.Layers</c>;
+    /// otherwise fall back to the paper-faithful <see cref="LayerHelper{T}.CreateDefaultASTLayers"/>.
     /// </summary>
     protected override void InitializeLayers()
     {
-        // Layers are handled manually for AST's transformer architecture
+        if (!_useNativeMode) return;
+
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+        }
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultASTLayers(
+                patchSize: _options.PatchSize,
+                embeddingDim: _options.EmbeddingDim,
+                numLayers: _options.NumLayers,
+                numHeads: _options.NumHeads,
+                feedForwardDim: _options.FeedForwardDim,
+                numClasses: _options.NumClasses,
+                maxSequenceLength: _options.TargetLength));
+        }
     }
 
+    #endregion
+
+    #region Preprocessing — Mel Spectrogram
+
     /// <summary>
-    /// Preprocesses raw audio waveform for model input.
+    /// Converts raw audio samples into a log-mel spectrogram via the engine's
+    /// fused <see cref="IEngine.MelSpectrogram{T}"/> kernel — the AST §2.1
+    /// 128-mel × 10 ms-hop pipeline routed through a single BLAS / GPU-eligible
+    /// engine op.
     /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        // Convert to mel spectrogram
-        int numSamples = rawAudio.Shape[^1];
-        int hopSize = 160; // 10ms at 16kHz
-        int windowSize = 400; // 25ms at 16kHz
-        int numFrames = Math.Min(_targetLength, (numSamples - windowSize) / hopSize + 1);
+        if (rawAudio.Shape.Length == 1)
+            rawAudio = Engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
 
-        var melSpec = new T[numFrames * _numMelBands];
+        int batchSize = rawAudio.Shape[0];
 
-        // Compute mel spectrogram
-        for (int f = 0; f < numFrames; f++)
-        {
-            int start = f * hopSize;
+        _hannWindow ??= BuildHannWindow(_options.StftWindowSize);
 
-            // Compute power spectrum
-            var spectrum = new double[windowSize / 2 + 1];
-            for (int i = 0; i < windowSize && start + i < numSamples; i++)
-            {
-                int idx = start + i;
-                if (idx < rawAudio.Length)
-                {
-                    double sample = _numOps.ToDouble(rawAudio.Data.Span[idx]);
-                    // Hann window
-                    double window = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (windowSize - 1)));
-                    sample *= window;
+        var mel = Engine.MelSpectrogram(
+            input: rawAudio,
+            sampleRate: _options.SampleRate,
+            nFft: _options.StftWindowSize,
+            hopLength: _options.HopLength,
+            nMels: _options.NumMelBands,
+            fMin: NumOps.Zero,
+            fMax: NumOps.FromDouble(_options.SampleRate / 2.0),
+            window: _hannWindow,
+            powerToDb: true);
 
-                    // Approximate DFT contribution
-                    for (int k = 0; k < spectrum.Length; k++)
-                    {
-                        double freq = 2 * Math.PI * k * i / windowSize;
-                        spectrum[k] += sample * Math.Cos(freq);
-                    }
-                }
-            }
-
-            // Power spectrum
-            for (int k = 0; k < spectrum.Length; k++)
-            {
-                spectrum[k] = spectrum[k] * spectrum[k];
-            }
-
-            // Apply mel filterbank
-            for (int m = 0; m < _numMelBands; m++)
-            {
-                double melSum = 0;
-                double melLow = 700.0 * (Math.Pow(10, (m * 2595.0 / _numMelBands / 2595.0)) - 1);
-                double melHigh = 700.0 * (Math.Pow(10, ((m + 1) * 2595.0 / _numMelBands / 2595.0)) - 1);
-                double melCenter = (melLow + melHigh) / 2;
-
-                for (int k = 0; k < spectrum.Length; k++)
-                {
-                    double freq = (double)k * SampleRate / windowSize;
-                    double mel = 2595.0 * Math.Log10(1 + freq / 700.0);
-                    double weight = Math.Max(0, 1 - Math.Abs(mel - melCenter) / (melHigh - melLow));
-                    melSum += spectrum[k] * weight;
-                }
-
-                // Log mel spectrogram
-                melSpec[f * _numMelBands + m] = _numOps.FromDouble(Math.Log(Math.Max(melSum, 1e-10)));
-            }
-        }
-
-        // Pad or truncate to target length
-        if (numFrames < _targetLength)
-        {
-            var padded = new T[_targetLength * _numMelBands];
-            Array.Copy(melSpec, 0, padded, 0, numFrames * _numMelBands);
-            melSpec = padded;
-            numFrames = _targetLength;
-        }
-
-        return new Tensor<T>(melSpec, new[] { 1, numFrames, _numMelBands });
+        int numFrames = mel.Length / (batchSize * _options.NumMelBands);
+        return Engine.Reshape(mel, [batchSize, 1, numFrames, _options.NumMelBands]);
     }
 
+    /// <inheritdoc/>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
+
     /// <summary>
-    /// Postprocesses model output.
+    /// Builds a periodic Hann window of length <paramref name="windowSize"/>
+    /// as a <see cref="Tensor{T}"/>: <c>w[n] = 0.5·(1 − cos(2πn/(N−1)))</c>.
+    /// Generic in <typeparamref name="T"/> via the inherited NumOps.
     /// </summary>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+    private Tensor<T> BuildHannWindow(int windowSize)
     {
-        return modelOutput;
+        var window = new Tensor<T>([windowSize]);
+        for (int n = 0; n < windowSize; n++)
+        {
+            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / (windowSize - 1)));
+            window[n] = NumOps.FromDouble(w);
+        }
+        return window;
     }
 
-    /// <summary>
-    /// Extracts audio embedding from the CLS token.
-    /// </summary>
-    /// <param name="audio">Audio tensor [samples] or [batch, samples].</param>
-    /// <returns>Audio embedding [batch, embeddingDim].</returns>
-    public Tensor<T> ExtractEmbedding(Tensor<T> audio)
-    {
-        var melSpec = PreprocessAudio(audio);
+    #endregion
 
-        if (IsOnnxMode && OnnxModel is not null)
-        {
-            return OnnxModel.Run(melSpec);
-        }
+    #region Public API
 
-        return ForwardEmbedding(melSpec);
-    }
-
-    /// <summary>
-    /// Forward pass to get embedding.
-    /// </summary>
-    private Tensor<T> ForwardEmbedding(Tensor<T> melSpec)
-    {
-        int batchSize = melSpec.Shape[0];
-        int numFrames = melSpec.Shape[1];
-        int numMels = melSpec.Shape[2];
-
-        // Patchify: [batch, frames, mels] -> [batch, numPatches, patchDim]
-        int numPatchesTime = numFrames / _patchSize;
-        int numPatchesFreq = numMels / _patchSize;
-        int numPatches = numPatchesTime * numPatchesFreq;
-        int patchDim = _patchSize * _patchSize;
-
-        var patches = new T[batchSize * numPatches * patchDim];
-        for (int b = 0; b < batchSize; b++)
-        {
-            int patchIdx = 0;
-            for (int pt = 0; pt < numPatchesTime; pt++)
-            {
-                for (int pf = 0; pf < numPatchesFreq; pf++)
-                {
-                    for (int i = 0; i < _patchSize; i++)
-                    {
-                        for (int j = 0; j < _patchSize; j++)
-                        {
-                            int frameIdx = pt * _patchSize + i;
-                            int melIdx = pf * _patchSize + j;
-                            int srcIdx = b * numFrames * numMels + frameIdx * numMels + melIdx;
-                            int dstIdx = b * numPatches * patchDim + patchIdx * patchDim + i * _patchSize + j;
-
-                            if (srcIdx < melSpec.Length && dstIdx < patches.Length)
-                            {
-                                patches[dstIdx] = melSpec.Data.Span[srcIdx];
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        // Patch embedding: linear projection
-        bool hasDistToken = _distToken.Length > 0;
-        int numTokens = numPatches + (hasDistToken ? 2 : 1); // +CLS, +DIST (optional)
-        var embedded = new T[batchSize * numTokens * _embeddingDim];
-
-        // Add CLS token
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                int idx = b * numTokens * _embeddingDim + d;
-                embedded[idx] = _clsToken[d];
-            }
-        }
-
-        // Add distillation token if present
-        int patchOffset = 1;
-        if (hasDistToken)
-        {
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    int idx = b * numTokens * _embeddingDim + _embeddingDim + d;
-                    embedded[idx] = _distToken[d];
-                }
-            }
-            patchOffset = 2;
-        }
-
-        // Project patches
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int p = 0; p < numPatches; p++)
-            {
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    T sum = d < _patchEmbedBias.Length ? _patchEmbedBias[d] : _numOps.Zero;
-                    for (int pd = 0; pd < patchDim; pd++)
-                    {
-                        int patchIdx = b * numPatches * patchDim + p * patchDim + pd;
-                        int wIdx = d * patchDim + pd;
-                        if (patchIdx < patches.Length && wIdx < _patchEmbedWeight.Length)
-                        {
-                            sum = _numOps.Add(sum, _numOps.Multiply(patches[patchIdx], _patchEmbedWeight[wIdx]));
-                        }
-                    }
-                    int outIdx = b * numTokens * _embeddingDim + (p + patchOffset) * _embeddingDim + d;
-                    embedded[outIdx] = sum;
-                }
-            }
-        }
-
-        // Add position embedding
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < numTokens; t++)
-            {
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    int idx = b * numTokens * _embeddingDim + t * _embeddingDim + d;
-                    int posIdx = t * _embeddingDim + d;
-                    if (posIdx < _positionEmbedding.Length)
-                    {
-                        embedded[idx] = _numOps.Add(embedded[idx], _positionEmbedding[posIdx]);
-                    }
-                }
-            }
-        }
-
-        var hidden = new Tensor<T>(embedded, new[] { batchSize, numTokens, _embeddingDim });
-
-        // Transformer blocks
-        foreach (var block in _transformerBlocks)
-        {
-            hidden = block.Forward(hidden);
-        }
-
-        // Layer norm
-        hidden = LayerNorm(hidden);
-
-        // Extract CLS token embedding
-        var clsEmbedding = new T[batchSize * _embeddingDim];
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                int idx = b * numTokens * _embeddingDim + d;
-                clsEmbedding[b * _embeddingDim + d] = hidden.Data.Span[idx];
-            }
-        }
-
-        return new Tensor<T>(clsEmbedding, new[] { batchSize, _embeddingDim });
-    }
-
-    /// <summary>
-    /// Applies layer normalization.
-    /// </summary>
-    private Tensor<T> LayerNorm(Tensor<T> input)
-    {
-        var gammaTensor = new Tensor<T>(_normGamma, [_normGamma.Length]);
-        var betaTensor = new Tensor<T>(_normBeta, [_normBeta.Length]);
-        return Engine.LayerNorm(input, gammaTensor, betaTensor, 1e-6, out _, out _);
-    }
-
-    /// <summary>
-    /// Classifies audio into categories.
-    /// </summary>
-    /// <param name="audio">Audio tensor to classify.</param>
-    /// <param name="topK">Number of top predictions to return.</param>
-    /// <returns>Top-k predictions with probabilities.</returns>
-    public List<(string Label, double Probability)> Classify(Tensor<T> audio, int topK = 5)
-    {
-        var embedding = ExtractEmbedding(audio);
-        var logits = ComputeLogits(embedding);
-
-        // Softmax
-        var predictions = new List<(string Label, double Probability)>();
-        int batchSize = logits.Shape[0];
-
-        for (int c = 0; c < _numClasses; c++)
-        {
-            double logit = _numOps.ToDouble(logits.Data.Span[c]);
-            string label = c < _classLabels.Length ? _classLabels[c] : $"class_{c}";
-            predictions.Add((label, logit));
-        }
-
-        // Softmax normalization
-        double maxLogit = predictions.Max(p => p.Probability);
-        double sumExp = predictions.Sum(p => Math.Exp(p.Probability - maxLogit));
-
-        var softmaxed = predictions.Select(p =>
-            (p.Label, Math.Exp(p.Probability - maxLogit) / sumExp)).ToList();
-
-        return softmaxed.OrderByDescending(p => p.Item2).Take(topK).ToList();
-    }
-
-    /// <summary>
-    /// Computes classification logits from embedding.
-    /// </summary>
-    private Tensor<T> ComputeLogits(Tensor<T> embedding)
-    {
-        int batchSize = embedding.Shape[0];
-        var logits = new T[batchSize * _numClasses];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                T sum = c < _headBias.Length ? _headBias[c] : _numOps.Zero;
-                for (int d = 0; d < _embeddingDim; d++)
-                {
-                    int embIdx = b * _embeddingDim + d;
-                    int wIdx = c * _embeddingDim + d;
-                    if (embIdx < embedding.Length && wIdx < _headWeight.Length)
-                    {
-                        sum = _numOps.Add(sum, _numOps.Multiply(embedding.Data.Span[embIdx], _headWeight[wIdx]));
-                    }
-                }
-                logits[b * _numClasses + c] = sum;
-            }
-        }
-
-        return new Tensor<T>(logits, new[] { batchSize, _numClasses });
-    }
-
-    /// <summary>
-    /// Predicts classification logits.
-    /// </summary>
+    /// <inheritdoc/>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        var embedding = ExtractEmbedding(input);
-        return ComputeLogits(embedding);
+        ThrowIfDisposed();
+        var mel = PreprocessAudio(input);
+        if (!_useNativeMode && OnnxEncoder is not null)
+        {
+            return PostprocessOutput(OnnxEncoder.Run(mel));
+        }
+        var hidden = mel;
+        foreach (var layer in Layers) hidden = layer.Forward(hidden);
+        return hidden;
     }
 
-    #region IAudioFingerprinter Implementation
+    /// <summary>Returns the top-K class predictions with softmax-normalised probabilities.</summary>
+    public List<(string Label, double Probability)> Classify(Tensor<T> audio, int topK = 5)
+    {
+        var logits = Predict(audio);
+        var probs = SoftmaxLastAxis(logits);
+
+        // Take the first batch row and pick top-K.
+        int classCount = probs.Shape[^1];
+        var indexed = new (double prob, int idx)[classCount];
+        for (int i = 0; i < classCount; i++)
+            indexed[i] = (Convert.ToDouble(probs[0, i]), i);
+        Array.Sort(indexed, (a, b) => b.prob.CompareTo(a.prob));
+
+        var result = new List<(string, double)>(topK);
+        for (int k = 0; k < Math.Min(topK, classCount); k++)
+            result.Add(($"class_{indexed[k].idx}", indexed[k].prob));
+        return result;
+    }
 
     /// <inheritdoc/>
     public AudioFingerprint<T> Fingerprint(Tensor<T> audio)
     {
-        var embedding = ExtractEmbedding(audio);
-        double duration = (double)audio.Shape[^1] / SampleRate;
+        // InitializeLayers leaves Layers empty in ONNX mode (the ONNX
+        // graph is executed via OnnxEncoder instead), so the layer-walk
+        // below would exit immediately and serialize the preprocessed
+        // mel spectrogram as the "fingerprint" — silently wrong. Require
+        // native mode here until an ONNX-embedding output is wired
+        // explicitly.
+        if (!_useNativeMode)
+        {
+            throw new NotSupportedException(
+                "ASTModel.Fingerprint() in ONNX mode requires an explicit " +
+                "embedding-producing output to be wired. Use the native " +
+                "constructor or invoke the ONNX encoder directly via the " +
+                "OnnxEncoder property.");
+        }
 
+        // For fingerprinting we want the pooled embedding (one layer before the
+        // classification head). Run the layer stack and stop at the
+        // GlobalPoolingLayer output.
+        var mel = PreprocessAudio(audio);
+        var hidden = mel;
+        foreach (var layer in Layers)
+        {
+            hidden = layer.Forward(hidden);
+            if (layer is GlobalPoolingLayer<T>) break;
+        }
+
+        var flat = hidden.ToVector();
+        var data = new T[flat.Length];
+        for (int i = 0; i < flat.Length; i++) data[i] = flat[i];
         return new AudioFingerprint<T>
         {
-            Data = embedding.Data.ToArray(),
-            Duration = duration,
+            Data = data,
             SampleRate = SampleRate,
-            Algorithm = Name,
-            FrameCount = 1,
-            Metadata = new Dictionary<string, object>
-            {
-                { "EmbeddingDim", _embeddingDim },
-                { "NumLayers", _numLayers },
-                { "NumHeads", _numHeads },
-                { "PatchSize", _patchSize }
-            }
+            Duration = audio.Length / (double)SampleRate
         };
     }
 
     /// <inheritdoc/>
-    public AudioFingerprint<T> Fingerprint(Vector<T> audio)
-    {
-        var tensor = new Tensor<T>(audio.ToArray(), new[] { audio.Length });
-        return Fingerprint(tensor);
-    }
+    public AudioFingerprint<T> Fingerprint(Vector<T> audio) =>
+        Fingerprint(Tensor<T>.FromVector(audio));
 
     /// <inheritdoc/>
     public double ComputeSimilarity(AudioFingerprint<T> fp1, AudioFingerprint<T> fp2)
     {
-        double dot = 0, norm1 = 0, norm2 = 0;
-        int len = Math.Min(fp1.Data.Length, fp2.Data.Length);
-
-        for (int i = 0; i < len; i++)
+        if (fp1.Data.Length != fp2.Data.Length)
+            throw new ArgumentException("Fingerprint dimensions do not match.");
+        double dot = 0.0, n1 = 0.0, n2 = 0.0;
+        for (int i = 0; i < fp1.Data.Length; i++)
         {
-            double v1 = _numOps.ToDouble(fp1.Data[i]);
-            double v2 = _numOps.ToDouble(fp2.Data[i]);
-            dot += v1 * v2;
-            norm1 += v1 * v1;
-            norm2 += v2 * v2;
+            double a = Convert.ToDouble(fp1.Data[i]);
+            double b = Convert.ToDouble(fp2.Data[i]);
+            dot += a * b; n1 += a * a; n2 += b * b;
         }
-
-        if (norm1 < 1e-10 || norm2 < 1e-10) return 0;
-        return dot / (Math.Sqrt(norm1) * Math.Sqrt(norm2));
+        return dot / (Math.Sqrt(n1) * Math.Sqrt(n2) + 1e-12);
     }
 
     /// <inheritdoc/>
     public IReadOnlyList<FingerprintMatch> FindMatches(
-        AudioFingerprint<T> query,
-        AudioFingerprint<T> reference,
-        int minMatchLength = 10)
+        AudioFingerprint<T> query, AudioFingerprint<T> reference, int minMatchLength = 10)
     {
+        if (minMatchLength <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(minMatchLength), minMatchLength, "minMatchLength must be > 0.");
+
+        // Honor the caller's minimum-match guard: if the embedding overlap
+        // is shorter than what they asked for, return no matches rather
+        // than silently misreport a global-embedding similarity as a
+        // valid match.
+        int overlap = Math.Min(query.Data.Length, reference.Data.Length);
+        if (overlap < minMatchLength)
+            return Array.Empty<FingerprintMatch>();
+
+        // AST produces global embeddings; whole-clip similarity only.
         double similarity = ComputeSimilarity(query, reference);
-
-        if (similarity > 0.7)
-        {
-            return new List<FingerprintMatch>
-            {
-                new FingerprintMatch
-                {
-                    QueryStartTime = 0,
-                    ReferenceStartTime = 0,
-                    Duration = Math.Min(query.Duration, reference.Duration),
-                    Confidence = similarity,
-                    MatchCount = 1
-                }
-            };
-        }
-
-        return new List<FingerprintMatch>();
-    }
-
-    #endregion
-
-    #region Training
-
-    /// <summary>
-    /// Trains the model on audio-label pairs.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-        {
-            throw new InvalidOperationException("Cannot train in ONNX inference mode.");
-        }
-
-        SetTrainingMode(true);
-
-        var logits = Predict(input);
-        var loss = ComputeCrossEntropyLoss(logits, expected);
-        UpdateWeights(logits, expected);
-
-        SetTrainingMode(false);
-    }
-
-    private T ComputeCrossEntropyLoss(Tensor<T> predicted, Tensor<T> target)
-    {
-        double totalLoss = 0;
-        int batchSize = predicted.Shape[0];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Softmax
-            double maxLogit = double.MinValue;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                int idx = b * _numClasses + c;
-                if (idx < predicted.Length)
-                {
-                    maxLogit = Math.Max(maxLogit, _numOps.ToDouble(predicted.Data.Span[idx]));
-                }
-            }
-
-            double sumExp = 0;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                int idx = b * _numClasses + c;
-                if (idx < predicted.Length)
-                {
-                    sumExp += Math.Exp(_numOps.ToDouble(predicted.Data.Span[idx]) - maxLogit);
-                }
-            }
-
-            // Cross-entropy
-            for (int c = 0; c < _numClasses; c++)
-            {
-                int predIdx = b * _numClasses + c;
-                int targIdx = b * _numClasses + c;
-                if (predIdx < predicted.Length && targIdx < target.Length)
-                {
-                    double prob = Math.Exp(_numOps.ToDouble(predicted.Data.Span[predIdx]) - maxLogit) / sumExp;
-                    double t = _numOps.ToDouble(target.Data.Span[targIdx]);
-                    if (t > 0.5)
-                    {
-                        totalLoss -= Math.Log(Math.Max(prob, 1e-10));
-                    }
-                }
-            }
-        }
-
-        return _numOps.FromDouble(totalLoss / batchSize);
-    }
-
-    private void UpdateWeights(Tensor<T> predicted, Tensor<T> target)
-    {
-        double learningRate = 1e-4;
-
-        for (int i = 0; i < _headWeight.Length; i++)
-        {
-            int predIdx = i % predicted.Length;
-            int targIdx = i % target.Length;
-
-            double pred = _numOps.ToDouble(predicted.Data.Span[predIdx]);
-            double targ = _numOps.ToDouble(target.Data.Span[targIdx]);
-            double grad = (1.0 / (1.0 + Math.Exp(-pred))) - targ;
-
-            double weight = _numOps.ToDouble(_headWeight[i]);
-            _headWeight[i] = _numOps.FromDouble(weight - learningRate * grad * 0.01);
-        }
-    }
-
-    #endregion
-
-    #region Serialization
-
-    public override byte[] Serialize()
-    {
-        using var stream = new MemoryStream();
-        using var writer = new BinaryWriter(stream);
-
-        writer.Write(SampleRate);
-        writer.Write(_numClasses);
-        writer.Write(_embeddingDim);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_numMelBands);
-        writer.Write(_targetLength);
-
-        WriteArray(writer, _patchEmbedWeight);
-        WriteArray(writer, _positionEmbedding);
-        WriteArray(writer, _clsToken);
-        WriteArray(writer, _headWeight);
-        WriteArray(writer, _headBias);
-
-        return stream.ToArray();
-    }
-
-    public override void Deserialize(byte[] data)
-    {
-        using var stream = new MemoryStream(data);
-        using var reader = new BinaryReader(stream);
-
-        SampleRate = reader.ReadInt32();
-        int numClasses = reader.ReadInt32();
-        int embeddingDim = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int patchSize = reader.ReadInt32();
-        int numMelBands = reader.ReadInt32();
-        int targetLength = reader.ReadInt32();
-
-        _patchEmbedWeight = ReadArray(reader);
-        _positionEmbedding = ReadArray(reader);
-        _clsToken = ReadArray(reader);
-        _headWeight = ReadArray(reader);
-        _headBias = ReadArray(reader);
-    }
-
-    private void WriteArray(BinaryWriter writer, T[] array)
-    {
-        writer.Write(array.Length);
-        foreach (var val in array)
-        {
-            writer.Write(_numOps.ToDouble(val));
-        }
-    }
-
-    private T[] ReadArray(BinaryReader reader)
-    {
-        int len = reader.ReadInt32();
-        var array = new T[len];
-        for (int i = 0; i < len; i++)
-        {
-            array[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-        return array;
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    private T[] InitializeWeights(int size, double initValue = double.NaN, double scale = 0.02)
-    {
-        var weights = new T[size];
-        if (double.IsNaN(initValue))
-        {
-            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-            for (int i = 0; i < size; i++)
-            {
-                weights[i] = _numOps.FromDouble(rand.NextGaussian() * scale);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < size; i++)
-            {
-                weights[i] = _numOps.FromDouble(initValue);
-            }
-        }
-        return weights;
-    }
-
-    private static string[] GetDefaultClassLabels()
-    {
+        if (similarity < 0.5) return Array.Empty<FingerprintMatch>();
         return new[]
         {
-            "Speech", "Singing", "Music", "Instrument", "Guitar", "Piano", "Drum", "Violin",
-            "Dog", "Cat", "Bird", "Animal", "Vehicle", "Car", "Train", "Airplane",
-            "Water", "Rain", "Thunder", "Wind", "Fire", "Explosion", "Gunshot",
-            "Footsteps", "Door", "Knock", "Bell", "Alarm", "Telephone", "Clock",
-            "Laugh", "Cry", "Cough", "Sneeze", "Applause", "Crowd", "Cheering",
-            "Television", "Radio", "Engine", "Siren", "Horn", "Whistle", "Static"
+            new FingerprintMatch
+            {
+                QueryStartTime = 0.0,
+                ReferenceStartTime = 0.0,
+                Duration = Math.Max(query.Duration, reference.Duration),
+                Confidence = similarity,
+                MatchCount = Math.Min(query.Data.Length, reference.Data.Length)
+            }
         };
+    }
+
+    /// <inheritdoc/>
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot train in ONNX inference mode.");
+        SetTrainingMode(true);
+        try { TrainWithTape(input, expected); }
+        finally { SetTrainingMode(false); }
+    }
+
+    /// <inheritdoc/>
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode)
+            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
+        int idx = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
     }
 
     #endregion
 
-    #region Abstract Method Implementations
+    #region Helpers
 
-    /// <inheritdoc/>
-    public override void UpdateParameters(Vector<T> gradients)
+    /// <summary>Numerically-stable softmax along the last axis. Engine-routed.</summary>
+    private Tensor<T> SoftmaxLastAxis(Tensor<T> logits) =>
+        Engine.TensorSoftmax(logits, axis: logits.Shape.Length - 1);
+
+    private bool _disposed;
+    private void ThrowIfDisposed()
     {
-        if (IsOnnxMode)
-        {
-            throw new NotSupportedException("Cannot update parameters in ONNX inference mode.");
-        }
-
-        // Get current parameters and apply gradient descent
-        var currentParams = GetParameters();
-        T learningRate = _numOps.FromDouble(0.0001);
-        for (int i = 0; i < Math.Min(currentParams.Length, gradients.Length); i++)
-        {
-            currentParams[i] = _numOps.Subtract(currentParams[i], _numOps.Multiply(learningRate, gradients[i]));
-        }
-        SetParameters(currentParams);
+        if (_disposed)
+            throw new ObjectDisposedException(GetType().FullName);
     }
 
     /// <inheritdoc/>
-    public override ModelMetadata<T> GetModelMetadata()
+    protected override void Dispose(bool disposing)
     {
-        var metadata = new ModelMetadata<T>
+        if (disposing) _disposed = true;
+        base.Dispose(disposing);
+    }
+
+    /// <inheritdoc/>
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
+        _useNativeMode
+            ? new ASTModel<T>(Architecture, _options)
+            // ONNX-backed instance: preserve the loaded model path so the
+            // clone keeps its execution mode. Without this, Clone() of an
+            // ONNX-mode AST silently downgrades to native (no weights,
+            // empty Layers) and changes inference behaviour.
+            : new ASTModel<T>(Architecture, _modelPath!, _options);
+
+    /// <inheritdoc/>
+    public override ModelMetadata<T> GetModelMetadata() =>
+        new ModelMetadata<T>
         {
-            Name = "AST",
-            Description = $"Audio Spectrogram Transformer ({_numClasses} classes, {_numLayers} layers)",
-            FeatureCount = SampleRate,
-            Complexity = _numLayers * _numHeads
+            Name = Name,
+            Description = "AST — Audio Spectrogram Transformer (Gong et al. 2021).",
+            Complexity = _options.NumLayers,
+            AdditionalInfo = new Dictionary<string, object>
+            {
+                ["EmbeddingDim"] = _options.EmbeddingDim,
+                ["NumLayers"] = _options.NumLayers,
+                ["NumHeads"] = _options.NumHeads,
+                ["PatchSize"] = _options.PatchSize,
+                ["NumMelBands"] = _options.NumMelBands,
+                ["TargetLength"] = _options.TargetLength,
+                ["NumClasses"] = _options.NumClasses,
+                ["SampleRate"] = _options.SampleRate,
+            }
         };
-        metadata.AdditionalInfo["EmbeddingDim"] = _embeddingDim.ToString();
-        metadata.AdditionalInfo["NumLayers"] = _numLayers.ToString();
-        metadata.AdditionalInfo["NumHeads"] = _numHeads.ToString();
-        metadata.AdditionalInfo["PatchSize"] = _patchSize.ToString();
-        metadata.AdditionalInfo["Mode"] = IsOnnxMode ? "ONNX" : "Native";
-        return metadata;
-    }
 
     /// <inheritdoc/>
     protected override void SerializeNetworkSpecificData(BinaryWriter writer)
     {
-        writer.Write(IsOnnxMode);
-        writer.Write(SampleRate);
-        writer.Write(_numClasses);
-        writer.Write(_embeddingDim);
-        writer.Write(_numLayers);
-        writer.Write(_numHeads);
-        writer.Write(_patchSize);
-        writer.Write(_numMelBands);
-        writer.Write(_targetLength);
+        writer.Write(_useNativeMode);
+        writer.Write(_options.SampleRate);
+        writer.Write(_options.StftWindowSize);
+        writer.Write(_options.HopLength);
+        writer.Write(_options.NumMelBands);
+        writer.Write(_options.TargetLength);
+        writer.Write(_options.PatchSize);
+        writer.Write(_options.NumClasses);
+        writer.Write(_options.EmbeddingDim);
+        writer.Write(_options.NumLayers);
+        writer.Write(_options.NumHeads);
+        writer.Write(_options.FeedForwardDim);
+        writer.Write(_options.DropoutRate);
     }
 
     /// <inheritdoc/>
     protected override void DeserializeNetworkSpecificData(BinaryReader reader)
     {
-        _ = reader.ReadBoolean(); // IsOnnxMode
-        _ = reader.ReadInt32();   // SampleRate
-        _ = reader.ReadInt32();   // _numClasses
-        _ = reader.ReadInt32();   // _embeddingDim
-        _ = reader.ReadInt32();   // _numLayers
-        _ = reader.ReadInt32();   // _numHeads
-        _ = reader.ReadInt32();   // _patchSize
-        _ = reader.ReadInt32();   // _numMelBands
-        _ = reader.ReadInt32();   // _targetLength
+        bool useNativeMode = reader.ReadBoolean();
+        if (useNativeMode != _useNativeMode)
+            throw new InvalidOperationException(
+                $"Persisted AST mode (native={useNativeMode}) does not match this " +
+                $"instance's mode (native={_useNativeMode}). Reconstruct ASTModel " +
+                $"with the matching constructor before loading this checkpoint.");
+        VerifyEqual(reader.ReadInt32(),  _options.SampleRate,     nameof(_options.SampleRate));
+        VerifyEqual(reader.ReadInt32(),  _options.StftWindowSize, nameof(_options.StftWindowSize));
+        VerifyEqual(reader.ReadInt32(),  _options.HopLength,      nameof(_options.HopLength));
+        VerifyEqual(reader.ReadInt32(),  _options.NumMelBands,    nameof(_options.NumMelBands));
+        VerifyEqual(reader.ReadInt32(),  _options.TargetLength,   nameof(_options.TargetLength));
+        VerifyEqual(reader.ReadInt32(),  _options.PatchSize,      nameof(_options.PatchSize));
+        VerifyEqual(reader.ReadInt32(),  _options.NumClasses,     nameof(_options.NumClasses));
+        VerifyEqual(reader.ReadInt32(),  _options.EmbeddingDim,   nameof(_options.EmbeddingDim));
+        VerifyEqual(reader.ReadInt32(),  _options.NumLayers,      nameof(_options.NumLayers));
+        VerifyEqual(reader.ReadInt32(),  _options.NumHeads,       nameof(_options.NumHeads));
+        VerifyEqual(reader.ReadInt32(),  _options.FeedForwardDim, nameof(_options.FeedForwardDim));
+        VerifyEqual(reader.ReadDouble(), _options.DropoutRate,    nameof(_options.DropoutRate));
     }
 
-    /// <inheritdoc/>
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    private static void VerifyEqual<TValue>(TValue persisted, TValue current, string name)
+        where TValue : IEquatable<TValue>
     {
-        return new ASTModel<T>(
-            Architecture,
-            sampleRate: SampleRate,
-            numClasses: _numClasses,
-            embeddingDim: _embeddingDim,
-            numLayers: _numLayers,
-            numHeads: _numHeads,
-            patchSize: _patchSize,
-            numMelBands: _numMelBands,
-            targetLength: _targetLength);
-    }
-
-    #endregion
-
-    #region Nested Types
-
-    /// <summary>
-    /// A transformer block with multi-head self-attention and MLP.
-    /// </summary>
-    private class TransformerBlock
-    {
-        private readonly INumericOperations<T> _ops;
-        private readonly int _dim;
-        private readonly int _numHeads;
-        private readonly int _headDim;
-        private readonly int _mlpDim;
-
-        private T[] _norm1Gamma, _norm1Beta;
-        private T[] _qWeight, _kWeight, _vWeight, _projWeight;
-        private T[] _norm2Gamma, _norm2Beta;
-        private T[] _mlpW1, _mlpW2;
-
-        public TransformerBlock(INumericOperations<T> ops, int dim, int numHeads, int mlpDim, double dropout)
-        {
-            _ops = ops;
-            _dim = dim;
-            _numHeads = numHeads;
-            _headDim = dim / numHeads;
-            _mlpDim = mlpDim;
-
-            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-            double scale = 0.02;
-
-            _norm1Gamma = Enumerable.Range(0, dim).Select(_ => _ops.FromDouble(1.0)).ToArray();
-            _norm1Beta = new T[dim];
-            _qWeight = InitWeights(dim * dim, rand, scale);
-            _kWeight = InitWeights(dim * dim, rand, scale);
-            _vWeight = InitWeights(dim * dim, rand, scale);
-            _projWeight = InitWeights(dim * dim, rand, scale);
-
-            _norm2Gamma = Enumerable.Range(0, dim).Select(_ => _ops.FromDouble(1.0)).ToArray();
-            _norm2Beta = new T[dim];
-            _mlpW1 = InitWeights(mlpDim * dim, rand, scale);
-            _mlpW2 = InitWeights(dim * mlpDim, rand, scale);
-        }
-
-        private T[] InitWeights(int size, Random rand, double scale)
-        {
-            return Enumerable.Range(0, size).Select(_ => _ops.FromDouble(rand.NextGaussian() * scale)).ToArray();
-        }
-
-        public Tensor<T> Forward(Tensor<T> input)
-        {
-            int batchSize = input.Shape[0];
-            int seqLen = input.Shape[1];
-            int dim = input.Shape[2];
-
-            // Pre-norm + self-attention
-            var normed1 = LayerNorm(input, _norm1Gamma, _norm1Beta);
-            var attended = SelfAttention(normed1);
-
-            // Residual
-            var residual1 = new T[input.Length];
-            for (int i = 0; i < input.Length; i++)
-            {
-                residual1[i] = _ops.Add(input.Data.Span[i], attended.Data.Span[i]);
-            }
-            var res1Tensor = new Tensor<T>(residual1, input._shape);
-
-            // Pre-norm + MLP
-            var normed2 = LayerNorm(res1Tensor, _norm2Gamma, _norm2Beta);
-            var mlpOut = MLP(normed2);
-
-            // Residual
-            var output = new T[input.Length];
-            for (int i = 0; i < input.Length; i++)
-            {
-                output[i] = _ops.Add(res1Tensor.Data.Span[i], mlpOut.Data.Span[i]);
-            }
-
-            return new Tensor<T>(output, input._shape);
-        }
-
-        private Tensor<T> LayerNorm(Tensor<T> input, T[] gamma, T[] beta)
-        {
-            var gammaTensor = new Tensor<T>(gamma, [gamma.Length]);
-            var betaTensor = new Tensor<T>(beta, [beta.Length]);
-            return AiDotNetEngine.Current.LayerNorm(input, gammaTensor, betaTensor, 1e-6, out _, out _);
-        }
-
-        private Tensor<T> SelfAttention(Tensor<T> input)
-        {
-            // Simplified self-attention (identity for performance)
-            var output = new T[input.Length];
-            Array.Copy(input.Data.ToArray(), output, input.Length);
-            return new Tensor<T>(output, input._shape);
-        }
-
-        private Tensor<T> MLP(Tensor<T> input)
-        {
-            int batchSize = input.Shape[0];
-            int seqLen = input.Shape[1];
-            int dim = input.Shape[2];
-
-            // First linear + GELU
-            var hidden = new T[batchSize * seqLen * _mlpDim];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    for (int m = 0; m < _mlpDim; m++)
-                    {
-                        T sum = _ops.Zero;
-                        for (int d = 0; d < dim; d++)
-                        {
-                            int inIdx = b * seqLen * dim + s * dim + d;
-                            int wIdx = m * dim + d;
-                            if (wIdx < _mlpW1.Length)
-                            {
-                                sum = _ops.Add(sum, _ops.Multiply(input.Data.Span[inIdx], _mlpW1[wIdx]));
-                            }
-                        }
-                        // GELU approximation
-                        double x = _ops.ToDouble(sum);
-                        double gelu = 0.5 * x * (1 + Math.Tanh(Math.Sqrt(2 / Math.PI) * (x + 0.044715 * x * x * x)));
-                        int hidIdx = b * seqLen * _mlpDim + s * _mlpDim + m;
-                        hidden[hidIdx] = _ops.FromDouble(gelu);
-                    }
-                }
-            }
-
-            // Second linear
-            var output = new T[input.Length];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int s = 0; s < seqLen; s++)
-                {
-                    for (int d = 0; d < dim; d++)
-                    {
-                        T sum = _ops.Zero;
-                        for (int m = 0; m < _mlpDim; m++)
-                        {
-                            int hidIdx = b * seqLen * _mlpDim + s * _mlpDim + m;
-                            int wIdx = d * _mlpDim + m;
-                            if (wIdx < _mlpW2.Length)
-                            {
-                                sum = _ops.Add(sum, _ops.Multiply(hidden[hidIdx], _mlpW2[wIdx]));
-                            }
-                        }
-                        int outIdx = b * seqLen * dim + s * dim + d;
-                        output[outIdx] = sum;
-                    }
-                }
-            }
-
-            return new Tensor<T>(output, input._shape);
-        }
+        if (!persisted.Equals(current))
+            throw new InvalidOperationException(
+                $"Persisted ASTModelOptions.{name} = {persisted} does not match constructor option {current}. " +
+                "Reconstruct ASTModel with matching ASTModelOptions before loading this checkpoint.");
     }
 
     #endregion

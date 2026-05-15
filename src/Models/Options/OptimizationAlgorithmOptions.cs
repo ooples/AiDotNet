@@ -103,14 +103,30 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
     public virtual double InitialLearningRate { get; set; } = 0.01;
 
     /// <summary>
-    /// Gets or sets whether to automatically adjust the learning rate during training.
+    /// Gets or sets whether to automatically adjust the learning rate during training
+    /// based on per-epoch fitness improvement (see
+    /// <see cref="OptimizerBase{T,TInput,TOutput}.UpdateAdaptiveParameters"/>).
     /// </summary>
-    /// <value>True to use adaptive learning rate (default), false otherwise.</value>
+    /// <value>False by default — matches Kingma &amp; Ba (Adam 2014) and PyTorch / TensorFlow / Keras defaults, which use a fixed LR unless an explicit scheduler is attached.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> When enabled, the algorithm will automatically adjust how fast it learns
-    /// based on its progress. It's like slowing down when you're getting close to your destination.</para>
+    /// based on its progress between optimization epochs. It's like slowing down when you're getting close to your destination.</para>
+    /// <para><b>Why false by default:</b>
+    /// (1) Matches the original Adam paper (Kingma &amp; Ba 2014) and every major
+    ///     framework's default — adaptive LR is opt-in via an explicit
+    ///     <c>ILearningRateScheduler</c>.
+    /// (2) Adaptive LR fires only inside <c>Optimize()</c>'s outer epoch loop;
+    ///     it never runs when callers invoke <c>Train(input, target)</c>
+    ///     directly. The previous <c>true</c> default therefore provided no
+    ///     functional benefit on per-step <c>Train()</c> callers (the common
+    ///     test-suite and inference-loop pattern).
+    /// (3) Unlocks <see cref="Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>,
+    ///     which bakes the LR into the compiled plan and is gated off when
+    ///     <c>UseAdaptiveLearningRate</c> is true. The fused-compiled path
+    ///     fuses forward + backward + Adam update in one kernel and runs
+    ///     5-10× faster than the eager autograd tape on paper-scale CNNs.</para>
     /// </remarks>
-    public bool UseAdaptiveLearningRate { get; set; } = true;
+    public bool UseAdaptiveLearningRate { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the rate at which the learning rate decreases over time.
@@ -568,17 +584,21 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 break;
 
             case OptimizerType.AdamOptimizer:
-                // Set Adam optimizer specific defaults
+                // Adam already does per-parameter adaptive scaling internally
+                // (m, v moments + bias correction — Kingma & Ba 2014). Leave
+                // UseAdaptiveLearningRate at the property default (false) so
+                // the fused-compiled training path stays eligible; users that
+                // want an outer LR scheduler on top still opt in explicitly.
                 options.InitialLearningRate = 0.001;
-                options.UseAdaptiveLearningRate = true;
                 options.UseAdaptiveMomentum = true;
                 options.MaxIterations = 200;
                 break;
 
             case OptimizerType.RMSProp:
-                // Set RMSProp specific defaults
+                // RMSProp does per-parameter adaptive scaling via running square
+                // gradient; outer adaptive scaffolding adds nothing. Leave the
+                // property default (false) to keep the fused path eligible.
                 options.InitialLearningRate = 0.001;
-                options.UseAdaptiveLearningRate = true;
                 options.LearningRateDecay = 0.9;
                 options.MaxIterations = 200;
                 break;
@@ -621,16 +641,16 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 break;
 
             case OptimizerType.AdaGrad:
-                // Set AdaGrad specific defaults
+                // AdaGrad's accumulator is itself the adaptive LR; outer
+                // scheduling is redundant. Keep property default (false).
                 options.InitialLearningRate = 0.01;
-                options.UseAdaptiveLearningRate = true;
                 options.UseAdaptiveMomentum = false;
                 options.MaxIterations = 200;
                 break;
 
             case OptimizerType.AdaDelta:
-                // Set AdaDelta specific defaults
-                options.UseAdaptiveLearningRate = true;
+                // AdaDelta's whole point is to eliminate LR tuning — leave the
+                // outer adaptive scaffold off (property default).
                 options.UseAdaptiveMomentum = false;
                 options.MaxIterations = 200;
                 break;
@@ -644,17 +664,17 @@ public class OptimizationAlgorithmOptions<T, TInput, TOutput> : ModelOptions
                 break;
 
             case OptimizerType.Nadam:
-                // Set Nadam specific defaults
+                // Nadam = Adam + Nesterov momentum — same per-param adaptive
+                // scaling as Adam, no outer scheduler needed.
                 options.InitialLearningRate = 0.002;
-                options.UseAdaptiveLearningRate = true;
                 options.UseAdaptiveMomentum = true;
                 options.MaxIterations = 200;
                 break;
 
             case OptimizerType.AMSGrad:
-                // Set AMSGrad specific defaults
+                // AMSGrad fixes Adam's convergence proof but keeps the same
+                // adaptive moment buffers — outer scheduling adds nothing.
                 options.InitialLearningRate = 0.001;
-                options.UseAdaptiveLearningRate = true;
                 options.UseAdaptiveMomentum = true;
                 options.MaxIterations = 200;
                 break;

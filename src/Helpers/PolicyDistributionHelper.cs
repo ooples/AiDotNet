@@ -2,7 +2,10 @@ namespace AiDotNet.Helpers;
 
 /// <summary>
 /// Provides tape-differentiable policy distribution computations for reinforcement learning.
-/// All methods use engine tensor operations so gradients flow through the gradient tape.
+/// All methods are engine-routed so gradients flow through the gradient tape; the calling
+/// agent passes its own <see cref="IEngine"/> so the helper never reaches for a static
+/// <c>AiDotNetEngine.Current</c> (which would break per-call engine overrides, DI in
+/// serving / dashboard scenarios, and test-time engine isolation).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
@@ -23,11 +26,13 @@ namespace AiDotNet.Helpers;
 public static class PolicyDistributionHelper<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
     /// Computes log-probabilities for discrete actions from logits using engine ops.
     /// </summary>
+    /// <param name="engine">The agent's <see cref="IEngine"/> (typically <c>this.Engine</c>
+    /// from a <see cref="NeuralNetworks.NeuralNetworkBase{T}"/>-derived agent) so tape
+    /// routing matches the surrounding forward pass.</param>
     /// <param name="logits">Network output logits [batchSize, numActions].</param>
     /// <param name="actionIndices">Selected action index per sample [batchSize].</param>
     /// <returns>Log-probabilities tensor [batchSize] — tape-differentiable.</returns>
@@ -40,27 +45,61 @@ public static class PolicyDistributionHelper<T>
     /// A log-probability of 0 means probability = 1 (the agent was certain).
     /// A very negative log-probability means the action was unlikely.
     /// </remarks>
-    public static Tensor<T> ComputeDiscreteLogProb(Tensor<T> logits, int[] actionIndices)
+    public static Tensor<T> ComputeDiscreteLogProb(IEngine engine, Tensor<T> logits, int[] actionIndices)
     {
         // log_softmax = logits - log(sum(exp(logits))) — numerically stable via log-sum-exp
-        var softmaxed = Engine.Softmax(logits);
-        var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-8));
-        var logProbs = Engine.TensorLog(safeSoftmax);
+        var softmaxed = engine.Softmax(logits);
+        var safeSoftmax = engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-8));
+        var logProbs = engine.TensorLog(safeSoftmax);
 
-        // Gather log-prob at each action index
-        var result = new Tensor<T>([actionIndices.Length]);
+        // Gather log-prob at each action index via an engine-routed mask
+        // multiply + reduce. The previous implementation copied values via
+        // the indexer (`result[i] = logProbs[i * numActions + idx]`) which
+        // broke the gradient tape — the freshly-constructed `result`
+        // tensor has no producer node, so `tape.ComputeGradients` returns
+        // zero w.r.t. the policy network's parameters and the optimizer
+        // applies a no-op update. The same gradient-break-on-indexer-copy
+        // pattern is documented in feedback_tensor_reshape_gradient.md.
+        //
+        // The mask is a one-hot tensor of the same shape as `logProbs`
+        // ([batch, numActions]) with `mask[i, actionIndices[i]] = 1`.
+        // Multiply element-wise and reduce along the action axis to gather
+        // the selected log-prob per sample — all engine ops, all tape-tracked.
+        int batchSize = actionIndices.Length;
         int numActions = logits.Shape.Length > 1 ? logits.Shape[1] : logits.Length;
-        for (int i = 0; i < actionIndices.Length; i++)
+        // Explicit bounds validation here gives a clear ArgumentException
+        // before the per-element mask write. The previous implementation
+        // failed late with a less actionable IndexOutOfRangeException at
+        // `maskData[i * numActions + actionIndices[i]]` when an index
+        // was out of range, and never caught a batch-size mismatch at all.
+        int logitsBatch = logits.Shape.Length > 1 ? logits.Shape[0] : 1;
+        if (batchSize != logitsBatch)
         {
-            result[i] = logProbs[i * numActions + actionIndices[i]];
+            throw new ArgumentException(
+                $"actionIndices length ({batchSize}) must match logits batch size ({logitsBatch}).",
+                nameof(actionIndices));
         }
-
-        return result;
+        var maskData = new T[batchSize * numActions];
+        for (int i = 0; i < batchSize; i++)
+        {
+            int idx = actionIndices[i];
+            if ((uint)idx >= (uint)numActions)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(actionIndices),
+                    $"Action index {idx} at sample {i} is outside [0, {numActions - 1}].");
+            }
+            maskData[i * numActions + idx] = NumOps.One;
+        }
+        var mask = new Tensor<T>(maskData, [batchSize, numActions]);
+        var masked = engine.TensorMultiply(logProbs, mask);
+        return engine.ReduceSum(masked, [1], keepDims: false);
     }
 
     /// <summary>
     /// Computes entropy of a discrete distribution from logits using engine ops.
     /// </summary>
+    /// <param name="engine">The agent's <see cref="IEngine"/>.</param>
     /// <param name="logits">Network output logits [batchSize, numActions].</param>
     /// <returns>Entropy tensor [batchSize] — tape-differentiable.</returns>
     /// <remarks>
@@ -73,28 +112,29 @@ public static class PolicyDistributionHelper<T>
     ///
     /// Formula: H = -sum(p * log(p)) for each action probability p.
     /// </remarks>
-    public static Tensor<T> ComputeDiscreteEntropy(Tensor<T> logits)
+    public static Tensor<T> ComputeDiscreteEntropy(IEngine engine, Tensor<T> logits)
     {
-        var softmaxed = Engine.Softmax(logits);
-        var safeSoftmax = Engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-8));
-        var logProbs = Engine.TensorLog(safeSoftmax);
-        var pLogP = Engine.TensorMultiply(softmaxed, logProbs);
-        var negPLogP = Engine.TensorNegate(pLogP);
+        var softmaxed = engine.Softmax(logits);
+        var safeSoftmax = engine.TensorAddScalar(softmaxed, NumOps.FromDouble(1e-8));
+        var logProbs = engine.TensorLog(safeSoftmax);
+        var pLogP = engine.TensorMultiply(softmaxed, logProbs);
+        var negPLogP = engine.TensorNegate(pLogP);
 
         // Sum over action dimension (axis 1) to get per-sample entropy
         if (negPLogP.Shape.Length > 1)
         {
-            return Engine.ReduceSum(negPLogP, [1], keepDims: false);
+            return engine.ReduceSum(negPLogP, [1], keepDims: false);
         }
 
         // Single sample — sum all
         var allAxes = Enumerable.Range(0, negPLogP.Shape.Length).ToArray();
-        return Engine.ReduceSum(negPLogP, allAxes, keepDims: false);
+        return engine.ReduceSum(negPLogP, allAxes, keepDims: false);
     }
 
     /// <summary>
     /// Computes log-probabilities for continuous (Gaussian) actions using engine ops.
     /// </summary>
+    /// <param name="engine">The agent's <see cref="IEngine"/>.</param>
     /// <param name="means">Gaussian means from network [batchSize, actionSize].</param>
     /// <param name="logStds">Log standard deviations [batchSize, actionSize].</param>
     /// <param name="actions">Actions taken [batchSize, actionSize].</param>
@@ -112,34 +152,35 @@ public static class PolicyDistributionHelper<T>
     ///
     /// This is summed across all action dimensions for the total log-probability.
     /// </remarks>
-    public static Tensor<T> ComputeGaussianLogProb(Tensor<T> means, Tensor<T> logStds, Tensor<T> actions)
+    public static Tensor<T> ComputeGaussianLogProb(IEngine engine, Tensor<T> means, Tensor<T> logStds, Tensor<T> actions)
     {
         // log_prob = -0.5 * ((action - mean) / std)^2 - log_std - 0.5 * log(2π)
-        var stds = Engine.TensorExp(logStds);
-        var safeStds = Engine.TensorAddScalar(stds, NumOps.FromDouble(1e-8));
-        var diff = Engine.TensorSubtract(actions, means);
-        var normalized = Engine.TensorDivide(diff, safeStds);
-        var normalizedSq = Engine.TensorMultiply(normalized, normalized);
-        var halfNormSq = Engine.TensorMultiplyScalar(normalizedSq, NumOps.FromDouble(-0.5));
+        var stds = engine.TensorExp(logStds);
+        var safeStds = engine.TensorAddScalar(stds, NumOps.FromDouble(1e-8));
+        var diff = engine.TensorSubtract(actions, means);
+        var normalized = engine.TensorDivide(diff, safeStds);
+        var normalizedSq = engine.TensorMultiply(normalized, normalized);
+        var halfNormSq = engine.TensorMultiplyScalar(normalizedSq, NumOps.FromDouble(-0.5));
 
-        var logStdTerm = Engine.TensorNegate(logStds);
+        var logStdTerm = engine.TensorNegate(logStds);
         var constTerm = NumOps.FromDouble(-0.5 * Math.Log(2.0 * Math.PI));
 
-        var perElement = Engine.TensorAdd(halfNormSq, Engine.TensorAddScalar(logStdTerm, constTerm));
+        var perElement = engine.TensorAdd(halfNormSq, engine.TensorAddScalar(logStdTerm, constTerm));
 
         // Sum over action dimensions to get total log-prob per sample
         if (perElement.Shape.Length > 1)
         {
-            return Engine.ReduceSum(perElement, [1], keepDims: false);
+            return engine.ReduceSum(perElement, [1], keepDims: false);
         }
 
         var allAxes = Enumerable.Range(0, perElement.Shape.Length).ToArray();
-        return Engine.ReduceSum(perElement, allAxes, keepDims: false);
+        return engine.ReduceSum(perElement, allAxes, keepDims: false);
     }
 
     /// <summary>
     /// Computes entropy of a Gaussian distribution using engine ops.
     /// </summary>
+    /// <param name="engine">The agent's <see cref="IEngine"/>.</param>
     /// <param name="logStds">Log standard deviations [batchSize, actionSize].</param>
     /// <returns>Entropy per sample [batchSize] — tape-differentiable.</returns>
     /// <remarks>
@@ -150,18 +191,18 @@ public static class PolicyDistributionHelper<T>
     ///
     /// Higher entropy = wider bell curves = more exploration.
     /// </remarks>
-    public static Tensor<T> ComputeGaussianEntropy(Tensor<T> logStds)
+    public static Tensor<T> ComputeGaussianEntropy(IEngine engine, Tensor<T> logStds)
     {
         // H = 0.5 * log(2πe) + log_std = 0.5 * (1 + log(2π)) + log_std
         var halfLogTwoPiE = NumOps.FromDouble(0.5 * (1.0 + Math.Log(2.0 * Math.PI)));
-        var perElement = Engine.TensorAddScalar(logStds, halfLogTwoPiE);
+        var perElement = engine.TensorAddScalar(logStds, halfLogTwoPiE);
 
         if (perElement.Shape.Length > 1)
         {
-            return Engine.ReduceSum(perElement, [1], keepDims: false);
+            return engine.ReduceSum(perElement, [1], keepDims: false);
         }
 
         var allAxes = Enumerable.Range(0, perElement.Shape.Length).ToArray();
-        return Engine.ReduceSum(perElement, allAxes, keepDims: false);
+        return engine.ReduceSum(perElement, allAxes, keepDims: false);
     }
 }

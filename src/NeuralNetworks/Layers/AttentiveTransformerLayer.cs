@@ -352,8 +352,8 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
         var bnParams = _bnLayer.GetParameters();
         if (bnGrads.Length > 0 && bnGrads.Length == bnParams.Length)
         {
-            var updated = AiDotNetEngine.Current.Subtract(
-                bnParams, AiDotNetEngine.Current.Multiply(bnGrads, learningRate));
+            var updated = Engine.Subtract(
+                bnParams, Engine.Multiply(bnGrads, learningRate));
             _bnLayer.SetParameters(updated);
         }
     }

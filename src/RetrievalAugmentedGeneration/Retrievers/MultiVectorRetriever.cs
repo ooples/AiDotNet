@@ -73,6 +73,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
     private readonly string _aggregationMethod;
 
     private readonly IDocumentStore<T> _documentStore;
+    private readonly IQueryEmbedder<T>? _queryEmbedder;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MultiVectorRetriever{T}"/> class.
@@ -99,7 +100,8 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
     public MultiVectorRetriever(
         IDocumentStore<T> documentStore,
         int vectorsPerDocument,
-        string aggregationMethod)
+        string aggregationMethod,
+        IQueryEmbedder<T>? queryEmbedder = null)
     {
         Guard.NotNull(documentStore);
         _documentStore = documentStore;
@@ -110,6 +112,7 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         _vectorsPerDocument = vectorsPerDocument;
         Guard.NotNull(aggregationMethod);
         _aggregationMethod = aggregationMethod;
+        _queryEmbedder = queryEmbedder;
     }
 
     /// <summary>
@@ -164,17 +167,36 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
         if (topK <= 0)
             throw new ArgumentOutOfRangeException(nameof(topK), "topK must be positive");
 
-        // Generate query embedding (would use actual embedding model in production)
-        var queryVector = new Vector<T>(new T[0]); // Placeholder
+        if (_queryEmbedder is null)
+            throw new NotSupportedException(
+                "MultiVectorRetriever requires an IQueryEmbedder<T> to score documents. " +
+                "The retriever was constructed without one. Pass an embedder that maps " +
+                "the query into the same embedding space as the document store via the " +
+                "constructor's `queryEmbedder` parameter — there is no defensible " +
+                "fallback that would give query-aware multi-vector retrieval without a " +
+                "real query embedding.");
 
-        // Retrieve documents and their multiple vectors
-        var allDocuments = _documentStore.GetSimilarWithFilters(
-            queryVector,
-            topK * _vectorsPerDocument * 2, // Oversample
-            metadataFilters ?? new Dictionary<string, object>()
-        ).ToList();
+        // 1. Embed the query (real query-aware first stage). Khattab et al.
+        //    2021 PLAID / Santhanam et al. 2022 ColBERTv2 §3.2 use a real
+        //    encoded query for first-stage candidate retrieval; our store
+        //    already returns the per-vector cosine similarity in
+        //    doc.RelevanceScore when called with a real query vector.
+        var queryVec = _queryEmbedder.EmbedQuery(query);
 
-        // Group documents by ID and aggregate their vector scores
+        // 2. Oversample by `topK * _vectorsPerDocument * 2` so the per-base-doc
+        //    grouping step below has enough sub-vectors to aggregate. The store
+        //    returns ALL sub-vector entries for each underlying document
+        //    (vectorsPerDocument per doc), so without this multiplier the
+        //    candidate set sees only ~topK*2/vectorsPerDocument distinct base
+        //    docs and the late-interaction reducer under-samples.
+        int oversample = Math.Max(topK * Math.Max(1, _vectorsPerDocument) * 2, 32);
+        var allDocuments = (metadataFilters == null || metadataFilters.Count == 0)
+            ? _documentStore.GetSimilar(queryVec, oversample)
+            : _documentStore.GetSimilarWithFilters(queryVec, oversample, metadataFilters);
+
+        // 3. Group documents by base ID. doc.RelevanceScore is the cosine
+        //    similarity the store computed against the query vector, which
+        //    IS the per-sub-vector query-aware score we want to aggregate.
         var documentScores = new Dictionary<string, (Document<T> doc, List<T> scores)>();
 
         foreach (var doc in allDocuments)
@@ -186,7 +208,10 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
                 documentScores[docId] = (doc, new List<T>());
             }
 
-            documentScores[docId].scores.Add(doc.RelevanceScore);
+            // doc.RelevanceScore is the store's cosine(queryVec, subVec).
+            // Use it directly so the aggregation reflects the real query.
+            T subScore = doc.HasRelevanceScore ? doc.RelevanceScore : NumOps.Zero;
+            documentScores[docId].scores.Add(subScore);
         }
 
         // Aggregate scores based on the specified method
@@ -261,4 +286,5 @@ public class MultiVectorRetriever<T> : RetrieverBase<T>
                 return scores.Max() ?? NumOps.Zero;
         }
     }
+
 }

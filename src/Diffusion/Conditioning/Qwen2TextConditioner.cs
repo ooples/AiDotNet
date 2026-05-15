@@ -1,156 +1,130 @@
-﻿using AiDotNet.Enums;
-using AiDotNet.Interfaces;
-using AiDotNet.Models;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
+using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.Tokenization.HuggingFace;
+using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Diffusion.Conditioning;
 
 /// <summary>
-/// Qwen2-based text encoder conditioning module for diffusion models.
+/// Qwen2 text encoder conditioning module (Yang et al. 2024).
+/// Pre-LN RMSNorm Transformer stack with RoPE grouped-query attention and
+/// SiLU FFN. Used in multilingual diffusion pipelines for stronger Asian-
+/// language prompt understanding.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks>
-/// <para>
-/// Alibaba's Qwen2 language model adapted as a text encoder for diffusion models.
-/// Qwen2 excels at Chinese-English bilingual understanding and is used in models
-/// like Kolors 2 and other Chinese-first diffusion pipelines.
-/// </para>
-/// <para>
-/// <b>For Beginners:</b> Qwen2 is a strong language model from Alibaba that understands
-/// both Chinese and English very well. When used in diffusion models, it helps generate
-/// images that accurately match prompts in both languages.
-///
-/// Key characteristics:
-/// - Excellent Chinese-English bilingual understanding
-/// - 151K vocabulary for broad language coverage
-/// - GQA (Grouped Query Attention) for efficient inference
-/// - Used in: Kolors 2, HunyuanDiT, Chinese-first diffusion models
-/// </para>
-/// <para>
-/// Reference: Yang et al., "Qwen2 Technical Report", 2024
-/// </para>
-/// </remarks>
 [ComponentType(ComponentType.Encoder)]
 [PipelineStage(PipelineStage.Preprocessing)]
+[ModelDomain(ModelDomain.NaturalLanguageProcessing)]
+[ModelCategory(ModelCategory.Diffusion)]
+[ModelTask(ModelTask.Embedding)]
+[ModelComplexity(ModelComplexity.High)]
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper(
+    "Qwen2 Technical Report",
+    "https://arxiv.org/abs/2407.10671",
+    Year = 2024,
+    Authors = "An Yang, Baosong Yang, Binyuan Hui, Bo Zheng, Bowen Yu, Chang Zhou, et al.")]
 public class Qwen2TextConditioner<T> : TextConditioningBase<T>
 {
-    /// <inheritdoc />
+    private readonly Qwen2Variant _variant;
+
     public override bool ProducesPooledOutput => false;
 
-    /// <summary>
-    /// Initializes a new Qwen2 text encoder.
-    /// </summary>
-    /// <param name="variant">Qwen2 variant. Default: OnePointFiveB (1536-dim, 28 layers).</param>
-    /// <param name="seed">Optional random seed.</param>
-    public Qwen2TextConditioner(Qwen2Variant variant = Qwen2Variant.OnePointFiveB, int? seed = null)
+    public Qwen2TextConditioner(
+        ITokenizer tokenizer,
+        Qwen2Variant variant = Qwen2Variant.OnePointFiveB,
+        NeuralNetworkArchitecture<T>? architecture = null)
         : base(
-            vocabSize: 151936,
-            embeddingDimension: GetEmbeddingDim(variant),
-            hiddenSize: GetHiddenSize(variant),
-            numLayers: GetNumLayers(variant),
-            numHeads: GetNumHeads(variant),
-            maxSequenceLength: 256,
-            seed: seed)
+            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            tokenizer: tokenizer,
+            maxSequenceLength: 512,
+            embeddingDimension: GetEmbeddingDim(variant))
     {
+        Guard.NotNull(tokenizer);
+        _variant = variant;
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> Encode(Tensor<T> input) => EncodeText(input);
-
-    /// <inheritdoc />
-    public override Tensor<T> EncodeText(Tensor<T> tokenIds, Tensor<T>? attentionMask = null)
+    /// <summary>
+    /// Loads a paper-canonical Qwen2 conditioner with its real pretrained
+    /// BPE tokenizer from HuggingFace.
+    /// </summary>
+    public static Qwen2TextConditioner<T> FromPretrained(
+        Qwen2Variant variant = Qwen2Variant.OnePointFiveB,
+        string? huggingFaceModelName = null,
+        string? cacheDir = null)
     {
-        var shape = tokenIds._shape;
-        int batchSize = shape[0];
-        int seqLen = shape.Length > 1 ? shape[1] : MaxSequenceLength;
-        var outputData = new Vector<T>(batchSize * seqLen * EmbeddingDimension);
-
-        for (int b = 0; b < batchSize; b++)
+        string modelName = huggingFaceModelName ?? variant switch
         {
-            var hidden = new Vector<T>(seqLen * HiddenSize);
-            for (int s = 0; s < seqLen; s++)
-            {
-                int flatIdx = b * seqLen + s;
-                int tokenId = flatIdx < tokenIds.Shape[0] * (tokenIds.Shape.Length > 1 ? tokenIds.Shape[1] : 1)
-                    ? (int)NumOps.ToDouble(tokenIds[flatIdx]) : 0;
-                tokenId = Math.Max(0, Math.Min(tokenId, VocabSize - 1));
-
-                for (int d = 0; d < HiddenSize; d++)
-                    hidden[s * HiddenSize + d] = NumOps.Add(
-                        TokenEmbeddings[tokenId * HiddenSize + d],
-                        PositionEmbeddings[s * HiddenSize + d]);
-            }
-
-            hidden = LayerNorm(hidden, FinalLayerNormWeights, FinalLayerNormBias, HiddenSize);
-
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int d = 0; d < EmbeddingDimension; d++)
-                {
-                    outputData[b * seqLen * EmbeddingDimension + s * EmbeddingDimension + d] =
-                        d < HiddenSize ? hidden[s * HiddenSize + d] : NumOps.Zero;
-                }
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, seqLen, EmbeddingDimension }, outputData);
+            Qwen2Variant.SevenB => "Qwen/Qwen2-7B",
+            _ => "Qwen/Qwen2-1.5B",
+        };
+        var tokenizer = AutoTokenizer.FromPretrained(modelName, cacheDir);
+        return new Qwen2TextConditioner<T>(tokenizer, variant);
     }
 
-    /// <inheritdoc />
+    protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
+        LayerHelper<T>.CreateDefaultQwen2TextLayers(
+            vocabSize: VocabSize,
+            maxSeqLen: MaxSequenceLength,
+            hiddenSize: GetHiddenSize(_variant),
+            numLayers: GetNumLayers(_variant),
+            numHeads: GetNumHeads(_variant),
+            numKvHeads: GetNumKvHeads(_variant));
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>
+        new Qwen2TextConditioner<T>(Tokenizer, _variant, Architecture);
+
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
-        var shape = sequenceEmbeddings._shape;
-        int batchSize = shape[0];
-        int seqLen = shape[1];
-        var pooledData = new Vector<T>(batchSize * EmbeddingDimension);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < EmbeddingDimension; d++)
-            {
-                T sum = NumOps.Zero;
-                for (int s = 0; s < seqLen; s++)
-                    sum = NumOps.Add(sum, sequenceEmbeddings[b * seqLen * EmbeddingDimension + s * EmbeddingDimension + d]);
-                pooledData[b * EmbeddingDimension + d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, EmbeddingDimension }, pooledData);
+        int rank = sequenceEmbeddings.Shape.Length;
+        if (rank != 3)
+            throw new ArgumentException(
+                $"GetPooledEmbedding expects rank-3 [B, S, D]; got rank {rank}.");
+        int batch = sequenceEmbeddings.Shape[0];
+        int seqLen = sequenceEmbeddings.Shape[1];
+        int dim = sequenceEmbeddings.Shape[2];
+        var pooled = new Vector<T>(batch * dim);
+        for (int b = 0; b < batch; b++)
+            for (int d = 0; d < dim; d++)
+                pooled[b * dim + d] = sequenceEmbeddings[b * seqLen * dim + (seqLen - 1) * dim + d];
+        return new Tensor<T>(new[] { batch, dim }, pooled);
     }
 
-    /// <inheritdoc />
-    public override Tensor<T> GetUnconditionalEmbedding(int batchSize)
+    private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(Qwen2Variant variant) =>
+        new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.Custom,
+            complexity: NetworkComplexity.Deep,
+            inputSize: 1);
+
+    private static int GetEmbeddingDim(Qwen2Variant variant) => variant switch
     {
-        var tokenIds = new Vector<T>(batchSize * MaxSequenceLength);
-        for (int b = 0; b < batchSize; b++)
-            tokenIds[b * MaxSequenceLength] = NumOps.FromDouble(1);
-        return EncodeText(new Tensor<T>(new[] { batchSize, MaxSequenceLength }, tokenIds));
-    }
-
-    /// <inheritdoc />
-    public override Tensor<T> Tokenize(string text)
+        Qwen2Variant.OnePointFiveB => 1536,
+        Qwen2Variant.SevenB => 4096,
+        _ => 1536,
+    };
+    private static int GetHiddenSize(Qwen2Variant variant) => GetEmbeddingDim(variant);
+    private static int GetNumLayers(Qwen2Variant variant) => variant switch
     {
-        var tokens = SimpleTokenize(text, MaxSequenceLength);
-        var tokenData = new Vector<T>(MaxSequenceLength);
-        for (int i = 0; i < MaxSequenceLength; i++) tokenData[i] = NumOps.FromDouble(tokens[i]);
-        return new Tensor<T>(new[] { 1, MaxSequenceLength }, tokenData);
-    }
-
-    /// <inheritdoc />
-    public override Tensor<T> TokenizeBatch(string[] texts)
+        Qwen2Variant.OnePointFiveB => 28,
+        Qwen2Variant.SevenB => 32,
+        _ => 28,
+    };
+    private static int GetNumHeads(Qwen2Variant variant) => variant switch
     {
-        var tokenData = new Vector<T>(texts.Length * MaxSequenceLength);
-        for (int b = 0; b < texts.Length; b++)
-        {
-            var tokens = SimpleTokenize(texts[b], MaxSequenceLength);
-            for (int i = 0; i < MaxSequenceLength; i++)
-                tokenData[b * MaxSequenceLength + i] = NumOps.FromDouble(tokens[i]);
-        }
-        return new Tensor<T>(new[] { texts.Length, MaxSequenceLength }, tokenData);
-    }
-
-    private static int GetEmbeddingDim(Qwen2Variant variant) => variant switch { Qwen2Variant.SevenB => 4096, _ => 1536 };
-    private static int GetHiddenSize(Qwen2Variant variant) => variant switch { Qwen2Variant.SevenB => 4096, _ => 1536 };
-    private static int GetNumLayers(Qwen2Variant variant) => variant switch { Qwen2Variant.SevenB => 32, _ => 28 };
-    private static int GetNumHeads(Qwen2Variant variant) => variant switch { Qwen2Variant.SevenB => 32, _ => 12 };
+        Qwen2Variant.OnePointFiveB => 12,
+        Qwen2Variant.SevenB => 32,
+        _ => 12,
+    };
+    // Qwen2 GQA ratio (Yang 2024 Table 1): heads/kv_heads = 6 for 1.5B, 4 for 7B.
+    private static int GetNumKvHeads(Qwen2Variant variant) => variant switch
+    {
+        Qwen2Variant.OnePointFiveB => 2,
+        Qwen2Variant.SevenB => 8,
+        _ => 2,
+    };
 }
