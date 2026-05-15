@@ -5024,6 +5024,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
         var resolvedOptimizer = optimizer ?? GetOrCreateBaseOptimizer();
+        // Reset the pending fused-miss reason so this call's emission
+        // window starts clean. The fused-path try sets it via
+        // EmitFusedMissAndFallback when it bails out; the post-commit
+        // diagnostic block (after opt.Step + extras update succeed)
+        // emits the FusedOptimizerPathEvent then. This preserves the
+        // "advance only on success" contract — a miss event for a step
+        // that never commits would otherwise drift from the loss/grad
+        // events in the diagnostics stream.
+        _pendingFusedMissReason = null;
 
         // Fused-compiled fast path: forward + backward + parameter update all
         // in one compiled kernel, SIMD-accelerated, zero materialized gradient
@@ -5192,7 +5201,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;
 
-
             // Resolve optimizer
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
@@ -5273,6 +5281,131 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // Closes #1270.zKjB (single-source-of-truth helper across
             // every training entry point).
             StepSchedulerIfSupported(opt);
+
+            // ---- Training diagnostics emission point (issue #1328 hook) ----
+            // Emitted AFTER opt.Step and the extras-update path commit. If
+            // either threw, we never reach here and the step counter does
+            // NOT advance — diagnostics will not record a step that didn't
+            // commit. Mirrors the fused path's "advance only on success"
+            // contract (CompiledTapeTrainingStep increments _fusedStepCount
+            // only after plan.Step returns).
+            if (Configuration.TrainingDiagnosticsConfig.Level
+                > Configuration.TrainingDiagnosticLevel.Silent)
+            {
+                int stepIdx = Configuration.TrainingDiagnosticsConfig.AdvanceStep();
+
+                // PerStep+ : emit deferred fused-miss event (if any) FIRST
+                // so consumers see the path-taken event before the loss/
+                // gradient events for the same step. The reason was set
+                // by EmitFusedMissAndFallback during the failed fused try
+                // earlier in this Train call.
+                if (_pendingFusedMissReason is not null
+                    && Configuration.TrainingDiagnosticsConfig.Level
+                        >= Configuration.TrainingDiagnosticLevel.PerStep)
+                {
+                    Configuration.TrainingDiagnosticsConfig.Emit(
+                        new Configuration.FusedOptimizerPathEvent(
+                            StepIndex: stepIdx,
+                            Hit: false,
+                            Reason: _pendingFusedMissReason));
+                }
+                _pendingFusedMissReason = null;
+
+                // Minimal-level: per-step loss event.
+                if (Configuration.TrainingDiagnosticsConfig.Level
+                    >= Configuration.TrainingDiagnosticLevel.Minimal)
+                {
+                    Configuration.TrainingDiagnosticsConfig.Emit(
+                        new Configuration.TrainingLossEvent(
+                            StepIndex: stepIdx,
+                            LossValue: NumOps.ToDouble(lossValue),
+                            OutputRank: output.Rank,
+                            OutputLength: output.Length));
+                }
+
+                // PerStep-level: per-parameter gradient L2 norm.
+                if (Configuration.TrainingDiagnosticsConfig.Level
+                    >= Configuration.TrainingDiagnosticLevel.PerStep)
+                {
+                    // Build a parameter-tensor -> (LayerCategory enum, type name) map by
+                    // walking the same path CollectParameters uses (ITrainableLayer<T>.
+                    // GetTrainableParameters), which guarantees the same order / dedup
+                    // behavior as trainableParams. LayerCategory is read from the
+                    // [LayerCategory(...)] attribute on the layer class — type-safe
+                    // and matches the existing categorization scheme used by
+                    // quantizers / pruners / pipeline schedulers.
+                    var paramCategory =
+                        new System.Collections.Generic.Dictionary<Tensor<T>, (Interfaces.LayerCategory Cat, string Name)>(
+                            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                    var seenForDiag =
+                        new System.Collections.Generic.HashSet<Tensor<T>>(
+                            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                    foreach (var trainable in Training.TapeTrainingStep<T>.CollectTrainableLayers(
+                        Layers, _layerStructureVersion))
+                    {
+                        if (trainable is null) continue;
+                        var lyrType = trainable.GetType();
+                        var attr = (Attributes.LayerCategoryAttribute?)Attribute
+                            .GetCustomAttribute(lyrType, typeof(Attributes.LayerCategoryAttribute));
+                        var cat = attr?.Category ?? Interfaces.LayerCategory.Other;
+                        string name = lyrType.Name;
+                        foreach (var p in trainable.GetTrainableParameters())
+                        {
+                            if (p is null || p.Length == 0) continue;
+                            if (seenForDiag.Add(p))
+                            {
+                                paramCategory[p] = (cat, name);
+                            }
+                        }
+                    }
+
+                    // Iterate trainableParams + extraTrainableTensors so the
+                    // diagnostics stream covers raw network-level params
+                    // (ViT cls_token / positional_embeddings etc.) too — these
+                    // are updated by training via the extras path above but
+                    // would otherwise never appear in the per-parameter
+                    // diagnostics. Lookup uses allGrads which holds both
+                    // layer-owned and network-level gradient entries.
+                    int totalDiag = trainableParams.Count + extraTrainableTensors.Count;
+                    for (int i = 0; i < totalDiag; i++)
+                    {
+                        bool isExtra = i >= trainableParams.Count;
+                        var param = isExtra
+                            ? extraTrainableTensors[i - trainableParams.Count]
+                            : trainableParams[i];
+                        if (param is null) continue;
+                        bool hasGrad = allGrads.TryGetValue(param, out var grad);
+                        double l2 = 0;
+                        if (hasGrad && grad is not null)
+                        {
+                            double sumSq = 0;
+                            long n = grad.Length;
+                            var span = grad.Data.Span;
+                            for (long k = 0; k < n; k++)
+                            {
+                                double v = NumOps.ToDouble(span[(int)k]);
+                                sumSq += v * v;
+                            }
+                            l2 = System.Math.Sqrt(sumSq);
+                        }
+                        var (cat, name) = paramCategory.TryGetValue(param, out var info)
+                            ? info
+                            : (Interfaces.LayerCategory.Other, isExtra ? "(network)" : "(unknown)");
+                        int[] shape = new int[param._shape.Length];
+                        for (int s = 0; s < shape.Length; s++) shape[s] = param._shape[s];
+                        Configuration.TrainingDiagnosticsConfig.Emit(
+                            new Configuration.GradientNormEvent(
+                                StepIndex: stepIdx,
+                                ParamIndex: i,
+                                ParamShape: shape,
+                                ParamLength: param.Length,
+                                HasGradient: hasGrad,
+                                GradientL2Norm: l2,
+                                LayerCategory: cat,
+                                LayerTypeName: name));
+                    }
+                }
+            }
         }
         finally
         {
@@ -5340,6 +5473,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private bool _fusedTrainingCommitted;
 
     /// <summary>
+    /// Reason string set by <see cref="EmitFusedMissAndFallback"/> when
+    /// <see cref="TryTrainWithFusedOptimizer"/> bails out early, consumed
+    /// (and cleared) by the post-success diagnostic block in
+    /// <see cref="TrainWithTape"/>. Defers emission of the
+    /// <see cref="Configuration.FusedOptimizerPathEvent"/> miss event
+    /// until the eager fallback has actually committed — preserving the
+    /// "advance only on success" contract that the fused path also
+    /// follows. Reset at the top of every <see cref="TrainWithTape"/>
+    /// call so a prior step's bail-out can't leak into this one.
+    /// </summary>
+    private string? _pendingFusedMissReason;
+
+    /// <summary>
     /// Attempts the fused-compiled training path — forward + backward + fused
     /// optimizer update all in one compiled kernel. Engages when conditions
     /// permit, returns <c>false</c> to signal the caller to fall back to the
@@ -5370,25 +5516,72 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// identically on standard benchmarks (the fused kernels use the same formulas).
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Helper for <see cref="TryTrainWithFusedOptimizer"/>'s early-return paths.
+    /// Stores <paramref name="reason"/> in <see cref="_pendingFusedMissReason"/>
+    /// (consumed and cleared by <see cref="TrainWithTape"/>'s post-success
+    /// diagnostic block) and returns <c>false</c> so the caller can fall
+    /// through to the eager tape path. Deferring emission to after the
+    /// eager path commits preserves the "advance only on success"
+    /// contract — if the eager fallback throws (forward / backward /
+    /// optimizer / extras update / scheduler), no miss event is emitted
+    /// for a step that never committed.
+    /// </summary>
+    private bool EmitFusedMissAndFallback(string reason)
+    {
+        _pendingFusedMissReason = reason;
+        return false;
+    }
+
     private bool TryTrainWithFusedOptimizer(
         Tensor<T> input,
         Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer)
     {
-        if (_fusedTrainingDisabled) return false;
+        // Diagnostic knob: tests can force training onto the eager tape-walk
+        // path to isolate fused-path bugs. Honoured at the top of every
+        // Train step so a test that sets ForceEagerPath inside a Sink
+        // takes effect immediately on the next call. See
+        // <see cref="Configuration.TrainingDiagnosticsConfig.ForceEagerPath"/>.
+        if (Configuration.TrainingDiagnosticsConfig.ForceEagerPath)
+        {
+            // Safety invariant: once a fused step has committed, Adam/AdamW
+            // m/v moments live inside the compiled plan and cannot be
+            // transferred to the eager optimizer. Silently switching paths
+            // mid-run would reset optimizer state and produce a trajectory
+            // that diverges from prior fused steps. Fail fast so a
+            // diagnostic toggle can't corrupt training that's already
+            // committed to the fused path. Resolution: call ResetState()
+            // or InvalidateParameterCountCache(), then set ForceEagerPath
+            // BEFORE any Train call.
+            if (_fusedTrainingCommitted)
+            {
+                throw new InvalidOperationException(
+                    "TrainingDiagnosticsConfig.ForceEagerPath cannot be enabled after fused " +
+                    "compiled training has already committed optimizer state — the plan-embedded " +
+                    "Adam/AdamW m/v moments would be silently abandoned, producing a divergent " +
+                    "training trajectory. Set ForceEagerPath BEFORE the first Train call, or " +
+                    "call ResetState() / InvalidateParameterCountCache() to clear committed " +
+                    "fused state and start fresh.");
+            }
+
+            return EmitFusedMissAndFallback("ForceEagerPath flag set");
+        }
+        if (_fusedTrainingDisabled)
+            return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
-            return false;
+            return EmitFusedMissAndFallback("TensorCodecOptions.EnableCompilation = false");
         // PR #319 fused-optimizer double-kernel support — paired with the
         // matching gate drop in CompiledTapeTrainingStep.TryStepWithFusedOptimizer
         // (line 232 in that file). Both float and double models can now hit
         // the compile-once-replay-many fast path; other numeric types still
         // fall through to the eager autograd tape.
         if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
-            return false;
+            return EmitFusedMissAndFallback($"numeric type {typeof(T).Name} not supported by fused kernel");
 
         if (!TryMapToFusedOptimizerConfig(
                 resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd))
-            return false;
+            return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
 
         // Use the existing recursive trainable-layer collector instead of the
         // top-level-only scan — composite layers with trainable children (e.g.,
@@ -5396,10 +5589,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // GetSubLayers() but aren't ITrainableLayer themselves. Without
         // recursion the fused path silently stops updating part of the model.
         var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
-        if (trainableLayers.Length == 0) return false;
+        if (trainableLayers.Length == 0)
+            return EmitFusedMissAndFallback("no trainable layers");
 
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>;
-        if (loss is null) return false;
+        if (loss is null)
+            return EmitFusedMissAndFallback("loss function not derived from LossFunctionBase<T>");
 
         // Mirror the eager path's bidirectional shape alignment exactly:
         // (a) forward has extra leading dim → reshape FORWARD to target shape
@@ -5445,6 +5640,34 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // inside the compiled plan and transferring them to the eager
             // optimizer isn't possible without API we don't have.
             _fusedTrainingCommitted = true;
+
+            // Emit diagnostic events for the fused-path hit. This is the
+            // ONLY place we can observe that the fused path ran without
+            // running through TrainWithTape's tape-walk hook, so consumers
+            // tracing #1328-class regressions can correlate "fused hit"
+            // with model misbehaviour.
+            if (Configuration.TrainingDiagnosticsConfig.Level
+                > Configuration.TrainingDiagnosticLevel.Silent)
+            {
+                int stepIdx = Configuration.TrainingDiagnosticsConfig.AdvanceStep();
+                if (Configuration.TrainingDiagnosticsConfig.Level
+                    >= Configuration.TrainingDiagnosticLevel.PerStep)
+                {
+                    Configuration.TrainingDiagnosticsConfig.Emit(
+                        new Configuration.FusedOptimizerPathEvent(
+                            StepIndex: stepIdx, Hit: true, Reason: null));
+                }
+                if (Configuration.TrainingDiagnosticsConfig.Level
+                    >= Configuration.TrainingDiagnosticLevel.Minimal)
+                {
+                    Configuration.TrainingDiagnosticsConfig.Emit(
+                        new Configuration.TrainingLossEvent(
+                            StepIndex: stepIdx,
+                            LossValue: NumOps.ToDouble(lossValue),
+                            OutputRank: -1,    // fused path doesn't materialize output here
+                            OutputLength: -1));
+                }
+            }
         }
         else if (_fusedTrainingCommitted)
         {
