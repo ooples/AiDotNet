@@ -402,10 +402,25 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // 288, and SetParameters then rejects the 2097408-param block.
         // Honoring each architecture's declared InputType picks the right
         // wrapper (FeedForwardNeuralNetwork for 1D, CNN for 3D).
+        // The Discriminator's task-specific loss function comes from the
+        // GAN's `lossFunction` argument when present. This is what makes
+        // BCEWithLogitsLoss-based stable adversarial training (Radford et
+        // al. 2015 DCGAN, Goodfellow 2014 §3) actually wire through to the
+        // Discriminator's TrainWithTape — without it the Discriminator
+        // falls back to `GetDefaultLossFunction(BinaryClassification)` =
+        // sigmoid-followed-by-BCE, whose `TensorClamp(predicted, 1e-7,
+        // 1-1e-7)` kills gradients the instant the disc's deep
+        // Conv+BN+LeakyReLU stack saturates the final sigmoid at init —
+        // observed as "Parameters did not change after training" / "No
+        // parameters changed after training — gradients may all be zero"
+        // on the GAN.Training_ShouldChangeParameters invariants even
+        // though every other piece of plumbing in this file is wired
+        // correctly. Pass the user-supplied loss to the Discriminator's
+        // CNN ctor so its TrainWithTape sees the right criterion.
         Generator = CreateNetworkForInputType(generatorArchitecture,
-            generatorArchitecture.InputType);
+            generatorArchitecture.InputType, lossFunction: null);
         Discriminator = CreateNetworkForInputType(discriminatorArchitecture,
-            discriminatorArchitecture.InputType);
+            discriminatorArchitecture.InputType, lossFunction: lossFunction);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Initialize optimizers (default to Adam if not provided)
@@ -421,14 +436,17 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <param name="architecture">The network architecture configuration.</param>
     /// <param name="inputType">The type of input data (OneDimensional, TwoDimensional, or ThreeDimensional).</param>
     /// <returns>A neural network appropriate for the input type.</returns>
-    private static NeuralNetworkBase<T> CreateNetworkForInputType(NeuralNetworkArchitecture<T> architecture, InputType inputType)
+    private static NeuralNetworkBase<T> CreateNetworkForInputType(
+        NeuralNetworkArchitecture<T> architecture,
+        InputType inputType,
+        ILossFunction<T>? lossFunction)
     {
         return inputType switch
         {
-            InputType.OneDimensional => new FeedForwardNeuralNetwork<T>(architecture),
-            InputType.TwoDimensional => new FeedForwardNeuralNetwork<T>(architecture),
-            InputType.ThreeDimensional => new ConvolutionalNeuralNetwork<T>(architecture),
-            _ => new FeedForwardNeuralNetwork<T>(architecture)
+            InputType.OneDimensional => new FeedForwardNeuralNetwork<T>(architecture, lossFunction: lossFunction),
+            InputType.TwoDimensional => new FeedForwardNeuralNetwork<T>(architecture, lossFunction: lossFunction),
+            InputType.ThreeDimensional => new ConvolutionalNeuralNetwork<T>(architecture, lossFunction: lossFunction),
+            _ => new FeedForwardNeuralNetwork<T>(architecture, lossFunction: lossFunction)
         };
     }
 
