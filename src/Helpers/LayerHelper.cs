@@ -31953,13 +31953,24 @@ public static class LayerHelper<T>
         int numStyleLayers = 3,
         int numDecoderLayers = 4,
         int numHeads = 4,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int inputFeatureDim = 0)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
 
         // === Text Encoder ===
+        // EmotiVoice (Guo et al. 2022 PromptTTS / NetEase 2023) feeds the encoder
+        // mel-spectrogram-shaped tensors with `MelChannels` feature width (80
+        // for the paper-default 80-band mel front end), but the encoder's
+        // MultiHeadAttention is sized for `encoderDim` (192). Without a leading
+        // projection from `inputFeatureDim` to `encoderDim` the MHA's QKV
+        // weights mismatch the input embedding dim and downstream
+        // `DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs` /
+        // `SpeakerConsistency` tests observe degenerate / inconsistent outputs.
+        if (inputFeatureDim > 0 && inputFeatureDim != encoderDim)
+            yield return new DenseLayer<T>(encoderDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
