@@ -2936,14 +2936,49 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (ScalarActivation != null)
         {
             metadata["ScalarActivationType"] = ScalarActivation.GetType().AssemblyQualifiedName ?? ScalarActivation.GetType().FullName ?? string.Empty;
+            // Persist activation-function-specific parameters that change behaviour
+            // away from the parameterless-ctor defaults. Without this the
+            // deserializer's Activator.CreateInstance(type) restores e.g. a
+            // LeakyReLU layer to alpha=0.01 even when the original was
+            // constructed with alpha=0.2 (paper-faithful DCGAN discriminator,
+            // Radford et al. 2015 §4 / Table 1), and Clone() produces a
+            // network whose Forward path differs from the original.
+            WriteActivationParameters(ScalarActivation, "ScalarActivation", metadata);
         }
 
         if (VectorActivation != null)
         {
             metadata["VectorActivationType"] = VectorActivation.GetType().AssemblyQualifiedName ?? VectorActivation.GetType().FullName ?? string.Empty;
+            WriteActivationParameters(VectorActivation, "VectorActivation", metadata);
         }
 
         return metadata;
+    }
+
+    /// <summary>
+    /// Persists activation-function-specific ctor parameters that aren't
+    /// reachable through the parameterless ctor. Today this covers
+    /// LeakyReLU's `alpha` (DCGAN uses 0.2 vs the type default of 0.01);
+    /// extend with additional case branches as new parameterised activations
+    /// land. Keep the keys stable — DeserializationHelper.TryCreateActivationInstance
+    /// reads them by the same prefix to reconstruct the activation with
+    /// the correct ctor argument.
+    /// </summary>
+    private static void WriteActivationParameters(
+        object activation,
+        string keyPrefix,
+        Dictionary<string, string> metadata)
+    {
+        if (activation is LeakyReLUActivation<T> leaky)
+        {
+            // Public `Alpha` property; convert through NumOps so the
+            // round-trip respects whatever numeric T is in use.
+            double alpha = Convert.ToDouble(leaky.Alpha);
+            metadata[$"{keyPrefix}Alpha"] = alpha.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+        // (Add more parameterised activations here as needed — ELU's alpha,
+        //  Swish/SiLU's beta, ParametricReLU's per-channel alphas via a
+        //  separate weight tensor, etc.)
     }
 
     #region GPU Persistent Tensor Registration

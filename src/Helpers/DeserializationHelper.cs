@@ -2669,6 +2669,29 @@ public static class DeserializationHelper
         try
         {
             object? instance;
+            // Activation-function-specific ctor-parameter restore. The
+            // ScalarActivationType / VectorActivationType metadata is paired
+            // with `{key}Alpha` entries written by LayerBase.GetMetadata via
+            // WriteActivationParameters — pick them up here so the round-
+            // tripped activation matches the original's behaviour (DCGAN's
+            // paper-faithful LeakyReLU(alpha=0.2) survives Clone instead of
+            // collapsing to the parameterless-ctor default alpha=0.01).
+            // Extend with sibling lookups (`{key}Beta`, `{key}Lambda`, …)
+            // as additional parameterised activations land.
+            string alphaKey = key + "Alpha";
+            if (parameters.TryGetValue(alphaKey, out var alphaRaw)
+                && double.TryParse(alphaRaw?.ToString() ?? string.Empty,
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out double alphaValue))
+            {
+                var alphaCtor = type.GetConstructor(new[] { typeof(double) });
+                if (alphaCtor is not null)
+                {
+                    instance = alphaCtor.Invoke(new object[] { alphaValue });
+                    return expectedInterface.IsInstanceOfType(instance) ? instance : null;
+                }
+            }
             try
             {
                 instance = Activator.CreateInstance(type);
