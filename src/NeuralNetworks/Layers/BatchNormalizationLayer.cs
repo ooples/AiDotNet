@@ -649,9 +649,23 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _lastMean = _runningMean;
             _lastVariance = _runningVariance;
 
-            // Cache scale/shift to ensure deterministic forward pass
-            // (recomputing creates new tensor allocations that can cause SIMD alignment differences)
-            if (_inferenceScaleDirty || _cachedInferenceScale is null || _cachedInferenceShift is null)
+            // Cache scale/shift to ensure deterministic forward pass.
+            // (recomputing creates new tensor allocations that can cause SIMD
+            // alignment differences across calls.)
+            //
+            // The cache MUST NOT be reused when a fresh GradientTape is active —
+            // cached scale/shift tensors carry the tape state from the call that
+            // built them. Reusing those tensors on a NEW tape (later training
+            // step that routes through here, e.g. the batch=1 training-mode
+            // fallback path above) breaks the gradient chain: backward on the
+            // current tape can't reach _gamma / _beta through cached tensors
+            // owned by a stale tape, and the optimizer step leaves both
+            // unchanged. Recompute per-forward whenever a tape is active.
+            bool tapeActiveForBn = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+                && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+            bool cacheNeedsRebuild = _inferenceScaleDirty || tapeActiveForBn
+                || _cachedInferenceScale is null || _cachedInferenceShift is null;
+            if (cacheNeedsRebuild)
             {
                 var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
                 var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
@@ -660,7 +674,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 _cachedInferenceScale = Engine.TensorDivide(_gamma, stdDev);
                 var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
                 _cachedInferenceShift = Engine.TensorSubtract(_beta, term2);
-                _inferenceScaleDirty = false;
+                // Only clear the dirty flag when caching from a tape-free
+                // path. Tape-active rebuilds intentionally don't persist —
+                // the next no-tape inference still has to recompute fresh
+                // because the tape-bound tensors above aren't reusable
+                // outside the originating tape.
+                if (!tapeActiveForBn)
+                    _inferenceScaleDirty = false;
             }
 
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)

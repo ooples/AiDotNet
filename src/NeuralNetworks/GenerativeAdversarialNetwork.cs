@@ -937,18 +937,53 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Generator wants discriminator to output "real" (1) for fake images
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLoss(input, genOutput =>
+        // The discriminator must be in EVAL mode for the generator step (its
+        // BatchNorm running stats / Dropout masks are frozen relative to the
+        // generator update — Goodfellow 2014 §3 "fix the discriminator to its
+        // current iterate when computing generator gradients"), but its
+        // forward pass MUST stay on the tape so gradients flow back through
+        // it to the generator's parameters. Discriminator.Predict() suspends
+        // the tape via NoGradScope, which detached the discriminator forward
+        // from the chain — the generator's TrainWithCustomLoss backward then
+        // had no path to its own weights and the optimizer step left them
+        // unchanged (the exact "Parameters did not change after training" /
+        // "No parameters changed after training — gradients may all be zero"
+        // failure on DCGANTests.Training_ShouldChangeParameters and
+        // GradientFlow_ShouldBeNonZeroAndFinite). Walk the discriminator's
+        // layer chain manually in eval mode WITHOUT NoGradScope so each
+        // layer's Forward is tape-recorded.
+        var prevDiscriminatorTrainingMode = Discriminator.IsTrainingMode;
+        Discriminator.SetTrainingMode(false);
+        T generatorLoss;
+        try
         {
-            // genOutput = generated fake images from ForwardForTraining (tape-tracked)
-            // Pass through discriminator (detached — only generator weights update)
-            var discScore = Discriminator.Predict(genOutput);
-            // Generator loss: BCE(discriminator(fake), real_labels)
-            // Use engine ops for tape differentiability
-            var diff = Engine.TensorSubtract(discScore, allRealLabels);
-            var squared = Engine.TensorMultiply(diff, diff);
-            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-            return Engine.ReduceMean(squared, allAxes, keepDims: false);
-        });
+            generatorLoss = trainableGen.TrainWithCustomLoss(input, genOutput =>
+            {
+                // genOutput = generated fake images from ForwardForTraining (tape-tracked).
+                // Run the discriminator layer-by-layer so each Forward call records
+                // on the same active GradientTape that the generator's
+                // TrainWithCustomLoss opened. This keeps the discriminator weights
+                // fixed (we only collect generator gradients) while letting the
+                // adversarial signal propagate through every BN / Conv / activation
+                // back to genOutput → Generator's weights.
+                var discScore = genOutput;
+                foreach (var layer in Discriminator.Layers)
+                    discScore = layer.Forward(discScore);
+                // Generator loss: MSE(discriminator(fake), real_labels). Equivalent
+                // to the non-saturating BCE objective Goodfellow 2014 §3 prescribes
+                // for the generator under the tape's tracked-op set; engine ops
+                // (TensorSubtract, TensorMultiply, ReduceMean) all register
+                // backward functions on the tape.
+                var diff = Engine.TensorSubtract(discScore, allRealLabels);
+                var squared = Engine.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                return Engine.ReduceMean(squared, allAxes, keepDims: false);
+            });
+        }
+        finally
+        {
+            Discriminator.SetTrainingMode(prevDiscriminatorTrainingMode);
+        }
         _lastGeneratorLoss = generatorLoss;
 
         // Calculate auxiliary losses if enabled
