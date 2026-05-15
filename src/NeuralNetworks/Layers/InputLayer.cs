@@ -92,6 +92,53 @@ public class InputLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Initializes a new instance of the <see cref="InputLayer{T}"/> class with an explicit
+    /// multi-dimensional input shape.
+    /// </summary>
+    /// <param name="inputShape">The full shape of each input sample, excluding the batch dimension.
+    /// For example, a 2D input of shape [seq_len, embed_dim] would be passed as
+    /// <c>new[] { seq_len, embed_dim }</c>.</param>
+    /// <remarks>
+    /// <para>
+    /// This constructor lets callers declare a non-flat input shape natively, so that downstream
+    /// rank-aware layers (e.g. <see cref="MultiHeadAttentionLayer{T}"/> which expects
+    /// <c>[seq_len, embed_dim]</c>) see a matching <see cref="LayerBase{T}.GetOutputShape"/>
+    /// and the strict <c>AreLayersCompatible</c> check passes without requiring an intermediate
+    /// <c>ReshapeLayer</c>. Closes #1325.
+    /// </para>
+    /// <para><b>For Beginners:</b> The other constructor (<c>InputLayer(int inputSize)</c>) declares
+    /// a 1D input shape <c>[inputSize]</c>. Use this constructor instead when your downstream layer
+    /// expects multi-dimensional input — for example pre-encoded sequence data
+    /// <c>[seq_len, embed_dim]</c> feeding directly into an attention layer.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="inputShape"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="inputShape"/> is empty
+    /// or contains a non-positive dimension.</exception>
+    public InputLayer(int[] inputShape)
+        : base(ValidateAndCloneShape(inputShape, nameof(inputShape)),
+               ValidateAndCloneShape(inputShape, nameof(inputShape)),
+               new IdentityActivation<T>() as IActivationFunction<T>)
+    {
+    }
+
+    private static int[] ValidateAndCloneShape(int[] shape, string paramName)
+    {
+        if (shape is null)
+            throw new ArgumentNullException(paramName);
+        if (shape.Length == 0)
+            throw new ArgumentException("InputLayer shape must have at least one dimension.", paramName);
+        for (int i = 0; i < shape.Length; i++)
+        {
+            if (shape[i] <= 0)
+                throw new ArgumentException(
+                    $"InputLayer shape dimensions must be positive (got shape[{i}] = {shape[i]}).",
+                    paramName);
+        }
+        return (int[])shape.Clone();
+    }
+
+    /// <summary>
     /// Performs the forward pass of the input layer, simply returning the input unchanged.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>

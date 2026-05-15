@@ -1,9 +1,9 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 using AiDotNet.TextToSpeech.StyleEmotion;
-using AiDotNet.Tensors;
 using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
