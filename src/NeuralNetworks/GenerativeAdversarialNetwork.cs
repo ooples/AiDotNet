@@ -901,39 +901,51 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // ------------ Train Discriminator ------------
 
-        // Generate fake images with tensor operations
+        // Generate fake images (detached from the generator's gradient path —
+        // Generator.Predict wraps in NoGradScope). The disc step below trains
+        // against these detached fakes; the separate generator-step backward
+        // re-runs the forward with tape to update generator weights.
         var fakeImages = Generator.Predict(input);
 
-        // Cache real / fake batches whenever any auxiliary loss needs them.
-        // Previously only UseFeatureMatching gated the cache, so the WGAN-GP
-        // gradient-penalty path silently saw null batches and the penalty
-        // contributed nothing — EnableGradientPenalty looked like a working
-        // toggle but never applied a real penalty signal during training.
+        // Cache real / fake batches only when an auxiliary loss path needs
+        // them. Previously this clone ran unconditionally for UseFeatureMatching;
+        // the WGAN-GP gradient-penalty path silently saw null batches and the
+        // penalty contributed nothing (EnableGradientPenalty looked like a
+        // working toggle but never applied a real penalty signal during
+        // training). Both paths now share the same gated cache.
         if (UseFeatureMatching || _useGradientPenalty)
         {
             _lastRealBatch = expectedOutput.Clone();
             _lastFakeBatch = fakeImages.Clone();
         }
 
-        // Create label tensors (1 for real, 0 for fake)
-        var realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-
-        // Train discriminator with tape-based autodiff. Standard BCE step on
-        // real and fake batches first — this is the discriminator's primary
-        // adversarial objective.
+        // === Combined discriminator step ===
         //
-        // Capture each step's LastLoss inline so we don't have to re-run the
-        // discriminator forward at lines 965-968 just for monitoring; those
-        // two extra Predict calls were burning ~2 full discriminator forwards
-        // per training iteration (4-5 conv + BN + LeakyReLU passes over a
-        // 64×64×3 image) for a scalar that NeuralNetworkBase.Train already
-        // computed and stored in LastLoss. At 250 iterations (MoreData) that's
-        // 500 redundant forwards saved — material for the test timeout budget.
-        Discriminator.Train(expectedOutput, realLabels);
-        T realLossFromTrain = Discriminator.GetLastLoss();
-        Discriminator.Train(fakeImages, fakeLabels);
-        T fakeLossFromTrain = Discriminator.GetLastLoss();
+        // Train the discriminator on real and fake samples in a SINGLE
+        // forward+backward+optimizer-step instead of two sequential Train
+        // calls. The BCE loss over a concatenated [real; fake] batch with
+        // labels [1; 0] is mathematically equivalent to the average of the
+        // two separate-step losses, but at half the disc compute per
+        // iteration (one tape, one forward, one backward, one optimizer
+        // step instead of two of each).
+        //
+        // Secondary effect: BN now sees batch=2 instead of batch=1, so the
+        // training-mode forward goes through the actual Engine.BatchNorm
+        // path (computes real batch stats and updates running mean/variance)
+        // instead of falling through the batch=1 inference fallback that
+        // leaves running stats at defaults forever. That fixes a latent
+        // bug where DCGAN's BN layers never accumulated useful running
+        // statistics during training. (Pre-fix the batch=1 routing was the
+        // only safe option because variance over one sample is 0 and the
+        // gradient was pathological; at batch=2 variance is well-defined
+        // and gradients flow normally per Ioffe & Szegedy 2015.)
+        var combinedImages = Engine.TensorConcatenate(new[] { expectedOutput, fakeImages }, axis: 0);
+        var combinedLabels = new Tensor<T>(new[] { batchSize * 2, 1 });
+        var lblSpan = combinedLabels.Data.Span;
+        for (int i = 0; i < batchSize; i++) lblSpan[i] = NumOps.One;
+        for (int i = batchSize; i < batchSize * 2; i++) lblSpan[i] = NumOps.Zero;
+        Discriminator.Train(combinedImages, combinedLabels);
+        T combinedDiscLoss = Discriminator.GetLastLoss();
 
         // WGAN-GP penalty step (Gulrajani et al. 2017 §4): if gradient
         // penalty is enabled, run a separate discriminator optimizer step
@@ -971,15 +983,14 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             }
         }
 
-        // Discriminator loss for monitoring: reuse the loss values captured
-        // during the two Discriminator.Train calls above. The pre-fix code
-        // re-ran the discriminator forward twice here and recomputed the loss
-        // from scratch — the same scalar Discriminator.Train already
-        // produced. Two extra disc forwards × 250 iters = wasted budget.
-        var discriminatorLoss = NumOps.Divide(
-            NumOps.Add(realLossFromTrain, fakeLossFromTrain),
-            NumOps.FromDouble(2.0));
-        _lastDiscriminatorLoss = discriminatorLoss;
+        // Discriminator loss for monitoring: the combined-batch BCE loss
+        // captured during the single Discriminator.Train call above. The
+        // pre-perf-fix code did two extra discriminator forwards here just
+        // to recompute the same scalar that Train had already stored in
+        // LastLoss; we now read it directly. Combined BCE over [real; fake]
+        // with labels [1; 0] is the average of the per-half losses, so the
+        // monitoring value is comparable to the old two-step formulation.
+        _lastDiscriminatorLoss = combinedDiscLoss;
 
         // Train generator to fool discriminator (adversarial objective)
         // Generator wants discriminator to output "real" (1) for fake images
