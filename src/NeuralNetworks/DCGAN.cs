@@ -458,7 +458,7 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             // activated pre-norm output, then BN normalizes, then
             // LeakyReLU applies the non-linearity). Matches the canonical
             // PyTorch DCGAN reference impl ordering.
-            layers.Add(new ActivationLayer<T>(new LeakyReLUActivation<T>(0.2)));
+            layers.Add(new ActivationLayer<T>((IActivationFunction<T>)new LeakyReLUActivation<T>(0.2)));
             currentChannels = nextChannels;
             currentSize /= 2;
         }
