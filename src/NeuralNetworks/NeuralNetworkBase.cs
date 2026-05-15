@@ -5617,7 +5617,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var output = ForwardForTraining(input);
             var lossTensor = computeLoss(output);
 
-            var grads = tape.ComputeGradients(lossTensor, trainableParams);
+            // Compute ALL gradients then filter to trainable params — matches
+            // TrainWithTape's policy. Passing `sources: trainableParams` directly
+            // would short-circuit the tape backward over view tensors in the
+            // gradient chain (e.g. GAN.Train's manual discriminator forward in
+            // eval mode, where the discriminator's layers' fields hold
+            // ParameterBuffer-view tensors after a prior Discriminator.Train
+            // initialised the buffer). The backward walker matches sources by
+            // reference identity; when the chain passes through a view it can
+            // miss the trainable-param entry and zero out its gradient — the
+            // exact "Parameters did not change after training" / "No parameters
+            // changed after training — gradients may all be zero" failure on
+            // DCGANTests.Training_ShouldChangeParameters and
+            // GradientFlow_ShouldBeNonZeroAndFinite.
+            var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+            var grads = new System.Collections.Generic.Dictionary<Tensor<T>, Tensor<T>>(
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var param in trainableParams)
+            {
+                if (allGrads.TryGetValue(param, out var grad))
+                    grads[param] = grad;
+            }
 
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;
