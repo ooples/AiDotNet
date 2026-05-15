@@ -824,20 +824,33 @@ public static class DeserializationHelper
             // "Expected N parameters, but got M".
             // Saved inputShape format: [batch, channels, height, width] (NCHW); some
             // legacy paths serialize without the batch dim, so accept rank 3 too.
-            if (instance is ConvolutionalLayer<T> conv && inputShape != null && inputShape.Length >= 3)
+            //
+            // Only resolve when every dim is positive — a layer serialised before its
+            // first forward carries -1 sentinels for the channel/spatial axes (this is
+            // the DCGAN discriminator clone scenario: the Conv was never forwarded
+            // before Clone, so its `GetInputShape()` returns `[-1, -1, -1]`). Eagerly
+            // resolving from those sentinels with `?? 1` would lock InputDepth to 1
+            // (the deserializer default), and the later post-deserialization fallback
+            // in NeuralNetworkBase.DeserializeInternalUnchecked — which restores from
+            // `Architecture.GetInputShape()` for the first layer — would then be
+            // skipped because IsShapeResolved is already true. Leaving the layer lazy
+            // here lets that fallback run, picking up the discriminator architecture's
+            // true input depth (e.g. 3 for an RGB DCGAN discriminator).
+            if (instance is ConvolutionalLayer<T> conv && inputShape != null && inputShape.Length >= 3
+                && inputShape.All(d => d > 0))
             {
                 int inDepth, inH, inW;
                 if (inputShape.Length == 4)
                 {
-                    inDepth = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
-                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                    inDepth = inputShape[1];
+                    inH = inputShape[2];
+                    inW = inputShape[3];
                 }
                 else
                 {
-                    inDepth = inputShape[0] > 0 ? inputShape[0] : 1;
-                    inH = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inW = inputShape[2] > 0 ? inputShape[2] : 1;
+                    inDepth = inputShape[0];
+                    inH = inputShape[1];
+                    inW = inputShape[2];
                 }
                 conv.ResolveShapesOnly(new[] { inDepth, inH, inW });
             }
@@ -915,20 +928,24 @@ public static class DeserializationHelper
             instance = ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation });
 
             // Pre-resolve from inputShape so SetParameters matches saved counts.
-            if (instance is NeuralNetworks.Layers.DeconvolutionalLayer<T> deconv && inputShape != null && inputShape.Length >= 3)
+            // Only resolve when every dim is positive — same lazy-sentinel rationale
+            // as ConvolutionalLayer above. Defers to the post-deserialization
+            // Architecture-based fallback for layers serialised before first forward.
+            if (instance is NeuralNetworks.Layers.DeconvolutionalLayer<T> deconv && inputShape != null && inputShape.Length >= 3
+                && inputShape.All(d => d > 0))
             {
                 int inDepth, inH, inW;
                 if (inputShape.Length == 4)
                 {
-                    inDepth = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
-                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                    inDepth = inputShape[1];
+                    inH = inputShape[2];
+                    inW = inputShape[3];
                 }
                 else
                 {
-                    inDepth = inputShape[0] > 0 ? inputShape[0] : 1;
-                    inH = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inW = inputShape[2] > 0 ? inputShape[2] : 1;
+                    inDepth = inputShape[0];
+                    inH = inputShape[1];
+                    inW = inputShape[2];
                 }
                 deconv.ResolveShapesOnly(new[] { inDepth, inH, inW });
             }

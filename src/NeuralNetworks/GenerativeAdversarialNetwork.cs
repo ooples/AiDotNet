@@ -1766,8 +1766,69 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
+        // Force weight allocation in both subnetworks before yielding chunks.
+        // The base NeuralNetworkBase.GetParameterChunks runs an RNG-neutral
+        // shape-only resolution pass, which is correct for inference / shape-
+        // introspection callers but leaves lazy layers WITHOUT registered
+        // trainable tensors — Layer.GetTrainableParameters() returns the
+        // backing _registeredTensors list (populated only by the layer's
+        // OnFirstForward via RegisterTrainableParameter), so an unmaterialised
+        // lazy stack yields zero chunks. For DCGAN — whose paper-faithful
+        // Generator and Discriminator are entirely lazy (latent Dense, all
+        // ConvTranspose2D / Conv2D layers) — this would mean
+        // GetParameterChunks() returns nothing before the first GAN.Train
+        // step. The NeuralNetworkModelTestBase.Training_ShouldChangeParameters
+        // /  GradientFlow_ShouldBeNonZeroAndFinite invariants snapshot
+        // GetParameterChunks BEFORE training, compare chunks AFTER training,
+        // and assert at-least-one-parameter-changed; with an empty snapshot
+        // the diff loop never runs and the invariant fires "no parameters
+        // changed". Materialising via the architecture's input shape consumes
+        // one RNG draw per layer (same as the first real forward would) and
+        // is the same allocation path the test's subsequent train step would
+        // hit — no behaviour change downstream, just a snapshot that contains
+        // the actual parameter tensors so the invariant can do its job.
+        EnsureMaterialized(Generator);
+        EnsureMaterialized(Discriminator);
+
         foreach (var chunk in Generator.GetParameterChunks()) yield return chunk;
         foreach (var chunk in Discriminator.GetParameterChunks()) yield return chunk;
+    }
+
+    private static void EnsureMaterialized(NeuralNetworkBase<T> subnet)
+    {
+        var archShape = subnet.Architecture?.GetInputShape();
+        if (archShape is null || archShape.Length == 0 || !System.Array.TrueForAll(archShape, d => d > 0))
+            return;
+
+        // Walk the layer chain forward, calling ResolveFromShape on each lazy
+        // layer with the running output-shape so weights actually allocate.
+        // Mirrors NeuralNetworkBase.ResolveLazyLayerShapes but uses
+        // ResolveFromShape (weight-allocating) instead of ResolveShapesOnly
+        // (shape-only). Swallow per-layer failures so a single uncooperative
+        // layer (e.g. an attention block that wants richer shape metadata)
+        // doesn't kill the whole walk — the test's first Train call will pick
+        // them up via the regular OnFirstForward path.
+        int[] currentShape = archShape;
+        foreach (var layer in subnet.Layers)
+        {
+            if (layer is null) continue;
+            try
+            {
+                if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    lb.ResolveFromShape(currentShape);
+                }
+                var outShape = layer.GetOutputShape();
+                if (outShape is { Length: > 0 } && System.Array.TrueForAll(outShape, d => d > 0))
+                    currentShape = outShape;
+                else
+                    break;
+            }
+            catch
+            {
+                break;
+            }
+        }
     }
 
     /// <summary>

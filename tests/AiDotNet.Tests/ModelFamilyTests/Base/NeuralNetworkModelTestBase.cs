@@ -1296,7 +1296,18 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// </summary>
     private static Tensor<double> MaterializeIfSparse(Tensor<double> chunk)
     {
-        if (chunk.IsSparse && chunk is SparseTensor<double> sparse)
+        // Use the runtime type alone (not `chunk.IsSparse`) to decide whether
+        // a chunk needs to be materialised to dense. A freshly-initialised
+        // SparseTensor<double> can report `IsSparse = false` when its
+        // NonZeroCount happens to be 0 (no entries observed yet — e.g.
+        // SparseLinearLayer's weight matrix at very high sparsity ratios
+        // where the layer was constructed but not yet populated), but
+        // `chunk[i]` on such an instance still dispatches to
+        // SparseTensor.GetFlat which throws "GetFlat is not supported on
+        // sparse tensors. Use SparseTensor-specific APIs or call ToDense()
+        // first." Always materialise when the runtime type is SparseTensor
+        // so the invariant loops can do plain int-indexed iteration.
+        if (chunk is SparseTensor<double> sparse)
             return sparse.ToDense();
         return chunk;
     }
