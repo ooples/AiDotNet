@@ -922,8 +922,18 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // Train discriminator with tape-based autodiff. Standard BCE step on
         // real and fake batches first — this is the discriminator's primary
         // adversarial objective.
+        //
+        // Capture each step's LastLoss inline so we don't have to re-run the
+        // discriminator forward at lines 965-968 just for monitoring; those
+        // two extra Predict calls were burning ~2 full discriminator forwards
+        // per training iteration (4-5 conv + BN + LeakyReLU passes over a
+        // 64×64×3 image) for a scalar that NeuralNetworkBase.Train already
+        // computed and stored in LastLoss. At 250 iterations (MoreData) that's
+        // 500 redundant forwards saved — material for the test timeout budget.
         Discriminator.Train(expectedOutput, realLabels);
+        T realLossFromTrain = Discriminator.GetLastLoss();
         Discriminator.Train(fakeImages, fakeLabels);
+        T fakeLossFromTrain = Discriminator.GetLastLoss();
 
         // WGAN-GP penalty step (Gulrajani et al. 2017 §4): if gradient
         // penalty is enabled, run a separate discriminator optimizer step
@@ -961,12 +971,14 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             }
         }
 
-        // Compute discriminator loss for monitoring
-        var realPred = Discriminator.Predict(expectedOutput);
-        var fakePred = Discriminator.Predict(fakeImages);
-        T realLoss = LossFunction.CalculateLoss(realPred.ToVector(), realLabels.ToVector());
-        T fakeLoss = LossFunction.CalculateLoss(fakePred.ToVector(), fakeLabels.ToVector());
-        var discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
+        // Discriminator loss for monitoring: reuse the loss values captured
+        // during the two Discriminator.Train calls above. The pre-fix code
+        // re-ran the discriminator forward twice here and recomputed the loss
+        // from scratch — the same scalar Discriminator.Train already
+        // produced. Two extra disc forwards × 250 iters = wasted budget.
+        var discriminatorLoss = NumOps.Divide(
+            NumOps.Add(realLossFromTrain, fakeLossFromTrain),
+            NumOps.FromDouble(2.0));
         _lastDiscriminatorLoss = discriminatorLoss;
 
         // Train generator to fool discriminator (adversarial objective)
