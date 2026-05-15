@@ -719,6 +719,24 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
+    /// Propagates training/eval mode to the Generator and Discriminator
+    /// sub-networks. The base implementation walks <see cref="Layers"/>,
+    /// which is empty for a GAN — Generator and Discriminator each carry
+    /// their own layer stack. Without this override <c>SetTrainingMode(false)</c>
+    /// would be a no-op against the sub-networks' BN / Dropout layers,
+    /// and a post-train <c>Predict</c> would still run BN in training mode
+    /// (computing batch stats from the single probe sample) instead of
+    /// using the running statistics — matching PyTorch's
+    /// <c>model.eval()</c> contract, which walks the module tree.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        Generator.SetTrainingMode(isTraining);
+        Discriminator.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
     /// Performs a forward pass through the generator network using a tensor input.
     /// </summary>
     /// <param name="input">The input tensor containing noise vectors to generate images from.</param>
