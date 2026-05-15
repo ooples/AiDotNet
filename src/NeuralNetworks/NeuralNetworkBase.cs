@@ -5538,35 +5538,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer)
     {
-        // Diagnostic knob: tests can force training onto the eager tape-walk
-        // path to isolate fused-path bugs. Honoured at the top of every
-        // Train step so a test that sets ForceEagerPath inside a Sink
-        // takes effect immediately on the next call. See
-        // <see cref="Configuration.TrainingDiagnosticsConfig.ForceEagerPath"/>.
-        if (Configuration.TrainingDiagnosticsConfig.ForceEagerPath)
-        {
-            // Safety invariant: once a fused step has committed, Adam/AdamW
-            // m/v moments live inside the compiled plan and cannot be
-            // transferred to the eager optimizer. Silently switching paths
-            // mid-run would reset optimizer state and produce a trajectory
-            // that diverges from prior fused steps. Fail fast so a
-            // diagnostic toggle can't corrupt training that's already
-            // committed to the fused path. Resolution: call ResetState()
-            // or InvalidateParameterCountCache(), then set ForceEagerPath
-            // BEFORE any Train call.
-            if (_fusedTrainingCommitted)
-            {
-                throw new InvalidOperationException(
-                    "TrainingDiagnosticsConfig.ForceEagerPath cannot be enabled after fused " +
-                    "compiled training has already committed optimizer state — the plan-embedded " +
-                    "Adam/AdamW m/v moments would be silently abandoned, producing a divergent " +
-                    "training trajectory. Set ForceEagerPath BEFORE the first Train call, or " +
-                    "call ResetState() / InvalidateParameterCountCache() to clear committed " +
-                    "fused state and start fresh.");
-            }
-
-            return EmitFusedMissAndFallback("ForceEagerPath flag set");
-        }
+        // Callers can still force the eager path via
+        // <c>TensorCodecOptions.EnableCompilation = false</c> (handled
+        // below). The dedicated <c>ForceEagerPath</c> diagnostic flag
+        // (added as a #1328 workaround) was removed in #1331 once the
+        // fused-compiled training path was fixed; the EnableCompilation
+        // gate is now the single supported way to bypass fused training.
         if (_fusedTrainingDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)

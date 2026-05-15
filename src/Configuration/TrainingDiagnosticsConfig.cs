@@ -100,28 +100,6 @@ public static class TrainingDiagnosticsConfig
         set => _level = value ? TrainingDiagnosticLevel.PerStep : TrainingDiagnosticLevel.Silent;
     }
 
-    private static volatile bool _forceEagerPath;
-
-    /// <summary>
-    /// Diagnostic override: when set to <c>true</c>, forces the training
-    /// pipeline onto the eager tape-walk path even when the fused-compiled
-    /// fast path would otherwise engage. Used to isolate fused-path bugs
-    /// from eager-path bugs — set this, run training, and observe whether
-    /// the model now learns correctly. If yes, the bug is in the fused
-    /// path; if no, the bug is in the shared forward / backward / optimizer
-    /// state used by both paths.
-    /// </summary>
-    /// <remarks>
-    /// Honoured by <c>NeuralNetworkBase.TryTrainWithFusedOptimizer</c>
-    /// at the top of every Train step. Default <c>false</c> — the fused
-    /// path stays enabled in production.
-    /// </remarks>
-    public static bool ForceEagerPath
-    {
-        get => _forceEagerPath;
-        set => _forceEagerPath = value;
-    }
-
     /// <summary>
     /// Monotonically incrementing step counter, advanced once per call
     /// to <c>TrainWithTape</c>. Used as the StepIndex on emitted events
