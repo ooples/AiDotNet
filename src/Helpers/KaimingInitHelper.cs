@@ -27,7 +27,7 @@ namespace AiDotNet.Helpers;
 /// move the loss by orders of magnitude on small-batch training.
 /// </para>
 /// </remarks>
-public static class KaimingInitHelper
+internal static class KaimingInitHelper
 {
     /// <summary>
     /// Returns the Kaiming gain for the given activation function. Returns
