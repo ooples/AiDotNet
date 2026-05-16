@@ -390,14 +390,19 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 // PacGAN-packed WGAN-GP). Critic step applies the per-step
                 // (clip, noise) primitive on its tape-computed gradients;
                 // generator step does the standard untrained-critic max.
+                //
+                // CRITICAL: charge privacy budget for EVERY critic step,
+                // not just once per outer batch. Each TrainDiscriminatorStepBatchedDP
+                // touches real data and consumes one DP-SGD privacy slot;
+                // accumulating only the outer-loop's stepEpsilon under-counts
+                // by a factor of DiscriminatorSteps and lets the early-stop
+                // guard (_cumulativeEpsilon >= _options.Epsilon) leak budget.
                 for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                 {
                     TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
+                    _cumulativeEpsilon += ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
                 }
                 TrainGeneratorStepBatched(transformedData, numPacks);
-
-                double stepEpsilon = ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
-                _cumulativeEpsilon += stepEpsilon;
             }
         }
 
@@ -447,14 +452,16 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
                 for (int batch = 0; batch < numBatches; batch++)
                 {
+                    // Charge privacy budget per critic step — each one touches
+                    // real data and is its own DP-SGD privacy event. Charging
+                    // only the outer-loop step under-counts by DiscriminatorSteps
+                    // and leaks budget past the early-stop guard.
                     for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                     {
                         TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
+                        _cumulativeEpsilon += ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
                     }
                     TrainGeneratorStepBatched(transformedData, numPacks);
-
-                    double stepEpsilon = ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
-                    _cumulativeEpsilon += stepEpsilon;
                 }
             }
         }, ct).ConfigureAwait(false);
