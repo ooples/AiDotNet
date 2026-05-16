@@ -5915,7 +5915,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var layerParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+
+            // Network-level trainable tensors that aren't owned by any layer
+            // (e.g., embedding tables, learned positional encodings, scaling
+            // factors exposed via GetExtraTrainableTensors). TrainWithTape and
+            // TrainWithGradientAccumulation already include these in their
+            // parameter set; the custom-loss path was filtering them out, so
+            // optimizers like WGAN-GP's discriminator update silently froze
+            // those tensors.
+            var extraTrainableTensors = new System.Collections.Generic.List<Tensor<T>>();
+            foreach (var t in GetExtraTrainableTensors())
+            {
+                if (t is not null && t.Length > 0)
+                    extraTrainableTensors.Add(t);
+            }
+            var trainableParams = extraTrainableTensors.Count == 0
+                ? (System.Collections.Generic.IReadOnlyList<Tensor<T>>)layerParams
+                : layerParams.Concat(extraTrainableTensors).ToList();
+
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
             using var tape = new GradientTape<T>();
