@@ -822,30 +822,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Returns layer-specific metadata for serialization purposes.
-    /// </summary>
-    /// <returns>A dictionary of metadata key-value pairs including kernel size, stride, and padding.</returns>
-    /// <remarks>
-    /// These constructor-level fields are not inferable from input/output shape alone: DCGAN
-    /// uses 4×4 kernels with stride 2 and padding 1, while the deserializer's defaults are
-    /// 3/1/0. Without this override Clone()/Deserialize would reconstruct a different-shaped
-    /// kernel tensor and SetParameters would reject the saved buffer length.
-    /// </remarks>
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["KernelSize"] = KernelSize.ToString();
-        metadata["Stride"] = Stride.ToString();
-        metadata["Padding"] = Padding.ToString();
-        if (ScalarActivation is not null)
-        {
-            metadata["ScalarActivationType"] = ScalarActivation.GetType().AssemblyQualifiedName
-                ?? ScalarActivation.GetType().FullName ?? string.Empty;
-        }
-        return metadata;
-    }
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>
