@@ -82,6 +82,19 @@ public class TableGANOptions<T> : RiskModelOptions<T>
     public double ClassificationWeight { get; set; } = 1.0;
 
     /// <summary>
+    /// Gets or sets whether the generator's loss includes the classification
+    /// auxiliary term. Defaults to <c>false</c>: the classifier head
+    /// (<c>_classLayers</c> / <c>_classOutput</c>) currently has no
+    /// dedicated training path that updates its parameters against real-row
+    /// labels, so its logits are effectively random and the generator
+    /// gradient driven by <see cref="ClassificationWeight"/> is noise.
+    /// Enable only after wiring a real classifier-training routine (e.g.
+    /// per-step optimizer update against real (row, label) pairs) — until
+    /// then the toggle stays false to keep the generator objective honest.
+    /// </summary>
+    public bool TrainClassifier { get; set; } = false;
+
+    /// <summary>
     /// Gets or sets the weight of the information loss (statistical similarity).
     /// </summary>
     /// <value>Information loss weight, defaulting to 1.0.</value>

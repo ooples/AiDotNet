@@ -577,7 +577,16 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
                 MatchLossShape(weightedInformationLoss, lossTensor));
         }
 
-        if (_classOutput is not null && _numClasses > 1 && _options.ClassificationWeight > 0)
+        // Classification auxiliary term is gated on _options.TrainClassifier
+        // (default false). Without a dedicated classifier-training routine
+        // updating _classLayers / _classOutput against real (row, label)
+        // pairs, the classifier logits are effectively random and the
+        // weighted classification gradient is noise — enabling
+        // ClassificationWeight alone silently degrades label fidelity rather
+        // than preserving it. Once a real classifier-training path is
+        // implemented, callers can set TrainClassifier=true to opt back in.
+        if (_options.TrainClassifier
+            && _classOutput is not null && _numClasses > 1 && _options.ClassificationWeight > 0)
         {
             var weightedClassificationLoss = Engine.TensorMultiplyScalar(
                 ComputeClassificationLoss(fakeActivated, realBatch),
