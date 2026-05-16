@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -17,147 +18,158 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// <c>MultiHeadAttention -> SequenceTokenSliceLayer -> custom-readout(rank-2 specific shape)</c>
 /// the custom-chain validator rejects both pairs with "Layer N is not compatible with Layer N+1".
 ///
-/// We mock the HRE readout's shape contract with <see cref="FixedShapeRank2Layer"/> —
-/// a no-op layer declaring input shape <c>[ctxLen, 2*codeDim]</c> (rank-2 with two
-/// known positive dims). This exactly mirrors <c>HreReadoutLayer</c>'s
-/// declared input shape from HarmonicEngine.
+/// <para>The validator is exercised through its real entry points
+/// (<c>new Transformer&lt;float&gt;(arch)</c> at construction time and the
+/// post-forward <c>DeepCopy</c> revalidation path inside the optimizer
+/// pipeline), not by re-implementing the compatibility algorithm in the
+/// test. The mock readout layer (<see cref="FixedShapeRank2Layer"/>)
+/// declares the same shape contract as HarmonicEngine's <c>HreReadoutLayer</c>,
+/// which is what surfaces the validator regression.</para>
 /// </summary>
 public class HrePaperAChainShapeValidatorTests
 {
     /// <summary>
-    /// Reproduces the actual failure mode: DeepCopy revalidates the chain
-    /// AFTER first forward has run. SequenceTokenSliceLayer's input shape
-    /// resolves to the concrete `[batch, ctxLen, dim]` (rank 3, all positive)
-    /// while MHA's declared output stays `[-1, embDim]` (rank 2). The
-    /// validator's AreShapesCompatible can't reconcile rank-2 vs rank-3
-    /// when both shapes are mostly-known.
+    /// Validator runs at chain-construction time and rejects the chain if any
+    /// adjacent-layer pair fails <c>AreShapesCompatible</c>. This is the first
+    /// time the rank-N declared (MHA <c>[-1, embDim]</c>) vs rank-(N+1)
+    /// resolved (Slice <c>[batch, ctxLen, embDim]</c>) shape pair is checked.
+    /// Pre-fix the chain construction threw with
+    /// "Layer N (MultiHeadAttention) is not compatible with Layer N+1 (SequenceTokenSliceLayer)".
     /// </summary>
     [Fact]
-    public void HreChain_RevalidateAfterForward_RankMismatchOnSlice()
+    public void HreChain_ConstructTransformer_PassesValidator()
     {
-        const int CtxLen = 64;
-        const int EmbDim = 32;
-        const int Batch = 4;
+        var arch = BuildHreLikeArchitecture();
 
-        // Pre-resolve the slice layer's shapes to mimic what OnFirstForward
-        // does. After a real forward with input [Batch, CtxLen, EmbDim], the
-        // slice's input/output become concrete rank-3/rank-2.
-        var slice = new PreResolvedSliceMock(
-            inputShape: new[] { Batch, CtxLen, EmbDim },
-            outputShape: new[] { Batch, EmbDim });
+        // ctor runs the chain validator. A regression of the rank-mismatch
+        // fix would throw here with the "Layer N is not compatible with Layer M"
+        // diagnostic.
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
-        var mhaOut = new MultiHeadAttentionLayer<float>(
-            headCount: 4, headDimension: EmbDim / 4,
-            activationFunction: (IActivationFunction<float>)new IdentityActivation<float>());
-
-        // Direct compatibility query — mirrors AreLayersCompatible's input.
-        // Currently fails: MHA's [-1, embDim] (rank 2) vs Slice's
-        // [Batch, CtxLen, EmbDim] (rank 3 resolved). After the fix, the
-        // validator should accept rank-N declared vs rank-N+1 resolved when
-        // the missing leading dim looks like a batch.
-        var mhaOutShape = mhaOut.GetOutputShape();
-        var sliceInShape = slice.GetInputShape();
-        Assert.Equal(2, mhaOutShape.Length); // MHA declares rank 2
-        Assert.Equal(3, sliceInShape.Length); // Slice resolved to rank 3
-
-        // The full chain test: re-validating after forward shouldn't reject
-        // the chain. This is the failure HarmonicEngine PR #149 hit when
-        // AiModelBuilder.BuildAsync → AdamOptimizer.Optimize →
-        // OptimizerBase.PrepareAndEvaluateSolution → DeepCopy re-built the
-        // Transformer from the same arch and called ValidateCustomLayers
-        // against the (now resolved) layer shapes.
-        var compatible = TestableValidator.AreShapesCompatible_Public(mhaOutShape, sliceInShape);
-        Assert.True(compatible,
-            $"validator rejects MHA out {ShapeStr(mhaOutShape)} vs Slice resolved in {ShapeStr(sliceInShape)} — " +
-            "this blocks DeepCopy after first forward, which is exactly the HarmonicEngine PR #149 failure path.");
-    }
-
-    private static string ShapeStr(int[] s) => "[" + string.Join(",", s) + "]";
-
-    /// <summary>
-    /// Test-only mock that returns pre-set input/output shapes directly,
-    /// simulating a SequenceTokenSliceLayer whose OnFirstForward has run
-    /// and called ResolveShapes with concrete batch/seq/dim values.
-    /// </summary>
-    private sealed class PreResolvedSliceMock : LayerBase<float>
-    {
-        public PreResolvedSliceMock(int[] inputShape, int[] outputShape)
-            : base(inputShape, outputShape) { }
-        public override long ParameterCount => 0;
-        public override bool SupportsTraining => false;
-        public override Tensor<float> Forward(Tensor<float> input) => input;
-        public override void UpdateParameters(float learningRate) { }
-        public override Vector<float> GetParameters() => new Vector<float>(0);
-        public override void SetParameters(Vector<float> parameters) { }
-        public override Vector<float> GetParameterGradients() => new Vector<float>(0);
-        public override void ResetState() { }
-        public override LayerBase<float> Clone() => new PreResolvedSliceMock(GetInputShape(), GetOutputShape());
+        Assert.NotNull(model);
+        Assert.True(model.Layers.Count >= MinExpectedLayers,
+            $"expected ≥{MinExpectedLayers} layers in built chain, got {model.Layers.Count}");
     }
 
     /// <summary>
-    /// Exposes <see cref="NeuralNetworkBase{T}.AreShapesCompatible"/> for
-    /// targeted regression coverage. The production method is private static
-    /// inside NeuralNetworkBase; we re-implement the contract here by
-    /// constructing a minimal NeuralNetwork to host the check.
+    /// After a real <c>Forward</c> mutates the slice layer's shape from
+    /// <c>[-1, -1, -1]</c> to a concrete <c>[batch, ctxLen, embDim]</c>, a
+    /// downstream <c>DeepCopy</c> re-runs the validator on the (now resolved)
+    /// chain — this is the exact failure path from HarmonicEngine PR #149,
+    /// triggered by <c>AdamOptimizer.Optimize</c> →
+    /// <c>OptimizerBase.PrepareAndEvaluateSolution</c> → <c>DeepCopy</c>.
+    /// Pre-fix the post-forward revalidation threw because the validator
+    /// couldn't reconcile MHA's still-declared rank-2 output with Slice's
+    /// now-rank-3 resolved input.
     /// </summary>
-    private static class TestableValidator
+    [Fact]
+    public void HreChain_DeepCopyAfterForward_PassesRevalidation()
     {
-        public static bool AreShapesCompatible_Public(int[] expectedShape, int[] actualShape)
+        var arch = BuildHreLikeArchitecture();
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+
+        // Real forward — this is what causes SequenceTokenSliceLayer to call
+        // ResolveShapes with a concrete batch dim, mutating the chain's
+        // observable shape state.
+        var input = new Tensor<float>(new[] { Batch, CtxLen });
+        var span = input.AsWritableSpan();
+        for (int i = 0; i < span.Length; i++) span[i] = i % VocabSize;
+        _ = model.Predict(input);
+
+        // DeepCopy re-instantiates the chain (and re-runs ValidateCustomLayers
+        // internally) against the same architecture but now with resolved
+        // upstream shape state. A regression here would throw
+        // ArgumentException with "Layer N is not compatible with Layer M".
+        var copy = (NeuralNetworkBase<float>)model.DeepCopy();
+
+        Assert.NotNull(copy);
+        // DeepCopy must return a distinct top-level model instance — without
+        // that, parameter updates on the copy would mutate the original.
+        Assert.NotSame(model, copy);
+        Assert.Equal(model.Layers.Count, copy.Layers.Count);
+        // The chain must be structurally equivalent — same layer types in the
+        // same positions. Per-instance reference-equality on individual layers
+        // is implementation-defined (parameter-less layers are legitimately
+        // shared) and not part of the DeepCopy contract.
+        for (int i = 0; i < model.Layers.Count; i++)
         {
-            // Mirror the production AreShapesCompatible logic exactly. Updating
-            // this when the production logic changes is the test's contract.
-            if (ShapesMatchKnownDimensions(expectedShape, actualShape)) return true;
-            var expectedTrim = TrimLeadingBatchLikeDimensions(expectedShape);
-            if (ShapesMatchKnownDimensions(expectedTrim, actualShape)) return true;
-            var actualTrim = TrimLeadingBatchLikeDimensions(actualShape);
-            if (ShapesMatchKnownDimensions(expectedShape, actualTrim)) return true;
-            if (ShapesMatchKnownDimensions(expectedTrim, actualTrim)) return true;
-            if (expectedShape.Length + 1 == actualShape.Length && actualShape[0] >= 1)
-            {
-                var actualNoBatch = new int[actualShape.Length - 1];
-                Array.Copy(actualShape, 1, actualNoBatch, 0, actualNoBatch.Length);
-                if (ShapesMatchKnownDimensions(expectedShape, actualNoBatch)) return true;
-            }
-            if (actualShape.Length + 1 == expectedShape.Length && expectedShape[0] >= 1)
-            {
-                var expectedNoBatch = new int[expectedShape.Length - 1];
-                Array.Copy(expectedShape, 1, expectedNoBatch, 0, expectedNoBatch.Length);
-                if (ShapesMatchKnownDimensions(expectedNoBatch, actualShape)) return true;
-            }
-            return false;
-        }
-        private static bool ShapesMatchKnownDimensions(int[] expected, int[] actual)
-        {
-            if (expected.Length != actual.Length) return false;
-            for (int i = 0; i < expected.Length; i++)
-                if (expected[i] > 0 && actual[i] > 0 && expected[i] != actual[i]) return false;
-            return true;
-        }
-        private static int[] TrimLeadingBatchLikeDimensions(int[] shape)
-        {
-            int start = 0;
-            while (start < shape.Length - 1 && shape[start] <= 1) start++;
-            if (start == 0) return shape;
-            var trimmed = new int[shape.Length - start];
-            Array.Copy(shape, start, trimmed, 0, trimmed.Length);
-            return trimmed;
+            Assert.Equal(model.Layers[i].GetType(), copy.Layers[i].GetType());
         }
     }
 
+    /// <summary>
+    /// Negative-direction guard: when the shorter shape's leading dim is a
+    /// concrete positive (not the wildcard <c>-1</c>), the validator must
+    /// still reject. Without this guard the rank-mismatch fix would bless
+    /// genuinely incompatible chains like <c>[32, 32]</c> vs <c>[3, 32, 32]</c>.
+    /// </summary>
     [Fact]
-    public void HreChain_MhaSliceReadout_ShouldValidate()
+    public void HreChain_RankMismatchWithoutWildcard_RejectedByValidator()
     {
-        const int CtxLen = 64;
-        const int EmbDim = 32;
-        const int Heads = 4;
-        const int VocabSize = 256;
+        // Chain: InputLayer(64) → FixedShape([32, 32] in, [32, 32] out)
+        //        → FixedShape([3, 32, 32] in, [3, 32, 32] out)
+        //
+        // The 2nd layer declares rank-2 output with a concrete leading 32; the
+        // 3rd declares rank-3 input with a concrete leading 3. These are
+        // unrelated shapes; the rank+1 strip branch must NOT bless them.
+        var layers = new List<ILayer<float>>
+        {
+            new InputLayer<float>(64),
+            new FixedShapeRank2Layer(
+                inputShape: new[] { 32, 32 },
+                outputShape: new[] { 32, 32 }),
+            new FixedShapeRank2Layer(
+                inputShape: new[] { 3, 32, 32 },
+                outputShape: new[] { 3, 32, 32 }),
+            new FixedShapeRank2Layer(
+                inputShape: new[] { 3, 32, 32 },
+                outputShape: new[] { VocabSize }),
+        };
 
-        // Mirror HarmonicEngine ApplesToApplesHreChain exactly:
-        // InputLayer → embed → PE → MHA × 2 → SequenceTokenSliceLayer → readout.
-        // HarmonicEngine prepends InputLayer per AiDotNet's IsValidInputLayer
-        // requirement. We use AiDotNet's EmbeddingLayer + DenseLayer to stand
-        // in for the HRE-side embed/PE/readout — the shape declarations are
-        // what matter for the validator, not the math inside.
+        var arch = new TransformerArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 1,
+            numDecoderLayers: 0,
+            numHeads: 1,
+            modelDimension: 32,
+            feedForwardDimension: 64,
+            inputSize: 64,
+            outputSize: VocabSize,
+            maxSequenceLength: 64,
+            vocabularySize: VocabSize,
+            layers: layers);
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>()));
+        // Be lenient about the exact wording (shape-enriched diagnostic upgrade
+        // injects shape info), but require the structural tokens identifying
+        // the rejected 1-2 edge.
+        Assert.Contains("not compatible", ex.Message);
+    }
+
+    // ============================================================================
+    // Test fixtures
+    // ============================================================================
+
+    private const int CtxLen = 8;
+    private const int EmbDim = 16;
+    private const int Heads = 2;
+    private const int VocabSize = 64;
+    private const int Batch = 2;
+    private const int MinExpectedLayers = 4;
+
+    /// <summary>
+    /// Builds an architecture isomorphic to HarmonicEngine's
+    /// <c>ApplesToApplesHreChain</c>: <c>InputLayer → embed → MHA × 2 →
+    /// SequenceTokenSliceLayer → readout</c>. We use AiDotNet's stock
+    /// <see cref="EmbeddingLayer{T}"/> as the embed and a
+    /// <see cref="FixedShapeRank2Layer"/> as the readout — the shape
+    /// declarations are what the validator checks; the math inside is
+    /// irrelevant for this regression.
+    /// </summary>
+    private static TransformerArchitecture<float> BuildHreLikeArchitecture()
+    {
         var layers = new List<ILayer<float>>
         {
             new InputLayer<float>(CtxLen),
@@ -167,15 +179,12 @@ public class HrePaperAChainShapeValidatorTests
             new MultiHeadAttentionLayer<float>(Heads, EmbDim / Heads,
                 activationFunction: (IActivationFunction<float>)new IdentityActivation<float>()),
             new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.Last),
-            // The HreReadoutLayer in HarmonicEngine declares input shape
-            // [ctxLen, 2*codeDim] (rank-2 with both dims > 0) and output
-            // [vocabSize]. Stand in with a fixed-shape mock.
             new FixedShapeRank2Layer(
-                inputShape: new[] { CtxLen, EmbDim },
+                inputShape: new[] { -1, EmbDim },
                 outputShape: new[] { VocabSize }),
         };
 
-        var arch = new TransformerArchitecture<float>(
+        return new TransformerArchitecture<float>(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
             numEncoderLayers: 2,
@@ -188,15 +197,14 @@ public class HrePaperAChainShapeValidatorTests
             maxSequenceLength: CtxLen,
             vocabularySize: VocabSize,
             layers: layers);
-
-        Assert.NotNull(arch);
-        Assert.Same(layers[0], arch.Layers![0]);
     }
 
     /// <summary>
-    /// No-op layer with explicit rank-2 input shape and rank-1 output shape.
-    /// Mimics HarmonicEngine's <c>HreReadoutLayer</c> shape contract for
-    /// validator-only regression testing.
+    /// No-op layer with explicit input/output shapes. Mimics HarmonicEngine's
+    /// <c>HreReadoutLayer</c> shape contract (rank-2 input <c>[batch, embDim]</c>
+    /// or <c>[-1, embDim]</c>, rank-1 output <c>[vocabSize]</c>) for the
+    /// validator-only regression tests. Forward is identity so we can run a
+    /// real <c>Predict</c> through the chain without depending on HRE math.
     /// </summary>
     private sealed class FixedShapeRank2Layer : LayerBase<float>
     {
@@ -207,7 +215,35 @@ public class HrePaperAChainShapeValidatorTests
 
         public override long ParameterCount => 0;
         public override bool SupportsTraining => false;
-        public override Tensor<float> Forward(Tensor<float> input) => input;
+
+        public override Tensor<float> Forward(Tensor<float> input)
+        {
+            // Reshape the input flat-buffer to the declared output shape.
+            // The declared output is [vocabSize] (rank 1) for the readout-mock
+            // case, but for diagnostic chains we may have [-1, embDim] →
+            // [-1, embDim] etc. Producing the right rank/dims by reshape from
+            // the input's total element count keeps the chain well-formed.
+            var outShape = GetOutputShape();
+            // Resolve wildcards from the input shape's batch dim if needed.
+            var resolved = new int[outShape.Length];
+            int knownProduct = 1;
+            int wildcardIdx = -1;
+            for (int i = 0; i < outShape.Length; i++)
+            {
+                if (outShape[i] <= 0) { wildcardIdx = i; resolved[i] = -1; }
+                else { resolved[i] = outShape[i]; knownProduct *= outShape[i]; }
+            }
+            int inputElements = 1;
+            for (int i = 0; i < input.Shape.Length; i++) inputElements *= input.Shape[i];
+            if (wildcardIdx >= 0)
+            {
+                resolved[wildcardIdx] = Math.Max(1, inputElements / Math.Max(1, knownProduct));
+            }
+            // Produce a zero tensor of the resolved shape — this layer is a
+            // shape-contract stand-in, not a real layer.
+            return new Tensor<float>(resolved);
+        }
+
         public override void UpdateParameters(float learningRate) { }
         public override Vector<float> GetParameters() => new Vector<float>(0);
         public override void SetParameters(Vector<float> parameters) { }

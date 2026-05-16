@@ -2252,16 +2252,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         //
         // exercised by NeuralNetworkBase.DeepCopy → Transformer..ctor →
         // ValidateCustomLayers re-running on an already-forwarded chain
-        // (HarmonicEngine PR #149 / #1333 repro). Try stripping a single
-        // positive leading dim from the higher-rank side and re-comparing.
-        if (expectedShape.Length + 1 == actualShape.Length && actualShape[0] >= 1)
+        // (HarmonicEngine PR #149 / #1333 repro).
+        //
+        // Crucially, the shorter side MUST explicitly declare a wildcard (-1)
+        // leading dim. Otherwise we'd bless unrelated shapes — e.g.
+        // [32, 32] (a concrete rank-2) vs [3, 32, 32] (a concrete rank-3)
+        // would silently pass by stripping the leading 3. The wildcard guard
+        // restricts the strip to the genuine "I accept any batch" contract
+        // that MHA/Slice/etc actually declare.
+        if (expectedShape.Length + 1 == actualShape.Length
+            && actualShape[0] >= 1
+            && expectedShape.Length > 0
+            && expectedShape[0] <= 0)
         {
             var actualNoBatch = new int[actualShape.Length - 1];
             Array.Copy(actualShape, 1, actualNoBatch, 0, actualNoBatch.Length);
             if (ShapesMatchKnownDimensions(expectedShape, actualNoBatch))
                 return true;
         }
-        if (actualShape.Length + 1 == expectedShape.Length && expectedShape[0] >= 1)
+        if (actualShape.Length + 1 == expectedShape.Length
+            && expectedShape[0] >= 1
+            && actualShape.Length > 0
+            && actualShape[0] <= 0)
         {
             var expectedNoBatch = new int[expectedShape.Length - 1];
             Array.Copy(expectedShape, 1, expectedNoBatch, 0, expectedNoBatch.Length);

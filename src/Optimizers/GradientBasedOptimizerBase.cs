@@ -106,11 +106,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     /// <summary>
     /// The loss function currently used by the optimizer's gradient path.
-    /// Public, read-only — exposed mainly so callers and regression tests can
-    /// verify the result of the model-default auto-sync in
-    /// <see cref="OnModelChanged"/>.
+    /// Internal — exposed so regression tests in <c>AiDotNetTests</c> can verify
+    /// the result of the model-default auto-sync in <see cref="OnModelChanged"/>
+    /// without expanding the public optimizer surface (optimizers are an
+    /// implementation detail; users should interact via <c>AiModelBuilder</c>).
     /// </summary>
-    public ILossFunction<T> CurrentLossFunction => LossFunction;
+    internal ILossFunction<T> CurrentLossFunction => LossFunction;
 
     /// <summary>
     /// A method used to regularize the parameters so they don't get out of control.

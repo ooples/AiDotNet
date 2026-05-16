@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Caching;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
@@ -60,7 +61,7 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
         get => _lossFunction;
         set
         {
-            _lossFunction = value;
+            _lossFunction = value ?? throw new ArgumentNullException(nameof(value));
             LossFunctionExplicitlySet = true;
         }
     }
@@ -88,7 +89,7 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </summary>
     internal void SetLossFunctionFromAutoSync(ILossFunction<T> lossFunction)
     {
-        _lossFunction = lossFunction;
+        _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
     }
 
     /// <summary>
