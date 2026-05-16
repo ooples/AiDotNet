@@ -125,9 +125,17 @@ public class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize())); ComputeEncoderDecoderBoundary(); }
+        else
+        {
+            // Patch-size validation only matters for the default vision-adapter
+            // stack — custom Architecture.Layers stacks never consult
+            // _options.ImageSize / _options.MaxVisualTokens, so rejecting them
+            // for invalid patch options breaks valid custom builds.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            ComputeEncoderDecoderBoundary();
+        }
         ValidateEncoderDecoderBoundary(_encoderLayerEnd);
     }
 

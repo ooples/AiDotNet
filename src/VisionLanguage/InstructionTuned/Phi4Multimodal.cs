@@ -126,9 +126,16 @@ public class Phi4Multimodal<T> : VisionLanguageModelBase<T>, IInstructionTunedVL
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize())); ComputeEncoderDecoderBoundary(); }
+        else
+        {
+            // Patch-size validation only applies to the default vision-adapter
+            // stack — custom Architecture.Layers stacks don't consume the
+            // patch options, so don't reject them on those values.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            ComputeEncoderDecoderBoundary();
+        }
         ValidateEncoderDecoderBoundary(_encoderLayerEnd);
     }
 

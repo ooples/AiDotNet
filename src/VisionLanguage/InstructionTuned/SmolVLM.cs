@@ -111,7 +111,24 @@ public class SmolVLM<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
         return output;
     }
     public Tensor<T> Chat(Tensor<T> image, IEnumerable<(string Role, string Content)> conversationHistory, string userMessage) { ThrowIfDisposed(); var sb = new System.Text.StringBuilder(); sb.Append(_options.SystemPrompt); foreach (var (role, content) in conversationHistory) sb.Append($"\n{role}: {content}"); sb.Append($"\nUser: {userMessage}\nAssistant:"); return GenerateFromImage(image, sb.ToString()); }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; ValidatePatchOptions(); if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultPixelShuffleProjectorLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize())); ComputeEncoderDecoderBoundary(); } ValidateEncoderDecoderBoundary(); }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            // Patch-size validation only applies to the default pixel-shuffle
+            // projector path — custom Architecture.Layers stacks don't consume
+            // the patch options, so don't reject them on those values.
+            ValidatePatchOptions();
+            Layers.AddRange(LayerHelper<T>.CreateDefaultPixelShuffleProjectorLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            ComputeEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary();
+    }
     // SmolVLM (Marafioti et al. 2024) ViT patch size = imageSize / sqrt(maxVisualTokens). For the 2.2B variant: 384 / 16 = 24.
     private int ComputePatchSize()
     {

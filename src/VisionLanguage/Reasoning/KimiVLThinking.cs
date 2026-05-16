@@ -216,7 +216,24 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 
         return output;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; ValidatePatchOptions(); if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize())); ComputeEncoderDecoderBoundary(); } ValidateEncoderDecoderBoundary(); }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            // ComputePatchSize() is only reached on the default resampler stack;
+            // custom Architecture.Layers stacks don't consume patch options, so
+            // don't reject them on those values.
+            ValidatePatchOptions();
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            ComputeEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary();
+    }
     private int ComputePatchSize()
     {
         ValidatePatchOptions();

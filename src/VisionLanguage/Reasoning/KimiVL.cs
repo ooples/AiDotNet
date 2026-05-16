@@ -205,7 +205,24 @@ public class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 
         return output;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens); if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputeKimiPatchSize())); _encoderLayerEnd = ComputeKimiEncoderDecoderBoundary(); } ValidateEncoderDecoderBoundary(_encoderLayerEnd); }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            // ComputeKimiPatchSize() is only reached on the default Kimi stack
+            // path; custom Architecture.Layers stacks don't consume the patch
+            // options, so don't reject them on those values.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputeKimiPatchSize()));
+            _encoderLayerEnd = ComputeKimiEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary(_encoderLayerEnd);
+    }
     private int ComputeKimiPatchSize() => ComputeVisualPatchSize(_options.ImageSize, _options.MaxVisualTokens, roundUp: true);
     // +2 leading layers from the helper: PatchEmbedding + LayerNorm.
     private int ComputeKimiEncoderDecoderBoundary() => ComputeVisionLanguageBoundary(leadingLayerCount: 2, visionLayerCount: _options.NumVisionLayers, visionBlockLayerCount: TransformerBlockLayerCount(_options.DropoutRate), auxiliaryBlockCount: 4, auxiliaryBlockLayerCount: ResamplerBlockLayerCount(_options.DropoutRate), trailingLayerCount: 1);

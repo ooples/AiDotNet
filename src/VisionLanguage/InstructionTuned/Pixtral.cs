@@ -115,9 +115,15 @@ public class Pixtral<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        ValidatePatchOptions();
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize())); ComputeEncoderDecoderBoundary(); }
+        else
+        {
+            // ComputePatchSize() itself calls ValidatePatchOptions, so the
+            // default-path else-branch is already gated. Custom Architecture.Layers
+            // stacks don't reach ComputePatchSize() — no need to validate.
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            ComputeEncoderDecoderBoundary();
+        }
         ValidateEncoderDecoderBoundary();
     }
 
