@@ -525,9 +525,19 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         var grads = tape.ComputeGradients(lossTensor, discParams);
 
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        // Replay-correct closure: lossTensor was (lossReal + lossFake), so
+        // RecomputeLoss must replay BOTH BCE terms to stay tied to the
+        // objective that produced `grads`. Capture fakeBatch in the closure
+        // so the fake side can be re-scored on optimizer.Step replay.
+        var capturedFakeBatch = fakeBatch;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) =>
-            Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), allAxes, keepDims: false));
+        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)
+        {
+            var predFake = DiscriminatorForwardBatched(capturedFakeBatch, true);
+            var lossR = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(predReal), allAxes, keepDims: false));
+            var lossF = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(predFake)), allAxes, keepDims: false));
+            return Engine.TensorAdd(lossR, lossF);
+        }
 
         var context = new TapeStepContext<T>(
             discParams, grads, lossValue,
@@ -622,11 +632,23 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
         T avgLoss = NumOps.Divide(lossSum, NumOps.FromDouble(batchSize));
 
-        var (lastReal, _) = BuildRealAndFakeBatches(data, startRow, endRow);
+        // Replay-correct closure: each per-example lossTensor was
+        // (lossReal + lossFake); the noisedAvgGrads collapse that across
+        // the batch but the corresponding scalar loss is still the mean of
+        // (lossReal + lossFake). RecomputeLoss must replay BOTH BCE terms
+        // so optimizer.Step replays stay tied to that objective. Capture
+        // the batch's fake side as the replay fake context.
+        var (lastReal, lastFake) = BuildRealAndFakeBatches(data, startRow, endRow);
         var allAxesFull = Enumerable.Range(0, lastReal.Shape.Length).ToArray();
+        var capturedFake = lastFake;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) =>
-            Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), allAxesFull, keepDims: false));
+        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)
+        {
+            var predFake = DiscriminatorForwardBatched(capturedFake, true);
+            var lossR = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(predReal), allAxesFull, keepDims: false));
+            var lossF = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(predFake)), allAxesFull, keepDims: false));
+            return Engine.TensorAdd(lossR, lossF);
+        }
 
         var context = new TapeStepContext<T>(
             discParams, noisedAvgGrads, avgLoss,

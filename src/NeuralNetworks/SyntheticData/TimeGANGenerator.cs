@@ -652,9 +652,22 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var grads = tape.ComputeGradients(lossTensor, paramsList);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
+        // Replay-correct closure for the critic: lossTensor was
+        // (lossReal + lossFake), so RecomputeLoss must replay BOTH BCE
+        // terms to stay tied to the objective that produced `grads`.
+        // ComputeForward receives the real-embedded input and returns the
+        // real discriminator scores; RecomputeLoss captures fakeSup so it
+        // can re-run the discriminator on the fake side too, then build
+        // the same -log σ(realScore) + -log σ(-fakeScore) sum.
+        var capturedFakeSup = fakeSup;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) =>
-            Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), allAxes, keepDims: false));
+        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)
+        {
+            var predFake = DiscriminatorForwardBatched(capturedFakeSup, true);
+            var lossR = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(predReal), allAxes, keepDims: false));
+            var lossF = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(predFake)), allAxes, keepDims: false));
+            return Engine.TensorAdd(lossR, lossF);
+        }
 
         var context = new TapeStepContext<T>(
             paramsList, grads, lossValue,
@@ -728,10 +741,33 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var grads = tape.ComputeGradients(lossTensor, paramsList);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
+        // Replay-correct closure for the joint phase: lossTensor combined
+        // adversarial (advLoss) AND, when supervisedBatch > 0, the weighted
+        // supervised next-step term. RecomputeLoss must reproduce the full
+        // sum so optimizer.Step replays stay tied to the objective that
+        // produced `grads` — replaying only the adversarial part silently
+        // drops the temporal-supervision phase-3 contribution.
+        int capturedSupervisedBatch = supervisedBatch;
+        var capturedXt = xt;
+        var capturedXtNext = xtNext;
+        var capturedAdvAxes = advAxes;
+        double capturedSupWeight = _options.SupervisedWeight;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(
             SupervisorForwardBatched(GeneratorForwardBatched(inp, true), true), false);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) =>
-            Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), advAxes, keepDims: false));
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var adv = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), capturedAdvAxes, keepDims: false));
+            if (capturedSupervisedBatch <= 0) return adv;
+            var ht = EmbedderForwardBatched(capturedXt, isTraining: false);
+            var htNext = EmbedderForwardBatched(capturedXtNext, isTraining: false);
+            var htPred = SupervisorForwardBatched(ht, isTraining: true);
+            var diff = Engine.TensorSubtract(htPred, htNext);
+            var sq = Engine.TensorMultiply(diff, diff);
+            var supAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+            var supLoss = Engine.ReduceMean(sq, supAxes, keepDims: false);
+            var weightedSup = Engine.TensorMultiplyScalar(supLoss, NumOps.FromDouble(capturedSupWeight));
+            return Engine.TensorAdd(adv, weightedSup);
+        }
 
         var context = new TapeStepContext<T>(
             paramsList, grads, lossValue,
