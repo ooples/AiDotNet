@@ -431,19 +431,36 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
         var avgReal = Engine.ReduceMean(realScores, allAxes, keepDims: false);
         var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
-        // Critic minimizes E[D(fake)] - E[D(real)] (= -wassersteinDistance).
-        var lossTensor = Engine.TensorSubtract(avgFake, avgReal);
+        // Critic minimizes E[D(fake)] − E[D(real)] + λ·GP (Gulrajani 2017
+        // WGAN-GP — the gradient penalty is the 1-Lipschitz constraint that
+        // makes the dual Wasserstein form recover the Earth-Mover distance).
+        // Without GP, plain WGAN diverges without weight clipping.
+        var wasserstein = Engine.TensorSubtract(avgFake, avgReal);
+        var gradientPenalty = ComputeGradientPenalty(realBatch, fakeBatch);
+        var lossTensor = Engine.TensorAdd(
+            wasserstein,
+            Engine.TensorMultiplyScalar(gradientPenalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
 
         var grads = tape.ComputeGradients(lossTensor, discParams);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
 
+        // Replay must reproduce the FULL objective (Wasserstein term + λ·GP).
+        // Replaying only the Wasserstein term would drift the critic away
+        // from the 1-Lipschitz constraint on optimizer.Step replays.
+        var capturedFake = fakeBatch;
+        var capturedReal = realBatch;
+        double capturedGpWeight = _options.GradientPenaltyWeight;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
         Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
         {
             var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
-            var recomputedFakeScores = DiscriminatorForwardBatched(fakeBatch, true);
+            var recomputedFakeScores = DiscriminatorForwardBatched(capturedFake, true);
             var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
-            return Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+            var recomputedWasserstein = Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+            var recomputedGp = ComputeGradientPenalty(capturedReal, capturedFake);
+            return Engine.TensorAdd(
+                recomputedWasserstein,
+                Engine.TensorMultiplyScalar(recomputedGp, NumOps.FromDouble(capturedGpWeight)));
         }
 
         var context = new TapeStepContext<T>(
@@ -451,6 +468,57 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             realBatch, realBatch, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
         _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// WGAN-GP gradient penalty (Gulrajani et al. 2017 §4): sample
+    /// interpolates between real and fake, get critic gradients w.r.t.
+    /// interpolates via a nested <see cref="GradientTape{T}"/>, then penalize
+    /// the squared deviation of the per-sample L2 norm from 1. Returns a
+    /// scalar that the caller weights by <see cref="TableGANOptions{T}.GradientPenaltyWeight"/>
+    /// and adds to the Wasserstein critic loss. Mirrors the
+    /// <c>CausalGANGenerator.ComputeGradientPenalty</c> implementation.
+    /// </summary>
+    private Tensor<T> ComputeGradientPenalty(Tensor<T> realBatch, Tensor<T> fakeBatch)
+    {
+        int batchSize = Math.Max(1, realBatch.Shape[0]);
+        int elementsPerSample = Math.Max(1, realBatch.Length / batchSize);
+
+        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
+        var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realBatch.Length]);
+        var ones = new Tensor<T>([realBatch.Length]);
+        Engine.TensorFill(ones, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(ones, epsilonBroadcast);
+
+        var realFlat = realBatch.Reshape([realBatch.Length]);
+        var fakeFlat = fakeBatch.Reshape([fakeBatch.Length]);
+        var interpolatedFlat = Engine.TensorAdd(
+            Engine.TensorMultiply(epsilonBroadcast, realFlat),
+            Engine.TensorMultiply(oneMinusEpsilon, fakeFlat));
+        var interpolated = interpolatedFlat.Reshape(realBatch._shape);
+
+        Tensor<T> inputGradients;
+        using (var gradientTape = new GradientTape<T>())
+        {
+            var scores = DiscriminatorForwardBatched(interpolated, true);
+            var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated]);
+            inputGradients = gradients.TryGetValue(interpolated, out var gradient)
+                ? gradient
+                : new Tensor<T>(interpolated._shape);
+        }
+
+        var gradientsReshaped = inputGradients.Reshape([batchSize, elementsPerSample]);
+        var gradientSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
+        var gradientNormSquared = Engine.ReduceSum(gradientSquared, [1], keepDims: false);
+        var gradientNorm = Engine.TensorSqrt(Engine.TensorAddScalar(gradientNormSquared, NumOps.FromDouble(1e-12)));
+        var targetNorm = new Tensor<T>(gradientNorm._shape);
+        Engine.TensorFill(targetNorm, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradientNorm, targetNorm);
+        var penalty = Engine.TensorMultiply(deviation, deviation);
+        var penaltyAxes = Enumerable.Range(0, penalty.Shape.Length).ToArray();
+        return Engine.ReduceMean(penalty, penaltyAxes, keepDims: false);
     }
 
     /// <summary>
