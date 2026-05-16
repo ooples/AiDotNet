@@ -102,6 +102,29 @@ public static class CompiledTapeTrainingStep<T>
     /// <summary>Resets the fused-step counter on the calling thread to zero.</summary>
     public static void ResetFusedStepCount() { _fusedStepCount = 0; }
 
+    // Reflection-cached lookup of ICompiledTrainingPlan<T>.SetMaxGradNorm(double).
+    // Populated lazily on first call per process and reused on every subsequent
+    // step. Returns null when the underlying Tensors assembly pre-dates the
+    // SetMaxGradNorm API addition (AiDotNet.Tensors PR #359 / first release
+    // after 0.81.0), at which point we silently skip the plan-side clip and
+    // rely on the eager NeuralNetworkBase.TrainWithTape clipping. This shim is
+    // intentionally tolerant — it's the single API-presence check we need to
+    // keep AiDotNet building against any 0.8x AiDotNet.Tensors NuGet.
+    private static System.Reflection.MethodInfo? s_setMaxGradNormMethod;
+    private static bool s_setMaxGradNormProbed;
+
+    private static void TrySetPlanMaxGradNorm(ICompiledTrainingPlan<T> plan, double maxGradNorm)
+    {
+        if (!s_setMaxGradNormProbed)
+        {
+            s_setMaxGradNormMethod = typeof(ICompiledTrainingPlan<T>).GetMethod(
+                "SetMaxGradNorm", new[] { typeof(double) });
+            s_setMaxGradNormProbed = true;
+        }
+        if (s_setMaxGradNormMethod is null) return; // older Tensors NuGet — eager path clips.
+        s_setMaxGradNormMethod.Invoke(plan, new object[] { maxGradNorm });
+    }
+
     /// <summary>
     /// Executes a single compiled training step.
     /// First call traces and compiles; subsequent calls replay the compiled plan.
@@ -433,14 +456,20 @@ public static class CompiledTapeTrainingStep<T>
                 }
                 _configuredPlan = plan;
                 _configuredOptimizerConfig = currentConfig;
-                // Apply the global gradient-norm clip threshold to the plan.
-                // The plan executes the clip inside Step() between backward
-                // and the fused optimizer update, so the optimizer always
-                // sees clipped gradients — matching the eager path's
-                // semantics (NeuralNetworkBase.TrainWithTape clips before
-                // calling opt.Step). Pass 0 to disable.
+                // Apply the global gradient-norm clip threshold to the plan
+                // when the underlying ICompiledTrainingPlan<T> exposes
+                // SetMaxGradNorm. The fused-plan-side clip executes between
+                // backward and the optimizer update so the optimizer sees
+                // clipped gradients — matching the eager path's semantics
+                // (NeuralNetworkBase.TrainWithTape clips before calling
+                // opt.Step). Reflection-shim so AiDotNet still builds
+                // against AiDotNet.Tensors versions that pre-date the
+                // SetMaxGradNorm addition (AiDotNet.Tensors PR #359); on
+                // those older versions the eager path's clipping is the
+                // only line of defense, which is still correct just not
+                // fused. Pass 0 to disable.
                 if (maxGradNorm > 0.0)
-                    plan.SetMaxGradNorm(maxGradNorm);
+                    TrySetPlanMaxGradNorm(plan, maxGradNorm);
             }
             else if (!ReferenceEquals(_configuredPlan, plan))
             {

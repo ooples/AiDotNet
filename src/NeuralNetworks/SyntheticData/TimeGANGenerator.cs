@@ -257,6 +257,20 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// <inheritdoc />
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
     {
+        // Reject configurations that would silently no-op training. With
+        // epochs <= 0 every phase loop runs zero iterations and IsFitted
+        // would still flip true at the bottom (untrained model marked
+        // ready for Generate). With SequenceLength < 2 there are no
+        // (xt, xt+1) pairs so Phase 2 (supervisor) and the supervised
+        // term of Phase 3 (joint) become no-ops — the TimeGAN variant
+        // described in the class docs is no longer what's being trained.
+        if (epochs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epochs), epochs, "epochs must be greater than 0.");
+        if (_options.SequenceLength < 2)
+            throw new InvalidOperationException(
+                "TimeGAN requires SequenceLength >= 2 for the supervisor + temporal-supervision objectives. "
+                + $"Got SequenceLength = {_options.SequenceLength}.");
+
         _columns = new List<ColumnMetadata>(columns);
         _dataWidth = data.Columns;
         int hiddenDim = _options.HiddenDimension;
@@ -267,8 +281,17 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var sequences = PrepareSequences(data, seqLen);
         if (sequences.Count == 0)
         {
-            IsFitted = true;
-            return;
+            throw new InvalidOperationException(
+                "TimeGAN.Fit: no usable sequences produced from the input data "
+                + $"(data rows = {data.Rows}, SequenceLength = {seqLen}). "
+                + "Need at least one window of length >= SequenceLength.");
+        }
+        if (!sequences.Exists(seq => seq.Rows >= 2))
+        {
+            throw new InvalidOperationException(
+                "TimeGAN.Fit: every prepared sequence has fewer than two timesteps, "
+                + "so the supervisor's next-step objective can never produce a pair. "
+                + "Increase the input row count or lower SequenceLength.");
         }
 
         int batchSize = Math.Min(_options.BatchSize, sequences.Count);
@@ -849,22 +872,20 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     private Tensor<T> GenerateNoiseBatchTensor(int batchSize, int dim)
     {
         int totalElements = batchSize * dim;
-        int halfElements = (totalElements + 1) / 2;
-        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
-        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
-        var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
-        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
-        var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
-        var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
-        var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
+        // Box–Muller via the seeded _random so TimeGANOptions.Seed makes
+        // Fit reproducible — Engine.TensorRandomUniformRange bypasses _random
+        // and breaks the seed contract that the rest of the sampler stack
+        // (and Generate via its own seeded paths) honours.
         var noiseData = new T[totalElements];
-        var z1Arr = z1.ToArray();
-        var z2Arr = z2.ToArray();
-        for (int i = 0; i < halfElements; i++)
+        for (int i = 0; i < totalElements; i += 2)
         {
-            int idx = i * 2;
-            if (idx < totalElements) noiseData[idx] = z1Arr[i];
-            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
+            double u1 = 1.0 - _random.NextDouble();   // ∈ (0, 1] keeps log finite
+            double u2 = _random.NextDouble();
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            noiseData[i] = NumOps.FromDouble(r * Math.Cos(theta));
+            if (i + 1 < totalElements)
+                noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
         }
         return new Tensor<T>(noiseData, [batchSize, dim]);
     }

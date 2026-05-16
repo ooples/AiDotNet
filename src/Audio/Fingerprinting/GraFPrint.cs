@@ -61,7 +61,7 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : _options.EmbeddingDim;
 
     /// <inheritdoc />
-    public override double MaxGradNorm => _options?.MaxGradNorm ?? 0.0;
+    public override double MaxGradNormValue => _options?.MaxGradNorm ?? 0.0;
 
     /// <summary>
     /// Return our paper-faithful AdamW + cosine-annealing optimizer instead

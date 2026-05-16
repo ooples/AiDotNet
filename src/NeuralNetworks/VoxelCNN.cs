@@ -403,6 +403,6 @@ public class VoxelCNN<T> : NeuralNetworkBase<T>
             BaseFilters,
             _optimizer,
             _lossFunction,
-            MaxGradNorm);
+            MaxGradNormValue);
     }
 }

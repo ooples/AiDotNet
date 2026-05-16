@@ -153,49 +153,49 @@ public class TableGANGeneratorTests
         using var gen = CreateGenerator();
 
         // Fixed-noise probe drawn from the same RNG that the generator
-        // builder uses, so identical seed → identical pre-Fit baseline
-        // across runs. EmbeddingDimension here matches CreateGenerator()'s
-        // default TableGANOptions so the noise tensor shape lines up with
-        // the generator's input layer.
+        // builder uses, so identical seed → identical baseline across runs.
+        // EmbeddingDimension here matches CreateGenerator()'s default
+        // TableGANOptions so the noise tensor shape lines up with the
+        // generator's input layer.
         var probeOptions = new TableGANOptions<double>();
         var probe = new Tensor<double>([1, probeOptions.EmbeddingDimension]);
-        var probeRng = new System.Random(seed: 7);
+        var probeRng = new System.Random(7);  // positional — Random's seed param name differs across TFMs
         for (int i = 0; i < probe.Length; i++)
             probe[i] = probeRng.NextDouble();
 
-        var preFit = gen.Predict(probe);
-        var preFitSnapshot = new double[preFit.Length];
-        for (int i = 0; i < preFit.Length; i++) preFitSnapshot[i] = preFit[i];
-
-        // 1 epoch is enough to exercise the discriminator-step loop and
-        // the post-fit bookkeeping (IsFitted flag, _columns assignment,
-        // generator layer reinit at the transformed data width).
+        // First Fit absorbs the generator-rebuild-to-transformed-width step
+        // (the no-trainable-weight-update edge case CodeRabbit flagged) so
+        // the snapshot we take afterward reflects the stable post-rebuild
+        // weights — any further change must come from actual gradient steps.
         gen.Fit(data, columns, epochs: 1);
 
         Assert.True(gen.IsFitted);
         Assert.Equal(columns.Length, gen.Columns.Count);
 
-        // Training effect: post-Fit generator output on the same probe must
-        // differ from pre-Fit. Use L2 distance because Fit rebuilds the
-        // generator layers at the transformed data width — the post-Fit
-        // tensor has a different length than the pre-Fit one, so element-
-        // wise inequality isn't well-defined. Either (a) shape change OR
-        // (b) any nonzero L2 distance on the overlapping prefix counts as
-        // observable training effect.
-        var postFit = gen.Predict(probe);
-        bool shapeChanged = postFit.Length != preFit.Length;
+        var stableWidthOutput = gen.Predict(probe);
+        var stableSnapshot = new double[stableWidthOutput.Length];
+        for (int i = 0; i < stableWidthOutput.Length; i++)
+            stableSnapshot[i] = stableWidthOutput[i];
+
+        // Second Fit runs purely against the stable-width architecture, so a
+        // shape-change-only "training" pass cannot satisfy the assertion below.
+        gen.Fit(data, columns, epochs: 1);
+
+        var postSecondFit = gen.Predict(probe);
+        Assert.Equal(stableSnapshot.Length, postSecondFit.Length);
+
         double l2 = 0.0;
-        int common = System.Math.Min(postFit.Length, preFit.Length);
-        for (int i = 0; i < common; i++)
+        for (int i = 0; i < postSecondFit.Length; i++)
         {
-            double d = postFit[i] - preFitSnapshot[i];
+            double d = postSecondFit[i] - stableSnapshot[i];
             l2 += d * d;
         }
-        Assert.True(shapeChanged || l2 > 0.0,
-            $"Fit produced no observable training effect: pre/post outputs "
-            + $"are identical (L2={l2}, shape unchanged). Either Fit silently "
-            + $"skipped the generator update or the no-op Train override "
-            + $"slipped into the Fit path.");
+        Assert.True(l2 > 0.0,
+            $"Fit produced no observable training effect across two epochs of "
+            + $"stable-width training: outputs on a fixed noise probe are "
+            + $"identical (L2={l2}). Either Fit silently skipped the "
+            + $"generator update or the no-op Train override slipped into "
+            + $"the Fit path.");
     }
 
     /// <summary>

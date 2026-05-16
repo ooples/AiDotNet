@@ -902,22 +902,20 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     {
         int embedDim = _options.EmbeddingDimension;
         int totalElements = batchSize * embedDim;
-        int halfElements = (totalElements + 1) / 2;
-        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
-        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
-        var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
-        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
-        var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
-        var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
-        var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
+        // Box–Muller via the seeded _random so DPCTGANOptions.Seed makes the
+        // packed training path reproducible — Engine.TensorRandomUniformRange
+        // bypasses _random and breaks the seed contract that the rest of the
+        // sampler stack (CTGANDataSampler, _random.NextDouble paths) honours.
         var noiseData = new T[totalElements];
-        var z1Arr = z1.ToArray();
-        var z2Arr = z2.ToArray();
-        for (int i = 0; i < halfElements; i++)
+        for (int i = 0; i < totalElements; i += 2)
         {
-            int idx = i * 2;
-            if (idx < totalElements) noiseData[idx] = z1Arr[i];
-            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
+            double u1 = 1.0 - _random.NextDouble();   // ∈ (0, 1] keeps log finite
+            double u2 = _random.NextDouble();
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            noiseData[i] = NumOps.FromDouble(r * Math.Cos(theta));
+            if (i + 1 < totalElements)
+                noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
         }
         return new Tensor<T>(noiseData, [batchSize, embedDim]);
     }

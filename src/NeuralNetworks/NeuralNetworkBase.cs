@@ -291,18 +291,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected DirectGpuTensorEngine? GpuEngine => AiDotNetEngine.Current as DirectGpuTensorEngine;
 
     /// <summary>
-    /// Backing storage for the gradient-clip max norm. Set in the ctor;
-    /// subclasses override the public <see cref="MaxGradNorm"/> property
-    /// to source the value from their own options instead.
+    /// Backing storage for the gradient-clip max norm. Subclasses may assign
+    /// to this in their constructor / init path; the public double-typed
+    /// accessor <see cref="MaxGradNormValue"/> reads through to it.
     /// </summary>
-    protected T MaxGradNormField;
+    protected T MaxGradNorm;
 
     /// <summary>
-    /// Maximum allowed global L2 norm for gradients per training step. When
-    /// the total gradient norm across all trainable parameters exceeds this
-    /// value, every gradient is scaled down by <c>maxNorm / totalNorm</c>
-    /// before the optimizer step. Mirrors PyTorch's
-    /// <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>.
+    /// Maximum allowed global L2 norm for gradients per training step,
+    /// exposed as a <c>double</c>. When the total gradient norm across all
+    /// trainable parameters exceeds this value, every gradient is scaled
+    /// down by <c>maxNorm / totalNorm</c> before the optimizer step.
+    /// Mirrors PyTorch's <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -324,14 +324,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// reciprocal sqrt blows up activations, the chain amplifies).
     /// </para>
     /// </remarks>
-    public virtual double MaxGradNorm => NumOps.ToDouble(MaxGradNormField);
+    public virtual double MaxGradNormValue => NumOps.ToDouble(MaxGradNorm);
 
     /// <summary>
     /// Backwards-compatible <c>T</c>-typed accessor for code that historically
-    /// read the protected field directly. New code should use
-    /// <see cref="MaxGradNorm"/> (the public double-typed virtual).
+    /// read the protected field directly. New code can use the
+    /// <see cref="MaxGradNorm"/> field directly or the double-typed
+    /// <see cref="MaxGradNormValue"/> virtual.
     /// </summary>
-    protected T MaxGradNormT => NumOps.FromDouble(MaxGradNorm);
+    protected T MaxGradNormT => MaxGradNorm;
 
     /// <summary>
     /// Cached parameter count to avoid repeated Sum() calculations.
@@ -395,7 +396,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Architecture = architecture;
         _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
-        MaxGradNormField = NumOps.FromDouble(maxGradNorm);
+        MaxGradNorm = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
         _cachedParameterCount = null;
         _sensitiveFeatures = new Vector<int>(0);
@@ -5355,7 +5356,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // GraFPrint at batch=1) can produce single-step Adam explosions
             // that drive loss up by orders of magnitude on the very first
             // iteration. Skipped when MaxGradNorm <= 0 (the default).
-            double maxGradNorm = MaxGradNorm;
+            double maxGradNorm = MaxGradNormValue;
             if (maxGradNorm > 0.0 && grads.Count > 0)
             {
                 // Pass trainableParams as the iteration-order key so the
@@ -5797,7 +5798,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             epsilon: eps,
             weightDecay: wd,
             out T lossValue,
-            maxGradNorm: MaxGradNorm,
+            maxGradNorm: MaxGradNormValue,
             lrSchedule: lrSched);
 
         if (ran)
