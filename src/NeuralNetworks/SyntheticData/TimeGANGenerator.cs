@@ -670,10 +670,16 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// </summary>
     private void TrainGeneratorStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
-        var xBatch = BuildFlattenedSequenceBatch(sequences, startIdx, endIdx);
-        if (xBatch.Shape[0] == 0) return;
-        int batchSize = xBatch.Shape[0];
         int hiddenDim = _options.HiddenDimension;
+
+        // Phase 3 joint loss (Yoon et al. 2019 §3.3) =
+        //   L_U (unsupervised adversarial, non-saturating)
+        //   + γ · L_S (supervised next-step MSE on real sequence pairs).
+        // Without the L_S term the supervisor is updated only through the
+        // adversarial gradient — the next-step temporal structure that
+        // L_S explicitly preserves is lost once joint training begins.
+        var (xt, xtNext) = BuildPairedSequenceBatch(sequences, startIdx, endIdx);
+        int supervisedBatch = xt.Shape[0];
 
         using var tape = new GradientTape<T>();
 
@@ -683,14 +689,41 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         if (_supervisorOutput is not null) genSupLayers.Add(_supervisorOutput);
         var paramsList = TapeTrainingStep<T>.CollectParameters(genSupLayers);
 
-        var noise = GenerateNoiseBatchTensor(batchSize, hiddenDim);
+        // Adversarial term: minimize -log σ(D(s(g(z))))
+        int advBatch = Math.Max(1, supervisedBatch);
+        var noise = GenerateNoiseBatchTensor(advBatch, hiddenDim);
         var fakeEmb = GeneratorForwardBatched(noise, isTraining: true);
         var fakeSup = SupervisorForwardBatched(fakeEmb, isTraining: true);
         var fakeScores = DiscriminatorForwardBatched(fakeSup, isTraining: false);
+        var advAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var advLoss = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(fakeScores), advAxes, keepDims: false));
 
-        var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
-        // Non-saturating generator loss: minimize -log σ(D(G(z)))
-        var lossTensor = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(fakeScores), allAxes, keepDims: false));
+        Tensor<T> lossTensor;
+        if (supervisedBatch > 0)
+        {
+            // Supervised term: L_S = E[||h_{t+1} − s(h_t)||_2^2] on real
+            // sequence pairs. Embedder is frozen by Phase 1 and runs
+            // outside the tape; the supervisor remains tape-tracked so its
+            // gradient flows.
+            var ht = EmbedderForwardBatched(xt, isTraining: false);
+            var htNext = EmbedderForwardBatched(xtNext, isTraining: false);
+            var htPred = SupervisorForwardBatched(ht, isTraining: true);
+            var diff = Engine.TensorSubtract(htPred, htNext);
+            var sq = Engine.TensorMultiply(diff, diff);
+            var supAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+            var supLoss = Engine.ReduceMean(sq, supAxes, keepDims: false);
+
+            // Yoon 2019 uses equal weighting between L_U and L_S in the
+            // joint phase; expose γ via options later if needed.
+            var weightedSup = Engine.TensorMultiplyScalar(supLoss, NumOps.FromDouble(_options.SupervisedWeight));
+            lossTensor = Engine.TensorAdd(advLoss, weightedSup);
+        }
+        else
+        {
+            // No paired data available (sequence too short for next-step
+            // pairing) — fall back to adversarial-only for this batch.
+            lossTensor = advLoss;
+        }
 
         var grads = tape.ComputeGradients(lossTensor, paramsList);
         T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
@@ -698,7 +731,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(
             SupervisorForwardBatched(GeneratorForwardBatched(inp, true), true), false);
         Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) =>
-            Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), allAxes, keepDims: false));
+            Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), advAxes, keepDims: false));
 
         var context = new TapeStepContext<T>(
             paramsList, grads, lossValue,
@@ -841,7 +874,14 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         return current;
     }
 
-    private Tensor<T> LogSigmoid(Tensor<T> x) => Engine.TensorLog(Engine.Sigmoid(x));
+    // Numerically stable log σ(x) = -softplus(-x). The naive
+    // log(σ(x)) = log(1 / (1 + exp(-x))) underflows to -∞ for confident
+    // negative scores (sigmoid saturates at 0). The softplus form keeps
+    // the dynamic range intact because softplus(z) = log(1+exp(z)) is
+    // implemented via the stable max(z,0) + log(1+exp(-|z|)) identity
+    // inside Engine.Softplus.
+    private Tensor<T> LogSigmoid(Tensor<T> x) =>
+        Engine.TensorNegate(Engine.Softplus(Engine.TensorNegate(x)));
 
     #endregion
 

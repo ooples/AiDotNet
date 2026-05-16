@@ -23784,6 +23784,8 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int patchSize = 16)
     {
+        ValidatePatchSize(patchSize);
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
@@ -32021,6 +32023,11 @@ public static class LayerHelper<T>
         double dropoutRate = 0.1,
         int inputFeatureDim = 0)
     {
+        if (inputFeatureDim < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(inputFeatureDim), inputFeatureDim,
+                "inputFeatureDim cannot be negative; use 0 (no projection) or a positive feature width.");
+
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
