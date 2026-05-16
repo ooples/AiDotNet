@@ -126,10 +126,24 @@ public class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM<T>
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); }
+        else
+        {
+            // Patch-size validation only matters for the default vision-adapter
+            // stack — custom Architecture.Layers stacks never consult
+            // _options.ImageSize / _options.MaxVisualTokens, so rejecting them
+            // for invalid patch options breaks valid custom builds.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            ComputeEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary(_encoderLayerEnd);
     }
 
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 6; }
+    // ViT patch size derived from the paper's image size and visual-token budget.
+    // Phi-3-Vision (Abdin et al. 2024): 336 / sqrt(576) = 14, matching the paper's 14x14 patches.
+    private int ComputePatchSize() => ComputeVisualPatchSize(_options.ImageSize, _options.MaxVisualTokens, roundUp: true);
+    // +2 leading layers from the helper: PatchEmbedding + LayerNorm. Previously +1 (LayerNorm only).
+    private void ComputeEncoderDecoderBoundary() { _encoderLayerEnd = ComputeVisionLanguageBoundary(leadingLayerCount: 2, visionLayerCount: _options.NumVisionLayers, visionBlockLayerCount: TransformerBlockLayerCount(_options.DropoutRate), trailingLayerCount: 6); }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
 
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }

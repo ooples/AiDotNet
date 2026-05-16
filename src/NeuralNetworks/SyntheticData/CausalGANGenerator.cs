@@ -1,13 +1,16 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -392,16 +395,18 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
         {
             for (int batch = 0; batch < numBatches; batch++)
             {
-                // Train discriminator (multiple steps per generator step)
+                // Paper-faithful CausalGAN training schedule (Kocaoglu et al.
+                // 2018 + NOTEARS / Zheng et al. 2018 §3.2). Critic + generator
+                // both via GradientTape; the causal adjacency matrix is
+                // updated separately via augmented Lagrangian after each
+                // epoch.
                 for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                 {
-                    TrainDiscriminatorStep(transformedData, batchSize, lr);
+                    TrainDiscriminatorStepBatched(transformedData, batchSize);
                 }
-
-                // Train generator
+                TrainGeneratorStepBatched(batchSize);
             }
 
-            // Update adjacency matrix with NOTEARS constraint
             UpdateAdjacencyAugmentedLagrangian(lr);
         }
 
@@ -453,8 +458,9 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
                 {
                     for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                     {
-                        TrainDiscriminatorStep(transformedData, batchSize, lr);
+                        TrainDiscriminatorStepBatched(transformedData, batchSize);
                     }
+                    TrainGeneratorStepBatched(batchSize);
                 }
                 UpdateAdjacencyAugmentedLagrangian(lr);
             }
@@ -574,41 +580,254 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     #region Training Steps
 
     /// <summary>
-    /// Trains the discriminator for one step with WGAN-GP loss.
+    /// Paper-faithful WGAN-GP critic step over the causal-structured fake
+    /// distribution (Kocaoglu et al. 2018 §4 / Gulrajani et al. 2017). Fake
+    /// samples are generated through the residual generator, then have the
+    /// causal adjacency matrix applied so the critic learns the joint
+    /// causal distribution. Tape-based gradients via
+    /// <see cref="GradientTape{T}"/> + <see cref="TapeStepContext{T}"/>.
     /// </summary>
-    private void TrainDiscriminatorStep(Matrix<T> transformedData, int batchSize, T learningRate)
+    private void TrainDiscriminatorStepBatched(Matrix<T> transformedData, int batchSize)
     {
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(learningRate) / batchSize);
+        var (realBatch, fakeBatch) = BuildRealAndFakeBatches(transformedData, batchSize);
 
-        for (int s = 0; s < batchSize; s++)
+        using var tape = new GradientTape<T>();
+        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers.Cast<ILayer<T>>());
+
+        var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: true);
+
+        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+        var avgReal = Engine.ReduceMean(realScores, allAxes, keepDims: false);
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        var wassersteinLoss = Engine.TensorSubtract(avgFake, avgReal);
+        var gradientPenalty = ComputeGradientPenalty(realBatch, fakeBatch);
+        var lossTensor = Engine.TensorAdd(
+            wassersteinLoss,
+            Engine.TensorMultiplyScalar(gradientPenalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+
+        var grads = tape.ComputeGradients(lossTensor, discParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
+            var recomputedFakeScores = DiscriminatorForwardBatched(fakeBatch, true);
+            var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
+            var recomputedWasserstein = Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+            var recomputedGradientPenalty = ComputeGradientPenalty(realBatch, fakeBatch);
+            return Engine.TensorAdd(
+                recomputedWasserstein,
+                Engine.TensorMultiplyScalar(recomputedGradientPenalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+        }
+
+        var context = new TapeStepContext<T>(
+            discParams, grads, lossValue,
+            realBatch, realBatch, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Paper-faithful generator step: minimize -E[D(G(z) ⊗ A)] where the
+    /// fake samples flow through the residual generator then the causal
+    /// adjacency mask (Kocaoglu et al. 2018). Tape-tracked end-to-end.
+    /// </summary>
+    private void TrainGeneratorStepBatched(int batchSize)
+    {
+        using var tape = new GradientTape<T>();
+        var generatorLayers = new List<ILayer<T>>();
+        generatorLayers.AddRange(Layers);
+        foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
+        var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
+
+        var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+        var fakeRaw = GeneratorForwardBatched(noiseBatch);
+        var fakeCausal = _adjacency is not null ? ApplyCausalStructureBatched(fakeRaw) : fakeRaw;
+        var fakeBatch = ApplyOutputActivationsBatched(fakeCausal);
+
+        var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: false);
+        var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        var lossTensor = Engine.TensorNegate(avgFake);
+
+        var grads = tape.ComputeGradients(lossTensor, genParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _)
+        {
+            var f = GeneratorForwardBatched(inp);
+            var c = _adjacency is not null ? ApplyCausalStructureBatched(f) : f;
+            var a = ApplyOutputActivationsBatched(c);
+            return DiscriminatorForwardBatched(a, false);
+        }
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.TensorNegate(Engine.ReduceMean(pred, allAxes, keepDims: false));
+
+        var context = new TapeStepContext<T>(
+            genParams, grads, lossValue,
+            noiseBatch, noiseBatch, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    private (Tensor<T> realBatch, Tensor<T> fakeBatch) BuildRealAndFakeBatches(
+        Matrix<T> transformedData, int batchSize)
+    {
+        var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+        var fakeRaw = GeneratorForwardBatched(noiseBatch);
+        var fakeCausal = _adjacency is not null ? ApplyCausalStructureBatched(fakeRaw) : fakeRaw;
+        var fakeBatch = ApplyOutputActivationsBatched(fakeCausal);
+
+        var realBatch = new Tensor<T>([batchSize, _dataWidth]);
+        for (int b = 0; b < batchSize; b++)
         {
             int rowIdx = _random.Next(transformedData.Rows);
-            var realRow = GetRow(transformedData, rowIdx);
-
-            // Generate fake sample with causal structure
-            var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-            var fakeRaw = GeneratorForward(VectorToTensor(noise));
-            if (_adjacency is not null)
-            {
-                fakeRaw = ApplyCausalStructure(fakeRaw);
-            }
-            fakeRaw = ApplyOutputActivations(fakeRaw);
-            var fakeRow = TensorToVector(fakeRaw, _dataWidth);
-
-            // WGAN loss on fake: gradient = +1
-            _ = DiscriminatorForward(VectorToTensor(fakeRow), isTraining: true);
-            var fakeGrad = new Tensor<T>([1]);
-            fakeGrad[0] = NumOps.One;
-            UpdateDiscriminatorParameters(scaledLr);
-
-            // WGAN loss on real: gradient = -1
-            _ = DiscriminatorForward(VectorToTensor(realRow), isTraining: true);
-            var realGrad = new Tensor<T>([1]);
-            realGrad[0] = NumOps.Negate(NumOps.One);
-            UpdateDiscriminatorParameters(scaledLr);
-
-            // WGAN-GP gradient penalty
+            int cols = Math.Min(_dataWidth, transformedData.Columns);
+            for (int j = 0; j < cols; j++) realBatch[b, j] = transformedData[rowIdx, j];
         }
+        return (realBatch, fakeBatch);
+    }
+
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize)
+    {
+        int embedDim = _options.EmbeddingDimension;
+        int totalElements = batchSize * embedDim;
+        int halfElements = (totalElements + 1) / 2;
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
+        var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));
+        var z1 = Engine.TensorMultiply(radius, Engine.TensorCos(theta));
+        var z2 = Engine.TensorMultiply(radius, Engine.TensorSin(theta));
+        var noiseData = new T[totalElements];
+        var z1Arr = z1.ToArray();
+        var z2Arr = z2.ToArray();
+        for (int i = 0; i < halfElements; i++)
+        {
+            int idx = i * 2;
+            if (idx < totalElements) noiseData[idx] = z1Arr[i];
+            if (idx + 1 < totalElements) noiseData[idx + 1] = z2Arr[i];
+        }
+        return new Tensor<T>(noiseData, [batchSize, embedDim]);
+    }
+
+    /// <summary>
+    /// Batched generator forward, tape-tracked. Same residual + BN + ReLU
+    /// architecture as <see cref="GeneratorForward"/>, but using
+    /// <see cref="Engine.TensorConcatenate"/> + <see cref="Engine.ReLU"/>.
+    /// </summary>
+    private Tensor<T> GeneratorForwardBatched(Tensor<T> noise)
+    {
+        if (_usingCustomLayers)
+        {
+            var c = noise;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+        var h = noise;
+        int numHidden = Layers.Count - 1;
+        for (int i = 0; i < numHidden; i++)
+        {
+            if (i > 0) h = Engine.TensorConcatenate([h, noise], axis: 1);
+            h = Layers[i].Forward(h);
+            if (i < _genBNLayers.Count) h = _genBNLayers[i].Forward(h);
+            h = Engine.ReLU(h);
+        }
+        h = Engine.TensorConcatenate([h, noise], axis: 1);
+        h = Layers[^1].Forward(h);
+        return h;
+    }
+
+    /// <summary>
+    /// Batched discriminator forward (LeakyReLU 0.2 + dropout), tape-tracked.
+    /// </summary>
+    private Tensor<T> DiscriminatorForwardBatched(Tensor<T> input, bool isTraining)
+    {
+        var current = input;
+        T leakySlope = NumOps.FromDouble(0.2);
+        for (int i = 0; i < _discLayers.Count - 1; i++)
+        {
+            current = _discLayers[i].Forward(current);
+            current = Engine.LeakyReLU(current, leakySlope);
+            if (isTraining && i < _discDropoutLayers.Count)
+                current = _discDropoutLayers[i].Forward(current);
+        }
+        current = _discLayers[^1].Forward(current);
+        return current;
+    }
+
+    /// <summary>
+    /// Applies the learned causal adjacency matrix to a batch of fake samples
+    /// (Kocaoglu et al. 2018). Each sample row x is multiplied by
+    /// (I + A), where A is the dataWidth x dataWidth causal adjacency matrix.
+    /// Implemented as a tape-tracked TensorMatMul.
+    /// </summary>
+    private Tensor<T> ApplyCausalStructureBatched(Tensor<T> fakeBatch)
+    {
+        if (_adjacency is null) return fakeBatch;
+
+        // Build (I + A) as a Tensor<T> of shape [dataWidth, dataWidth].
+        int d = _dataWidth;
+        var iPlusA = new Tensor<T>([d, d]);
+        for (int i = 0; i < d; i++)
+        for (int j = 0; j < d; j++)
+            iPlusA[i, j] = i == j
+                ? NumOps.Add(NumOps.One, _adjacency[i, j])
+                : _adjacency[i, j];
+
+        // [B, d] × [d, d] -> [B, d]
+        return Engine.TensorMatMul(fakeBatch, iPlusA);
+    }
+
+    /// <summary>
+    /// Batched per-column VGM output activation (matches CTGAN /
+    /// TableGAN's tape-tracked Tanh + per-block Softmax dispatch).
+    /// </summary>
+    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output)
+    {
+        if (_transformer is null) return Engine.TensorTanh(output);
+
+        int batch = output.Shape[0];
+        int totalWidth = output.Shape[1];
+        var blocks = new List<Tensor<T>>(_columns.Count * 2);
+        int idx = 0;
+
+        for (int col = 0; col < _columns.Count && idx < totalWidth; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+            if (transform.IsContinuous)
+            {
+                var valueSlice = Engine.TensorSlice(output, [0, idx], [batch, 1]);
+                blocks.Add(Engine.TensorTanh(valueSlice));
+                idx++;
+                int numModes = transform.Width - 1;
+                int modeLength = Math.Min(numModes, totalWidth - idx);
+                if (modeLength > 0)
+                {
+                    var modeSlice = Engine.TensorSlice(output, [0, idx], [batch, modeLength]);
+                    blocks.Add(Engine.Softmax(modeSlice, axis: 1));
+                    idx += modeLength;
+                }
+            }
+            else
+            {
+                int blockLength = Math.Min(transform.Width, totalWidth - idx);
+                var catSlice = Engine.TensorSlice(output, [0, idx], [batch, blockLength]);
+                blocks.Add(Engine.Softmax(catSlice, axis: 1));
+                idx += blockLength;
+            }
+        }
+
+        if (idx < totalWidth)
+        {
+            var tail = Engine.TensorSlice(output, [0, idx], [batch, totalWidth - idx]);
+            blocks.Add(Engine.TensorTanh(tail));
+        }
+
+        if (blocks.Count == 1) return blocks[0];
+        return Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
     }
 
     #endregion
@@ -779,6 +998,48 @@ public class CausalGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGene
     #endregion
 
     #region Gradient Penalty
+
+    private Tensor<T> ComputeGradientPenalty(Tensor<T> realBatch, Tensor<T> fakeBatch)
+    {
+        int batchSize = Math.Max(1, realBatch.Shape[0]);
+        int elementsPerSample = Math.Max(1, realBatch.Length / batchSize);
+
+        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
+        var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realBatch.Length]);
+        var ones = new Tensor<T>([realBatch.Length]);
+        Engine.TensorFill(ones, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(ones, epsilonBroadcast);
+
+        var realFlat = realBatch.Reshape([realBatch.Length]);
+        var fakeFlat = fakeBatch.Reshape([fakeBatch.Length]);
+        var interpolatedFlat = Engine.TensorAdd(
+            Engine.TensorMultiply(epsilonBroadcast, realFlat),
+            Engine.TensorMultiply(oneMinusEpsilon, fakeFlat));
+        var interpolated = interpolatedFlat.Reshape(realBatch._shape);
+
+        Tensor<T> inputGradients;
+        using (var gradientTape = new GradientTape<T>())
+        {
+            var scores = DiscriminatorForwardBatched(interpolated, true);
+            var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated]);
+            inputGradients = gradients.TryGetValue(interpolated, out var gradient)
+                ? gradient
+                : new Tensor<T>(interpolated._shape);
+        }
+
+        var gradientsReshaped = inputGradients.Reshape([batchSize, elementsPerSample]);
+        var gradientSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
+        var gradientNormSquared = Engine.ReduceSum(gradientSquared, [1], keepDims: false);
+        var gradientNorm = Engine.TensorSqrt(Engine.TensorAddScalar(gradientNormSquared, NumOps.FromDouble(1e-12)));
+        var targetNorm = new Tensor<T>(gradientNorm._shape);
+        Engine.TensorFill(targetNorm, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradientNorm, targetNorm);
+        var penalty = Engine.TensorMultiply(deviation, deviation);
+        var penaltyAxes = Enumerable.Range(0, penalty.Shape.Length).ToArray();
+        return Engine.ReduceMean(penalty, penaltyAxes, keepDims: false);
+    }
 
     #endregion
 

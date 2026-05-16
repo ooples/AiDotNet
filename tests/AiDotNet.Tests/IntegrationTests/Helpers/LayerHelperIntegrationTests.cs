@@ -16,6 +16,26 @@ namespace AiDotNet.Tests.IntegrationTests.Helpers;
 /// </summary>
 public class LayerHelperIntegrationTests
 {
+    [Fact(Timeout = 120000)]
+    public async Task VisionLanguagePatchFactories_InvalidPatchSize_ThrowAtFactoryBoundary()
+    {
+        var factories = new Action[]
+        {
+            () => LayerHelper<double>.CreateDefaultLLaVAMLPProjectorLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultPixelShuffleProjectorLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultCrossAttentionResamplerVLMLayers(patchSize: 0).ToList(),
+            () => LayerHelper<double>.CreateDefaultVisionAdapterLayers(patchSize: 0).ToList()
+        };
+
+        foreach (var factory in factories)
+        {
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(factory);
+            Assert.Equal("patchSize", ex.ParamName);
+        }
+
+        await Task.CompletedTask;
+    }
+
     #region CreateDefaultLayers Tests
 
     [Fact(Timeout = 120000)]
@@ -286,20 +306,28 @@ public class LayerHelperIntegrationTests
 
         var layers = LayerHelper<double>.CreateDefaultDeepBeliefNetworkLayers(architecture).ToList();
 
-        // layerSizes = [784, 500, 500, 2000, 10] -> 4 transitions.
-        // Each transition is one RBMLayer (applies sigmoid internally,
-        // no separate ActivationLayer needed — see the source comment
-        // about avoiding double-sigmoid compression). Output layer is
-        // one DenseLayer with softmax (or identity for regression).
-        // Total: 4 RBM + 1 Dense = 5 layers.
-        Assert.Equal(5, layers.Count);
+        // Per Hinton 2006 / Hinton & Salakhutdinov 2006, the RBM stack is
+        // strictly [inputSize, 500, 500, 2000] (three RBMs forming the deep
+        // feature-extraction tower); the supervised projection head sits on
+        // top as a SEPARATE DenseLayer — the paper does not fold the
+        // classification head into the RBM tower. Total: 3 RBM + 1 Dense = 4.
+        // Earlier revisions of CreateDefaultDeepBeliefNetworkLayers appended
+        // architecture.OutputSize into the RBM stack itself, producing a
+        // 4-RBM tower whose final RBM was RBM(2000 → outputSize) — for the
+        // common regression / single-scalar head that reduces to a 1-unit
+        // sigmoid bottleneck which destroys all input-dependent information
+        // before the supervised head ever sees it (the L2-collapse signature
+        // the DBN.DifferentInputs_AfterTraining invariant catches). This
+        // test was updated to assert the paper-faithful 3-RBM-plus-Dense
+        // layout when the architecture factory was corrected.
+        Assert.Equal(4, layers.Count);
 
         // Should contain RBM layers (core of DBN)
         Assert.Contains(layers, l => l is RBMLayer<double>);
 
-        // Count RBM layers (one per transition in layerSizes)
+        // Count RBM layers (one per transition in the rbmStackSizes chain).
         int rbmCount = layers.Count(l => l is RBMLayer<double>);
-        Assert.Equal(4, rbmCount);
+        Assert.Equal(3, rbmCount);
 
         // Final layer must be the dense classifier head.
         Assert.IsType<DenseLayer<double>>(layers[^1]);

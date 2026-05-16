@@ -203,6 +203,72 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Validates image/token settings used to derive patch sizes for native VLM layer factories.
+    /// </summary>
+    private protected static void ValidateVisualPatchOptions(int imageSize, int maxVisualTokens)
+    {
+        if (imageSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(imageSize), imageSize, "ImageSize must be greater than 0.");
+        if (maxVisualTokens <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxVisualTokens), maxVisualTokens, "MaxVisualTokens must be greater than 0.");
+    }
+
+    /// <summary>
+    /// Computes a patch size from an image size and target visual-token budget.
+    /// </summary>
+    private protected static int ComputeVisualPatchSize(int imageSize, int maxVisualTokens, bool roundUp = false)
+    {
+        ValidateVisualPatchOptions(imageSize, maxVisualTokens);
+        double targetTokensPerSide = Math.Sqrt(maxVisualTokens);
+        double patchSize = imageSize / targetTokensPerSide;
+        return Math.Max(1, roundUp ? (int)Math.Ceiling(patchSize) : (int)patchSize);
+    }
+
+    /// <summary>
+    /// Returns the layer count contributed by a standard transformer block.
+    /// </summary>
+    private protected static int TransformerBlockLayerCount(double dropoutRate) => dropoutRate > 0 ? 6 : 5;
+
+    /// <summary>
+    /// Returns the layer count contributed by a cross-attention resampler block.
+    /// </summary>
+    private protected static int ResamplerBlockLayerCount(double dropoutRate) => dropoutRate > 0 ? 8 : 7;
+
+    /// <summary>
+    /// Computes an encoder/decoder split boundary from repeated block counts.
+    /// </summary>
+    private protected static int ComputeVisionLanguageBoundary(
+        int leadingLayerCount,
+        int visionLayerCount,
+        int visionBlockLayerCount,
+        int auxiliaryBlockCount = 0,
+        int auxiliaryBlockLayerCount = 0,
+        int trailingLayerCount = 0)
+    {
+        if (leadingLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(leadingLayerCount));
+        if (visionLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(visionLayerCount));
+        if (visionBlockLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(visionBlockLayerCount));
+        if (auxiliaryBlockCount < 0) throw new ArgumentOutOfRangeException(nameof(auxiliaryBlockCount));
+        if (auxiliaryBlockLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(auxiliaryBlockLayerCount));
+        if (trailingLayerCount < 0) throw new ArgumentOutOfRangeException(nameof(trailingLayerCount));
+
+        return checked(
+            leadingLayerCount +
+            visionLayerCount * visionBlockLayerCount +
+            auxiliaryBlockCount * auxiliaryBlockLayerCount +
+            trailingLayerCount);
+    }
+
+    /// <summary>
+    /// Verifies the computed encoder/decoder split is inside the current layer list.
+    /// </summary>
+    private protected void ValidateEncoderDecoderBoundary(int encoderLayerEnd)
+    {
+        if (encoderLayerEnd <= 0 || encoderLayerEnd > Layers.Count)
+            throw new InvalidOperationException($"Invalid encoder boundary {encoderLayerEnd} for {Layers.Count} layers.");
+    }
+
+    /// <summary>
     /// Gets the default loss function for this model.
     /// </summary>
     public override ILossFunction<T> DefaultLossFunction => LossFunction;

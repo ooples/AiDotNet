@@ -1653,9 +1653,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
             generatorFeatureMaps: 8,
             discriminatorFeatureMaps: 8);
 
-        // Create noise input matching the generator's expected input shape
-        // DCGAN generator expects input depth = featureMaps * 8 = 64, spatial size = 4x4
-        var noiseInput = CreateRandomTensor([64, 4, 4]); // [channels, height, width]
+        // Per Radford et al. 2015 §3, DCGAN's generator input is the latent
+        // noise vector of size `latentSize`. The generator's first Dense layer
+        // projects [latentSize] → [generatorFeatureMaps*8, initialSize, initialSize]
+        // internally; consumers feed only the latent vector. The previous test
+        // body passed the post-projection feature-map shape [64, 4, 4] and was
+        // rejected by the projection's input-shape contract.
+        var noiseInput = CreateRandomTensor([16]); // [latentSize]
 
         // Act
         var output = dcgan.Predict(noiseInput);

@@ -7,8 +7,10 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -375,23 +377,42 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         int numPacks = Math.Max(1, batchSize / pacSize);
         int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        bool privacyBudgetExhausted = false;
+        for (int epoch = 0; epoch < epochs && !privacyBudgetExhausted; epoch++)
         {
             if (_cumulativeEpsilon >= _options.Epsilon)
             {
                 break; // Privacy budget exhausted
             }
 
-            for (int batch = 0; batch < numBatches; batch++)
+            for (int batch = 0; batch < numBatches && !privacyBudgetExhausted; batch++)
             {
+                // DP-SGD-faithful schedule (Abadi et al. 2016 §3 over CTGAN's
+                // PacGAN-packed WGAN-GP). Critic step applies the per-step
+                // (clip, noise) primitive on its tape-computed gradients;
+                // generator step does the standard untrained-critic max.
+                //
+                // CRITICAL: charge privacy budget for EVERY critic step,
+                // not just once per outer batch. Each TrainDiscriminatorStepBatchedDP
+                // touches real data and consumes one DP-SGD privacy slot;
+                // accumulating only the outer-loop's stepEpsilon under-counts
+                // by a factor of DiscriminatorSteps and lets the early-stop
+                // guard (_cumulativeEpsilon >= _options.Epsilon) leak budget.
+                // Check budget INSIDE the inner loop too — without that
+                // mid-epoch exit, a critic step can push the run past the
+                // (ε, δ) target and the remaining steps in that epoch still
+                // execute, consuming extra privacy.
                 for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                 {
-                    TrainDiscriminatorStepDP(transformedData, numPacks, lr);
+                    TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
+                    _cumulativeEpsilon += ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
+                    if (_cumulativeEpsilon >= _options.Epsilon)
+                    {
+                        privacyBudgetExhausted = true;
+                        break;
+                    }
                 }
-
-
-                double stepEpsilon = ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
-                _cumulativeEpsilon += stepEpsilon;
+                if (!privacyBudgetExhausted) TrainGeneratorStepBatched(transformedData, numPacks);
             }
         }
 
@@ -434,20 +455,33 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             int numPacks = Math.Max(1, batchSize / pacSize);
             int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            bool privacyBudgetExhausted = false;
+            for (int epoch = 0; epoch < epochs && !privacyBudgetExhausted; epoch++)
             {
                 ct.ThrowIfCancellationRequested();
                 if (_cumulativeEpsilon >= _options.Epsilon) break;
 
-                for (int batch = 0; batch < numBatches; batch++)
+                for (int batch = 0; batch < numBatches && !privacyBudgetExhausted; batch++)
                 {
+                    // Charge privacy budget per critic step — each one touches
+                    // real data and is its own DP-SGD privacy event. Charging
+                    // only the outer-loop step under-counts by DiscriminatorSteps
+                    // and leaks budget past the early-stop guard. The mid-batch
+                    // privacy-exhaustion break stops further critic + generator
+                    // updates so a single critic step can't push the run past
+                    // the (ε, δ) target and still execute the remaining steps.
                     for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                     {
-                        TrainDiscriminatorStepDP(transformedData, numPacks, lr);
+                        TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
+                        _cumulativeEpsilon += ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
+                        if (_cumulativeEpsilon >= _options.Epsilon)
+                        {
+                            privacyBudgetExhausted = true;
+                            break;
+                        }
                     }
-
-                    double stepEpsilon = ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
-                    _cumulativeEpsilon += stepEpsilon;
+                    if (privacyBudgetExhausted) break;
+                    TrainGeneratorStepBatched(transformedData, numPacks);
                 }
             }
         }, ct).ConfigureAwait(false);
@@ -516,7 +550,17 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
         // Approximate noise multiplier from privacy budget
         // Using simplified Gaussian mechanism: sigma >= sqrt(2 * ln(1.25/delta)) * sensitivity / epsilon
-        int totalSteps = epochs * Math.Max(1, datasetSize / _options.BatchSize);
+        //
+        // Per-step privacy events: each TrainDiscriminatorStepBatchedDP call
+        // is a separate privacy event under Abadi 2016 §3 (the privacy budget
+        // is charged per critic step in the training loop). DiscriminatorSteps
+        // > 1 multiplies the number of events per outer batch, so the
+        // perStepEpsilon must be divided across DiscriminatorSteps × batches ×
+        // epochs — otherwise the auto-derived sigma is under-noised and the
+        // reported (ε, δ) bound is overstated.
+        int totalSteps = epochs
+            * Math.Max(1, datasetSize / _options.BatchSize)
+            * Math.Max(1, _options.DiscriminatorSteps);
         double perStepEpsilon = _options.Epsilon / Math.Max(totalSteps, 1);
         double sensitivity = _options.ClipNorm;
         double minNoise = Math.Sqrt(2.0 * Math.Log(1.25 / _options.Delta)) * sensitivity / Math.Max(perStepEpsilon, 1e-10);
@@ -567,55 +611,432 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     #region GAN Training Steps
 
     /// <summary>
-    /// Trains the discriminator for one step with DP noise injection on discriminator updates.
+    /// Paper-faithful DP-SGD critic step (Abadi et al. 2016
+    /// "Deep Learning with Differential Privacy" §3, layered over Xu et al.
+    /// 2019 CTGAN's PacGAN-packed WGAN). Computes per-packed-example WGAN
+    /// critic gradients, then applies the canonical DP-SGD primitive:
+    ///   1. Clip each example's full gradient vector to <see cref="_options.ClipNorm"/>.
+    ///   2. Average the clipped gradients and add Gaussian noise.
+    ///   3. Hand the noised averaged gradient to the optimizer via TapeStepContext.
+    /// Replaces the prior <c>UpdateDiscriminatorParametersDP</c> path that
+    /// clipped/noised the parameters directly (not paper-faithful — DP-SGD
+    /// operates on gradients) and threw "Backward pass must be called…" on
+    /// the tape-only autodiff stack.
     /// </summary>
-    private void TrainDiscriminatorStepDP(Matrix<T> transformedData, int numPacks, T learningRate)
+    private void TrainDiscriminatorStepBatchedDP(Matrix<T> transformedData, int numPacks)
     {
-        if (_sampler is null || _packedRealBuf is null || _packedFakeBuf is null ||
-            _noiseBuf is null || _genInputBuf is null || _realSingleBuf is null ||
-            _fakeSingleBuf is null || _realRowBuf is null || _fakeRowBuf is null ||
-            _oneGrad is null || _negOneGrad is null) return;
+        if (_sampler is null) return;
+
+        var (realPacked, fakePacked) = BuildPackedRealAndFakeBatches(transformedData, numPacks);
+
+        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers);
+
+        var realScores = DiscriminatorForwardBatched(realPacked, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: true);
+
+        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+        var avgReal = Engine.ReduceMean(realScores, allAxes, keepDims: false);
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        // Critic objective: E[D(fake)] − E[D(real)] + λ·GP (Gulrajani 2017
+        // WGAN-GP). Plain WGAN without the 1-Lipschitz constraint regresses
+        // the critic's geometry; the GP term is the soft-Lipschitz penalty
+        // that recovers Earth-Mover distance. λ from options.
+        var wasserstein = Engine.TensorSubtract(avgFake, avgReal);
+        var gp = ComputeGradientPenalty(realPacked, fakePacked);
+        var lossTensor = Engine.TensorAdd(
+            wasserstein,
+            Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+
+        var noisedGrads = ComputePerExampleNoisedGradients(realPacked, fakePacked, discParams);
+
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        // Replay must reproduce the full objective (Wasserstein + λ·GP).
+        var capturedReal = realPacked;
+        var capturedFake = fakePacked;
+        double capturedGpWeight = _options.GradientPenaltyWeight;
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
+            var recomputedFakeScores = DiscriminatorForwardBatched(capturedFake, true);
+            var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
+            var recomputedWasserstein = Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
+            var recomputedGp = ComputeGradientPenalty(capturedReal, capturedFake);
+            return Engine.TensorAdd(
+                recomputedWasserstein,
+                Engine.TensorMultiplyScalar(recomputedGp, NumOps.FromDouble(capturedGpWeight)));
+        }
+
+        var context = new TapeStepContext<T>(
+            discParams, noisedGrads, lossValue,
+            realPacked, realPacked, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Non-DP generator step (Abadi et al. 2016 only requires privacy on
+    /// the discriminator-side gradients since the generator never sees real
+    /// data directly — privacy comes via the data-processing inequality).
+    /// </summary>
+    private void TrainGeneratorStepBatched(Matrix<T> transformedData, int numPacks)
+    {
+        if (_sampler is null) return;
+
+        using var tape = new GradientTape<T>();
+        var generatorLayers = new List<ILayer<T>>();
+        generatorLayers.AddRange(Layers);
+        foreach (var bn in _genBNLayers) generatorLayers.Add(bn);
+        var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
 
         int pacSize = _options.PacSize;
-        int singleDim = _dataWidth + _condWidth;
-        T scaledLr = NumOps.FromDouble(NumOps.ToDouble(learningRate) / numPacks);
+        int total = numPacks * pacSize;
+        var noiseBatch = GenerateNoiseBatchTensor(total);
+        var condBatch = SampleConditionalBatchTensor(total);
+        var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
 
-        for (int p = 0; p < numPacks; p++)
+        var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
+        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
+        var fakeWithCond = Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1);
+        var fakePacked = fakeWithCond.Reshape([numPacks, _packedInputDim]);
+
+        var fakeScores = DiscriminatorForwardBatched(fakePacked, isTraining: false);
+        var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
+        var lossTensor = Engine.TensorNegate(avgFake);
+
+        var grads = tape.ComputeGradients(lossTensor, genParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _)
         {
-            // Zero out packed buffers
-            for (int z = 0; z < _packedInputDim; z++)
+            var faked = GeneratorForwardWithResidualBatched(inp);
+            var act = ApplyOutputActivationsBatched(faked);
+            var withCond = Engine.TensorConcatenate([act, condBatch], axis: 1);
+            var packed = withCond.Reshape([numPacks, _packedInputDim]);
+            return DiscriminatorForwardBatched(packed, false);
+        }
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => Engine.TensorNegate(Engine.ReduceMean(pred, allAxes, keepDims: false));
+
+        var context = new TapeStepContext<T>(
+            genParams, grads, lossValue,
+            genInput, genInput, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// DP-SGD gradient post-processing (Abadi et al. 2016 §3): compute each
+    /// packed example's critic gradient, clip that example's full parameter
+    /// vector to <see cref="_options.ClipNorm"/>, average clipped gradients,
+    /// then add Gaussian noise to the averaged gradient.
+    /// </summary>
+    private Dictionary<Tensor<T>, Tensor<T>> ComputePerExampleNoisedGradients(
+        Tensor<T> realPacked,
+        Tensor<T> fakePacked,
+        IReadOnlyList<Tensor<T>> discParams)
+    {
+        int exampleCount = Math.Max(1, realPacked.Shape[0]);
+        var clippedSums = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var param in discParams)
+            clippedSums[param] = new Tensor<T>(param._shape);
+
+        for (int example = 0; example < exampleCount; example++)
+        {
+            var realExample = ExtractPackedExample(realPacked, example);
+            var fakeExample = ExtractPackedExample(fakePacked, example);
+
+            Dictionary<Tensor<T>, Tensor<T>> grads;
+            using (var tape = new GradientTape<T>())
             {
-                _packedRealBuf[z] = NumOps.Zero;
-                _packedFakeBuf[z] = NumOps.Zero;
+                var realScores = DiscriminatorForwardBatched(realExample, isTraining: true);
+                var fakeScores = DiscriminatorForwardBatched(fakeExample, isTraining: true);
+                var axes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+                // Per-example WGAN-GP loss: clip the FULL critic objective
+                // (Wasserstein term + λ·GP) per Abadi 2016 §3 — DP-SGD's L2-
+                // sensitivity bound requires the SUM of all terms that touch
+                // real data to be clipped together. Computing GP on the
+                // per-example (real, fake) pair keeps the 1-Lipschitz
+                // constraint differential-privacy-faithful.
+                var wassersteinPerEx = Engine.TensorSubtract(
+                    Engine.ReduceMean(fakeScores, axes, keepDims: false),
+                    Engine.ReduceMean(realScores, axes, keepDims: false));
+                var gpPerEx = ComputeGradientPenalty(realExample, fakeExample);
+                var loss = Engine.TensorAdd(
+                    wassersteinPerEx,
+                    Engine.TensorMultiplyScalar(gpPerEx, NumOps.FromDouble(_options.GradientPenaltyWeight)));
+                grads = tape.ComputeGradients(loss, discParams);
             }
 
-            for (int s = 0; s < pacSize; s++)
+            double normSquared = 0;
+            foreach (var grad in grads.Values)
             {
-                var (condVector, rowIdx) = _sampler.SampleConditionAndRow();
-                FillRow(_realRowBuf, transformedData, rowIdx);
-                ConcatInto(_realSingleBuf, _realRowBuf, condVector);
-
-                FillStandardNormal(_noiseBuf);
-                ConcatInto(_genInputBuf, _noiseBuf, condVector);
-                var fakeTransformed = Predict(VectorToTensor(_genInputBuf));
-                FillFromTensor(_fakeRowBuf, fakeTransformed);
-                ConcatInto(_fakeSingleBuf, _fakeRowBuf, condVector);
-
-                for (int d = 0; d < singleDim; d++)
+                for (int i = 0; i < grad.Length; i++)
                 {
-                    _packedRealBuf[s * singleDim + d] = d < _realSingleBuf.Length ? _realSingleBuf[d] : NumOps.Zero;
-                    _packedFakeBuf[s * singleDim + d] = d < _fakeSingleBuf.Length ? _fakeSingleBuf[d] : NumOps.Zero;
+                    double value = NumOps.ToDouble(grad[i]);
+                    normSquared += value * value;
                 }
             }
 
-            // WGAN fake loss
-            _ = DiscriminatorForward(VectorToTensor(_packedFakeBuf), isTraining: true);
-            UpdateDiscriminatorParametersDP(scaledLr);
+            double norm = Math.Sqrt(normSquared + 1e-12);
+            double clipFactor = Math.Min(1.0, _options.ClipNorm / norm);
 
-            // WGAN real loss
-            _ = DiscriminatorForward(VectorToTensor(_packedRealBuf), isTraining: true);
-            UpdateDiscriminatorParametersDP(scaledLr);
+            foreach (var param in discParams)
+            {
+                if (!grads.TryGetValue(param, out var grad))
+                    continue;
+
+                var sum = clippedSums[param];
+                for (int i = 0; i < grad.Length; i++)
+                {
+                    double value = NumOps.ToDouble(sum[i]) + NumOps.ToDouble(grad[i]) * clipFactor;
+                    sum[i] = NumOps.FromDouble(value);
+                }
+            }
         }
+
+        var noisedAverage = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        double inverseCount = 1.0 / exampleCount;
+        double noiseStd = _options.ClipNorm * _computedNoiseMultiplier * inverseCount;
+        foreach (var param in discParams)
+        {
+            var sum = clippedSums[param];
+            var averaged = new Tensor<T>(sum._shape);
+            for (int i = 0; i < sum.Length; i++)
+            {
+                double noise = NumOps.ToDouble(SampleStandardNormal()) * noiseStd;
+                averaged[i] = NumOps.FromDouble(NumOps.ToDouble(sum[i]) * inverseCount + noise);
+            }
+            noisedAverage[param] = averaged;
+        }
+
+        return noisedAverage;
+    }
+
+    /// <summary>
+    /// WGAN-GP gradient penalty (Gulrajani et al. 2017 §4): sample
+    /// interpolates between real and fake, get critic gradients w.r.t. those
+    /// interpolates via a nested <see cref="GradientTape{T}"/>, then penalize
+    /// the squared deviation of the per-sample L2 norm from 1. Returns the
+    /// scalar penalty that the caller weights by
+    /// <see cref="DPCTGANOptions{T}.GradientPenaltyWeight"/> before adding
+    /// it to the Wasserstein critic loss. Mirrors the
+    /// <c>CausalGANGenerator.ComputeGradientPenalty</c> implementation.
+    /// </summary>
+    private Tensor<T> ComputeGradientPenalty(Tensor<T> realBatch, Tensor<T> fakeBatch)
+    {
+        int batchSize = Math.Max(1, realBatch.Shape[0]);
+        int elementsPerSample = Math.Max(1, realBatch.Length / batchSize);
+
+        // Seed-reproducible interpolation coefficient — sample from _random so
+        // DPCTGANOptions.Seed makes the GP computation deterministic, matching
+        // the seeded-noise refactor for GenerateNoiseBatchTensor.
+        var epsilonData = new T[batchSize];
+        for (int i = 0; i < batchSize; i++)
+            epsilonData[i] = NumOps.FromDouble(_random.NextDouble());
+        var epsilon = new Tensor<T>(epsilonData, [batchSize, 1]);
+        var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realBatch.Length]);
+        var ones = new Tensor<T>([realBatch.Length]);
+        Engine.TensorFill(ones, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(ones, epsilonBroadcast);
+
+        var realFlat = realBatch.Reshape([realBatch.Length]);
+        var fakeFlat = fakeBatch.Reshape([fakeBatch.Length]);
+        var interpolatedFlat = Engine.TensorAdd(
+            Engine.TensorMultiply(epsilonBroadcast, realFlat),
+            Engine.TensorMultiply(oneMinusEpsilon, fakeFlat));
+        var interpolated = interpolatedFlat.Reshape(realBatch._shape);
+
+        Tensor<T> inputGradients;
+        using (var gradientTape = new GradientTape<T>())
+        {
+            var scores = DiscriminatorForwardBatched(interpolated, true);
+            var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
+            var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
+            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated]);
+            inputGradients = gradients.TryGetValue(interpolated, out var gradient)
+                ? gradient
+                : new Tensor<T>(interpolated._shape);
+        }
+
+        var gradientsReshaped = inputGradients.Reshape([batchSize, elementsPerSample]);
+        var gradientSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
+        var gradientNormSquared = Engine.ReduceSum(gradientSquared, [1], keepDims: false);
+        var gradientNorm = Engine.TensorSqrt(Engine.TensorAddScalar(gradientNormSquared, NumOps.FromDouble(1e-12)));
+        var targetNorm = new Tensor<T>(gradientNorm._shape);
+        Engine.TensorFill(targetNorm, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradientNorm, targetNorm);
+        var penalty = Engine.TensorMultiply(deviation, deviation);
+        var penaltyAxes = Enumerable.Range(0, penalty.Shape.Length).ToArray();
+        return Engine.ReduceMean(penalty, penaltyAxes, keepDims: false);
+    }
+
+    private Tensor<T> ExtractPackedExample(Tensor<T> packed, int rowIndex)
+    {
+        var row = new Tensor<T>([1, _packedInputDim]);
+        for (int j = 0; j < _packedInputDim; j++)
+            row[0, j] = packed[rowIndex, j];
+        return row;
+    }
+
+    private (Tensor<T> realPacked, Tensor<T> fakePacked) BuildPackedRealAndFakeBatches(
+        Matrix<T> transformedData,
+        int numPacks)
+    {
+        int pacSize = _options.PacSize;
+        int total = numPacks * pacSize;
+        var noiseBatch = GenerateNoiseBatchTensor(total);
+        var (condBatch, rowIndices) = SampleConditionalBatchWithRows(total);
+        var genInput = Engine.TensorConcatenate([noiseBatch, condBatch], axis: 1);
+        var fakeFlat = GeneratorForwardWithResidualBatched(genInput);
+        var fakeActivated = ApplyOutputActivationsBatched(fakeFlat);
+        var fakeSingles = Engine.TensorConcatenate([fakeActivated, condBatch], axis: 1);
+
+        var realFlat = new Tensor<T>([total, _dataWidth]);
+        for (int s = 0; s < total; s++)
+        {
+            int rowIdx = rowIndices[s];
+            int cols = Math.Min(_dataWidth, transformedData.Columns);
+            for (int j = 0; j < cols; j++) realFlat[s, j] = transformedData[rowIdx, j];
+        }
+        var realSingles = Engine.TensorConcatenate([realFlat, condBatch], axis: 1);
+        return (realSingles.Reshape([numPacks, _packedInputDim]),
+                fakeSingles.Reshape([numPacks, _packedInputDim]));
+    }
+
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize)
+    {
+        int embedDim = _options.EmbeddingDimension;
+        int totalElements = batchSize * embedDim;
+        // Box–Muller via the seeded _random so DPCTGANOptions.Seed makes the
+        // packed training path reproducible — Engine.TensorRandomUniformRange
+        // bypasses _random and breaks the seed contract that the rest of the
+        // sampler stack (CTGANDataSampler, _random.NextDouble paths) honours.
+        var noiseData = new T[totalElements];
+        for (int i = 0; i < totalElements; i += 2)
+        {
+            double u1 = 1.0 - _random.NextDouble();   // ∈ (0, 1] keeps log finite
+            double u2 = _random.NextDouble();
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            noiseData[i] = NumOps.FromDouble(r * Math.Cos(theta));
+            if (i + 1 < totalElements)
+                noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
+        }
+        return new Tensor<T>(noiseData, [batchSize, embedDim]);
+    }
+
+    private Tensor<T> SampleConditionalBatchTensor(int batchSize)
+    {
+        if (_sampler is null) return new Tensor<T>([batchSize, _condWidth]);
+        var batch = new Tensor<T>([batchSize, _condWidth]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, _) = _sampler.SampleConditionAndRow();
+            int cols = Math.Min(_condWidth, cv.Length);
+            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+        }
+        return batch;
+    }
+
+    private (Tensor<T> CondBatch, int[] RowIndices) SampleConditionalBatchWithRows(int batchSize)
+    {
+        var batch = new Tensor<T>([batchSize, _condWidth]);
+        var rowIndices = new int[batchSize];
+        if (_sampler is null) return (batch, rowIndices);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            var (cv, rowIndex) = _sampler.SampleConditionAndRow();
+            int cols = Math.Min(_condWidth, cv.Length);
+            for (int j = 0; j < cols; j++) batch[b, j] = cv[j];
+            rowIndices[b] = rowIndex;
+        }
+
+        return (batch, rowIndices);
+    }
+
+    private Tensor<T> GeneratorForwardWithResidualBatched(Tensor<T> input)
+    {
+        if (_usingCustomLayers)
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+        var h = input;
+        int numHidden = Layers.Count - 1;
+        for (int i = 0; i < numHidden; i++)
+        {
+            if (i > 0) h = Engine.TensorConcatenate([h, input], axis: 1);
+            h = Layers[i].Forward(h);
+            if (i < _genBNLayers.Count) h = _genBNLayers[i].Forward(h);
+            h = Engine.ReLU(h);
+        }
+        h = Engine.TensorConcatenate([h, input], axis: 1);
+        h = Layers[^1].Forward(h);
+        return h;
+    }
+
+    private Tensor<T> DiscriminatorForwardBatched(Tensor<T> input, bool isTraining)
+    {
+        var current = input;
+        T leakySlope = NumOps.FromDouble(0.2);
+        int layerIdx = 0;
+        for (int i = 0; i < _discLayers.Count; i++)
+        {
+            if (_discLayers[i] is DropoutLayer<T> dropout)
+            {
+                if (isTraining) current = dropout.Forward(current);
+                continue;
+            }
+            bool isLastDense = layerIdx == _discLayerDims.Count - 1;
+            current = _discLayers[i].Forward(current);
+            if (!isLastDense) current = Engine.LeakyReLU(current, leakySlope);
+            layerIdx++;
+        }
+        return current;
+    }
+
+    private Tensor<T> ApplyOutputActivationsBatched(Tensor<T> output)
+    {
+        if (_transformer is null) return Engine.TensorTanh(output);
+        int batch = output.Shape[0];
+        int totalWidth = output.Shape[1];
+        var blocks = new List<Tensor<T>>(_columns.Count * 2);
+        int idx = 0;
+        for (int col = 0; col < _columns.Count && idx < totalWidth; col++)
+        {
+            var transform = _transformer.GetTransformInfo(col);
+            if (transform.IsContinuous)
+            {
+                var valueSlice = Engine.TensorSlice(output, [0, idx], [batch, 1]);
+                blocks.Add(Engine.TensorTanh(valueSlice));
+                idx++;
+                int numModes = transform.Width - 1;
+                int modeLength = Math.Min(numModes, totalWidth - idx);
+                if (modeLength > 0)
+                {
+                    var modeSlice = Engine.TensorSlice(output, [0, idx], [batch, modeLength]);
+                    blocks.Add(Engine.Softmax(modeSlice, axis: 1));
+                    idx += modeLength;
+                }
+            }
+            else
+            {
+                int blockLength = Math.Min(transform.Width, totalWidth - idx);
+                var catSlice = Engine.TensorSlice(output, [0, idx], [batch, blockLength]);
+                blocks.Add(Engine.Softmax(catSlice, axis: 1));
+                idx += blockLength;
+            }
+        }
+        if (idx < totalWidth)
+        {
+            var tail = Engine.TensorSlice(output, [0, idx], [batch, totalWidth - idx]);
+            blocks.Add(Engine.TensorTanh(tail));
+        }
+        if (blocks.Count == 1) return blocks[0];
+        return Engine.TensorConcatenate(blocks.ToArray(), axis: 1);
     }
 
     /// <summary>

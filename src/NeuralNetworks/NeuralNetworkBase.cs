@@ -291,9 +291,51 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected DirectGpuTensorEngine? GpuEngine => AiDotNetEngine.Current as DirectGpuTensorEngine;
 
     /// <summary>
-    /// The maximum allowed norm for gradients during training.
+    /// Backing storage for the gradient-clip max norm. Subclasses may assign
+    /// to this in their constructor / init path; the public double-typed
+    /// accessor <see cref="MaxGradNormValue"/> reads through to it.
     /// </summary>
     protected T MaxGradNorm;
+
+    /// <summary>
+    /// Maximum allowed global L2 norm for gradients per training step,
+    /// exposed as a <c>double</c>. When the total gradient norm across all
+    /// trainable parameters exceeds this value, every gradient is scaled
+    /// down by <c>maxNorm / totalNorm</c> before the optimizer step.
+    /// Mirrors PyTorch's <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Default: 1.0 from the ctor. Subclasses that need per-model control
+    /// (e.g. GraFPrint sourcing the value from <c>GraFPrintOptions</c>)
+    /// should override this property and return the option-driven value;
+    /// returning 0 disables clipping for that subclass.
+    /// </para>
+    /// <para>
+    /// Active in BOTH the eager training path (TrainWithTape calls
+    /// ApplyGradientClipping just before optimizer.Step) and the compiled
+    /// fused-optimizer path (CompiledTapeTrainingStep wires this onto the
+    /// plan so it's applied inside <c>plan.Step()</c> between the backward
+    /// pass and the fused Adam update). Without clipping, deep networks
+    /// with batch-norm at small batch sizes can produce single-step Adam
+    /// explosions that drive loss up by orders of magnitude on the very
+    /// first iteration (GraFPrint's 53-layer pyramid is the canonical case
+    /// — single-sample BN drives variance toward zero, the eps-floored
+    /// reciprocal sqrt blows up activations, the chain amplifies).
+    /// </para>
+    /// </remarks>
+    public virtual double MaxGradNormValue => NumOps.ToDouble(MaxGradNorm);
+
+    /// <summary>
+    /// Backwards-compatible <c>T</c>-typed accessor for code that historically
+    /// read the protected field directly. Routes through the public
+    /// <see cref="MaxGradNormValue"/> virtual so subclasses that override
+    /// the public accessor (e.g. GraFPrint reading from its options) flow
+    /// the option-driven value into every clipping helper. Reading the
+    /// backing field directly would bypass those overrides — including the
+    /// "return 0 to disable clipping" contract.
+    /// </summary>
+    protected T MaxGradNormT => NumOps.FromDouble(MaxGradNormValue);
 
     /// <summary>
     /// Cached parameter count to avoid repeated Sum() calculations.
@@ -417,7 +459,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         for (int i = 0; i < gradients.Count; i++)
         {
-            gradients[i] = ClipTensorGradient(gradients[i], MaxGradNorm);
+            gradients[i] = ClipTensorGradient(gradients[i], MaxGradNormT);
         }
     }
 
@@ -477,7 +519,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected Tensor<T> ClipGradient(Tensor<T> gradient)
     {
-        return ClipTensorGradient(gradient, MaxGradNorm);
+        return ClipTensorGradient(gradient, MaxGradNormT);
     }
 
     /// <summary>
@@ -496,7 +538,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected Vector<T> ClipGradient(Vector<T> gradient)
     {
-        return ClipTensorGradient(Tensor<T>.FromVector(gradient), MaxGradNorm).ToVector();
+        return ClipTensorGradient(Tensor<T>.FromVector(gradient), MaxGradNormT).ToVector();
     }
 
     /// <summary>
@@ -2056,18 +2098,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private bool IsFirstLayerShapeCompatible(ILayer<T> layer)
     {
-        // Embedding-category layers (token / positional / patch / time
-        // embeddings) declare their input shape as the per-element lookup
-        // contract (typically [1] = "I take one token at a time"), even
-        // though Forward broadcasts over upstream rank — see
-        // EmbeddingLayer<T>.Forward which accepts [seqLen], [batch, seqLen],
-        // [batch, seqLen, 1] and returns embedded results in matching rank.
-        // The strict architecture-input-shape check would reject this
-        // legitimate broadcast contract; recognise the category and skip
-        // the strict shape match. Closes #1321.
-        if (IsBroadcastInputCategory(layer))
-            return true;
-
         int[]? layerInputShape = TryGetLayerShape(layer, shapeSelector: static l => l.GetInputShape());
         if (IsDeferredOrAgnosticShape(layerInputShape))
             return true;
@@ -2116,46 +2146,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             pb *= b[i];
         }
         return pa == pb;
-    }
-
-    /// <summary>
-    /// True when <paramref name="layer"/> is an Embedding-category layer
-    /// whose declared input shape is a per-element broadcast contract
-    /// (e.g. <c>EmbeddingLayer&lt;T&gt;</c> reports input shape <c>[1]</c>
-    /// for per-token lookup; positional encodings report similar
-    /// broadcast-friendly shapes).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Used by both first-layer-vs-architecture and layer-to-layer
-    /// compatibility checks so a custom chain like
-    /// <c>InputLayer(64) → EmbeddingLayer(vocab, dim) → ...</c> validates
-    /// without false rejection — the <c>[64]</c>-vs-<c>[1]</c> mismatch is
-    /// a contract feature, not a bug. Closes #1321 / #1323.
-    /// </para>
-    /// <para>
-    /// Recognition is intentionally broader than the LayerBase&lt;T&gt;
-    /// category check alone: custom embedding / positional layers that
-    /// implement <see cref="ILayer{T}"/> directly (without inheriting
-    /// LayerBase&lt;T&gt;) don't expose <c>GetLayerCategory()</c>, so a
-    /// category-only check would still reject the broadcast-input
-    /// contract for them. The name-based fallback matches the same
-    /// convention LayerBase.GetLayerCategory uses for its default
-    /// classification, so the two recognition paths agree.
-    /// </para>
-    /// </remarks>
-    private static bool IsBroadcastInputCategory(ILayer<T> layer)
-    {
-        if (layer is LayerBase<T> lb && lb.GetLayerCategory() == LayerCategory.Embedding)
-            return true;
-
-        // Name-based fallback for custom ILayer<T> implementations not
-        // derived from LayerBase<T>. Matches the same heuristic
-        // LayerBase.GetLayerCategory uses (typeName.Contains "Embedding" /
-        // "Positional", case-insensitive).
-        var layerName = layer.GetType().Name;
-        return layerName.Contains("Embedding", StringComparison.OrdinalIgnoreCase)
-            || layerName.Contains("Positional", StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsLastLayerShapeCompatible(ILayer<T> layer, out string error)
@@ -2442,16 +2432,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual bool AreLayersCompatible(ILayer<T> prevLayer, ILayer<T> currentLayer)
     {
-        // Embedding-category layers (token / positional / patch / time)
-        // declare their input shape as a per-element lookup contract — the
-        // current rank-aware Forward (see EmbeddingLayer<T>.Forward) accepts
-        // any-rank token tensor and broadcasts the embedding lookup over it.
-        // Skip the strict prev-output ↔ current-input shape match for these
-        // layers so a chain like InputLayer(64) → EmbeddingLayer(vocab, dim)
-        // validates correctly. Closes #1323.
-        if (IsBroadcastInputCategory(currentLayer))
-            return true;
-
         // Lazy layers report InputShape = [-1] (or empty) until first Forward —
         // skip the strict shape-equality check; resolution happens at first
         // forward. Empty-shape layers are shape-agnostic by design (e.g.
@@ -5371,6 +5351,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 return loss.ComputeTapeLoss(pred, tgt);
             }
 
+            // Apply global gradient-norm clipping when configured. Mirrors
+            // PyTorch's torch.nn.utils.clip_grad_norm_ — total L2 norm across
+            // all trainable-parameter gradients; when it exceeds MaxGradNorm,
+            // every gradient is scaled by maxNorm/totalNorm. Without this
+            // step, deep networks with batch-norm at small batch sizes (e.g.
+            // GraFPrint at batch=1) can produce single-step Adam explosions
+            // that drive loss up by orders of magnitude on the very first
+            // iteration. Skipped when MaxGradNorm <= 0 (the default).
+            double maxGradNorm = MaxGradNormValue;
+            if (maxGradNorm > 0.0 && grads.Count > 0)
+            {
+                // Pass trainableParams as the iteration-order key so the
+                // total-norm sum is computed in a deterministic order
+                // (Dictionary iteration order is bucket-order, which uses
+                // the per-process-randomized identity hash for tensor
+                // keys → different sum-order per process → different
+                // clip scale per process → non-deterministic training).
+                ApplyGradientClipping(grads, maxGradNorm, trainableParams);
+            }
+
             var context = new TapeStepContext<T>(
                 trainableParams, grads, lossValue,
                 input, expected, ComputeForward,
@@ -5550,6 +5550,54 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Best-effort read of the supplied optimizer's current learning
     /// rate, used by the network-level extras update path. Returns the
     /// optimizer-typed value when the optimizer is a recognised
+    /// Applies global gradient L2-norm clipping in-place across all gradient
+    /// tensors in the supplied dictionary. Computes
+    /// <c>totalNorm = sqrt(sum_i sum(grad_i²))</c>; when
+    /// <c>totalNorm &gt; maxNorm</c>, scales every gradient by
+    /// <c>maxNorm / (totalNorm + 1e-6)</c>. Mirrors PyTorch's
+    /// <c>clip_grad_norm_</c> semantics — collective scaling, not per-tensor
+    /// — so the relative direction of the gradient field is preserved while
+    /// its magnitude is bounded.
+    /// </summary>
+    private void ApplyGradientClipping(
+        Dictionary<Tensor<T>, Tensor<T>> grads, double maxNorm,
+        IReadOnlyList<Tensor<T>> iterationOrder)
+    {
+        // Step 1: total L2 norm across all gradient tensors, iterating in
+        // the caller-supplied deterministic order (NOT dict bucket order —
+        // that's process-randomized for reference-keyed dicts).
+        double totalNormSq = 0.0;
+        for (int p = 0; p < iterationOrder.Count; p++)
+        {
+            if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+            if (g is null || g.Length == 0) continue;
+            var span = g.Data.Span;
+            int len = g.Length;
+            for (int i = 0; i < len; i++)
+            {
+                double v = NumOps.ToDouble(span[i]);
+                totalNormSq += v * v;
+            }
+        }
+        if (totalNormSq == 0.0) return;
+        double totalNorm = Math.Sqrt(totalNormSq);
+        if (totalNorm <= maxNorm) return;
+
+        // Step 2: scale every gradient down so the new global norm == maxNorm.
+        // The +1e-6 in the denominator matches PyTorch's clip_grad_norm_ to
+        // avoid div-by-zero when the gradient magnitudes are vanishingly small.
+        T scale = NumOps.FromDouble(maxNorm / (totalNorm + 1e-6));
+        for (int p = 0; p < iterationOrder.Count; p++)
+        {
+            if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+            if (g is null || g.Length == 0) continue;
+            var span = g.Data.Span;
+            int len = g.Length;
+            for (int i = 0; i < len; i++)
+                span[i] = NumOps.Multiply(span[i], scale);
+        }
+    }
+
     /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}"/>; falls
     /// back to a conservative default for optimizers that don't expose
     /// the rate.
@@ -5701,7 +5749,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return EmitFusedMissAndFallback($"numeric type {typeof(T).Name} not supported by fused kernel");
 
         if (!TryMapToFusedOptimizerConfig(
-                resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd))
+                resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd,
+                out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSched))
             return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
 
         // Use the existing recursive trainable-layer collector instead of the
@@ -5751,7 +5800,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             beta2: b2,
             epsilon: eps,
             weightDecay: wd,
-            out T lossValue);
+            out T lossValue,
+            maxGradNorm: MaxGradNormValue,
+            lrSchedule: lrSched);
 
         if (ran)
         {
@@ -5841,7 +5892,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         out float beta1,
         out float beta2,
         out float epsilon,
-        out float weightDecay)
+        out float weightDecay,
+        out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule)
     {
         optimizerType = default;
         learningRate = 0f;
@@ -5849,13 +5901,37 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         beta2 = 0f;
         epsilon = 0f;
         weightDecay = 0f;
+        lrSchedule = null;
 
-        // Reject when an LR scheduler is attached — GetCurrentLearningRate()
-        // would change between steps but the fused plan bakes the LR at first
-        // ConfigureOptimizer, so subsequent rate changes silently disappear.
+        // When an LR scheduler is attached, try to convert it to a fused-side
+        // LrSchedule. The fused kernel evaluates the schedule per Step() — no
+        // performance penalty vs constant-LR — so paper-faithful training
+        // recipes (cosine annealing, OneCycle, linear-warmup-cosine, etc.)
+        // get full compile-mode perf. Only unknown / unsupported scheduler
+        // types fall back to eager.
         if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradBase
             && gradBase.LearningRateScheduler is not null)
-            return false;
+        {
+            switch (gradBase.LearningRateScheduler)
+            {
+                case AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
+                    lrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule.Cosine(
+                        cosine.BaseLearningRate, cosine.TMax, cosine.EtaMin);
+                    break;
+                case AiDotNet.LearningRateSchedulers.ExponentialLRScheduler expo:
+                    lrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule.Exponential(
+                        expo.BaseLearningRate, expo.Gamma);
+                    break;
+                case AiDotNet.LearningRateSchedulers.ConstantLRScheduler:
+                    // Constant scheduler = effectively no schedule; let the
+                    // GetCurrentLearningRate path below handle the rate.
+                    break;
+                default:
+                    // Unknown scheduler type — fall back to eager so the
+                    // configured schedule isn't silently ignored.
+                    return false;
+            }
+        }
 
         switch (optimizer)
         {

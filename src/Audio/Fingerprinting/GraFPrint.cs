@@ -60,6 +60,25 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         ? Architecture.OutputSize
         : _options.EmbeddingDim;
 
+    /// <inheritdoc />
+    public override double MaxGradNormValue => _options?.MaxGradNorm ?? 0.0;
+
+    /// <summary>
+    /// Return our paper-faithful AdamW + cosine-annealing optimizer instead
+    /// of the default Adam that the base class falls back to. Without this
+    /// override the constructor-wired <see cref="_optimizer"/> sits unused —
+    /// <see cref="NeuralNetworkBase{T}.TrainWithTape(Tensor{T}, Tensor{T})"/>
+    /// resolves the optimizer via <see cref="NeuralNetworkBase{T}.GetOrCreateBaseOptimizer"/>
+    /// which creates a fresh default AdamOptimizer (no scheduler, no
+    /// paper-tuned LR) and our cosine schedule + LR=1e-4 silently never
+    /// engage during training.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+    {
+        if (_optimizer is not null) return _optimizer;
+        return base.GetOrCreateBaseOptimizer();
+    }
+
     #endregion
 
     #region IAudioFingerprinter Properties
@@ -105,32 +124,61 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _options = options ?? new GraFPrintOptions();
         NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Pass an explicit AdamW options bundle when the caller doesn't
+        // supply one — the package-default LR (1e-3) is known to be unstable
+        // for this architecture's small-batch BN regime; GraFPrintOptions
+        // sources the paper-faithful 1e-4 from the network's own options
+        // (Bhattacharjee 2023, §4.1).
+        // AdamW with cosine annealing LR scheduler — paper-faithful per
+        // Bhattacharjee 2023 §4.1. The scheduler is honored end-to-end:
+        // the fused training kernel evaluates the per-step LR inline (no
+        // perf penalty vs constant LR) so compile-mode users get the same
+        // schedule the paper specifies. Without the schedule, AdamW on a
+        // small-batch repeated-sample training scenario tends to overshoot
+        // after ~5-10 iters as accumulated momentum pushes weights past
+        // the local optimum; cosine decay smoothly reduces step size and
+        // prevents that oscillation.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler(
+                    baseLearningRate: _options.LearningRate,
+                    tMax: _options.LRSchedulerTMax,
+                    etaMin: _options.LearningRate * 0.01),
+            });
         base.SampleRate = _options.SampleRate;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
             _options.FftSize, _options.HopLength);
 
         // Targeted opt-out from the fused-Adam optimizer step ONLY.
         //
-        // GraFPrint uses T=double for the model-family invariant tests. The
-        // BatchNorm fused divergence we tracked under Tensors#350 has at
-        // least two distinct sub-bugs:
+        // Tensors PR #352 has fixed several layers of the original #350 issue:
+        //   - Engine routing through scope/tape (BindEngineIfUnset for
+        //     BatchNorm + TensorAdd/Subtract/Multiply/ReduceSum)
+        //   - BatchNorm specialized backward (BatchNormBackwardInto)
+        //   - LazyNode auto-rematerialize through wrong engine (clear
+        //     LazySource + IsRealized at compile time)
         //
-        //   (a) rank-2 / batched-rank-4 BatchNormInferenceUnsafe layout
-        //       assumption — fixed by Tensors PR #352. Float-only path.
-        //   (b) a separate divergence path that affects T=double — surfaces
-        //       on this 53-layer paper-faithful BN pyramid as the same
-        //       loss-explosion pattern the diagnostic harness captured.
-        //       Empirically verified: applying the #352 patch and removing
-        //       this workaround still makes Training_ShouldReduceLoss fail
-        //       with loss going 66 → 440891 over the test's iteration count.
+        // After those fixes, BatchNormGradSlotResidualTests pass 18/18 (was
+        // 3 failing). But Training_ShouldReduceLoss on the 53-layer GraFPrint
+        // BN pyramid still diverges with fused-Adam: loss explodes from
+        // ~75 to >300_000 over the test's 30 iterations. A minimal custom
+        // testconsole harness (testconsole/GraFPrintLossTrace.cs) running
+        // the SAME architecture + SAME seed + SAME data + SAME 30 iter
+        // sequence shows loss DECREASING normally — so the divergence is
+        // sensitive to something in the xunit test execution context
+        // (static state, threading, allocator pool warm-up order) that
+        // hasn't been pinned down yet.
         //
-        // Until the double-precision path is also tracked and fixed, keep
-        // the per-model fused-Adam opt-out. ConvBnFusion / dataflow fusion /
-        // algebraic backward / forward CSE / BLAS batch / pointwise fusion
-        // all stay engaged — only the optimizer step itself runs through
-        // eager Adam, which is correct.
-        _fusedTrainingDisabled = true;
+        // Caller-driven opt-out — default false (production path). Tests
+        // that hit the unresolved 30-iter divergence on the 53-layer GraFPrint
+        // BN pyramid can flip GraFPrintOptions.DisableFusedOptimizerStep
+        // to true. ConvBnFusion / dataflow fusion / algebraic backward /
+        // forward CSE / BLAS batch / pointwise fusion all stay engaged —
+        // only the optimizer step itself runs through eager Adam.
+        _fusedTrainingDisabled = _options.DisableFusedOptimizerStep;
 
         InitializeLayers();
     }
@@ -263,6 +311,24 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
                 numGnnLayers: _options.NumGnnLayers, numAttentionHeads: _options.NumAttentionHeads,
                 embeddingDim: _options.EmbeddingDim, dropoutRate: _options.DropoutRate));
         }
+
+        // Per-layer deterministic seeding when the architecture pins a seed.
+        // Each layer gets a distinct derived seed (base ⊕ index) so weights
+        // differ across layers while staying reproducible across processes —
+        // mirrors LayerHelper.Wire's seedRng.Next() pattern but inline here
+        // since GraFPrint constructs its layers directly. Without this,
+        // layer init falls back to RandomHelper.ThreadSafeRandom's
+        // process-global counter, which advances based on construction
+        // order across tests and produces different init weights every run.
+        if (Architecture.RandomSeed.HasValue)
+        {
+            var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed.Value);
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                if (Layers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb)
+                    lb.RandomSeed = seedRng.Next();
+            }
+        }
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
@@ -356,10 +422,7 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         // That bypasses ONLY the fused-Adam optimizer-step path while
         // leaving every other compile-mode optimization engaged
         // (ConvBnFusion, dataflow fusion, algebraic backward, etc.).
-        // Earlier revisions of this Train method scoped a global
-        // TensorCodecOptions.EnableCompilation = false around TrainWithTape;
-        // that hammered ALL compile-mode optimizations off and tanked
-        // throughput. The targeted flag is the right scope.
+
         SetTrainingMode(true);
         try
         {

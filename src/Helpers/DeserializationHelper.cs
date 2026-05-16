@@ -805,7 +805,11 @@ public static class DeserializationHelper
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+            // Try the 7-param ctor first (added nonlinearityForInit for paper-faithful
+            // Conv→BN→LeakyReLU init gain). Fall back to the 6-param ctor for
+            // backwards compatibility with older builds.
+            var ctor7 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType });
+            var ctor = ctor7 ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find ConvolutionalLayer constructor.");
@@ -813,7 +817,12 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
                 throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for ConvolutionalLayer.");
-            instance = ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
+            // Pass null for nonlinearityForInit on deserialization — weights are
+            // restored from the saved parameter vector, so InitializeWeights
+            // never runs and the gain choice is moot for the clone path.
+            instance = ctor7 is not null
+                ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null })
+                : ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
 
             // Pre-resolve the lazy layer using the serialized inputShape so SetParameters
             // sees the correct InputDepth and the kernel/bias counts match the saved

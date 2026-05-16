@@ -584,17 +584,26 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 batchVariance = new Tensor<T>(_runningVariance._shape, new Vector<T>(newVarData));
             }
 
-            // Update running statistics using Exponential Moving Average (Vectorized)
-            // running_mean = momentum * running_mean + (1 - momentum) * batch_mean
+            // Issue #350 v3: in-place form so the lazy chain captured at
+            // CompiledTrainingPlan trace time replays correctly across
+            // Step()s. The prior out-of-place form pinned the INITIAL
+            // _runningMean reference; every replay computed
+            // momentum*init + (1-momentum)*batch instead of
+            // momentum*previous + (1-momentum)*batch, so running stats
+            // stayed at one EMA step off initial. BatchNormInference
+            // (Predict) then divided by sqrt(~0+eps) ≈ 316 per BN layer
+            // and blew up the 53-layer pyramid output by ~1e7×. The
+            // in-place ops are GraphMode-aware (CpuEngine.cs:2916+ +
+            // LazyTensorScope.RecordInPlace) so each replay re-applies
+            // the mutation — EMA accumulates correctly under both eager
+            // and compiled execution.
             T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
-
-            var momentumRunningMean = Engine.TensorMultiplyScalar(_runningMean, _momentum);
+            Engine.TensorMultiplyScalarInPlace(_runningMean, _momentum);
             var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
-            _runningMean = Engine.TensorAdd(momentumRunningMean, scaledBatchMean);
-
-            var momentumRunningVar = Engine.TensorMultiplyScalar(_runningVariance, _momentum);
+            Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
+            Engine.TensorMultiplyScalarInPlace(_runningVariance, _momentum);
             var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
-            _runningVariance = Engine.TensorAdd(momentumRunningVar, scaledBatchVar);
+            Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
 
             // Invalidate cached inference scale/shift since running stats changed
             _inferenceScaleDirty = true;

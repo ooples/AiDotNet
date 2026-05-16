@@ -667,6 +667,6 @@ public class ResNetNetwork<T> : NeuralNetworkBase<T>
             _configuration,
             null,
             _lossFunction,
-            NumOps.ToDouble(MaxGradNorm));
+            MaxGradNormValue);
     }
 }

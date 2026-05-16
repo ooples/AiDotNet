@@ -1,13 +1,16 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -83,7 +86,12 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private FullyConnectedLayer<T>? _logvarHead;
     private readonly List<Tensor<T>> _encoderPreActs = new();
 
-    // Decoder batch normalization (auxiliary, matched to Layers)
+    // Decoder hidden FCs (paired 1:1 with _decoderBN). NOT the full
+    // Layers list — Layers also contains encoder/VAE-head/discriminator
+    // sub-graphs, and walking it in the decoder forward path would feed
+    // latent noise through the encoder and discriminator weights. The
+    // decoder pass MUST use this slice only.
+    private readonly List<FullyConnectedLayer<T>> _decoderLayers = new();
     private readonly List<BatchNormalizationLayer<T>> _decoderBN = new();
     private FullyConnectedLayer<T>? _decoderOutput;
     private readonly List<Tensor<T>> _decoderPreActs = new();
@@ -196,6 +204,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     private void ExtractMedSynthLayerReferences()
     {
         _encoderLayers.Clear();
+        _decoderLayers.Clear();
         _decoderBN.Clear();
         _discLayers.Clear();
         _discDropout.Clear();
@@ -218,10 +227,14 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         if (idx < Layers.Count && Layers[idx] is FullyConnectedLayer<T> logvar)
         { _logvarHead = logvar; idx++; }
 
-        // Decoder layers (FC + BN pairs)
+        // Decoder layers (FC + BN pairs). Capture the FC alias too so the
+        // decoder forward path can walk decoder-only weights without
+        // touching encoder/discriminator sub-graphs that share Layers.
         for (int i = 0; i < dims.Length && idx < Layers.Count; i++)
         {
-            idx++; // FC layer
+            if (Layers[idx] is FullyConnectedLayer<T> decFc)
+                _decoderLayers.Add(decFc);
+            idx++; // advance past FC
             if (idx < Layers.Count && Layers[idx] is BatchNormalizationLayer<T> bn)
             { _decoderBN.Add(bn); idx++; }
         }
@@ -299,12 +312,22 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
             {
                 int end = Math.Min(b + batchSize, data.Rows);
 
-
+                // Paper-faithful MedSynth (VAE+GAN hybrid) training step:
+                // 1) VAE half — encoder + (μ, log σ²) + decoder updated against
+                //    reconstruction + KL + clinical-constraint losses. This
+                //    is what makes MedSynth a VAE+GAN hybrid rather than a
+                //    plain GAN; dropping it (the prior code path did) leaves
+                //    _encoderLayers / _meanHead / _logvarHead untrained and
+                //    relies on post-hoc clamping in Generate().
+                // 2) GAN inner loop — DP-SGD discriminator updates (Abadi
+                //    2016) interleaved with non-saturating generator updates
+                //    (Goodfellow 2014 §3).
+                TrainVaeStepBatched(transformedData, b, end);
                 for (int d = 0; d < _options.DiscriminatorSteps; d++)
                 {
-                    TrainDiscriminatorStep(transformedData, b, end, lr);
+                    TrainDiscriminatorStepBatched(transformedData, b, end, noiseMultiplier);
                 }
-
+                TrainGeneratorStepBatched(end - b);
             }
         }
 
@@ -352,11 +375,14 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        // Forward through decoder (Layers)
+        // Forward through decoder-only slice (NOT the full Layers list —
+        // Layers also contains the encoder, VAE heads, and discriminator
+        // sub-graph and walking all of it on latent input would feed
+        // noise through encoder/disc weights).
         var current = input;
-        for (int i = 0; i < Layers.Count; i++)
+        for (int i = 0; i < _decoderLayers.Count; i++)
         {
-            current = Layers[i].Forward(current);
+            current = _decoderLayers[i].Forward(current);
             if (i < _decoderBN.Count)
             {
                 _decoderBN[i].SetTrainingMode(false);
@@ -447,55 +473,586 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
     #region Training
 
-    private void TrainDiscriminatorStep(Matrix<T> data, int startRow, int endRow, T lr)
+    /// <summary>
+    /// Paper-faithful DP-SGD discriminator step (Abadi et al. 2016 §3 layered
+    /// over MedSynth's VAE+GAN hybrid). Computes the BCE discriminator loss
+    /// gradient via <see cref="GradientTape{T}"/>, applies the canonical
+    /// DP-SGD primitive (per-parameter L2 clip + Gaussian noise on the
+    /// gradient, not on the parameter), then hands the noised gradient to
+    /// the optimizer through a <see cref="TapeStepContext{T}"/>.
+    /// Replaces the prior manual <c>DiscriminatorForward → UpdateDiscriminator</c>
+    /// path which threw "Backward pass must be called before updating
+    /// parameters" on the tape-only autodiff stack.
+    /// </summary>
+    private void TrainDiscriminatorStepBatched(Matrix<T> data, int startRow, int endRow, double noiseMultiplier)
     {
         if (_discOutput is null) return;
 
-        for (int row = startRow; row < endRow; row++)
+        int batchSize = endRow - startRow;
+        if (batchSize <= 0) return;
+
+        if (noiseMultiplier > 0)
         {
-            var real = GetRow(data, row);
-
-            var realScore = DiscriminatorForward(real, isTraining: true);
-            double sigReal = Sigmoid(NumOps.ToDouble(realScore[0]));
-
-            var gradReal = new Tensor<T>([1]);
-            gradReal[0] = NumOps.FromDouble(-(1.0 - sigReal));
-            UpdateDiscriminator(lr);
-
-            var noise = CreateStandardNormalVector(_options.LatentDimension);
-            var fake = DecoderForward(noise, isTraining: false);
-
-            var fakeScore = DiscriminatorForward(fake, isTraining: true);
-            double sigFake = Sigmoid(NumOps.ToDouble(fakeScore[0]));
-
-            var gradFake = new Tensor<T>([1]);
-            gradFake[0] = NumOps.FromDouble(sigFake);
-            UpdateDiscriminator(lr);
+            // Paper-faithful per-example DP-SGD (Abadi et al. 2016
+            // Algorithm 1). The earlier implementation called
+            // tape.ComputeGradients once on the FULL batch — that returns
+            // already-aggregated gradients, after which a single
+            // per-parameter L2 clip + noise no longer matches the
+            // Abadi mechanism. The privacy proof's L2-sensitivity bound
+            // requires clipping every per-example gradient INDIVIDUALLY
+            // (against the GLOBAL norm across all parameters concatenated)
+            // BEFORE aggregation. We therefore replay forward+backward L
+            // times — one microbatch per example — clip each per-example
+            // gradient by min(1, C / ||g_x||_2), accumulate the clipped
+            // gradients, add a single Gaussian noise draw N(0, σ²C²I)
+            // to the sum, and divide by L.
+            TrainDiscriminatorStepPerExampleDPSGD(data, startRow, endRow, noiseMultiplier);
+            return;
         }
+
+        // Non-DP fast path: single batched forward+backward.
+        var (realBatch, fakeBatch) = BuildRealAndFakeBatches(data, startRow, endRow);
+
+        using var tape = new GradientTape<T>();
+        var discParams = TapeTrainingStep<T>.CollectParameters(BuildDiscLayerList());
+
+        var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: true);
+
+        // BCE-with-logits objective (Goodfellow 2014 GAN, also used by
+        // MedSynth per paper §3.2): D maximizes log σ(D(real)) + log(1 - σ(D(fake))).
+        // Tape-friendly form: -log σ(real) - log σ(-fake) where σ is sigmoid.
+        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+        var negFakeScores = Engine.TensorNegate(fakeScores);
+        var lossReal = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(realScores), allAxes, keepDims: false));
+        var lossFake = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(negFakeScores), allAxes, keepDims: false));
+        var lossTensor = Engine.TensorAdd(lossReal, lossFake);
+
+        var grads = tape.ComputeGradients(lossTensor, discParams);
+
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        // Replay-correct closure: lossTensor was (lossReal + lossFake), so
+        // RecomputeLoss must replay BOTH BCE terms to stay tied to the
+        // objective that produced `grads`. Capture fakeBatch in the closure
+        // so the fake side can be re-scored on optimizer.Step replay.
+        var capturedFakeBatch = fakeBatch;
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)
+        {
+            var predFake = DiscriminatorForwardBatched(capturedFakeBatch, true);
+            var lossR = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(predReal), allAxes, keepDims: false));
+            var lossF = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(predFake)), allAxes, keepDims: false));
+            return Engine.TensorAdd(lossR, lossF);
+        }
+
+        var context = new TapeStepContext<T>(
+            discParams, grads, lossValue,
+            realBatch, realBatch, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
     }
 
-    private void ClipAndNoiseGradient(Tensor<T> grad, double noiseMultiplier)
+    /// <summary>
+    /// Per-example DP-SGD discriminator step (Abadi et al. 2016 §3, Algorithm 1).
+    /// Replays forward+backward once per example, clips each per-example
+    /// gradient against the GLOBAL L2 norm across all parameters
+    /// concatenated, sums, adds a single Gaussian noise draw, and averages.
+    /// </summary>
+    private void TrainDiscriminatorStepPerExampleDPSGD(Matrix<T> data, int startRow, int endRow, double noiseMultiplier)
     {
-        double norm = 0;
-        for (int i = 0; i < grad.Length; i++)
+        int batchSize = endRow - startRow;
+        var discLayerList = BuildDiscLayerList();
+        var discParams = TapeTrainingStep<T>.CollectParameters(discLayerList);
+
+        // Accumulator for sum of clipped per-example gradients
+        var gradSum = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var p in discParams)
         {
-            double v = NumOps.ToDouble(grad[i]);
-            norm += v * v;
+            var zero = new Tensor<T>(p._shape);
+            zero.Fill(NumOps.Zero);
+            gradSum[p] = zero;
         }
-        norm = Math.Sqrt(norm);
 
         double clipNorm = _options.ClipNorm;
-        double scale = norm > clipNorm ? clipNorm / norm : 1.0;
+        double noiseStd = clipNorm * noiseMultiplier;
+        T lossSum = NumOps.Zero;
 
-        for (int i = 0; i < grad.Length; i++)
+        // Capture the EXACT per-example (real, fake) tensors that produced
+        // the per-example losses + clipped gradients, so the replay closure
+        // can reconstruct the same objective. Replay built from
+        // BuildRealAndFakeBatches(...startRow, endRow) draws fresh noise
+        // (= different fake rows), which decouples the replayed scalar loss
+        // from the noisedAvgGrads — the optimizer's replay would compute a
+        // loss tied to a different objective than the gradients it applies.
+        var perExampleReal = new List<Tensor<T>>(endRow - startRow);
+        var perExampleFake = new List<Tensor<T>>(endRow - startRow);
+
+        for (int row = startRow; row < endRow; row++)
         {
-            double clipped = NumOps.ToDouble(grad[i]) * scale;
-            double u1 = Math.Max(1e-10, _random.NextDouble());
-            double u2 = _random.NextDouble();
-            double noiseVal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            double noise = noiseVal * noiseMultiplier * clipNorm;
-            grad[i] = NumOps.FromDouble(clipped + noise);
+            var (realBatch, fakeBatch) = BuildRealAndFakeBatches(data, row, row + 1);
+            perExampleReal.Add(realBatch);
+            perExampleFake.Add(fakeBatch);
+
+            using var tape = new GradientTape<T>();
+            var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
+            var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: true);
+
+            var perExampleAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+            var negFakeScores = Engine.TensorNegate(fakeScores);
+            var lossReal = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(realScores), perExampleAxes, keepDims: false));
+            var lossFake = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(negFakeScores), perExampleAxes, keepDims: false));
+            var lossTensor = Engine.TensorAdd(lossReal, lossFake);
+
+            if (lossTensor.Length > 0)
+                lossSum = NumOps.Add(lossSum, lossTensor[0]);
+
+            var grads = tape.ComputeGradients(lossTensor, discParams);
+
+            // GLOBAL L2 norm across all parameter gradients concatenated.
+            // Required by Abadi's L2-sensitivity bound — per-tensor norms
+            // do NOT provide the same privacy guarantee.
+            double globalSqSum = 0.0;
+            foreach (var g in grads.Values)
+            {
+                for (int i = 0; i < g.Length; i++)
+                {
+                    double v = NumOps.ToDouble(g[i]);
+                    globalSqSum += v * v;
+                }
+            }
+            double globalNorm = Math.Sqrt(globalSqSum + 1e-12);
+            double clipFactor = Math.Min(1.0, clipNorm / globalNorm);
+            T clipFactorT = NumOps.FromDouble(clipFactor);
+
+            foreach (var kvp in grads)
+            {
+                var scaled = Engine.TensorMultiplyScalar(kvp.Value, clipFactorT);
+                gradSum[kvp.Key] = Engine.TensorAdd(gradSum[kvp.Key], scaled);
+            }
         }
+
+        // Add Gaussian noise to the SUM, then average by batchSize.
+        var noisedAvgGrads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        double invBatch = 1.0 / batchSize;
+        foreach (var kvp in gradSum)
+        {
+            var noisy = new Tensor<T>(kvp.Value._shape);
+            for (int i = 0; i < kvp.Value.Length; i++)
+            {
+                double sumVal = NumOps.ToDouble(kvp.Value[i]);
+                double u1 = Math.Max(1e-10, _random.NextDouble());
+                double u2 = _random.NextDouble();
+                double zn = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+                noisy[i] = NumOps.FromDouble((sumVal + zn * noiseStd) * invBatch);
+            }
+            noisedAvgGrads[kvp.Key] = noisy;
+        }
+
+        T avgLoss = NumOps.Divide(lossSum, NumOps.FromDouble(batchSize));
+
+        // Replay-correct closure: each per-example lossTensor was
+        // (lossReal + lossFake); the noisedAvgGrads collapse that across
+        // the batch but the corresponding scalar loss is still the mean of
+        // (lossReal + lossFake). RecomputeLoss must replay BOTH BCE terms,
+        // AND must use the EXACT same (real, fake) tensors that the per-
+        // example loop used to compute grads — drawing fresh fake noise
+        // here would tie the replayed loss to a different objective than
+        // the noisedAvgGrads (silent training drift on any optimizer.Step
+        // that exercises the replay path).
+        var stackedReal = Engine.TensorConcatenate([.. perExampleReal], axis: 0);
+        var stackedFake = Engine.TensorConcatenate([.. perExampleFake], axis: 0);
+        var allAxesFull = Enumerable.Range(0, stackedReal.Shape.Length).ToArray();
+        var capturedFake = stackedFake;
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)
+        {
+            var predFake = DiscriminatorForwardBatched(capturedFake, true);
+            var lossR = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(predReal), allAxesFull, keepDims: false));
+            var lossF = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(predFake)), allAxesFull, keepDims: false));
+            return Engine.TensorAdd(lossR, lossF);
+        }
+
+        var context = new TapeStepContext<T>(
+            discParams, noisedAvgGrads, avgLoss,
+            stackedReal, stackedReal, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Paper-faithful generator/decoder step for MedSynth (no DP — adversarial
+    /// gradients flow into the generator which never directly touches real data,
+    /// covered by the data-processing inequality). Minimizes
+    /// <c>-E[log σ(D(G(z)))]</c> (non-saturating Goodfellow 2014 generator loss)
+    /// plus a constraint penalty when the clinical-constraint layer is wired up.
+    /// </summary>
+    private void TrainGeneratorStepBatched(int batchSize)
+    {
+        using var tape = new GradientTape<T>();
+
+        // Generator's trainable surface = decoder FCs + per-layer BN +
+        // output projection — NOT the full Layers list (Layers also holds
+        // the encoder, VAE heads, and discriminator sub-graph; capturing
+        // those in genParams would move the critic / encoder during the
+        // generator step and corrupt the GAN training equilibrium).
+        var generatorLayers = new List<ILayer<T>>(_decoderLayers.Count + _decoderBN.Count + 1);
+        generatorLayers.AddRange(_decoderLayers);
+        generatorLayers.AddRange(_decoderBN);
+        if (_decoderOutput is not null) generatorLayers.Add(_decoderOutput);
+        var genParams = TapeTrainingStep<T>.CollectParameters(generatorLayers);
+
+        var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+        var fakeBatch = DecoderForwardBatched(noiseBatch, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: false);
+
+        // Non-saturating generator loss (Goodfellow 2014 §3): maximize log σ(D(G(z)))
+        // i.e. minimize -log σ(D(G(z))).
+        var allAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var lossTensor = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(fakeScores), allAxes, keepDims: false));
+
+        var grads = tape.ComputeGradients(lossTensor, genParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) =>
+            DiscriminatorForwardBatched(DecoderForwardBatched(inp, true), false);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) =>
+            Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), allAxes, keepDims: false));
+
+        var context = new TapeStepContext<T>(
+            genParams, grads, lossValue,
+            noiseBatch, noiseBatch, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// VAE-half of the MedSynth (VAE+GAN hybrid) training loop. Trains the
+    /// encoder, the VAE heads (μ, log σ²), and the decoder against the
+    /// composite VAE objective
+    /// <code>
+    ///   L_VAE = MSE(real, x_recon)                              // reconstruction
+    ///         + KLWeight · KL( N(μ, σ²) ‖ N(0, I) )            // KL divergence
+    ///         + ConstraintWeight · ConstraintPenalty(x_recon)   // clinical bounds
+    /// </code>
+    /// per Kingma 2013 §3 + the clinical-constraint extension. Without this
+    /// step the documented VAE+GAN hybrid regresses to a plain GAN with
+    /// post-hoc clamping in Generate(...) (CodeRabbit blocking concern).
+    /// </summary>
+    private void TrainVaeStepBatched(Matrix<T> data, int startRow, int endRow)
+    {
+        int batchSize = endRow - startRow;
+        if (batchSize <= 0) return;
+        if (_meanHead is null || _logvarHead is null || _decoderOutput is null) return;
+
+        // Build the real batch tensor (rows of the transformed dataset).
+        var realBatch = new Tensor<T>([batchSize, _dataWidth]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            int row = startRow + b;
+            int cols = Math.Min(_dataWidth, data.Columns);
+            for (int j = 0; j < cols; j++) realBatch[b, j] = data[row, j];
+        }
+
+        // Trainable surface = encoder + (μ, log σ²) heads + decoder FCs + BN +
+        // output. Discriminator stays out of the VAE tape (its forward is not
+        // run here at all).
+        var vaeLayers = new List<ILayer<T>>(
+            _encoderLayers.Count + 2 + _decoderLayers.Count + _decoderBN.Count + 1);
+        vaeLayers.AddRange(_encoderLayers);
+        vaeLayers.Add(_meanHead);
+        vaeLayers.Add(_logvarHead);
+        vaeLayers.AddRange(_decoderLayers);
+        vaeLayers.AddRange(_decoderBN);
+        vaeLayers.Add(_decoderOutput);
+        var vaeParams = TapeTrainingStep<T>.CollectParameters(vaeLayers);
+
+        using var tape = new GradientTape<T>();
+
+        // Encoder + heads.
+        var hidden = EncoderForwardBatched(realBatch);
+        var mean = _meanHead.Forward(hidden);
+        var logvar = _logvarHead.Forward(hidden);
+
+        // Reparameterize: z = μ + ε ⊙ exp(½ · log σ²), ε ~ N(0, I) (seeded).
+        int latentDim = _options.LatentDimension;
+        var epsData = new T[batchSize * latentDim];
+        for (int i = 0; i < epsData.Length; i += 2)
+        {
+            double u1 = 1.0 - _random.NextDouble();
+            double u2 = _random.NextDouble();
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            epsData[i] = NumOps.FromDouble(r * Math.Cos(theta));
+            if (i + 1 < epsData.Length)
+                epsData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
+        }
+        var epsTensor = new Tensor<T>(epsData, [batchSize, latentDim]);
+        var halfLogvar = Engine.TensorMultiplyScalar(logvar, NumOps.FromDouble(0.5));
+        var stddev = Engine.TensorExp(halfLogvar);
+        var z = Engine.TensorAdd(mean, Engine.TensorMultiply(stddev, epsTensor));
+
+        // Decoder forward — tape-tracked. Matches DecoderForwardBatched.
+        var recon = DecoderForwardBatched(z, isTraining: true);
+
+        // Reconstruction loss: per-element MSE → scalar mean.
+        var diff = Engine.TensorSubtract(recon, realBatch);
+        var sq = Engine.TensorMultiply(diff, diff);
+        var reconAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+        var reconLoss = Engine.ReduceMean(sq, reconAxes, keepDims: false);
+
+        // KL( N(μ, σ²) ‖ N(0, I) ) = 0.5 · Σ(σ² + μ² − 1 − log σ²)  per element,
+        // then mean over the batch. σ² = exp(log σ²).
+        var variance = Engine.TensorExp(logvar);
+        var meanSq = Engine.TensorMultiply(mean, mean);
+        var ones = new Tensor<T>(logvar._shape);
+        Engine.TensorFill(ones, NumOps.One);
+        var klPerElement = Engine.TensorAdd(
+            Engine.TensorSubtract(Engine.TensorAdd(variance, meanSq), ones),
+            Engine.TensorNegate(logvar));
+        var klAxes = Enumerable.Range(0, klPerElement.Shape.Length).ToArray();
+        var klLoss = Engine.TensorMultiplyScalar(
+            Engine.ReduceMean(klPerElement, klAxes, keepDims: false),
+            NumOps.FromDouble(0.5));
+
+        // Constraint penalty: per-column squared violation of the
+        // [colMin, colMax] bounds learned in LearnConstraints, mean over
+        // (batch, columns). Uses tape-tracked ReLU(x − colMax) for the
+        // upper-bound violation and ReLU(colMin − x) for the lower-bound,
+        // squared and summed. Skipped when the constraint table is null
+        // (no Fit-time learning happened).
+        Tensor<T> totalLoss = Engine.TensorAdd(
+            reconLoss,
+            Engine.TensorMultiplyScalar(klLoss, NumOps.FromDouble(_options.KLWeight)));
+        if (_colMin is not null && _colMax is not null && _options.ConstraintWeight > 0.0)
+        {
+            int cols = Math.Min(_dataWidth, _colMin.Length);
+            var lowerBoundArr = new T[cols];
+            var upperBoundArr = new T[cols];
+            for (int j = 0; j < cols; j++)
+            {
+                lowerBoundArr[j] = NumOps.FromDouble(_colMin[j]);
+                upperBoundArr[j] = NumOps.FromDouble(_colMax[j]);
+            }
+            // Broadcast bound vectors as [1, _dataWidth] against the recon
+            // [batch, _dataWidth] — the engine's TensorSubtract handles
+            // numpy-style broadcasting on the leading axis.
+            var lower = new Tensor<T>(lowerBoundArr, [1, cols]);
+            var upper = new Tensor<T>(upperBoundArr, [1, cols]);
+            var upperViol = Engine.ReLU(Engine.TensorSubtract(recon, upper));
+            var lowerViol = Engine.ReLU(Engine.TensorSubtract(lower, recon));
+            var viol = Engine.TensorAdd(
+                Engine.TensorMultiply(upperViol, upperViol),
+                Engine.TensorMultiply(lowerViol, lowerViol));
+            var violAxes = Enumerable.Range(0, viol.Shape.Length).ToArray();
+            var constraintLoss = Engine.ReduceMean(viol, violAxes, keepDims: false);
+            totalLoss = Engine.TensorAdd(
+                totalLoss,
+                Engine.TensorMultiplyScalar(constraintLoss, NumOps.FromDouble(_options.ConstraintWeight)));
+        }
+
+        var grads = tape.ComputeGradients(totalLoss, vaeParams);
+        T lossValue = totalLoss.Length > 0 ? totalLoss[0] : NumOps.Zero;
+
+        // Replay closure recomputes the full VAE composite loss against the
+        // exact (realBatch, eps, lower/upper bounds) captured during the
+        // forward pass. Re-sampling ε here on replay would change the
+        // reparameterized z and decouple the replayed loss from the grads;
+        // re-using the captured ε keeps the optimizer.Step replay tied to
+        // the same objective that produced grads.
+        var capturedReal = realBatch;
+        var capturedEps = epsTensor;
+        var capturedReconAxes = reconAxes;
+        var capturedKlAxes = klAxes;
+        double capturedKLWeight = _options.KLWeight;
+        double capturedConstraintWeight = _options.ConstraintWeight;
+        T[]? capturedLowerArr = null, capturedUpperArr = null;
+        int capturedCols = 0;
+        if (_colMin is not null && _colMax is not null && capturedConstraintWeight > 0.0)
+        {
+            capturedCols = Math.Min(_dataWidth, _colMin.Length);
+            capturedLowerArr = new T[capturedCols];
+            capturedUpperArr = new T[capturedCols];
+            for (int j = 0; j < capturedCols; j++)
+            {
+                capturedLowerArr[j] = NumOps.FromDouble(_colMin[j]);
+                capturedUpperArr[j] = NumOps.FromDouble(_colMax[j]);
+            }
+        }
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _)
+        {
+            var h = EncoderForwardBatched(inp);
+            var m = _meanHead.Forward(h);
+            var lv = _logvarHead.Forward(h);
+            var hl = Engine.TensorMultiplyScalar(lv, NumOps.FromDouble(0.5));
+            var sd = Engine.TensorExp(hl);
+            var zz = Engine.TensorAdd(m, Engine.TensorMultiply(sd, capturedEps));
+            return DecoderForwardBatched(zz, isTraining: true);
+        }
+        Tensor<T> RecomputeLoss(Tensor<T> reconReplay, Tensor<T> _)
+        {
+            var d = Engine.TensorSubtract(reconReplay, capturedReal);
+            var s = Engine.TensorMultiply(d, d);
+            var rL = Engine.ReduceMean(s, capturedReconAxes, keepDims: false);
+            // KL term needs μ/log σ² which aren't in this closure's signature.
+            // Recompute via a second encoder pass on capturedReal — identical
+            // input → identical heads → identical KL contribution.
+            var h2 = EncoderForwardBatched(capturedReal);
+            var m2 = _meanHead.Forward(h2);
+            var lv2 = _logvarHead.Forward(h2);
+            var v2 = Engine.TensorExp(lv2);
+            var ms2 = Engine.TensorMultiply(m2, m2);
+            var o2 = new Tensor<T>(lv2._shape);
+            Engine.TensorFill(o2, NumOps.One);
+            var klE = Engine.TensorAdd(
+                Engine.TensorSubtract(Engine.TensorAdd(v2, ms2), o2),
+                Engine.TensorNegate(lv2));
+            var klL = Engine.TensorMultiplyScalar(
+                Engine.ReduceMean(klE, capturedKlAxes, keepDims: false),
+                NumOps.FromDouble(0.5));
+            var total = Engine.TensorAdd(rL,
+                Engine.TensorMultiplyScalar(klL, NumOps.FromDouble(capturedKLWeight)));
+            if (capturedLowerArr is not null && capturedUpperArr is not null)
+            {
+                var lwr = new Tensor<T>(capturedLowerArr, [1, capturedCols]);
+                var upr = new Tensor<T>(capturedUpperArr, [1, capturedCols]);
+                var uv = Engine.ReLU(Engine.TensorSubtract(reconReplay, upr));
+                var lvw = Engine.ReLU(Engine.TensorSubtract(lwr, reconReplay));
+                var vi = Engine.TensorAdd(
+                    Engine.TensorMultiply(uv, uv),
+                    Engine.TensorMultiply(lvw, lvw));
+                var viAxes = Enumerable.Range(0, vi.Shape.Length).ToArray();
+                var cL = Engine.ReduceMean(vi, viAxes, keepDims: false);
+                total = Engine.TensorAdd(total,
+                    Engine.TensorMultiplyScalar(cL, NumOps.FromDouble(capturedConstraintWeight)));
+            }
+            return total;
+        }
+
+        var context = new TapeStepContext<T>(
+            vaeParams, grads, lossValue,
+            realBatch, realBatch, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Numerically-stable <c>log(sigmoid(x))</c> = <c>-softplus(-x)</c>, expressed
+    /// via tape-tracked Engine ops so backprop flows correctly through the
+    /// BCE-with-logits loss.
+    /// </summary>
+    private Tensor<T> LogSigmoid(Tensor<T> x)
+    {
+        // Numerically stable log σ(x) = -softplus(-x). The naive
+        // log(σ(x)) underflows to -∞ for sufficiently negative scores
+        // (sigmoid → 0). Engine.Softplus is internally computed with the
+        // max(z,0) + log(1+exp(-|z|)) identity so the dynamic range
+        // stays intact for confident discriminator outputs.
+        return Engine.TensorNegate(Engine.Softplus(Engine.TensorNegate(x)));
+    }
+
+    /// <summary>
+    /// Builds [batchSize, dataWidth] real + fake batches for one DP-SGD critic step.
+    /// </summary>
+    private (Tensor<T> realBatch, Tensor<T> fakeBatch) BuildRealAndFakeBatches(
+        Matrix<T> data, int startRow, int endRow)
+    {
+        int batchSize = endRow - startRow;
+        var realBatch = new Tensor<T>([batchSize, _dataWidth]);
+        for (int b = 0; b < batchSize; b++)
+        {
+            int row = startRow + b;
+            int cols = Math.Min(_dataWidth, data.Columns);
+            for (int j = 0; j < cols; j++) realBatch[b, j] = data[row, j];
+        }
+        var noiseBatch = GenerateNoiseBatchTensor(batchSize);
+        var fakeBatch = DecoderForwardBatched(noiseBatch, isTraining: false);
+        return (realBatch, fakeBatch);
+    }
+
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize)
+    {
+        int latentDim = _options.LatentDimension;
+        int totalElements = batchSize * latentDim;
+        // Box–Muller via the seeded _random so MedSynthOptions.Seed makes
+        // Fit reproducible — Engine.TensorRandomUniformRange bypasses _random
+        // and breaks the seed contract that Generate(...) still honours.
+        var noiseData = new T[totalElements];
+        for (int i = 0; i < totalElements; i += 2)
+        {
+            double u1 = 1.0 - _random.NextDouble();   // ∈ (0, 1] keeps log finite
+            double u2 = _random.NextDouble();
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            noiseData[i] = NumOps.FromDouble(r * Math.Cos(theta));
+            if (i + 1 < totalElements)
+                noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
+        }
+        return new Tensor<T>(noiseData, [batchSize, latentDim]);
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked decoder forward (replaces per-row
+    /// <see cref="DecoderForward"/>). Uses <see cref="Engine.ReLU"/> instead of
+    /// the manual <c>ApplyReLU</c> indexed loop so the tape sees the activation.
+    /// </summary>
+    private Tensor<T> DecoderForwardBatched(Tensor<T> z, bool isTraining)
+    {
+        var current = z;
+        for (int i = 0; i < _decoderLayers.Count; i++)
+        {
+            current = _decoderLayers[i].Forward(current);
+            if (i < _decoderBN.Count)
+            {
+                _decoderBN[i].SetTrainingMode(isTraining);
+                current = _decoderBN[i].Forward(current);
+            }
+            current = Engine.ReLU(current);
+        }
+        if (_decoderOutput is not null)
+            current = _decoderOutput.Forward(current);
+        return current;
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked encoder forward. Mirrors per-row
+    /// <see cref="EncoderForward(Vector{T})"/> but on a <c>[batch, dataWidth]</c>
+    /// tensor and using tape-tracked <see cref="Engine.ReLU"/> so the VAE
+    /// step's backward flows through the encoder weights.
+    /// </summary>
+    private Tensor<T> EncoderForwardBatched(Tensor<T> input)
+    {
+        var current = input;
+        for (int i = 0; i < _encoderLayers.Count; i++)
+        {
+            current = _encoderLayers[i].Forward(current);
+            current = Engine.ReLU(current);
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// Batched, tape-tracked discriminator forward. Same paper-faithful
+    /// LeakyReLU(0.2) + Dropout architecture as
+    /// <see cref="DiscriminatorForward"/>, but using <see cref="Engine.LeakyReLU"/>.
+    /// </summary>
+    private Tensor<T> DiscriminatorForwardBatched(Tensor<T> input, bool isTraining)
+    {
+        var current = input;
+        T leakySlope = NumOps.FromDouble(0.2);
+        for (int i = 0; i < _discLayers.Count; i++)
+        {
+            current = _discLayers[i].Forward(current);
+            current = Engine.LeakyReLU(current, leakySlope);
+            if (i < _discDropout.Count)
+            {
+                _discDropout[i].SetTrainingMode(isTraining);
+                current = _discDropout[i].Forward(current);
+            }
+        }
+        if (_discOutput is not null)
+            current = _discOutput.Forward(current);
+        return current;
     }
 
     private double ComputeNoiseMultiplier(int dataSize, int epochs)
@@ -542,9 +1099,9 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         _decoderPreActs.Clear();
         var current = VectorToTensor(z);
 
-        for (int i = 0; i < Layers.Count; i++)
+        for (int i = 0; i < _decoderLayers.Count; i++)
         {
-            current = Layers[i].Forward(current);
+            current = _decoderLayers[i].Forward(current);
             if (i < _decoderBN.Count)
             {
                 _decoderBN[i].SetTrainingMode(isTraining);

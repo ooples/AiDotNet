@@ -28,8 +28,15 @@ on:
     - cron: '0 8 * * 1'
 
 concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
+  # For PR events: group by PR number so a rapid synchronize / reopen cancels
+  # the previous run for the same PR. For push events (master / main): group
+  # by ref AND commit SHA so back-to-back merges don't cancel each other —
+  # the prior pattern (`build-${{ github.ref }}` + cancel-in-progress: true)
+  # killed every push run on master when two commits landed within seconds,
+  # which is why no PR ever saw a green Build & SonarCloud signal on PR #1318
+  # despite the workflow being marked active.
+  group: build-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1

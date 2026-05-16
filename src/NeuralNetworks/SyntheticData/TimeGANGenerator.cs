@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -7,8 +8,10 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.SyntheticData;
 
@@ -254,6 +257,20 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// <inheritdoc />
     public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
     {
+        // Reject configurations that would silently no-op training. With
+        // epochs <= 0 every phase loop runs zero iterations and IsFitted
+        // would still flip true at the bottom (untrained model marked
+        // ready for Generate). With SequenceLength < 2 there are no
+        // (xt, xt+1) pairs so Phase 2 (supervisor) and the supervised
+        // term of Phase 3 (joint) become no-ops — the TimeGAN variant
+        // described in the class docs is no longer what's being trained.
+        if (epochs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(epochs), epochs, "epochs must be greater than 0.");
+        if (_options.SequenceLength < 2)
+            throw new InvalidOperationException(
+                "TimeGAN requires SequenceLength >= 2 for the supervisor + temporal-supervision objectives. "
+                + $"Got SequenceLength = {_options.SequenceLength}.");
+
         _columns = new List<ColumnMetadata>(columns);
         _dataWidth = data.Columns;
         int hiddenDim = _options.HiddenDimension;
@@ -264,42 +281,64 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         var sequences = PrepareSequences(data, seqLen);
         if (sequences.Count == 0)
         {
-            IsFitted = true;
-            return;
+            throw new InvalidOperationException(
+                "TimeGAN.Fit: no usable sequences produced from the input data "
+                + $"(data rows = {data.Rows}, SequenceLength = {seqLen}). "
+                + "Need at least one window of length >= SequenceLength.");
+        }
+        if (!sequences.Exists(seq => seq.Rows >= 2))
+        {
+            throw new InvalidOperationException(
+                "TimeGAN.Fit: every prepared sequence has fewer than two timesteps, "
+                + "so the supervisor's next-step objective can never produce a pair. "
+                + "Increase the input row count or lower SequenceLength.");
         }
 
         int batchSize = Math.Min(_options.BatchSize, sequences.Count);
-        int phaseDuration = Math.Max(1, epochs / 3);
+        // Honor the caller's total epochs budget across the three phases —
+        // the prior `phaseDuration = max(1, epochs/3)` formulation ran each
+        // phase that many times, so the model actually trained for
+        // 3·phaseDuration passes (over-training when epochs < 3 since
+        // Math.Max(1, …) floors to 1 per phase, and dropping the remainder
+        // for non-multiples of 3). Split as base + remainder distribution.
+        int baseEpochs = epochs / 3;
+        int remainder = epochs % 3;
+        int phase1Epochs = baseEpochs + (remainder > 0 ? 1 : 0);
+        int phase2Epochs = baseEpochs + (remainder > 1 ? 1 : 0);
+        int phase3Epochs = baseEpochs;
         T lr = NumOps.FromDouble(_options.LearningRate / Math.Max(batchSize, 1));
 
-        // Phase 1: Embedding training
-        for (int epoch = 0; epoch < phaseDuration; epoch++)
+        // Paper-faithful TimeGAN (Yoon et al. 2019) 3-phase training:
+        // Phase 1: embedder + recovery learn the latent space via reconstruction.
+        for (int epoch = 0; epoch < phase1Epochs; epoch++)
         {
             for (int b = 0; b < sequences.Count; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, sequences.Count);
-                TrainEmbeddingStep(sequences, b, end, lr);
+                TrainEmbeddingStepBatched(sequences, b, end);
             }
         }
 
-        // Phase 2: Supervised training
-        for (int epoch = 0; epoch < phaseDuration; epoch++)
+        // Phase 2: supervisor learns next-step prediction in latent space.
+        for (int epoch = 0; epoch < phase2Epochs; epoch++)
         {
             for (int b = 0; b < sequences.Count; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, sequences.Count);
-                TrainSupervisedStep(sequences, b, end, lr);
+                TrainSupervisedStepBatched(sequences, b, end);
             }
         }
 
-        // Phase 3: Joint training
-        for (int epoch = 0; epoch < phaseDuration; epoch++)
+        // Phase 3: joint adversarial training. Per Yoon 2019 §3.3 schedule:
+        // generator/supervisor step + critic step + embedder fine-tune per batch.
+        for (int epoch = 0; epoch < phase3Epochs; epoch++)
         {
             for (int b = 0; b < sequences.Count; b += batchSize)
             {
                 int end = Math.Min(b + batchSize, sequences.Count);
-                TrainDiscriminatorStep(sequences, b, end, lr);
-                TrainEmbeddingStep(sequences, b, end, lr);
+                TrainDiscriminatorStepBatched(sequences, b, end);
+                TrainGeneratorStepBatched(sequences, b, end);
+                TrainEmbeddingStepBatched(sequences, b, end);
             }
         }
 
@@ -517,91 +556,399 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
     #region Training Phases
 
-    private void TrainEmbeddingStep(List<Matrix<T>> sequences, int startIdx, int endIdx, T lr)
+    /// <summary>
+    /// Paper-faithful TimeGAN Phase 1 (Yoon et al. 2019 §3.1):
+    /// joint embedder + recovery training on the reconstruction objective
+    /// <c>L_R = E[||x - r(e(x))||_2^2]</c>. Tape-tracked so backprop flows
+    /// through both networks in a single optimizer step.
+    /// </summary>
+    private void TrainEmbeddingStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
-        for (int s = startIdx; s < endIdx; s++)
-        {
-            var seq = sequences[s];
-            for (int t = 0; t < seq.Rows; t++)
-            {
-                var x = GetRow(seq, t);
-                var embedding = EmbedderForward(x, isTraining: true);
-                var recovered = RecoveryForward(embedding, isTraining: true);
+        var xBatch = BuildFlattenedSequenceBatch(sequences, startIdx, endIdx);
+        if (xBatch.Shape[0] == 0) return;
 
-                var grad = new Tensor<T>([recovered.Length]);
-                int gradLen = Math.Min(grad.Length, x.Length);
-                for (int j = 0; j < gradLen; j++)
-                {
-                    double diff = NumOps.ToDouble(recovered[j]) - NumOps.ToDouble(x[j]);
-                    grad[j] = NumOps.FromDouble(2.0 * diff * _options.ReconstructionWeight);
-                }
-                grad = SanitizeAndClipGradient(grad, 5.0);
+        using var tape = new GradientTape<T>();
 
-                UpdateRecovery(lr);
-                UpdateEmbedder(lr);
-            }
-        }
+        var embedderRecoveryLayers = new List<ILayer<T>>();
+        embedderRecoveryLayers.AddRange(_embedderLayers);
+        if (_embedderOutput is not null) embedderRecoveryLayers.Add(_embedderOutput);
+        embedderRecoveryLayers.AddRange(_recoveryLayers);
+        if (_recoveryOutput is not null) embedderRecoveryLayers.Add(_recoveryOutput);
+        var paramsList = TapeTrainingStep<T>.CollectParameters(embedderRecoveryLayers);
+
+        var hBatch = EmbedderForwardBatched(xBatch, isTraining: true);
+        var rBatch = RecoveryForwardBatched(hBatch, isTraining: true);
+
+        // L_R = mean((x - r)^2) * reconstruction_weight
+        var diff = Engine.TensorSubtract(rBatch, xBatch);
+        var sq = Engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+        var meanSq = Engine.ReduceMean(sq, allAxes, keepDims: false);
+        var lossTensor = Engine.TensorMultiplyScalar(meanSq, NumOps.FromDouble(_options.ReconstructionWeight));
+
+        var grads = tape.ComputeGradients(lossTensor, paramsList);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) =>
+            RecoveryForwardBatched(EmbedderForwardBatched(inp, true), true);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> target) => Engine.TensorMultiplyScalar(
+            Engine.ReduceMean(
+                Engine.TensorMultiply(Engine.TensorSubtract(pred, target), Engine.TensorSubtract(pred, target)),
+                allAxes, keepDims: false),
+            NumOps.FromDouble(_options.ReconstructionWeight));
+
+        var context = new TapeStepContext<T>(
+            paramsList, grads, lossValue,
+            xBatch, xBatch, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
     }
 
-    private void TrainSupervisedStep(List<Matrix<T>> sequences, int startIdx, int endIdx, T lr)
+    /// <summary>
+    /// Paper-faithful TimeGAN Phase 2 (Yoon et al. 2019 §3.2):
+    /// supervisor next-step prediction in the embedded space.
+    /// <c>L_S = E[||h_{t+1} - s(h_t)||_2^2]</c>. Embedder is frozen
+    /// (Phase 1 produced it).
+    /// </summary>
+    private void TrainSupervisedStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
+    {
+        var (xt, xtNext) = BuildPairedSequenceBatch(sequences, startIdx, endIdx);
+        if (xt.Shape[0] == 0) return;
+
+        using var tape = new GradientTape<T>();
+
+        var supervisorLayers = new List<ILayer<T>>();
+        supervisorLayers.AddRange(_supervisorLayers);
+        if (_supervisorOutput is not null) supervisorLayers.Add(_supervisorOutput);
+        var paramsList = TapeTrainingStep<T>.CollectParameters(supervisorLayers);
+
+        // Embedder runs OUTSIDE the tape (frozen for this step).
+        var ht = EmbedderForwardBatched(xt, isTraining: false);
+        var htNext = EmbedderForwardBatched(xtNext, isTraining: false);
+
+        var htPred = SupervisorForwardBatched(ht, isTraining: true);
+        var diff = Engine.TensorSubtract(htPred, htNext);
+        var sq = Engine.TensorMultiply(diff, diff);
+        var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+        var lossTensor = Engine.ReduceMean(sq, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(lossTensor, paramsList);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => SupervisorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> target) => Engine.ReduceMean(
+            Engine.TensorMultiply(Engine.TensorSubtract(pred, target), Engine.TensorSubtract(pred, target)),
+            allAxes, keepDims: false);
+
+        var context = new TapeStepContext<T>(
+            paramsList, grads, lossValue,
+            ht, htNext, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Paper-faithful TimeGAN Phase 3 critic step (Yoon et al. 2019 §3.3):
+    /// the discriminator learns to distinguish real embedded sequences from
+    /// supervisor-rolled-out fake embedded sequences. BCE-with-logits via
+    /// tape-tracked Engine.Sigmoid + Engine.TensorLog.
+    /// </summary>
+    private void TrainDiscriminatorStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
+    {
+        var xBatch = BuildFlattenedSequenceBatch(sequences, startIdx, endIdx);
+        if (xBatch.Shape[0] == 0) return;
+        int batchSize = xBatch.Shape[0];
+        int hiddenDim = _options.HiddenDimension;
+
+        // Real embedded sequence: x -> embedder. Fake: noise -> generator -> supervisor.
+        // Both produced OUTSIDE the critic's tape so the critic only updates its own params.
+        var realEmb = EmbedderForwardBatched(xBatch, isTraining: false);
+        var noise = GenerateNoiseBatchTensor(batchSize, hiddenDim);
+        var fakeEmb = GeneratorForwardBatched(noise, isTraining: false);
+        var fakeSup = SupervisorForwardBatched(fakeEmb, isTraining: false);
+
+        using var tape = new GradientTape<T>();
+
+        var discLayers = new List<ILayer<T>>();
+        discLayers.AddRange(_discriminatorLayers);
+        if (_discriminatorOutput is not null) discLayers.Add(_discriminatorOutput);
+        var paramsList = TapeTrainingStep<T>.CollectParameters(discLayers);
+
+        var realScores = DiscriminatorForwardBatched(realEmb, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakeSup, isTraining: true);
+
+        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+        var lossReal = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(realScores), allAxes, keepDims: false));
+        var lossFake = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(fakeScores)), allAxes, keepDims: false));
+        var lossTensor = Engine.TensorAdd(lossReal, lossFake);
+
+        var grads = tape.ComputeGradients(lossTensor, paramsList);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        // Replay-correct closure for the critic: lossTensor was
+        // (lossReal + lossFake), so RecomputeLoss must replay BOTH BCE
+        // terms to stay tied to the objective that produced `grads`.
+        // ComputeForward receives the real-embedded input and returns the
+        // real discriminator scores; RecomputeLoss captures fakeSup so it
+        // can re-run the discriminator on the fake side too, then build
+        // the same -log σ(realScore) + -log σ(-fakeScore) sum.
+        var capturedFakeSup = fakeSup;
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
+        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)
+        {
+            var predFake = DiscriminatorForwardBatched(capturedFakeSup, true);
+            var lossR = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(predReal), allAxes, keepDims: false));
+            var lossF = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(predFake)), allAxes, keepDims: false));
+            return Engine.TensorAdd(lossR, lossF);
+        }
+
+        var context = new TapeStepContext<T>(
+            paramsList, grads, lossValue,
+            realEmb, realEmb, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Paper-faithful TimeGAN Phase 3 generator + supervisor joint step:
+    /// non-saturating adversarial loss + supervised next-step loss in the
+    /// embedded space (Yoon et al. 2019 §3.3 joint training).
+    /// </summary>
+    private void TrainGeneratorStepBatched(List<Matrix<T>> sequences, int startIdx, int endIdx)
     {
         int hiddenDim = _options.HiddenDimension;
-        for (int s = startIdx; s < endIdx; s++)
+
+        // Phase 3 joint loss (Yoon et al. 2019 §3.3) =
+        //   L_U (unsupervised adversarial, non-saturating)
+        //   + γ · L_S (supervised next-step MSE on real sequence pairs).
+        // Without the L_S term the supervisor is updated only through the
+        // adversarial gradient — the next-step temporal structure that
+        // L_S explicitly preserves is lost once joint training begins.
+        var (xt, xtNext) = BuildPairedSequenceBatch(sequences, startIdx, endIdx);
+        int supervisedBatch = xt.Shape[0];
+
+        using var tape = new GradientTape<T>();
+
+        var genSupLayers = new List<ILayer<T>>();
+        genSupLayers.AddRange(Layers);
+        genSupLayers.AddRange(_supervisorLayers);
+        if (_supervisorOutput is not null) genSupLayers.Add(_supervisorOutput);
+        var paramsList = TapeTrainingStep<T>.CollectParameters(genSupLayers);
+
+        // Adversarial term: minimize -log σ(D(s(g(z))))
+        int advBatch = Math.Max(1, supervisedBatch);
+        var noise = GenerateNoiseBatchTensor(advBatch, hiddenDim);
+        var fakeEmb = GeneratorForwardBatched(noise, isTraining: true);
+        var fakeSup = SupervisorForwardBatched(fakeEmb, isTraining: true);
+        var fakeScores = DiscriminatorForwardBatched(fakeSup, isTraining: false);
+        var advAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+        var advLoss = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(fakeScores), advAxes, keepDims: false));
+
+        Tensor<T> lossTensor;
+        if (supervisedBatch > 0)
+        {
+            // Supervised term: L_S = E[||h_{t+1} − s(h_t)||_2^2] on real
+            // sequence pairs. Embedder is frozen by Phase 1 and runs
+            // outside the tape; the supervisor remains tape-tracked so its
+            // gradient flows.
+            var ht = EmbedderForwardBatched(xt, isTraining: false);
+            var htNext = EmbedderForwardBatched(xtNext, isTraining: false);
+            var htPred = SupervisorForwardBatched(ht, isTraining: true);
+            var diff = Engine.TensorSubtract(htPred, htNext);
+            var sq = Engine.TensorMultiply(diff, diff);
+            var supAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+            var supLoss = Engine.ReduceMean(sq, supAxes, keepDims: false);
+
+            // Yoon 2019 uses equal weighting between L_U and L_S in the
+            // joint phase; expose γ via options later if needed.
+            var weightedSup = Engine.TensorMultiplyScalar(supLoss, NumOps.FromDouble(_options.SupervisedWeight));
+            lossTensor = Engine.TensorAdd(advLoss, weightedSup);
+        }
+        else
+        {
+            // No paired data available (sequence too short for next-step
+            // pairing) — fall back to adversarial-only for this batch.
+            lossTensor = advLoss;
+        }
+
+        var grads = tape.ComputeGradients(lossTensor, paramsList);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+
+        // Replay-correct closure for the joint phase: lossTensor combined
+        // adversarial (advLoss) AND, when supervisedBatch > 0, the weighted
+        // supervised next-step term. RecomputeLoss must reproduce the full
+        // sum so optimizer.Step replays stay tied to the objective that
+        // produced `grads` — replaying only the adversarial part silently
+        // drops the temporal-supervision phase-3 contribution.
+        int capturedSupervisedBatch = supervisedBatch;
+        var capturedXt = xt;
+        var capturedXtNext = xtNext;
+        var capturedAdvAxes = advAxes;
+        double capturedSupWeight = _options.SupervisedWeight;
+        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(
+            SupervisorForwardBatched(GeneratorForwardBatched(inp, true), true), false);
+        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
+        {
+            var adv = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), capturedAdvAxes, keepDims: false));
+            if (capturedSupervisedBatch <= 0) return adv;
+            var ht = EmbedderForwardBatched(capturedXt, isTraining: false);
+            var htNext = EmbedderForwardBatched(capturedXtNext, isTraining: false);
+            var htPred = SupervisorForwardBatched(ht, isTraining: true);
+            var diff = Engine.TensorSubtract(htPred, htNext);
+            var sq = Engine.TensorMultiply(diff, diff);
+            var supAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
+            var supLoss = Engine.ReduceMean(sq, supAxes, keepDims: false);
+            var weightedSup = Engine.TensorMultiplyScalar(supLoss, NumOps.FromDouble(capturedSupWeight));
+            return Engine.TensorAdd(adv, weightedSup);
+        }
+
+        var context = new TapeStepContext<T>(
+            paramsList, grads, lossValue,
+            noise, noise, ComputeForward, RecomputeLoss,
+            parameterBuffer: null);
+        _optimizer.Step(context);
+    }
+
+    /// <summary>
+    /// Flattens timesteps across a slice of sequences into a single
+    /// <c>[batchSize, dataWidth]</c> tensor for batched processing.
+    /// Each row is one timestep observation.
+    /// </summary>
+    private Tensor<T> BuildFlattenedSequenceBatch(List<Matrix<T>> sequences, int startIdx, int endIdx)
+    {
+        int totalRows = 0;
+        for (int s = startIdx; s < endIdx && s < sequences.Count; s++) totalRows += sequences[s].Rows;
+        var batch = new Tensor<T>([Math.Max(1, totalRows), _dataWidth]);
+        int idx = 0;
+        for (int s = startIdx; s < endIdx && s < sequences.Count; s++)
+        {
+            var seq = sequences[s];
+            int cols = Math.Min(_dataWidth, seq.Columns);
+            for (int t = 0; t < seq.Rows; t++)
+            {
+                for (int j = 0; j < cols; j++) batch[idx, j] = seq[t, j];
+                idx++;
+            }
+        }
+        // If the slice yielded zero rows, return an empty-batch tensor with
+        // first-dim zero so callers can early-exit on shape check.
+        return totalRows == 0 ? new Tensor<T>([0, _dataWidth]) : batch;
+    }
+
+    /// <summary>
+    /// Builds the paired (x_t, x_{t+1}) batches from sequence slices for the
+    /// supervisor's next-step prediction objective.
+    /// </summary>
+    private (Tensor<T> xt, Tensor<T> xtNext) BuildPairedSequenceBatch(List<Matrix<T>> sequences, int startIdx, int endIdx)
+    {
+        int totalPairs = 0;
+        for (int s = startIdx; s < endIdx && s < sequences.Count; s++)
+            if (sequences[s].Rows >= 2) totalPairs += sequences[s].Rows - 1;
+
+        if (totalPairs == 0)
+            return (new Tensor<T>([0, _dataWidth]), new Tensor<T>([0, _dataWidth]));
+
+        var xt = new Tensor<T>([totalPairs, _dataWidth]);
+        var xtNext = new Tensor<T>([totalPairs, _dataWidth]);
+        int idx = 0;
+        for (int s = startIdx; s < endIdx && s < sequences.Count; s++)
         {
             var seq = sequences[s];
             if (seq.Rows < 2) continue;
-
+            int cols = Math.Min(_dataWidth, seq.Columns);
             for (int t = 0; t < seq.Rows - 1; t++)
             {
-                var xt = GetRow(seq, t);
-                var xtNext = GetRow(seq, t + 1);
-                var ht = EmbedderForward(xt, isTraining: false);
-                var htNext = EmbedderForward(xtNext, isTraining: false);
-                var htPred = SupervisorForward(ht, isTraining: true);
-
-                var grad = new Tensor<T>([htPred.Length]);
-                for (int j = 0; j < grad.Length && j < htNext.Length; j++)
+                for (int j = 0; j < cols; j++)
                 {
-                    double diff = NumOps.ToDouble(htPred[j]) - NumOps.ToDouble(htNext[j]);
-                    grad[j] = NumOps.FromDouble(2.0 * diff);
+                    xt[idx, j] = seq[t, j];
+                    xtNext[idx, j] = seq[t + 1, j];
                 }
-
-                UpdateSupervisor(lr);
+                idx++;
             }
         }
+        return (xt, xtNext);
     }
 
-    private void TrainDiscriminatorStep(List<Matrix<T>> sequences, int startIdx, int endIdx, T lr)
+    private Tensor<T> GenerateNoiseBatchTensor(int batchSize, int dim)
     {
-        int hiddenDim = _options.HiddenDimension;
-        for (int s = startIdx; s < endIdx; s++)
+        int totalElements = batchSize * dim;
+        // Box–Muller via the seeded _random so TimeGANOptions.Seed makes
+        // Fit reproducible — Engine.TensorRandomUniformRange bypasses _random
+        // and breaks the seed contract that the rest of the sampler stack
+        // (and Generate via its own seeded paths) honours.
+        var noiseData = new T[totalElements];
+        for (int i = 0; i < totalElements; i += 2)
         {
-            var seq = sequences[s];
-            for (int t = 0; t < seq.Rows; t++)
+            double u1 = 1.0 - _random.NextDouble();   // ∈ (0, 1] keeps log finite
+            double u2 = _random.NextDouble();
+            double r = Math.Sqrt(-2.0 * Math.Log(u1));
+            double theta = 2.0 * Math.PI * u2;
+            noiseData[i] = NumOps.FromDouble(r * Math.Cos(theta));
+            if (i + 1 < totalElements)
+                noiseData[i + 1] = NumOps.FromDouble(r * Math.Sin(theta));
+        }
+        return new Tensor<T>(noiseData, [batchSize, dim]);
+    }
+
+    // ----- Batched, tape-tracked forward methods (Engine.Sigmoid / LeakyReLU) -----
+
+    private Tensor<T> EmbedderForwardBatched(Tensor<T> x, bool isTraining)
+    {
+        var current = x;
+        foreach (var l in _embedderLayers) { current = l.Forward(current); current = Engine.Sigmoid(current); }
+        if (_embedderOutput is not null) current = _embedderOutput.Forward(current);
+        return current;
+    }
+
+    private Tensor<T> RecoveryForwardBatched(Tensor<T> h, bool isTraining)
+    {
+        var current = h;
+        foreach (var l in _recoveryLayers) { current = l.Forward(current); current = Engine.Sigmoid(current); }
+        if (_recoveryOutput is not null) current = _recoveryOutput.Forward(current);
+        return current;
+    }
+
+    private Tensor<T> GeneratorForwardBatched(Tensor<T> noise, bool isTraining)
+    {
+        var current = noise;
+        foreach (var l in Layers) { current = l.Forward(current); current = Engine.Sigmoid(current); }
+        return current;
+    }
+
+    private Tensor<T> SupervisorForwardBatched(Tensor<T> h, bool isTraining)
+    {
+        var current = h;
+        foreach (var l in _supervisorLayers) { current = l.Forward(current); current = Engine.Sigmoid(current); }
+        if (_supervisorOutput is not null) current = _supervisorOutput.Forward(current);
+        return current;
+    }
+
+    private Tensor<T> DiscriminatorForwardBatched(Tensor<T> h, bool isTraining)
+    {
+        var current = h;
+        T leakySlope = NumOps.FromDouble(0.2);
+        for (int i = 0; i < _discriminatorLayers.Count; i++)
+        {
+            current = _discriminatorLayers[i].Forward(current);
+            current = Engine.LeakyReLU(current, leakySlope);
+            if (i < _discDropoutLayers.Count)
             {
-                var x = GetRow(seq, t);
-                var realEmb = EmbedderForward(x, isTraining: false);
-                var discReal = DiscriminatorForward(realEmb, isTraining: true);
-
-                double realScore = NumOps.ToDouble(discReal[0]);
-                double sigReal = SigmoidScalar(realScore);
-                var gradReal = new Tensor<T>([1]);
-                gradReal[0] = NumOps.FromDouble(-(1.0 - sigReal));
-                UpdateDiscriminator(lr);
-
-                var noise = CreateStandardNormalVector(hiddenDim);
-                var fakeEmb = GeneratorForward(noise, isTraining: false);
-                var fakeSup = SupervisorForward(fakeEmb, isTraining: false);
-                var discFake = DiscriminatorForward(fakeSup, isTraining: true);
-
-                double fakeScore = NumOps.ToDouble(discFake[0]);
-                double sigFake = SigmoidScalar(fakeScore);
-                var gradFake = new Tensor<T>([1]);
-                gradFake[0] = NumOps.FromDouble(sigFake);
-                UpdateDiscriminator(lr);
+                _discDropoutLayers[i].SetTrainingMode(isTraining);
+                current = _discDropoutLayers[i].Forward(current);
             }
         }
+        if (_discriminatorOutput is not null) current = _discriminatorOutput.Forward(current);
+        return current;
     }
+
+    // Numerically stable log σ(x) = -softplus(-x). The naive
+    // log(σ(x)) = log(1 / (1 + exp(-x))) underflows to -∞ for confident
+    // negative scores (sigmoid saturates at 0). The softplus form keeps
+    // the dynamic range intact because softplus(z) = log(1+exp(z)) is
+    // implemented via the stable max(z,0) + log(1+exp(-|z|)) identity
+    // inside Engine.Softplus.
+    private Tensor<T> LogSigmoid(Tensor<T> x) =>
+        Engine.TensorNegate(Engine.Softplus(Engine.TensorNegate(x)));
 
     #endregion
 

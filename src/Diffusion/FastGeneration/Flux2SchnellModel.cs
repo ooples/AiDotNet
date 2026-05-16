@@ -80,7 +80,18 @@ public class Flux2SchnellModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.0001,
-                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear
+                BetaEnd = 0.02, BetaSchedule = BetaSchedule.Linear,
+                // FLUX.1-schnell ("schnell" = German for "fast"; Black Forest
+                // Labs 2024) is a Latent Adversarial Diffusion Distillation
+                // (LADD) student distilled to 1-4 sampling steps. The
+                // model card and XML example in this file's class docs both
+                // specify `NumInferenceSteps = 4` as the canonical default;
+                // override the DiffusionModelOptions default of 10 so
+                // `Predict()` doesn't burn 6 extra UNet evaluations the
+                // distillation was specifically trained to skip — the
+                // ScaledInput_ShouldChangeOutput test's two Predict calls
+                // at 10 steps were OOM-timeout-ing at the 120s budget.
+                DefaultInferenceSteps = 4
             },
             scheduler ?? new FlowMatchingScheduler<T>(SchedulerConfig<T>.CreateRectifiedFlow()),
             architecture)

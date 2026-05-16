@@ -216,8 +216,34 @@ public class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 
         return output;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; int resamplerLpb = _options.DropoutRate > 0 ? 8 : 7; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 4 * resamplerLpb + 1; }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            // ComputePatchSize() is only reached on the default resampler stack;
+            // custom Architecture.Layers stacks don't consume patch options, so
+            // don't reject them on those values.
+            ValidatePatchOptions();
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            ComputeEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary();
+    }
+    private int ComputePatchSize()
+    {
+        ValidatePatchOptions();
+        double targetTokensPerSide = Math.Sqrt(_options.MaxVisualTokens);
+        return Math.Max(1, (int)Math.Ceiling(_options.ImageSize / targetTokensPerSide));
+    }
+    private void ValidatePatchOptions() { if (_options.ImageSize <= 0) throw new ArgumentOutOfRangeException(nameof(_options.ImageSize), _options.ImageSize, "ImageSize must be greater than 0."); if (_options.MaxVisualTokens <= 0) throw new ArgumentOutOfRangeException(nameof(_options.MaxVisualTokens), _options.MaxVisualTokens, "MaxVisualTokens must be greater than 0."); }
+    // +2 leading layers from the helper: PatchEmbedding + LayerNorm.
+    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; int resamplerLpb = _options.DropoutRate > 0 ? 8 : 7; _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb + 4 * resamplerLpb + 1; }
+    private void ValidateEncoderDecoderBoundary() { if (_encoderLayerEnd <= 0 || _encoderLayerEnd > Layers.Count) throw new InvalidOperationException($"Invalid encoder boundary {_encoderLayerEnd} for {Layers.Count} layers."); }
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }

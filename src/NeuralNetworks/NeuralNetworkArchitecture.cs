@@ -55,6 +55,22 @@ public class NeuralNetworkArchitecture<T>
     public List<ILayer<T>> Layers { get; } = new List<ILayer<T>>();
 
     /// <summary>
+    /// Optional seed for reproducible weight initialization across all
+    /// layers in this architecture. When set, model constructors that
+    /// build their layer chain via <see cref="LayerHelper{T}"/> wire each
+    /// layer's <see cref="Layers.LayerBase{T}.RandomSeed"/> off this base
+    /// seed (per-layer seeds are derived deterministically from this
+    /// value so each layer still gets a distinct RNG stream). When unset
+    /// (the default), layer init falls back to the process-wide
+    /// <see cref="Helpers.RandomHelper.ThreadSafeRandom"/> counter — which
+    /// is per-process-deterministic but advances based on construction
+    /// order, so a network whose layers are built after some other RNG
+    /// consumer will see different init weights than the same network
+    /// built in a fresh process.
+    /// </summary>
+    public int? RandomSeed { get; set; }
+
+    /// <summary>
     /// Gets the type of input the neural network is designed to handle.
     /// </summary>
     /// <remarks>
@@ -1042,19 +1058,6 @@ public class NeuralNetworkArchitecture<T>
         if (Layers != null && Layers.Count > 0)
         {
             var firstLayer = Layers[0];
-
-            // Embedding-category layers (token / positional / patch / time)
-            // declare their input shape as a per-element broadcast contract
-            // (e.g. EmbeddingLayer<T> reports [1] = "I take one token at a
-            // time" while EmbeddingLayer<T>.Forward actually accepts any-rank
-            // token tensor [seqLen] / [batch, seqLen] / [batch, seqLen, 1]).
-            // The strict product-vs-InputSize check would reject this
-            // legitimate broadcast contract; recognise the category up front
-            // and let the runtime shape inference handle dimensional
-            // compatibility. Closes #1321.
-            if (IsBroadcastInputLayerCategory(firstLayer))
-                return;
-
             var firstShape = firstLayer.GetInputShape();
             // Lazy layers carry -1 placeholders until first Forward; skip the strict
             // size check and let runtime shape resolution validate the dimensions.
@@ -1068,43 +1071,6 @@ public class NeuralNetworkArchitecture<T>
                 }
             }
         }
-    }
-
-    /// <summary>
-    /// True when <paramref name="layer"/> is an Embedding-category layer
-    /// whose declared input shape is a per-element broadcast contract.
-    /// Mirrors <c>NeuralNetworkBase&lt;T&gt;.IsBroadcastInputCategory</c> —
-    /// kept here as a static private helper so the architecture-level
-    /// validator stays self-contained without introducing a new dependency
-    /// on NeuralNetworkBase. Closes #1321.
-    /// </summary>
-    /// <remarks>
-    /// Recognition is intentionally broader than the LayerBase&lt;T&gt;
-    /// category check alone. Custom embedding / positional layers that
-    /// implement <see cref="ILayer{T}"/> directly (i.e. don't inherit from
-    /// LayerBase&lt;T&gt;) wouldn't expose <c>GetLayerCategory()</c> at
-    /// all, so a category-only check would still reject them and the
-    /// #1321 / #1323 use case (substrate-correct custom embeddings outside
-    /// LayerBase&lt;T&gt;) would still throw. A name-based fallback
-    /// matches the same convention LayerBase.GetLayerCategory itself uses
-    /// for its name-based default classification, so the two paths agree
-    /// on what counts as an "Embedding" layer.
-    /// </remarks>
-    private static bool IsBroadcastInputLayerCategory(ILayer<T> layer)
-    {
-        if (layer is Layers.LayerBase<T> lb &&
-            lb.GetLayerCategory() == Interfaces.LayerCategory.Embedding)
-        {
-            return true;
-        }
-
-        // Name-based fallback for custom ILayer<T> implementations that
-        // don't inherit from LayerBase<T>. Matches the same heuristic
-        // LayerBase.GetLayerCategory uses for its default classification
-        // (typeName.Contains "Embedding" / "Positional", case-insensitive).
-        var layerName = layer.GetType().Name;
-        return layerName.Contains("Embedding", System.StringComparison.OrdinalIgnoreCase)
-            || layerName.Contains("Positional", System.StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

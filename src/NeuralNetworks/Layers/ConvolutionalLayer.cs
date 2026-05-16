@@ -235,10 +235,30 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
 
     /// <summary>
-    // Removed _biasReshaped4D cache: caching the reshape view across forwards is
-    // unsafe when the tape-trained optimizer.Step rebinds _biases to a new tensor —
-    // the cached view still points at the prior tensor's storage. Forward now
-    // recomputes the reshape every call (metadata-only op, view object alloc).
+    /// Reference-keyed cache of the rank-1 <c>_biases</c> reshaped to
+    /// <c>[1, OutputDepth, 1, 1]</c> for the conv-bias broadcast pattern.
+    /// Populated only on the **inference path** (tape inactive); the cache
+    /// auto-invalidates when <c>_biases</c>'s object identity changes (which
+    /// is how optimizer.Step rebinds parameters, the situation that made the
+    /// prior unguarded cache unsafe).
+    ///
+    /// <para>Skipped on the tape-tracked path because the cached reshape's
+    /// recorded GradFn binds to whichever <c>_biases</c> was current at cache-prime
+    /// time, plus the recording is captured in the FIRST tape that observed the
+    /// op — neither invariant is safe to assume across tape sessions.
+    /// The plan-replay path (which is the dominant Train forward consumer after
+    /// the first iteration) never touches this cache at all because plan replay
+    /// runs traced engine ops directly without invoking <c>layer.Forward()</c>.</para>
+    /// </summary>
+    private Tensor<T>? _biasReshaped4D;
+
+    /// <summary>
+    /// Snapshot of the <c>_biases</c> reference at the moment
+    /// <see cref="_biasReshaped4D"/> was populated. A simple reference equality
+    /// check against the current <c>_biases</c> detects optimizer-driven
+    /// rebinds — the cache is invalidated in that case.
+    /// </summary>
+    private Tensor<T>? _biasReshaped4DSource;
 
     /// <summary>
     /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
@@ -272,6 +292,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// Tracks whether lazy initialization has been completed.
     /// </summary>
     private bool _isInitialized;
+
+    /// <summary>
+    /// Optional override for Kaiming init's gain. When non-null, weight init
+    /// uses <see cref="KaimingInitHelper.UniformBoundFor"/> with this
+    /// activation's gain instead of the layer's own ScalarActivation. Set via
+    /// the <c>nonlinearityForInit</c> ctor parameter.
+    /// </summary>
+    private readonly IActivationFunction<T>? _nonlinearityForInit;
 
     /// <inheritdoc />
     public override bool IsInitialized => _isInitialized;
@@ -387,7 +415,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public ConvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
                               IActivationFunction<T>? activationFunction = null,
-                              IInitializationStrategy<T>? initializationStrategy = null)
+                              IInitializationStrategy<T>? initializationStrategy = null,
+                              IActivationFunction<T>? nonlinearityForInit = null)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new ReLUActivation<T>())
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
@@ -404,6 +433,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // Store the initialization strategy (defaults to LazyInitializationStrategy semantics
         // since shape is always deferred to first forward in this layer now).
         InitializationStrategy = initializationStrategy;
+
+        // Optional override for Kaiming init's variance-preservation gain. When
+        // non-null, the layer's weight init uses this activation's Kaiming gain
+        // instead of the layer's own activationFunction. Use case: paper-faithful
+        // Conv→BN→LeakyReLU chains construct the Conv with activationFunction
+        // = identity (because the actual nonlinearity is applied two layers
+        // later) but still need the Conv's weights initialized for the
+        // *eventual* downstream nonlinearity. Explicit caller-controlled
+        // gain mirrors PyTorch's `nn.init.kaiming_uniform_(weight,
+        // nonlinearity='leaky_relu', a=...)` convention.
+        _nonlinearityForInit = nonlinearityForInit;
 
         // Always start fully deferred: shape, channel count, and weights resolve on first Forward.
         _kernels = new Tensor<T>([0, 0, 0, 0]);
@@ -861,13 +901,43 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
 
     private void InitializeWeights()
     {
-        // He-uniform initialization: U(-bound, bound) where bound = sqrt(6 / fanIn)
-        // per He et al. 2015 "Delving Deep into Rectifiers".
+        // Kaiming-uniform initialization: U(-bound, bound) where
+        //   bound = gain * sqrt(3 / fanIn)
+        // per He et al. 2015 §2.2 / PyTorch's nn.init.kaiming_uniform_.
+        // The gain is the activation's variance-preservation factor —
+        // sqrt(2) for ReLU, sqrt(2/(1+α²)) for LeakyReLU(α), 1.0 for
+        // identity. Using the wrong gain on a deep network drives forward
+        // variance and backward grad norms enough off-target to cause
+        // single-step Adam explosions on small-batch training; e.g. a
+        // 53-layer Conv→BN→LeakyReLU(0.2) pyramid (GraFPrint) initialized
+        // with the ReLU gain has its first iteration push loss by orders
+        // of magnitude.
+        //
+        // Init gain selection priority:
+        //   1. Explicit nonlinearityForInit override (paper-faithful chains
+        //      where the layer's own activation slot is identity but the
+        //      eventual downstream nonlinearity is something else — Conv→BN→
+        //      LeakyReLU is the canonical case).
+        //   2. The layer's own ScalarActivation (when no override).
         int fanIn = InputDepth * KernelSize * KernelSize;
-        double bound = Math.Sqrt(6.0 / fanIn);
+        var gainActivation = _nonlinearityForInit ?? ScalarActivation;
+        double bound = KaimingInitHelper.UniformBoundFor(fanIn, gainActivation);
 
-        // Use SimdRandom for vectorized He-uniform initialization
-        var rng = new SimdRandom();
+        // Issue #350 v3: honor LayerBase<T>.RandomSeed (the per-layer-seed
+        // mechanism wired by LayerHelper.Wire from architecture.RandomSeed)
+        // so weight initialization is REPRODUCIBLE when the architecture
+        // pins a seed. The parameterless `new SimdRandom()` form pulls
+        // from `Environment.TickCount + Interlocked.Increment` and thus
+        // hands every test invocation a DIFFERENT seed — under
+        // CompiledTrainingPlan that means each invocation runs the same
+        // forward/backward graph against a different initial weight state,
+        // and the 53-layer GraFPrint pyramid amplifies the divergence into
+        // ~order-of-magnitude per-run swings in final loss. Mirrors the
+        // RandomSeed.HasValue gate already in EmbeddingLayer (line 448),
+        // FeedForwardLayer (line 314), MultiHeadAttentionLayer (line 574).
+        SimdRandom rng = RandomSeed.HasValue
+            ? new SimdRandom(RandomSeed.Value)
+            : new SimdRandom();
         var span = _kernels.Data.Span;
         int total = span.Length;
         if (total == 0)
@@ -1050,14 +1120,12 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         Tensor<T> result;
         if (fusedActivation != FusedActivationType.None)
         {
-            // Single fused call: output = activation(conv(input, kernel) + bias)
-            // Reshape bias to [1, C, 1, 1] for proper broadcasting with conv output [B, C, H, W].
-            // Recompute every forward — caching the reshape view across forwards is unsafe
-            // when the tape-trained optimizer.Step rebinds _biases to a new tensor (the view's
-            // storage pointer is stale by the next forward). Reshape is metadata-only so the
-            // cost is a tensor-view object alloc.
-            var biasReshaped = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = Engine.FusedConv2D(input4D, _kernels, biasReshaped,
+            // Pass _biases as the rank-1 [C] vector — Engine.FusedConv2D auto-reshapes
+            // to [1, C, 1, 1] internally when needed (under tape) and otherwise feeds
+            // the raw [C] array directly to its NCHW fast path. Skipping the layer-side
+            // reshape eliminates one Tensor-view allocation + AutoTracer.RecordOp per
+            // call per layer.
+            result = Engine.FusedConv2D(input4D, _kernels, _biases,
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
         else if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
@@ -1104,9 +1172,21 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Engine.Conv2DInto(_preAllocatedOutput, input4D, _kernels, Stride, Padding, dilation: 1);
             var output = _preAllocatedOutput;
 
-            // Recompute every forward — see fused-activation branch above for rationale.
-            var biasReshapedInf = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            Engine.TensorBroadcastAddInPlace(output, biasReshapedInf);
+            // Reuse a cached rank-4 reshape view of _biases. Cache is keyed on
+            // the _biases reference: optimizer.Step rebinds to a new tensor →
+            // cache invalidates → fresh reshape. Within a single iteration the
+            // bias reference is stable, so this collapses 19 conv-layer reshape
+            // calls per Predict down to 1-per-bias-rebind. Each cache hit saves
+            // one Tensor allocation + DifferentiableOps.RecordUnary + AutoTracer
+            // record per layer per forward. Tape-inactive guard at the branch
+            // level (entered only when neither tape nor IsTrainingMode is set)
+            // makes this safe — no GradFn needs to bind through the reshape.
+            if (!ReferenceEquals(_biasReshaped4DSource, _biases) || _biasReshaped4D is null)
+            {
+                _biasReshaped4D = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+                _biasReshaped4DSource = _biases;
+            }
+            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
             result = ApplyActivation(output);
         }

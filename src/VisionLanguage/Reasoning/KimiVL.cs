@@ -205,8 +205,27 @@ public class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
 
         return output;
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; int resamplerLpb = _options.DropoutRate > 0 ? 8 : 7; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 4 * resamplerLpb + 1; }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2;
+        }
+        else
+        {
+            // ComputeKimiPatchSize() is only reached on the default Kimi stack
+            // path; custom Architecture.Layers stacks don't consume the patch
+            // options, so don't reject them on those values.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(LayerHelper<T>.CreateDefaultCrossAttentionResamplerVLMLayers(_options.VisionDim, _options.VisionDim, _options.DecoderDim, _options.NumVisionLayers, 4, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputeKimiPatchSize()));
+            _encoderLayerEnd = ComputeKimiEncoderDecoderBoundary();
+        }
+        ValidateEncoderDecoderBoundary(_encoderLayerEnd);
+    }
+    private int ComputeKimiPatchSize() => ComputeVisualPatchSize(_options.ImageSize, _options.MaxVisualTokens, roundUp: true);
+    // +2 leading layers from the helper: PatchEmbedding + LayerNorm.
+    private int ComputeKimiEncoderDecoderBoundary() => ComputeVisionLanguageBoundary(leadingLayerCount: 2, visionLayerCount: _options.NumVisionLayers, visionBlockLayerCount: TransformerBlockLayerCount(_options.DropoutRate), auxiliaryBlockCount: 4, auxiliaryBlockLayerCount: ResamplerBlockLayerCount(_options.DropoutRate), trailingLayerCount: 1);
     private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
