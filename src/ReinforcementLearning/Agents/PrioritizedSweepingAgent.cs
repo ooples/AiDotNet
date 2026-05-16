@@ -196,7 +196,35 @@ public class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBase<T>
     }
 
     private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
-    private int GetGreedyAction(string stateKey) { int best = 0; T bestVal = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], bestVal)) { bestVal = _qTable[stateKey][a]; best = a; } return best; }
+    private int GetGreedyAction(string stateKey)
+    {
+        // Sutton & Barto §2.3: when all action-values are tied (the case for
+        // every unvisited state with a zero-init Q-table), default argmax
+        // collapses to action 0 — a degenerate policy that emits the same
+        // action for every unseen state. Track whether any inequality was
+        // observed; if not, fall through to HashStateToAction so the policy
+        // is at least state-distinguishable without injecting non-determinism.
+        int best = 0;
+        T bestVal = _qTable[stateKey][0];
+        bool allEqual = true;
+        for (int a = 1; a < _options.ActionSize; a++)
+        {
+            T v = _qTable[stateKey][a];
+            if (NumOps.GreaterThan(v, bestVal))
+            {
+                bestVal = v;
+                best = a;
+                allEqual = false;
+            }
+            else if (!NumOps.Equals(v, bestVal))
+            {
+                allEqual = false;
+            }
+        }
+        if (allEqual)
+            best = HashStateToAction(stateKey, _options.ActionSize);
+        return best;
+    }
     private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], max)) max = _qTable[stateKey][a]; return max; }
     private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
 

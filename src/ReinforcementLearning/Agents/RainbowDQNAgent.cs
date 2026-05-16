@@ -189,6 +189,17 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
         return new NeuralNetwork<T>(finalArchitecture, lossFunction: LossFunction);
     }
 
+    /// <summary>
+    /// IFullModel.Predict surfaces the raw Q-value vector (one element per
+    /// discrete action) rather than the one-hot committed action. Action
+    /// commitment for env.Step is the job of <see cref="SelectAction"/>;
+    /// Predict is the value-function diagnostic — needed by off-policy
+    /// learners that consume Q(s, ·) directly, by evaluation harnesses
+    /// inspecting policy distinguishability, and by callers that want to
+    /// compare two states' value vectors instead of just their argmaxes.
+    /// </summary>
+    public override Vector<T> Predict(Vector<T> input) => ComputeQValues(input);
+
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         // Fortunato et al. 2017 ("Noisy Networks for Exploration") replaces
@@ -355,6 +366,57 @@ public class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var lastTransition = _nStepBuffer[_nStepBuffer.Count - 1];
         return (firstState, firstAction, nStepReturn, lastTransition.nextState, false);
+    }
+
+    /// <summary>
+    /// Supervised Train(state, target) does one direct regression step on the
+    /// online Q-network: minimise ‖Q(state, ·) − target‖² so callers that
+    /// provide an explicit Q-value target — offline pretraining from logged
+    /// data, distillation, BC warm starts, generated invariant tests — see
+    /// the network parameters actually move after a few calls. The base
+    /// <see cref="ReinforcementLearningAgentBase{T}.Train(Vector{T}, Vector{T})"/>
+    /// synthesises one transition into the replay buffer and calls
+    /// <see cref="Train()"/>, but Rainbow's buffer-fill gate keeps that path
+    /// no-opping for the entire warmup window. Same paper-adjacent
+    /// justification as the SAC supervised BC override (Rajeswaran et al.
+    /// 2018 §3.2): supervised pretraining of the value head from
+    /// demonstrations is a standard Rainbow trick when offline data exists.
+    /// </summary>
+    public override void Train(Vector<T> state, Vector<T> target)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (target.Length == 0)
+            throw new ArgumentException("target must contain at least one element.", nameof(target));
+
+        // Online-network output width: ActionSize × NumAtoms when
+        // distributional (C51 emits per-(action, atom) logits, Bellemare et al.
+        // 2017), ActionSize otherwise. Pad / truncate the supervised target
+        // to match so the engine forward+backward path runs without a shape
+        // mismatch — the trailing-element padding is harmless because the
+        // padded slots receive zero gradient when the regression target is
+        // zero for them.
+        int outputSize = _options.UseDistributional
+            ? _options.ActionSize * _options.NumAtoms
+            : _options.ActionSize;
+
+        Vector<T> packedTarget;
+        if (target.Length == outputSize)
+        {
+            packedTarget = target;
+        }
+        else
+        {
+            packedTarget = new Vector<T>(outputSize);
+            int copyLen = Math.Min(outputSize, target.Length);
+            for (int i = 0; i < copyLen; i++)
+                packedTarget[i] = target[i];
+        }
+
+        var stateTensor = Tensor<T>.FromVector(state);
+        var targetTensor = Tensor<T>.FromVector(packedTarget);
+        _onlineNetwork.Train(stateTensor, targetTensor);
+        TrainingSteps++;
     }
 
     public override T Train()

@@ -56,12 +56,20 @@ public class NoisyDenseLayer<T> : LayerBase<T>
     private readonly object _rngLock = new();
 
     // Trainable parameters — held as tensor fields so the tape can track them
-    // by reference identity. Mutating their contents in-place (via SetParameters
-    // or UpdateParameters) keeps the tape wiring intact.
-    private readonly Tensor<T> _muWeights;
-    private readonly Tensor<T> _sigmaWeights;
-    private readonly Tensor<T> _muBiases;
-    private readonly Tensor<T> _sigmaBiases;
+    // by reference identity. Fields are NOT readonly because
+    // NeuralNetworkBase.GetOrCreateParameterBuffer rebinds them to views into
+    // the contiguous ParameterBuffer via SetTrainableParameters; the tape's
+    // TapeStepContext.ValidateBufferAlignment then requires every tensor it
+    // sees during forward to be the same reference the buffer holds. Copying
+    // data into the old standalone tensors would leave Forward() using
+    // standalone-tensor references the tape rejects with "Parameter N is not
+    // a view into the provided ParameterBuffer" — the path
+    // RainbowDQNAgent.Train(state, target) takes when called for offline
+    // pretraining or BC warm-start.
+    private Tensor<T> _muWeights;
+    private Tensor<T> _sigmaWeights;
+    private Tensor<T> _muBiases;
+    private Tensor<T> _sigmaBiases;
 
     /// <summary>
     /// Creates a new noisy dense layer.
@@ -153,34 +161,47 @@ public class NoisyDenseLayer<T> : LayerBase<T>
         new[] { _muWeights, _sigmaWeights, _muBiases, _sigmaBiases };
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Replaces the field tensor references with the supplied tensors rather
+    /// than copying data into the old ones. The ParameterBuffer machinery in
+    /// <see cref="NeuralNetworkBase{T}.GetOrCreateParameterBuffer"/> calls
+    /// this with buffer-backed views; subsequent Forward() must use those
+    /// view tensors so the tape's reference-identity alignment check passes
+    /// (TapeStepContext.ValidateBufferAlignment, AiDotNet.Tensors).
+    /// Validate shapes per-dim (rank + every dim) so a same-length but
+    /// differently-shaped tensor doesn't silently scramble the layer's
+    /// weights — a [2, 6] tensor and a [3, 4] tensor have the same flat
+    /// length but rebinding _muWeights from the former to the latter would
+    /// rotate every weight-index pair.
+    /// </remarks>
     public override void SetTrainableParameters(IReadOnlyList<Tensor<T>> parameters)
     {
         if (parameters.Count != 4)
             throw new ArgumentException("Expected exactly 4 parameter tensors (μ_w, σ_w, μ_b, σ_b).", nameof(parameters));
-        CopyTensorInPlace(parameters[0], _muWeights);
-        CopyTensorInPlace(parameters[1], _sigmaWeights);
-        CopyTensorInPlace(parameters[2], _muBiases);
-        CopyTensorInPlace(parameters[3], _sigmaBiases);
+        ValidateShapeMatch(parameters[0], _muWeights, nameof(_muWeights));
+        ValidateShapeMatch(parameters[1], _sigmaWeights, nameof(_sigmaWeights));
+        ValidateShapeMatch(parameters[2], _muBiases, nameof(_muBiases));
+        ValidateShapeMatch(parameters[3], _sigmaBiases, nameof(_sigmaBiases));
+        _muWeights = parameters[0];
+        _sigmaWeights = parameters[1];
+        _muBiases = parameters[2];
+        _sigmaBiases = parameters[3];
     }
 
-    private static void CopyTensorInPlace(Tensor<T> src, Tensor<T> dst)
+    private static void ValidateShapeMatch(Tensor<T> incoming, Tensor<T> existing, string paramName)
     {
-        // Validate full shape, not just flat length. A [2, 6] source has the
-        // same Length as a [3, 4] destination but copying the elements
-        // straight across would silently scramble the layer's weight matrix
-        // by row/column. Reject rank and per-dim mismatches explicitly.
-        if (src.Rank != dst.Rank || src.Length != dst.Length)
+        if (incoming.Rank != existing.Rank || incoming.Length != existing.Length)
             throw new ArgumentException(
-                $"Shape mismatch: source rank={src.Rank} length={src.Length}, " +
-                $"destination rank={dst.Rank} length={dst.Length}.");
-        for (int dim = 0; dim < src.Rank; dim++)
+                $"Shape mismatch for {paramName}: incoming rank={incoming.Rank} length={incoming.Length}, " +
+                $"existing rank={existing.Rank} length={existing.Length}.");
+        for (int dim = 0; dim < incoming.Rank; dim++)
         {
-            if (src.Shape[dim] != dst.Shape[dim])
+            if (incoming.Shape[dim] != existing.Shape[dim])
                 throw new ArgumentException(
-                    $"Shape mismatch at dim {dim}: source={src.Shape[dim]}, destination={dst.Shape[dim]}. " +
-                    "Full shape must match — same-length tensors of different ranks/shapes would scramble weights.");
+                    $"Shape mismatch for {paramName} at dim {dim}: incoming={incoming.Shape[dim]}, " +
+                    $"existing={existing.Shape[dim]}. Full shape must match — same-length tensors " +
+                    "of different ranks/shapes would scramble weights.");
         }
-        for (int i = 0; i < src.Length; i++) dst[i] = src[i];
     }
 
     /// <inheritdoc/>

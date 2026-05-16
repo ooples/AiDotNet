@@ -860,4 +860,27 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>
         _gpuInputShape4D = null;
         _gpuAddedBatchDimension = false;
     }
+
+    /// <summary>
+    /// Returns layer-specific metadata for serialization. Required so that
+    /// post-deserialize SetParameters sees the same KernelSize / Stride /
+    /// Padding the original layer used — without these keys the deserializer
+    /// at <see cref="AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType{T}(string, int[], int[], System.Collections.Generic.Dictionary{string, object})"/>
+    /// falls back to its defaults (kernel=3, stride=1, padding=0) and the
+    /// reconstructed kernel tensor has a different element count than the
+    /// saved weight blob, which surfaces as "Expected N parameters, but got M"
+    /// in <see cref="SetParameters"/>. <see cref="ConvolutionalLayer{T}"/>
+    /// has had this metadata override since its first commit; the missing
+    /// counterpart here was a real bug exposed by the RAPIDFlow pyramid
+    /// architecture (which is the first model in the repo to put a
+    /// non-default-shape DeconvolutionalLayer in a Clone path).
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["KernelSize"] = KernelSize.ToString();
+        metadata["Stride"] = Stride.ToString();
+        metadata["Padding"] = Padding.ToString();
+        return metadata;
+    }
 }

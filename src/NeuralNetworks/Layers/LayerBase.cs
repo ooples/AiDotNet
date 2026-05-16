@@ -2936,6 +2936,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         if (ScalarActivation != null)
         {
             metadata["ScalarActivationType"] = ScalarActivation.GetType().AssemblyQualifiedName ?? ScalarActivation.GetType().FullName ?? string.Empty;
+            // Parametric activations carry per-instance state (LeakyReLU's
+            // negative slope, ELU's alpha, etc.) that the default
+            // Activator.CreateInstance round-trip in TryCreateActivationInstance
+            // would silently reset to the constructor's default. Capture any
+            // discoverable scalar parameter under a stable key so deserialize
+            // can rebuild the same instance — without this, a layer wired
+            // with LeakyReLU(0.2) is silently rebuilt as LeakyReLU(0.01) on
+            // Clone and the network's forward output diverges by the slope
+            // ratio (20× on negative inputs).
+            CaptureScalarActivationParameters(metadata, ScalarActivation);
         }
 
         if (VectorActivation != null)
@@ -2944,6 +2954,39 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         }
 
         return metadata;
+    }
+
+    /// <summary>
+    /// Inspects a scalar activation for well-known parametric properties
+    /// (currently <c>Alpha</c> covering LeakyReLU / ELU / PReLU / RReLU /
+    /// SELU) and stores them on the layer metadata so
+    /// <see cref="AiDotNet.Helpers.DeserializationHelper"/>'s
+    /// <c>TryCreateActivationInstance</c> can rebuild the same instance
+    /// post-clone instead of falling back to the constructor default.
+    /// </summary>
+    private static void CaptureScalarActivationParameters(Dictionary<string, string> metadata, object activation)
+    {
+        // Alpha is the canonical name across the family. Probe via reflection
+        // so we don't have to plumb a per-activation interface; activations
+        // that don't expose an Alpha (vanilla ReLU, GELU, Sigmoid, Tanh,
+        // Identity) yield no metadata key and the deserializer's default
+        // construction is correct for them.
+        var alphaProp = activation.GetType().GetProperty(
+            "Alpha",
+            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+        if (alphaProp is null) return;
+        var alphaValue = alphaProp.GetValue(activation);
+        if (alphaValue is null) return;
+
+        // Convert via IConvertible — the property is typed as the generic
+        // numeric T (float / double), which both implement IConvertible.
+        try
+        {
+            double asDouble = Convert.ToDouble(alphaValue, System.Globalization.CultureInfo.InvariantCulture);
+            metadata["ScalarActivationAlpha"] = asDouble.ToString("G17", System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (InvalidCastException) { /* non-numeric Alpha — ignore */ }
+        catch (FormatException) { /* shouldn't happen for IConvertible numerics — ignore */ }
     }
 
     #region GPU Persistent Tensor Registration
