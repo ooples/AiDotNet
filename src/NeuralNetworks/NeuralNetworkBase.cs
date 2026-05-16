@@ -1907,7 +1907,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// or trigger a misleading throw from <see cref="TryTrainWithFusedOptimizer"/>
     /// about plan-embedded state that no longer exists.
     /// </summary>
-    protected void InvalidateAfterParameterShapeChange()
+    private void InvalidateAfterParameterShapeChange()
     {
         _cachedParameterCount = null;
         _layerStructureVersion++;
@@ -2172,7 +2172,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // [channels, -1, -1] before first Forward and is compared against
         // OutputSize = channels * H * W = a single flat scalar that can't
         // be element-wise-matched.
-        if (outputShape.Any(d => d <= 0))
+        // -1 is the lazy/deferred sentinel; zero-sized dimensions are genuinely
+        // invalid and should fail validation rather than getting waved through
+        // to fail later at runtime with a less clear error.
+        if (outputShape.Any(d => d < 0))
         {
             error = string.Empty;
             return true;
@@ -5915,7 +5918,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SetTrainingMode(true);
         try
         {
-            var layerParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+            var opt = optimizer ?? GetOrCreateBaseOptimizer();
+
+            using var tape = new GradientTape<T>();
+            var output = ForwardForTraining(input);
+
+            // Collect trainables AFTER the forward pass so any lazy-initialised
+            // or replaced parameter tensors (e.g. Dense / Conv layers that bind
+            // their weight tensors on first forward, or layers that swap in a
+            // ParameterBuffer view) are captured in their final identity. A
+            // pre-forward snapshot can point at placeholder tensors that the
+            // forward then replaces, leaving the optimizer to step on stale
+            // references and silently skipping the real trainable tensors.
+            // TrainWithTape uses the same after-forward ordering.
+            var layerParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
 
             // Network-level trainable tensors that aren't owned by any layer
             // (e.g., embedding tables, learned positional encodings, scaling
@@ -5934,10 +5950,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 ? (System.Collections.Generic.IReadOnlyList<Tensor<T>>)layerParams
                 : layerParams.Concat(extraTrainableTensors).ToList();
 
-            var opt = optimizer ?? GetOrCreateBaseOptimizer();
-
-            using var tape = new GradientTape<T>();
-            var output = ForwardForTraining(input);
             var lossTensor = computeLoss(output);
 
             // Compute ALL gradients then filter to trainable params — matches
