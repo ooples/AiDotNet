@@ -210,9 +210,12 @@ public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase
             network2.Train(input2, target2);
         double lossLong = ComputeMSE(network2.Predict(input2), target2);
 
-        Assert.False(double.IsNaN(lossShort) || double.IsNaN(lossLong),
-            $"DBN loss became NaN during training: short={lossShort}, long={lossLong}. "
-            + "Indicates gradient explosion or numerical instability in the supervised fine-tuning path.");
+        Assert.True(double.IsFinite(lossShort),
+            $"DBN short-run loss is non-finite ({lossShort}). Indicates gradient explosion or "
+            + "numerical instability in the supervised fine-tuning path.");
+        Assert.True(double.IsFinite(lossLong),
+            $"DBN long-run loss is non-finite ({lossLong}). Indicates gradient explosion or "
+            + "numerical instability in the supervised fine-tuning path.");
         Assert.True(lossLong <= lossShort + MoreDataTolerance,
             $"DBN: {longIters} iterations loss ({lossLong:F6}) > {shortIters} iterations loss "
             + $"({lossShort:F6}) even after CD-1 pre-training. Supervised optimizer is "

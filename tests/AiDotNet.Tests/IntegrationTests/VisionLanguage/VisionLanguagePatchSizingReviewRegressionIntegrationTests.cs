@@ -13,38 +13,44 @@ namespace AiDotNet.Tests.IntegrationTests.VisionLanguage;
 
 public class VisionLanguagePatchSizingReviewRegressionIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void InstructionTunedModels_WithNonDivisibleTokenBudgets_RoundPatchSizeUp()
     {
         var architecture = CreateArchitectureWithCustomLayers();
 
-        Assert.Equal(8, InvokeComputePatchSize(new DeepSeekVL<double>(architecture, CreateOptions<DeepSeekVLOptions>())));
-        Assert.Equal(8, InvokeComputePatchSize(new DeepSeekVL2<double>(architecture, CreateOptions<DeepSeekVL2Options>())));
-        Assert.Equal(8, InvokeComputePatchSize(new Gemma3<double>(architecture, CreateOptions<Gemma3Options>())));
-        Assert.Equal(8, InvokeComputePatchSize(new InternVL<double>(architecture, CreateOptions<InternVLOptions>())));
-        Assert.Equal(8, InvokeComputePatchSize(new InternVL2<double>(architecture, CreateOptions<InternVL2Options>())));
-        Assert.Equal(8, InvokeComputePatchSize(new InternVL25<double>(architecture, CreateOptions<InternVL25Options>())));
-        Assert.Equal(8, InvokeComputePatchSize(new InternVL3<double>(architecture, CreateOptions<InternVL3Options>())));
-        Assert.Equal(8, InvokeComputePatchSize(new Llama32Vision<double>(architecture, CreateOptions<Llama32VisionOptions>())));
-        Assert.Equal(8, InvokeComputePatchSize(new Phi3Vision<double>(architecture, CreateOptions<Phi3VisionOptions>())));
-        Assert.Equal(8, InvokeComputePatchSize(new Phi4Multimodal<double>(architecture, CreateOptions<Phi4MultimodalOptions>())));
+        AssertPatchSizeIsEight(() => new DeepSeekVL<double>(architecture, CreateOptions<DeepSeekVLOptions>()));
+        AssertPatchSizeIsEight(() => new DeepSeekVL2<double>(architecture, CreateOptions<DeepSeekVL2Options>()));
+        AssertPatchSizeIsEight(() => new Gemma3<double>(architecture, CreateOptions<Gemma3Options>()));
+        AssertPatchSizeIsEight(() => new InternVL<double>(architecture, CreateOptions<InternVLOptions>()));
+        AssertPatchSizeIsEight(() => new InternVL2<double>(architecture, CreateOptions<InternVL2Options>()));
+        AssertPatchSizeIsEight(() => new InternVL25<double>(architecture, CreateOptions<InternVL25Options>()));
+        AssertPatchSizeIsEight(() => new InternVL3<double>(architecture, CreateOptions<InternVL3Options>()));
+        AssertPatchSizeIsEight(() => new Llama32Vision<double>(architecture, CreateOptions<Llama32VisionOptions>()));
+        AssertPatchSizeIsEight(() => new Phi3Vision<double>(architecture, CreateOptions<Phi3VisionOptions>()));
+        AssertPatchSizeIsEight(() => new Phi4Multimodal<double>(architecture, CreateOptions<Phi4MultimodalOptions>()));
     }
 
-    [Fact]
+    private static void AssertPatchSizeIsEight<TModel>(Func<TModel> factory) where TModel : IDisposable
+    {
+        using var model = factory();
+        Assert.Equal(8, InvokeComputePatchSize(model));
+    }
+
+    [Fact(Timeout = 120000)]
     public void InstructionTunedModels_WithInvalidVisualSizingOptions_RejectBeforeLayerInitialization()
     {
         var architecture = CreateArchitectureWithCustomLayers();
 
-        AssertInvalidSizingRejected(() => new DeepSeekVL<double>(architecture, CreateOptions<DeepSeekVLOptions>(imageSize: 0)), "ImageSize");
-        AssertInvalidSizingRejected(() => new DeepSeekVL2<double>(architecture, CreateOptions<DeepSeekVL2Options>(imageSize: 0)), "ImageSize");
-        AssertInvalidSizingRejected(() => new Gemma3<double>(architecture, CreateOptions<Gemma3Options>(imageSize: 0)), "ImageSize");
-        AssertInvalidSizingRejected(() => new InternVL<double>(architecture, CreateOptions<InternVLOptions>(imageSize: 0)), "ImageSize");
-        AssertInvalidSizingRejected(() => new InternVL2<double>(architecture, CreateOptions<InternVL2Options>(imageSize: 0)), "ImageSize");
-        AssertInvalidSizingRejected(() => new InternVL25<double>(architecture, CreateOptions<InternVL25Options>(maxVisualTokens: 0)), "MaxVisualTokens");
-        AssertInvalidSizingRejected(() => new InternVL3<double>(architecture, CreateOptions<InternVL3Options>(maxVisualTokens: 0)), "MaxVisualTokens");
-        AssertInvalidSizingRejected(() => new Llama32Vision<double>(architecture, CreateOptions<Llama32VisionOptions>(maxVisualTokens: 0)), "MaxVisualTokens");
-        AssertInvalidSizingRejected(() => new Phi3Vision<double>(architecture, CreateOptions<Phi3VisionOptions>(maxVisualTokens: 0)), "MaxVisualTokens");
-        AssertInvalidSizingRejected(() => new Phi4Multimodal<double>(architecture, CreateOptions<Phi4MultimodalOptions>(maxVisualTokens: 0)), "MaxVisualTokens");
+        AssertInvalidSizingRejected(() => new DeepSeekVL<double>(architecture, CreateOptions<DeepSeekVLOptions>(imageSize: 0)), "imageSize");
+        AssertInvalidSizingRejected(() => new DeepSeekVL2<double>(architecture, CreateOptions<DeepSeekVL2Options>(imageSize: 0)), "imageSize");
+        AssertInvalidSizingRejected(() => new Gemma3<double>(architecture, CreateOptions<Gemma3Options>(imageSize: 0)), "imageSize");
+        AssertInvalidSizingRejected(() => new InternVL<double>(architecture, CreateOptions<InternVLOptions>(imageSize: 0)), "imageSize");
+        AssertInvalidSizingRejected(() => new InternVL2<double>(architecture, CreateOptions<InternVL2Options>(imageSize: 0)), "imageSize");
+        AssertInvalidSizingRejected(() => new InternVL25<double>(architecture, CreateOptions<InternVL25Options>(maxVisualTokens: 0)), "maxVisualTokens");
+        AssertInvalidSizingRejected(() => new InternVL3<double>(architecture, CreateOptions<InternVL3Options>(maxVisualTokens: 0)), "maxVisualTokens");
+        AssertInvalidSizingRejected(() => new Llama32Vision<double>(architecture, CreateOptions<Llama32VisionOptions>(maxVisualTokens: 0)), "maxVisualTokens");
+        AssertInvalidSizingRejected(() => new Phi3Vision<double>(architecture, CreateOptions<Phi3VisionOptions>(maxVisualTokens: 0)), "maxVisualTokens");
+        AssertInvalidSizingRejected(() => new Phi4Multimodal<double>(architecture, CreateOptions<Phi4MultimodalOptions>(maxVisualTokens: 0)), "maxVisualTokens");
     }
 
     private static TOptions CreateOptions<TOptions>(int imageSize = 31, int maxVisualTokens = 16)
@@ -90,9 +96,9 @@ public class VisionLanguagePatchSizingReviewRegressionIntegrationTests
         return (int)method!.Invoke(model, Array.Empty<object>())!;
     }
 
-    private static void AssertInvalidSizingRejected(Action createModel, string expectedMessage)
+    private static void AssertInvalidSizingRejected(Action createModel, string expectedParamName)
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(createModel);
-        Assert.Contains(expectedMessage, ex.Message, StringComparison.Ordinal);
+        Assert.Equal(expectedParamName, ex.ParamName);
     }
 }

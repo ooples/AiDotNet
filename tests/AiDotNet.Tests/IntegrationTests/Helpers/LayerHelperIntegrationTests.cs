@@ -30,7 +30,7 @@ public class LayerHelperIntegrationTests
         foreach (var factory in factories)
         {
             var ex = Assert.Throws<ArgumentOutOfRangeException>(factory);
-            Assert.Contains("greater than 0", ex.Message);
+            Assert.Equal("patchSize", ex.ParamName);
         }
 
         await Task.CompletedTask;

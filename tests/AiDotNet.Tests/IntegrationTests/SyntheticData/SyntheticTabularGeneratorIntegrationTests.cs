@@ -334,11 +334,20 @@ public class SyntheticTabularGeneratorIntegrationTests
         realBatch[0, labelTransform.StartOffset + expectedClass] = 1.0;
 
         var logits = new Tensor<double>([1, columns[options.LabelColumnIndex].Categories.Count]);
+        // Bind by exact (Tensor<double>, Tensor<double>) signature so a later
+        // overload addition can't silently bind the wrong method (or throw
+        // AmbiguousMatchException at runtime).
         var targetBuilder = typeof(TableGANGenerator<double>).GetMethod(
             "BuildClassificationTargetTensor",
-            BindingFlags.Instance | BindingFlags.NonPublic)!;
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { typeof(Tensor<double>), typeof(Tensor<double>) },
+            modifiers: null);
+        Assert.NotNull(targetBuilder);
 
-        var targets = (Tensor<double>)targetBuilder.Invoke(generator, [realBatch, logits])!;
+        var invoked = targetBuilder.Invoke(generator, [realBatch, logits]);
+        Assert.NotNull(invoked);
+        var targets = (Tensor<double>)invoked;
 
         Assert.Equal(1.0, targets[0, expectedClass], 6);
         for (int c = 0; c < labelTransform.Width; c++)

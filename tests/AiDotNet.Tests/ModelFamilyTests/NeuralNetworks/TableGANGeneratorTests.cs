@@ -77,7 +77,7 @@ public class TableGANGeneratorTests
     [Fact]
     public void Constructor_DefaultOptions_DoesNotThrow()
     {
-        var gen = CreateGenerator();
+        using var gen = CreateGenerator();
         Assert.NotNull(gen);
         Assert.False(gen.IsFitted);
     }
@@ -91,7 +91,7 @@ public class TableGANGeneratorTests
     [Fact]
     public void Predict_NoiseInput_ReturnsFiniteRow()
     {
-        var gen = CreateGenerator();
+        using var gen = CreateGenerator();
         var options = new TableGANOptions<double>();
         var noise = new Tensor<double>([1, options.EmbeddingDimension]);
         for (int i = 0; i < noise.Length; i++)
@@ -118,7 +118,7 @@ public class TableGANGeneratorTests
     [Fact]
     public void Train_NoOp_DoesNotThrow()
     {
-        var gen = CreateGenerator();
+        using var gen = CreateGenerator();
         var input = new Tensor<double>([1, 100]);
         var target = new Tensor<double>([1, 4]);
 
@@ -134,12 +134,34 @@ public class TableGANGeneratorTests
     /// This is the real training entry point — the auto-generated
     /// <c>Training_ShouldChangeParameters</c> invariant only observed the
     /// no-op <c>Train</c> override and therefore reported a false failure.
+    /// <para>
+    /// Asserts an actual training-effect signal (output on a fixed-noise
+    /// probe changes between the pre-Fit and post-Fit generator layers)
+    /// in addition to the metadata flags, so a no-op Fit implementation
+    /// or a Fit that silently skips the generator update would fail this
+    /// test rather than passing on bookkeeping alone.
+    /// </para>
     /// </summary>
     [Fact]
     public void Fit_TinyDataset_MarksGeneratorAsFitted()
     {
         var (data, columns) = BuildToyDataset(rows: 32);
-        var gen = CreateGenerator();
+        using var gen = CreateGenerator();
+
+        // Fixed-noise probe drawn from the same RNG that the generator
+        // builder uses, so identical seed → identical pre-Fit baseline
+        // across runs. EmbeddingDimension here matches CreateGenerator()'s
+        // default TableGANOptions so the noise tensor shape lines up with
+        // the generator's input layer.
+        var probeOptions = new TableGANOptions<double>();
+        var probe = new Tensor<double>([1, probeOptions.EmbeddingDimension]);
+        var probeRng = new System.Random(seed: 7);
+        for (int i = 0; i < probe.Length; i++)
+            probe[i] = probeRng.NextDouble();
+
+        var preFit = gen.Predict(probe);
+        var preFitSnapshot = new double[preFit.Length];
+        for (int i = 0; i < preFit.Length; i++) preFitSnapshot[i] = preFit[i];
 
         // 1 epoch is enough to exercise the discriminator-step loop and
         // the post-fit bookkeeping (IsFitted flag, _columns assignment,
@@ -148,6 +170,28 @@ public class TableGANGeneratorTests
 
         Assert.True(gen.IsFitted);
         Assert.Equal(columns.Length, gen.Columns.Count);
+
+        // Training effect: post-Fit generator output on the same probe must
+        // differ from pre-Fit. Use L2 distance because Fit rebuilds the
+        // generator layers at the transformed data width — the post-Fit
+        // tensor has a different length than the pre-Fit one, so element-
+        // wise inequality isn't well-defined. Either (a) shape change OR
+        // (b) any nonzero L2 distance on the overlapping prefix counts as
+        // observable training effect.
+        var postFit = gen.Predict(probe);
+        bool shapeChanged = postFit.Length != preFit.Length;
+        double l2 = 0.0;
+        int common = System.Math.Min(postFit.Length, preFit.Length);
+        for (int i = 0; i < common; i++)
+        {
+            double d = postFit[i] - preFitSnapshot[i];
+            l2 += d * d;
+        }
+        Assert.True(shapeChanged || l2 > 0.0,
+            $"Fit produced no observable training effect: pre/post outputs "
+            + $"are identical (L2={l2}, shape unchanged). Either Fit silently "
+            + $"skipped the generator update or the no-op Train override "
+            + $"slipped into the Fit path.");
     }
 
     /// <summary>
@@ -160,7 +204,7 @@ public class TableGANGeneratorTests
     public void Generate_AfterFit_ProducesFiniteSyntheticRows()
     {
         var (data, columns) = BuildToyDataset(rows: 32);
-        var gen = CreateGenerator();
+        using var gen = CreateGenerator();
         gen.Fit(data, columns, epochs: 1);
 
         var synthetic = gen.Generate(numSamples: 8);

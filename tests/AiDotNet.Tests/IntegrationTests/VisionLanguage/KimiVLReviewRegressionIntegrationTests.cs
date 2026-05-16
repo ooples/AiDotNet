@@ -13,7 +13,7 @@ namespace AiDotNet.Tests.IntegrationTests.VisionLanguage;
 
 public class KimiVLReviewRegressionIntegrationTests
 {
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithInvalidImageSize_ThrowsBeforeLayerInitialization()
     {
         var options = CreateOptions();
@@ -28,7 +28,7 @@ public class KimiVLReviewRegressionIntegrationTests
         Assert.Equal("imageSize", ex.ParamName);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithTinyNativeConfiguration_UsesSharedBoundaryHelpers()
     {
         var options = CreateOptions();
@@ -43,7 +43,7 @@ public class KimiVLReviewRegressionIntegrationTests
         Assert.InRange(encoderLayerEnd, 1, model.Layers.Count - 1);
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void Constructor_WithNonDivisibleTokenBudget_RoundsPatchSizeUp()
     {
         var options = CreateOptions();
