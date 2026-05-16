@@ -106,17 +106,26 @@ public class HrePaperAChainShapeValidatorTests
     [Fact]
     public void HreChain_RankMismatchWithoutWildcard_RejectedByValidator()
     {
-        // Chain: InputLayer(64) → FixedShape([32, 32] in, [32, 32] out)
-        //        → FixedShape([3, 32, 32] in, [3, 32, 32] out)
+        // Chain crafted so that ONLY the 1→2 edge fails compatibility — every
+        // other transition (0→1, 2→3) is shape-compatible. Without this
+        // careful construction, a "Layer X is not compatible with Layer Y"
+        // assertion could be triggered by an unrelated edge and the regression
+        // we're guarding (rank-mismatch wildcard guard) would silently pass
+        // even if it broke.
         //
-        // The 2nd layer declares rank-2 output with a concrete leading 32; the
-        // 3rd declares rank-3 input with a concrete leading 3. These are
-        // unrelated shapes; the rank+1 strip branch must NOT bless them.
+        //   0: InputLayer(64)          out [64]
+        //   1: ProbeLayer [64] → [32, 32]                     ← 0→1 OK
+        //   2: ProbeLayer [3, 32, 32] → [3, 32, 32]           ← 1→2 FAILS:
+        //         Layer 1 out [32, 32] (rank 2, no wildcard) vs
+        //         Layer 2 in  [3, 32, 32] (rank 3, concrete leading 3).
+        //         Rank-mismatch wildcard guard MUST reject — without it the
+        //         validator would silently strip the leading 3 and accept.
+        //   3: ProbeLayer [3, 32, 32] → [vocab]                ← 2→3 OK
         var layers = new List<ILayer<float>>
         {
             new InputLayer<float>(64),
             new FixedShapeRank2Layer(
-                inputShape: new[] { 32, 32 },
+                inputShape: new[] { 64 },
                 outputShape: new[] { 32, 32 }),
             new FixedShapeRank2Layer(
                 inputShape: new[] { 3, 32, 32 },
@@ -142,10 +151,22 @@ public class HrePaperAChainShapeValidatorTests
 
         var ex = Assert.Throws<ArgumentException>(() =>
             new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>()));
-        // Be lenient about the exact wording (shape-enriched diagnostic upgrade
-        // injects shape info), but require the structural tokens identifying
-        // the rejected 1-2 edge.
-        Assert.Contains("not compatible", ex.Message);
+
+        // Pin the assertion to the SPECIFIC 1→2 rejection, with both the
+        // structural tokens AND the concrete shapes that surface in the
+        // shape-enriched diagnostic. Without these, the test would also
+        // pass on any other edge-N "not compatible" failure — meaning a
+        // regression of the rank-mismatch wildcard guard could ship while
+        // a different bug at edge 0→1 keeps the assertion green.
+        Assert.Contains("Layer 1", ex.Message);
+        Assert.Contains("output [32, 32]", ex.Message);
+        Assert.Contains("is not compatible with Layer 2", ex.Message);
+        Assert.Contains("input [3, 32, 32]", ex.Message);
+
+        // Also assert there is NO reported failure on the 0→1 edge — the
+        // chain is constructed so 0→1 ([64] → [64]) is compatible and we
+        // rely on that to isolate the 1→2 regression.
+        Assert.DoesNotContain("Layer 0", ex.Message);
     }
 
     // ============================================================================
