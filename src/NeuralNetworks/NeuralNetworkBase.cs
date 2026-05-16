@@ -2011,7 +2011,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // architecture input shape, it is a valid boundary layer.
         if (!IsFirstLayerShapeCompatible(layers[0]))
         {
-            errors.Add("The first layer's input shape must be compatible with the architecture input shape.");
+            var firstLayerShape = TryGetLayerShape(layers[0], static l => l.GetInputShape());
+            var archShape = TryGetArchitectureDeclaredInputShape();
+            errors.Add(
+                $"The first layer's input shape must be compatible with the architecture input shape. " +
+                $"(first layer = {layers[0].GetType().Name}, input shape = {FormatShape(firstLayerShape)}; " +
+                $"architecture input shape = {FormatShape(archShape)}).");
         }
 
         // Check layer connections
@@ -2024,7 +2029,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
                 if (!AreLayersCompatible(prevLayer, currentLayer))
                 {
-                    errors.Add($"Layer {i - 1} is not compatible with Layer {i}.");
+                    var prevOut = TryGetLayerShape(prevLayer, static l => l.GetOutputShape());
+                    var currIn = TryGetLayerShape(currentLayer, static l => l.GetInputShape());
+                    errors.Add(
+                        $"Layer {i - 1} ({prevLayer.GetType().Name}, output {FormatShape(prevOut)}) " +
+                        $"is not compatible with Layer {i} ({currentLayer.GetType().Name}, " +
+                        $"input {FormatShape(currIn)}).");
                 }
             }
         }
@@ -2066,7 +2076,46 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (IsDeferredOrAgnosticShape(architectureInputShape))
             return true;
 
-        return AreShapesCompatible(architectureInputShape!, layerInputShape!);
+        if (AreShapesCompatible(architectureInputShape!, layerInputShape!))
+            return true;
+
+        // Flat-reshape boundary: architecture may declare a structured
+        // shape (e.g. [H, W] image, [batch, ctxLen]) while a flatten-style
+        // first layer like InputLayer<T>(N) declares a single flat dim.
+        // Accept when the total element count matches and all dims are
+        // known positive values — this is exactly the "flatten" boundary
+        // (TransformerArchitecture with inputType=TwoDimensional + inputSize=64
+        // yields shape [8, 8]; a custom chain starting with InputLayer(64)
+        // expects the same 64 elements arriving as rank-1). Without this
+        // path the validator rejects a legitimate flatten contract that
+        // the layer would have happily accepted at first forward.
+        if (TotalElementsMatch(architectureInputShape!, layerInputShape!))
+            return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Two shape arrays have the same total element count, with all dims
+    /// known and positive. Used at the architecture / first-layer boundary
+    /// to recognise legitimate flatten / reshape contracts that
+    /// <see cref="AreShapesCompatible"/>'s rank-strict check would reject.
+    /// </summary>
+    private static bool TotalElementsMatch(int[] a, int[] b)
+    {
+        if (a is null || b is null || a.Length == 0 || b.Length == 0) return false;
+        long pa = 1, pb = 1;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] <= 0) return false;
+            pa *= a[i];
+        }
+        for (int i = 0; i < b.Length; i++)
+        {
+            if (b[i] <= 0) return false;
+            pb *= b[i];
+        }
+        return pa == pb;
     }
 
     /// <summary>
@@ -2166,6 +2215,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return shape is null || shape.Length == 0 || shape.All(d => d <= 0);
     }
 
+    /// <summary>Renders a shape array as <c>[d0, d1, ...]</c> for validator error messages.</summary>
+    private static string FormatShape(int[]? shape)
+    {
+        if (shape is null) return "<null>";
+        if (shape.Length == 0) return "[]";
+        return "[" + string.Join(", ", shape) + "]";
+    }
+
     private static bool AreShapesCompatible(int[] expectedShape, int[] actualShape)
     {
         if (ShapesMatchKnownDimensions(expectedShape, actualShape))
@@ -2179,7 +2236,52 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (ShapesMatchKnownDimensions(expectedShape, actualWithoutLeadingBatch))
             return true;
 
-        return ShapesMatchKnownDimensions(expectedWithoutLeadingBatch, actualWithoutLeadingBatch);
+        if (ShapesMatchKnownDimensions(expectedWithoutLeadingBatch, actualWithoutLeadingBatch))
+            return true;
+
+        // Rank-N declared vs rank-(N+1) post-forward-resolved batch path.
+        // TrimLeadingBatchLikeDimensions only strips dims <= 1, so a layer
+        // whose OnFirstForward resolved its input shape to a concrete
+        // [batch>=2, ...rest] keeps the batch dim in place — and the rank
+        // ends up off by one against an upstream layer that declares
+        // [-1, ...rest]. This is the path
+        //
+        //   MultiHeadAttentionLayer.GetOutputShape() == [-1, embDim]   (rank 2 declared)
+        //   SequenceTokenSliceLayer.GetInputShape()  == [batch, seq, embDim]
+        //                                              (rank 3, resolved by OnFirstForward)
+        //
+        // exercised by NeuralNetworkBase.DeepCopy → Transformer..ctor →
+        // ValidateCustomLayers re-running on an already-forwarded chain
+        // (HarmonicEngine PR #149 / #1333 repro).
+        //
+        // Crucially, the shorter side MUST explicitly declare a wildcard (-1)
+        // leading dim. Otherwise we'd bless unrelated shapes — e.g.
+        // [32, 32] (a concrete rank-2) vs [3, 32, 32] (a concrete rank-3)
+        // would silently pass by stripping the leading 3. The wildcard guard
+        // restricts the strip to the genuine "I accept any batch" contract
+        // that MHA/Slice/etc actually declare.
+        if (expectedShape.Length + 1 == actualShape.Length
+            && actualShape[0] >= 1
+            && expectedShape.Length > 0
+            && expectedShape[0] <= 0)
+        {
+            var actualNoBatch = new int[actualShape.Length - 1];
+            Array.Copy(actualShape, 1, actualNoBatch, 0, actualNoBatch.Length);
+            if (ShapesMatchKnownDimensions(expectedShape, actualNoBatch))
+                return true;
+        }
+        if (actualShape.Length + 1 == expectedShape.Length
+            && expectedShape[0] >= 1
+            && actualShape.Length > 0
+            && actualShape[0] <= 0)
+        {
+            var expectedNoBatch = new int[expectedShape.Length - 1];
+            Array.Copy(expectedShape, 1, expectedNoBatch, 0, expectedNoBatch.Length);
+            if (ShapesMatchKnownDimensions(expectedNoBatch, actualShape))
+                return true;
+        }
+
+        return false;
     }
 
     private static bool ShapesMatchKnownDimensions(int[] expectedShape, int[] actualShape)
@@ -6869,14 +6971,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // redundant double-conversion loop — so we also take it whenever
         // the new instance has an identically-shaped Layers list.
         long paramBytes = 0;
+        bool hasCustomLayer = false;
         for (int i = 0; i < _layers.Count; i++)
         {
             paramBytes += (long)_layers[i].ParameterCount * sizeof(double);
             if (_layers[i] is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> ext)
                 paramBytes += (long)ext.ExtraParameterCount * sizeof(double);
+
+            // Detect layers whose concrete type lives outside AiDotNet — the
+            // DeserializationHelper's hard-coded type registry only knows the
+            // built-in layers, so a custom external layer would fail the
+            // serialize/deserialize roundtrip path with NotSupportedException.
+            // Force the per-layer copy path for these chains. (We can't
+            // enumerate the registry directly from a static helper, so the
+            // check is by assembly identity: anything outside the AiDotNet
+            // core assembly is treated as custom.)
+            var layerAssembly = _layers[i].GetType().Assembly;
+            if (layerAssembly != typeof(NeuralNetworkBase<T>).Assembly)
+                hasCustomLayer = true;
         }
 
-        if (paramBytes > (long)MaxArrayLength)
+        if (paramBytes > (long)MaxArrayLength || hasCustomLayer)
         {
             var largeCopy = CreateNewInstance();
             if (largeCopy is NeuralNetworkBase<T> largeBase && largeBase._layers.Count == _layers.Count)

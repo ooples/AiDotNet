@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Caching;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
@@ -55,7 +56,41 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// A higher loss means worse performance, so the optimizer tries to find model parameters that minimize this loss.
     /// </para>
     /// </remarks>
-    public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
+    public ILossFunction<T> LossFunction
+    {
+        get => _lossFunction;
+        set
+        {
+            _lossFunction = value ?? throw new ArgumentNullException(nameof(value));
+            LossFunctionExplicitlySet = true;
+        }
+    }
+
+    private ILossFunction<T> _lossFunction = new MeanSquaredErrorLoss<T>();
+
+    /// <summary>
+    /// True when <see cref="LossFunction"/> was explicitly set by the caller; false
+    /// while it still holds the default <see cref="MeanSquaredErrorLoss{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}.OnModelChanged"/>
+    /// hook uses this flag to auto-sync the optimizer's loss from the model's
+    /// <see cref="IFullModel{T, TInput, TOutput}.DefaultLossFunction"/> when the caller
+    /// configured a loss on the model but not on the optimizer. If the caller set the
+    /// optimizer's loss explicitly (even to <see cref="MeanSquaredErrorLoss{T}"/>),
+    /// the auto-sync is skipped so the caller's choice wins.
+    /// </remarks>
+    internal bool LossFunctionExplicitlySet { get; private set; }
+
+    /// <summary>
+    /// Internal: assign <see cref="LossFunction"/> without flipping
+    /// <see cref="LossFunctionExplicitlySet"/>. Used by the
+    /// model-default auto-sync so a subsequent re-SetModel still re-syncs.
+    /// </summary>
+    internal void SetLossFunctionFromAutoSync(ILossFunction<T> lossFunction)
+    {
+        _lossFunction = lossFunction ?? throw new ArgumentNullException(nameof(lossFunction));
+    }
 
     /// <summary>
     /// Gets or sets the regularization method to use for preventing overfitting.
