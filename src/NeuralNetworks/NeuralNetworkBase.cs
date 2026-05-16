@@ -2370,6 +2370,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Lazy current layers carry -1 placeholders; defer the product check to first forward.
         if (prevLayer is ReshapeLayer<T> reshapeLayer && !currentIsLazy)
         {
+            // First, try the same-rank shape match. This path handles the
+            // common case where Reshape's output shape lines up dim-for-dim
+            // with the next layer's input shape, possibly with -1 wildcards
+            // on either side (e.g. ReshapeLayer([4, 32]) → MHA whose input
+            // is declared as [-1, 32] because the seq-len dim is lazy until
+            // first forward). The naive product comparison below trims
+            // leading dims <= 1, which silently strips a leading -1 too —
+            // turning [-1, 32] into [32] and breaking the product check.
+            // Closes the #1330 InferenceOptimizerIntegrationTests cluster.
+            if (AreShapesCompatible(reshapeLayer.GetOutputShape(), currentInputShape!))
+                return true;
+
+            // Fall back to product-of-known-dims for the implicit-flatten
+            // case where ranks differ (e.g. Reshape([4, 32]) feeding a
+            // DenseLayer that takes a flat [128]). TrimLeadingBatchLikeDimensions
+            // strips leading dims <= 1 to ignore an implicit batch dim, so
+            // a -1 in any non-leading position still survives and short-
+            // circuits the comparison.
             var reshapeOutputShape = TrimLeadingBatchLikeDimensions(reshapeLayer.GetOutputShape());
             var normalizedCurrentInputShape = TrimLeadingBatchLikeDimensions(currentInputShape!);
 
