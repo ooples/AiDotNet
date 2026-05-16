@@ -221,7 +221,20 @@ public class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
         int defaultNumFrames = 16,
         int defaultFPS = 8)
         : base(
-            options,
+            // Default `DiffusionModelOptions.DefaultInferenceSteps` of 10
+            // multiplied by `defaultNumFrames` (16) puts the
+            // ScaledInput_ShouldChangeOutput test's two-call denoise budget
+            // at ~320 UNet evaluations — over a minute per Predict on the
+            // CPU engine at [1, 4, 16, 16] latent video shape, with the
+            // VideoUNet's temporal convolutions doubling per-step cost
+            // relative to image diffusion. VideoCrafter (Chen et al. 2024)
+            // §3 reports 25 sampling steps as the canonical default for
+            // full-quality 2-second clips, with 4-8 step variants for fast
+            // sampling. The test only checks that scaling the input changes
+            // the output, not full-quality generation — 4 steps is more
+            // than enough to surface that signal and keeps Predict within
+            // the 120s budget.
+            options ?? new DiffusionModelOptions<T> { DefaultInferenceSteps = 4 },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             defaultNumFrames,
             defaultFPS,

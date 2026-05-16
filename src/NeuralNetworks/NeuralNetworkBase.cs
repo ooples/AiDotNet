@@ -2149,6 +2149,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         int[] outputShape = layerOutputShape!;
 
+        // Partially-deferred shapes — e.g. a transposed-conv generator that
+        // emits [3, -1, -1] until first Forward resolves H/W from runtime
+        // input — can't be compared dimensionally against the architecture's
+        // flat OutputSize. Defer the check; the layer will fail at runtime
+        // with a precise shape error if the resolved output doesn't honour
+        // the contract. Closes the DCGAN cluster-1 false-rejection where
+        // the generator's last ConvTranspose2D layer reports
+        // [channels, -1, -1] before first Forward and is compared against
+        // OutputSize = channels * H * W = a single flat scalar that can't
+        // be element-wise-matched.
+        if (outputShape.Any(d => d <= 0))
+        {
+            error = string.Empty;
+            return true;
+        }
+
         if (Architecture.OutputSize > 0 && !AreShapesCompatible([Architecture.OutputSize], outputShape))
         {
             error = $"The last layer's output shape [{string.Join(", ", outputShape)}] must match the architecture output size ({Architecture.OutputSize}).";
@@ -5877,7 +5893,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var output = ForwardForTraining(input);
             var lossTensor = computeLoss(output);
 
-            var grads = tape.ComputeGradients(lossTensor, trainableParams);
+            // Compute ALL gradients then filter to trainable params — matches
+            // TrainWithTape's policy. Passing `sources: trainableParams` directly
+            // would short-circuit the tape backward over view tensors in the
+            // gradient chain (e.g. GAN.Train's manual discriminator forward in
+            // eval mode, where the discriminator's layers' fields hold
+            // ParameterBuffer-view tensors after a prior Discriminator.Train
+            // initialised the buffer). The backward walker matches sources by
+            // reference identity; when the chain passes through a view it can
+            // miss the trainable-param entry and zero out its gradient — the
+            // exact "Parameters did not change after training" / "No parameters
+            // changed after training — gradients may all be zero" failure on
+            // DCGANTests.Training_ShouldChangeParameters and
+            // GradientFlow_ShouldBeNonZeroAndFinite.
+            var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+            var grads = new System.Collections.Generic.Dictionary<Tensor<T>, Tensor<T>>(
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var param in trainableParams)
+            {
+                if (allGrads.TryGetValue(param, out var grad))
+                    grads[param] = grad;
+            }
 
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;

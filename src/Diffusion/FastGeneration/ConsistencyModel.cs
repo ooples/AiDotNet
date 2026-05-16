@@ -238,6 +238,16 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 18,
+                // Song et al. 2023 ("Consistency Models") §4 reports
+                // ImageNet-64 / LSUN single-step FID at 6.20 and 2-step
+                // FID at 4.70 — the entire point of consistency-model
+                // distillation is single-step or 2-step inference. Override
+                // the DiffusionModelOptions default of 10 to the
+                // paper-canonical 2 so `Predict()` doesn't run 10 redundant
+                // denoising loops (the failing ScaledInput_ShouldChangeOutput
+                // test calls `Predict` twice — at 10 steps that's 20 UNet
+                // forwards, which times out at the 120s budget on CPU).
+                DefaultInferenceSteps = 2,
                 BetaStart = 0.00085,
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear

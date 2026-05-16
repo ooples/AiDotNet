@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
 
@@ -134,7 +135,24 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             InputType.ThreeDimensional,
             generatorOptimizer: null,
             discriminatorOptimizer: null,
-            lossFunction)
+            // Default to BinaryCrossEntropyWithLogitsLoss for paper-faithful
+            // training: the Discriminator's architecture emits a LOGIT (no
+            // final sigmoid — see CreateDCGANDiscriminatorArchitecture) and
+            // BCEWithLogits fuses log-sigmoid + BCE in one numerically
+            // stable op (gradient = sigmoid(x) − target, which never
+            // saturates regardless of how extreme the disc's pre-activation
+            // gets at init). The previous default (a plain BCELoss on
+            // sigmoid-activated output, derived from
+            // GetDefaultLossFunction(BinaryClassification)) killed gradients
+            // at init via the `TensorClamp(predicted, 1e-7, 1-1e-7)` step:
+            // DCGAN's deep Conv+BN+LeakyReLU stack saturates the sigmoid
+            // before any training has happened, and clamp's gradient is
+            // identically zero outside the [eps, 1-eps] interval — the
+            // exact "Parameters did not change after training" / "No
+            // parameters changed after training" cluster the per-step
+            // invariants caught. Callers can still pass an explicit loss
+            // function to override this.
+            lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DCGANOptions();
         Options = _options;
@@ -372,8 +390,96 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
         int imageWidth,
         int featureMaps)
     {
-        // DCGAN discriminator takes 3D images as input (channels x height x width)
-        // and outputs a single probability value for real/fake classification
+        // Paper-faithful DCGAN discriminator (Radford et al. 2015 §3,
+        // "Architecture guidelines for stable Deep Convolutional GANs"):
+        //
+        //   • Strided convolutions (no max-pool) for downsampling.
+        //   • Batch normalization after every Conv EXCEPT the input layer
+        //     (paper §3 bullet 2: "Use batchnorm in both the generator and
+        //     discriminator … Directly applying batchnorm to all layers
+        //     resulted in sample oscillation and model instability. This was
+        //     avoided by not applying batchnorm to the generator output
+        //     layer and the discriminator input layer.").
+        //   • LeakyReLU activation with slope 0.2 for all layers (§3 bullet
+        //     5: "Use LeakyReLU activation in the discriminator for all
+        //     layers" — slope reported in §4 / Table 1).
+        //   • Final layer emits a single LOGIT (not a sigmoid probability):
+        //     stable training pairs this with BinaryCrossEntropyWithLogitsLoss
+        //     in the GAN ctor (Goodfellow 2014 §3 numerical-stability note,
+        //     standard PyTorch convention nn.BCEWithLogitsLoss). Using a
+        //     sigmoid + plain BCE collapses gradients at init the moment
+        //     the deep Conv+BN+LeakyReLU stack saturates the final sigmoid,
+        //     and the optimizer step leaves every weight at its initial
+        //     value — observed directly as the
+        //     DCGANTests.Training_ShouldChangeParameters / GradientFlow
+        //     "Parameters did not change after training" failures.
+        //
+        // Per-stage spatial-dim arithmetic with the 4×4 kernel / stride 2 /
+        // padding 1 contract: out = (in + 2·padding − kernel) / stride + 1
+        // = (in − 2) / 2 + 1 = in / 2 (exact for even `in`). Channels grow
+        // featureMaps → featureMaps·2 → featureMaps·4 → … until the spatial
+        // dim reaches 4×4, at which point a final 4×4 / stride 1 / padding 0
+        // Conv with `outputDepth = 1` collapses the spatial dimensions to
+        // 1×1 — equivalent to Flatten + Dense(1) but matches the paper's
+        // strided-conv-only block layout.
+
+        var layers = new List<ILayer<T>>();
+
+        int targetSize = Math.Min(imageHeight, imageWidth);
+        int currentSize = targetSize;
+        int currentChannels = featureMaps;
+
+        var leakyReLU = new LeakyReLUActivation<T>(0.2);
+
+        // First Conv: imageChannels → featureMaps. NO batch norm on the
+        // input layer per the paper. LeakyReLU activation built in.
+        layers.Add(new ConvolutionalLayer<T>(
+            outputDepth: featureMaps,
+            kernelSize: 4,
+            stride: 2,
+            padding: 1,
+            activationFunction: leakyReLU));
+        currentSize /= 2;
+
+        // Repeat strided-conv blocks (Conv → BN → LeakyReLU) doubling
+        // channels and halving spatial dim, until spatial dim is 4×4.
+        while (currentSize > 4)
+        {
+            int nextChannels = currentChannels * 2;
+            layers.Add(new ConvolutionalLayer<T>(
+                outputDepth: nextChannels,
+                kernelSize: 4,
+                stride: 2,
+                padding: 1,
+                activationFunction: new IdentityActivation<T>()));
+            // BatchNorm after Conv per paper Fig. 1 / §3 bullet 2.
+            layers.Add(new BatchNormalizationLayer<T>());
+            // LeakyReLU as a separate layer (Conv emits an identity-
+            // activated pre-norm output, then BN normalizes, then
+            // LeakyReLU applies the non-linearity). Matches the canonical
+            // PyTorch DCGAN reference impl ordering.
+            layers.Add(new ActivationLayer<T>((IActivationFunction<T>)new LeakyReLUActivation<T>(0.2)));
+            currentChannels = nextChannels;
+            currentSize /= 2;
+        }
+
+        // Final Conv: collapse [currentChannels, 4, 4] → [1, 1, 1] using
+        // 4×4 / stride 1 / padding 0. Identity activation — the logit is
+        // consumed by BCEWithLogitsLoss. NO BatchNorm on the output layer
+        // per the paper (§3 bullet 2).
+        layers.Add(new ConvolutionalLayer<T>(
+            outputDepth: 1,
+            kernelSize: 4,
+            stride: 1,
+            padding: 0,
+            activationFunction: new IdentityActivation<T>()));
+
+        // Flatten the 1×1 spatial output to a rank-2 [batch, 1] tensor so
+        // the consumer (BCEWithLogitsLoss) sees the same shape as the
+        // realLabels / fakeLabels (CreateLabelTensor returns
+        // [batchSize, 1]).
+        layers.Add(new FlattenLayer<T>());
+
         return new NeuralNetworkArchitecture<T>(
             InputType.ThreeDimensional,
             NeuralNetworkTaskType.BinaryClassification,
@@ -381,6 +487,7 @@ public class DCGAN<T> : GenerativeAdversarialNetwork<T>
             inputDepth: imageChannels,
             inputHeight: imageHeight,
             inputWidth: imageWidth,
-            outputSize: 1);
+            outputSize: 1,
+            layers: layers);
     }
 }

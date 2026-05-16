@@ -102,10 +102,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// </remarks>
     private Tensor<T> _runningVariance;
 
-    // Cached inference scale/shift for deterministic forward pass
-    private Tensor<T>? _cachedInferenceScale;
-    private Tensor<T>? _cachedInferenceShift;
-    private bool _inferenceScaleDirty = true;
+    // No inference scale/shift cache: the optimizer mutates _gamma /
+    // _beta in place via the tape-based training path, and there is no
+    // in-layer hook to invalidate a cache against those mutations.
+    // Recomputing scale/shift from the current parameters on every
+    // Forward call is 4 small engine ops on channel-sized tensors,
+    // which is negligible against the Conv/Deconv compute that dominates
+    // a BN-heavy forward.
 
     /// <summary>
     /// The input from the last forward pass.
@@ -551,7 +554,32 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         _lastInput = tapeActive ? null : input;
 
-        if (IsTrainingMode)
+        // Training-mode BN at batch=1 is mathematically degenerate: with one
+        // sample the batch mean equals the sample, batch variance is zero, and
+        // the normalised output collapses to `beta` regardless of input. The
+        // gradient signal through that step is also pathological — d/d_input
+        // of `(x - mean(x)) / sqrt(var(x) + eps)` is exactly 0 when N=1 because
+        // mean(x) ≡ x and the numerator is identically zero for every input.
+        // Networks built from BN layers (paper-faithful ResNet/VGG/UNet/DCGAN
+        // discriminator, plus every model in OccupancyNN's family before the
+        // LayerNorm switch) therefore produce input-invariant output and
+        // zero-gradient training at batch=1, which is the exact "loss did not
+        // strictly decrease on memorization task" / "output didn't change when
+        // input was scaled 10x" / "network produces identical output for
+        // distinct inputs" cluster the per-sample invariants catch.
+        //
+        // The fix matches PyTorch's documented workaround for batch=1: fall
+        // back to the inference path (use running stats) when N=1 even in
+        // training mode. Running stats start at (0, 1) per Ioffe & Szegedy
+        // 2015 §3.2 so the first call effectively applies y = gamma*x + beta,
+        // which is well-defined and input-sensitive. Running stats still get
+        // updated by every batch>=2 step that follows. This does NOT change
+        // batch>=2 training behaviour — only the degenerate N=1 case is routed
+        // to the inference path.
+        bool batchTooSmallForTraining = IsTrainingMode
+            && input.Rank >= 2
+            && input.Shape[0] == 1;
+        if (IsTrainingMode && !batchTooSmallForTraining)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
@@ -596,9 +624,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
             _runningVariance = Engine.TensorAdd(momentumRunningVar, scaledBatchVar);
 
-            // Invalidate cached inference scale/shift since running stats changed
-            _inferenceScaleDirty = true;
-
             // Restore pre-flatten rank if we collapsed leading axes for the
             // features-last transformer path above. Tape-recorded reshape so
             // backward flows through unchanged.
@@ -624,24 +649,32 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _lastMean = _runningMean;
             _lastVariance = _runningVariance;
 
-            // Cache scale/shift to ensure deterministic forward pass
-            // (recomputing creates new tensor allocations that can cause SIMD alignment differences)
-            if (_inferenceScaleDirty || _cachedInferenceScale is null || _cachedInferenceShift is null)
-            {
-                var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
-                var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
-                var stdDev = Engine.TensorSqrt(variancePlusEps);
+            // Recompute the inference scale and shift from the CURRENT
+            // _gamma / _beta / _runningMean / _runningVariance on every
+            // Forward. Caching them is unsafe because the tape-based
+            // optimizer path (TapeStepContext / optimizer.Step) writes
+            // into the parameter tensor buffer directly with no in-layer
+            // hook to invalidate from — UpdateParameters does flip a
+            // dirty flag, but the tape path never calls it. A cached
+            // scale built before training would otherwise be reused
+            // forever, so a trained-then-cloned-then-predict comparison
+            // diverges by ~3 % per BN as the trained model keeps the
+            // pre-training (gamma=1, beta=0) scale while the freshly
+            // deserialized clone rebuilds from the loaded parameters.
+            // Cost: 4 small engine ops over channel-sized tensors, which
+            // is negligible vs the Conv/Deconv compute that dominates.
+            var epsilonVec = Tensor<T>.CreateDefault(_runningVariance._shape, _epsilon);
+            var variancePlusEps = Engine.TensorAdd(_runningVariance, epsilonVec);
+            var stdDev = Engine.TensorSqrt(variancePlusEps);
 
-                _cachedInferenceScale = Engine.TensorDivide(_gamma, stdDev);
-                var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
-                _cachedInferenceShift = Engine.TensorSubtract(_beta, term2);
-                _inferenceScaleDirty = false;
-            }
+            var inferenceScale = Engine.TensorDivide(_gamma, stdDev);
+            var term2 = Engine.TensorDivide(Engine.TensorMultiply(_gamma, _runningMean), stdDev);
+            var inferenceShift = Engine.TensorSubtract(_beta, term2);
 
             // Handle any tensor rank (2D, 3D, 4D, 5D, etc.)
             // Dimension 0 is batch, dimension 1 is features/channels
             // Dimensions 2+ are spatial dimensions
-            var result = ApplyInferenceAnyRank(input, _cachedInferenceScale, _cachedInferenceShift);
+            var result = ApplyInferenceAnyRank(input, inferenceScale, inferenceShift);
 
             // Restore pre-flatten rank for the features-last path.
             if (flattenedFeaturesLast && preFlattenShape is not null)
@@ -853,17 +886,25 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         if (parameters.Length != featureSize * 2)
             throw new ArgumentException($"Expected {featureSize * 2} parameters, but got {parameters.Length}", nameof(parameters));
 
-        // Production-grade: Use Tensor.FromVector instead of manual loops
-        var gammaVec = parameters.Slice(0, featureSize);
-        var betaVec = parameters.Slice(featureSize, featureSize);
-
-        _gamma = Tensor<T>.FromVector(gammaVec, [featureSize]);
-        _beta = Tensor<T>.FromVector(betaVec, [featureSize]);
+        // Update _gamma / _beta IN-PLACE rather than replacing the tensor
+        // references. OnFirstForward registered the original _gamma / _beta
+        // tensors with the engine's persistent-tensor registry (line 472-473)
+        // for GPU residency and tape attribution. Replacing the tensor
+        // reference leaves the registry pointing at the pre-Set _gamma /
+        // _beta, while subsequent reads via `_gamma.Data` go to the new
+        // tensor — a split-state bug that causes Clone-after-Train output
+        // drift because the cached BN inference scale (and any other
+        // registry-mediated path) reads the stale tensor while the field
+        // points to the loaded one. In-place fill keeps the registered
+        // tensor as the source of truth.
+        var span = _gamma.Data.Span;
+        for (int i = 0; i < featureSize; i++) span[i] = parameters[i];
+        var betaSpan = _beta.Data.Span;
+        for (int i = 0; i < featureSize; i++) betaSpan[i] = parameters[featureSize + i];
 
         // Notify GPU that tensor data has changed
         Engine.InvalidatePersistentTensor(_gamma);
         Engine.InvalidatePersistentTensor(_beta);
-        _inferenceScaleDirty = true;
     }
 
     // --- ILayerSerializationExtras: running mean/variance are non-trainable state ---
@@ -886,12 +927,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 $"(mean + variance for {featureSize} features), but got {extraParameters.Length}.",
                 nameof(extraParameters));
 
-        var meanVec = extraParameters.Slice(0, featureSize);
-        var varVec = extraParameters.Slice(featureSize, featureSize);
-
-        _runningMean = Tensor<T>.FromVector(meanVec, [featureSize]);
-        _runningVariance = Tensor<T>.FromVector(varVec, [featureSize]);
-        _inferenceScaleDirty = true;
+        // Update _runningMean / _runningVariance IN-PLACE rather than
+        // replacing the tensor references — same registry-aliasing rationale
+        // as SetParameters above.
+        var meanSpan = _runningMean.Data.Span;
+        for (int i = 0; i < featureSize; i++) meanSpan[i] = extraParameters[i];
+        var varSpan = _runningVariance.Data.Span;
+        for (int i = 0; i < featureSize; i++) varSpan[i] = extraParameters[featureSize + i];
     }
 
     private Tensor<T>? _gammaVelocity;
@@ -958,16 +1000,12 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
             gpuEngine.SgdMomentumUpdateGpu(_gamma, _gammaGradient, _gammaVelocity, lr, 0.0f, 0.0f);
             gpuEngine.SgdMomentumUpdateGpu(_beta, _betaGradient, _betaVelocity, lr, 0.0f, 0.0f);
-            _inferenceScaleDirty = true;
         }
         else
         {
             // Production-grade: Use Engine operations instead of manual loops
             _gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
             _beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
-
-            // Invalidate cached inference terms since gamma/beta changed
-            _inferenceScaleDirty = true;
 
             // Notify GPU that tensor data has changed
             Engine.InvalidatePersistentTensor(_gamma);

@@ -402,10 +402,25 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // 288, and SetParameters then rejects the 2097408-param block.
         // Honoring each architecture's declared InputType picks the right
         // wrapper (FeedForwardNeuralNetwork for 1D, CNN for 3D).
+        // The Discriminator's task-specific loss function comes from the
+        // GAN's `lossFunction` argument when present. This is what makes
+        // BCEWithLogitsLoss-based stable adversarial training (Radford et
+        // al. 2015 DCGAN, Goodfellow 2014 §3) actually wire through to the
+        // Discriminator's TrainWithTape — without it the Discriminator
+        // falls back to `GetDefaultLossFunction(BinaryClassification)` =
+        // sigmoid-followed-by-BCE, whose `TensorClamp(predicted, 1e-7,
+        // 1-1e-7)` kills gradients the instant the disc's deep
+        // Conv+BN+LeakyReLU stack saturates the final sigmoid at init —
+        // observed as "Parameters did not change after training" / "No
+        // parameters changed after training — gradients may all be zero"
+        // on the GAN.Training_ShouldChangeParameters invariants even
+        // though every other piece of plumbing in this file is wired
+        // correctly. Pass the user-supplied loss to the Discriminator's
+        // CNN ctor so its TrainWithTape sees the right criterion.
         Generator = CreateNetworkForInputType(generatorArchitecture,
-            generatorArchitecture.InputType);
+            generatorArchitecture.InputType, lossFunction: null);
         Discriminator = CreateNetworkForInputType(discriminatorArchitecture,
-            discriminatorArchitecture.InputType);
+            discriminatorArchitecture.InputType, lossFunction: lossFunction);
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType);
 
         // Initialize optimizers (default to Adam if not provided)
@@ -421,14 +436,17 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// <param name="architecture">The network architecture configuration.</param>
     /// <param name="inputType">The type of input data (OneDimensional, TwoDimensional, or ThreeDimensional).</param>
     /// <returns>A neural network appropriate for the input type.</returns>
-    private static NeuralNetworkBase<T> CreateNetworkForInputType(NeuralNetworkArchitecture<T> architecture, InputType inputType)
+    private static NeuralNetworkBase<T> CreateNetworkForInputType(
+        NeuralNetworkArchitecture<T> architecture,
+        InputType inputType,
+        ILossFunction<T>? lossFunction)
     {
         return inputType switch
         {
-            InputType.OneDimensional => new FeedForwardNeuralNetwork<T>(architecture),
-            InputType.TwoDimensional => new FeedForwardNeuralNetwork<T>(architecture),
-            InputType.ThreeDimensional => new ConvolutionalNeuralNetwork<T>(architecture),
-            _ => new FeedForwardNeuralNetwork<T>(architecture)
+            InputType.OneDimensional => new FeedForwardNeuralNetwork<T>(architecture, lossFunction: lossFunction),
+            InputType.TwoDimensional => new FeedForwardNeuralNetwork<T>(architecture, lossFunction: lossFunction),
+            InputType.ThreeDimensional => new ConvolutionalNeuralNetwork<T>(architecture, lossFunction: lossFunction),
+            _ => new FeedForwardNeuralNetwork<T>(architecture, lossFunction: lossFunction)
         };
     }
 
@@ -701,6 +719,24 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     }
 
     /// <summary>
+    /// Propagates training/eval mode to the Generator and Discriminator
+    /// sub-networks. The base implementation walks <see cref="Layers"/>,
+    /// which is empty for a GAN — Generator and Discriminator each carry
+    /// their own layer stack. Without this override <c>SetTrainingMode(false)</c>
+    /// would be a no-op against the sub-networks' BN / Dropout layers,
+    /// and a post-train <c>Predict</c> would still run BN in training mode
+    /// (computing batch stats from the single probe sample) instead of
+    /// using the running statistics — matching PyTorch's
+    /// <c>model.eval()</c> contract, which walks the module tree.
+    /// </summary>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        Generator.SetTrainingMode(isTraining);
+        Discriminator.SetTrainingMode(isTraining);
+    }
+
+    /// <summary>
     /// Performs a forward pass through the generator network using a tensor input.
     /// </summary>
     /// <param name="input">The input tensor containing noise vectors to generate images from.</param>
@@ -865,29 +901,51 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // ------------ Train Discriminator ------------
 
-        // Generate fake images with tensor operations
+        // Generate fake images (detached from the generator's gradient path —
+        // Generator.Predict wraps in NoGradScope). The disc step below trains
+        // against these detached fakes; the separate generator-step backward
+        // re-runs the forward with tape to update generator weights.
         var fakeImages = Generator.Predict(input);
 
-        // Cache real / fake batches whenever any auxiliary loss needs them.
-        // Previously only UseFeatureMatching gated the cache, so the WGAN-GP
-        // gradient-penalty path silently saw null batches and the penalty
-        // contributed nothing — EnableGradientPenalty looked like a working
-        // toggle but never applied a real penalty signal during training.
+        // Cache real / fake batches only when an auxiliary loss path needs
+        // them. Previously this clone ran unconditionally for UseFeatureMatching;
+        // the WGAN-GP gradient-penalty path silently saw null batches and the
+        // penalty contributed nothing (EnableGradientPenalty looked like a
+        // working toggle but never applied a real penalty signal during
+        // training). Both paths now share the same gated cache.
         if (UseFeatureMatching || _useGradientPenalty)
         {
             _lastRealBatch = expectedOutput.Clone();
             _lastFakeBatch = fakeImages.Clone();
         }
 
-        // Create label tensors (1 for real, 0 for fake)
-        var realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        var fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-
-        // Train discriminator with tape-based autodiff. Standard BCE step on
-        // real and fake batches first — this is the discriminator's primary
-        // adversarial objective.
-        Discriminator.Train(expectedOutput, realLabels);
-        Discriminator.Train(fakeImages, fakeLabels);
+        // === Combined discriminator step ===
+        //
+        // Train the discriminator on real and fake samples in a SINGLE
+        // forward+backward+optimizer-step instead of two sequential Train
+        // calls. The BCE loss over a concatenated [real; fake] batch with
+        // labels [1; 0] is mathematically equivalent to the average of the
+        // two separate-step losses, but at half the disc compute per
+        // iteration (one tape, one forward, one backward, one optimizer
+        // step instead of two of each).
+        //
+        // Secondary effect: BN now sees batch=2 instead of batch=1, so the
+        // training-mode forward goes through the actual Engine.BatchNorm
+        // path (computes real batch stats and updates running mean/variance)
+        // instead of falling through the batch=1 inference fallback that
+        // leaves running stats at defaults forever. That fixes a latent
+        // bug where DCGAN's BN layers never accumulated useful running
+        // statistics during training. (Pre-fix the batch=1 routing was the
+        // only safe option because variance over one sample is 0 and the
+        // gradient was pathological; at batch=2 variance is well-defined
+        // and gradients flow normally per Ioffe & Szegedy 2015.)
+        var combinedImages = Engine.TensorConcatenate(new[] { expectedOutput, fakeImages }, axis: 0);
+        var combinedLabels = new Tensor<T>(new[] { batchSize * 2, 1 });
+        var lblSpan = combinedLabels.Data.Span;
+        for (int i = 0; i < batchSize; i++) lblSpan[i] = NumOps.One;
+        for (int i = batchSize; i < batchSize * 2; i++) lblSpan[i] = NumOps.Zero;
+        Discriminator.Train(combinedImages, combinedLabels);
+        T combinedDiscLoss = Discriminator.GetLastLoss();
 
         // WGAN-GP penalty step (Gulrajani et al. 2017 §4): if gradient
         // penalty is enabled, run a separate discriminator optimizer step
@@ -925,30 +983,66 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             }
         }
 
-        // Compute discriminator loss for monitoring
-        var realPred = Discriminator.Predict(expectedOutput);
-        var fakePred = Discriminator.Predict(fakeImages);
-        T realLoss = LossFunction.CalculateLoss(realPred.ToVector(), realLabels.ToVector());
-        T fakeLoss = LossFunction.CalculateLoss(fakePred.ToVector(), fakeLabels.ToVector());
-        var discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
-        _lastDiscriminatorLoss = discriminatorLoss;
+        // Discriminator loss for monitoring: the combined-batch BCE loss
+        // captured during the single Discriminator.Train call above. The
+        // pre-perf-fix code did two extra discriminator forwards here just
+        // to recompute the same scalar that Train had already stored in
+        // LastLoss; we now read it directly. Combined BCE over [real; fake]
+        // with labels [1; 0] is the average of the per-half losses, so the
+        // monitoring value is comparable to the old two-step formulation.
+        _lastDiscriminatorLoss = combinedDiscLoss;
 
         // Train generator to fool discriminator (adversarial objective)
         // Generator wants discriminator to output "real" (1) for fake images
         var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLoss(input, genOutput =>
+        // The discriminator must be in EVAL mode for the generator step (its
+        // BatchNorm running stats / Dropout masks are frozen relative to the
+        // generator update — Goodfellow 2014 §3 "fix the discriminator to its
+        // current iterate when computing generator gradients"), but its
+        // forward pass MUST stay on the tape so gradients flow back through
+        // it to the generator's parameters. Discriminator.Predict() suspends
+        // the tape via NoGradScope, which detached the discriminator forward
+        // from the chain — the generator's TrainWithCustomLoss backward then
+        // had no path to its own weights and the optimizer step left them
+        // unchanged (the exact "Parameters did not change after training" /
+        // "No parameters changed after training — gradients may all be zero"
+        // failure on DCGANTests.Training_ShouldChangeParameters and
+        // GradientFlow_ShouldBeNonZeroAndFinite). Walk the discriminator's
+        // layer chain manually in eval mode WITHOUT NoGradScope so each
+        // layer's Forward is tape-recorded.
+        var prevDiscriminatorTrainingMode = Discriminator.IsTrainingMode;
+        Discriminator.SetTrainingMode(false);
+        T generatorLoss;
+        try
         {
-            // genOutput = generated fake images from ForwardForTraining (tape-tracked)
-            // Pass through discriminator (detached — only generator weights update)
-            var discScore = Discriminator.Predict(genOutput);
-            // Generator loss: BCE(discriminator(fake), real_labels)
-            // Use engine ops for tape differentiability
-            var diff = Engine.TensorSubtract(discScore, allRealLabels);
-            var squared = Engine.TensorMultiply(diff, diff);
-            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-            return Engine.ReduceMean(squared, allAxes, keepDims: false);
-        });
+            generatorLoss = trainableGen.TrainWithCustomLoss(input, genOutput =>
+            {
+                // genOutput = generated fake images from ForwardForTraining (tape-tracked).
+                // Run the discriminator layer-by-layer so each Forward call records
+                // on the same active GradientTape that the generator's
+                // TrainWithCustomLoss opened. This keeps the discriminator weights
+                // fixed (we only collect generator gradients) while letting the
+                // adversarial signal propagate through every BN / Conv / activation
+                // back to genOutput → Generator's weights.
+                var discScore = genOutput;
+                foreach (var layer in Discriminator.Layers)
+                    discScore = layer.Forward(discScore);
+                // Generator loss: MSE(discriminator(fake), real_labels). Equivalent
+                // to the non-saturating BCE objective Goodfellow 2014 §3 prescribes
+                // for the generator under the tape's tracked-op set; engine ops
+                // (TensorSubtract, TensorMultiply, ReduceMean) all register
+                // backward functions on the tape.
+                var diff = Engine.TensorSubtract(discScore, allRealLabels);
+                var squared = Engine.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                return Engine.ReduceMean(squared, allAxes, keepDims: false);
+            });
+        }
+        finally
+        {
+            Discriminator.SetTrainingMode(prevDiscriminatorTrainingMode);
+        }
         _lastGeneratorLoss = generatorLoss;
 
         // Calculate auxiliary losses if enabled
@@ -1766,8 +1860,69 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
+        // Force weight allocation in both subnetworks before yielding chunks.
+        // The base NeuralNetworkBase.GetParameterChunks runs an RNG-neutral
+        // shape-only resolution pass, which is correct for inference / shape-
+        // introspection callers but leaves lazy layers WITHOUT registered
+        // trainable tensors — Layer.GetTrainableParameters() returns the
+        // backing _registeredTensors list (populated only by the layer's
+        // OnFirstForward via RegisterTrainableParameter), so an unmaterialised
+        // lazy stack yields zero chunks. For DCGAN — whose paper-faithful
+        // Generator and Discriminator are entirely lazy (latent Dense, all
+        // ConvTranspose2D / Conv2D layers) — this would mean
+        // GetParameterChunks() returns nothing before the first GAN.Train
+        // step. The NeuralNetworkModelTestBase.Training_ShouldChangeParameters
+        // /  GradientFlow_ShouldBeNonZeroAndFinite invariants snapshot
+        // GetParameterChunks BEFORE training, compare chunks AFTER training,
+        // and assert at-least-one-parameter-changed; with an empty snapshot
+        // the diff loop never runs and the invariant fires "no parameters
+        // changed". Materialising via the architecture's input shape consumes
+        // one RNG draw per layer (same as the first real forward would) and
+        // is the same allocation path the test's subsequent train step would
+        // hit — no behaviour change downstream, just a snapshot that contains
+        // the actual parameter tensors so the invariant can do its job.
+        EnsureMaterialized(Generator);
+        EnsureMaterialized(Discriminator);
+
         foreach (var chunk in Generator.GetParameterChunks()) yield return chunk;
         foreach (var chunk in Discriminator.GetParameterChunks()) yield return chunk;
+    }
+
+    private static void EnsureMaterialized(NeuralNetworkBase<T> subnet)
+    {
+        var archShape = subnet.Architecture?.GetInputShape();
+        if (archShape is null || archShape.Length == 0 || !System.Array.TrueForAll(archShape, d => d > 0))
+            return;
+
+        // Walk the layer chain forward, calling ResolveFromShape on each lazy
+        // layer with the running output-shape so weights actually allocate.
+        // Mirrors NeuralNetworkBase.ResolveLazyLayerShapes but uses
+        // ResolveFromShape (weight-allocating) instead of ResolveShapesOnly
+        // (shape-only). Swallow per-layer failures so a single uncooperative
+        // layer (e.g. an attention block that wants richer shape metadata)
+        // doesn't kill the whole walk — the test's first Train call will pick
+        // them up via the regular OnFirstForward path.
+        int[] currentShape = archShape;
+        foreach (var layer in subnet.Layers)
+        {
+            if (layer is null) continue;
+            try
+            {
+                if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> lb && !lb.IsShapeResolved)
+                {
+                    lb.ResolveFromShape(currentShape);
+                }
+                var outShape = layer.GetOutputShape();
+                if (outShape is { Length: > 0 } && System.Array.TrueForAll(outShape, d => d > 0))
+                    currentShape = outShape;
+                else
+                    break;
+            }
+            catch
+            {
+                break;
+            }
+        }
     }
 
     /// <summary>

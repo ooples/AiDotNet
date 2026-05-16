@@ -784,13 +784,16 @@ public static class LayerHelper<T>
         // Flatten the output of LSTM layers
         yield return new FlattenLayer<T>();
 
-        // Dense layers for further processing
+        // Dense layers for further processing. LayerNormalization (Ba 2016)
+        // rather than BatchNormalization so the head still normalizes at any
+        // batch size — memorization-style training runs at batch=1 and BN
+        // collapses (σ² = 0) under those conditions.
         yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.3f);
 
         yield return new DenseLayer<T>(32, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.2f);
 
         // Output layer
@@ -867,13 +870,21 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputFeatures = inputShape[0];
 
-        // Dense layers for processing input features
+        // Dense layers for processing input features.
+        // LayerNormalization (Ba et al. 2016) — not BatchNormalization — to
+        // keep the per-sample normalization mathematically well-defined at
+        // any batch size. Occupancy detection is a small-MLP regime where
+        // BN at batch=1 collapses to y = β (μ_B = x, σ²_B = 0), zeroing the
+        // gradient signal through the normalization layer and stalling
+        // memorization-style training. LayerNorm normalizes across the
+        // feature axis within each sample and is the modern default for
+        // small dense MLPs.
         yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.3f);
 
         yield return new DenseLayer<T>(32, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.2f);
 
         yield return new DenseLayer<T>(16, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -1389,8 +1400,20 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepBeliefNetworkLayers(NeuralNetworkArchitecture<T> architecture)
     {
-        // Default layer sizes for DBN (can be adjusted as needed)
-        int[] layerSizes = [architecture.GetInputShape()[0], 500, 500, 2000, architecture.OutputSize];
+        // RBM stack sizes follow Hinton 2006 / Hinton & Salakhutdinov 2006:
+        //   inputSize → 500 → 500 → 2000  (three RBMs forming the deep
+        //   feature-extraction stack), with a separate supervised projection
+        //   head on top that maps the 2000-d code to outputSize.
+        // The previous layout appended architecture.OutputSize into the RBM
+        // stack itself, so the final RBM was RBM(2000 → outputSize). For the
+        // common regression / single-scalar case this is RBM(2000 → 1),
+        // which destroys all input-dependent information through a 1-unit
+        // sigmoid bottleneck — both pre-training (CD-1 on a single hidden
+        // unit) and the supervised head then operate on the same collapsed
+        // representation, and the network produces input-invariant output
+        // (the L2-collapse the DBN invariant tests catch). Keeping outputSize
+        // strictly on the supervised projection head matches the paper.
+        int[] rbmStackSizes = [architecture.GetInputShape()[0], 500, 500, 2000];
 
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
@@ -1400,14 +1423,14 @@ public static class LayerHelper<T>
         // here (they allocate at construction); the trailing DenseLayer
         // is lazy and benefits from chain-resolution. Without it the
         // Dense's input dim wouldn't be known until first Forward.
-        var layers = new List<ILayer<T>>(layerSizes.Length);
+        var layers = new List<ILayer<T>>(rbmStackSizes.Length);
 
         // RBMLayer applies sigmoid internally — no extra ActivationLayer
         // needed (double sigmoid would compress output to [0.5, 0.73]).
-        for (int i = 0; i < layerSizes.Length - 1; i++)
+        for (int i = 0; i < rbmStackSizes.Length - 1; i++)
         {
-            int visibleUnits = layerSizes[i];
-            int hiddenUnits = layerSizes[i + 1];
+            int visibleUnits = rbmStackSizes[i];
+            int hiddenUnits = rbmStackSizes[i + 1];
 
             layers.Add(new RBMLayer<T>(
                 visibleUnits: visibleUnits,
@@ -1416,14 +1439,16 @@ public static class LayerHelper<T>
             ));
         }
 
-        // Add the final output layer — use softmax for classification, identity for regression
-        int outputSize = layerSizes[layerSizes.Length - 1];
+        // Supervised projection head — softmax for classification, identity
+        // for regression / single-scalar regression heads. This is the only
+        // layer that depends on architecture.OutputSize, matching the
+        // paper's "stack of RBMs + supervised head" split.
         IActivationFunction<T> finalActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
             ? softmaxActivation
             : new IdentityActivation<T>();
-        layers.Add(new DenseLayer<T>(outputSize, finalActivation));
+        layers.Add(new DenseLayer<T>(architecture.OutputSize, finalActivation));
 
-        ChainResolveLazyLayers(layers, new[] { layerSizes[0] });
+        ChainResolveLazyLayers(layers, new[] { rbmStackSizes[0] });
         foreach (var layer in layers) yield return layer;
     }
 
