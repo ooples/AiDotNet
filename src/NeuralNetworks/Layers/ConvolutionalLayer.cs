@@ -235,10 +235,30 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     private Tensor<T> _biases;
 
     /// <summary>
-    // Removed _biasReshaped4D cache: caching the reshape view across forwards is
-    // unsafe when the tape-trained optimizer.Step rebinds _biases to a new tensor —
-    // the cached view still points at the prior tensor's storage. Forward now
-    // recomputes the reshape every call (metadata-only op, view object alloc).
+    /// Reference-keyed cache of the rank-1 <c>_biases</c> reshaped to
+    /// <c>[1, OutputDepth, 1, 1]</c> for the conv-bias broadcast pattern.
+    /// Populated only on the **inference path** (tape inactive); the cache
+    /// auto-invalidates when <c>_biases</c>'s object identity changes (which
+    /// is how optimizer.Step rebinds parameters, the situation that made the
+    /// prior unguarded cache unsafe).
+    ///
+    /// <para>Skipped on the tape-tracked path because the cached reshape's
+    /// recorded GradFn binds to whichever <c>_biases</c> was current at cache-prime
+    /// time, plus the recording is captured in the FIRST tape that observed the
+    /// op — neither invariant is safe to assume across tape sessions.
+    /// The plan-replay path (which is the dominant Train forward consumer after
+    /// the first iteration) never touches this cache at all because plan replay
+    /// runs traced engine ops directly without invoking <c>layer.Forward()</c>.</para>
+    /// </summary>
+    private Tensor<T>? _biasReshaped4D;
+
+    /// <summary>
+    /// Snapshot of the <c>_biases</c> reference at the moment
+    /// <see cref="_biasReshaped4D"/> was populated. A simple reference equality
+    /// check against the current <c>_biases</c> detects optimizer-driven
+    /// rebinds — the cache is invalidated in that case.
+    /// </summary>
+    private Tensor<T>? _biasReshaped4DSource;
 
     /// <summary>
     /// Pre-allocated output buffer for Conv2DInto. Reused every forward pass.
@@ -1100,14 +1120,12 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         Tensor<T> result;
         if (fusedActivation != FusedActivationType.None)
         {
-            // Single fused call: output = activation(conv(input, kernel) + bias)
-            // Reshape bias to [1, C, 1, 1] for proper broadcasting with conv output [B, C, H, W].
-            // Recompute every forward — caching the reshape view across forwards is unsafe
-            // when the tape-trained optimizer.Step rebinds _biases to a new tensor (the view's
-            // storage pointer is stale by the next forward). Reshape is metadata-only so the
-            // cost is a tensor-view object alloc.
-            var biasReshaped = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            result = Engine.FusedConv2D(input4D, _kernels, biasReshaped,
+            // Pass _biases as the rank-1 [C] vector — Engine.FusedConv2D auto-reshapes
+            // to [1, C, 1, 1] internally when needed (under tape) and otherwise feeds
+            // the raw [C] array directly to its NCHW fast path. Skipping the layer-side
+            // reshape eliminates one Tensor-view allocation + AutoTracer.RecordOp per
+            // call per layer.
+            result = Engine.FusedConv2D(input4D, _kernels, _biases,
                 Stride, Stride, Padding, Padding, 1, 1, fusedActivation);
         }
         else if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
@@ -1154,9 +1172,21 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
             Engine.Conv2DInto(_preAllocatedOutput, input4D, _kernels, Stride, Padding, dilation: 1);
             var output = _preAllocatedOutput;
 
-            // Recompute every forward — see fused-activation branch above for rationale.
-            var biasReshapedInf = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
-            Engine.TensorBroadcastAddInPlace(output, biasReshapedInf);
+            // Reuse a cached rank-4 reshape view of _biases. Cache is keyed on
+            // the _biases reference: optimizer.Step rebinds to a new tensor →
+            // cache invalidates → fresh reshape. Within a single iteration the
+            // bias reference is stable, so this collapses 19 conv-layer reshape
+            // calls per Predict down to 1-per-bias-rebind. Each cache hit saves
+            // one Tensor allocation + DifferentiableOps.RecordUnary + AutoTracer
+            // record per layer per forward. Tape-inactive guard at the branch
+            // level (entered only when neither tape nor IsTrainingMode is set)
+            // makes this safe — no GradFn needs to bind through the reshape.
+            if (!ReferenceEquals(_biasReshaped4DSource, _biases) || _biasReshaped4D is null)
+            {
+                _biasReshaped4D = Engine.Reshape(_biases, [1, OutputDepth, 1, 1]);
+                _biasReshaped4DSource = _biases;
+            }
+            Engine.TensorBroadcastAddInPlace(output, _biasReshaped4D);
 
             result = ApplyActivation(output);
         }
