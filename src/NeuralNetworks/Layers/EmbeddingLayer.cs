@@ -586,28 +586,43 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         else
         {
             // Standard embedding lookup for integer token indices.
-            // Engine.TensorEmbeddingLookup is now fully tape-aware:
-            //   * #255 (Tensors 0.58.1): added DifferentiableOps.RecordUnary
-            //     so dL/dE is computed by the backward function.
-            //   * #257 (Tensors 0.58.2): preserved original tensor
-            //     refs across .Contiguous() rebind in MatMul +
-            //     broadcast/conv/norm/SDPA ops, so the computed
-            //     gradient now keys correctly against
-            //     _embeddingTensor (and the 3 MultiHeadAttention
-            //     Q/K/V weights that hit the same defect).
-            // Both training and inference go through the fast eager
-            // row-gather path — the prior issue #1208 workaround
-            // (one-hot @ E matmul) is no longer needed and would
-            // just allocate an extra [N, V] tensor per training
-            // step.
-            int totalIndices = input.Length;
-            var flatIndices = new Tensor<int>([totalIndices]);
-            for (int i = 0; i < totalIndices; i++)
+            // AiDotNet#1331: route lookups through the float-indices overload
+            // when a graph-mode lazy trace is active. The legacy
+            // <c>TensorEmbeddingLookup&lt;T, int&gt;</c> snapshots the int
+            // indices array INSIDE the lazy node — but the int array is built
+            // here in C# from a flat <c>Tensor&lt;int&gt;</c> instance that is
+            // NOT a leaf of the lazy graph. On subsequent <c>plan.Step()</c>
+            // calls the snapshot never refreshes, so every replay gathers
+            // rows for the FIRST batch's tokens regardless of the current
+            // float input data — the model converges to a uniform output
+            // (loss ≈ ln(V)) instead of learning the input→target mapping.
+            //
+            // The float-indices variant captures the float input tensor by
+            // reference and converts to int at execute time. The caller can
+            // update the float input's data in place between Step() calls and
+            // the next replay sees the new indices.
+            //
+            // Tape-awareness: same backward as the int path (dL/dE scatter
+            // back to the embedding table), but the scatter uses fresh
+            // indices read at backward time too — keeping forward gather and
+            // backward scatter aligned on every Step.
+            if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
             {
-                int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
-                flatIndices[i] = index;
+                flatOutput = Engine.TensorEmbeddingLookupFromFloatIndices(_embeddingTensor, input);
             }
-            flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
+            else
+            {
+                // Eager / inference fast path: direct row gather avoids the
+                // O(N*V) one-hot matmul. Pre-issue #1208 / pre-#1331 default.
+                int totalIndices = input.Length;
+                var flatIndices = new Tensor<int>([totalIndices]);
+                for (int i = 0; i < totalIndices; i++)
+                {
+                    int index = Convert.ToInt32(NumOps.ToDouble(input.Data.Span[i]));
+                    flatIndices[i] = index;
+                }
+                flatOutput = Engine.TensorEmbeddingLookup<T, int>(_embeddingTensor, flatIndices);
+            }
         }
 
         // Calculate output shape

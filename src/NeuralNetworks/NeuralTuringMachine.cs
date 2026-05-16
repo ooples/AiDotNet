@@ -1379,38 +1379,30 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
 
         // Set to training mode
         SetTrainingMode(true);
-
-        // Forward pass
-        var predictions = Predict(input);
-
-        // Calculate loss
-        var predVector = predictions.ToVector();
-        var expectedVector = expectedOutput.ToVector();
-        T loss = LossFunction.CalculateLoss(predVector, expectedVector);
-        LastLoss = loss;
-
-        // Calculate output gradients
-        var gradVector = LossFunction.CalculateDerivative(predVector, expectedVector);
-        var outputGradients = new Tensor<T>(predictions._shape);
-
-        // Copy gradient values to tensor
-        int index = 0;
-        for (int b = 0; b < predictions.Shape[0]; b++)
+        try
         {
-            for (int i = 0; i < predictions.Shape[1]; i++)
-            {
-                outputGradients[b, i] = gradVector[index++];
-            }
+            // Delegate to the shared tape-walking trainer in NeuralNetworkBase.
+            // TrainWithTape runs the full forward → loss → Backward → optimizer
+            // step pipeline, which populates each layer's per-parameter
+            // gradient buffers and applies the optimizer's update rule. The
+            // prior hand-rolled implementation in this method computed
+            // outputGradients but never invoked Backward on any layer, so
+            // DenseLayer.UpdateParameters threw
+            // "Backward pass must be called before updating parameters." —
+            // see the NeuralTuringMachineTests suite (Training_*,
+            // GradientFlow_*, etc.) which all crashed at that point.
+            // optimizer = null routes through the model's resolved default
+            // optimizer (set via the architecture/builder pipeline). NTM
+            // doesn't expose a dedicated _optimizer field — passing null
+            // matches the pattern used by ConvolutionalNeuralNetwork and
+            // other models that don't carry their own optimizer reference.
+            TrainWithTape(input, expectedOutput, optimizer: null);
         }
-
-        // Backpropagation
-
-        // Update parameters using the learning rate
-        T learningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.01); // Default learning rate
-        UpdateParameters(learningRate);
-
-        // Reset to inference mode
-        SetTrainingMode(false);
+        finally
+        {
+            // Reset to inference mode
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

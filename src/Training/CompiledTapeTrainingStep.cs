@@ -35,6 +35,30 @@ public static class CompiledTapeTrainingStep<T>
     private static Tensor<T>[]? _cachedParameters;
 
     /// <summary>
+    /// AiDotNet#1331: persistent input tensor reused across <see cref="TryStepWithFusedOptimizer"/>
+    /// calls. The compiled plan captures whatever tensor ref the trace lambda saw — if every call
+    /// allocated a fresh <c>Tensor&lt;T&gt;</c> for <c>input</c> (the canonical PyTorch-style
+    /// <c>model.Train(input_k, target_k)</c> pattern), the plan's captured ref points at the
+    /// FIRST tensor forever and <c>plan.Step()</c> replays with stale data — gradients become
+    /// disconnected from the actual training data, loss drifts upward, model never converges.
+    /// We solve this by tracing through a SINGLE persistent tensor and copying the caller's
+    /// fresh data into it on every step. See <c>InputDataMustRefreshAcrossStep_NotFrozenAtCompileTime</c>
+    /// in the Tensors test suite for the diagnostic that proves this pattern.
+    /// </summary>
+    [ThreadStatic]
+    private static Tensor<T>? _persistentInput;
+
+    /// <summary>
+    /// AiDotNet#1331: persistent target tensor. Same rationale as <see cref="_persistentInput"/> —
+    /// the loss-computation lambda captures <c>target</c> by reference, so per-call fresh target
+    /// tensors are invisible to <c>plan.Step()</c>. Funnelling every <c>Train</c> call through
+    /// this single tensor (with in-place data copy) keeps the captured graph leaf in sync with
+    /// the caller's data.
+    /// </summary>
+    [ThreadStatic]
+    private static Tensor<T>? _persistentTarget;
+
+    /// <summary>
     /// The single plan that has been configured with an optimizer on this
     /// thread. <b>Strict single-plan semantics</b>: Adam/AdamW/SGD moment
     /// buffers live INSIDE the compiled plan (via
@@ -171,6 +195,13 @@ public static class CompiledTapeTrainingStep<T>
         _cachedParameters = null;
         _configuredPlan = null;
         _configuredOptimizerConfig = null;
+        // AiDotNet#1331: drop the persistent input/target tensors so the next
+        // call traces a fresh plan with new captured leaves. Forgetting this
+        // would re-use the old tensors with whatever shape they had — a
+        // shape-changed call would then hit ValidateShapesMatch in SetInputs
+        // and throw, masking what is really a model-structure change.
+        _persistentInput = null;
+        _persistentTarget = null;
         // Reset the fused-engagement counter — from this point on, any
         // assertion about "fused ran at least N times" should reflect the
         // new lifecycle.
@@ -243,10 +274,37 @@ public static class CompiledTapeTrainingStep<T>
         {
             var cache = _cache ??= new CompiledModelCache<T>();
 
+            // AiDotNet#1331: ensure the persistent input/target tensors exist
+            // with shapes matching the caller's data. If shape changed since
+            // the last call (different batch size, sequence length, ...) the
+            // single-plan policy below would refuse the new plan anyway — we
+            // pre-empt that by invalidating up front so the user gets a clean
+            // recompile rather than a confusing rejection.
+            if (_persistentInput is null
+                || !ShapesEqual(_persistentInput._shape, input._shape)
+                || _persistentTarget is null
+                || !ShapesEqual(_persistentTarget._shape, target._shape))
+            {
+                Invalidate();
+                _persistentInput = new Tensor<T>(input._shape);
+                _persistentTarget = new Tensor<T>(target._shape);
+                // Re-acquire the cache reference after Invalidate cleared it.
+                cache = _cache ??= new CompiledModelCache<T>();
+            }
+
+            // Copy the caller's fresh per-call data into the persistent
+            // tensors BEFORE compilation or replay. The compiled plan's
+            // lazy graph leaves point at _persistentInput / _persistentTarget;
+            // every plan.Step() (including the implicit one inside the
+            // compile lambda) reads from these refs, so writing to them
+            // here makes the new data visible.
+            input.AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
+            target.AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
+
             // Force layer initialization before collecting parameters — DenseLayer
             // replaces _weights with a new tensor on first Forward.
             if (_cachedParameters is null)
-                forward(input);
+                forward(_persistentInput);
 
             // Use the dedup-aware collector for the fused path. Shared/tied
             // weights (same Tensor<T> instance referenced by multiple layers)
@@ -275,12 +333,10 @@ public static class CompiledTapeTrainingStep<T>
                 compositeKey,
                 () =>
                 {
-                    // Tensors 0.50.1 changed GetOrCompileTraining to take a
-                    // Func<Tensor<T>> — the trace lambda must return the
-                    // scalar output (loss) so the compile-graph has a single
-                    // terminal node to differentiate from.
-                    var predicted = forward(input);
-                    return computeLoss(predicted, target);
+                    // Trace through the persistent tensors so plan.Step()
+                    // reads from the same refs we update each call.
+                    var predicted = forward(_persistentInput!);
+                    return computeLoss(predicted, _persistentTarget!);
                 },
                 parameters);
 
@@ -376,6 +432,23 @@ public static class CompiledTapeTrainingStep<T>
             }
         }
         return result.ToArray();
+    }
+
+    /// <summary>
+    /// AiDotNet#1331 helper: structural shape equality. We need this on the
+    /// hot path where every <c>Train</c> call decides whether the persistent
+    /// input/target tensors are still usable — Tensor's default
+    /// <c>Equals</c> compares data, not shape, so a per-call data difference
+    /// would force an unnecessary recompile.
+    /// </summary>
+    private static bool ShapesEqual(int[] a, int[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (a[i] != b[i]) return false;
+        }
+        return true;
     }
 
     private static Tensor<T>[] CollectParameterArray(IReadOnlyList<ITrainableLayer<T>> layers)
