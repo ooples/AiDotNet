@@ -131,7 +131,29 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     protected virtual int MoreDataLongIterations => 200;
 
     /// <inheritdoc />
-    public virtual Task InitializeAsync() => Task.CompletedTask;
+    public virtual Task InitializeAsync()
+    {
+        // Bit-exact reproducibility for per-test loss / parameter assertions.
+        // OpenBLAS's multi-threaded GEMM partitions K across native threads
+        // and sums partial products in thread-completion order — fixed via
+        // SetDeterministicMode (calls openblas_set_num_threads(1)).
+        // Forcing the CPU engine pins another determinism axis: the GPU
+        // auto-detect ModuleInitializer picks DirectGpuTensorEngine when
+        // available, but OpenCL kernels have intra-workgroup reduction-
+        // order non-determinism we can't pin from here.
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
+        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+        // Invalidate the fused-training plan cache between tests. The plan
+        // bakes optimizer m/v state inside the compiled object; without
+        // invalidation, a test that runs after another test in the same
+        // process reuses the prior test's plan + carries its accumulated
+        // momentum/variance buffers, producing different training
+        // trajectories than the same test run in isolation.
+        AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+        AiDotNet.Training.CompiledTapeTrainingStep<float>.Invalidate();
+        return Task.CompletedTask;
+    }
 
     /// <summary>
     /// Force finalization of the per-test network between tests. Production-default
@@ -1317,18 +1339,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// </summary>
     private static Tensor<double> MaterializeIfSparse(Tensor<double> chunk)
     {
-        // Use the runtime type alone (not `chunk.IsSparse`) to decide whether
-        // a chunk needs to be materialised to dense. A freshly-initialised
-        // SparseTensor<double> can report `IsSparse = false` when its
-        // NonZeroCount happens to be 0 (no entries observed yet — e.g.
-        // SparseLinearLayer's weight matrix at very high sparsity ratios
-        // where the layer was constructed but not yet populated), but
-        // `chunk[i]` on such an instance still dispatches to
-        // SparseTensor.GetFlat which throws "GetFlat is not supported on
-        // sparse tensors. Use SparseTensor-specific APIs or call ToDense()
-        // first." Always materialise when the runtime type is SparseTensor
-        // so the invariant loops can do plain int-indexed iteration.
-        if (chunk is SparseTensor<double> sparse)
+        if (chunk.IsSparse && chunk is SparseTensor<double> sparse)
             return sparse.ToDense();
         return chunk;
     }

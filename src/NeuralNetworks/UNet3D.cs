@@ -358,6 +358,6 @@ public class UNet3D<T> : NeuralNetworkBase<T>
             BaseFilters,
             _optimizer,
             _lossFunction,
-            NumOps.ToDouble(MaxGradNorm));
+            MaxGradNorm);
     }
 }

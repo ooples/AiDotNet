@@ -245,7 +245,11 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// weights; cross-runtime determinism is not provided.
     /// </para>
     /// </remarks>
-    public int? RandomSeed { get; }
+    // RandomSeed now lives on the NeuralNetworkArchitecture base. The ctor
+    // at line 517 assigns into the inherited property. This declaration
+    // is retained as a comment-only marker so the docstring above remains
+    // colocated with the field that documents it; the property itself
+    // resolves to the base class declaration.
 
     /// <summary>
     /// Gets the size of the vocabulary for text-based tasks.

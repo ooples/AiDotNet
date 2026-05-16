@@ -273,6 +273,14 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </summary>
     private bool _isInitialized;
 
+    /// <summary>
+    /// Optional override for Kaiming init's gain. When non-null, weight init
+    /// uses <see cref="KaimingInitHelper.UniformBoundFor"/> with this
+    /// activation's gain instead of the layer's own ScalarActivation. Set via
+    /// the <c>nonlinearityForInit</c> ctor parameter.
+    /// </summary>
+    private readonly IActivationFunction<T>? _nonlinearityForInit;
+
     /// <inheritdoc />
     public override bool IsInitialized => _isInitialized;
 
@@ -387,7 +395,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
     /// </remarks>
     public ConvolutionalLayer(int outputDepth, int kernelSize, int stride = 1, int padding = 0,
                               IActivationFunction<T>? activationFunction = null,
-                              IInitializationStrategy<T>? initializationStrategy = null)
+                              IInitializationStrategy<T>? initializationStrategy = null,
+                              IActivationFunction<T>? nonlinearityForInit = null)
         : base(new[] { -1, -1, -1 }, new[] { outputDepth, -1, -1 }, activationFunction ?? new ReLUActivation<T>())
     {
         if (outputDepth <= 0) throw new ArgumentOutOfRangeException(nameof(outputDepth), "outputDepth must be positive.");
@@ -404,6 +413,17 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
         // Store the initialization strategy (defaults to LazyInitializationStrategy semantics
         // since shape is always deferred to first forward in this layer now).
         InitializationStrategy = initializationStrategy;
+
+        // Optional override for Kaiming init's variance-preservation gain. When
+        // non-null, the layer's weight init uses this activation's Kaiming gain
+        // instead of the layer's own activationFunction. Use case: paper-faithful
+        // Conv→BN→LeakyReLU chains construct the Conv with activationFunction
+        // = identity (because the actual nonlinearity is applied two layers
+        // later) but still need the Conv's weights initialized for the
+        // *eventual* downstream nonlinearity. Explicit caller-controlled
+        // gain mirrors PyTorch's `nn.init.kaiming_uniform_(weight,
+        // nonlinearity='leaky_relu', a=...)` convention.
+        _nonlinearityForInit = nonlinearityForInit;
 
         // Always start fully deferred: shape, channel count, and weights resolve on first Forward.
         _kernels = new Tensor<T>([0, 0, 0, 0]);
@@ -861,13 +881,43 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>
 
     private void InitializeWeights()
     {
-        // He-uniform initialization: U(-bound, bound) where bound = sqrt(6 / fanIn)
-        // per He et al. 2015 "Delving Deep into Rectifiers".
+        // Kaiming-uniform initialization: U(-bound, bound) where
+        //   bound = gain * sqrt(3 / fanIn)
+        // per He et al. 2015 §2.2 / PyTorch's nn.init.kaiming_uniform_.
+        // The gain is the activation's variance-preservation factor —
+        // sqrt(2) for ReLU, sqrt(2/(1+α²)) for LeakyReLU(α), 1.0 for
+        // identity. Using the wrong gain on a deep network drives forward
+        // variance and backward grad norms enough off-target to cause
+        // single-step Adam explosions on small-batch training; e.g. a
+        // 53-layer Conv→BN→LeakyReLU(0.2) pyramid (GraFPrint) initialized
+        // with the ReLU gain has its first iteration push loss by orders
+        // of magnitude.
+        //
+        // Init gain selection priority:
+        //   1. Explicit nonlinearityForInit override (paper-faithful chains
+        //      where the layer's own activation slot is identity but the
+        //      eventual downstream nonlinearity is something else — Conv→BN→
+        //      LeakyReLU is the canonical case).
+        //   2. The layer's own ScalarActivation (when no override).
         int fanIn = InputDepth * KernelSize * KernelSize;
-        double bound = Math.Sqrt(6.0 / fanIn);
+        var gainActivation = _nonlinearityForInit ?? ScalarActivation;
+        double bound = KaimingInitHelper.UniformBoundFor(fanIn, gainActivation);
 
-        // Use SimdRandom for vectorized He-uniform initialization
-        var rng = new SimdRandom();
+        // Issue #350 v3: honor LayerBase<T>.RandomSeed (the per-layer-seed
+        // mechanism wired by LayerHelper.Wire from architecture.RandomSeed)
+        // so weight initialization is REPRODUCIBLE when the architecture
+        // pins a seed. The parameterless `new SimdRandom()` form pulls
+        // from `Environment.TickCount + Interlocked.Increment` and thus
+        // hands every test invocation a DIFFERENT seed — under
+        // CompiledTrainingPlan that means each invocation runs the same
+        // forward/backward graph against a different initial weight state,
+        // and the 53-layer GraFPrint pyramid amplifies the divergence into
+        // ~order-of-magnitude per-run swings in final loss. Mirrors the
+        // RandomSeed.HasValue gate already in EmbeddingLayer (line 448),
+        // FeedForwardLayer (line 314), MultiHeadAttentionLayer (line 574).
+        SimdRandom rng = RandomSeed.HasValue
+            ? new SimdRandom(RandomSeed.Value)
+            : new SimdRandom();
         var span = _kernels.Data.Span;
         int total = span.Length;
         if (total == 0)

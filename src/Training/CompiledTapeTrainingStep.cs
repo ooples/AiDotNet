@@ -254,7 +254,9 @@ public static class CompiledTapeTrainingStep<T>
         float beta2,
         float epsilon,
         float weightDecay,
-        out T lossValue)
+        out T lossValue,
+        double maxGradNorm = 0.0,
+        AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
 
@@ -303,8 +305,50 @@ public static class CompiledTapeTrainingStep<T>
 
             // Force layer initialization before collecting parameters — DenseLayer
             // replaces _weights with a new tensor on first Forward.
+            //
+            // Issue #350 v3 (compile-vs-eager parity): the pre-trace forward
+            // call here MUST NOT consume the same per-step random state that
+            // the trace lambda's forward will consume. The trace lambda is
+            // called immediately after, runs ForwardForTraining in TRAINING
+            // MODE, and any Dropout / sampling op pulls values from the
+            // shared ThreadSafeRandom counter at that point. If THIS pre-init
+            // forward also runs in training mode, it consumes the SAME
+            // counter values FIRST — leaving the trace forward to consume
+            // the NEXT batch of values. EAGER mode (TapeTrainingStep) only
+            // calls forward once per Step, so its dropout masks come from
+            // the counter values that compile-mode's pre-init swallowed.
+            // Net effect: every Dropout layer's mask diverges between the
+            // two execution paths, and on a deep network like the 53-layer
+            // GraFPrint pyramid the cumulative activation drift makes
+            // every downstream gradient differ in sign and magnitude.
+            //
+            // Fix: drop into inference mode for the pre-init forward so
+            // Dropout returns input unchanged (no mask, no RNG consumed).
+            // Other lazy-init code paths (DenseLayer weights, etc.) still
+            // run; only stochastic ops short-circuit. Restore training mode
+            // before the trace lambda fires so the actual training forward
+            // sees the same RNG state the eager path would.
             if (_cachedParameters is null)
-                forward(_persistentInput);
+            {
+                // TryStepWithFusedOptimizer is the training entry — every layer
+                // is in training mode here by precondition (NeuralNetworkBase
+                // calls SetTrainingMode(true) before invoking this). Drop them
+                // into inference mode for the lazy-init forward, then restore
+                // to training mode before the trace lambda fires. This avoids
+                // burning the deterministic random counter on Dropout masks
+                // that are immediately discarded.
+                for (int li = 0; li < layers.Count; li++)
+                    layers[li].SetTrainingMode(false);
+                try
+                {
+                    forward(_persistentInput);
+                }
+                finally
+                {
+                    for (int li = 0; li < layers.Count; li++)
+                        layers[li].SetTrainingMode(true);
+                }
+            }
 
             // Use the dedup-aware collector for the fused path. Shared/tied
             // weights (same Tensor<T> instance referenced by multiple layers)
@@ -360,16 +404,43 @@ public static class CompiledTapeTrainingStep<T>
             if (_configuredPlan is null)
             {
                 // First fused call on this thread. Configure the plan and
-                // commit to single-plan semantics from here on.
-                plan.ConfigureOptimizer(
-                    optimizerType,
-                    learningRate,
-                    beta1,
-                    beta2,
-                    epsilon,
-                    weightDecay);
+                // commit to single-plan semantics from here on. When the
+                // caller passed an lrSchedule, use the LrSchedule overload
+                // so the fused kernel evaluates the per-step learning rate
+                // inline (cosine, exponential, etc.) — no perf penalty vs
+                // constant LR, but it lets paper-faithful schedulers
+                // (cosine annealing, OneCycle, linear-warmup-cosine) run
+                // through the fused path instead of falling back to eager.
+                if (lrSchedule != null)
+                {
+                    plan.ConfigureOptimizer(
+                        optimizerType,
+                        lrSchedule,
+                        beta1,
+                        beta2,
+                        epsilon,
+                        weightDecay);
+                }
+                else
+                {
+                    plan.ConfigureOptimizer(
+                        optimizerType,
+                        learningRate,
+                        beta1,
+                        beta2,
+                        epsilon,
+                        weightDecay);
+                }
                 _configuredPlan = plan;
                 _configuredOptimizerConfig = currentConfig;
+                // Apply the global gradient-norm clip threshold to the plan.
+                // The plan executes the clip inside Step() between backward
+                // and the fused optimizer update, so the optimizer always
+                // sees clipped gradients — matching the eager path's
+                // semantics (NeuralNetworkBase.TrainWithTape clips before
+                // calling opt.Step). Pass 0 to disable.
+                if (maxGradNorm > 0.0)
+                    plan.SetMaxGradNorm(maxGradNorm);
             }
             else if (!ReferenceEquals(_configuredPlan, plan))
             {
@@ -413,6 +484,7 @@ public static class CompiledTapeTrainingStep<T>
             return false;
         }
     }
+
 
     /// <summary>
     /// Deduplicates trainable parameter tensors by reference identity. The eager

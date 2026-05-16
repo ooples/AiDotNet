@@ -61,6 +61,19 @@ public class GraFPrintOptions : ModelOptions
     /// <summary>Gets or sets the dropout rate.</summary>
     public double DropoutRate { get; set; } = 0.1;
 
+    /// <summary>
+    /// Maximum global L2 norm for gradients per training step. The 53-layer
+    /// Conv→BN→LeakyReLU pyramid in this network is sensitive to first-step
+    /// gradient magnitudes when trained at small batch sizes (BN with batch=1
+    /// produces near-degenerate variance, amplifying activation scale through
+    /// the chain), so the default-on clip protects against single-step Adam
+    /// explosions. Mirrors PyTorch's <c>torch.nn.utils.clip_grad_norm_</c>
+    /// max_norm parameter; 1.0 is the value used in most published
+    /// transformer / deep-CNN training recipes including the GraFPrint
+    /// reference (Bhattacharjee 2023, §4.1). Set to 0 to disable.
+    /// </summary>
+    public double MaxGradNorm { get; set; } = 1.0;
+
     #endregion
 
     #region Matching
@@ -84,8 +97,24 @@ public class GraFPrintOptions : ModelOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
+    /// <summary>
+    /// AdamW learning rate. Matches the published GraFPrint training
+    /// recipe (Bhattacharjee 2023, §4.1): AdamW(lr=1e-4, weight_decay=0.01)
+    /// with batch≥128 and cosine annealing. Production callers should
+    /// pair this with the paper's batch size — <c>1e-4</c> assumes
+    /// well-conditioned BN running stats from a real batch.
+    /// </summary>
     public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Maximum step count for the cosine annealing LR scheduler. The LR
+    /// decays from <see cref="LearningRate"/> down to 1% of LearningRate
+    /// over this many Train calls, following the cosine half-period
+    /// formula. Default 100 matches what the paper reports for the
+    /// tiny-variant training horizon (Bhattacharjee 2023, §4.1); set
+    /// higher for longer training runs.
+    /// </summary>
+    public int LRSchedulerTMax { get; set; } = 100;
 
     /// <summary>Gets or sets the contrastive loss temperature.</summary>
     public double Temperature { get; set; } = 0.05;

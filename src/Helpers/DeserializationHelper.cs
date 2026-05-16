@@ -805,7 +805,11 @@ public static class DeserializationHelper
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             var initStrategyType = typeof(AiDotNet.Initialization.IInitializationStrategy<>).MakeGenericType(typeof(T));
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
+            // Try the 7-param ctor first (added nonlinearityForInit for paper-faithful
+            // Conv→BN→LeakyReLU init gain). Fall back to the 6-param ctor for
+            // backwards compatibility with older builds.
+            var ctor7 = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType, activationFuncType });
+            var ctor = ctor7 ?? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), activationFuncType, initStrategyType });
             if (ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find ConvolutionalLayer constructor.");
@@ -813,7 +817,12 @@ public static class DeserializationHelper
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
             if (activation is null && additionalParams is not null && additionalParams.ContainsKey("ScalarActivationType"))
                 throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for ConvolutionalLayer.");
-            instance = ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
+            // Pass null for nonlinearityForInit on deserialization — weights are
+            // restored from the saved parameter vector, so InitializeWeights
+            // never runs and the gain choice is moot for the clone path.
+            instance = ctor7 is not null
+                ? ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null, null })
+                : ctor.Invoke(new object?[] { outputDepth, kernelSize, stride, padding, activation, null });
 
             // Pre-resolve the lazy layer using the serialized inputShape so SetParameters
             // sees the correct InputDepth and the kernel/bias counts match the saved
@@ -2536,20 +2545,19 @@ public static class DeserializationHelper
     {
         if (additionalParams == null) return null;
 
-        // Route through the parameter-aware path so callers like
-        // GlobalPoolingLayer, Conv3DLayer, and MeshEdgeConvLayer (which used to
-        // call TryRestoreActivation directly) inherit the same alpha / config
-        // restoration that TryCreateActivationInstance does for LeakyReLU,
-        // ELU, CELU, PReLU. The old implementation invoked Activator.CreateInstance
-        // with no ctor args, so e.g. a LeakyReLU(0.2) round-tripped as
-        // LeakyReLU(0.01) — silently changing activation behavior across
-        // clone/deserialize for any layer that didn't have its own bespoke
-        // post-processing (only GraphAttentionLayer did).
-        var scalarInterface = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
-        var vectorInterface = typeof(IVectorActivationFunction<>).MakeGenericType(typeof(T));
+        string? typeName = null;
+        if (additionalParams.TryGetValue("ScalarActivationType", out var atVal))
+            typeName = atVal as string;
 
-        return TryCreateActivationInstance(additionalParams, "ScalarActivationType", scalarInterface)
-            ?? TryCreateActivationInstance(additionalParams, "VectorActivationType", vectorInterface);
+        if (string.IsNullOrEmpty(typeName)) return null;
+
+        var activationType = Type.GetType(typeName);
+        if (activationType == null) return null;
+
+        if (activationType.IsGenericTypeDefinition)
+            activationType = activationType.MakeGenericType(typeof(T));
+
+        return Activator.CreateInstance(activationType);
     }
 
     private static int? TryGetInt(Dictionary<string, object>? parameters, string key)

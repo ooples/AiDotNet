@@ -291,9 +291,47 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected DirectGpuTensorEngine? GpuEngine => AiDotNetEngine.Current as DirectGpuTensorEngine;
 
     /// <summary>
-    /// The maximum allowed norm for gradients during training.
+    /// Backing storage for the gradient-clip max norm. Set in the ctor;
+    /// subclasses override the public <see cref="MaxGradNorm"/> property
+    /// to source the value from their own options instead.
     /// </summary>
-    protected T MaxGradNorm;
+    protected T MaxGradNormField;
+
+    /// <summary>
+    /// Maximum allowed global L2 norm for gradients per training step. When
+    /// the total gradient norm across all trainable parameters exceeds this
+    /// value, every gradient is scaled down by <c>maxNorm / totalNorm</c>
+    /// before the optimizer step. Mirrors PyTorch's
+    /// <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Default: 1.0 from the ctor. Subclasses that need per-model control
+    /// (e.g. GraFPrint sourcing the value from <c>GraFPrintOptions</c>)
+    /// should override this property and return the option-driven value;
+    /// returning 0 disables clipping for that subclass.
+    /// </para>
+    /// <para>
+    /// Active in BOTH the eager training path (TrainWithTape calls
+    /// ApplyGradientClipping just before optimizer.Step) and the compiled
+    /// fused-optimizer path (CompiledTapeTrainingStep wires this onto the
+    /// plan so it's applied inside <c>plan.Step()</c> between the backward
+    /// pass and the fused Adam update). Without clipping, deep networks
+    /// with batch-norm at small batch sizes can produce single-step Adam
+    /// explosions that drive loss up by orders of magnitude on the very
+    /// first iteration (GraFPrint's 53-layer pyramid is the canonical case
+    /// — single-sample BN drives variance toward zero, the eps-floored
+    /// reciprocal sqrt blows up activations, the chain amplifies).
+    /// </para>
+    /// </remarks>
+    public virtual double MaxGradNorm => NumOps.ToDouble(MaxGradNormField);
+
+    /// <summary>
+    /// Backwards-compatible <c>T</c>-typed accessor for code that historically
+    /// read the protected field directly. New code should use
+    /// <see cref="MaxGradNorm"/> (the public double-typed virtual).
+    /// </summary>
+    protected T MaxGradNormT => NumOps.FromDouble(MaxGradNorm);
 
     /// <summary>
     /// Cached parameter count to avoid repeated Sum() calculations.
@@ -357,7 +395,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         Architecture = architecture;
         _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
-        MaxGradNorm = NumOps.FromDouble(maxGradNorm);
+        MaxGradNormField = NumOps.FromDouble(maxGradNorm);
         LossFunction = lossFunction;
         _cachedParameterCount = null;
         _sensitiveFeatures = new Vector<int>(0);
@@ -417,7 +455,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     {
         for (int i = 0; i < gradients.Count; i++)
         {
-            gradients[i] = ClipTensorGradient(gradients[i], MaxGradNorm);
+            gradients[i] = ClipTensorGradient(gradients[i], MaxGradNormT);
         }
     }
 
@@ -477,7 +515,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected Tensor<T> ClipGradient(Tensor<T> gradient)
     {
-        return ClipTensorGradient(gradient, MaxGradNorm);
+        return ClipTensorGradient(gradient, MaxGradNormT);
     }
 
     /// <summary>
@@ -496,7 +534,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected Vector<T> ClipGradient(Vector<T> gradient)
     {
-        return ClipTensorGradient(Tensor<T>.FromVector(gradient), MaxGradNorm).ToVector();
+        return ClipTensorGradient(Tensor<T>.FromVector(gradient), MaxGradNormT).ToVector();
     }
 
     /// <summary>
@@ -1888,48 +1926,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
-    /// Targeted invalidation for parameter-shape changes that do NOT change
-    /// the layer count / identity — only the per-layer parameter counts and
-    /// the tensors backing them. Used by <see cref="ResolveLazyLayerShapes"/>
-    /// after lazy <c>[-1]</c>-shaped layers materialize their parameter
-    /// tensors. Unlike <see cref="InvalidateParameterCountCache"/> it does
-    /// NOT reset the sticky <c>_fusedTrainingDisabled</c> flag, so a deliberate
-    /// fused-path-disable from a prior training call survives a lazy-shape
-    /// resolve. The layer-structure version IS bumped (so version-keyed
-    /// caches re-key), and the parameter buffer / compiled plans are still
-    /// invalidated since they hold references to the pre-resolve tensors.
-    /// <c>_fusedTrainingCommitted</c> IS reset because it tracks plan-embedded
-    /// Adam/AdamW/SGD moment state — when we invalidate
-    /// <see cref="Training.CompiledTapeTrainingStep{T}"/> below the plan-owned
-    /// m/v are dropped, so the "the plan owns optimizer state" contract no
-    /// longer holds. Leaving the flag set would either let the next step
-    /// silently re-compile with fresh m/v while we still claim plan-ownership,
-    /// or trigger a misleading throw from <see cref="TryTrainWithFusedOptimizer"/>
-    /// about plan-embedded state that no longer exists.
-    /// </summary>
-    private void InvalidateAfterParameterShapeChange()
-    {
-        _cachedParameterCount = null;
-        _layerStructureVersion++;
-        _parameterBuffer = null;
-        _skipParameterBuffer = false;
-        _skipParameterBufferVersion = -1;
-        Training.TapeTrainingStep<T>.InvalidateCache();
-        InvalidateLayerInfoCache();
-        _compileHost.Invalidate();
-        Training.CompiledTapeTrainingStep<T>.Invalidate();
-        // Plan was just dropped — its embedded Adam m/v are gone. Clear the
-        // committed flag so the next training step can either cleanly recompile
-        // a fresh plan or fall back to eager without throwing the misleading
-        // "plan-embedded state cannot be transferred" exception. We keep
-        // _fusedTrainingDisabled because the conditions that triggered the
-        // sticky disable (LR scheduler attached, optimizer type outside the
-        // fused set, etc.) are config-level and aren't reset by lazy-shape
-        // resolution.
-        _fusedTrainingCommitted = false;
-    }
-
-    /// <summary>
     /// Invalidates the parameter count cache.
     /// Call this method whenever layers are added, removed, or modified.
     /// </summary>
@@ -2088,18 +2084,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     private bool IsFirstLayerShapeCompatible(ILayer<T> layer)
     {
-        // Embedding-category layers (token / positional / patch / time
-        // embeddings) declare their input shape as the per-element lookup
-        // contract (typically [1] = "I take one token at a time"), even
-        // though Forward broadcasts over upstream rank — see
-        // EmbeddingLayer<T>.Forward which accepts [seqLen], [batch, seqLen],
-        // [batch, seqLen, 1] and returns embedded results in matching rank.
-        // The strict architecture-input-shape check would reject this
-        // legitimate broadcast contract; recognise the category and skip
-        // the strict shape match. Closes #1321.
-        if (IsBroadcastInputCategory(layer))
-            return true;
-
         int[]? layerInputShape = TryGetLayerShape(layer, shapeSelector: static l => l.GetInputShape());
         if (IsDeferredOrAgnosticShape(layerInputShape))
             return true;
@@ -2109,46 +2093,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return true;
 
         return AreShapesCompatible(architectureInputShape!, layerInputShape!);
-    }
-
-    /// <summary>
-    /// True when <paramref name="layer"/> is an Embedding-category layer
-    /// whose declared input shape is a per-element broadcast contract
-    /// (e.g. <c>EmbeddingLayer&lt;T&gt;</c> reports input shape <c>[1]</c>
-    /// for per-token lookup; positional encodings report similar
-    /// broadcast-friendly shapes).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Used by both first-layer-vs-architecture and layer-to-layer
-    /// compatibility checks so a custom chain like
-    /// <c>InputLayer(64) → EmbeddingLayer(vocab, dim) → ...</c> validates
-    /// without false rejection — the <c>[64]</c>-vs-<c>[1]</c> mismatch is
-    /// a contract feature, not a bug. Closes #1321 / #1323.
-    /// </para>
-    /// <para>
-    /// Recognition is intentionally broader than the LayerBase&lt;T&gt;
-    /// category check alone: custom embedding / positional layers that
-    /// implement <see cref="ILayer{T}"/> directly (without inheriting
-    /// LayerBase&lt;T&gt;) don't expose <c>GetLayerCategory()</c>, so a
-    /// category-only check would still reject the broadcast-input
-    /// contract for them. The name-based fallback matches the same
-    /// convention LayerBase.GetLayerCategory uses for its default
-    /// classification, so the two recognition paths agree.
-    /// </para>
-    /// </remarks>
-    private static bool IsBroadcastInputCategory(ILayer<T> layer)
-    {
-        if (layer is LayerBase<T> lb && lb.GetLayerCategory() == LayerCategory.Embedding)
-            return true;
-
-        // Name-based fallback for custom ILayer<T> implementations not
-        // derived from LayerBase<T>. Matches the same heuristic
-        // LayerBase.GetLayerCategory uses (typeName.Contains "Embedding" /
-        // "Positional", case-insensitive).
-        var layerName = layer.GetType().Name;
-        return layerName.Contains("Embedding", StringComparison.OrdinalIgnoreCase)
-            || layerName.Contains("Positional", StringComparison.OrdinalIgnoreCase);
     }
 
     private bool IsLastLayerShapeCompatible(ILayer<T> layer, out string error)
@@ -2161,25 +2105,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         int[] outputShape = layerOutputShape!;
-
-        // Partially-deferred shapes — e.g. a transposed-conv generator that
-        // emits [3, -1, -1] until first Forward resolves H/W from runtime
-        // input — can't be compared dimensionally against the architecture's
-        // flat OutputSize. Defer the check; the layer will fail at runtime
-        // with a precise shape error if the resolved output doesn't honour
-        // the contract. Closes the DCGAN cluster-1 false-rejection where
-        // the generator's last ConvTranspose2D layer reports
-        // [channels, -1, -1] before first Forward and is compared against
-        // OutputSize = channels * H * W = a single flat scalar that can't
-        // be element-wise-matched.
-        // -1 is the lazy/deferred sentinel; zero-sized dimensions are genuinely
-        // invalid and should fail validation rather than getting waved through
-        // to fail later at runtime with a less clear error.
-        if (outputShape.Any(d => d < 0))
-        {
-            error = string.Empty;
-            return true;
-        }
 
         if (Architecture.OutputSize > 0 && !AreShapesCompatible([Architecture.OutputSize], outputShape))
         {
@@ -2401,16 +2326,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual bool AreLayersCompatible(ILayer<T> prevLayer, ILayer<T> currentLayer)
     {
-        // Embedding-category layers (token / positional / patch / time)
-        // declare their input shape as a per-element lookup contract — the
-        // current rank-aware Forward (see EmbeddingLayer<T>.Forward) accepts
-        // any-rank token tensor and broadcasts the embedding lookup over it.
-        // Skip the strict prev-output ↔ current-input shape match for these
-        // layers so a chain like InputLayer(64) → EmbeddingLayer(vocab, dim)
-        // validates correctly. Closes #1323.
-        if (IsBroadcastInputCategory(currentLayer))
-            return true;
-
         // Lazy layers report InputShape = [-1] (or empty) until first Forward —
         // skip the strict shape-equality check; resolution happens at first
         // forward. Empty-shape layers are shape-agnostic by design (e.g.
@@ -2624,14 +2539,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return;
         }
 
-        // Track whether the walk actually mutated layer shapes. If every
-        // layer is already resolved (eager construction path) the loop
-        // below is a pure read, so we shouldn't bump version counters or
-        // drop warmed compiled plans — that would force the next training
-        // step to recompile for no benefit and silently reset Adam state
-        // via the InvalidateAfterParameterShapeChange path.
-        bool parameterShapeChanged = false;
-
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
@@ -2646,7 +2553,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // training. Weight allocation still happens lazily on the
                     // first real Forward via EnsureInitializedFromInput.
                     lb.ResolveShapesOnly(currentShape);
-                    parameterShapeChanged = true;
                 }
 
                 // Advance the chain via the layer's now-resolved output
@@ -2679,33 +2585,6 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
 
         _layerShapesResolved = true;
-
-        // Shape resolution can change every lazy layer's reported
-        // ParameterCount (DenseLayer / FullyConnectedLayer / Conv variants
-        // return shape-based estimates when not yet initialized). A prior
-        // ParameterCount read (e.g. from a Parameters_ShouldBeNonEmpty
-        // smoke test that ran BEFORE InitializeLayers materialized the
-        // architecture) cached 0; without invalidating that cache,
-        // TryAutoEnableWeightStreaming reads the stale 0 and stays under
-        // the 125M streaming threshold even when the resolved architecture
-        // is multi-billion-parameter scale (Phi-3-Vision, Transfusion,
-        // SmolVLM at paper defaults). The first Forward then OOMs on
-        // DenseLayer.EnsureInitialized → TensorAllocator.Rent against a
-        // [DecoderDim, 4×DecoderDim] weight allocation that should have
-        // routed through WeightRegistry.AllocateStreaming instead.
-        //
-        // Use the targeted invalidator: lazy-shape resolution only changes
-        // parameter shapes / counts (NOT layer count or identity), so we
-        // shouldn't reset sticky fused-training flags that may have been
-        // deliberately disabled by a prior training run. Skip entirely when
-        // no layer actually resolved — invalidating warmed plans / param
-        // buffer for a no-op walk is pure overhead, and on a model that has
-        // already committed to a fused training plan it would silently drop
-        // Adam moments via the plan invalidation.
-        if (parameterShapeChanged)
-        {
-            InvalidateAfterParameterShapeChange();
-        }
     }
 
     /// <summary>
@@ -5366,6 +5245,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 return loss.ComputeTapeLoss(pred, tgt);
             }
 
+            // Apply global gradient-norm clipping when configured. Mirrors
+            // PyTorch's torch.nn.utils.clip_grad_norm_ — total L2 norm across
+            // all trainable-parameter gradients; when it exceeds MaxGradNorm,
+            // every gradient is scaled by maxNorm/totalNorm. Without this
+            // step, deep networks with batch-norm at small batch sizes (e.g.
+            // GraFPrint at batch=1) can produce single-step Adam explosions
+            // that drive loss up by orders of magnitude on the very first
+            // iteration. Skipped when MaxGradNorm <= 0 (the default).
+            double maxGradNorm = MaxGradNorm;
+            if (maxGradNorm > 0.0 && grads.Count > 0)
+            {
+                // Pass trainableParams as the iteration-order key so the
+                // total-norm sum is computed in a deterministic order
+                // (Dictionary iteration order is bucket-order, which uses
+                // the per-process-randomized identity hash for tensor
+                // keys → different sum-order per process → different
+                // clip scale per process → non-deterministic training).
+                ApplyGradientClipping(grads, maxGradNorm, trainableParams);
+            }
+
             var context = new TapeStepContext<T>(
                 trainableParams, grads, lossValue,
                 input, expected, ComputeForward,
@@ -5545,6 +5444,54 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Best-effort read of the supplied optimizer's current learning
     /// rate, used by the network-level extras update path. Returns the
     /// optimizer-typed value when the optimizer is a recognised
+    /// Applies global gradient L2-norm clipping in-place across all gradient
+    /// tensors in the supplied dictionary. Computes
+    /// <c>totalNorm = sqrt(sum_i sum(grad_i²))</c>; when
+    /// <c>totalNorm &gt; maxNorm</c>, scales every gradient by
+    /// <c>maxNorm / (totalNorm + 1e-6)</c>. Mirrors PyTorch's
+    /// <c>clip_grad_norm_</c> semantics — collective scaling, not per-tensor
+    /// — so the relative direction of the gradient field is preserved while
+    /// its magnitude is bounded.
+    /// </summary>
+    private void ApplyGradientClipping(
+        Dictionary<Tensor<T>, Tensor<T>> grads, double maxNorm,
+        IReadOnlyList<Tensor<T>> iterationOrder)
+    {
+        // Step 1: total L2 norm across all gradient tensors, iterating in
+        // the caller-supplied deterministic order (NOT dict bucket order —
+        // that's process-randomized for reference-keyed dicts).
+        double totalNormSq = 0.0;
+        for (int p = 0; p < iterationOrder.Count; p++)
+        {
+            if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+            if (g is null || g.Length == 0) continue;
+            var span = g.Data.Span;
+            int len = g.Length;
+            for (int i = 0; i < len; i++)
+            {
+                double v = NumOps.ToDouble(span[i]);
+                totalNormSq += v * v;
+            }
+        }
+        if (totalNormSq == 0.0) return;
+        double totalNorm = Math.Sqrt(totalNormSq);
+        if (totalNorm <= maxNorm) return;
+
+        // Step 2: scale every gradient down so the new global norm == maxNorm.
+        // The +1e-6 in the denominator matches PyTorch's clip_grad_norm_ to
+        // avoid div-by-zero when the gradient magnitudes are vanishingly small.
+        T scale = NumOps.FromDouble(maxNorm / (totalNorm + 1e-6));
+        for (int p = 0; p < iterationOrder.Count; p++)
+        {
+            if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+            if (g is null || g.Length == 0) continue;
+            var span = g.Data.Span;
+            int len = g.Length;
+            for (int i = 0; i < len; i++)
+                span[i] = NumOps.Multiply(span[i], scale);
+        }
+    }
+
     /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}"/>; falls
     /// back to a conservative default for optimizers that don't expose
     /// the rate.
@@ -5696,7 +5643,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return EmitFusedMissAndFallback($"numeric type {typeof(T).Name} not supported by fused kernel");
 
         if (!TryMapToFusedOptimizerConfig(
-                resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd))
+                resolvedOptimizer, out var fusedType, out float lr, out float b1, out float b2, out float eps, out float wd,
+                out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSched))
             return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
 
         // Use the existing recursive trainable-layer collector instead of the
@@ -5746,7 +5694,9 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             beta2: b2,
             epsilon: eps,
             weightDecay: wd,
-            out T lossValue);
+            out T lossValue,
+            maxGradNorm: MaxGradNorm,
+            lrSchedule: lrSched);
 
         if (ran)
         {
@@ -5836,7 +5786,8 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         out float beta1,
         out float beta2,
         out float epsilon,
-        out float weightDecay)
+        out float weightDecay,
+        out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule)
     {
         optimizerType = default;
         learningRate = 0f;
@@ -5844,13 +5795,37 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         beta2 = 0f;
         epsilon = 0f;
         weightDecay = 0f;
+        lrSchedule = null;
 
-        // Reject when an LR scheduler is attached — GetCurrentLearningRate()
-        // would change between steps but the fused plan bakes the LR at first
-        // ConfigureOptimizer, so subsequent rate changes silently disappear.
+        // When an LR scheduler is attached, try to convert it to a fused-side
+        // LrSchedule. The fused kernel evaluates the schedule per Step() — no
+        // performance penalty vs constant-LR — so paper-faithful training
+        // recipes (cosine annealing, OneCycle, linear-warmup-cosine, etc.)
+        // get full compile-mode perf. Only unknown / unsupported scheduler
+        // types fall back to eager.
         if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradBase
             && gradBase.LearningRateScheduler is not null)
-            return false;
+        {
+            switch (gradBase.LearningRateScheduler)
+            {
+                case AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
+                    lrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule.Cosine(
+                        cosine.BaseLearningRate, cosine.TMax, cosine.EtaMin);
+                    break;
+                case AiDotNet.LearningRateSchedulers.ExponentialLRScheduler expo:
+                    lrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule.Exponential(
+                        expo.BaseLearningRate, expo.Gamma);
+                    break;
+                case AiDotNet.LearningRateSchedulers.ConstantLRScheduler:
+                    // Constant scheduler = effectively no schedule; let the
+                    // GetCurrentLearningRate path below handle the rate.
+                    break;
+                default:
+                    // Unknown scheduler type — fall back to eager so the
+                    // configured schedule isn't silently ignored.
+                    return false;
+            }
+        }
 
         switch (optimizer)
         {
@@ -5918,61 +5893,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         SetTrainingMode(true);
         try
         {
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
             using var tape = new GradientTape<T>();
             var output = ForwardForTraining(input);
-
-            // Collect trainables AFTER the forward pass so any lazy-initialised
-            // or replaced parameter tensors (e.g. Dense / Conv layers that bind
-            // their weight tensors on first forward, or layers that swap in a
-            // ParameterBuffer view) are captured in their final identity. A
-            // pre-forward snapshot can point at placeholder tensors that the
-            // forward then replaces, leaving the optimizer to step on stale
-            // references and silently skipping the real trainable tensors.
-            // TrainWithTape uses the same after-forward ordering.
-            var layerParams = Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion);
-
-            // Network-level trainable tensors that aren't owned by any layer
-            // (e.g., embedding tables, learned positional encodings, scaling
-            // factors exposed via GetExtraTrainableTensors). TrainWithTape and
-            // TrainWithGradientAccumulation already include these in their
-            // parameter set; the custom-loss path was filtering them out, so
-            // optimizers like WGAN-GP's discriminator update silently froze
-            // those tensors.
-            var extraTrainableTensors = new System.Collections.Generic.List<Tensor<T>>();
-            foreach (var t in GetExtraTrainableTensors())
-            {
-                if (t is not null && t.Length > 0)
-                    extraTrainableTensors.Add(t);
-            }
-            var trainableParams = extraTrainableTensors.Count == 0
-                ? (System.Collections.Generic.IReadOnlyList<Tensor<T>>)layerParams
-                : layerParams.Concat(extraTrainableTensors).ToList();
-
             var lossTensor = computeLoss(output);
 
-            // Compute ALL gradients then filter to trainable params — matches
-            // TrainWithTape's policy. Passing `sources: trainableParams` directly
-            // would short-circuit the tape backward over view tensors in the
-            // gradient chain (e.g. GAN.Train's manual discriminator forward in
-            // eval mode, where the discriminator's layers' fields hold
-            // ParameterBuffer-view tensors after a prior Discriminator.Train
-            // initialised the buffer). The backward walker matches sources by
-            // reference identity; when the chain passes through a view it can
-            // miss the trainable-param entry and zero out its gradient — the
-            // exact "Parameters did not change after training" / "No parameters
-            // changed after training — gradients may all be zero" failure on
-            // DCGANTests.Training_ShouldChangeParameters and
-            // GradientFlow_ShouldBeNonZeroAndFinite.
-            var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-            var grads = new System.Collections.Generic.Dictionary<Tensor<T>, Tensor<T>>(
-                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-            foreach (var param in trainableParams)
-            {
-                if (allGrads.TryGetValue(param, out var grad))
-                    grads[param] = grad;
-            }
+            var grads = tape.ComputeGradients(lossTensor, trainableParams);
 
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;

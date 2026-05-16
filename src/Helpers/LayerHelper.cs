@@ -22,12 +22,6 @@ public static class LayerHelper<T>
     /// </summary>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
-    private static void ValidatePatchSize(int patchSize)
-    {
-        if (patchSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(patchSize), patchSize, "patchSize must be greater than 0.");
-    }
-
     /// <summary>
     /// Creates the default layer configuration for a Deep Portfolio Management model.
     /// </summary>
@@ -784,16 +778,13 @@ public static class LayerHelper<T>
         // Flatten the output of LSTM layers
         yield return new FlattenLayer<T>();
 
-        // Dense layers for further processing. LayerNormalization (Ba 2016)
-        // rather than BatchNormalization so the head still normalizes at any
-        // batch size — memorization-style training runs at batch=1 and BN
-        // collapses (σ² = 0) under those conditions.
+        // Dense layers for further processing
         yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new LayerNormalizationLayer<T>();
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.3f);
 
         yield return new DenseLayer<T>(32, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new LayerNormalizationLayer<T>();
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.2f);
 
         // Output layer
@@ -870,21 +861,13 @@ public static class LayerHelper<T>
         var inputShape = architecture.GetInputShape();
         int inputFeatures = inputShape[0];
 
-        // Dense layers for processing input features.
-        // LayerNormalization (Ba et al. 2016) — not BatchNormalization — to
-        // keep the per-sample normalization mathematically well-defined at
-        // any batch size. Occupancy detection is a small-MLP regime where
-        // BN at batch=1 collapses to y = β (μ_B = x, σ²_B = 0), zeroing the
-        // gradient signal through the normalization layer and stalling
-        // memorization-style training. LayerNorm normalizes across the
-        // feature axis within each sample and is the modern default for
-        // small dense MLPs.
+        // Dense layers for processing input features
         yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new LayerNormalizationLayer<T>();
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.3f);
 
         yield return new DenseLayer<T>(32, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new LayerNormalizationLayer<T>();
+        yield return new BatchNormalizationLayer<T>();
         yield return new DropoutLayer<T>(0.2f);
 
         yield return new DenseLayer<T>(16, new ReLUActivation<T>() as IActivationFunction<T>);
@@ -1400,20 +1383,8 @@ public static class LayerHelper<T>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultDeepBeliefNetworkLayers(NeuralNetworkArchitecture<T> architecture)
     {
-        // RBM stack sizes follow Hinton 2006 / Hinton & Salakhutdinov 2006:
-        //   inputSize → 500 → 500 → 2000  (three RBMs forming the deep
-        //   feature-extraction stack), with a separate supervised projection
-        //   head on top that maps the 2000-d code to outputSize.
-        // The previous layout appended architecture.OutputSize into the RBM
-        // stack itself, so the final RBM was RBM(2000 → outputSize). For the
-        // common regression / single-scalar case this is RBM(2000 → 1),
-        // which destroys all input-dependent information through a 1-unit
-        // sigmoid bottleneck — both pre-training (CD-1 on a single hidden
-        // unit) and the supervised head then operate on the same collapsed
-        // representation, and the network produces input-invariant output
-        // (the L2-collapse the DBN invariant tests catch). Keeping outputSize
-        // strictly on the supervised projection head matches the paper.
-        int[] rbmStackSizes = [architecture.GetInputShape()[0], 500, 500, 2000];
+        // Default layer sizes for DBN (can be adjusted as needed)
+        int[] layerSizes = [architecture.GetInputShape()[0], 500, 500, 2000, architecture.OutputSize];
 
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
         IActivationFunction<T> softmaxActivation = new SoftmaxActivation<T>();
@@ -1423,14 +1394,14 @@ public static class LayerHelper<T>
         // here (they allocate at construction); the trailing DenseLayer
         // is lazy and benefits from chain-resolution. Without it the
         // Dense's input dim wouldn't be known until first Forward.
-        var layers = new List<ILayer<T>>(rbmStackSizes.Length);
+        var layers = new List<ILayer<T>>(layerSizes.Length);
 
         // RBMLayer applies sigmoid internally — no extra ActivationLayer
         // needed (double sigmoid would compress output to [0.5, 0.73]).
-        for (int i = 0; i < rbmStackSizes.Length - 1; i++)
+        for (int i = 0; i < layerSizes.Length - 1; i++)
         {
-            int visibleUnits = rbmStackSizes[i];
-            int hiddenUnits = rbmStackSizes[i + 1];
+            int visibleUnits = layerSizes[i];
+            int hiddenUnits = layerSizes[i + 1];
 
             layers.Add(new RBMLayer<T>(
                 visibleUnits: visibleUnits,
@@ -1439,16 +1410,14 @@ public static class LayerHelper<T>
             ));
         }
 
-        // Supervised projection head — softmax for classification, identity
-        // for regression / single-scalar regression heads. This is the only
-        // layer that depends on architecture.OutputSize, matching the
-        // paper's "stack of RBMs + supervised head" split.
+        // Add the final output layer — use softmax for classification, identity for regression
+        int outputSize = layerSizes[layerSizes.Length - 1];
         IActivationFunction<T> finalActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
             ? softmaxActivation
             : new IdentityActivation<T>();
-        layers.Add(new DenseLayer<T>(architecture.OutputSize, finalActivation));
+        layers.Add(new DenseLayer<T>(outputSize, finalActivation));
 
-        ChainResolveLazyLayers(layers, new[] { rbmStackSizes[0] });
+        ChainResolveLazyLayers(layers, new[] { layerSizes[0] });
         foreach (var layer in layers) yield return layer;
     }
 
@@ -20576,7 +20545,14 @@ public static class LayerHelper<T>
 
         // Stem: 1×1 Conv + BN + LeakyReLU (graph_encoder.py:
         // self.stem = nn.Sequential(Conv2d(...), BN(...), LeakyReLU(0.2))).
-        yield return new ConvolutionalLayer<T>(outputDepth: stem, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity);
+        // The Conv carries `identity` in its own activation slot because the
+        // paper applies LeakyReLU two layers later (after BN), but its weight
+        // init still needs the LeakyReLU(0.2) Kaiming gain — without that the
+        // 53-layer pyramid produces single-step Adam explosions on small-batch
+        // training. nonlinearityForInit decouples the init gain from the
+        // layer's own activation slot, mirroring PyTorch's
+        // `nn.init.kaiming_uniform_(weight, nonlinearity='leaky_relu', a=0.2)`.
+        yield return new ConvolutionalLayer<T>(outputDepth: stem, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity, nonlinearityForInit: leaky);
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(leaky);
 
@@ -20601,21 +20577,21 @@ public static class LayerHelper<T>
 
         // Stage 1: stride-2 downsample (the paper's Downsample module:
         // 3×3 Conv stride 2 + BN) then per-stage FFN blocks.
-        yield return new ConvolutionalLayer<T>(outputDepth: stage1, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity);
+        yield return new ConvolutionalLayer<T>(outputDepth: stage1, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity, nonlinearityForInit: leaky);
         yield return new BatchNormalizationLayer<T>();
         for (int i = 0; i < stage1Blocks; i++)
             foreach (var l in BlockFFN(stage1, leaky, identity, dropoutRate))
                 yield return l;
 
         // Stage 2: the deep stage (2:2:6:2 — middle one is deepest).
-        yield return new ConvolutionalLayer<T>(outputDepth: stage2, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity);
+        yield return new ConvolutionalLayer<T>(outputDepth: stage2, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity, nonlinearityForInit: leaky);
         yield return new BatchNormalizationLayer<T>();
         for (int i = 0; i < stage2Blocks; i++)
             foreach (var l in BlockFFN(stage2, leaky, identity, dropoutRate))
                 yield return l;
 
         // Stage 3: final stage at the deepest channel width.
-        yield return new ConvolutionalLayer<T>(outputDepth: stage3, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity);
+        yield return new ConvolutionalLayer<T>(outputDepth: stage3, kernelSize: 3, stride: 2, padding: 1, activationFunction: identity, nonlinearityForInit: leaky);
         yield return new BatchNormalizationLayer<T>();
         for (int i = 0; i < stage3Blocks; i++)
             foreach (var l in BlockFFN(stage3, leaky, identity, dropoutRate))
@@ -20647,10 +20623,17 @@ public static class LayerHelper<T>
         IActivationFunction<T> identity,
         double dropoutRate)
     {
-        yield return new ConvolutionalLayer<T>(outputDepth: channels * 4, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity);
+        // Conv1×1 expand 4× → BN → LeakyReLU. The expand Conv is followed by
+        // BN+LeakyReLU so its weights need the LeakyReLU(0.2) Kaiming gain.
+        yield return new ConvolutionalLayer<T>(outputDepth: channels * 4, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity, nonlinearityForInit: leaky);
         yield return new BatchNormalizationLayer<T>();
         yield return new ActivationLayer<T>(leaky);
-        yield return new ConvolutionalLayer<T>(outputDepth: channels, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity);
+        // Contract Conv1×1 → BN → (Dropout). The contract Conv has no
+        // downstream nonlinearity in this block (BN normalizes, Dropout is
+        // multiplicative noise), so its eventual nonlinearity is whatever
+        // the NEXT block's first activation is — also LeakyReLU(0.2) in the
+        // paper's stacked-FFN topology. Initialize with the matching gain.
+        yield return new ConvolutionalLayer<T>(outputDepth: channels, kernelSize: 1, stride: 1, padding: 0, activationFunction: identity, nonlinearityForInit: leaky);
         yield return new BatchNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
     }
@@ -23599,8 +23582,6 @@ public static class LayerHelper<T>
         int patchSize = 14,
         int inputChannels = 3)
     {
-        ValidatePatchSize(patchSize);
-
         if (inputChannels <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputChannels), "inputChannels must be positive.");
 
@@ -23668,22 +23649,14 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1,
-        int patchSize = 14)
+        double dropoutRate = 0.1)
     {
-        ValidatePatchSize(patchSize);
-
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (InternViT) ===
-        // Patch embedding: [B, 3, H, W] -> [B, num_patches, visionDim].
-        // Without this the InternViT's MHA receives the raw image's pixel
-        // width as the embedding dim and fails the QKV projection — same
-        // root cause as PR #1290 / #1311's SmolVLM / InternVL failures.
-        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
@@ -23729,11 +23702,8 @@ public static class LayerHelper<T>
         int numResamplerLayers = 4,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1,
-        int patchSize = 14)
+        double dropoutRate = 0.1)
     {
-        ValidatePatchSize(patchSize);
-
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
@@ -23741,11 +23711,6 @@ public static class LayerHelper<T>
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
-        // Patchify [B, 3, H, W] -> [B, num_patches, visionDim] so the subsequent
-        // MHA sees a sequence of patch tokens at the paper's embedding dim.
-        // Qwen-VL (Bai 2023) / Qwen2-VL (Wang 2024) / KimiVL all use 14x14 patches
-        // on their ViT-bigG/14 (and equivalent) vision encoders.
-        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
@@ -23805,9 +23770,6 @@ public static class LayerHelper<T>
         int numHeads = 32,
         double dropoutRate = 0.1)
     {
-        if (patchDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(patchDim), patchDim, "patchDim must be greater than 0.");
-
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int decoderFfnDim = decoderDim * 4;
@@ -23840,27 +23802,14 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1,
-        int patchSize = 14)
+        double dropoutRate = 0.1)
     {
-        ValidatePatchSize(patchSize);
-
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (ViT) ===
-        // Patch embedding: [B, 3, H, W] -> [B, num_patches, visionDim].
-        // Required so the downstream MultiHeadAttentionLayers see a sequence
-        // of patch tokens at the paper-specified embedding dim (visionDim)
-        // instead of the raw image's pixel dimensions. Without this the MHA
-        // QKV projection (weights [visionDim, visionDim]) is multiplied
-        // against an embedding-dim equal to the image width — the precise
-        // failure shape "Query [B, H, W] vs Weights [visionDim, visionDim]"
-        // surfaced on PR #1290 (#1311) for Phi3Vision / Gemma3 / Llama3.2-Vision /
-        // Phi4-Multimodal / Pixtral / PixtralLarge.
-        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
@@ -23906,22 +23855,14 @@ public static class LayerHelper<T>
         int numVisionLayers = 24,
         int numDecoderLayers = 32,
         int numHeads = 12,
-        double dropoutRate = 0.1,
-        int patchSize = 16)
+        double dropoutRate = 0.1)
     {
-        ValidatePatchSize(patchSize);
-
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
         // === Vision Encoder (hybrid SigLIP + SAM) ===
-        // Patchify [B, 3, H, W] -> [B, num_patches, visionDim]. DeepSeek-VL
-        // (Lu 2024) uses SigLIP-L/16 + SAM-B/16, so patchSize=16. Without this
-        // the first MHA reads spatial dims as the feature dim and fails the
-        // QKV projection (PR #1290 / #1311 root cause for the VLM family).
-        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim, expectedInputChannels: 3);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numVisionLayers; i++)
@@ -32145,31 +32086,13 @@ public static class LayerHelper<T>
         int numStyleLayers = 3,
         int numDecoderLayers = 4,
         int numHeads = 4,
-        double dropoutRate = 0.1,
-        int inputFeatureDim = 0)
+        double dropoutRate = 0.1)
     {
-        if (inputFeatureDim < 0)
-            throw new ArgumentOutOfRangeException(
-                nameof(inputFeatureDim), inputFeatureDim,
-                "inputFeatureDim cannot be negative; use 0 (no projection) or a positive feature width.");
-
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
 
         // === Text Encoder ===
-        // EmotiVoice (Guo et al. 2022 PromptTTS / NetEase 2023) feeds the encoder
-        // mel-spectrogram-shaped tensors with `MelChannels` feature width (80
-        // for the paper-default 80-band mel front end), but the encoder's
-        // MultiHeadAttention is sized for `encoderDim` (192). Without a leading
-        // projection from `inputFeatureDim` to `encoderDim` the MHA's QKV
-        // weights mismatch the input embedding dim and downstream
-        // `DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs` /
-        // `SpeakerConsistency` tests observe degenerate / inconsistent outputs.
-        // Applies to all style/emotion TTS front ends that expose mel /
-        // prosody feature tensors instead of already-projected hidden states.
-        if (inputFeatureDim > 0 && inputFeatureDim != encoderDim)
-            yield return new DenseLayer<T>(encoderDim, identityActivation);
         yield return new LayerNormalizationLayer<T>();
 
         for (int i = 0; i < numEncoderLayers; i++)
