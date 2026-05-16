@@ -992,9 +992,11 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         // monitoring value is comparable to the old two-step formulation.
         _lastDiscriminatorLoss = combinedDiscLoss;
 
-        // Train generator to fool discriminator (adversarial objective)
-        // Generator wants discriminator to output "real" (1) for fake images
-        var allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
+        // Train generator to fool discriminator (adversarial objective).
+        // The non-saturating BCE-with-logits generator term below is
+        // formulated directly on discriminator logits and doesn't need a
+        // pre-built "all real" label tensor — that's implicit in the
+        // -log σ(disc(fake)) form.
         var trainableGen = (NeuralNetworkBase<T>)Generator;
         // The discriminator must be in EVAL mode for the generator step (its
         // BatchNorm running stats / Dropout masks are frozen relative to the
@@ -1028,15 +1030,22 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
                 var discScore = genOutput;
                 foreach (var layer in Discriminator.Layers)
                     discScore = layer.Forward(discScore);
-                // Generator loss: MSE(discriminator(fake), real_labels). Equivalent
-                // to the non-saturating BCE objective Goodfellow 2014 §3 prescribes
-                // for the generator under the tape's tracked-op set; engine ops
-                // (TensorSubtract, TensorMultiply, ReduceMean) all register
-                // backward functions on the tape.
-                var diff = Engine.TensorSubtract(discScore, allRealLabels);
-                var squared = Engine.TensorMultiply(diff, diff);
-                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-                return Engine.ReduceMean(squared, allAxes, keepDims: false);
+                // Generator loss: non-saturating BCE-with-logits per Goodfellow
+                // 2014 §3, matching the BCE-with-logits criterion that this base
+                // class wires into the Discriminator (lines 405-419 above —
+                // GetDefaultLossFunction(BinaryClassification) = BCE-with-logits).
+                // The previous LSGAN-style MSE((discScore − 1)²) here was a
+                // different objective (Mao 2017 LSGAN) and silently changed
+                // training semantics for every derived GAN.
+                //
+                // -log σ(discScore) is the per-sample non-saturating generator
+                // term. Implemented via the numerically-stable LogSigmoid identity
+                // -log σ(x) = softplus(-x), where softplus is the tape-tracked
+                // Engine.Softplus op. ReduceMean over all axes gives the scalar
+                // loss the tape requires.
+                var allAxes = Enumerable.Range(0, discScore.Shape.Length).ToArray();
+                var negLogSigmoid = Engine.Softplus(Engine.TensorNegate(discScore));
+                return Engine.ReduceMean(negLogSigmoid, allAxes, keepDims: false);
             });
         }
         finally
