@@ -1893,12 +1893,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// the tensors backing them. Used by <see cref="ResolveLazyLayerShapes"/>
     /// after lazy <c>[-1]</c>-shaped layers materialize their parameter
     /// tensors. Unlike <see cref="InvalidateParameterCountCache"/> it does
-    /// NOT reset the sticky <c>_fusedTrainingDisabled</c> /
-    /// <c>_fusedTrainingCommitted</c> flags, so a deliberate
+    /// NOT reset the sticky <c>_fusedTrainingDisabled</c> flag, so a deliberate
     /// fused-path-disable from a prior training call survives a lazy-shape
     /// resolve. The layer-structure version IS bumped (so version-keyed
     /// caches re-key), and the parameter buffer / compiled plans are still
     /// invalidated since they hold references to the pre-resolve tensors.
+    /// <c>_fusedTrainingCommitted</c> IS reset because it tracks plan-embedded
+    /// Adam/AdamW/SGD moment state — when we invalidate
+    /// <see cref="Training.CompiledTapeTrainingStep{T}"/> below the plan-owned
+    /// m/v are dropped, so the "the plan owns optimizer state" contract no
+    /// longer holds. Leaving the flag set would either let the next step
+    /// silently re-compile with fresh m/v while we still claim plan-ownership,
+    /// or trigger a misleading throw from <see cref="TryTrainWithFusedOptimizer"/>
+    /// about plan-embedded state that no longer exists.
     /// </summary>
     protected void InvalidateAfterParameterShapeChange()
     {
@@ -1911,9 +1918,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         InvalidateLayerInfoCache();
         _compileHost.Invalidate();
         Training.CompiledTapeTrainingStep<T>.Invalidate();
-        // Intentionally NOT resetting _fusedTrainingDisabled /
-        // _fusedTrainingCommitted: those are sticky decisions tied to
-        // training-time behavior, not to parameter-shape state.
+        // Plan was just dropped — its embedded Adam m/v are gone. Clear the
+        // committed flag so the next training step can either cleanly recompile
+        // a fresh plan or fall back to eager without throwing the misleading
+        // "plan-embedded state cannot be transferred" exception. We keep
+        // _fusedTrainingDisabled because the conditions that triggered the
+        // sticky disable (LR scheduler attached, optimizer type outside the
+        // fused set, etc.) are config-level and aren't reset by lazy-shape
+        // resolution.
+        _fusedTrainingCommitted = false;
     }
 
     /// <summary>
@@ -2608,6 +2621,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             return;
         }
 
+        // Track whether the walk actually mutated layer shapes. If every
+        // layer is already resolved (eager construction path) the loop
+        // below is a pure read, so we shouldn't bump version counters or
+        // drop warmed compiled plans — that would force the next training
+        // step to recompile for no benefit and silently reset Adam state
+        // via the InvalidateAfterParameterShapeChange path.
+        bool parameterShapeChanged = false;
+
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
@@ -2622,6 +2643,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                     // training. Weight allocation still happens lazily on the
                     // first real Forward via EnsureInitializedFromInput.
                     lb.ResolveShapesOnly(currentShape);
+                    parameterShapeChanged = true;
                 }
 
                 // Advance the chain via the layer's now-resolved output
@@ -2672,8 +2694,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Use the targeted invalidator: lazy-shape resolution only changes
         // parameter shapes / counts (NOT layer count or identity), so we
         // shouldn't reset sticky fused-training flags that may have been
-        // deliberately disabled by a prior training run.
-        InvalidateAfterParameterShapeChange();
+        // deliberately disabled by a prior training run. Skip entirely when
+        // no layer actually resolved — invalidating warmed plans / param
+        // buffer for a no-op walk is pure overhead, and on a model that has
+        // already committed to a fused training plan it would silently drop
+        // Adam moments via the plan invalidation.
+        if (parameterShapeChanged)
+        {
+            InvalidateAfterParameterShapeChange();
+        }
     }
 
     /// <summary>

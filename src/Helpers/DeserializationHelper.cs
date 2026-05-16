@@ -2536,19 +2536,20 @@ public static class DeserializationHelper
     {
         if (additionalParams == null) return null;
 
-        string? typeName = null;
-        if (additionalParams.TryGetValue("ScalarActivationType", out var atVal))
-            typeName = atVal as string;
+        // Route through the parameter-aware path so callers like
+        // GlobalPoolingLayer, Conv3DLayer, and MeshEdgeConvLayer (which used to
+        // call TryRestoreActivation directly) inherit the same alpha / config
+        // restoration that TryCreateActivationInstance does for LeakyReLU,
+        // ELU, CELU, PReLU. The old implementation invoked Activator.CreateInstance
+        // with no ctor args, so e.g. a LeakyReLU(0.2) round-tripped as
+        // LeakyReLU(0.01) — silently changing activation behavior across
+        // clone/deserialize for any layer that didn't have its own bespoke
+        // post-processing (only GraphAttentionLayer did).
+        var scalarInterface = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
+        var vectorInterface = typeof(IVectorActivationFunction<>).MakeGenericType(typeof(T));
 
-        if (string.IsNullOrEmpty(typeName)) return null;
-
-        var activationType = Type.GetType(typeName);
-        if (activationType == null) return null;
-
-        if (activationType.IsGenericTypeDefinition)
-            activationType = activationType.MakeGenericType(typeof(T));
-
-        return Activator.CreateInstance(activationType);
+        return TryCreateActivationInstance(additionalParams, "ScalarActivationType", scalarInterface)
+            ?? TryCreateActivationInstance(additionalParams, "VectorActivationType", vectorInterface);
     }
 
     private static int? TryGetInt(Dictionary<string, object>? parameters, string key)

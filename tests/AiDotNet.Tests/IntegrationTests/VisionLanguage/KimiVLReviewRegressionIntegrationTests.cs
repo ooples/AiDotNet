@@ -22,7 +22,10 @@ public class KimiVLReviewRegressionIntegrationTests
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() =>
             new KimiVL<double>(CreateArchitectureWithCustomLayers(), options));
 
-        Assert.Contains("ImageSize", ex.Message);
+        // Assert on the parameter-name contract rather than message text — the validator
+        // throws with `nameof(imageSize)` which produces lowercase "imageSize", and the
+        // message wording isn't part of the public contract.
+        Assert.Equal("imageSize", ex.ParamName);
     }
 
     [Fact]

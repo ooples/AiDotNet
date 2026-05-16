@@ -126,9 +126,18 @@ public class Llama32Vision<T> : VisionLanguageModelBase<T>, IInstructionTunedVLM
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; }
-        else { Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize())); ComputeEncoderDecoderBoundary(); }
+        else
+        {
+            // Validate visual-patch options only when building the default VLM stack —
+            // ComputePatchSize() is the only consumer of _options.ImageSize /
+            // _options.MaxVisualTokens; when Architecture.Layers is supplied those
+            // options are irrelevant and validation would spuriously reject custom-
+            // layer setups.
+            ValidateVisualPatchOptions(_options.ImageSize, _options.MaxVisualTokens);
+            Layers.AddRange(LayerHelper<T>.CreateDefaultVisionAdapterLayers(_options.VisionDim, _options.VisionDim * 2, _options.DecoderDim, _options.NumVisionLayers, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate, patchSize: ComputePatchSize()));
+            ComputeEncoderDecoderBoundary();
+        }
         ValidateEncoderDecoderBoundary(_encoderLayerEnd);
     }
 

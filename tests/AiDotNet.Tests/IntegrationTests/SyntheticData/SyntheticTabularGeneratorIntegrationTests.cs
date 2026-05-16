@@ -305,7 +305,7 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "TableGAN");
     }
 
-    [Fact]
+    [Fact(Timeout = 120000)]
     public void TableGANGenerator_ClassificationTargets_UseTransformedLabelSlice()
     {
         var (data, columns) = CreateTestData();
