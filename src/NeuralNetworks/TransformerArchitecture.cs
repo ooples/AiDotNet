@@ -212,46 +212,6 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     public int WarmupSteps { get; }
 
     /// <summary>
-    /// Gets the random seed used to derive deterministic weight initialization
-    /// for this architecture's default layer stack. <c>null</c> means use the
-    /// framework's non-deterministic thread-safe RNG (default — same behaviour
-    /// as before this property was added).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Setting this to a fixed integer (e.g., <c>0</c> or <c>42</c>) makes
-    /// <see cref="LayerHelper{T}.CreateDefaultTransformerLayers"/> derive a
-    /// per-layer seed (one <c>seedRng.Next()</c> per constructed layer, in
-    /// declaration order) and assign it to each layer's <c>RandomSeed</c>
-    /// property on <c>LayerBase&lt;T&gt;</c>. Each layer's own
-    /// <c>InitializeParameters</c> reads <c>RandomSeed</c> and uses it to
-    /// build a seeded RNG via <c>RandomHelper.CreateSeededRandom</c> — so
-    /// the layer's natural init algorithm (DenseLayer's activation-aware
-    /// He / LeCun, MultiHeadAttention's Xavier-uniform via SimdRandom,
-    /// EmbeddingLayer's small-noise scaled-by-sqrt(d) fill) runs unchanged
-    /// but with reproducible RNG state. This is required for reproducible
-    /// unit tests, multi-seed experiment harnesses, and CI determinism.
-    /// </para>
-    /// <para>
-    /// Without a fixed seed, every <c>new Transformer(arch, ...)</c> instance
-    /// gets different initial weights drawn from the process-wide thread-safe
-    /// RNG, and small training-budget convergence tests (e.g., V=256 batched
-    /// 100-step memorization) show non-deterministic accuracy across runs.
-    /// </para>
-    /// <para>
-    /// Determinism scope: <see cref="System.Random"/>'s internal algorithm is
-    /// runtime-specific (legacy Knuth subtractive on net471, modern
-    /// xoshiro256** on .NET 6+). Same-runtime + same-seed produces identical
-    /// weights; cross-runtime determinism is not provided.
-    /// </para>
-    /// </remarks>
-    // RandomSeed now lives on the NeuralNetworkArchitecture base. The ctor
-    // at line 517 assigns into the inherited property. This declaration
-    // is retained as a comment-only marker so the docstring above remains
-    // colocated with the field that documents it; the property itself
-    // resolves to the base class declaration.
-
-    /// <summary>
     /// Gets the size of the vocabulary for text-based tasks.
     /// </summary>
     /// <remarks>
