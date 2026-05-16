@@ -105,6 +105,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected ILossFunction<T> LossFunction;
 
     /// <summary>
+    /// The loss function currently used by the optimizer's gradient path.
+    /// Public, read-only — exposed mainly so callers and regression tests can
+    /// verify the result of the model-default auto-sync in
+    /// <see cref="OnModelChanged"/>.
+    /// </summary>
+    public ILossFunction<T> CurrentLossFunction => LossFunction;
+
+    /// <summary>
     /// A method used to regularize the parameters so they don't get out of control.
     /// </summary>
     protected IRegularization<T, TInput, TOutput> Regularization;
@@ -204,6 +212,64 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Sync both learning rate fields so derived classes using either will get the correct value
         SetLearningRate(_learningRateScheduler?.CurrentLearningRate
             ?? GradientOptions.InitialLearningRate);
+    }
+
+    /// <summary>
+    /// When the optimizer's model is (re-)set and the caller did NOT explicitly configure
+    /// <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.LossFunction"/>, adopt
+    /// the model's <see cref="IFullModel{T, TInput, TOutput}.DefaultLossFunction"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Without this, a model configured with e.g. <c>CategoricalCrossEntropyLoss&lt;float&gt;</c>
+    /// silently trains under the optimizer-options default
+    /// <c>MeanSquaredErrorLoss&lt;float&gt;</c>, because
+    /// <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/> reads its loss from the
+    /// optimizer options at construction time. The shape mismatch (one-hot
+    /// <c>[batch, vocab]</c> target vs MSE-on-<c>[batch, vocab]</c> prediction) typically
+    /// blows up downstream in <c>TensorSubtract</c>.
+    /// </para>
+    /// <para>
+    /// The caller's explicit choice always wins: if the options' loss was set explicitly
+    /// (tracked by <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.LossFunctionExplicitlySet"/>),
+    /// we don't touch it. This means a user who genuinely wants to optimize a CCE-model
+    /// under MSE can still do so by setting the optimizer's loss themselves.
+    /// </para>
+    /// </remarks>
+    protected override void OnModelChanged(
+        IFullModel<T, TInput, TOutput>? oldModel,
+        IFullModel<T, TInput, TOutput> newModel)
+    {
+        base.OnModelChanged(oldModel, newModel);
+
+        if (GradientOptions.LossFunctionExplicitlySet)
+        {
+            return;
+        }
+
+        ILossFunction<T>? modelDefault = null;
+        try
+        {
+            modelDefault = newModel.DefaultLossFunction;
+        }
+        catch (InvalidOperationException)
+        {
+            // Some IFullModel implementations throw if accessed before configuration;
+            // treat that as "no model-side default available" and keep the optimizer's
+            // default (MSE).
+        }
+
+        if (modelDefault is null)
+        {
+            return;
+        }
+
+        LossFunction = modelDefault;
+        // Mirror to the options so consumers that read GradientOptions.LossFunction
+        // (e.g. AiModelBuilder facade, debug logging) see the synced value too.
+        // The back-door setter does NOT flip LossFunctionExplicitlySet, so a future
+        // SetModel call still re-syncs from the new model's default.
+        GradientOptions.SetLossFunctionFromAutoSync(modelDefault);
     }
 
     /// <summary>

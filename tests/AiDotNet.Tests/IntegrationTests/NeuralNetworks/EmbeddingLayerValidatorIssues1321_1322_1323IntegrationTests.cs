@@ -213,7 +213,14 @@ public class EmbeddingLayerValidatorIssues1321_1322_1323IntegrationTests
             layers: layers);
 
         var ex = Assert.Throws<ArgumentException>(() => new FeedForwardNeuralNetwork<float>(arch));
-        Assert.Contains("Layer 0 is not compatible with Layer 1", ex.Message);
+        // The shape-enriched error message format (per the validator's diagnostic
+        // upgrade in this same PR) reads e.g.
+        //   "Layer 0 (InputLayer, output [16]) is not compatible with Layer 1 (InputLayer, input [31])."
+        // The test's invariant is "a compatibility violation between Layer 0 and Layer 1
+        // is reported," which we verify on the two structural tokens rather than the
+        // exact substring (the prior substring spanned the now-injected shape info).
+        Assert.Contains("Layer 0", ex.Message);
+        Assert.Contains("is not compatible with Layer 1", ex.Message);
     }
 
     // ====================================================================
