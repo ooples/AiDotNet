@@ -305,40 +305,60 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // If gradients flow only in tail chunks but not the head, that's
         // still a real bug and the snapshot would catch zero changes here
         // — surfacing the bug as a failing assertion is the right outcome.
-        const int MaxSampledChunks = 32;
-        const int MaxValuesPerChunk = 1024;
-        var snapshots = new System.Collections.Generic.List<double[]>();
-        foreach (var chunk in EnumerateParameterChunks(network))
-        {
-            if (snapshots.Count >= MaxSampledChunks) break;
-            int n = System.Math.Min(chunk.Length, MaxValuesPerChunk);
-            var arr = new double[n];
-            for (int j = 0; j < n; j++) arr[j] = chunk[j];
-            snapshots.Add(arr);
-        }
+        // Per-chunk content hash with full chunk coverage. The earlier
+        // sample-N-values-from-first-M-chunks design silently false-failed on
+        // any model whose training-active params lived OUTSIDE the leading
+        // 32 chunks × 1024 values window (ResNet, DenseNet, EfficientNet,
+        // etc. all hit this — verified by widening the sample to int.MaxValue
+        // and observing the same tests pass). A flat snapshot OOMs on
+        // paper-scale models (≥ 2 GB contiguous), so instead we hash each
+        // chunk's content into a single long and store the per-chunk hash
+        // list. Memory: 8 bytes × num_chunks (a few KB even for 1M-chunk
+        // models). Comparing post-train hashes catches any bit-flip in any
+        // value in any chunk.
+        var preHashes = ComputeChunkHashes(network);
 
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(input, target);
 
+        var postHashes = ComputeChunkHashes(network);
+
         bool anyChanged = false;
-        int chunkIdx = 0;
-        foreach (var chunk in EnumerateParameterChunks(network))
+        int compareCount = System.Math.Min(preHashes.Count, postHashes.Count);
+        for (int i = 0; i < compareCount; i++)
         {
-            if (chunkIdx >= snapshots.Count) break;
-            var prev = snapshots[chunkIdx++];
-            int n = System.Math.Min(prev.Length, chunk.Length);
-            for (int j = 0; j < n; j++)
+            if (preHashes[i] != postHashes[i])
             {
-                if (System.Math.Abs(prev[j] - chunk[j]) > 1e-15)
-                {
-                    anyChanged = true;
-                    break;
-                }
+                anyChanged = true;
+                break;
             }
-            if (anyChanged) break;
         }
         Assert.True(anyChanged,
             "Parameters did not change after training. Gradients may be zero or learning rate is 0.");
+    }
+
+    /// <summary>
+    /// Computes a content hash per parameter chunk for fast pre/post-train
+    /// comparison. Full coverage (every chunk, every value) with O(num_chunks)
+    /// memory — replaces the prior bounded-sample approach that silently
+    /// missed changes in trailing chunks on multi-layer models. Uses an
+    /// FNV-1a-style mix over the raw IEEE-754 bit pattern of each value so
+    /// a NaN→NaN no-change doesn't collide with a real param update.
+    /// </summary>
+    private static System.Collections.Generic.List<long> ComputeChunkHashes(INeuralNetworkModel<double> network)
+    {
+        var hashes = new System.Collections.Generic.List<long>();
+        foreach (var chunk in EnumerateParameterChunks(network))
+        {
+            long h = unchecked((long)0xcbf29ce484222325UL);
+            for (int j = 0; j < chunk.Length; j++)
+            {
+                long bits = System.BitConverter.DoubleToInt64Bits(chunk[j]);
+                h = unchecked((h ^ bits) * (long)0x100000001b3UL);
+            }
+            hashes.Add(h);
+        }
+        return hashes;
     }
 
     // =====================================================
@@ -927,37 +947,38 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // rationale. On paper-scale models the full snapshot OOMs; the
         // invariant ("at least one parameter changed and none are NaN/Inf")
         // is preserved by sampling the first few chunks at fixed width.
-        const int MaxSampledChunks = 32;
-        const int MaxValuesPerChunk = 1024;
-        var snapshots = new System.Collections.Generic.List<double[]>();
-        foreach (var chunk in EnumerateParameterChunks(network))
-        {
-            if (snapshots.Count >= MaxSampledChunks) break;
-            int n = System.Math.Min(chunk.Length, MaxValuesPerChunk);
-            var arr = new double[n];
-            for (int j = 0; j < n; j++) arr[j] = chunk[j];
-            snapshots.Add(arr);
-        }
+        // See Training_ShouldChangeParameters for the rationale behind the
+        // per-chunk hash approach (full chunk coverage with bounded memory).
+        // The NaN/Inf scan below is the additional invariant unique to this
+        // test — it walks every post-train value (regardless of whether that
+        // value changed) so an explosion in any param is caught.
+        var preHashes = ComputeChunkHashes(network);
 
         network.Train(input, target);
 
+        var postHashes = ComputeChunkHashes(network);
+
         bool anyChanged = false;
-        int chunkIdx = 0;
+        int compareCount = System.Math.Min(preHashes.Count, postHashes.Count);
+        for (int i = 0; i < compareCount; i++)
+        {
+            if (preHashes[i] != postHashes[i])
+            {
+                anyChanged = true;
+                break;
+            }
+        }
+
         int globalIdx = 0;
         foreach (var chunk in EnumerateParameterChunks(network))
         {
-            if (chunkIdx >= snapshots.Count) break;
-            var prev = snapshots[chunkIdx++];
-            int n = System.Math.Min(prev.Length, chunk.Length);
-            for (int j = 0; j < n; j++, globalIdx++)
+            for (int j = 0; j < chunk.Length; j++, globalIdx++)
             {
                 double after = chunk[j];
                 Assert.False(double.IsNaN(after),
                     $"Parameter[{globalIdx}] is NaN after training — gradient computation is broken.");
                 Assert.False(double.IsInfinity(after),
                     $"Parameter[{globalIdx}] is Infinity after training — gradient explosion.");
-                if (System.Math.Abs(prev[j] - after) > 1e-15)
-                    anyChanged = true;
             }
         }
         Assert.True(anyChanged,
