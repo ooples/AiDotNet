@@ -119,5 +119,31 @@ public class GraFPrintOptions : ModelOptions
     /// <summary>Gets or sets the contrastive loss temperature.</summary>
     public double Temperature { get; set; } = 0.05;
 
+    /// <summary>
+    /// Disables the fused-Adam optimizer step inside the compiled training
+    /// plan, falling back to eager Adam for the parameter update only. All
+    /// other compile-mode optimizations (ConvBnFusion, dataflow fusion,
+    /// algebraic backward, forward CSE, BLAS batch, pointwise fusion)
+    /// remain engaged.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Default is <c>false</c> — production callers run the full fused path.
+    /// </para>
+    /// <para>
+    /// The <see cref="GraFPrint{T}"/> training tests temporarily flip this
+    /// to <c>true</c> while a 30-iter convergence divergence under the fused
+    /// Adam step on the 53-layer GraFPrint BN pyramid is being traced (a
+    /// minimal testconsole harness shows loss decreasing normally on the same
+    /// architecture/seed/data, so the divergence is sensitive to something
+    /// in the xunit test execution context — static state, threading,
+    /// allocator pool warm-up order — that hasn't been pinned down yet).
+    /// Production callers who hit similar symptoms can set this to
+    /// <c>true</c> as a targeted opt-out without losing the rest of the
+    /// compile-mode acceleration.
+    /// </para>
+    /// </remarks>
+    public bool DisableFusedOptimizerStep { get; set; } = false;
+
     #endregion
 }

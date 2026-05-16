@@ -172,12 +172,13 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         // (static state, threading, allocator pool warm-up order) that
         // hasn't been pinned down yet.
         //
-        // Until that's tracked and fixed, keep the per-model fused-Adam
-        // opt-out so the 30-iter training tests pass. ConvBnFusion /
-        // dataflow fusion / algebraic backward / forward CSE / BLAS batch /
-        // pointwise fusion all stay engaged — only the optimizer step
-        // itself runs through eager Adam.
-        _fusedTrainingDisabled = true;  // COMPILE mode
+        // Caller-driven opt-out — default false (production path). Tests
+        // that hit the unresolved 30-iter divergence on the 53-layer GraFPrint
+        // BN pyramid can flip GraFPrintOptions.DisableFusedOptimizerStep
+        // to true. ConvBnFusion / dataflow fusion / algebraic backward /
+        // forward CSE / BLAS batch / pointwise fusion all stay engaged —
+        // only the optimizer step itself runs through eager Adam.
+        _fusedTrainingDisabled = _options.DisableFusedOptimizerStep;
 
         InitializeLayers();
     }
