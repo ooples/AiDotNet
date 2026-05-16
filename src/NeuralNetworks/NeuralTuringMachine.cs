@@ -129,6 +129,17 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     private List<Vector<T>> _writeWeights;
 
     /// <summary>
+    /// Snapshot of the initial memory matrix taken at construction time.
+    /// Reset back onto each batch's working memory at the start of every
+    /// forward pass so two successive Predict calls on the same input
+    /// produce the same output. Without this, in-place writes in
+    /// WriteToMemory corrupt _memories[b] across calls and the network
+    /// becomes non-deterministic (and unbounded — the writes lack the
+    /// clamping needed to keep retainAmount in [0, 1]).
+    /// </summary>
+    private Matrix<T>? _initialMemoryTemplate;
+
+    /// <summary>
     /// Indicates whether the network is in training mode.
     /// </summary>
     private bool _isTraining;
@@ -322,7 +333,9 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     }
 
     /// <summary>
-    /// Initializes the memory matrices with small random values.
+    /// Initializes the memory matrices with small random values and snapshots
+    /// the result as the initial-state template used to reset working memory
+    /// at the start of every forward pass.
     /// </summary>
     private void InitializeMemory()
     {
@@ -335,6 +348,44 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
                     // Initialize with values from normal distribution for better training stability
                     _memories[m][i, j] = MathHelper.GetNormalRandom(NumOps.Zero, NumOps.FromDouble(0.1));
                 }
+            }
+        }
+
+        // Snapshot _memories[0] as the canonical initial memory. Every Predict
+        // call copies this back onto every batch's working memory so writes
+        // don't accumulate across calls (see _initialMemoryTemplate docs).
+        _initialMemoryTemplate = new Matrix<T>(_memorySize, _memoryVectorSize);
+        for (int i = 0; i < _memorySize; i++)
+            for (int j = 0; j < _memoryVectorSize; j++)
+                _initialMemoryTemplate[i, j] = _memories[0][i, j];
+    }
+
+    /// <summary>
+    /// Resets each batch element's working memory and read/write attention
+    /// weights to their canonical initial state. Called at the start of
+    /// every forward pass so two successive Predict calls on identical
+    /// inputs produce identical outputs even though WriteToMemory mutates
+    /// memory in place.
+    /// </summary>
+    private void ResetRuntimeState(int batchSize)
+    {
+        if (_initialMemoryTemplate is null)
+            return;
+
+        T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_memorySize));
+
+        for (int b = 0; b < batchSize && b < _memories.Count; b++)
+        {
+            // Restore memory contents from the snapshot rather than re-randomizing —
+            // re-randomizing would itself break determinism across Predict calls.
+            for (int i = 0; i < _memorySize; i++)
+                for (int j = 0; j < _memoryVectorSize; j++)
+                    _memories[b][i, j] = _initialMemoryTemplate[i, j];
+
+            for (int i = 0; i < _memorySize; i++)
+            {
+                _readWeights[b][i] = uniformWeight;
+                _writeWeights[b][i] = uniformWeight;
             }
         }
     }
@@ -551,6 +602,22 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     }
 
     /// <summary>
+    /// Forward path used by the training tape. Routes through the same
+    /// NTM-specific memory pipeline as <see cref="Predict"/> so the tape
+    /// captures the controller → memory → output operations the test
+    /// suite then evaluates. The default
+    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> iterates
+    /// <c>Layers</c> sequentially as a generic feed-forward stack, which
+    /// is wrong for NTM: it produces a different output than Predict
+    /// (no read/write addressing), so the gradient step is computed
+    /// against one network and the loss is measured against another.
+    /// Training_ShouldReduceLoss then sees loss moving in arbitrary
+    /// directions because the path the optimizer is improving isn't the
+    /// path the test checks. Issue #1332 cluster 1.1.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Predict(input);
+
+    /// <summary>
     /// Performs a forward pass through the Neural Turing Machine.
     /// </summary>
     /// <param name="input">The input tensor to process.</param>
@@ -586,6 +653,16 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
 
         // Setup memories for this batch
         SetupBatchMemories(batchSize);
+
+        // Reset memory + attention weights to their canonical initial state.
+        // The classic NTM is stateful WITHIN a sequence (each time step writes
+        // to memory, the next time step reads the mutated memory) but
+        // STATELESS across separate Predict invocations — calling Predict
+        // twice on the same input must produce the same output. Without
+        // this reset, the WriteToMemory in-place mutation accumulates and
+        // the second Predict sees corrupted memory, producing NaN cascades
+        // (issue #1332 cluster 1).
+        ResetRuntimeState(batchSize);
 
         var outputs = new List<Tensor<T>>();
 
@@ -718,30 +795,21 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         // Handle 1D input [features] → [1, features]
         if (input.Rank == 1)
         {
-            input = input.Reshape([1, input.Shape[0]]);
+            input = Engine.Reshape(input, [1, input.Shape[0]]);
         }
-
-        int batchSize = input.Shape[0];
 
         // Read from memories based on previous weights
         var readResults = ReadFromMemories();
 
-        // Combine input with read results
-        var combined = new Tensor<T>(new int[] { batchSize, input.Shape[1] + readResults.Shape[1] });
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Copy input values
-            for (int i = 0; i < input.Shape[1]; i++)
-            {
-                combined[b, i] = input[b, i];
-            }
-
-            // Copy read results
-            for (int i = 0; i < readResults.Shape[1]; i++)
-            {
-                combined[b, input.Shape[1] + i] = readResults[b, i];
-            }
-        }
+        // Combine input with read results along the feature axis using a
+        // tape-aware concat. The earlier manual fill produced a fresh
+        // tensor that had no tape connection back to <c>input</c> or
+        // <c>readResults</c>, so backward couldn't propagate dL/d(controller-input)
+        // to the network's leaf input tensor and the prior-step memory
+        // contribution to the read result was silently zeroed in the
+        // gradient — directly visible as Training_ShouldReduceLoss going
+        // the wrong direction under #1332 cluster 1.1.
+        var combined = Engine.TensorConcatenate(new[] { input, readResults }, axis: 1);
 
         // Process through controller layers (first half of layers)
         var current = combined;
@@ -1137,22 +1205,56 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>The sharpened weights.</returns>
     private Vector<T> Sharpen(Vector<T> weights, T gamma)
     {
-        // === Vectorized: Use TensorPower for element-wise power operation (Phase C: New IEngine methods) ===
-        var weightsTensor = new Tensor<T>(weights.ToArray(), [_memorySize]);
+        // Numerical-stability triad (issue #1332 cluster 1):
+        //   1. Clamp gamma >= 1. NTM paper §3.3 defines sharpening as raising
+        //      the weights to a power γ ≥ 1; γ < 1 dampens instead of sharpens
+        //      and γ < 0 turns any weights[i] = 0 into +Inf via TensorPower,
+        //      which then explodes the subsequent normalization into NaN.
+        //   2. Renormalize the input weights to the probability simplex first
+        //      (sum-to-one) so the TensorPower input is bounded in [0, 1].
+        //      Upstream ConvolutionalShift produces values up to ~3×max(w);
+        //      without renorm the sharpened output can drift far from a
+        //      proper distribution.
+        //   3. Add eps to weights before TensorPower so a hard zero raised
+        //      to a fractional power doesn't surface as 0^0 = NaN on engines
+        //      that special-case zero.
+        T gammaClamped = NumOps.LessThan(gamma, NumOps.One) ? NumOps.One : gamma;
+        T eps = NumOps.FromDouble(1e-12);
 
-        // Raise each weight to the power of gamma using vectorized operation
-        var powered = Engine.TensorPower(weightsTensor, gamma);
-
-        // Sum all powered values
-        T sum = Engine.TensorSum(powered);
-
-        // Avoid division by zero
-        if (NumOps.Equals(sum, NumOps.Zero))
+        // Step 1: renormalize input to a probability simplex. Clamp each
+        // input weight to [0, +inf) first — ConvolutionalShift can produce
+        // tiny NEGATIVE values (e.g. -1e-18) from floating-point rounding
+        // even though the weighted sum of non-negative inputs is
+        // mathematically non-negative. TensorPower(negative, fractional)
+        // returns NaN on every IEEE-754 engine, so the negative value would
+        // propagate even past the renormalization step.
+        T inputSum = NumOps.Zero;
+        var clamped = new T[_memorySize];
+        for (int i = 0; i < weights.Length; i++)
         {
-            sum = NumOps.FromDouble(1e-6);
+            T w = weights[i];
+            if (NumOps.IsNaN(w) || NumOps.LessThan(w, NumOps.Zero))
+                w = NumOps.Zero;
+            clamped[i] = w;
+            inputSum = NumOps.Add(inputSum, w);
         }
+        if (NumOps.LessThan(inputSum, eps) || NumOps.IsNaN(inputSum))
+            inputSum = NumOps.FromDouble(1e-6);
 
-        // Normalize to ensure sum is 1 using vectorized division
+        var simplex = new T[_memorySize];
+        for (int i = 0; i < _memorySize; i++)
+            simplex[i] = NumOps.Add(NumOps.Divide(clamped[i], inputSum), eps);
+
+        var weightsTensor = new Tensor<T>(simplex, [_memorySize]);
+
+        // Step 2: raise each weight to gamma.
+        var powered = Engine.TensorPower(weightsTensor, gammaClamped);
+
+        // Step 3: normalize the sharpened weights back to the simplex.
+        T sum = Engine.TensorSum(powered);
+        if (NumOps.LessThan(sum, eps) || NumOps.IsNaN(sum))
+            sum = NumOps.FromDouble(1e-6);
+
         var normalized = Engine.TensorDivideScalar(powered, sum);
 
         return new Vector<T>(normalized.ToArray());
@@ -1296,7 +1398,14 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <param name="addVector">The vector specifying what to add at each location.</param>
     private void WriteToMemory(Matrix<T> memory, Vector<T> writeWeights, Vector<T> eraseVector, Vector<T> addVector)
     {
-        // Perform write operation for each memory location
+        // NTM paper §3.2 defines write as
+        //     M_t(i) = M_{t-1}(i) * (1 - w(i)*e) + w(i)*a
+        // where w(i) ∈ [0,1] (post-softmax address) and e ∈ [0,1] (sigmoid
+        // erase). The retain factor (1 - w(i)*e) must stay in [0, 1] for
+        // memory to be bounded. Upstream ConvolutionalShift+Sharpen can push
+        // individual w(i) slightly above 1 even though the vector sums to ~1,
+        // and a single training step can push the product over 1 — clamping
+        // (issue #1332 cluster 1.3) is what keeps retainAmount non-negative.
         for (int m = 0; m < _memorySize; m++)
         {
             T weight = writeWeights[m];
@@ -1307,10 +1416,15 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
                 continue;
             }
 
-            // Erase phase - memory[i] = memory[i] * (1 - weight * erase[i])
+            // Erase phase: clamp w*e to [0, 1] so retainAmount stays in [0, 1].
             for (int v = 0; v < _memoryVectorSize; v++)
             {
                 T eraseAmount = NumOps.Multiply(weight, eraseVector[v]);
+                if (NumOps.LessThan(eraseAmount, NumOps.Zero))
+                    eraseAmount = NumOps.Zero;
+                else if (NumOps.GreaterThan(eraseAmount, NumOps.One))
+                    eraseAmount = NumOps.One;
+
                 T retainAmount = NumOps.Subtract(NumOps.One, eraseAmount);
                 memory[m, v] = NumOps.Multiply(memory[m, v], retainAmount);
             }
@@ -1332,24 +1446,13 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// <returns>The final output tensor.</returns>
     private Tensor<T> GenerateOutput(Tensor<T> controllerState, Tensor<T> readResult)
     {
-        int batchSize = controllerState.Shape[0];
-
-        // Combine controller state with read result
-        var combined = new Tensor<T>(new int[] { batchSize, controllerState.Shape[1] + readResult.Shape[1] });
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Copy controller state
-            for (int i = 0; i < controllerState.Shape[1]; i++)
-            {
-                combined[b, i] = controllerState[b, i];
-            }
-
-            // Copy read result
-            for (int i = 0; i < readResult.Shape[1]; i++)
-            {
-                combined[b, controllerState.Shape[1] + i] = readResult[b, i];
-            }
-        }
+        // Tape-aware concat along the feature axis (axis=1 for the
+        // canonical [batch, features] layout). Same rationale as the
+        // ProcessController fix — the previous manual fill detached the
+        // output layer's input from the controller in the tape, so
+        // dL/d(controller_output) read as zero and the controller never
+        // updated. Issue #1332 cluster 1.1.
+        var combined = Engine.TensorConcatenate(new[] { controllerState, readResult }, axis: 1);
 
         // Process through output layers (second half of layers)
         var current = combined;
@@ -1516,6 +1619,23 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
                 writer.Write(Convert.ToDouble(weights[i]));
             }
         }
+
+        // Write the initial memory template — the canonical snapshot
+        // ResetRuntimeState copies onto every batch element at the start of
+        // each Predict. Without this, Clone reconstructs the model with a
+        // FRESH random template (constructor calls InitializeMemory), and
+        // the cloned model's first Predict resets _memories to the wrong
+        // initial state — the Predict-after-Clone output diverges from the
+        // original. presentFlag handles backward-compat with payloads
+        // written by earlier versions of this class.
+        bool templatePresent = _initialMemoryTemplate is not null;
+        writer.Write(templatePresent);
+        if (templatePresent)
+        {
+            for (int i = 0; i < _memorySize; i++)
+                for (int j = 0; j < _memoryVectorSize; j++)
+                    writer.Write(Convert.ToDouble(_initialMemoryTemplate![i, j]));
+        }
     }
 
     /// <summary>
@@ -1569,6 +1689,21 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
                 weights[i] = NumOps.FromDouble(reader.ReadDouble());
             }
             _writeWeights.Add(weights);
+        }
+
+        // Read the initial memory template (added for #1332 cluster 1 —
+        // see SerializeNetworkSpecificData for context). PeekChar==-1
+        // protects against legacy payloads that didn't write it.
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            bool templatePresent = reader.ReadBoolean();
+            if (templatePresent)
+            {
+                _initialMemoryTemplate = new Matrix<T>(_memorySize, _memoryVectorSize);
+                for (int i = 0; i < _memorySize; i++)
+                    for (int j = 0; j < _memoryVectorSize; j++)
+                        _initialMemoryTemplate[i, j] = NumOps.FromDouble(reader.ReadDouble());
+            }
         }
     }
 
