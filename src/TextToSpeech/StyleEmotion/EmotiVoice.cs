@@ -44,7 +44,29 @@ public class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
     public EmotiVoice(NeuralNetworkArchitecture<T> architecture, string modelPath, EmotiVoiceOptions? options = null) : base(architecture) { _options = options ?? new EmotiVoiceOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); InitializeLayers(); }
     public EmotiVoice(NeuralNetworkArchitecture<T> architecture, EmotiVoiceOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new EmotiVoiceOptions(); _useNativeMode = true; _optimizer = optimizer ?? CreateDefaultOptimizer(); base.SampleRate = _options.SampleRate; base.MelChannels = _options.MelChannels; base.HopSize = _options.HopSize; base.HiddenDim = _options.HiddenDim; InitializeLayers(); }
-    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() => new(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, Beta1 = _options.OptimizerBeta1, Beta2 = _options.OptimizerBeta2, Epsilon = _options.OptimizerEpsilon, UseAdaptiveBetas = false });
+    // AdamW (not Adam) so persisted _options.WeightDecay actually applies —
+    // plain AdamOptimizerOptions has no WeightDecay setting. Wire the
+    // ExponentialLRScheduler with the persisted gamma when it's a non-default
+    // value (< 1.0); leave the scheduler unset when gamma is 1.0 (= no decay)
+    // so the optimizer's plain InitialLearningRate path is used.
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        var opts = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            Beta1 = _options.OptimizerBeta1,
+            Beta2 = _options.OptimizerBeta2,
+            Epsilon = _options.OptimizerEpsilon,
+            WeightDecay = _options.WeightDecay,
+        };
+        double gamma = _options.LearningRateSchedulerGamma;
+        if (gamma > 0 && gamma < 1.0)
+        {
+            opts.LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(
+                baseLearningRate: _options.LearningRate, gamma: gamma);
+        }
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, opts);
+    }
     int ITtsModel<T>.SampleRate => _options.SampleRate; public int MaxTextLength => _options.MaxTextLength; public new int HiddenDim => _options.HiddenDim; public int NumFlowSteps => _options.NumDecoderLayers;
     /// Synthesizes speech using EmotiVoice's emotion-controlled pipeline.
     /// Architecture: text prompt + emotion label → BERT encoder → duration/pitch/energy prediction

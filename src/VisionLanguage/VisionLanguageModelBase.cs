@@ -205,7 +205,7 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Validates image/token settings used to derive patch sizes for native VLM layer factories.
     /// </summary>
-    protected static void ValidateVisualPatchOptions(int imageSize, int maxVisualTokens)
+    private protected static void ValidateVisualPatchOptions(int imageSize, int maxVisualTokens)
     {
         if (imageSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(imageSize), imageSize, "ImageSize must be greater than 0.");
@@ -216,7 +216,7 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Computes a patch size from an image size and target visual-token budget.
     /// </summary>
-    protected static int ComputeVisualPatchSize(int imageSize, int maxVisualTokens, bool roundUp = false)
+    private protected static int ComputeVisualPatchSize(int imageSize, int maxVisualTokens, bool roundUp = false)
     {
         ValidateVisualPatchOptions(imageSize, maxVisualTokens);
         double targetTokensPerSide = Math.Sqrt(maxVisualTokens);
@@ -227,17 +227,17 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Returns the layer count contributed by a standard transformer block.
     /// </summary>
-    protected static int TransformerBlockLayerCount(double dropoutRate) => dropoutRate > 0 ? 6 : 5;
+    private protected static int TransformerBlockLayerCount(double dropoutRate) => dropoutRate > 0 ? 6 : 5;
 
     /// <summary>
     /// Returns the layer count contributed by a cross-attention resampler block.
     /// </summary>
-    protected static int ResamplerBlockLayerCount(double dropoutRate) => dropoutRate > 0 ? 8 : 7;
+    private protected static int ResamplerBlockLayerCount(double dropoutRate) => dropoutRate > 0 ? 8 : 7;
 
     /// <summary>
     /// Computes an encoder/decoder split boundary from repeated block counts.
     /// </summary>
-    protected static int ComputeVisionLanguageBoundary(
+    private protected static int ComputeVisionLanguageBoundary(
         int leadingLayerCount,
         int visionLayerCount,
         int visionBlockLayerCount,
@@ -262,7 +262,7 @@ public abstract class VisionLanguageModelBase<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Verifies the computed encoder/decoder split is inside the current layer list.
     /// </summary>
-    protected void ValidateEncoderDecoderBoundary(int encoderLayerEnd)
+    private protected void ValidateEncoderDecoderBoundary(int encoderLayerEnd)
     {
         if (encoderLayerEnd <= 0 || encoderLayerEnd > Layers.Count)
             throw new InvalidOperationException($"Invalid encoder boundary {encoderLayerEnd} for {Layers.Count} layers.");

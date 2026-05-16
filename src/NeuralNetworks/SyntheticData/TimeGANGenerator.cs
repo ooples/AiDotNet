@@ -272,12 +272,22 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         }
 
         int batchSize = Math.Min(_options.BatchSize, sequences.Count);
-        int phaseDuration = Math.Max(1, epochs / 3);
+        // Honor the caller's total epochs budget across the three phases —
+        // the prior `phaseDuration = max(1, epochs/3)` formulation ran each
+        // phase that many times, so the model actually trained for
+        // 3·phaseDuration passes (over-training when epochs < 3 since
+        // Math.Max(1, …) floors to 1 per phase, and dropping the remainder
+        // for non-multiples of 3). Split as base + remainder distribution.
+        int baseEpochs = epochs / 3;
+        int remainder = epochs % 3;
+        int phase1Epochs = baseEpochs + (remainder > 0 ? 1 : 0);
+        int phase2Epochs = baseEpochs + (remainder > 1 ? 1 : 0);
+        int phase3Epochs = baseEpochs;
         T lr = NumOps.FromDouble(_options.LearningRate / Math.Max(batchSize, 1));
 
         // Paper-faithful TimeGAN (Yoon et al. 2019) 3-phase training:
         // Phase 1: embedder + recovery learn the latent space via reconstruction.
-        for (int epoch = 0; epoch < phaseDuration; epoch++)
+        for (int epoch = 0; epoch < phase1Epochs; epoch++)
         {
             for (int b = 0; b < sequences.Count; b += batchSize)
             {
@@ -287,7 +297,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         }
 
         // Phase 2: supervisor learns next-step prediction in latent space.
-        for (int epoch = 0; epoch < phaseDuration; epoch++)
+        for (int epoch = 0; epoch < phase2Epochs; epoch++)
         {
             for (int b = 0; b < sequences.Count; b += batchSize)
             {
@@ -298,7 +308,7 @@ public class TimeGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
         // Phase 3: joint adversarial training. Per Yoon 2019 §3.3 schedule:
         // generator/supervisor step + critic step + embedder fine-tune per batch.
-        for (int epoch = 0; epoch < phaseDuration; epoch++)
+        for (int epoch = 0; epoch < phase3Epochs; epoch++)
         {
             for (int b = 0; b < sequences.Count; b += batchSize)
             {

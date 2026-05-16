@@ -960,18 +960,21 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
             var trainableDisc = (NeuralNetworkBase<T>)Discriminator;
             try
             {
-                trainableDisc.TrainWithCustomLoss(_lastRealBatch, _ =>
-                {
-                    // ComputeGradientPenalty already applies the λ factor and
-                    // returns the per-batch mean penalty as a scalar T.
-                    // Wrap it in a [1]-shape Tensor so TrainWithCustomLoss
-                    // can treat it as a loss tensor.
-                    T penaltyScalar = ComputeGradientPenalty(
-                        _lastRealBatch, _lastFakeBatch, _gradientPenaltyLambda);
-                    var lossTensor = new Tensor<T>([1]);
-                    lossTensor[0] = penaltyScalar;
-                    return lossTensor;
-                });
+                // Build the GP loss inline INSIDE the TrainWithCustomLoss
+                // closure so it participates in the active discriminator tape.
+                // The prior call to ComputeGradientPenalty(...) returned a
+                // bare scalar T wrapped in a fresh Tensor<T>([1]) — that
+                // wrapper had no recorded GradFn chain, so the outer tape
+                // couldn't backprop the penalty signal into discriminator
+                // parameters. Enabling _useGradientPenalty silently produced
+                // a no-op disc update step. Pattern mirrors
+                // CausalGANGenerator.ComputeGradientPenalty + the
+                // TableGAN / DPCTGAN inline GP closures.
+                var lambdaCaptured = _gradientPenaltyLambda;
+                var realCaptured = _lastRealBatch;
+                var fakeCaptured = _lastFakeBatch;
+                trainableDisc.TrainWithCustomLoss(realCaptured, _ =>
+                    BuildTapeTrackedGradientPenalty(realCaptured, fakeCaptured, lambdaCaptured));
             }
             catch (Exception ex)
             {
@@ -2104,6 +2107,68 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// Typical lambda values are 10.0 for images.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Tape-connected variant of <see cref="ComputeGradientPenalty(Tensor{T}, Tensor{T}, double)"/>
+    /// that returns a <see cref="Tensor{T}"/> whose computation graph is
+    /// recorded on the active (outer) <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientTape{T}"/>.
+    /// Required for use inside <c>TrainWithCustomLoss</c> closures so the
+    /// outer discriminator-training tape can backprop the λ·GP signal into
+    /// discriminator parameters. The scalar-T overload above can't be used
+    /// for that — wrapping its return into a fresh tensor produces a
+    /// detached loss that yields no parameter update.
+    ///
+    /// <para>Mirrors the inline GP pattern in
+    /// <see cref="SyntheticData.CausalGANGenerator{T}"/> et al.: sample
+    /// interpolates, get d(D(interp))/d(interp) via a nested tape, then
+    /// build the squared-deviation-from-1 mean as outer-tape-tracked engine
+    /// ops so the outer tape sees the full graph.</para>
+    /// </summary>
+    private Tensor<T> BuildTapeTrackedGradientPenalty(Tensor<T> realSamples, Tensor<T> fakeSamples, double lambda)
+    {
+        int batchSize = Math.Max(1, realSamples.Shape[0]);
+        int elementsPerSample = Math.Max(1, realSamples.Length / batchSize);
+
+        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
+        var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realSamples.Length]);
+        var onesFlat = new Tensor<T>([realSamples.Length]);
+        Engine.TensorFill(onesFlat, NumOps.One);
+        var oneMinusEpsilon = Engine.TensorSubtract(onesFlat, epsilonBroadcast);
+
+        var realFlat = realSamples.Reshape([realSamples.Length]);
+        var fakeFlat = fakeSamples.Reshape([fakeSamples.Length]);
+        var interpolatedFlat = Engine.TensorAdd(
+            Engine.TensorMultiply(epsilonBroadcast, realFlat),
+            Engine.TensorMultiply(oneMinusEpsilon, fakeFlat));
+        var interpolated = interpolatedFlat.Reshape(realSamples._shape);
+
+        Tensor<T> inputGradients;
+        using (var nestedTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
+        {
+            // Forward through the discriminator on the NESTED tape so we
+            // can extract d(D(interp))/d(interp). Walking the layer list
+            // directly keeps the recording on this nested tape (and out of
+            // the outer disc-training tape that wraps the whole closure).
+            Tensor<T> score = interpolated;
+            foreach (var layer in Discriminator.Layers) score = layer.Forward(score);
+            var scoreAxes = Enumerable.Range(0, score.Shape.Length).ToArray();
+            var summedScore = Engine.ReduceSum(score, scoreAxes, keepDims: false);
+            var grads = nestedTape.ComputeGradients(summedScore, [interpolated]);
+            inputGradients = grads.TryGetValue(interpolated, out var g) ? g : new Tensor<T>(interpolated._shape);
+        }
+
+        var gradientsReshaped = inputGradients.Reshape([batchSize, elementsPerSample]);
+        var gradientSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
+        var gradientNormSquared = Engine.ReduceSum(gradientSquared, [1], keepDims: false);
+        var gradientNorm = Engine.TensorSqrt(Engine.TensorAddScalar(gradientNormSquared, NumOps.FromDouble(1e-12)));
+        var targetNorm = new Tensor<T>(gradientNorm._shape);
+        Engine.TensorFill(targetNorm, NumOps.One);
+        var deviation = Engine.TensorSubtract(gradientNorm, targetNorm);
+        var penalty = Engine.TensorMultiply(deviation, deviation);
+        var penaltyAxes = Enumerable.Range(0, penalty.Shape.Length).ToArray();
+        var meanPenalty = Engine.ReduceMean(penalty, penaltyAxes, keepDims: false);
+        return Engine.TensorMultiplyScalar(meanPenalty, NumOps.FromDouble(lambda));
+    }
+
     public T ComputeGradientPenalty(Tensor<T> realSamples, Tensor<T> fakeSamples, double lambda = 10.0)
     {
         if (realSamples == null || fakeSamples == null)

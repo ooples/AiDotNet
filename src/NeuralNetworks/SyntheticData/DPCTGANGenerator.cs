@@ -377,14 +377,15 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         int numPacks = Math.Max(1, batchSize / pacSize);
         int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        bool privacyBudgetExhausted = false;
+        for (int epoch = 0; epoch < epochs && !privacyBudgetExhausted; epoch++)
         {
             if (_cumulativeEpsilon >= _options.Epsilon)
             {
                 break; // Privacy budget exhausted
             }
 
-            for (int batch = 0; batch < numBatches; batch++)
+            for (int batch = 0; batch < numBatches && !privacyBudgetExhausted; batch++)
             {
                 // DP-SGD-faithful schedule (Abadi et al. 2016 §3 over CTGAN's
                 // PacGAN-packed WGAN-GP). Critic step applies the per-step
@@ -397,12 +398,21 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
                 // accumulating only the outer-loop's stepEpsilon under-counts
                 // by a factor of DiscriminatorSteps and lets the early-stop
                 // guard (_cumulativeEpsilon >= _options.Epsilon) leak budget.
+                // Check budget INSIDE the inner loop too — without that
+                // mid-epoch exit, a critic step can push the run past the
+                // (ε, δ) target and the remaining steps in that epoch still
+                // execute, consuming extra privacy.
                 for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                 {
                     TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
                     _cumulativeEpsilon += ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
+                    if (_cumulativeEpsilon >= _options.Epsilon)
+                    {
+                        privacyBudgetExhausted = true;
+                        break;
+                    }
                 }
-                TrainGeneratorStepBatched(transformedData, numPacks);
+                if (!privacyBudgetExhausted) TrainGeneratorStepBatched(transformedData, numPacks);
             }
         }
 
@@ -445,22 +455,32 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
             int numPacks = Math.Max(1, batchSize / pacSize);
             int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            bool privacyBudgetExhausted = false;
+            for (int epoch = 0; epoch < epochs && !privacyBudgetExhausted; epoch++)
             {
                 ct.ThrowIfCancellationRequested();
                 if (_cumulativeEpsilon >= _options.Epsilon) break;
 
-                for (int batch = 0; batch < numBatches; batch++)
+                for (int batch = 0; batch < numBatches && !privacyBudgetExhausted; batch++)
                 {
                     // Charge privacy budget per critic step — each one touches
                     // real data and is its own DP-SGD privacy event. Charging
                     // only the outer-loop step under-counts by DiscriminatorSteps
-                    // and leaks budget past the early-stop guard.
+                    // and leaks budget past the early-stop guard. The mid-batch
+                    // privacy-exhaustion break stops further critic + generator
+                    // updates so a single critic step can't push the run past
+                    // the (ε, δ) target and still execute the remaining steps.
                     for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                     {
                         TrainDiscriminatorStepBatchedDP(transformedData, numPacks);
                         _cumulativeEpsilon += ComputeStepPrivacyCost(data.Rows, numPacks * pacSize);
+                        if (_cumulativeEpsilon >= _options.Epsilon)
+                        {
+                            privacyBudgetExhausted = true;
+                            break;
+                        }
                     }
+                    if (privacyBudgetExhausted) break;
                     TrainGeneratorStepBatched(transformedData, numPacks);
                 }
             }
@@ -530,7 +550,17 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
 
         // Approximate noise multiplier from privacy budget
         // Using simplified Gaussian mechanism: sigma >= sqrt(2 * ln(1.25/delta)) * sensitivity / epsilon
-        int totalSteps = epochs * Math.Max(1, datasetSize / _options.BatchSize);
+        //
+        // Per-step privacy events: each TrainDiscriminatorStepBatchedDP call
+        // is a separate privacy event under Abadi 2016 §3 (the privacy budget
+        // is charged per critic step in the training loop). DiscriminatorSteps
+        // > 1 multiplies the number of events per outer batch, so the
+        // perStepEpsilon must be divided across DiscriminatorSteps × batches ×
+        // epochs — otherwise the auto-derived sigma is under-noised and the
+        // reported (ε, δ) bound is overstated.
+        int totalSteps = epochs
+            * Math.Max(1, datasetSize / _options.BatchSize)
+            * Math.Max(1, _options.DiscriminatorSteps);
         double perStepEpsilon = _options.Epsilon / Math.Max(totalSteps, 1);
         double sensitivity = _options.ClipNorm;
         double minNoise = Math.Sqrt(2.0 * Math.Log(1.25 / _options.Delta)) * sensitivity / Math.Max(perStepEpsilon, 1e-10);

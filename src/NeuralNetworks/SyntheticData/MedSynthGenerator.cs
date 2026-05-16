@@ -571,9 +571,21 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         double noiseStd = clipNorm * noiseMultiplier;
         T lossSum = NumOps.Zero;
 
+        // Capture the EXACT per-example (real, fake) tensors that produced
+        // the per-example losses + clipped gradients, so the replay closure
+        // can reconstruct the same objective. Replay built from
+        // BuildRealAndFakeBatches(...startRow, endRow) draws fresh noise
+        // (= different fake rows), which decouples the replayed scalar loss
+        // from the noisedAvgGrads — the optimizer's replay would compute a
+        // loss tied to a different objective than the gradients it applies.
+        var perExampleReal = new List<Tensor<T>>(endRow - startRow);
+        var perExampleFake = new List<Tensor<T>>(endRow - startRow);
+
         for (int row = startRow; row < endRow; row++)
         {
             var (realBatch, fakeBatch) = BuildRealAndFakeBatches(data, row, row + 1);
+            perExampleReal.Add(realBatch);
+            perExampleFake.Add(fakeBatch);
 
             using var tape = new GradientTape<T>();
             var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
@@ -635,12 +647,16 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
         // Replay-correct closure: each per-example lossTensor was
         // (lossReal + lossFake); the noisedAvgGrads collapse that across
         // the batch but the corresponding scalar loss is still the mean of
-        // (lossReal + lossFake). RecomputeLoss must replay BOTH BCE terms
-        // so optimizer.Step replays stay tied to that objective. Capture
-        // the batch's fake side as the replay fake context.
-        var (lastReal, lastFake) = BuildRealAndFakeBatches(data, startRow, endRow);
-        var allAxesFull = Enumerable.Range(0, lastReal.Shape.Length).ToArray();
-        var capturedFake = lastFake;
+        // (lossReal + lossFake). RecomputeLoss must replay BOTH BCE terms,
+        // AND must use the EXACT same (real, fake) tensors that the per-
+        // example loop used to compute grads — drawing fresh fake noise
+        // here would tie the replayed loss to a different objective than
+        // the noisedAvgGrads (silent training drift on any optimizer.Step
+        // that exercises the replay path).
+        var stackedReal = Engine.TensorConcatenate([.. perExampleReal], axis: 0);
+        var stackedFake = Engine.TensorConcatenate([.. perExampleFake], axis: 0);
+        var allAxesFull = Enumerable.Range(0, stackedReal.Shape.Length).ToArray();
+        var capturedFake = stackedFake;
         Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
         Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)
         {
@@ -652,7 +668,7 @@ public class MedSynthGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
 
         var context = new TapeStepContext<T>(
             discParams, noisedAvgGrads, avgLoss,
-            lastReal, lastReal, ComputeForward, RecomputeLoss,
+            stackedReal, stackedReal, ComputeForward, RecomputeLoss,
             parameterBuffer: null);
         _optimizer.Step(context);
     }

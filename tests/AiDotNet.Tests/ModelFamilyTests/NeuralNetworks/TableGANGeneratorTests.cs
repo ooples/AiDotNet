@@ -100,6 +100,10 @@ public class TableGANGeneratorTests
         var output = gen.Predict(noise);
 
         Assert.NotNull(output);
+        // Strict size assertion — without it, the finite-value loop below is
+        // skipped on an empty output and the test silently passes for an
+        // entirely-missing prediction.
+        Assert.Equal(options.EmbeddingDimension, output.Length);
         for (int i = 0; i < output.Length; i++)
         {
             double v = output[i];

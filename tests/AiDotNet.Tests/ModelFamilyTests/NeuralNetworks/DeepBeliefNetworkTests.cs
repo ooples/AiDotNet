@@ -210,10 +210,13 @@ public class DeepBeliefNetworkTests : NeuralNetworkModelTestBase
             network2.Train(input2, target2);
         double lossLong = ComputeMSE(network2.Predict(input2), target2);
 
-        Assert.True(double.IsFinite(lossShort),
+        // double.IsFinite was added in .NET Core 2.1 / .NET 5+ and is NOT
+        // available on net471 — the test project multi-targets net471, so
+        // use the NaN || Infinity polyfill instead.
+        Assert.False(double.IsNaN(lossShort) || double.IsInfinity(lossShort),
             $"DBN short-run loss is non-finite ({lossShort}). Indicates gradient explosion or "
             + "numerical instability in the supervised fine-tuning path.");
-        Assert.True(double.IsFinite(lossLong),
+        Assert.False(double.IsNaN(lossLong) || double.IsInfinity(lossLong),
             $"DBN long-run loss is non-finite ({lossLong}). Indicates gradient explosion or "
             + "numerical instability in the supervised fine-tuning path.");
         Assert.True(lossLong <= lossShort + MoreDataTolerance,
