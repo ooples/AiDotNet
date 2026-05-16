@@ -828,7 +828,13 @@ public class DPCTGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
         int batchSize = Math.Max(1, realBatch.Shape[0]);
         int elementsPerSample = Math.Max(1, realBatch.Length / batchSize);
 
-        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
+        // Seed-reproducible interpolation coefficient — sample from _random so
+        // DPCTGANOptions.Seed makes the GP computation deterministic, matching
+        // the seeded-noise refactor for GenerateNoiseBatchTensor.
+        var epsilonData = new T[batchSize];
+        for (int i = 0; i < batchSize; i++)
+            epsilonData[i] = NumOps.FromDouble(_random.NextDouble());
+        var epsilon = new Tensor<T>(epsilonData, [batchSize, 1]);
         var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realBatch.Length]);
         var ones = new Tensor<T>([realBatch.Length]);
         Engine.TensorFill(ones, NumOps.One);

@@ -328,11 +328,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
     /// <summary>
     /// Backwards-compatible <c>T</c>-typed accessor for code that historically
-    /// read the protected field directly. New code can use the
-    /// <see cref="MaxGradNorm"/> field directly or the double-typed
-    /// <see cref="MaxGradNormValue"/> virtual.
+    /// read the protected field directly. Routes through the public
+    /// <see cref="MaxGradNormValue"/> virtual so subclasses that override
+    /// the public accessor (e.g. GraFPrint reading from its options) flow
+    /// the option-driven value into every clipping helper. Reading the
+    /// backing field directly would bypass those overrides — including the
+    /// "return 0 to disable clipping" contract.
     /// </summary>
-    protected T MaxGradNormT => MaxGradNorm;
+    protected T MaxGradNormT => NumOps.FromDouble(MaxGradNormValue);
 
     /// <summary>
     /// Cached parameter count to avoid repeated Sum() calculations.
