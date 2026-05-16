@@ -26,6 +26,12 @@ class Program
         ["ngboost-profile"]     = NGBoostProfile.Run,
         ["svc-profile"]         = SVCProfile.Run,
         ["vec-inspect"]         = VecInspect.Run,
+        ["grafprint-clone-diag"] = GraFPrintCloneDiag.Run,
+        ["grafprint-continuity-diag"] = GraFPrintContinuityDiag.Run,
+        ["grafprint-perf-diag"] = GraFPrintPerfDiag.Run,
+        ["fused-min-repro"]     = FusedPropagationMinRepro.Run,
+        ["grafprint-divergence"] = GraFPrintFusedDivergence.Run,
+        ["bn-fused-grad-diff"]  = BnFusedGradDiff.Run,
     };
 
     static async Task Main(string[] args)

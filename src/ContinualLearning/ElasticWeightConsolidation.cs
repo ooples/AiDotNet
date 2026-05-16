@@ -185,13 +185,27 @@ public class ElasticWeightConsolidation<T> : IContinualLearningStrategy<T>
         var currentParams = network.GetParameters();
         var ewcGrad = new Vector<T>(gradients.Length);
 
-        // Compute gradient of EWC loss: λ * Σ_tasks F_i * (θ_i - θ*_i)
+        // Compute gradient of EWC loss: λ * Σ_tasks F_i * (θ_i - θ*_i).
+        // The gradient vector callers pass in may be sized differently from
+        // the network's parameter count (e.g. an external optimizer that
+        // applies its own gradient transform before handing off, or a test
+        // harness that probes ModifyGradients with a fixed-length probe
+        // vector). Bound the iteration by the smallest of all four arrays
+        // so we never index out of range — the trailing EWC gradient terms
+        // for params beyond the gradient vector's length simply have no
+        // gradient slot to accumulate into and are dropped on the floor,
+        // which is the correct behavior: the caller's gradients vector is
+        // the contract for which parameter slots get modified.
         for (int task = 0; task < _fisherDiagonals.Count; task++)
         {
             var fisher = _fisherDiagonals[task];
             var optimal = _optimalParameters[task];
 
-            for (int i = 0; i < currentParams.Length; i++)
+            int n = Math.Min(
+                Math.Min(currentParams.Length, gradients.Length),
+                Math.Min(fisher.Length, optimal.Length));
+
+            for (int i = 0; i < n; i++)
             {
                 var diff = _numOps.Subtract(currentParams[i], optimal[i]);
                 var grad = _numOps.Multiply(fisher[i], diff);

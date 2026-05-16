@@ -34,25 +34,20 @@ namespace AiDotNet.Models.Options;
 public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
 {
     /// <summary>
-    /// Default constructor — required for object-initializer syntax.
+    /// Default constructor required for object-initializer syntax.
     /// </summary>
     public MuZeroOptions()
     {
     }
 
     /// <summary>
-    /// Copy constructor — required by the Options golden pattern so
-    /// Clone() faithfully preserves every property. Mirrors every base
-    /// <see cref="ReinforcementLearningOptions{T}"/> field plus every
-    /// MuZero-specific field. Without it, a Cloned agent silently
-    /// re-runs the default constructor and loses any customised
-    /// hyperparameters.
+    /// Copy constructor required by the Options golden pattern so Clone()
+    /// faithfully preserves every property.
     /// </summary>
     public MuZeroOptions(MuZeroOptions<T> other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
-        // Base ReinforcementLearningOptions<T> fields
         LearningRate = other.LearningRate;
         DiscountFactor = other.DiscountFactor;
         LossFunction = other.LossFunction;
@@ -65,12 +60,8 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
         EpsilonDecay = other.EpsilonDecay;
         WarmupSteps = other.WarmupSteps;
         MaxGradientNorm = other.MaxGradientNorm;
-
-        // ModelOptions base field — reproducibility seed. Missing this
-        // would silently change rng behaviour between original and clone.
         Seed = other.Seed;
 
-        // MuZero-specific fields
         ObservationSize = other.ObservationSize;
         ActionSize = other.ActionSize;
         LatentStateSize = other.LatentStateSize;
@@ -91,36 +82,29 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     /// <summary>
     /// Dimensionality of the environment's observation vector.
     /// </summary>
-    /// <value>Default 4 — the canonical CartPole observation
-    /// (cart position, cart velocity, pole angle, pole angular velocity),
-    /// the smallest non-trivial RL benchmark and the size used by
-    /// the repository's RL invariant tests.</value>
+    /// <value>
+    /// Default 4: the canonical CartPole observation, which is the smallest
+    /// non-trivial RL benchmark shape used by the repository invariant tests.
+    /// </value>
     /// <remarks>
-    /// <para>Override for any other environment — Atari (96×96×128
-    /// framestack flattened, or use the unflattened framestack with a
-    /// CNN representation network), Go (19×19 = 361 board), MuJoCo
-    /// (17-dim joint states for Walker2d), etc. The representation
-    /// network's input layer reads this dimension; getting it wrong
-    /// produces a shape mismatch in the very first forward pass.</para>
-    /// <para><b>For Beginners:</b> How many numbers describe the state of
-    /// your environment at one timestep. For CartPole that's 4 (cart
-    /// position, cart velocity, pole angle, pole angular velocity).</para>
+    /// Override for any other environment: Atari frame stacks, Go board state,
+    /// MuJoCo joint states, etc. The representation network's input layer reads
+    /// this dimension, so an incorrect value causes a first-forward shape
+    /// mismatch.
     /// </remarks>
     public int ObservationSize { get; init; } = 4;
 
     /// <summary>
     /// Number of discrete actions the agent can choose from.
     /// </summary>
-    /// <value>Default 2 — the CartPole action set (push-left, push-right)
-    /// and the smallest non-degenerate discrete action space.</value>
+    /// <value>
+    /// Default 2: the CartPole action set (push-left, push-right) and the
+    /// smallest non-degenerate discrete action space.
+    /// </value>
     /// <remarks>
-    /// <para>Override for any environment with more actions — Atari
-    /// typically 18, Go 362 (361 board positions + pass), chess ~4672.
-    /// The prediction network's policy head reads this dimension; the
-    /// MCTS tree branches on this many children per node.</para>
-    /// <para><b>For Beginners:</b> How many different moves your agent
-    /// can pick from at each step. For CartPole that's 2 (left or
-    /// right).</para>
+    /// Override for environments with more actions. The prediction network's
+    /// policy head reads this dimension, and the MCTS tree branches on this
+    /// many children per node.
     /// </remarks>
     public int ActionSize { get; init; } = 2;
 
@@ -137,15 +121,15 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public double RootExplorationFraction { get; init; } = 0.25;
 
     // Training parameters
-    public int UnrollSteps { get; init; } = 5;  // Number of steps to unroll for training
-    public int TDSteps { get; init; } = 10;  // TD bootstrap steps
+    public int UnrollSteps { get; init; } = 5;
+    public int TDSteps { get; init; } = 10;
     public double PriorityAlpha { get; init; } = 1.0;
 
     // Value/Policy targets
-    public bool UseValuePrefix { get; init; } = false;  // Value prefix for long-horizon tasks
+    public bool UseValuePrefix { get; init; } = false;
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// The optimizer used for updating network parameters. If null, Adam is used.
     /// </summary>
     public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 }

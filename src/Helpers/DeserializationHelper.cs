@@ -2645,19 +2645,47 @@ public static class DeserializationHelper
             return null;
         }
 
+        // Recover per-instance scalar parameters that LayerBase.GetMetadata
+        // captured under "ScalarActivationAlpha" / "VectorActivationAlpha"
+        // (LayerBase.CaptureScalarActivationParameters). Without this, a
+        // layer wired with LeakyReLU(0.2) round-trips through clone as
+        // LeakyReLU(0.01) because the default Activator.CreateInstance call
+        // below uses the constructor's default alpha — the network's
+        // negative-input forward then diverges by the slope ratio.
+        double? alpha = TryGetDouble(parameters,
+            key == "VectorActivationType" ? "VectorActivationAlpha" : "ScalarActivationAlpha");
+
         try
         {
-            object? instance;
-            try
+            object? instance = null;
+
+            // Try the single-double constructor (LeakyReLU, ELU, PReLU,
+            // RReLU, SELU all expose `Activation(double alpha = …)`) when
+            // we have a saved alpha value. Falls through to the
+            // parameterless / defaulted-parameter path otherwise.
+            if (alpha.HasValue)
             {
-                instance = Activator.CreateInstance(type);
+                var doubleCtor = type.GetConstructor(new Type[] { typeof(double) });
+                if (doubleCtor is not null)
+                {
+                    try { instance = doubleCtor.Invoke(new object?[] { alpha.Value }); }
+                    catch (TargetInvocationException) { instance = null; }
+                }
             }
-            catch (MissingMethodException)
+
+            if (instance is null)
             {
-                // Fall back to constructors with all-optional parameters
-                var ctor = type.GetConstructors()
-                    .FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
-                instance = ctor?.Invoke(ctor.GetParameters().Select(p => p.DefaultValue).ToArray());
+                try
+                {
+                    instance = Activator.CreateInstance(type);
+                }
+                catch (MissingMethodException)
+                {
+                    // Fall back to constructors with all-optional parameters
+                    var ctor = type.GetConstructors()
+                        .FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
+                    instance = ctor?.Invoke(ctor.GetParameters().Select(p => p.DefaultValue).ToArray());
+                }
             }
 
             if (instance == null)

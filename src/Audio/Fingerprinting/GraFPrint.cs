@@ -44,7 +44,7 @@ namespace AiDotNet.Audio.Fingerprinting;
 [ModelTask(ModelTask.FeatureExtraction)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("GraFPrint: A GNN-Based Approach for Audio Fingerprinting", "https://arxiv.org/abs/2311.02483", Year = 2023, Authors = "Andres Ferraro, Dmitry Bogdanov")]
+[ResearchPaper("GraFPrint: A GNN-Based Approach for Audio Identification", "https://arxiv.org/abs/2410.10994", Year = 2025, Authors = "Aditya Bhattacharjee, Shubhr Singh, Emmanouil Benetos")]
 internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
 {
     #region Fields
@@ -55,6 +55,10 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     private MelSpectrogram<T>? _melSpectrogram;
     private bool _useNativeMode;
     private bool _disposed;
+
+    private int EffectiveEmbeddingDim => Architecture.OutputSize > 0
+        ? Architecture.OutputSize
+        : _options.EmbeddingDim;
 
     #endregion
 
@@ -81,6 +85,7 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new GraFPrintOptions();
+        NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
         _options.ModelPath = modelPath;
@@ -98,11 +103,35 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         : base(architecture)
     {
         _options = options ?? new GraFPrintOptions();
+        NormalizeEmbeddingDimFromArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels,
             _options.FftSize, _options.HopLength);
+
+        // Targeted opt-out from the fused-Adam optimizer step ONLY.
+        //
+        // GraFPrint uses T=double for the model-family invariant tests. The
+        // BatchNorm fused divergence we tracked under Tensors#350 has at
+        // least two distinct sub-bugs:
+        //
+        //   (a) rank-2 / batched-rank-4 BatchNormInferenceUnsafe layout
+        //       assumption — fixed by Tensors PR #352. Float-only path.
+        //   (b) a separate divergence path that affects T=double — surfaces
+        //       on this 53-layer paper-faithful BN pyramid as the same
+        //       loss-explosion pattern the diagnostic harness captured.
+        //       Empirically verified: applying the #352 patch and removing
+        //       this workaround still makes Training_ShouldReduceLoss fail
+        //       with loss going 66 → 440891 over the test's iteration count.
+        //
+        // Until the double-precision path is also tracked and fixed, keep
+        // the per-model fused-Adam opt-out. ConvBnFusion / dataflow fusion /
+        // algebraic backward / forward CSE / BLAS batch / pointwise fusion
+        // all stay engaged — only the optimizer step itself runs through
+        // eager Adam, which is correct.
+        _fusedTrainingDisabled = true;
+
         InitializeLayers();
     }
 
@@ -227,26 +256,114 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultGraFPrintLayers(
-            numMels: _options.NumMels, gnnHiddenDim: _options.GnnHiddenDim,
-            numGnnLayers: _options.NumGnnLayers, numAttentionHeads: _options.NumAttentionHeads,
-            embeddingDim: _options.EmbeddingDim, dropoutRate: _options.DropoutRate));
+        else
+        {
+            Layers.AddRange(LayerHelper<T>.CreateDefaultGraFPrintLayers(
+                numMels: _options.NumMels, gnnHiddenDim: _options.GnnHiddenDim,
+                numGnnLayers: _options.NumGnnLayers, numAttentionHeads: _options.NumAttentionHeads,
+                embeddingDim: _options.EmbeddingDim, dropoutRate: _options.DropoutRate));
+        }
     }
 
     public override Tensor<T> Predict(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+
+        // Auto-flip to eval mode for the forward, matching the base
+        // NeuralNetworkBase.Predict contract that mirrors PyTorch's
+        // model.eval(). The base class's auto-flip is bypassed by this
+        // override, so without an explicit flip here BatchNorm consumes
+        // single-sample batch statistics (degenerate, ~0 variance) and
+        // DropoutLayer samples a random mask per Predict call — both
+        // make output non-deterministic across two Predict calls on the
+        // same input, which is exactly what the generated
+        // SimilarInputs_ProduceSimilarEmbeddings invariant catches
+        // (cosine ~0.31 between embeddings of inputs differing by 1e-6).
+        // Restore the prior training mode in finally so a Predict-inside-
+        // a-training-loop call doesn't permanently flip the network.
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+
+        // The paper-faithful chain uses BatchNormalizationLayer between every
+        // conv. BN's inference broadcast in this codebase
+        // (BatchNormalizationLayer.ApplyInferenceAnyRank) assumes the
+        // canonical NCHW layout — dim 0 = batch, dim 1 = channels. For a
+        // rank-3 unbatched [C, H, W] image the broadcast picks the wrong
+        // axis and the shape mismatches at the first BN. Force a leading
+        // batch dim so the entire chain stays in [B, C, H, W] form,
+        // matching what NeuralNetworkBase.NormalizeBatchDim would emit for
+        // Train's tape forward — inference and training shape-consistent.
+        var batched = input.Rank == 3
+            ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]])
+            : input;
+
+        var c = batched;
+        foreach (var l in Layers) c = l.Forward(c);
+
+        // Paper's graph_encoder.py finishes with
+        //   x = self.proj(x)            # [B, C, N, 1]
+        //   x = torch.mean(x, dim=2)    # [B, C, 1]
+        //   x = x.squeeze(-1).squeeze(-1)  # [B, C]
+        // i.e. the public output is rank-2 [B, embeddingDim]. GlobalPooling
+        // with keepDims=true yields rank-4 [B, embeddingDim, 1, 1]; squeeze
+        // trailing singleton dims so the base test class's warm-up infers
+        // a rank-2 EffectiveOutputShape that downstream
+        // CreateRandomTargetTensor calls can use without a rank mismatch
+        // against the loss target.
+        while (c.Rank > 2 && c.Shape[c.Rank - 1] == 1)
+        {
+            var newShape = new int[c.Rank - 1];
+            for (int i = 0; i < c.Rank - 1; i++) newShape[i] = c.Shape[i];
+            c = Engine.Reshape(c, newShape);
+        }
+        return c;
+
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+
+        // Same rank-3 → rank-4 promotion Predict applies, so the training-
+        // time ForwardForTraining walk sees the same shape sequence as
+        // inference. Without this, BN's any-rank inference path picks the
+        // wrong channel axis on rank-3 input and the broadcast mismatches.
+        var batchedInput = input.Rank == 3
+            ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]])
+            : input;
+
+        // ForwardForTraining walks Layers in order without the post-chain
+        // squeeze Predict applies. The chain ends at GlobalPoolingLayer
+        // with keepDims=true → rank-4 [B, embeddingDim, 1, 1]. Reshape the
+        // expected target to match so MSE / cross-entropy see same-rank
+        // tensors. Element count is preserved.
+        Tensor<T> alignedTarget = expected;
+        if (expected.Rank == 1)
+            alignedTarget = Engine.Reshape(expected, [1, expected.Shape[0], 1, 1]);
+        else if (expected.Rank == 2)
+            alignedTarget = Engine.Reshape(expected, [expected.Shape[0], expected.Shape[1], 1, 1]);
+
+        // Note: the per-model _fusedTrainingDisabled flag is set in the
+        // constructor (see ctor for the BN-pyramid divergence rationale).
+        // That bypasses ONLY the fused-Adam optimizer-step path while
+        // leaving every other compile-mode optimization engaged
+        // (ConvBnFusion, dataflow fusion, algebraic backward, etc.).
+        // Earlier revisions of this Train method scoped a global
+        // TensorCodecOptions.EnableCompilation = false around TrainWithTape;
+        // that hammered ALL compile-mode optimizations off and tanked
+        // throughput. The targeted flag is the right scope.
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            TrainWithTape(batchedInput, alignedTarget);
         }
         finally
         {
@@ -299,8 +416,18 @@ internal class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
         _options.EmbeddingDim = r.ReadInt32(); _options.GnnHiddenDim = r.ReadInt32();
         _options.NumGnnLayers = r.ReadInt32(); _options.NumAttentionHeads = r.ReadInt32();
         _options.KNeighbors = r.ReadInt32(); _options.Temperature = r.ReadDouble(); _options.DropoutRate = r.ReadDouble();
+        NormalizeEmbeddingDimFromArchitecture();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxEncoder = new OnnxModel<T>(p, _options.OnnxOptions);
         _melSpectrogram = new MelSpectrogram<T>(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength);
+    }
+
+    private void NormalizeEmbeddingDimFromArchitecture()
+    {
+        int embeddingDim = EffectiveEmbeddingDim;
+        if (embeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.EmbeddingDim), embeddingDim, "EmbeddingDim must be greater than 0.");
+
+        _options.EmbeddingDim = embeddingDim;
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
