@@ -1,7 +1,6 @@
 ﻿using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
-using SimdVector = System.Numerics.Vector<float>;
 
 namespace AiDotNet.Inference.Quantization;
 
@@ -115,77 +114,18 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         var output = new Tensor<float>(new[] { batchSize, _outputSize });
         var inputSpan = flat.AsSpan();
 
-        // SIMD-vectorize the inner dequant-on-fly matmul over input dimension.
-        // Closes part of AiDotNet#1349 (consumer-side wiring of int8 weight-only
-        // matmul to a vectorized hot path). Previously this triple loop did one
-        // scalar load + one sbyte→float widen + one fma per inner iteration; the
-        // measured wall-clock was ~20× slower than FP32 matmul (PR #1348 follow-
-        // up benchmark). The vectorized form processes Vector<float>.Count
-        // elements per iteration (8 on AVX2, 16 on AVX-512), with a per-chunk
-        // sbyte→float widen via a small stackalloc buffer + a portable
-        // Vector<float> accumulator.
-        //
-        // TFM gating: the Vector<float>(Span<float>) ctor is .NET Core 3.0+
-        // only. net471's Vector<T> only has (T value) broadcast and
-        // (T[] values, int startIndex) array overloads. Rather than allocate
-        // a float[] per chunk on net471 (which would defeat the SIMD win), we
-        // fall back to the original scalar inner loop on that TFM. net10.0
-        // production hosts get the full speedup; net471 legacy hosts get the
-        // status-quo scalar path.
-        //
-        // Numerical equivalence: SIMD changes the order of accumulation
-        // (associativity is approximate for FP32), so the result differs from
-        // the scalar path by ~1 ULP per K elements summed. For the inference-
-        // only use case this is well below the INT8 quantization noise floor
-        // (~35-40 dB SNR on typical transformer weights, ~1e-2 relative error).
-#if NETCOREAPP3_0_OR_GREATER
-        int vecSize = SimdVector.Count;
-        Span<float> weightChunk = stackalloc float[vecSize];
-        for (int b = 0; b < batchSize; b++)
-        {
-            int inputBase = b * featuresIn;
-            int outputBase = b * _outputSize;
-            for (int o = 0; o < _outputSize; o++)
-            {
-                float scale = _rowScales[o];
-                int wBase = o * _inputSize;
-
-                var sumVec = SimdVector.Zero;
-                var scaleVec = new SimdVector(scale);
-                int vectorLimit = _inputSize - (_inputSize % vecSize);
-                int i = 0;
-                for (; i < vectorLimit; i += vecSize)
-                {
-                    // Widen Vector<float>.Count contiguous sbyte weights to FP32.
-                    for (int j = 0; j < vecSize; j++)
-                    {
-                        weightChunk[j] = _weightsInt8[wBase + i + j];
-                    }
-                    var inputVec = new SimdVector(inputSpan.Slice(inputBase + i, vecSize));
-                    var weightVec = new SimdVector(weightChunk);
-                    sumVec += inputVec * weightVec * scaleVec;
-                }
-
-                // Reduce the SIMD accumulator to scalar. Vector.Sum is .NET 7+;
-                // sum lanes explicitly for net10.0 compatibility.
-                float laneSum = 0;
-                for (int j = 0; j < vecSize; j++)
-                {
-                    laneSum += sumVec[j];
-                }
-                float sum = _biases[o] + laneSum;
-
-                // Tail: remaining (_inputSize % vecSize) elements via scalar.
-                for (; i < _inputSize; i++)
-                {
-                    sum += inputSpan[inputBase + i] * (_weightsInt8[wBase + i] * scale);
-                }
-
-                output.SetFlat(outputBase + o, sum);
-            }
-        }
-#else
-        // net471 scalar fallback — Vector<float>(Span<float>) ctor isn't available.
+        // Scalar dequant-on-fly matmul. The proper SIMD speedup for INT8
+        // weight-only inference belongs in AiDotNet.Tensors (which has full
+        // PyTorch-parity custom SIMD/AVX-512 acceleration faster than the
+        // System.Numerics primitives). Specifically, AiDotNet.Tensors already
+        // has `SimdGemm.SgemmWithInt8CachedB` for this exact use case, but it's
+        // currently internal to the Tensors-namespace. Once Tensors exposes a
+        // public INT8 weight matmul entry point (tracked in AiDotNet#1349),
+        // this loop should be replaced with a call to that engine op. Until
+        // then, the scalar path remains correct (just slow) — the inference-
+        // side perf gap is the same scope as #1349 and shouldn't be patched
+        // here with a third-party-library workaround that diverges from the
+        // engine layer's official SIMD path.
         for (int b = 0; b < batchSize; b++)
         {
             int inputBase = b * featuresIn;
@@ -202,7 +142,6 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
                 output.SetFlat(outputBase + o, sum);
             }
         }
-#endif
 
         var activated = ApplyActivation(output);
         if (inputWas1D)

@@ -4,7 +4,6 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
-using SimdVector = System.Numerics.Vector<float>;
 
 namespace AiDotNet.Inference.Quantization;
 
@@ -416,57 +415,12 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
             ?? throw new InvalidOperationException("Int8 scales not initialized for quantized projection.");
         var output = new Tensor<float>(new[] { rows, outDim });
 
-        // SIMD-vectorize the int8 dequant-on-fly matmul over input dimension.
-        // Mirror of the fix in QuantizedDenseLayer.Forward — see that file for
-        // detailed rationale + numerical-equivalence notes. Closes the
-        // attention-side gap of AiDotNet#1349.
-        //
-        // TFM gating: Vector<float>(Span<float>) is .NET Core 3.0+ only;
-        // net471 falls back to the scalar inner loop (status quo).
-#if NETCOREAPP3_0_OR_GREATER
-        int vecSize = SimdVector.Count;
-        Span<float> weightChunk = stackalloc float[vecSize];
-        for (int r = 0; r < rows; r++)
-        {
-            int inputBase = r * inDim;
-            int outputBase = r * outDim;
-            for (int o = 0; o < outDim; o++)
-            {
-                float scale = scales[o];
-                int wBase = o * inDim;
-
-                var sumVec = SimdVector.Zero;
-                var scaleVec = new SimdVector(scale);
-                int vectorLimit = inDim - (inDim % vecSize);
-                int i = 0;
-                for (; i < vectorLimit; i += vecSize)
-                {
-                    for (int j = 0; j < vecSize; j++)
-                    {
-                        weightChunk[j] = weights[wBase + i + j];
-                    }
-                    var inputVec = new SimdVector(input.Slice(inputBase + i, vecSize));
-                    var weightVec = new SimdVector(weightChunk);
-                    sumVec += inputVec * weightVec * scaleVec;
-                }
-
-                float laneSum = 0;
-                for (int j = 0; j < vecSize; j++)
-                {
-                    laneSum += sumVec[j];
-                }
-                float sum = laneSum;
-
-                for (; i < inDim; i++)
-                {
-                    sum += input[inputBase + i] * (weights[wBase + i] * scale);
-                }
-
-                output.SetFlat(outputBase + o, sum);
-            }
-        }
-#else
-        // net471 scalar fallback — Vector<float>(Span<float>) ctor isn't available.
+        // Scalar dequant-on-fly matmul. The proper SIMD speedup belongs in
+        // AiDotNet.Tensors (which has full PyTorch-parity custom SIMD/AVX-512
+        // acceleration faster than the System.Numerics primitives). Tracked
+        // in AiDotNet#1349 — once Tensors exposes a public INT8 weight matmul
+        // entry point this loop should be replaced with a call to that engine
+        // op.
         for (int r = 0; r < rows; r++)
         {
             int inputBase = r * inDim;
@@ -483,7 +437,6 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
                 output.SetFlat(outputBase + o, sum);
             }
         }
-#endif
         return output;
     }
 
