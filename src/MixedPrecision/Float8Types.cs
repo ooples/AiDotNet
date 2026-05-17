@@ -6,12 +6,13 @@ namespace AiDotNet.MixedPrecision;
 /// Helper methods for bit manipulation of floating point values.
 /// </summary>
 /// <remarks>
-/// Made public in AiDotNet#1354 so consumer tests can verify FP32 master-weight
-/// preservation under mixed-precision training (i.e. check that the low-13
-/// mantissa bits of a master weight are NOT zero, which would indicate the
-/// FP16/BF16 round-tripped working weights leaked into the master state).
+/// Internal: kept off the public surface per the facade-pattern coding
+/// guideline. Consumers that need to verify FP32 master-weight
+/// preservation under mixed-precision training should use the
+/// purpose-built <see cref="MixedPrecisionContext.HasFullFP32Precision(float)"/>
+/// method instead of touching bit-manipulation utilities directly.
 /// </remarks>
-public static class BitConverterHelper
+internal static class BitConverterHelper
 {
     /// <summary>
     /// Converts a float to its bit representation as an int.

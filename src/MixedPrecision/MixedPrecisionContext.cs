@@ -249,6 +249,35 @@ public class MixedPrecisionContext : IDisposable
     }
 
     /// <summary>
+    /// Returns true if <paramref name="masterWeight"/> carries low-mantissa
+    /// bits that an FP16 / BF16 round-trip would have zeroed out — i.e. the
+    /// value still holds full FP32 precision (the master copy was preserved).
+    /// </summary>
+    /// <remarks>
+    /// Test-friendly verification API for the mixed-precision contract
+    /// (issue #1354): master parameters live in FP32 and only the working
+    /// copy is cast to FP16/BF16 each step. A correctly wired model
+    /// retains low-13-mantissa-bit detail in the master state across
+    /// optimizer steps; an incorrectly wired one would round-trip the
+    /// master through FP16 and lose those bits. Consumers can call this
+    /// after Train to assert the master copy is intact without having to
+    /// touch BitConverterHelper directly (which is intentionally internal
+    /// to keep low-level bit utilities off the public facade — issue
+    /// #1354 review feedback). Returns false for exact zero (which has
+    /// no mantissa bits to check by definition) so callers can filter
+    /// trivial cases without a separate guard.
+    /// </remarks>
+    public static bool HasFullFP32Precision(float masterWeight)
+    {
+        if (masterWeight == 0f) return false;
+        int bits = BitConverterHelper.SingleToInt32Bits(masterWeight);
+        // FP16 cast-and-back zeroes ~13 low mantissa bits; BF16 zeroes 16.
+        // Either round-trip clears the low 13 bits, so the low-13-bit mask
+        // is the correct discriminator.
+        return (bits & 0x00001FFF) != 0;
+    }
+
+    /// <summary>
     /// Gets the working weights (FP16) for a parameter group.
     /// </summary>
     /// <param name="parameterName">Name of the parameter group.</param>

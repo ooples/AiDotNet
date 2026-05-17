@@ -125,16 +125,15 @@ public class MixedPrecisionTrainWithTapeWiringTests
         }
         Assert.True(anyChanged, "Train under MP must update master parameters when no overflow");
 
-        // Master weights are FP32: at least one param's binary representation
-        // must have a non-zero low-16-bit mantissa (i.e. not BF16/FP16 quantized).
+        // Master weights are FP32: at least one param must retain low
+        // mantissa bits that an FP16/BF16 round-trip would have zeroed.
+        // Use the public MixedPrecisionContext.HasFullFP32Precision
+        // verification API instead of touching BitConverterHelper
+        // directly (which is internal per the facade pattern).
         bool anyHasLowMantissaBits = false;
         for (int i = 0; i < paramsAfter.Length; i++)
         {
-            int bits = AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(paramsAfter[i]);
-            // FP16 cast-and-back zeroes ~13 low mantissa bits; BF16 zeroes 16.
-            // A real FP32 master value should have some non-zero bits in the
-            // low 13 positions after even one optimizer step. Skip exact zeros.
-            if (paramsAfter[i] != 0f && (bits & 0x00001FFF) != 0)
+            if (AiDotNet.MixedPrecision.MixedPrecisionContext.HasFullFP32Precision(paramsAfter[i]))
             {
                 anyHasLowMantissaBits = true;
                 break;
@@ -265,5 +264,49 @@ public class MixedPrecisionTrainWithTapeWiringTests
         var ctx = model.GetMixedPrecisionContext();
         Assert.NotNull(ctx);
         Assert.Equal(256.0, ctx!.LossScaler.Scale);
+    }
+
+    /// <summary>
+    /// Overflow path: when the loss-scaled gradient produces NaN/Inf the
+    /// dynamic loss-scaler must (a) keep the optimizer step from updating
+    /// master parameters AND (b) back the scale off so the next step has
+    /// a chance to succeed. This is a core MP correctness contract that
+    /// the rest of the suite doesn't cover directly.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task EnableMixedPrecision_FP16_Overflow_SkipsStepAndBacksOffScale()
+    {
+        await Task.Yield();
+        var model = BuildTinyDeterministicNetwork();
+        const double initialScale = 65536.0;
+        model.EnableMixedPrecision(new MixedPrecisionConfig
+        {
+            PrecisionType = MixedPrecisionType.FP16,
+            InitialLossScale = initialScale,
+            EnableDynamicScaling = true
+        });
+
+        var before = model.GetParameters();
+        // Float.MaxValue inputs guarantee an overflow under any non-trivial
+        // forward + loss-scaled backward: 3.4e38 * 65536 in the scaled grad
+        // is +inf, the unscale-and-check step catches it, and the optimizer
+        // step is skipped.
+        var x = MakeInput(new[] { float.MaxValue, float.MaxValue, float.MaxValue, float.MaxValue });
+        var y = MakeInput(new[] { float.MaxValue, float.MaxValue, float.MaxValue });
+
+        model.Train(x, y);
+
+        var after = model.GetParameters();
+        Assert.Equal(before.Length, after.Length);
+        for (int i = 0; i < before.Length; i++)
+        {
+            Assert.Equal(before[i], after[i]); // step should be skipped on overflow
+        }
+
+        var ctx = model.GetMixedPrecisionContext();
+        Assert.NotNull(ctx);
+        Assert.True(ctx!.LossScaler.Scale < initialScale,
+            $"Expected loss scale to back off from {initialScale} after overflow, " +
+            $"but scale is still {ctx.LossScaler.Scale}.");
     }
 }
