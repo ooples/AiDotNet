@@ -178,9 +178,24 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            // Check convergence
+            // Check convergence against the PREVIOUS epoch, not against
+            // bestStepData. UpdateBestSolution above copies currentStepData
+            // into bestStepData on the first iteration (because bestStepData
+            // starts uninitialised), so |best - current| would always be 0
+            // < tolerance and the optimiser would exit after the first epoch
+            // — observed as AiModelBuilder.BuildAsync producing uniform
+            // (1/V) predictions because only ~3 batched Adam steps ran
+            // before Optimize returned. The correct convergence signal is
+            // "the fitness stopped changing from one epoch to the next",
+            // i.e. |current - previous| < tolerance. Issue #1340.
+            //
+            // Guard the first iteration explicitly: previousStepData is the
+            // pre-epoch baseline returned by PrepareAndEvaluateSolution
+            // (untrained model evaluation). At epoch=0 we have to compare
+            // current vs that pre-epoch baseline, so the per-epoch progress
+            // signal is meaningful starting from the very first epoch.
             if (NumOps.LessThan(
-                NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)),
                 NumOps.FromDouble(_options.Tolerance)))
             {
                 return CreateOptimizationResult(bestStepData, inputData);

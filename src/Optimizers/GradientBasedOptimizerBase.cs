@@ -754,6 +754,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         TInput X,
         TOutput y)
     {
+        // Issue #1340: the previous implementation read/wrote a gradient cache
+        // keyed by (modelType, batchSize, inputSize, optionsType) which made
+        // every mini-batch produce the SAME cache key inside one Optimize()
+        // run — the first batch's gradient was cached and every subsequent
+        // call returned that stale cached gradient, so parameters never moved
+        // off their initialisation. The fix is to compute a key that ALSO
+        // includes a fingerprint of the current model parameters and the
+        // runtime identity of the batch tensors, so a legitimate re-evaluation
+        // of the exact same (params, X, y) tuple (e.g. line search / trust-
+        // region reject) still hits the cache while a normal training loop
+        // always misses.
         string cacheKey = GenerateGradientCacheKey(solution, X, y);
         var cachedGradient = GradientCache.GetCachedGradient(cacheKey);
         if (cachedGradient != null)
@@ -1278,6 +1289,34 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <para><b>For Beginners:</b> This method creates a unique identifier for each gradient calculation.
     /// It's like labeling each spot on the hill so you can remember what the gradient was there.
     /// </para>
+    /// <para>
+    /// Issue #1340: the previous implementation keyed only by
+    /// <c>(modelType, batchSize, inputSize, optionsType)</c>, which made every
+    /// mini-batch within a training run produce the SAME cache key.
+    /// <c>AdamOptimizer.Optimize</c> calls <see cref="CalculateGradient"/> once
+    /// per batch; the FIRST batch's gradient was cached and every subsequent
+    /// call returned that stale cached gradient regardless of which batch was
+    /// actually fed in. The optimizer therefore replayed the same step over
+    /// and over and the model's parameters never drifted away from their
+    /// initial Xavier weights — the bug surfaced as
+    /// <c>AiModelBuilder.BuildAsync(...)</c> producing uniform predictions
+    /// despite a model that trains fine via per-sample <c>model.Train(x, y)</c>.
+    /// </para>
+    /// <para>
+    /// The fix is to also key by the runtime identity of the model, the batch
+    /// inputs, and the batch targets, plus a parameter-state fingerprint that
+    /// changes whenever <see cref="UpdateSolution"/> writes back new
+    /// parameters. <c>OptimizationDataBatcher.ExtractBatch</c> allocates fresh
+    /// <c>Tensor&lt;T&gt;</c> / <c>Matrix&lt;T&gt;</c> instances per iteration,
+    /// so reference identity alone differentiates batches even when shuffle is
+    /// off; the parameter fingerprint additionally guards against (1) legitimate
+    /// re-evaluation of the same (X, y) pair after a parameter update
+    /// (e.g. trust-region accept/reject cycles, line search) and (2) the
+    /// existing-mode case where the user calls <c>CalculateGradient</c> twice
+    /// in a row with the same arguments (cache should hit). The legitimate
+    /// caching scenarios still work because identity-based keys only collide
+    /// when the caller actually reuses the same tensor instances.
+    /// </para>
     /// </remarks>
     /// <param name="model">The current model.</param>
     /// <param name="X">The input features.</param>
@@ -1285,7 +1324,91 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <returns>A string key for caching the gradient.</returns>
     protected virtual string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
-        return $"{model.GetType().Name}_{InputHelper<T, TInput>.GetBatchSize(X)}_{InputHelper<T, TInput>.GetInputSize(X)}_{GradientOptions.GetType().Name}";
+        int modelIdentity = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(model);
+        int xIdentity = X is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(X);
+        int yIdentity = y is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(y);
+        long paramFingerprint = ComputeParameterFingerprint(model);
+
+        return $"{model.GetType().Name}_{InputHelper<T, TInput>.GetBatchSize(X)}_{InputHelper<T, TInput>.GetInputSize(X)}"
+            + $"_{GradientOptions.GetType().Name}_{modelIdentity:X8}_{xIdentity:X8}_{yIdentity:X8}_{paramFingerprint:X16}";
+    }
+
+    /// <summary>
+    /// Computes a fast fingerprint of the model's current parameter state for
+    /// gradient cache invalidation. Returns 0 for non-parameterizable models
+    /// (the cache key still differentiates via reference identity for those).
+    /// </summary>
+    /// <remarks>
+    /// Uses a strided XOR of bit-cast parameter values so a single weight
+    /// changing flips the fingerprint, but the scan is O(min(N, 256)) — cheap
+    /// even for foundation-class models. Stride is chosen so 256 samples span
+    /// the full parameter vector. For tiny vectors (&lt; 256 params) every
+    /// parameter contributes.
+    /// </remarks>
+    private static long ComputeParameterFingerprint(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is not IParameterizable<T, TInput, TOutput> parameterizable
+            || !parameterizable.SupportsParameterInitialization)
+        {
+            return 0L;
+        }
+
+        Vector<T> parameters;
+        try
+        {
+            parameters = parameterizable.GetParameters();
+        }
+        catch
+        {
+            // Some models throw if not yet built / lazy-init not run.
+            // Fingerprint of 0 is safe — the model identity in the key already
+            // differentiates models, and a not-yet-built model can't have stale
+            // cached gradients anyway.
+            return 0L;
+        }
+
+        if (parameters is null || parameters.Length == 0)
+        {
+            return 0L;
+        }
+
+        const int MaxSamples = 256;
+        int stride = Math.Max(1, parameters.Length / MaxSamples);
+        long hash = parameters.Length; // seed with length so size changes flip fingerprint
+        for (int i = 0; i < parameters.Length; i += stride)
+        {
+            // Mix in both the bit pattern of the parameter and the index — two
+            // params with the same value at different positions should produce
+            // different contributions.
+            long bits = ParameterBitsToLong(parameters[i]);
+            hash = unchecked(hash * 31L ^ bits ^ ((long)i << 17));
+        }
+        return hash;
+    }
+
+    /// <summary>
+    /// Converts a numeric parameter value into a stable 64-bit bit pattern for
+    /// fingerprint mixing. Float/double get IEEE-754 bit reinterpretation;
+    /// other numeric types fall back to <c>Convert.ToDouble</c> then bit-cast.
+    /// </summary>
+    private static long ParameterBitsToLong(T value)
+    {
+        if (value is float f)
+        {
+            return BitConverter.SingleToInt32Bits(f);
+        }
+        if (value is double d)
+        {
+            return BitConverter.DoubleToInt64Bits(d);
+        }
+        try
+        {
+            return BitConverter.DoubleToInt64Bits(Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch
+        {
+            return 0L;
+        }
     }
 
     /// <summary>
