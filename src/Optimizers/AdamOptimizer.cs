@@ -41,6 +41,16 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     private Vector<T> _v;
 
     /// <summary>
+    /// Running maximum of v̂ when AMSGrad is enabled, for the
+    /// Vector-based UpdateParameters / UpdateSolution paths (the tape-based
+    /// Step path tracks vMax per-tensor in <see cref="_tapeVMax"/>).
+    /// Reddi, Kale, Kumar 2018 §4 — non-decreasing v̂_max prevents the
+    /// post-convergence m / sqrt(v) drift Adam exhibits on fixed-input
+    /// regression. Issue #1332 cluster 6.
+    /// </summary>
+    private Vector<T>? _vMaxVector;
+
+    /// <summary>
     /// The current time step (iteration count).
     /// </summary>
     private int _t;
@@ -310,6 +320,10 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             _previousV = new Vector<T>(parameters.Length);
             _t = 0;
         }
+        if (_options.UseAMSGrad && (_vMaxVector is null || _vMaxVector.Length != parameters.Length))
+        {
+            _vMaxVector = new Vector<T>(parameters.Length);
+        }
 
         // Guard against parameter/gradient size mismatch
         if (parameters.Length != gradient.Length)
@@ -360,8 +374,26 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
 
-        // Compute update: update = mHat / (sqrt(vHat) + epsilon)
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        // AMSGrad: track per-coord running max of v̂. The Reddi 2018 fix
+        // guarantees the denominator √v̂_max is non-decreasing, which bounds
+        // Adam's post-convergence m̂ / √v̂ drift on stochastic-objective
+        // models (VGAE reparameterization noise, etc. — see GraphGenerationModel
+        // in #1332 cluster 6). For consistency the bias-corrected
+        // v̂_t (not raw v_t) is the quantity tracked, mirroring the standard
+        // formulation and AdamW's existing AMSGrad path.
+        Vector<T> vHatEffective;
+        if (_options.UseAMSGrad)
+        {
+            _vMaxVector = (Vector<T>)Engine.Max(_vMaxVector!, vHat);
+            vHatEffective = _vMaxVector;
+        }
+        else
+        {
+            vHatEffective = vHat;
+        }
+
+        // Compute update: update = mHat / (sqrt(vHatEffective) + epsilon)
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHatEffective);
         // Create epsilon vector for addition
         var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);

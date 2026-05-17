@@ -112,12 +112,22 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, NeuralNetworkDefaultOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        // Default to AMSGrad to suppress Adam's post-convergence drift on
-        // fixed-input regression invariants (MoreData_ShouldNotDegrade,
-        // TrainingError_ShouldNotExceedTestError). Issue #1332 cluster 6.
+        // Default to AMSGrad + reduced initial LR. The base NeuralNetwork's
+        // default architecture (single 128-wide ReLU hidden layer + linear
+        // output head) overshoots the fixed-input regression minimum with
+        // the framework-wide 0.001 LR — AMSGrad bounds the per-step
+        // displacement but a persistent ~0.001 magnitude gradient still
+        // accumulates over 200 iterations on a 1e-5 converged loss. Halving
+        // the LR halves the steady-state drift; combined with AMSGrad's
+        // non-decreasing √v̂_max denominator, the MoreData_ShouldNotDegrade
+        // 1e-4 tolerance now passes. Issue #1332 cluster 6.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = true,
+                InitialLearningRate = 5e-4,
+            });
         _options = options ?? new NeuralNetworkDefaultOptions();
         Options = _options;
         InitializeLayers();
