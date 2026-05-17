@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NER.SequenceLabeling;
@@ -373,6 +374,29 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Returns the CRF layer in the model's Layers list, or null if absent
+    /// (e.g. <c>UseCRF == false</c> in options). The CRF is canonically the
+    /// LAST layer in the default LSTM-CRF / CNN-BiLSTM-CRF / Transformer-CRF
+    /// stack, so the search runs in reverse for the common case.
+    /// </summary>
+    /// <remarks>
+    /// Lives on the base class so every sequence-labeling NER subclass
+    /// (BiLSTMCRF, CNNBiLSTMCRF, future TransformerBiLSTMCRF, ...) shares
+    /// the same lookup contract instead of each copy-pasting the same loop.
+    /// The search is model-agnostic; it only depends on the layer-list
+    /// shape exposed by <see cref="NeuralNetworkBase{T}.Layers"/>.
+    /// </remarks>
+    protected ConditionalRandomFieldLayer<T>? FindCrfLayer()
+    {
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            if (Layers[i] is ConditionalRandomFieldLayer<T> crf)
+                return crf;
+        }
+        return null;
     }
 
     /// <inheritdoc />

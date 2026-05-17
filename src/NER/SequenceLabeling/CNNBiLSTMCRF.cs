@@ -426,19 +426,6 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         return base.GetNamedLayerActivations(preprocessed);
     }
 
-    /// <summary>
-    /// Returns the CRF layer in the model's Layers list, or null if absent.
-    /// </summary>
-    private ConditionalRandomFieldLayer<T>? FindCrfLayer()
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (Layers[i] is ConditionalRandomFieldLayer<T> crf)
-                return crf;
-        }
-        return null;
-    }
-
     /// <inheritdoc />
     public override void UpdateParameters(Vector<T> parameters)
     {

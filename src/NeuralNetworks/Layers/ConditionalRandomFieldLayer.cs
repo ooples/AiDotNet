@@ -782,48 +782,28 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 var prevExpanded = Engine.Reshape(prevViterbi, [_numClasses, 1]); // [numClasses, 1]
                 var scoresWithTrans = Engine.TensorBroadcastAdd(prevExpanded, _transitionMatrix); // [numClasses, numClasses]
 
-                // During training: use log-sum-exp (smooth, differentiable)
-                // During inference: use max (Viterbi, non-differentiable)
+                // This branch is INFERENCE-ONLY: the training-mode short-circuit
+                // at the top of Forward (line ~730) returns raw emissions before
+                // the Viterbi loop runs, and CRF training uses the dedicated
+                // tape-tracked log-sum-exp implementation in
+                // ComputeNegativeLogLikelihood. So per-class Viterbi-max +
+                // backpointer recording is the only path we need here.
                 var maxScores = new Tensor<T>([_numClasses]);
                 for (int c = 0; c < _numClasses; c++)
                 {
-                    if (IsTrainingMode)
+                    T maxVal = NumOps.MinValue;
+                    int maxIdx = 0;
+                    for (int prevC = 0; prevC < _numClasses; prevC++)
                     {
-                        // Log-sum-exp: logsumexp_prevC(score[prevC, c])
-                        // = maxVal + log(sum(exp(score[prevC, c] - maxVal)))
-                        T maxVal = NumOps.MinValue;
-                        for (int prevC = 0; prevC < _numClasses; prevC++)
+                        T val = scoresWithTrans[prevC, c];
+                        if (NumOps.GreaterThan(val, maxVal))
                         {
-                            T val = scoresWithTrans[prevC, c];
-                            if (NumOps.GreaterThan(val, maxVal))
-                                maxVal = val;
+                            maxVal = val;
+                            maxIdx = prevC;
                         }
-                        T sumExp = NumOps.Zero;
-                        for (int prevC = 0; prevC < _numClasses; prevC++)
-                        {
-                            T val = scoresWithTrans[prevC, c];
-                            sumExp = NumOps.Add(sumExp, NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(val, maxVal)))));
-                        }
-                        maxScores[c] = NumOps.Add(maxVal, NumOps.FromDouble(Math.Log(NumOps.ToDouble(NumOps.Add(sumExp, NumOps.FromDouble(1e-10))))));
-                        backpointers[t, c] = 0; // Not used during training
                     }
-                    else
-                    {
-                        // Viterbi max
-                        T maxVal = NumOps.MinValue;
-                        int maxIdx = 0;
-                        for (int prevC = 0; prevC < _numClasses; prevC++)
-                        {
-                            T val = scoresWithTrans[prevC, c];
-                            if (NumOps.GreaterThan(val, maxVal))
-                            {
-                                maxVal = val;
-                                maxIdx = prevC;
-                            }
-                        }
-                        maxScores[c] = maxVal;
-                        backpointers[t, c] = maxIdx;
-                    }
+                    maxScores[c] = maxVal;
+                    backpointers[t, c] = maxIdx;
                 }
 
                 // Add emissions: maxScores + currentEmissions
@@ -855,24 +835,12 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 bestPath[t] = backpointers[t + 1, bestPath[t + 1]];
             }
 
-            if (IsTrainingMode)
+            // Inference-only path (training-mode short-circuits at the top
+            // of Forward and never reaches the Viterbi loop): write the
+            // one-hot encoded best path into the output tensor.
+            for (int t = 0; t < _sequenceLength; t++)
             {
-                // During training: output the continuous viterbi scores for gradient flow
-                for (int t = 0; t < _sequenceLength; t++)
-                {
-                    for (int c = 0; c < _numClasses; c++)
-                    {
-                        output[b, t, c] = viterbi[t, c];
-                    }
-                }
-            }
-            else
-            {
-                // During inference: one-hot encoded class labels
-                for (int t = 0; t < _sequenceLength; t++)
-                {
-                    output[b, t, bestPath[t]] = NumOps.One;
-                }
+                output[b, t, bestPath[t]] = NumOps.One;
             }
         }
 
@@ -1071,6 +1039,17 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 $"labels shape [{string.Join(",", labels2D.Shape.ToArray())}] doesn't match emissions [{batchSize}, {seqLen}, ...].",
                 nameof(labels));
 
+        // Empty-batch guard: with batchSize == 0 the accumulator loop
+        // below never executes and totalNll stays null, which the prior
+        // implementation papered over with `totalNll!` (forbidden by
+        // project rules + still crashes at runtime). An empty-batch loss
+        // is meaningless (no examples to score), so reject it explicitly
+        // with a clear diagnostic rather than NRE downstream.
+        if (batchSize == 0)
+            throw new ArgumentException(
+                "emissions has batch size 0; cannot compute NLL on an empty batch.",
+                nameof(emissions));
+
         // Per-batch tape-tracked NLL accumulator. All ops below route through
         // Engine (TensorAdd, ReduceSum, TensorExp, etc.) so gradients flow into
         // emissions (upstream layers) AND _transitionMatrix / _startScores /
@@ -1168,9 +1147,16 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 : Engine.TensorAdd(totalNll, perExampleNll);
         }
 
-        // Mean over batch
-        var invBatch = NumOps.FromDouble(1.0 / Math.Max(1, batchSize));
-        var meanNll = Engine.TensorMultiplyScalar(totalNll!, invBatch); // shape [1]
+        // Mean over batch. batchSize == 0 was rejected above, so the
+        // accumulator loop executed at least once and totalNll is
+        // guaranteed non-null here — promote to a local with a
+        // pattern-matched non-null guard so we don't lean on the
+        // null-forgiving operator (forbidden by project rules).
+        if (totalNll is not { } accumulated)
+            throw new InvalidOperationException(
+                "CRF NLL accumulator was unexpectedly null after a non-empty batch loop.");
+        var invBatch = NumOps.FromDouble(1.0 / batchSize);
+        var meanNll = Engine.TensorMultiplyScalar(accumulated, invBatch); // shape [1]
         return meanNll;
     }
 

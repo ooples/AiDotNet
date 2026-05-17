@@ -884,22 +884,6 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     }
 
     /// <summary>
-    /// Returns the CRF layer in the model's Layers list, or null if absent
-    /// (UseCRF == false in options). The CRF is canonically the LAST layer
-    /// in the default BiLSTM-CRF stack, so the search runs in reverse for
-    /// the common case.
-    /// </summary>
-    private ConditionalRandomFieldLayer<T>? FindCrfLayer()
-    {
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (Layers[i] is ConditionalRandomFieldLayer<T> crf)
-                return crf;
-        }
-        return null;
-    }
-
-    /// <summary>
     /// Updates all model parameters from a flat parameter vector.
     /// </summary>
     /// <param name="parameters">A flat vector containing all model parameters concatenated in layer
