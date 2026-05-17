@@ -279,15 +279,20 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
         for (int s = 0; s < CanaryCtxLen; s++) probe[0, s] = features[0, s];
         AssertFacadePredictNonDegenerate(result.Predict(probe), "ConfigureWeightStreaming");
 
-        // Test name promises "DoesNotChangeOutput": assert feature-arm
-        // top-1 retains the baseline within the standard 50% bound. The
-        // tiny canary model is below the auto-streaming threshold, so
-        // streaming should be a no-op here — anything less than full
-        // retention indicates streaming engaged on a sub-threshold
-        // model and corrupted training. (PR #1345 review.)
+        // Test name promises "DoesNotChangeOutput": for a no-op contract
+        // (sub-threshold model so auto-streaming should not engage),
+        // require near-identical top-1 — not just 50% retention. A 50%
+        // tolerance would hide a real streaming-corruption regression
+        // that halves accuracy. Use an absolute 1pp envelope so noise
+        // from the canary's tiny dataset is allowed but anything larger
+        // fails. (PR #1345 round-2 review.)
         double featureTopOne = MeasureTrainingTopOne(model, features, labels);
         _output.WriteLine($"WeightStreaming(auto): top-1={featureTopOne:P2}");
-        AssertFeatureRetainsAccuracy(baselineTopOne, featureTopOne, "ConfigureWeightStreaming");
+        Assert.True(
+            Math.Abs(featureTopOne - baselineTopOne) <= 0.01,
+            $"ConfigureWeightStreaming should be a no-op for sub-threshold models. " +
+            $"baseline={baselineTopOne:P2}, feature={featureTopOne:P2} — " +
+            $"|delta| = {Math.Abs(featureTopOne - baselineTopOne):P2} > 1pp envelope.");
     }
 
     /// <summary>

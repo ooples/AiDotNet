@@ -5,6 +5,7 @@ using AiDotNet.Deployment.Configuration;
 using AiDotNet.ExperimentTracking;
 using AiDotNet.Interpretability;
 using AiDotNet.Models.Options;
+using AiDotNet.ModelRegistry;
 using AiDotNet.TrainingMonitoring;
 using AiDotNet.Configuration;
 using Xunit;
@@ -275,7 +276,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
         var model = MakeCanaryModel();
 
         var cv = new KFoldCrossValidator<float, Tensor<float>, Tensor<float>>(
-            new AiDotNet.Models.Options.CrossValidationOptions { NumberOfFolds = 3 });
+            new CrossValidationOptions { NumberOfFolds = 3 });
 
         var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model)
@@ -373,7 +374,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
-        var monitor = new AiDotNet.TrainingMonitoring.TrainingMonitor<float>();
+        var monitor = new TrainingMonitor<float>();
 
         var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model)
@@ -406,7 +407,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
         try
         {
             Directory.CreateDirectory(tempDir);
-            var registry = new AiDotNet.ModelRegistry.ModelRegistry<float, Tensor<float>, Tensor<float>>(tempDir);
+            var registry = new ModelRegistry<float, Tensor<float>, Tensor<float>>(tempDir);
 
             var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureModel(model)

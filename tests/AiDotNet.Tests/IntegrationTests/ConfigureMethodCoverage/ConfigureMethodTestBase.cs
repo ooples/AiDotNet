@@ -1,6 +1,7 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Results;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Engines;
 
@@ -22,7 +23,14 @@ public sealed class ConfigureMethodTestCpuFixture
     }
 }
 
-[Xunit.CollectionDefinition("ConfigureMethodCoverage")]
+// DisableParallelization=true: the fixture's AiDotNetEngine.ResetToCpu()
+// mutates process-wide engine state. Other test collections (notably
+// NeuralNetworkModelTestBase) also reset the engine — running them
+// concurrently with this collection produces race conditions on the
+// shared engine singleton and intermittent crashes. Serialize the
+// whole collection so the engine state is stable for the duration.
+// (PR #1345 round-2 review.)
+[Xunit.CollectionDefinition("ConfigureMethodCoverage", DisableParallelization = true)]
 public sealed class ConfigureMethodCoverageCollection : Xunit.ICollectionFixture<ConfigureMethodTestCpuFixture> { }
 
 /// <summary>
@@ -373,6 +381,25 @@ public abstract class ConfigureMethodTestBase
             $"{featureName}: facade Predict returned all-zero output (L2={l2:E2}). "
             + $"This is the issue-#1267 facade bug — underlying model trained but result "
             + $"wrapper returns uninitialized zeros.");
+    }
+
+    /// <summary>
+    /// Convenience wrapper: take the first row of <paramref name="features"/>
+    /// as a probe, run it through the facade's Predict, and assert the
+    /// output is non-degenerate. Reduces the 3-line probe-construction
+    /// boilerplate that the Configure* coverage tests repeated 14 times.
+    /// PR #1345 round-2 review nitpick.
+    /// </summary>
+    protected static void AssertConfiguredModelProducesNonDegenerateOutput(
+        AiModelResult<float, Tensor<float>, Tensor<float>> result,
+        Tensor<float> features,
+        string featureName)
+    {
+        if (result is null) throw new ArgumentNullException(nameof(result));
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        var probe = new Tensor<float>([1, CanaryCtxLen]);
+        for (int s = 0; s < CanaryCtxLen; s++) probe[0, s] = features[0, s];
+        AssertFacadePredictNonDegenerate(result.Predict(probe), featureName);
     }
 
     /// <summary>
