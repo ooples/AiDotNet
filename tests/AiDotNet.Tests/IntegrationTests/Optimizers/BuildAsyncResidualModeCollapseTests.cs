@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -338,5 +339,237 @@ public class BuildAsyncResidualModeCollapseTests
             BuildOptions(
                 explicitLoss: new MeanSquaredErrorLoss<float>(),
                 explicitRegularization: new NoRegularization<float, Tensor<float>, Tensor<float>>()));
+
+        // ARM 6: parameter-delta + gradient-magnitude probe.
+        // H5 was refuted by the standalone ParameterGradientOrderingH5ProbeTests
+        // suite — GetParameters and ComputeGradients agree on flat-vector
+        // length AND per-index correspondence (round-trip verified). So the
+        // residual mode collapse is not a swapped gradient. This arm
+        // diagnoses whether the gradients have the RIGHT MAGNITUDE to
+        // drive meaningful Adam steps on this fixture, and how much the
+        // model's parameters actually move during a full Optimize() run.
+        //
+        // If the parameter L2 delta is large but accuracy stays at ~10%, the
+        // gradients are driving the model in some non-helpful direction
+        // (e.g. towards a degenerate fixed point). If the parameter L2
+        // delta is small, the gradient magnitudes are too small for the
+        // effective learning rate — Adam is being starved.
+        try
+        {
+            var modelArm6 = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+
+            // Materialize lazy-init layers via a Predict pass (no-grad) so
+            // GetParameters returns the full flat vector. Otherwise
+            // GetParameters on a freshly-constructed model with lazy
+            // (Embedding, FF, etc.) layers can return Length=0.
+            _ = modelArm6.Predict(xTrain);
+
+            // Capture gradient on the FULL training set (the same batch
+            // Optimize() will see first) to size up its magnitude.
+            var grad = modelArm6.ComputeGradients(xTrain, yTrain, new CategoricalCrossEntropyLoss<float>());
+
+            // Capture initial parameter snapshot AFTER ComputeGradients
+            // has triggered any lazy allocation.
+            var initialParams = modelArm6.GetParameters();
+            var initialSnapshot = new float[initialParams.Length];
+            for (int i = 0; i < initialParams.Length; i++) initialSnapshot[i] = initialParams[i];
+            double gradL2 = 0.0;
+            double gradMax = 0.0;
+            for (int i = 0; i < grad.Length; i++)
+            {
+                double v = grad[i];
+                gradL2 += v * v;
+                if (Math.Abs(v) > gradMax) gradMax = Math.Abs(v);
+            }
+            gradL2 = Math.Sqrt(gradL2);
+
+            // Now run Optimize() and capture final params.
+            var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(modelArm6,
+                BuildOptions(
+                    explicitLoss: null,
+                    explicitRegularization: new NoRegularization<float, Tensor<float>, Tensor<float>>()));
+            var inputData = new OptimizationInputData<float, Tensor<float>, Tensor<float>>
+            {
+                XTrain = xTrain,
+                YTrain = yTrain,
+                XValidation = xTrain,
+                YValidation = yTrain,
+                XTest = xTrain,
+                YTest = yTrain,
+            };
+            _ = optimizer.Optimize(inputData);
+
+            var finalParams = modelArm6.GetParameters();
+            double deltaL2 = 0.0;
+            double deltaMax = 0.0;
+            double finalParamL2 = 0.0;
+            for (int i = 0; i < finalParams.Length; i++)
+            {
+                double diff = (double)finalParams[i] - initialSnapshot[i];
+                deltaL2 += diff * diff;
+                if (Math.Abs(diff) > deltaMax) deltaMax = Math.Abs(diff);
+                double v = (double)finalParams[i];
+                finalParamL2 += v * v;
+            }
+            deltaL2 = Math.Sqrt(deltaL2);
+            finalParamL2 = Math.Sqrt(finalParamL2);
+
+            // Numerical finite-difference verification on the parameter
+            // indices with the LARGEST analytic gradient magnitude. These
+            // are the most informative spots: a wrong-gradient bug shows
+            // up as analytic large but numeric ~0, OR analytic with wrong
+            // SIGN (numeric and analytic opposite signs). Picking by
+            // gradient magnitude avoids the degenerate case where both
+            // numbers are tiny (where any rel error is meaningless).
+            var freshArch = BuildFixture().Arch;
+            var modelFd = new Transformer<float>(freshArch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+            var lossFn = new CategoricalCrossEntropyLoss<float>();
+            // Materialize and grab analytic gradient.
+            var analyticGrad = modelFd.ComputeGradients(xTrain, yTrain, lossFn);
+            var fdParams = modelFd.GetParameters();
+            // Pick the 12 indices with largest |analytic gradient|.
+            var sortedByMagnitude = Enumerable.Range(0, analyticGrad.Length)
+                .OrderByDescending(i => Math.Abs((double)analyticGrad[i]))
+                .Take(12)
+                .ToArray();
+            int[] probeIndices = sortedByMagnitude;
+            const float fdEps = 1e-3f;
+            int fdMatches = 0;
+            int fdMismatches = 0;
+            double worstFdRel = 0.0;
+            int worstFdIdx = -1;
+            double worstFdAnalytic = 0;
+            double worstFdNumeric = 0;
+            for (int p = 0; p < probeIndices.Length; p++)
+            {
+                int idx = probeIndices[p];
+                if (idx < 0 || idx >= fdParams.Length) continue;
+
+                // L(+ε)
+                var paramsPlus = new Vector<float>(fdParams.Length);
+                for (int j = 0; j < fdParams.Length; j++) paramsPlus[j] = fdParams[j];
+                paramsPlus[idx] = fdParams[idx] + fdEps;
+                modelFd.SetParameters(paramsPlus);
+                var predPlus = modelFd.Predict(xTrain);
+                float lossPlus = ScalarLoss(predPlus, yTrain, lossFn);
+
+                // L(-ε)
+                var paramsMinus = new Vector<float>(fdParams.Length);
+                for (int j = 0; j < fdParams.Length; j++) paramsMinus[j] = fdParams[j];
+                paramsMinus[idx] = fdParams[idx] - fdEps;
+                modelFd.SetParameters(paramsMinus);
+                var predMinus = modelFd.Predict(xTrain);
+                float lossMinus = ScalarLoss(predMinus, yTrain, lossFn);
+
+                // Restore original.
+                modelFd.SetParameters(fdParams);
+
+                double numericGrad = (lossPlus - lossMinus) / (2.0 * fdEps);
+                double analyticVal = analyticGrad[idx];
+
+                // Tolerance: relative error within 20% AND absolute within 1e-3.
+                double absDiff = Math.Abs(numericGrad - analyticVal);
+                double scale = Math.Max(Math.Abs(numericGrad), Math.Max(Math.Abs(analyticVal), 1e-6));
+                double rel = absDiff / scale;
+                if (rel > worstFdRel)
+                {
+                    worstFdRel = rel;
+                    worstFdIdx = idx;
+                    worstFdAnalytic = analyticVal;
+                    worstFdNumeric = numericGrad;
+                }
+                if (rel < 0.2 || absDiff < 1e-3) fdMatches++;
+                else fdMismatches++;
+            }
+
+            _output.WriteLine($"Arm 6 (parameter-delta + gradient-magnitude probe):");
+            _output.WriteLine($"  initial params L2 = {Math.Sqrt(initialSnapshot.Sum(v => (double)v * v)):F6}");
+            _output.WriteLine($"  final params L2   = {finalParamL2:F6}");
+            _output.WriteLine($"  delta L2 (final - initial) = {deltaL2:F6}");
+            _output.WriteLine($"  delta max element          = {deltaMax:F6}");
+            _output.WriteLine($"  first-step gradient L2     = {gradL2:F6}");
+            _output.WriteLine($"  first-step gradient max    = {gradMax:F6}");
+            _output.WriteLine($"  finite-diff gradient check ({probeIndices.Length} indices): {fdMatches} match, {fdMismatches} mismatch");
+            _output.WriteLine($"    worst rel error: {worstFdRel:F4} at idx {worstFdIdx} (analytic={worstFdAnalytic:F6}, numeric={worstFdNumeric:F6})");
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Arm 6 failed: {ex.GetType().Name}: {ex.Message}");
+            _output.WriteLine($"Stack: {ex.StackTrace}");
+        }
+
+        // ARM 7: long-horizon BuildAsync run with 0 tolerance + 200 epochs.
+        // Verifies whether the residual mode collapse is a step-count
+        // issue (the optimizer is being stopped too early by an aggressive
+        // convergence criterion) or a fundamental optimizer-path bug. If
+        // accuracy reaches near Arm 0 with more steps, the bug is in the
+        // stopping criterion. If accuracy plateaus at ~10%, the bug is in
+        // the optimizer step itself.
+        try
+        {
+            var (_, xLong, yLong) = BuildFixture();
+            var modelArm7 = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+            var optionsArm7 = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = LearningRate,
+                MaxIterations = 200,
+                BatchSize = BatchSize,
+                UseAdaptiveLearningRate = false,
+                RandomSeed = Seed,
+                ShuffleData = true,
+                Tolerance = 0.0,
+                Regularization = new NoRegularization<float, Tensor<float>, Tensor<float>>(),
+            };
+            var optimizerArm7 = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(modelArm7, optionsArm7);
+            var inputDataArm7 = new OptimizationInputData<float, Tensor<float>, Tensor<float>>
+            {
+                XTrain = xLong,
+                YTrain = yLong,
+                XValidation = xLong,
+                YValidation = yLong,
+                XTest = xLong,
+                YTest = yLong,
+            };
+            _ = optimizerArm7.Optimize(inputDataArm7);
+            float arm7Top1 = ComputeTopOneAccuracy(modelArm7, xLong, yLong);
+            _output.WriteLine($"Arm 7 (BuildAsync 200 epochs, Tolerance=0): top-1 = {arm7Top1 * 100.0f:F1}% (uniform = {UniformTopOne * 100.0f:F1}%)");
+        }
+        catch (Exception ex)
+        {
+            _output.WriteLine($"Arm 7 failed: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Compute scalar MEAN loss from prediction and target tensors using the
+    /// supplied loss function. Used by Arm 6's finite-difference gradient check.
+    /// Matches the per-batch averaging in <c>LossFunctionBase{T}.ComputeTapeLoss</c>
+    /// — without this, the analytic gradient (mean-batch) would compare to a
+    /// sum-batch numerical gradient and the ratio would be batch-size-scaled,
+    /// which would falsely flag every gradient as a magnitude bug.
+    /// </summary>
+    private static float ScalarLoss(Tensor<float> predictions, Tensor<float> targets, ILossFunction<float> loss)
+    {
+        var predFlat = predictions.ToVector();
+        var tgtFlat = targets.ToVector();
+        // Targets length may differ from predictions length when SequenceClassification
+        // is producing [B, S, V] but the test only provides [B, V] one-hot for the last
+        // position. Pull only the last-position slice of predictions to match.
+        if (predFlat.Length > tgtFlat.Length)
+        {
+            int batchSize = targets.Shape[0];
+            int vocab = targets.Shape[1];
+            int strideOffset = predFlat.Length - batchSize * vocab;
+            var lastSlice = new Vector<float>(batchSize * vocab);
+            for (int i = 0; i < lastSlice.Length; i++) lastSlice[i] = predFlat[strideOffset + i];
+            predFlat = lastSlice;
+        }
+        // CategoricalCrossEntropyLoss.CalculateLoss(Vector, Vector) returns the
+        // SUM over the full vector (no batch averaging). ComputeTapeLoss averages
+        // over batch axes. Match that mean to get a comparable finite-difference
+        // gradient. Divide by the leading (batch) dimension of the target shape.
+        float rawSum = loss.CalculateLoss(predFlat, tgtFlat);
+        int batchDim = targets.Shape[0];
+        return rawSum / Math.Max(1, batchDim);
     }
 }
