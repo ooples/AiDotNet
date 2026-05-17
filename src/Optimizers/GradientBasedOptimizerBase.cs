@@ -1328,9 +1328,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         int xIdentity = X is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(X);
         int yIdentity = y is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(y);
         long paramFingerprint = ComputeParameterFingerprint(model);
+        // Include the mixed-precision loss scale in the key — cached
+        // gradients are scaled by LossScaler.Scale BEFORE the cache
+        // write (ApplyMixedPrecisionScaling runs on line ~878 before
+        // CacheGradient). When the dynamic scaler backs off the scale
+        // after an overflow, a subsequent lookup with the same
+        // (model, X, y, params) would otherwise hit the entry written
+        // at the OLD scale, then ApplyGradientsWithMixedPrecision would
+        // unscale it with the NEW scale and produce a wrong effective
+        // step size on an unchanged model state. Bit-pattern the
+        // double so a 65536→32768 backoff flips the key. PR #1351
+        // round-2 review.
+        double lossScale = _mixedPrecisionContext?.LossScaler.Scale ?? 1.0;
+        long lossScaleBits = BitConverter.DoubleToInt64Bits(lossScale);
 
         return $"{model.GetType().Name}_{InputHelper<T, TInput>.GetBatchSize(X)}_{InputHelper<T, TInput>.GetInputSize(X)}"
-            + $"_{GradientOptions.GetType().Name}_{modelIdentity:X8}_{xIdentity:X8}_{yIdentity:X8}_{paramFingerprint:X16}";
+            + $"_{GradientOptions.GetType().Name}_{modelIdentity:X8}_{xIdentity:X8}_{yIdentity:X8}_{paramFingerprint:X16}"
+            + $"_{lossScaleBits:X16}";
     }
 
     /// <summary>
