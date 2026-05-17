@@ -31,8 +31,47 @@ public abstract class ContinualLearningTestBase
             outputSize: 4));
     }
 
-    /// <summary>Number of model parameters for test data generation.</summary>
-    protected virtual int NumParameters => 10;
+    /// <summary>
+    /// Number of trainable parameters in the network returned by
+    /// <see cref="CreateMockNetwork"/>. Derived from an actual network instance
+    /// so synthetic gradient vectors produced in test bodies have the SAME
+    /// length the continual-learning strategy is going to operate on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Hardcoding this to a small literal (the prior <c>=> 10</c> default) made
+    /// every strategy whose <c>ModifyGradients</c> path actually computes a
+    /// reference gradient on the live network (e.g. AveragedGEM, GEM,
+    /// SynapticIntelligence) throw on dimension-mismatch dot products — the
+    /// freshly computed reference gradient has the network's true parameter
+    /// count (4740 for the default 4→4 FFN), not the literal 10. Mirroring the
+    /// network's parameter count is the only correct shape for any test that
+    /// feeds a synthetic gradient into <c>strategy.ModifyGradients</c>.
+    /// </para>
+    /// </remarks>
+    private int? _cachedNumParameters;
+    protected virtual int NumParameters
+    {
+        get
+        {
+            if (_cachedNumParameters is { } v) return v;
+            // Construct the probe network exactly once. The prior shape
+            // (CreateMockNetwork() ?? CreateMockNetwork()) called the
+            // factory twice on a cache miss — wasted work and risky for
+            // overrides whose factory does side-effectful setup (RNG
+            // advancement, lazy allocation, etc.).
+            var probe = CreateMockNetwork();
+            try
+            {
+                _cachedNumParameters = probe.GetParameters().Length;
+                return _cachedNumParameters.Value;
+            }
+            finally
+            {
+                (probe as IDisposable)?.Dispose();
+            }
+        }
+    }
 
     // AccumulatesAcrossTasks is checked via the IContinualLearningStrategy<T> interface property.
 
