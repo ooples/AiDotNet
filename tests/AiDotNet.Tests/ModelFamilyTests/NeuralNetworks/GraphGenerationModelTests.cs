@@ -78,6 +78,20 @@ public class GraphGenerationModelTests : GraphNNModelTestBase
         if (target.Rank >= 2)
         {
             int n = System.Math.Min(target.Shape[0], target.Shape[1]);
+            // VGAE's decoder is sigmoid(Z·Z^T) — symmetric by construction.
+            // The base helper produces independently-sampled off-diagonal
+            // entries (asymmetric), which would create an unreachable MSE
+            // floor on Training_ShouldReduceLoss and weaken the training
+            // signal. Symmetrize by mirroring the upper triangle into the
+            // lower triangle before fixing the diagonal. PR #1350 review.
+            for (int i = 0; i < n; i++)
+            {
+                for (int j = i + 1; j < n; j++)
+                {
+                    double v = target[i, j];
+                    target[j, i] = v;
+                }
+            }
             for (int i = 0; i < n; i++)
                 target[i, i] = 1.0;
         }

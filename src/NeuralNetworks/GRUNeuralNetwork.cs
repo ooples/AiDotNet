@@ -117,9 +117,19 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         // (v̂_max is non-decreasing, so the denominator can only grow).
         // Issue #1332 cluster 6. Callers who pass an explicit `optimizer`
         // keep their own choice unchanged.
+        // Thread the constructor's `learningRate` argument through to the
+        // default optimizer's InitialLearningRate. Prior to PR #1350 review
+        // the parameter was stored in _learningRate but the default
+        // AdamOptimizer was built with a hardcoded LR, so a caller passing
+        // learningRate=0.002 silently trained at 1e-3. Callers who supply
+        // their own `optimizer` retain full control of LR scheduling.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = true,
+                InitialLearningRate = learningRate
+            });
         _options = options ?? new GRUOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);

@@ -284,8 +284,23 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
 
-        // Compute update: update = learningRate * mHat / (sqrt(vHat) + epsilon)
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        // AMSGrad: when enabled, divide by sqrt(running max of v̂) instead
+        // of sqrt(v̂) — the same correction the vector UpdateParameters
+        // path applies. Without this branch the UpdateSolution path
+        // silently ran plain Adam even with UseAMSGrad=true, defeating
+        // the purpose of the AMSGrad option on the BuildAsync/Optimize
+        // call path. PR #1350 review.
+        var vHatForDenominator = vHat;
+        if (_options.UseAMSGrad)
+        {
+            if (_vMaxVector is null || _vMaxVector.Length != vHat.Length)
+                _vMaxVector = new Vector<T>(vHat.Length);
+            _vMaxVector = (Vector<T>)Engine.Max(_vMaxVector, vHat);
+            vHatForDenominator = _vMaxVector;
+        }
+
+        // Compute update: update = learningRate * mHat / (sqrt(vHat_used) + epsilon)
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHatForDenominator);
         // Create epsilon vector for addition
         var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
@@ -472,8 +487,20 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1);
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
 
+        // AMSGrad: same v̂_max correction the Vector / UpdateSolution
+        // paths apply. Without this branch the Matrix-parameter path
+        // silently ran plain Adam even with UseAMSGrad=true. PR #1350 review.
+        var vHatForDenominator = vHat;
+        if (_options.UseAMSGrad)
+        {
+            if (_vMaxVector is null || _vMaxVector.Length != vHat.Length)
+                _vMaxVector = new Vector<T>(vHat.Length);
+            _vMaxVector = (Vector<T>)Engine.Max(_vMaxVector, vHat);
+            vHatForDenominator = _vMaxVector;
+        }
+
         // Compute update
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
+        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHatForDenominator);
         var epsilonVec = new Vector<T>(Enumerable.Repeat(epsilon, vHatSqrt.Length));
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
         var update = (Vector<T>)Engine.Divide(mHat, denominator);
@@ -920,6 +947,22 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 nameof(appliedGradients));
         }
 
+        // ReverseUpdate reconstructs the forward step from m / v / bias-
+        // correction state. Under UseAMSGrad the forward step divides by
+        // sqrt(v̂_max) instead of sqrt(v̂), and the running v̂_max from
+        // before the step isn't snapshotted on _previousM / _previousV.
+        // A naive reverse pass would use the post-update _vMaxVector and
+        // produce wrong parameters. Until a snapshot is added (the
+        // larger fix), fail fast so callers get a clear error instead
+        // of silently incorrect rollback. PR #1350 review.
+        if (_options.UseAMSGrad)
+        {
+            throw new NotSupportedException(
+                "ReverseUpdate is not supported when UseAMSGrad is enabled — the AMSGrad " +
+                "v̂_max state at the time of the forward step is not snapshotted, so the " +
+                "reverse pass cannot reconstruct the original parameters exactly.");
+        }
+
         // Ensure previous moment buffers are initialized
         if (_previousM == null || _previousV == null || _previousM.Length != updatedParameters.Length || _previousT == 0)
         {
@@ -981,6 +1024,17 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
         _t = 0;
+        // Also clear the AMSGrad per-coord v̂_max so reuse after Reset
+        // doesn't carry a stale upper bound into the next training run.
+        _vMaxVector = null;
+        // Tape-step moment dictionaries + tape step counter: same
+        // rationale — reusing the optimizer with WithParameters-cloned
+        // models post-Reset would otherwise leak per-tensor moments
+        // from the prior run keyed on stale tensor refs. PR #1350 review.
+        _tapeM.Clear();
+        _tapeV.Clear();
+        _tapeVMax.Clear();
+        _tapeStep = 0;
     }
 
     /// <summary>

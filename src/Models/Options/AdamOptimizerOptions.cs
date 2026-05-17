@@ -37,6 +37,40 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     }
 
     /// <summary>
+    /// Copy constructor — clones every property declared on this options
+    /// class plus the base-class gradient-clipping settings used here.
+    /// Required by the <c>src/Models/Options/**</c> coding-guideline
+    /// copy-constructor contract; without it, <c>UseAMSGrad</c> and the
+    /// other Adam-specific knobs would silently revert to their type
+    /// defaults whenever an options instance is round-tripped through a
+    /// generic copy/clone path. PR #1350 review.
+    /// </summary>
+    /// <param name="other">Source options to copy. Must be non-null.</param>
+    /// <exception cref="ArgumentNullException">When <paramref name="other"/> is null.</exception>
+    public AdamOptimizerOptions(AdamOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        // Base / optimizer-wide settings used by this type.
+        EnableGradientClipping = other.EnableGradientClipping;
+        MaxGradientNorm = other.MaxGradientNorm;
+
+        // Adam-specific settings (must mirror every property declared on this class).
+        BatchSize = other.BatchSize;
+        InitialLearningRate = other.InitialLearningRate;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        Epsilon = other.Epsilon;
+        AnomalyGuardMode = other.AnomalyGuardMode;
+        UseAdaptiveBetas = other.UseAdaptiveBetas;
+        MinBeta1 = other.MinBeta1;
+        MaxBeta1 = other.MaxBeta1;
+        MinBeta2 = other.MinBeta2;
+        MaxBeta2 = other.MaxBeta2;
+        UseAMSGrad = other.UseAMSGrad;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
     /// <value>A positive integer, defaulting to 32.</value>

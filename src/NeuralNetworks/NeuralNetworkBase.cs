@@ -6047,13 +6047,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <remarks>
     /// Default is AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). Standard
     /// Adam's bias-corrected m̂ / √v̂ ratio doesn't decay fast enough after
-    /// gradient convergence, so on fixed-input regression invariants
-    /// (MoreData_ShouldNotDegrade, Training_ShouldChangeParameters across
-    /// long horizons) it drifts the model away from a tight optimum.
-    /// AMSGrad's running v̂_max guarantees the denominator can only grow,
-    /// bounding post-convergence drift to negligible levels. Issue #1332
-    /// cluster 6 — optimizer-level fix for the entire model family rather
-    /// than per-model AdamOptimizer overrides.
+    /// gradient convergence on some models, so AMSGrad's running v̂_max
+    /// (which guarantees the denominator can only grow) bounds post-
+    /// convergence drift to negligible levels on the base-optimizer path.
+    /// Scope: improves stability for models that go through this
+    /// <c>GetOrCreateBaseOptimizer</c> path. <c>Training_ShouldChangeParameters</c>
+    /// was addressed separately by the ESN parameter-chunk work, and
+    /// <c>MoreData_ShouldNotDegrade</c> failures remain unresolved in other
+    /// areas tracked under #1332. Note that the fused-Adam fast path falls
+    /// back to eager training because the fused kernel does not implement
+    /// AMSGrad's max-second-moment update.
     /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
