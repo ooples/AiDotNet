@@ -776,8 +776,10 @@ public class AiModelBuilderFacadePredictParityTests
     /// BuildAsync. Run manually (skipped by default) to inspect whether the
     /// model's outputs are moving in the right direction during training.
     /// </summary>
-    [Xunit.Fact(Skip = "Diagnostic for #1340; run manually when debugging.")]
-    public void BuildAsync_Diagnostic_PredictionLogitsAfterTraining()
+    // Diagnostic for #1340 — call manually from a debugger session. NOT a
+    // [Fact] (kept private to avoid the "skipped test committed to CI"
+    // anti-pattern flagged by PR #1351 review).
+    private void BuildAsync_Diagnostic_PredictionLogitsAfterTraining_DebugOnly()
     {
         const int vocab = 16;
         const int ctxLen = 8;
@@ -928,8 +930,9 @@ public class AiModelBuilderFacadePredictParityTests
     /// gradient vector returned by CalculateGradient to confirm it is real
     /// (non-zero, varies across batches, correct length).
     /// </summary>
-    [Xunit.Fact(Skip = "Diagnostic for #1340; run manually when debugging.")]
-    public void BuildAsync_Diagnostic_OutputShapeAfterForward()
+    // Diagnostic for #1340 — call manually from a debugger session. NOT a
+    // [Fact] (see DebugOnly rationale above).
+    private void BuildAsync_Diagnostic_OutputShapeAfterForward_DebugOnly()
     {
         const int vocab = 16;
         const int ctxLen = 8;
@@ -1005,8 +1008,9 @@ public class AiModelBuilderFacadePredictParityTests
     /// Diagnostic — captures parameter vector before and after BuildAsync to
     /// see whether ANY weights are changing at all.
     /// </summary>
-    [Xunit.Fact(Skip = "Diagnostic for #1340; run manually when debugging.")]
-    public void BuildAsync_Diagnostic_ParametersDrift()
+    // Diagnostic for #1340 — call manually from a debugger session. NOT a
+    // [Fact] (see DebugOnly rationale above).
+    private void BuildAsync_Diagnostic_ParametersDrift_DebugOnly()
     {
         const int vocab = 16;
         const int ctxLen = 8;

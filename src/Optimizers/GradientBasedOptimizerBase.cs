@@ -1358,12 +1358,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             parameters = parameterizable.GetParameters();
         }
-        catch
+        catch (InvalidOperationException)
         {
-            // Some models throw if not yet built / lazy-init not run.
-            // Fingerprint of 0 is safe — the model identity in the key already
-            // differentiates models, and a not-yet-built model can't have stale
-            // cached gradients anyway.
+            // Lazy-init models throw InvalidOperationException when
+            // GetParameters is called before the first forward has
+            // resolved their shapes. Fingerprint of 0 is safe here —
+            // the model identity in the cache key already differentiates
+            // models, and a not-yet-built model can't have stale cached
+            // gradients to invalidate. Narrowed from a bare `catch` per
+            // PR #1351 review comment so genuinely unexpected
+            // exceptions (NRE, OOM, etc.) propagate instead of being
+            // silently swallowed into a zero fingerprint.
+            return 0L;
+        }
+        catch (NotSupportedException)
+        {
+            // Same rationale: some IParameterizable implementations gate
+            // GetParameters behind feature flags and throw
+            // NotSupportedException when the feature is off.
             return 0L;
         }
 
@@ -1405,8 +1417,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             return BitConverter.DoubleToInt64Bits(Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture));
         }
-        catch
+        catch (InvalidCastException)
         {
+            // T doesn't expose an IConvertible-compatible double cast.
+            // Zero fingerprint contribution — see the outer-method
+            // rationale on the GetParameters catch above.
+            return 0L;
+        }
+        catch (FormatException)
+        {
+            // Convert.ToDouble can throw FormatException for some
+            // custom T types whose string-round-trip isn't standard.
+            return 0L;
+        }
+        catch (OverflowException)
+        {
+            // Value out of double range — drop from fingerprint mix.
             return 0L;
         }
     }
