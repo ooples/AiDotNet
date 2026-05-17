@@ -772,15 +772,30 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         Vector<T> gradient;
 
+        // Track whether the gradient came from the IGradientComputable fast-path
+        // (which back-propagates through a tape-built scalar loss whose
+        // ComputeTapeLoss already averages over the batch via ReduceMean) or
+        // the loss-derivative fallback (which returns the per-element loss
+        // derivative summed over the batch). The fast-path gradient is
+        // ALREADY the mean-batch gradient — dividing again by the batch size
+        // below produces a 1/N² scale and reduces effective step magnitude
+        // proportionally, which mode-collapses Transformer training under
+        // BuildAsync's batched Optimize loop (Adam.UpdateSolution at
+        // BatchSize=8 sees gradients 8× too small for any meaningful step).
+        // Fixes the residual mode collapse left by PR #1351.
+        bool gradientIsAlreadyMeanScaled;
+
         // Try to use explicit gradient computation if available (more efficient and accurate)
         if (solution is IGradientComputable<T, TInput, TOutput> gradientComputable)
         {
             gradient = gradientComputable.ComputeGradients(X, y, LossFunction);
+            gradientIsAlreadyMeanScaled = true;
         }
         else
         {
             // Fallback to traditional gradient computation via loss function derivative
             TOutput predictions = solution.Predict(X);
+            gradientIsAlreadyMeanScaled = false;
 
             if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)
             {
@@ -871,9 +886,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var regularizationContribution = (Vector<T>)Engine.Subtract(parameters, regularizedParameters);
         gradient = (Vector<T>)Engine.Add(gradient, regularizationContribution);
 
-        // Scale the gradient by the batch size
-        int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
-        gradient = gradient.Divide(NumOps.FromDouble(batchSize));
+        // Scale the gradient by the batch size ONLY for the loss-derivative
+        // fallback path. The IGradientComputable fast-path returns a gradient
+        // that the loss function's ComputeTapeLoss already averaged over the
+        // batch (and over any sequence/spatial axes) — dividing by batchSize
+        // a second time would compound to 1/N² and collapse Transformer
+        // training under BuildAsync's batched Optimize loop.
+        if (!gradientIsAlreadyMeanScaled)
+        {
+            int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
+            gradient = gradient.Divide(NumOps.FromDouble(batchSize));
+        }
 
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
