@@ -379,33 +379,6 @@ public class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         return padded;
     }
 
-    /// <summary>
-    /// Pads or truncates labels to match the preprocessed input sequence length.
-    /// </summary>
-    private Tensor<T> PreprocessLabels(Tensor<T> labels, int targetSeqLen)
-    {
-        if (labels.Rank < 1) return labels;
-
-        int labelLen = labels.Shape[0];
-        if (labelLen == targetSeqLen) return labels;
-
-        if (labels.Rank == 1)
-        {
-            var padded = new Tensor<T>([targetSeqLen]);
-            int copyLen = Math.Min(labelLen, targetSeqLen);
-            for (int i = 0; i < copyLen; i++)
-                padded[i] = labels[i];
-            return padded;
-        }
-
-        int cols = labels.Shape[1];
-        var padded2 = new Tensor<T>([targetSeqLen, cols]);
-        int copyLen2 = Math.Min(labelLen, targetSeqLen);
-        for (int s = 0; s < copyLen2; s++)
-            for (int c = 0; c < cols; c++)
-                padded2[s, c] = labels[s, c];
-        return padded2;
-    }
 
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
