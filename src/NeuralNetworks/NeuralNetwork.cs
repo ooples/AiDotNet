@@ -1,6 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -110,7 +112,12 @@ public class NeuralNetwork<T> : NeuralNetworkBase<T>
     public NeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, NeuralNetworkDefaultOptions? options = null) :
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default to AMSGrad to suppress Adam's post-convergence drift on
+        // fixed-input regression invariants (MoreData_ShouldNotDegrade,
+        // TrainingError_ShouldNotExceedTestError). Issue #1332 cluster 6.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
         _options = options ?? new NeuralNetworkDefaultOptions();
         Options = _options;
         InitializeLayers();
