@@ -1055,8 +1055,7 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         Tensor<T> gateBroad = Engine.TensorTile(gate, new[] { 1, _memorySize });
         Tensor<T> oneMinusGate = Engine.TensorSubtract(
             Engine.TensorTile(
-                Engine.Reshape(
-                    new Tensor<T>(new T[] { NumOps.One }, new[] { 1, 1 }), [1, 1]),
+                new Tensor<T>(new T[] { NumOps.One }, new[] { 1, 1 }),
                 new[] { batchSize, _memorySize }),
             gateBroad);
         Tensor<T> a = Engine.TensorMultiply(gateBroad, contentWeights);
