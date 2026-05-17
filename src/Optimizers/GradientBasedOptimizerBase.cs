@@ -850,10 +850,26 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
         }
 
-        // Apply regularization to the gradient
+        // Apply regularization to the gradient. The previous code called the
+        // 1-arg Regularize(Vector<T>) overload on the parameters, then ADDED
+        // its return value to the gradient — but that overload is defined as
+        // "return the regularized COEFFICIENTS" (e.g. L2 returns (1-λ)·params),
+        // not "return the regularization gradient contribution". For default
+        // L2 (strength=0.01) this added 0.99·params to every gradient on
+        // every step, which alone collapsed every weight toward zero and was
+        // the root cause of the residual mode collapse left by PR #1351.
+        //
+        // Correct semantics: the regularization gradient contribution is
+        // d/dθ(R(θ)). For L2 R(θ)=½λ‖θ‖² that's λ·θ; for L1 R(θ)=λ‖θ‖₁ that
+        // is λ·sign(θ). Both can be derived from the 1-arg overload via
+        // `params - Regularize(params)` (= λ·θ for L2; = soft-thresholding
+        // shift for L1), so the gradient contribution is the DIFFERENCE
+        // between params and the regularizer's coefficient transform — the
+        // exact opposite of what the previous code computed.
         var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        var regularizationGradient = Regularization.Regularize(parameters);
-        gradient = gradient.Add(regularizationGradient);
+        var regularizedParameters = Regularization.Regularize(parameters);
+        var regularizationContribution = (Vector<T>)Engine.Subtract(parameters, regularizedParameters);
+        gradient = (Vector<T>)Engine.Add(gradient, regularizationContribution);
 
         // Scale the gradient by the batch size
         int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
