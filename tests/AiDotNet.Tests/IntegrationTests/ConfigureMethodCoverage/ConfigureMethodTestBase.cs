@@ -397,8 +397,16 @@ public abstract class ConfigureMethodTestBase
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
         if (features is null) throw new ArgumentNullException(nameof(features));
-        var probe = new Tensor<float>([1, CanaryCtxLen]);
-        for (int s = 0; s < CanaryCtxLen; s++) probe[0, s] = features[0, s];
+        // CodeRabbit feedback on #1345: derive probe width from the caller's
+        // feature tensor instead of hard-coding CanaryCtxLen. Hard-coding
+        // would truncate inputs (when features is wider) or throw on indexing
+        // (when narrower), either of which silently invalidates the non-
+        // degenerate assertion. Read features.Shape[1] for the row width.
+        Xunit.Assert.True(features.Shape[0] > 0, $"{featureName}: features must contain at least one row.");
+        Xunit.Assert.True(features.Shape.Length >= 2, $"{featureName}: features must be at least 2-D.");
+        int ctxLen = features.Shape[1];
+        var probe = new Tensor<float>([1, ctxLen]);
+        for (int s = 0; s < ctxLen; s++) probe[0, s] = features[0, s];
         AssertFacadePredictNonDegenerate(result.Predict(probe), featureName);
     }
 
