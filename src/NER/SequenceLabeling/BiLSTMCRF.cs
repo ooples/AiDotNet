@@ -565,7 +565,16 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                 try
                 {
                     var preprocessed = PreprocessTokens(tokenEmbeddings);
-                    var preprocessedLabels = PreprocessLabels(labels, preprocessed.Shape[0]);
+                    // Rank-aware seq-len lookup — for rank-3 batched inputs
+                    // [batch, seq, embed] Shape[0] is the batch size, not
+                    // the sequence length, and PreprocessLabels then sized
+                    // labels to the batch count and the CRF layer's
+                    // sequence-length contract was violated. Mirror Train's
+                    // logic so async and sync paths agree.
+                    int targetSeqLen = preprocessed.Rank == 3
+                        ? preprocessed.Shape[1]
+                        : preprocessed.Shape[0];
+                    var preprocessedLabels = PreprocessLabels(labels, targetSeqLen);
                     var output = Forward(preprocessed);
                     double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
                         output.ToVector(), preprocessedLabels.ToVector()));
@@ -811,7 +820,22 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pad/truncate inputs and labels to MaxSequenceLength before the
+            // tape forward — the ConditionalRandomFieldLayer locks its
+            // internal Viterbi/transition buffers to the sequence length seen
+            // on construction (default MaxSequenceLength = 256), and the
+            // PredictLabels / PredictBatch paths already preprocess for that
+            // contract. The training path previously fed the raw input shape
+            // straight through, which exploded with
+            // "ConditionalRandomFieldLayer's sequence length mismatch" the
+            // moment any caller supplied a shorter sequence than the
+            // configured MaxSequenceLength.
+            var preprocessedInput = PreprocessTokens(input);
+            int targetSeqLen = preprocessedInput.Rank == 3
+                ? preprocessedInput.Shape[1]
+                : preprocessedInput.Shape[0];
+            var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
+            TrainWithTape(preprocessedInput, preprocessedExpected);
         }
         finally
         {

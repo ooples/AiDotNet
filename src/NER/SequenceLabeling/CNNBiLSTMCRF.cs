@@ -262,7 +262,15 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                 try
                 {
                     var preprocessed = PreprocessTokens(tokenEmbeddings);
-                    var preprocessedLabels = PreprocessLabels(labels, preprocessed.Shape[0]);
+                    // Rank-aware seq-len lookup, mirroring Train. Shape[0]
+                    // is the batch size for rank-3 inputs and labels were
+                    // being sized to the batch count, violating the CRF
+                    // layer's sequence-length contract. See BiLSTMCRF.Train
+                    // for the full rationale.
+                    int targetSeqLen = preprocessed.Rank == 3
+                        ? preprocessed.Shape[1]
+                        : preprocessed.Shape[0];
+                    var preprocessedLabels = PreprocessLabels(labels, targetSeqLen);
                     var output = Forward(preprocessed);
                     double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
                         output.ToVector(), preprocessedLabels.ToVector()));
@@ -379,7 +387,18 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
         SetTrainingMode(true);
-        try { TrainWithTape(input, expected); }
+        try
+        {
+            // Mirror PredictLabels' preprocessing into Train so the CRF
+            // layer sees the locked sequence length it was constructed with
+            // (see BiLSTMCRF.Train for the longer-form rationale).
+            var preprocessedInput = PreprocessTokens(input);
+            int targetSeqLen = preprocessedInput.Rank == 3
+                ? preprocessedInput.Shape[1]
+                : preprocessedInput.Shape[0];
+            var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
+            TrainWithTape(preprocessedInput, preprocessedExpected);
+        }
         finally { SetTrainingMode(false); }
     }
 
