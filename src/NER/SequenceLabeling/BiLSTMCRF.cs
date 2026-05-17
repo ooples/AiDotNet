@@ -1213,10 +1213,21 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         }
         else if (_useNativeMode)
         {
+            // ONNX cleanup only — do NOT clear Layers and call InitializeLayers
+            // here. The base class's DeserializeInternalUnchecked has already
+            // recreated every layer from its serialized type+shape+metadata
+            // and called SetParameters with the saved trained weights; clearing
+            // and reinitialising here threw all that work away and replaced it
+            // with fresh random-init layers, which made Clone /
+            // DeepCopy / SaveModel+LoadModel return a model that predicts
+            // completely different label sequences than the source. That was
+            // the actual root cause of the BiLSTMCRFTests
+            // Clone_ShouldProduceIdenticalOutput and
+            // Clone_AfterTraining_ShouldPreserveLearnedWeights failures after
+            // cluster 4 cleanup (the dropped weights manifested as ||Δ|| ~= ||trained||
+            // on a probe-input — random-init magnitude relative to the trained model).
             OnnxModel?.Dispose();
             OnnxModel = null;
-            Layers.Clear();
-            InitializeLayers();
         }
     }
 

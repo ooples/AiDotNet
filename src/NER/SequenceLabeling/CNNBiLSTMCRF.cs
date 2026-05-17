@@ -584,11 +584,13 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         {
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
         }
-        else if (_useNativeMode)
-        {
-            Layers.Clear();
-            InitializeLayers();
-        }
+        // Native mode: do NOT clear+re-init Layers here. See the matching
+        // comment in BiLSTMCRF.DeserializeNetworkSpecificData — the base
+        // class already recreated every layer and called SetParameters
+        // with the saved trained weights; wiping them here drops those
+        // weights and replaces them with fresh random-init, which
+        // caused the Clone / DeepCopy round-trip to silently return a
+        // randomly-initialised model.
     }
 
     #endregion
