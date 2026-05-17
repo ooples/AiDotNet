@@ -4543,8 +4543,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         FineTuningConfiguration<T, TInput, TOutput>? configuration = null)
     {
         _fineTuningConfiguration = configuration ?? new FineTuningConfiguration<T, TInput, TOutput>();
+
+        // RESERVED FOR FUTURE USE: the configuration is currently stored on the
+        // builder but the multi-method fine-tuning runner (DPO/SimPO/GRPO/ORPO/
+        // IPO/KTO/CPO/CAI/RLHF) is not yet integrated into the BuildAsync
+        // pipeline. See the open AiDotNet issue for tracking; until then the
+        // surface is reachable for migration via the returned result.
+        // Surface a one-time runtime warning so users discover the gap early
+        // rather than after Build returns silently.
+        System.Diagnostics.Trace.TraceWarning(
+            "ConfigureFineTuning: configuration stored but no in-engine consumer is wired yet. " +
+            "FineTuningConfiguration is reserved for future use. Track follow-up at " +
+            "AiDotNet 'fix(#1357 follow-up): wire ConfigureFineTuning to runner'.");
+
         return this;
     }
+
+    /// <summary>
+    /// Internal accessor exposing the most recently configured
+    /// <see cref="FineTuningConfiguration{T, TInput, TOutput}"/> so unit tests
+    /// can assert the value was retained by <see cref="ConfigureFineTuning"/>.
+    /// </summary>
+    internal FineTuningConfiguration<T, TInput, TOutput>? ConfiguredFineTuning => _fineTuningConfiguration;
 
     /// <summary>
     /// Configures a multi-stage training pipeline for advanced training workflows.
@@ -4615,8 +4635,29 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null)
     {
         _trainingPipelineConfiguration = configuration;
+
+        // RESERVED FOR FUTURE USE: multi-stage training pipelines (SFT -> DPO,
+        // SFT -> RM -> PPO, Constitutional AI, curriculum, iterative refinement)
+        // are stored on the builder but the staged executor is not yet wired
+        // into BuildAsync. Surface a one-time runtime warning so users discover
+        // the gap early rather than after Build returns silently.
+        if (configuration is not null)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "ConfigureTrainingPipeline: configuration stored but no in-engine consumer is wired yet. " +
+                "TrainingPipelineConfiguration is reserved for future use. Track follow-up at " +
+                "AiDotNet 'fix(#1357 follow-up): wire ConfigureTrainingPipeline to staged executor'.");
+        }
+
         return this;
     }
+
+    /// <summary>
+    /// Internal accessor exposing the most recently configured
+    /// <see cref="TrainingPipelineConfiguration{T, TInput, TOutput}"/> so unit tests
+    /// can assert the value was retained by <see cref="ConfigureTrainingPipeline"/>.
+    /// </summary>
+    internal TrainingPipelineConfiguration<T, TInput, TOutput>? ConfiguredTrainingPipeline => _trainingPipelineConfiguration;
 
     /// <summary>
     /// Configures LoRA (Low-Rank Adaptation) for parameter-efficient fine-tuning.
@@ -4901,8 +4942,26 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         CurriculumLearningOptions<T, TInput, TOutput>? options = null)
     {
         _curriculumLearningOptions = options ?? new CurriculumLearningOptions<T, TInput, TOutput>();
+
+        // RESERVED FOR FUTURE USE: the underlying CurriculumLearner /
+        // CurriculumScheduler types exist under src/CurriculumLearning, but the
+        // builder does not yet thread these options into the training loop.
+        // Surface a one-time runtime warning so users discover the gap early
+        // rather than after Build returns silently.
+        System.Diagnostics.Trace.TraceWarning(
+            "ConfigureCurriculumLearning: configuration stored but no in-engine consumer is wired yet. " +
+            "CurriculumLearningOptions is reserved for future use. Track follow-up at " +
+            "AiDotNet 'fix(#1357 follow-up): wire ConfigureCurriculumLearning to training loop'.");
+
         return this;
     }
+
+    /// <summary>
+    /// Internal accessor exposing the most recently configured
+    /// <see cref="CurriculumLearningOptions{T, TInput, TOutput}"/> so unit tests
+    /// can assert the value was retained by <see cref="ConfigureCurriculumLearning"/>.
+    /// </summary>
+    internal CurriculumLearningOptions<T, TInput, TOutput>? ConfiguredCurriculumLearning => _curriculumLearningOptions;
 
     private static AutoMLEnsembleOptions ResolveDefaultEnsembling(AutoMLBudgetPreset preset)
     {
@@ -6118,8 +6177,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         _sslConfig = new SelfSupervisedLearning.SSLConfig();
         configure?.Invoke(_sslConfig);
+
+        // RESERVED FOR FUTURE USE: SSL pretraining infrastructure (SimCLR,
+        // MoCo, BYOL, DINO, MAE) exists under src/SelfSupervisedLearning, but
+        // the builder does not yet run pretraining as a stage of BuildAsync.
+        // Users that need SSL today should drive the SSLFineTuningPipeline /
+        // SSL method classes directly. Surface a one-time runtime warning so
+        // callers discover the gap early rather than after Build returns
+        // silently.
+        System.Diagnostics.Trace.TraceWarning(
+            "ConfigureSelfSupervisedLearning: configuration stored but no in-engine consumer is wired yet. " +
+            "SSLConfig is reserved for future use; in the meantime drive SSLFineTuningPipeline directly. " +
+            "Track follow-up at AiDotNet 'fix(#1357 follow-up): wire ConfigureSelfSupervisedLearning to pretraining stage'.");
+
         return this;
     }
+
+    /// <summary>
+    /// Internal accessor exposing the most recently configured
+    /// <see cref="SelfSupervisedLearning.SSLConfig"/> so unit tests can assert
+    /// the value was retained by <see cref="ConfigureSelfSupervisedLearning"/>.
+    /// </summary>
+    internal SelfSupervisedLearning.SSLConfig? ConfiguredSelfSupervisedLearning => _sslConfig;
 
     /// <summary>
     /// Configures program synthesis (code generation / repair) settings with sensible defaults.
