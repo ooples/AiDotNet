@@ -160,7 +160,12 @@ public class GradientCheckpointingTransformerIssue1341Tests
             var target = new Tensor<float>(new[] { 1, vocabSize });
             target[0, rng.Next(vocabSize)] = 1.0f;
 
-            transformer.Train(input, target);
+            // Use Record.Exception (same pattern as the sibling test at
+            // line ~103) so an unexpected throw produces a clearly
+            // attributed assertion failure instead of bubbling up as a
+            // raw exception that hides which step failed.
+            var ex = Record.Exception(() => transformer.Train(input, target));
+            Assert.Null(ex);
             var lastLoss = transformer.GetLastLoss();
             Assert.True(!float.IsNaN(lastLoss) && !float.IsInfinity(lastLoss),
                 $"step={step}: LastLoss must be finite, was {lastLoss}");
