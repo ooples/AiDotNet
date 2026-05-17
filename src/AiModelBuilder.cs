@@ -1613,6 +1613,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var programSynthesisResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
         ProcessKnowledgeGraphOptions(programSynthesisResult);
         AttachSafetyPipeline(programSynthesisResult);
+        AttachAdversarialRobustness(programSynthesisResult);
         return programSynthesisResult;
     }
 
@@ -1621,6 +1622,41 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         if (_safetyPipelineConfig != null)
         {
             result.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
+        }
+    }
+
+    /// <summary>
+    /// Threads any <see cref="_adversarialRobustnessConfiguration"/> set via
+    /// <see cref="ConfigureAdversarialRobustness"/> into the constructed
+    /// <see cref="AiModelResult{T, TInput, TOutput}"/> so the runtime
+    /// adversarial-robustness API (<c>PredictWithDefense</c>,
+    /// <c>EvaluateRobustness</c>) actually picks up the user's settings.
+    /// </summary>
+    /// <remarks>
+    /// Prior to this method the <see cref="ConfigureAdversarialRobustness"/>
+    /// call only stored the configuration in
+    /// <see cref="_adversarialRobustnessConfiguration"/>; the field was never
+    /// read elsewhere, so the call had no observable effect (issue #1357 —
+    /// "ConfigureAdversarialRobustness stores config, never consumes it").
+    /// This method mirrors <see cref="AttachSafetyPipeline"/> and is invoked
+    /// from every Build path so per-sample-train consumers also see the
+    /// configuration on the returned result.
+    /// </remarks>
+    private void AttachAdversarialRobustness(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_adversarialRobustnessConfiguration is null || !_adversarialRobustnessConfiguration.Enabled)
+        {
+            return;
+        }
+
+        // Always surface the underlying options so EvaluateRobustness /
+        // PredictWithDefense can read them at inference time even when no
+        // custom defense was supplied.
+        result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
+
+        if (_adversarialRobustnessConfiguration.CustomDefense is not null)
+        {
+            result.SetAdversarialDefense(_adversarialRobustnessConfiguration.CustomDefense);
         }
     }
 
@@ -2132,6 +2168,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var nnResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
         ProcessKnowledgeGraphOptions(nnResult);
         AttachSafetyPipeline(nnResult);
+        AttachAdversarialRobustness(nnResult);
         return nnResult;
     }
 
@@ -3471,6 +3508,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         // Build and attach the composable safety pipeline if configured
         AttachSafetyPipeline(finalResult);
+        AttachAdversarialRobustness(finalResult);
 
         return finalResult;
     }
@@ -3607,6 +3645,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(metaOptions));
         ProcessKnowledgeGraphOptions(result);
         AttachSafetyPipeline(result);
+        AttachAdversarialRobustness(result);
 
         return result;
     }
@@ -3939,6 +3978,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(rlOptions));
         ProcessKnowledgeGraphOptions(result);
         AttachSafetyPipeline(result);
+        AttachAdversarialRobustness(result);
 
         return result;
     }
