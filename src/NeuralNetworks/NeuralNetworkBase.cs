@@ -3994,22 +3994,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
     /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
-    /// <remarks>
-    /// <para>
-    /// Public surface added by AiDotNet#1354. Previously this was
-    /// <c>internal virtual</c> so consumers could only enable mixed precision
-    /// through the <c>AiModelBuilder.ConfigureMixedPrecision + BuildAsync</c>
-    /// path, which is unusable for per-sample <c>model.Train(x, y)</c> loops.
-    /// Exposing it publicly + the <c>TrainWithTape</c> wiring change in the
-    /// same fix closes the gap: consumers can call
-    /// <c>model.EnableMixedPrecision(cfg)</c> directly on a constructed
-    /// <see cref="NeuralNetworkBase{T}"/> subclass and the next call to
-    /// <c>model.Train(x, y)</c> will route through the mixed-precision
-    /// training path (loss scaling, FP16/BF16 forward-weight round-trip,
-    /// FP32 master weights, overflow detection + step-skip).
-    /// </para>
-    /// </remarks>
-    public virtual void EnableMixedPrecision(LocalMixedPrecisionConfig? config = null)
+    internal virtual void EnableMixedPrecision(LocalMixedPrecisionConfig? config = null)
     {
         // Check that T is float
         if (typeof(T) != typeof(float))
@@ -4041,7 +4026,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Switching to FP32 training for the final epochs
     /// </para>
     /// </remarks>
-    public virtual void DisableMixedPrecision()
+    internal virtual void DisableMixedPrecision()
     {
         if (_mixedPrecisionContext != null)
         {
@@ -4697,7 +4682,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// such as the current loss scale and overflow statistics. Useful for monitoring and debugging.
     /// </para>
     /// </remarks>
-    public virtual MixedPrecisionContext? GetMixedPrecisionContext()
+    internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
     {
         return _mixedPrecisionContext;
     }

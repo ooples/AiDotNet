@@ -12,9 +12,12 @@ using AiDotNetVector = AiDotNet.Tensors.LinearAlgebra.Vector<float>;
 namespace AiDotNetTests.UnitTests.MixedPrecision;
 
 /// <summary>
-/// Unit tests for the AiDotNet#1354 wire-up: <c>NeuralNetworkBase.EnableMixedPrecision</c>
-/// is now public AND <c>TrainWithTape</c> consults <c>_mixedPrecisionContext</c>
-/// during the per-sample <c>model.Train(x, y)</c> path.
+/// Unit tests for the AiDotNet#1354 wire-up: <c>TrainWithTape</c> consults
+/// <c>_mixedPrecisionContext</c> during the per-sample <c>model.Train(x, y)</c>
+/// path. Mixed-precision is configured ONLY through the facade
+/// (<c>AiModelBuilder.ConfigureMixedPrecision + BuildAsync</c>); the underlying
+/// <c>EnableMixedPrecision</c> remains <c>internal virtual</c> to preserve the
+/// facade pattern. These tests reach it via <c>InternalsVisibleTo</c> grant.
 ///
 /// <para>The wire-up contract verified here:</para>
 /// <list type="number">
@@ -29,7 +32,9 @@ namespace AiDotNetTests.UnitTests.MixedPrecision;
 ///         the same effective FP32 update as non-mixed-precision training at the
 ///         same configuration (within numerical noise from the rounded forward).</item>
 ///   <item>BF16: works without loss scaling (default scale = 1.0).</item>
-///   <item>EnableMixedPrecision is invokable from outside the assembly (public).</item>
+///   <item><c>BuildAsync</c> applies the stored <c>_mixedPrecisionConfig</c> to
+///         the constructed neural-network model via internal
+///         <c>EnableMixedPrecision</c> (existing call at AiModelBuilder.cs:2502).</item>
 /// </list>
 /// </summary>
 public class MixedPrecisionTrainWithTapeWiringTests
