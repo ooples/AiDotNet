@@ -55,7 +55,14 @@ namespace AiDotNet.Inference.Quantization;
 /// </code>
 /// </example>
 /// </remarks>
-public sealed class Int8InferenceModel
+// Internal: per the facade-pattern coding guideline, plumbing types
+// stay off the public surface. The supported public entry point for
+// INT8 weight-only inference is the AiModelBuilder / NeuralNetworkBase
+// facade methods; this class is the in-memory representation those
+// facade methods return. Issue #1342 review (PR #1348) flagged the
+// previous `public` declarations as a leak of the underlying
+// mutable NeuralNetworkBase<float>.
+internal sealed class Int8InferenceModel
 {
     private readonly NeuralNetworkBase<float> _model;
     private readonly long _quantizedWeightBytes;
@@ -78,7 +85,14 @@ public sealed class Int8InferenceModel
     /// Gets the underlying neural network (with quantized layers swapped in).
     /// Use <see cref="Predict"/> for the recommended inference entry point.
     /// </summary>
-    public NeuralNetworkBase<float> InnerModel => _model;
+    /// <remarks>
+    /// Internal: leaking the mutable NeuralNetworkBase<float> on the
+    /// public surface would let callers bypass the inference-only
+    /// contract by training the swapped-in quantized layers. Kept
+    /// internal so the facade can decide what (if anything) to expose
+    /// to consumers.
+    /// </remarks>
+    internal NeuralNetworkBase<float> InnerModel => _model;
 
     /// <summary>
     /// Total bytes used by INT8 weight storage (sbyte weights + float32 scales),
@@ -140,7 +154,7 @@ public sealed class Int8InferenceModel
     /// Typically indicates the network has lazy attention layers that never received a forward
     /// pass; run a single training step or warm-up <c>Predict</c> first.
     /// </exception>
-    public static Int8InferenceModel FromTrained(
+    internal static Int8InferenceModel FromTrained(
         NeuralNetworkBase<float> trained,
         bool cloneModel = true)
     {

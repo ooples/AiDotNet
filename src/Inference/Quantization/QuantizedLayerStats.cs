@@ -34,6 +34,17 @@ internal static class QuantizedLayerStats
     public static (long Quantized, long Original) GetBytes(QuantizedAttentionLayer layer)
     {
         if (layer is null) throw new ArgumentNullException(nameof(layer));
+        // The byte arithmetic below assumes INT8 layout (1 byte per
+        // weight + 4 bytes per per-row scale). QuantizedAttentionLayer
+        // also supports FP8 / NF4 modes whose storage layouts differ,
+        // so silently returning these numbers for a non-INT8 layer
+        // would publish wrong stats. Fail fast — when the helper is
+        // extended to FP8/NF4 the per-mode arithmetic should branch
+        // here explicitly. (PR #1348 review comment.)
+        if (layer.QuantizationFormat != InferenceQuantizationMode.WeightOnlyInt8)
+            throw new NotSupportedException(
+                $"QuantizedLayerStats.GetBytes currently supports only " +
+                $"{InferenceQuantizationMode.WeightOnlyInt8}; got {layer.QuantizationFormat}.");
 
         long totalQuant = 0;
         long totalOrig = 0;

@@ -170,7 +170,16 @@ public class Int8InferenceModelIntegrationTests
         const int measureIters = 20;
 
         var fp32 = BuildAndWarmTransformer(seqLen, embDim, numHeads, seed: 53);
-        var int8 = Int8InferenceModel.FromTrained(fp32);
+        // Explicit cloneModel: true so FromTrained's INT8 rewrite
+        // operates on a deep copy of fp32 and leaves the original
+        // intact for the FP32-baseline measurement below. The
+        // default *is* true, but in a perf test that compares
+        // fp32 vs int8 on the same machine relying on an implicit
+        // default is fragile — a future signature change that
+        // flipped the default to false would silently turn this
+        // into a quantized-vs-quantized comparison and the <50x
+        // guard would lose all signal. (PR #1348 review comment.)
+        var int8 = Int8InferenceModel.FromTrained(fp32, cloneModel: true);
         var input = CreateRandomInput(seqLen, embDim, seed: 31);
 
         // Warmup both paths to amortize JIT, plan cache, etc.
