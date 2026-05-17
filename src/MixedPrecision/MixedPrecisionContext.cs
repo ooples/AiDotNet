@@ -186,6 +186,69 @@ public class MixedPrecisionContext : IDisposable
     }
 
     /// <summary>
+    /// Round-trips the master weights through BF16 (truncate-low-16-bits-of-FP32)
+    /// to emulate a forward pass that would have used BF16 working weights.
+    /// </summary>
+    /// <param name="parameterName">Name of the parameter group (default: "params").</param>
+    /// <returns>The BF16-round-tripped weights as an FP32 vector (BF16 has no native CLR type;
+    /// the round-tripped vector contains FP32 values whose representation has had
+    /// the low 16 mantissa bits cleared via round-to-nearest-even).</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> BF16 is "Brain Float 16" — IEEE FP32 with the
+    /// low 16 mantissa bits dropped. Same 8-bit exponent as FP32 (so the
+    /// dynamic range matches), but only 7 bits of mantissa precision.
+    /// </para>
+    /// <para>The round-trip is implemented by clearing the low 16 bits of the
+    /// IEEE FP32 representation with round-to-nearest-even on the truncated
+    /// bits — this is the value any layer would have seen if its forward
+    /// weights were materialized as BF16. We return an FP32 vector because
+    /// .NET 8 does not ship a primitive BF16 type; the value semantics are
+    /// identical to BF16 → FP32.
+    /// </para>
+    /// </remarks>
+    public Vector<float> CastWeightsToBF16(string parameterName = "params")
+    {
+        if (!IsInitialized)
+        {
+            throw new InvalidOperationException("Context not initialized. Call Initialize() first.");
+        }
+
+        if (!_masterWeights.TryGetValue(parameterName, out var masterParams))
+        {
+            throw new KeyNotFoundException($"Parameter '{parameterName}' not found. Available parameters: {string.Join(", ", ParameterNames)}");
+        }
+
+        var result = new Vector<float>(masterParams.Length);
+        for (int i = 0; i < masterParams.Length; i++)
+        {
+            result[i] = TruncateFloatToBF16RoundTrip(masterParams[i]);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Emulate BF16 → FP32 round-trip by clearing the low 16 bits of the
+    /// FP32 mantissa (round-to-nearest-even).
+    /// </summary>
+    /// <remarks>
+    /// BF16 IEEE format = upper 16 bits of FP32 (1 sign + 8 exponent + 7 mantissa).
+    /// FP32 → BF16 drops the low 16 bits of the mantissa.
+    /// BF16 → FP32 zero-extends those 16 bits.
+    /// Net: "zero the low 16 mantissa bits with round-to-nearest-even on the
+    /// dropped half".
+    /// </remarks>
+    private static float TruncateFloatToBF16RoundTrip(float value)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value)) return value;
+        uint bits = unchecked((uint)BitConverterHelper.SingleToInt32Bits(value));
+        uint truncated = bits & 0xFFFF0000u;
+        uint rounding = bits & 0x0000FFFFu;
+        if (rounding > 0x8000u) truncated += 0x10000u;
+        else if (rounding == 0x8000u && (truncated & 0x10000u) != 0) truncated += 0x10000u;
+        return BitConverterHelper.Int32BitsToSingle(unchecked((int)truncated));
+    }
+
+    /// <summary>
     /// Gets the working weights (FP16) for a parameter group.
     /// </summary>
     /// <param name="parameterName">Name of the parameter group.</param>

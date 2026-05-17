@@ -3994,7 +3994,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>
     /// <exception cref="InvalidOperationException">Thrown when mixed-precision is already enabled.</exception>
-    internal virtual void EnableMixedPrecision(LocalMixedPrecisionConfig? config = null)
+    /// <remarks>
+    /// <para>
+    /// Public surface added by AiDotNet#1354. Previously this was
+    /// <c>internal virtual</c> so consumers could only enable mixed precision
+    /// through the <c>AiModelBuilder.ConfigureMixedPrecision + BuildAsync</c>
+    /// path, which is unusable for per-sample <c>model.Train(x, y)</c> loops.
+    /// Exposing it publicly + the <c>TrainWithTape</c> wiring change in the
+    /// same fix closes the gap: consumers can call
+    /// <c>model.EnableMixedPrecision(cfg)</c> directly on a constructed
+    /// <see cref="NeuralNetworkBase{T}"/> subclass and the next call to
+    /// <c>model.Train(x, y)</c> will route through the mixed-precision
+    /// training path (loss scaling, FP16/BF16 forward-weight round-trip,
+    /// FP32 master weights, overflow detection + step-skip).
+    /// </para>
+    /// </remarks>
+    public virtual void EnableMixedPrecision(LocalMixedPrecisionConfig? config = null)
     {
         // Check that T is float
         if (typeof(T) != typeof(float))
@@ -4026,7 +4041,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// - Switching to FP32 training for the final epochs
     /// </para>
     /// </remarks>
-    internal virtual void DisableMixedPrecision()
+    public virtual void DisableMixedPrecision()
     {
         if (_mixedPrecisionContext != null)
         {
@@ -4682,7 +4697,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// such as the current loss scale and overflow statistics. Useful for monitoring and debugging.
     /// </para>
     /// </remarks>
-    internal virtual MixedPrecisionContext? GetMixedPrecisionContext()
+    public virtual MixedPrecisionContext? GetMixedPrecisionContext()
     {
         return _mixedPrecisionContext;
     }
@@ -5153,7 +5168,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // operate on float* directly). Returns false if any condition isn't
         // met or tracing fails; we then fall through to the eager tape path
         // below with behavior unchanged.
-        if (TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
+        //
+        // Mixed-precision (issue #1354): the fused path does NOT materialize
+        // intermediate gradient tensors that the loss-scaler needs to unscale
+        // + overflow-check, and does NOT consult _mixedPrecisionContext for
+        // forward-weight round-tripping. When MP is enabled we MUST take the
+        // eager tape path so the MP wiring below (cast weights to low precision,
+        // scale loss, unscale gradients, overflow detection) actually runs.
+        if (_mixedPrecisionContext is null
+            && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
             return;
 
         // The parameter walk here exists only to size the buffer on first Train()
@@ -5249,6 +5272,53 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             var loss = LossFunction as LossFunctions.LossFunctionBase<T>
                 ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
 
+            // ---------------- Mixed-precision (#1354) — pre-forward setup ----------------
+            // When _mixedPrecisionContext != null we are running mixed-precision
+            // training. The contract is:
+            //   1. master weights stay FP32 (in the layer storage)
+            //   2. forward + backward use low-precision (FP16 or BF16) working
+            //      weights — on CPU we approximate this by round-tripping each
+            //      trainable parameter through the target low precision and
+            //      writing the rounded value back in-place before the forward
+            //      pass. The tensor reference (which the optimizer's
+            //      TapeStepContext tracks) is unchanged.
+            //   3. loss is scaled up by LossScaler.Scale BEFORE backward so
+            //      gradients are S× larger (preventing FP16 underflow on real
+            //      hardware backends); we unscale gradients afterward.
+            //   4. master weights are restored to FP32 BEFORE the optimizer
+            //      step so the optimizer sees the precise FP32 trajectory.
+            //   5. if any unscaled gradient is NaN / Inf, LossScaler reduces
+            //      the scale and we skip the optimizer step.
+            // We snapshot the FP32 master values here so we can restore them
+            // before opt.Step, then on next Train() call the round-trip starts
+            // from the updated FP32 masters again.
+            List<float[]>? mpFp32Snapshots = null;
+            MixedPrecisionContext? mpCtx = _mixedPrecisionContext;
+            if (mpCtx is not null && typeof(T) == typeof(float))
+            {
+                mpFp32Snapshots = new List<float[]>(trainableParams.Count);
+                bool useFp16 = mpCtx.Config.PrecisionType == Enums.MixedPrecisionType.FP16;
+                for (int p = 0; p < trainableParams.Count; p++)
+                {
+                    var param = trainableParams[p];
+                    int len = param.Length;
+                    var snapshot = new float[len];
+                    var paramSpan = param.Data.Span;
+                    for (int i = 0; i < len; i++)
+                    {
+                        // T is float in this branch but the data span is T-typed; round-trip via Convert
+                        float fp32Value = Convert.ToSingle(paramSpan[i]);
+                        snapshot[i] = fp32Value;
+                        float rounded = useFp16
+                            ? (float)(Half)fp32Value
+                            : MixedPrecisionBf16RoundTrip(fp32Value);
+                        // Write back as T (we know T == float here).
+                        paramSpan[i] = (T)(object)rounded;
+                    }
+                    mpFp32Snapshots.Add(snapshot);
+                }
+            }
+
             // Activate a TensorArena for the forward/backward/update scope.
             // After the first iteration warms the arena, ALL subsequent TensorAllocator.Rent
             // calls reuse pooled arrays — zero GC allocation in the training hot loop.
@@ -5296,6 +5366,21 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             }
 
             var lossTensor = loss.ComputeTapeLoss(output, expected);
+
+            // ---------------- Mixed-precision (#1354) — scale loss before backward ----------------
+            // Multiply the tape-tracked loss by LossScaler.Scale so the backward
+            // pass produces gradients that are S× their natural magnitude. We
+            // unscale them post-backward and run the overflow check. For BF16
+            // the default scale is 1.0 (LossScaler is effectively a no-op),
+            // so this multiplication is a tape-safe identity.
+            if (mpCtx is not null && typeof(T) == typeof(float))
+            {
+                double scale = mpCtx.LossScaler.Scale;
+                if (scale != 1.0)
+                {
+                    lossTensor = Engine.TensorMultiplyScalar(lossTensor, NumOps.FromDouble(scale));
+                }
+            }
 
             // Compute all gradients then filter to trainable params.
             // Passing sources directly can miss parameters when the tape backward
@@ -5351,6 +5436,79 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 return loss.ComputeTapeLoss(pred, tgt);
             }
 
+            // ---------------- Mixed-precision (#1354) — unscale gradients + overflow check ----------------
+            // (a) Divide every gradient (including those for extras) by
+            //     LossScaler.Scale so the optimizer sees the real magnitudes.
+            // (b) Run overflow detection: if ANY gradient is NaN/Inf the
+            //     LossScaler reduces its scale and we MUST skip the optimizer
+            //     step for this iteration (PyTorch GradScaler semantics).
+            // (c) Restore FP32 master weights to the layers BEFORE opt.Step
+            //     so the optimizer's update is applied to the precise FP32
+            //     trajectory (NOT the rounded values that drove the forward
+            //     pass). Restoration happens unconditionally — even on
+            //     overflow we don't want the FP16-rounded values to leak into
+            //     the next iteration's master state.
+            bool mpSkipOptimizerStep = false;
+            if (mpCtx is not null && typeof(T) == typeof(float) && mpFp32Snapshots is not null)
+            {
+                double scale = mpCtx.LossScaler.Scale;
+                T inverseScale = NumOps.FromDouble(1.0 / scale);
+                bool hasOverflow = false;
+
+                // Unscale every gradient we have a tape entry for (grads dict
+                // for trainable params + allGrads entries for extras). The
+                // grads dict references the same Tensor<T> objects as allGrads
+                // so we iterate allGrads to cover both at once.
+                foreach (var kvp in allGrads)
+                {
+                    var g = kvp.Value;
+                    if (g is null || g.Length == 0) continue;
+                    var span = g.Data.Span;
+                    int len = g.Length;
+                    for (int i = 0; i < len; i++)
+                    {
+                        span[i] = NumOps.Multiply(span[i], inverseScale);
+                        if (!hasOverflow && (NumOps.IsNaN(span[i]) || NumOps.IsInfinity(span[i])))
+                        {
+                            hasOverflow = true;
+                        }
+                    }
+                }
+
+                // Update LossScaler state — this drives the dynamic-scaling
+                // automaton (grow on N consecutive successful steps; back off
+                // on overflow). We use the void-returning state-update path
+                // (RecordOverflow / RecordSuccess via UnscaleGradientsAndCheck
+                // is gradient-mutating — we've already done that ourselves).
+                // Push state via a no-op vector so the public API drives the
+                // automaton without re-modifying our already-unscaled grads.
+                var probe = new Vector<float>(1);
+                if (hasOverflow)
+                {
+                    probe[0] = float.NaN;
+                }
+                _ = mpCtx.LossScaler.UnscaleGradientsAndCheck(probe);
+
+                // Restore FP32 master weights to the layer storage. The
+                // optimizer step below will then update FP32 values, not
+                // FP16-rounded ones. The tensor REFERENCE is preserved so
+                // the optimizer (which keyed on references in its own state)
+                // continues to work.
+                for (int p = 0; p < trainableParams.Count && p < mpFp32Snapshots.Count; p++)
+                {
+                    var param = trainableParams[p];
+                    var snapshot = mpFp32Snapshots[p];
+                    var span = param.Data.Span;
+                    int len = Math.Min(snapshot.Length, param.Length);
+                    for (int i = 0; i < len; i++)
+                    {
+                        span[i] = (T)(object)snapshot[i];
+                    }
+                }
+
+                mpSkipOptimizerStep = hasOverflow;
+            }
+
             // Apply global gradient-norm clipping when configured. Mirrors
             // PyTorch's torch.nn.utils.clip_grad_norm_ — total L2 norm across
             // all trainable-parameter gradients; when it exceeds MaxGradNorm,
@@ -5377,7 +5535,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 ComputeLossAligned,
                 paramBuffer);
 
-            opt.Step(context);
+            if (!mpSkipOptimizerStep)
+            {
+                opt.Step(context);
+            }
 
             // Apply gradient updates to network-level RAW trainable
             // tensors (ViT cls_token / positional_embeddings etc.).
@@ -5392,7 +5553,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // TRAINED — the previous behaviour left them frozen at
             // their initial random values forever, which was the
             // actual review concern.
-            if (extraTrainableTensors.Count > 0)
+            if (extraTrainableTensors.Count > 0 && !mpSkipOptimizerStep)
             {
                 T extrasLr = NumOps.FromDouble(GetOptimizerLearningRate(opt));
                 foreach (var extra in extraTrainableTensors)
@@ -5612,6 +5773,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // Conservative SGD-default; only hit when the optimizer hides
         // its LR. Logged via the trace path so users see the fallback.
         return 0.001;
+    }
+
+    /// <summary>
+    /// Emulate BF16 → FP32 round-trip by clearing the low 16 bits of the
+    /// FP32 mantissa (round-to-nearest-even). Used by the mixed-precision
+    /// path in <see cref="TrainWithTape"/> when
+    /// <c>_mixedPrecisionContext.Config.PrecisionType == BF16</c>: each
+    /// trainable parameter is round-tripped through BF16 before the forward
+    /// pass to match the activation noise a real BF16 forward would produce.
+    /// FP32 → BF16 = drop the low 16 mantissa bits; BF16 → FP32 = zero-extend
+    /// them; net = "zero the low 16 mantissa bits with RTE on the dropped
+    /// half". Identical bit-pattern semantics to BF16 hardware.
+    /// </summary>
+    private static float MixedPrecisionBf16RoundTrip(float value)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value)) return value;
+        uint bits = unchecked((uint)MixedPrecision.BitConverterHelper.SingleToInt32Bits(value));
+        uint truncated = bits & 0xFFFF0000u;
+        uint rounding = bits & 0x0000FFFFu;
+        if (rounding > 0x8000u) truncated += 0x10000u;
+        else if (rounding == 0x8000u && (truncated & 0x10000u) != 0) truncated += 0x10000u;
+        return MixedPrecision.BitConverterHelper.Int32BitsToSingle(unchecked((int)truncated));
     }
 
     /// <summary>
