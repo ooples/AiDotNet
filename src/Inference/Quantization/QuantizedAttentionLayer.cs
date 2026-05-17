@@ -420,6 +420,10 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
         // Mirror of the fix in QuantizedDenseLayer.Forward — see that file for
         // detailed rationale + numerical-equivalence notes. Closes the
         // attention-side gap of AiDotNet#1349.
+        //
+        // TFM gating: Vector<float>(Span<float>) is .NET Core 3.0+ only;
+        // net471 falls back to the scalar inner loop (status quo).
+#if NETCOREAPP3_0_OR_GREATER
         int vecSize = SimdVector.Count;
         Span<float> weightChunk = stackalloc float[vecSize];
         for (int r = 0; r < rows; r++)
@@ -461,6 +465,25 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
                 output.SetFlat(outputBase + o, sum);
             }
         }
+#else
+        // net471 scalar fallback — Vector<float>(Span<float>) ctor isn't available.
+        for (int r = 0; r < rows; r++)
+        {
+            int inputBase = r * inDim;
+            int outputBase = r * outDim;
+            for (int o = 0; o < outDim; o++)
+            {
+                float sum = 0f;
+                float scale = scales[o];
+                int wBase = o * inDim;
+                for (int i = 0; i < inDim; i++)
+                {
+                    sum += input[inputBase + i] * (weights[wBase + i] * scale);
+                }
+                output.SetFlat(outputBase + o, sum);
+            }
+        }
+#endif
         return output;
     }
 

@@ -125,11 +125,20 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         // sbyte→float widen via a small stackalloc buffer + a portable
         // Vector<float> accumulator.
         //
+        // TFM gating: the Vector<float>(Span<float>) ctor is .NET Core 3.0+
+        // only. net471's Vector<T> only has (T value) broadcast and
+        // (T[] values, int startIndex) array overloads. Rather than allocate
+        // a float[] per chunk on net471 (which would defeat the SIMD win), we
+        // fall back to the original scalar inner loop on that TFM. net10.0
+        // production hosts get the full speedup; net471 legacy hosts get the
+        // status-quo scalar path.
+        //
         // Numerical equivalence: SIMD changes the order of accumulation
         // (associativity is approximate for FP32), so the result differs from
         // the scalar path by ~1 ULP per K elements summed. For the inference-
         // only use case this is well below the INT8 quantization noise floor
         // (~35-40 dB SNR on typical transformer weights, ~1e-2 relative error).
+#if NETCOREAPP3_0_OR_GREATER
         int vecSize = SimdVector.Count;
         Span<float> weightChunk = stackalloc float[vecSize];
         for (int b = 0; b < batchSize; b++)
@@ -148,12 +157,6 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
                 for (; i < vectorLimit; i += vecSize)
                 {
                     // Widen Vector<float>.Count contiguous sbyte weights to FP32.
-                    // (Manual widen is the portable path; intrinsics-specific
-                    // ConvertToVector*Int32 + ConvertToVector*Single paths are
-                    // CPU-feature-gated and not portable to net471 without
-                    // additional version branches. The scalar widen is the
-                    // only non-vectorized op in the inner loop; the dominant
-                    // cost — the fma — is fully vectorized.)
                     for (int j = 0; j < vecSize; j++)
                     {
                         weightChunk[j] = _weightsInt8[wBase + i + j];
@@ -164,8 +167,7 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
                 }
 
                 // Reduce the SIMD accumulator to scalar. Vector.Sum is .NET 7+;
-                // since this assembly targets net471 as well we sum lanes
-                // explicitly.
+                // sum lanes explicitly for net10.0 compatibility.
                 float laneSum = 0;
                 for (int j = 0; j < vecSize; j++)
                 {
@@ -182,6 +184,25 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
                 output.SetFlat(outputBase + o, sum);
             }
         }
+#else
+        // net471 scalar fallback — Vector<float>(Span<float>) ctor isn't available.
+        for (int b = 0; b < batchSize; b++)
+        {
+            int inputBase = b * featuresIn;
+            int outputBase = b * _outputSize;
+            for (int o = 0; o < _outputSize; o++)
+            {
+                float sum = _biases[o];
+                float scale = _rowScales[o];
+                int wBase = o * _inputSize;
+                for (int i = 0; i < _inputSize; i++)
+                {
+                    sum += inputSpan[inputBase + i] * (_weightsInt8[wBase + i] * scale);
+                }
+                output.SetFlat(outputBase + o, sum);
+            }
+        }
+#endif
 
         var activated = ApplyActivation(output);
         if (inputWas1D)
