@@ -565,7 +565,16 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                 try
                 {
                     var preprocessed = PreprocessTokens(tokenEmbeddings);
-                    var preprocessedLabels = PreprocessLabels(labels, preprocessed.Shape[0]);
+                    // Rank-aware seq-len lookup — for rank-3 batched inputs
+                    // [batch, seq, embed] Shape[0] is the batch size, not
+                    // the sequence length, and PreprocessLabels then sized
+                    // labels to the batch count and the CRF layer's
+                    // sequence-length contract was violated. Mirror Train's
+                    // logic so async and sync paths agree.
+                    int targetSeqLen = preprocessed.Rank == 3
+                        ? preprocessed.Shape[1]
+                        : preprocessed.Shape[0];
+                    var preprocessedLabels = PreprocessLabels(labels, targetSeqLen);
                     var output = Forward(preprocessed);
                     double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
                         output.ToVector(), preprocessedLabels.ToVector()));
