@@ -2242,8 +2242,22 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
         }
 
         // Read the initial memory template (added for #1332 cluster 1 —
-        // see SerializeNetworkSpecificData for context). PeekChar==-1
-        // protects against legacy payloads that didn't write it.
+        // see SerializeNetworkSpecificData for context). The stream-bounds
+        // check protects against legacy payloads that didn't write it.
+        //
+        // Legacy serialized models (pre-#1332): the template is NOT in
+        // the payload, so _initialMemoryTemplate / _initialMemoryTensor
+        // keep whatever values the constructor's InitializeMemory()
+        // populated — fresh random draws, not the values the trained
+        // model was using. Determinism within a Predict call is still
+        // preserved (ResetRuntimeState snapshots back to the runtime
+        // template), and trained Layer parameters are restored
+        // correctly, so the model is fully usable. The only difference
+        // is that the *initial* memory state for the very first time
+        // step differs from the original training run; over a few
+        // training/inference steps memory rewrites converge regardless.
+        // Re-saving an old payload with this code writes the template
+        // and the difference goes away on the next load.
         if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             bool templatePresent = reader.ReadBoolean();
