@@ -268,7 +268,7 @@ public class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
             // would always be 0 < tolerance and the optimiser would exit after
             // the first iteration. Issue #1340 / PR #1351 fix swept across the
             // optimizer suite.
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (epoch > 0 && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
