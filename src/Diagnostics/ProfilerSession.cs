@@ -441,6 +441,11 @@ public class ProfilerSessionTimer : IDisposable
     private readonly Stopwatch _stopwatch;
     private readonly string? _parentName;
     private bool _stopped;
+    // AiDotNet#1355: snapshot per-thread allocation counter at scope entry
+    // so Stop() can report the delta. Negative sentinel == "not tracked"
+    // (either ProfilingConfig.TrackAllocations=false OR running on net471
+    // where GC.GetAllocatedBytesForCurrentThread is not available).
+    private readonly long _allocBytesAtStart;
 
     /// <summary>
     /// Gets the name of this profiler timer.
@@ -453,10 +458,27 @@ public class ProfilerSessionTimer : IDisposable
         _name = name;
         _stopwatch = Stopwatch.StartNew();
         _stopped = false;
+        _allocBytesAtStart = session.Config.TrackAllocations
+            ? TryGetThreadAllocatedBytes()
+            : -1L;
 
         var stack = session.GetCallStack();
         _parentName = stack.Count > 0 ? stack.Peek().Name : null;
         stack.Push(this);
+    }
+
+    /// <summary>
+    /// AiDotNet#1355 helper: sample <c>GC.GetAllocatedBytesForCurrentThread</c>
+    /// on platforms that ship it (.NET Core 3.0+ / .NET 5+ / .NET 10) and
+    /// return -1 on net471 which has no per-thread allocation API.
+    /// </summary>
+    private static long TryGetThreadAllocatedBytes()
+    {
+#if NETCOREAPP3_0_OR_GREATER
+        return GC.GetAllocatedBytesForCurrentThread();
+#else
+        return -1L;
+#endif
     }
 
     /// <summary>
@@ -469,6 +491,29 @@ public class ProfilerSessionTimer : IDisposable
 
         _stopwatch.Stop();
         _session.RecordTiming(_name, _stopwatch.Elapsed, _parentName);
+
+        // AiDotNet#1355: emit memory-allocation delta when tracking is on
+        // and the platform exposed a baseline at scope entry. The negative
+        // sentinel guards both the disabled-tracking path and the
+        // platform-without-API path.
+        //
+        // Note: the per-thread counter aggregates ALL allocations on this
+        // thread, so nested scopes will double-count parent allocations.
+        // This matches PyTorch's torch.profiler.profile(profile_memory=True)
+        // semantics — parent timings always cover child timings — and is
+        // documented as such on ProfilingConfig.TrackAllocations.
+        if (_allocBytesAtStart >= 0)
+        {
+            long allocBytesAtEnd = TryGetThreadAllocatedBytes();
+            if (allocBytesAtEnd >= 0)
+            {
+                long delta = allocBytesAtEnd - _allocBytesAtStart;
+                if (delta > 0)
+                {
+                    _session.RecordAllocation(_name, delta);
+                }
+            }
+        }
 
         // Clean up from call stack - handle case where nested timers were not stopped in order
         // (e.g., due to exceptions causing early exit)
