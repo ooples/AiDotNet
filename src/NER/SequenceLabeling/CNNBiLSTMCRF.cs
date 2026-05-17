@@ -379,7 +379,18 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
         SetTrainingMode(true);
-        try { TrainWithTape(input, expected); }
+        try
+        {
+            // Mirror PredictLabels' preprocessing into Train so the CRF
+            // layer sees the locked sequence length it was constructed with
+            // (see BiLSTMCRF.Train for the longer-form rationale).
+            var preprocessedInput = PreprocessTokens(input);
+            int targetSeqLen = preprocessedInput.Rank == 3
+                ? preprocessedInput.Shape[1]
+                : preprocessedInput.Shape[0];
+            var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
+            TrainWithTape(preprocessedInput, preprocessedExpected);
+        }
         finally { SetTrainingMode(false); }
     }
 

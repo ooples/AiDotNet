@@ -811,7 +811,22 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pad/truncate inputs and labels to MaxSequenceLength before the
+            // tape forward — the ConditionalRandomFieldLayer locks its
+            // internal Viterbi/transition buffers to the sequence length seen
+            // on construction (default MaxSequenceLength = 256), and the
+            // PredictLabels / PredictBatch paths already preprocess for that
+            // contract. The training path previously fed the raw input shape
+            // straight through, which exploded with
+            // "ConditionalRandomFieldLayer's sequence length mismatch" the
+            // moment any caller supplied a shorter sequence than the
+            // configured MaxSequenceLength.
+            var preprocessedInput = PreprocessTokens(input);
+            int targetSeqLen = preprocessedInput.Rank == 3
+                ? preprocessedInput.Shape[1]
+                : preprocessedInput.Shape[0];
+            var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
+            TrainWithTape(preprocessedInput, preprocessedExpected);
         }
         finally
         {
