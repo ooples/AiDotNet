@@ -1532,8 +1532,17 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override void SetTrainingMode(bool isTraining)
     {
+        // CodeRabbit feedback on #1366: only ResetState on a true
+        // training→eval transition. Calling SetTrainingMode(false) when the
+        // layer is ALREADY in eval mode (e.g. consumer re-asserts eval after
+        // a Predict batch) shouldn't clear caches a second time — the caches
+        // are already null and the bookkeeping would be wasted work + risk
+        // clearing other state the layer might have set since the last
+        // transition. Capture the previous mode before delegating to base,
+        // then gate the ResetState() on the actual edge.
+        bool wasTraining = IsTrainingMode;
         base.SetTrainingMode(isTraining);
-        if (!isTraining)
+        if (wasTraining && !isTraining)
         {
             ResetState();
         }
