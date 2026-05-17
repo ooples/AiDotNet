@@ -446,6 +446,13 @@ public class ProfilerSessionTimer : IDisposable
     // (either ProfilingConfig.TrackAllocations=false OR running on net471
     // where GC.GetAllocatedBytesForCurrentThread is not available).
     private readonly long _allocBytesAtStart;
+    // AiDotNet#1355: capture the managed thread the scope was opened on
+    // so Stop() can refuse to record an allocation delta when the timer
+    // crossed an `await` and resumed on a different thread. The per-
+    // thread allocation counters at start vs. end would then belong to
+    // unrelated threads and produce nonsense (or wildly negative)
+    // deltas. Better to skip the recording than to publish bad data.
+    private readonly int _threadIdAtStart;
 
     /// <summary>
     /// Gets the name of this profiler timer.
@@ -458,6 +465,7 @@ public class ProfilerSessionTimer : IDisposable
         _name = name;
         _stopwatch = Stopwatch.StartNew();
         _stopped = false;
+        _threadIdAtStart = Environment.CurrentManagedThreadId;
         _allocBytesAtStart = session.Config.TrackAllocations
             ? TryGetThreadAllocatedBytes()
             : -1L;
@@ -502,7 +510,15 @@ public class ProfilerSessionTimer : IDisposable
         // This matches PyTorch's torch.profiler.profile(profile_memory=True)
         // semantics — parent timings always cover child timings — and is
         // documented as such on ProfilingConfig.TrackAllocations.
-        if (_allocBytesAtStart >= 0)
+        // Skip the allocation delta when the timer crossed an `await`
+        // and resumed on a different managed thread — comparing the
+        // start-thread's per-thread allocation counter with the
+        // resume-thread's counter is comparing unrelated values and
+        // can publish wildly wrong numbers (or negative deltas). The
+        // timing measurement still records correctly because Stopwatch
+        // is wall-clock and thread-agnostic.
+        if (_allocBytesAtStart >= 0
+            && Environment.CurrentManagedThreadId == _threadIdAtStart)
         {
             long allocBytesAtEnd = TryGetThreadAllocatedBytes();
             if (allocBytesAtEnd >= 0)
