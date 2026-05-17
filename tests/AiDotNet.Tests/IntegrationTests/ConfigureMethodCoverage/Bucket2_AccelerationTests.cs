@@ -42,12 +42,21 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// Previously untested. Mixed precision should retain ≥ 50% baseline accuracy
     /// (numerical noise from fp16 can lose a few percent, but not half).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureMixedPrecision_Default_RetainsAccuracy()
     {
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
+
+        // Baseline arm: direct train without ConfigureMixedPrecision so we
+        // have a top-1 reference to compare retention against. Per PR #1345
+        // review the prior version only checked non-degenerate spread,
+        // which couldn't catch an accuracy regression that fell short of
+        // 50% retention.
+        var (baselineTopOne, baselineSpread) = DirectTrainAndMeasure(
+            MakeCanaryModel(), features, labels);
+        _output.WriteLine($"Baseline (no MP): top-1={baselineTopOne:P2} spread={baselineSpread:E2}");
 
         // Feature arm: with mixed precision.
         var modelFeat = MakeCanaryModel();
@@ -62,15 +71,17 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
         var facadePred = result.Predict(probe);
         AssertFacadePredictNonDegenerate(facadePred, "ConfigureMixedPrecision");
         double spread = MeasurePredictionSpread(modelFeat, features);
-        _output.WriteLine($"ConfigureMixedPrecision: spread={spread:E2}");
+        double featureTopOne = MeasureTrainingTopOne(modelFeat, features, labels);
+        _output.WriteLine($"ConfigureMixedPrecision: top-1={featureTopOne:P2} spread={spread:E2}");
         AssertOutputSpreadNonZero(spread, "ConfigureMixedPrecision", 1e-6);
+        AssertFeatureRetainsAccuracy(baselineTopOne, featureTopOne, "ConfigureMixedPrecision");
     }
 
     /// <summary>
     /// ConfigureMixedPrecision with explicit conservative config — verifies the
     /// preset doesn't throw and produces non-degenerate output.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureMixedPrecision_ConservativeConfig_BuildsAndPredicts()
     {
@@ -96,7 +107,7 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// invariant). We don't enforce the upper bound aggressively because the
     /// canary model is tiny and JIT startup overhead can dominate.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureJitCompilation_Default_ProducesNonDegenerateOutput()
     {
@@ -163,7 +174,7 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// non-degenerate output. Compression configs are mostly metadata for export,
     /// so this is a smoke test.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureCompression_Default_ProducesNonDegenerateOutput()
     {
@@ -187,14 +198,22 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// chain rule for non-elementwise ops. Fixed in AiDotNet#1341 (Tensors PR #361).
     /// Run a small forward/backward through this path and verify output health.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureMemoryManagement_GradientCheckpointing_RetainsAccuracy()
     {
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
-        var model = MakeCanaryModel();
 
+        // Baseline: direct-train no-checkpointing reference top-1.
+        // Per PR #1345 review the prior version only checked spread,
+        // which couldn't catch a checkpoint-stitching regression that
+        // dropped accuracy short of 50% retention.
+        var (baselineTopOne, baselineSpread) = DirectTrainAndMeasure(
+            MakeCanaryModel(), features, labels);
+        _output.WriteLine($"Baseline (no checkpoint): top-1={baselineTopOne:P2} spread={baselineSpread:E2}");
+
+        var model = MakeCanaryModel();
         var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
         builder.ConfigureMemoryManagement(TrainingMemoryConfig.MemoryEfficient());
         builder.ConfigureModel(model);
@@ -206,14 +225,16 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
         AssertFacadePredictNonDegenerate(result.Predict(probe), "ConfigureMemoryManagement(MemoryEfficient)");
 
         double spread = MeasurePredictionSpread(model, features);
-        _output.WriteLine($"GradientCheckpointing: spread={spread:E2}");
+        double featureTopOne = MeasureTrainingTopOne(model, features, labels);
+        _output.WriteLine($"GradientCheckpointing: top-1={featureTopOne:P2} spread={spread:E2}");
         AssertOutputSpreadNonZero(spread, "ConfigureMemoryManagement(MemoryEfficient)", 1e-6);
+        AssertFeatureRetainsAccuracy(baselineTopOne, featureTopOne, "ConfigureMemoryManagement(MemoryEfficient)");
     }
 
     /// <summary>
     /// ConfigureMemoryManagement with ForTransformers preset.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureMemoryManagement_ForTransformers_ProducesNonDegenerateOutput()
     {
@@ -236,14 +257,18 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// ConfigureWeightStreaming — auto-detect default (null config). Should be a
     /// no-op on tiny models; verifies the path doesn't throw and output is healthy.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureWeightStreaming_Default_DoesNotChangeOutput()
     {
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
-        var model = MakeCanaryModel();
 
+        // Baseline top-1 without weight streaming.
+        var (baselineTopOne, _) = DirectTrainAndMeasure(MakeCanaryModel(), features, labels);
+        _output.WriteLine($"Baseline (no streaming): top-1={baselineTopOne:P2}");
+
+        var model = MakeCanaryModel();
         var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
         builder.ConfigureWeightStreaming();
         builder.ConfigureModel(model);
@@ -253,13 +278,23 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
         var probe = new Tensor<float>([1, CanaryCtxLen]);
         for (int s = 0; s < CanaryCtxLen; s++) probe[0, s] = features[0, s];
         AssertFacadePredictNonDegenerate(result.Predict(probe), "ConfigureWeightStreaming");
+
+        // Test name promises "DoesNotChangeOutput": assert feature-arm
+        // top-1 retains the baseline within the standard 50% bound. The
+        // tiny canary model is below the auto-streaming threshold, so
+        // streaming should be a no-op here — anything less than full
+        // retention indicates streaming engaged on a sub-threshold
+        // model and corrupted training. (PR #1345 review.)
+        double featureTopOne = MeasureTrainingTopOne(model, features, labels);
+        _output.WriteLine($"WeightStreaming(auto): top-1={featureTopOne:P2}");
+        AssertFeatureRetainsAccuracy(baselineTopOne, featureTopOne, "ConfigureWeightStreaming");
     }
 
     /// <summary>
     /// ConfigureWeightStreaming with custom positive threshold — verifies validation
     /// passes for valid input.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureWeightStreaming_CustomThreshold_ProducesNonDegenerateOutput()
     {
@@ -282,7 +317,7 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// ConfigureWeightStreaming with invalid (zero) threshold must throw — closes
     /// the #1271.s-Ne validation gap (silently-ignored invalid config).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public void ConfigureWeightStreaming_ZeroThreshold_ThrowsArgumentOutOfRange()
     {
@@ -295,7 +330,7 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// ConfigureInferenceOptimizations — claims KV-cache 2-10×, batching, speculative
     /// decoding. Verify the path doesn't break output.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureInferenceOptimizations_Default_ProducesNonDegenerateOutput()
     {
@@ -318,7 +353,7 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// ConfigureGpuAcceleration — verifies the path doesn't throw on CPU-only
     /// hosts (the auto-detect should fall back gracefully).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureGpuAcceleration_Default_FallsBackGracefullyOnCpuHost()
     {
@@ -342,7 +377,7 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
     /// ConfigurePlanCaching — caches compiled JIT plans to disk. Smoke test
     /// against a temp directory.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigurePlanCaching_TempDir_ProducesNonDegenerateOutput()
     {

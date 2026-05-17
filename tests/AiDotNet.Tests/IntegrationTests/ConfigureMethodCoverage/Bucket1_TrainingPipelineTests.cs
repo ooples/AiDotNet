@@ -22,8 +22,6 @@ namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 /// <item>ConfigureLossFunction (via fitness calculator)</item>
 /// <item>ConfigureFitnessCalculator</item>
 /// <item>ConfigureFitDetector</item>
-/// <item>ConfigureRegularization</item>
-/// <item>ConfigureCrossValidation</item>
 /// </list>
 /// </remarks>
 [Collection("ConfigureMethodCoverage")]
@@ -39,7 +37,7 @@ public class Bucket1_TrainingPipelineTests : ConfigureMethodTestBase
     /// canary budget is intentionally short — degenerate-output detection
     /// (the bugs this suite targets) is via the spread metric.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public void Baseline_DirectTrain_ProducesNonDegenerateOutput()
     {

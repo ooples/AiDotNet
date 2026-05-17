@@ -40,9 +40,11 @@ public sealed class ConfigureMethodCoverageCollection : Xunit.ICollectionFixture
 /// </para>
 /// <para>
 /// The "canary" config is intentionally small so every test runs in &lt; 60 s on CI:
-/// vocab=16, ctxLen=8, dModel=16, layers=1, heads=2, ~64 training examples, &lt;= 200 steps.
-/// At those sizes single-example or small-batch memorization is fully achievable for
-/// any working training pipeline; degenerate-output bugs flip the top-1 assertion.
+/// vocab=8, ctxLen=4, dModel=16, layers=1, heads=2, ~64 training examples, &lt;= 200 steps.
+/// (Values mirror the per-constant declarations below: <c>CanaryVocab = 8</c>,
+/// <c>CanaryCtxLen = 4</c>.) At those sizes single-example or small-batch
+/// memorization is fully achievable for any working training pipeline;
+/// degenerate-output bugs flip the top-1 assertion.
 /// </para>
 /// </remarks>
 public abstract class ConfigureMethodTestBase
@@ -301,12 +303,17 @@ public abstract class ConfigureMethodTestBase
         string featureName,
         double minRetentionRatio = 0.5)
     {
-        // If baseline itself failed (top-1 below chance), the comparison is meaningless.
-        // The baseline test fires first; this guard avoids a misleading retention pass.
-        if (baselineTopOne <= 1.0 / CanaryVocab + 0.05)
-        {
-            return;
-        }
+        // Baseline must clear chance + 5pp before a retention comparison is
+        // meaningful — silently returning here would let a broken feature-arm
+        // test pass when the baseline itself was bad (an always-pass bug
+        // pattern). Surface the bad baseline as the test failure instead.
+        // (PR #1345 review.)
+        Xunit.Assert.True(
+            baselineTopOne > 1.0 / CanaryVocab + 0.05,
+            $"{featureName}: baseline top-1 {baselineTopOne:P2} is at or below " +
+            $"random chance ({1.0 / CanaryVocab:P2} + 5pp). Fix the baseline before " +
+            "asserting retention — comparing against a degenerate baseline would " +
+            "let a broken feature arm silently pass.");
         double minRequired = baselineTopOne * minRetentionRatio;
         Xunit.Assert.True(
             featureTopOne >= minRequired,
@@ -410,7 +417,7 @@ public abstract class ConfigureMethodTestBase
     /// to amortize JIT, then averages 3 timed iterations. Intended for the speedup
     /// assertions; not high-precision but stable across machines for &gt; 2× speedups.
     /// </summary>
-    protected static double TimeAction(Action action, int warmup = 1, int iterations = 3)
+    protected static double TimeAction(Action action, int warmup = 3, int iterations = 3)
     {
         for (int i = 0; i < warmup; i++) action();
         var sw = System.Diagnostics.Stopwatch.StartNew();
