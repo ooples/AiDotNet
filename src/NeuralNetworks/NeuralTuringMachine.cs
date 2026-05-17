@@ -401,8 +401,16 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
     /// </summary>
     private void ResetRuntimeState(int batchSize)
     {
+        // Both constructors call InitializeDefaultMemoryAndWeights() →
+        // InitializeMemory(), which populates _initialMemoryTemplate. A
+        // null template here means construction was skipped or the field
+        // was cleared, both of which are programming errors — surface
+        // them loudly instead of silently leaving _memories[b] in
+        // whatever stale state SetupBatchMemories left it in.
         if (_initialMemoryTemplate is null)
-            return;
+            throw new InvalidOperationException(
+                "_initialMemoryTemplate is null; ensure InitializeMemory()/" +
+                "InitializeDefaultMemoryAndWeights() ran in the constructor.");
 
         T uniformWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(_memorySize));
 
@@ -765,6 +773,17 @@ public class NeuralTuringMachine<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<
             // [readSlot]) and dL/d(controllerOutput[writeSlot]).
             int controllerWidth = controllerOutput.Shape[1];
             int quartileWidth = controllerWidth / 4;
+            // Custom architectures with sub-4-wide controller emission would
+            // produce a degenerate [B, 4, 0] tensor in TapeQuartile and the
+            // memory addressing path would silently skip its parameters.
+            // The default constructor sizes the controller wide enough
+            // (controllerSize = 128 / 4 = 32-wide quartiles), so this only
+            // fires for misconfigured architectures.
+            if (quartileWidth == 0)
+                throw new InvalidOperationException(
+                    $"NTM controller output width ({controllerWidth}) must be >= 4 to " +
+                    "split into read/write parameter quartiles. Increase controllerSize " +
+                    "or supply a wider custom Layers chain.");
             Tensor<T> readParams = TapeQuartile(controllerOutput, 0, quartileWidth);
             Tensor<T> writeParams = TapeQuartile(controllerOutput, 1, quartileWidth);
 
