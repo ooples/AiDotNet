@@ -227,7 +227,7 @@ public class BuildAsyncResidualModeCollapseTests
     }
 
     /// <summary>
-    /// Full 5-arm diagnostic running every arm in sequence so the
+    /// Full 8-arm diagnostic running every arm in sequence so the
     /// per-arm numbers are produced under matched conditions. The
     /// produced top-1 numbers are surfaced via ITestOutputHelper for
     /// the PR description.
@@ -241,7 +241,7 @@ public class BuildAsyncResidualModeCollapseTests
     ///         uniform-output baseline (&gt; 6.25%) — i.e. the post-fix
     ///         optimizer makes meaningful learning progress on the
     ///         same task that pre-fix collapsed to 1/V.</item>
-    ///   <item>The remaining single-arm probes (Arms 2-5) are
+    ///   <item>The remaining single-arm probes (Arms 2-7) are
     ///         informational — they go into the PR description so
     ///         reviewers can see what each hypothesis contributes
     ///         individually under matched fixture conditions.</item>
@@ -249,7 +249,7 @@ public class BuildAsyncResidualModeCollapseTests
     /// </para>
     /// </summary>
     [Fact(Timeout = 600_000)]
-    public async Task BuildAsync_ResidualModeCollapse_FiveArmDiagnostic()
+    public async Task BuildAsync_ResidualModeCollapse_EightArmDiagnostic()
     {
         await Task.Yield();
         var (arch, xTrain, yTrain) = BuildFixture();
@@ -354,7 +354,10 @@ public class BuildAsyncResidualModeCollapseTests
         // (e.g. towards a degenerate fixed point). If the parameter L2
         // delta is small, the gradient magnitudes are too small for the
         // effective learning rate — Adam is being starved.
-        try
+        // (No try-catch: per PR #1364 review, swallowing exceptions would
+        // turn this diagnostic into an always-passing test. Let any
+        // ComputeGradients / GetParameters / finite-diff failure
+        // propagate so the test reports the real failure.)
         {
             var modelArm6 = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
@@ -492,11 +495,6 @@ public class BuildAsyncResidualModeCollapseTests
             _output.WriteLine($"  finite-diff gradient check ({probeIndices.Length} indices): {fdMatches} match, {fdMismatches} mismatch");
             _output.WriteLine($"    worst rel error: {worstFdRel:F4} at idx {worstFdIdx} (analytic={worstFdAnalytic:F6}, numeric={worstFdNumeric:F6})");
         }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"Arm 6 failed: {ex.GetType().Name}: {ex.Message}");
-            _output.WriteLine($"Stack: {ex.StackTrace}");
-        }
 
         // ARM 7: long-horizon BuildAsync run with 0 tolerance + 200 epochs.
         // Verifies whether the residual mode collapse is a step-count
@@ -504,8 +502,7 @@ public class BuildAsyncResidualModeCollapseTests
         // convergence criterion) or a fundamental optimizer-path bug. If
         // accuracy reaches near Arm 0 with more steps, the bug is in the
         // stopping criterion. If accuracy plateaus at ~10%, the bug is in
-        // the optimizer step itself.
-        try
+        // the optimizer step itself. (No try-catch: see Arm 6 rationale.)
         {
             var (_, xLong, yLong) = BuildFixture();
             var modelArm7 = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
@@ -533,10 +530,6 @@ public class BuildAsyncResidualModeCollapseTests
             _ = optimizerArm7.Optimize(inputDataArm7);
             float arm7Top1 = ComputeTopOneAccuracy(modelArm7, xLong, yLong);
             _output.WriteLine($"Arm 7 (BuildAsync 200 epochs, Tolerance=0): top-1 = {arm7Top1 * 100.0f:F1}% (uniform = {UniformTopOne * 100.0f:F1}%)");
-        }
-        catch (Exception ex)
-        {
-            _output.WriteLine($"Arm 7 failed: {ex.GetType().Name}: {ex.Message}");
         }
     }
 

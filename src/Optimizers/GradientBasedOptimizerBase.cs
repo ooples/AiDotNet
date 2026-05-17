@@ -881,22 +881,29 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // shift for L1), so the gradient contribution is the DIFFERENCE
         // between params and the regularizer's coefficient transform — the
         // exact opposite of what the previous code computed.
-        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        var regularizedParameters = Regularization.Regularize(parameters);
-        var regularizationContribution = (Vector<T>)Engine.Subtract(parameters, regularizedParameters);
-        gradient = (Vector<T>)Engine.Add(gradient, regularizationContribution);
-
         // Scale the gradient by the batch size ONLY for the loss-derivative
         // fallback path. The IGradientComputable fast-path returns a gradient
         // that the loss function's ComputeTapeLoss already averaged over the
         // batch (and over any sequence/spatial axes) — dividing by batchSize
         // a second time would compound to 1/N² and collapse Transformer
         // training under BuildAsync's batched Optimize loop.
+        //
+        // CRITICAL: this divide must run BEFORE the regularization
+        // contribution is added — otherwise non-IGradientComputable
+        // models optimize `mean(loss) + R(θ)/N` while
+        // IGradientComputable models optimize `mean(loss) + R(θ)`, and
+        // the effective regularization strength becomes batch-size
+        // dependent and inconsistent across paths. (PR #1364 review.)
         if (!gradientIsAlreadyMeanScaled)
         {
             int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
             gradient = gradient.Divide(NumOps.FromDouble(batchSize));
         }
+
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
+        var regularizedParameters = Regularization.Regularize(parameters);
+        var regularizationContribution = (Vector<T>)Engine.Subtract(parameters, regularizedParameters);
+        gradient = (Vector<T>)Engine.Add(gradient, regularizationContribution);
 
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
@@ -1386,12 +1393,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             parameters = parameterizable.GetParameters();
         }
-        catch
+        catch (InvalidOperationException)
         {
-            // Some models throw if not yet built / lazy-init not run.
-            // Fingerprint of 0 is safe — the model identity in the key already
-            // differentiates models, and a not-yet-built model can't have stale
-            // cached gradients anyway.
+            // Lazy-init models throw InvalidOperationException when
+            // GetParameters is called before the first forward has
+            // resolved their shapes. Fingerprint of 0 is safe here —
+            // the model identity in the cache key already differentiates
+            // models, and a not-yet-built model can't have stale cached
+            // gradients to invalidate. Narrowed from a bare `catch`
+            // (PR #1364 review) so genuinely unexpected exceptions
+            // propagate instead of being silently swallowed.
+            return 0L;
+        }
+        catch (NotSupportedException)
+        {
+            // Same rationale: some IParameterizable implementations gate
+            // GetParameters behind feature flags and throw
+            // NotSupportedException when the feature is off.
             return 0L;
         }
 
@@ -1433,7 +1451,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             return BitConverter.DoubleToInt64Bits(Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture));
         }
-        catch
+        catch (InvalidCastException)
+        {
+            return 0L;
+        }
+        catch (FormatException)
+        {
+            return 0L;
+        }
+        catch (OverflowException)
         {
             return 0L;
         }

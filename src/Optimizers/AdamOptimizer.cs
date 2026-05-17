@@ -162,8 +162,14 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // SetTrainingMode lives on INeuralNetwork, not IFullModel — for non-NN
         // models (regression, clustering, etc.) there's no training-mode
         // distinction so the gate is skipped.
-        var trainingModeModel = currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>;
-        trainingModeModel?.SetTrainingMode(true);
+        //
+        // CRITICAL: must follow the LIVE currentSolution, not the original
+        // pre-loop instance. UpdateSolution returns WithParameters(...)
+        // replacements; if we toggle the pre-loop instance only, the
+        // batch-N+1 model is in unknown mode. Sync the flag on every new
+        // currentSolution and flip back to eval on the final live
+        // instance in the finally block. (PR #1364 review.)
+        (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
 
         try
         {
@@ -186,7 +192,20 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                     // Update solution using Adam algorithm
                     var newSolution = UpdateSolution(currentSolution, gradient);
 
+                    // Sync training mode onto the new live instance —
+                    // WithParameters(...) returns a fresh model that
+                    // doesn't inherit the prior instance's training-mode flag.
+                    (newSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
+
                     currentSolution = newSolution;
+
+                    // Advance the scheduler's per-batch hook so StepPerBatch /
+                    // WarmupThenEpoch schedulers actually progress. The
+                    // batched Optimize loop previously never called
+                    // OnBatchEnd, so any caller wiring an Adam-with-scheduler
+                    // optimizer to BuildAsync got a flat learning rate
+                    // regardless of configuration. (PR #1364 review.)
+                    OnBatchEnd();
                 }
 
                 // Evaluate after processing all batches in the epoch
@@ -224,15 +243,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 }
 
                 previousStepData = currentStepData;
+
+                // Per-epoch scheduler tick — same rationale as OnBatchEnd
+                // above. Epoch-level schedulers (StepPerEpoch, etc.) need
+                // this to advance.
+                OnEpochEnd();
             }
 
             return CreateOptimizationResult(bestStepData, inputData);
         }
         finally
         {
-            // Leave the model in eval mode so the next Predict / evaluation
-            // call doesn't accidentally engage dropout / batchnorm-train-stats.
-            trainingModeModel?.SetTrainingMode(false);
+            // Leave the LIVE model (not the original pre-loop instance) in
+            // eval mode so the next Predict / evaluation call doesn't
+            // accidentally engage dropout / batchnorm-train-stats.
+            (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(false);
         }
     }
 

@@ -119,18 +119,35 @@ public class ParameterGradientOrderingH5ProbeTests
         _output.WriteLine($"  TOTAL Path A: {flatOffsetA} (flatA.Length = {flatA.Length})");
 
         // === Path B: GetParameterChunks (recursive trainable walk) ===
+        // Capture each chunk's values into a flat list so we can verify
+        // VALUE parity (not just total-count parity) below — without
+        // value-level assertions, a traversal-order mismatch can slip
+        // through. (PR #1364 review.)
         int flatOffsetB = 0;
         int chunkIdx = 0;
+        var flatBValues = new System.Collections.Generic.List<float>();
         _output.WriteLine("=== Path B: GetParameterChunks() recursive walk ===");
         foreach (var chunk in model.GetParameterChunks())
         {
             _output.WriteLine($"  Chunk[{chunkIdx}]: count={chunk.Length}, offset={flatOffsetB}");
+            for (int j = 0; j < chunk.Length; j++)
+                flatBValues.Add(chunk[j]);
             flatOffsetB += chunk.Length;
             chunkIdx++;
         }
         _output.WriteLine($"  TOTAL Path B: {flatOffsetB}");
 
         Assert.Equal(flatOffsetA, flatOffsetB);
+        // Per-element parity catches a traversal-order mismatch that
+        // total-count equality alone would silently allow.
+        Assert.Equal(flatA.Length, flatBValues.Count);
+        for (int i = 0; i < flatA.Length; i++)
+        {
+            Assert.True(
+                Math.Abs(flatA[i] - flatBValues[i]) < 1e-6f,
+                $"GetParameters() and GetParameterChunks() disagree at flat index {i}: " +
+                $"path A = {flatA[i]}, path B = {flatBValues[i]}.");
+        }
     }
 
     /// <summary>
