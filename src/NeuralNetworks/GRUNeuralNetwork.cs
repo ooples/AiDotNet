@@ -98,9 +98,28 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     public GRUNeuralNetwork(NeuralNetworkArchitecture<T> architecture, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, ILossFunction<T>? lossFunction = null, GRUOptions? options = null, double learningRate = 0.001) :
-        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
+        base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType),
+             // Tighter grad-norm clip than the base default of 1.0 because GRU
+             // gates compound gradients across the unrolled sequence. 0.5
+             // mirrors Cho et al. 2014 §3. (See ConfigureDefaultOptimizer
+             // below for the LR side of the stability fix — gradient clipping
+             // alone is insufficient against Adam's post-convergence m/sqrt(v)
+             // drift on the MoreData_ShouldNotDegrade invariant.)
+             // Issue #1332 cluster 6.
+             maxGradNorm: 0.5)
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Provide a smaller default Adam LR than the framework-wide 0.001
+        // so the per-step displacement after convergence is small enough
+        // that 200 iterations on a fixed-input regression don't drift the
+        // model away from a tightly-converged loss. The recurrent through-
+        // gate Jacobian doesn't decay as quickly as feed-forward Adam
+        // expects, so the bias-corrected m_hat / sqrt(v_hat) ratio stays
+        // larger than ideal even after the gradient has shrunk; a lower
+        // base LR is the cleanest model-side knob. Callers who pass an
+        // explicit `optimizer` keep their own choice unchanged.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
         _options = options ?? new GRUOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);
