@@ -177,16 +177,7 @@ internal sealed class Int8InferenceModel
         };
 
         var optimizer = new InferenceOptimizer<float>(config);
-        var (optimizedModel, applied) = optimizer.OptimizeForInference(trained, cloneModel: cloneModel);
-
-        if (!applied)
-        {
-            throw new InvalidOperationException(
-                "Int8InferenceModel.FromTrained could not find any layers eligible for INT8 quantization. " +
-                "This usually means the model has lazy attention/dense layers that have not yet been " +
-                "shape-resolved (their parameter buffers are still zero-sized). Run one training step " +
-                "or a warm-up Predict() on the source model first, then call FromTrained again.");
-        }
+        var (optimizedModel, _) = optimizer.OptimizeForInference(trained, cloneModel: cloneModel);
 
         // Compute artifact stats by scanning the rewritten layers.
         long quantBytes = 0;
@@ -208,6 +199,23 @@ internal sealed class Int8InferenceModel
                 origBytes += o;
                 quantLayerCount++;
             }
+        }
+
+        // Validate on quantLayerCount, NOT on the optimizer's `applied`
+        // flag. `applied` is true for any inference-optimization rewrite
+        // path (FlashAttention substitution, kernel-fusion, etc.) — so
+        // a model with zero INT8 quant layers would still get past the
+        // old `if (!applied)` guard and return an Int8InferenceModel
+        // whose ParameterCount / CompressionRatio surface a no-op. The
+        // method contract is "INT8 inference-only wrapper", so the
+        // honest precondition is quantLayerCount > 0. (PR #1348 review.)
+        if (quantLayerCount == 0)
+        {
+            throw new InvalidOperationException(
+                "Int8InferenceModel.FromTrained could not find any layers eligible for INT8 quantization. " +
+                "This usually means the model has lazy attention/dense layers that have not yet been " +
+                "shape-resolved (their parameter buffers are still zero-sized). Run one training step " +
+                "or a warm-up Predict() on the source model first, then call FromTrained again.");
         }
 
         return new Int8InferenceModel(optimizedModel, quantBytes, origBytes, quantLayerCount);
