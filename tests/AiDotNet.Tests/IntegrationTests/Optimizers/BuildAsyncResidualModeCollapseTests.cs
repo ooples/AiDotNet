@@ -162,7 +162,7 @@ public class BuildAsyncResidualModeCollapseTests
     }
 
     private static float ComputeTopOneAccuracy(
-        Transformer<float> model,
+        IFullModel<float, Tensor<float>, Tensor<float>> model,
         Tensor<float> x,
         Tensor<float> y)
     {
@@ -219,8 +219,16 @@ public class BuildAsyncResidualModeCollapseTests
             XTest = xTrain,
             YTest = yTrain,
         };
-        _ = optimizer.Optimize(inputData);
-        float top1 = ComputeTopOneAccuracy(model, xTrain, yTrain);
+        // Capture the trained/best solution: AdamOptimizer.Optimize advances
+        // currentSolution through WithParameters(...) replacements rather
+        // than guaranteeing in-place mutation of the original `model`
+        // reference, so scoring `model` directly under-measures the
+        // optimization (PR #1358 review comment). Fall back to the original
+        // model only when the optimizer returned no BestSolution (defensive;
+        // shouldn't happen with the default Optimize path).
+        var result = optimizer.Optimize(inputData);
+        var scored = result.BestSolution ?? (IFullModel<float, Tensor<float>, Tensor<float>>)model;
+        float top1 = ComputeTopOneAccuracy(scored, xTrain, yTrain);
         _output.WriteLine($"{label}: top-1 = {top1 * 100.0f:F1}% (uniform = {UniformTopOne * 100.0f:F1}%)");
         return top1;
     }

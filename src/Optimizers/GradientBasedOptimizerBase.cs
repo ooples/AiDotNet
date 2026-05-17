@@ -881,22 +881,31 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // shift for L1), so the gradient contribution is the DIFFERENCE
         // between params and the regularizer's coefficient transform — the
         // exact opposite of what the previous code computed.
-        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        var regularizedParameters = Regularization.Regularize(parameters);
-        var regularizationContribution = (Vector<T>)Engine.Subtract(parameters, regularizedParameters);
-        gradient = (Vector<T>)Engine.Add(gradient, regularizationContribution);
-
         // Scale the gradient by the batch size ONLY for the loss-derivative
         // fallback path. The IGradientComputable fast-path returns a gradient
         // that the loss function's ComputeTapeLoss already averaged over the
         // batch (and over any sequence/spatial axes) — dividing by batchSize
         // a second time would compound to 1/N² and collapse Transformer
         // training under BuildAsync's batched Optimize loop.
+        //
+        // CRITICAL: this divide must run BEFORE the regularization
+        // contribution is added — otherwise non-IGradientComputable
+        // models optimize `mean(loss) + R(θ)/N` while
+        // IGradientComputable models optimize `mean(loss) + R(θ)`, and
+        // the effective regularization strength becomes batch-size
+        // dependent and inconsistent across the two gradient paths
+        // (PR #1358 review comment). Regularize the post-divided
+        // data gradient instead.
         if (!gradientIsAlreadyMeanScaled)
         {
             int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
             gradient = gradient.Divide(NumOps.FromDouble(batchSize));
         }
+
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
+        var regularizedParameters = Regularization.Regularize(parameters);
+        var regularizationContribution = (Vector<T>)Engine.Subtract(parameters, regularizedParameters);
+        gradient = (Vector<T>)Engine.Add(gradient, regularizationContribution);
 
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);

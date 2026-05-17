@@ -162,8 +162,19 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // SetTrainingMode lives on INeuralNetwork, not IFullModel — for non-NN
         // models (regression, clustering, etc.) there's no training-mode
         // distinction so the gate is skipped.
-        var trainingModeModel = currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>;
-        trainingModeModel?.SetTrainingMode(true);
+        //
+        // CRITICAL: must follow the LIVE currentSolution, not the original
+        // pre-loop instance. UpdateSolution returns WithParameters(...)
+        // replacements; if we toggle the pre-loop instance only, the
+        // batch-N+1 model is in unknown mode (either reset to eval — which
+        // disables dropout regularization mid-training — or stuck in train
+        // mode forever — which leaves the post-Optimize Predict scoring
+        // under dropout / BN-train-stats). Sync the flag on the new
+        // currentSolution each time we replace it, and only flip back to
+        // eval on the final live instance in the finally block.
+        // (PR #1358 review comment.)
+        var initialTrainingMode = currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>;
+        initialTrainingMode?.SetTrainingMode(true);
 
         try
         {
@@ -185,6 +196,14 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
                     // Update solution using Adam algorithm
                     var newSolution = UpdateSolution(currentSolution, gradient);
+
+                    // Sync training mode onto the new live instance —
+                    // WithParameters(...) returns a fresh model that
+                    // doesn't inherit the prior instance's training-mode
+                    // flag, so the next CalculateGradient would otherwise
+                    // forward through a possibly-eval-mode network and
+                    // skip dropout.
+                    (newSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
 
                     currentSolution = newSolution;
                 }
@@ -215,9 +234,10 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         }
         finally
         {
-            // Leave the model in eval mode so the next Predict / evaluation
-            // call doesn't accidentally engage dropout / batchnorm-train-stats.
-            trainingModeModel?.SetTrainingMode(false);
+            // Leave the LIVE model (not the original pre-loop instance)
+            // in eval mode so the next Predict / evaluation call doesn't
+            // accidentally engage dropout / batchnorm-train-stats.
+            (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(false);
         }
     }
 
