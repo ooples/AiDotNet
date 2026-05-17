@@ -111,6 +111,24 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             return store;
         }
 
+        /// <summary>
+        /// Constructs a ColBERTRetriever wired with <see cref="TestColBertEmbedder{T}"/>.
+        /// Use for every <c>Retrieve_*</c> test that exercises the scoring path —
+        /// ColBERTRetriever throws <see cref="NotSupportedException"/> by design
+        /// when constructed without an embedder, and these unit tests run without
+        /// a real ColBERT ONNX checkpoint.
+        /// </summary>
+        private static ColBERTRetriever<double> CreateRetriever(
+            IDocumentStore<double> store,
+            int maxDocLength = 512,
+            int maxQueryLength = 32) =>
+            new ColBERTRetriever<double>(
+                store,
+                modelPath: "model.onnx",
+                maxDocLength: maxDocLength,
+                maxQueryLength: maxQueryLength,
+                embedder: new TestColBertEmbedder<double>());
+
         private MockDocumentStore CreateStoreWithDocumentsAndMetadata(
             params (string id, string content, Dictionary<string, object> metadata)[] docs)
         {
@@ -287,8 +305,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("test query").ToList();
@@ -303,8 +320,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "The quick brown fox jumps over the lazy dog"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("quick brown fox").ToList();
@@ -320,8 +336,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "The quick brown fox"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act - query tokens don't match but store still returns documents
             var results = retriever.Retrieve("elephant giraffe").ToList();
@@ -338,8 +353,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 ("doc1", "The quick brown fox jumps"),
                 ("doc2", "A lazy dog sleeps all day"),
                 ("doc3", "Climate change impacts"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("quick fox dog").ToList();
@@ -358,8 +372,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 ("doc3", "fox three"),
                 ("doc4", "fox four"),
                 ("doc5", "fox five"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("fox", topK: 3).ToList();
@@ -374,8 +387,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "The QUICK Brown FOX"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("quick fox").ToList();
@@ -390,8 +402,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -403,8 +414,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -416,8 +426,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -429,8 +438,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -442,8 +450,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -461,8 +468,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateStoreWithDocuments(
                 ("doc1", "fox"),
                 ("doc2", "quick brown fox jumps"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("quick brown fox").ToList();
@@ -479,8 +485,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "The quick brown fox"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("fox").ToList();
@@ -496,8 +501,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "climate change solutions and impacts"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("climate change solutions").ToList();
@@ -518,8 +522,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateStoreWithDocumentsAndMetadata(
                 ("doc1", "fox in the forest", new Dictionary<string, object> { { "category", "nature" } }),
                 ("doc2", "fox in the city", new Dictionary<string, object> { { "category", "urban" } }));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("fox", topK: 5,
@@ -536,8 +539,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocumentsAndMetadata(
                 ("doc1", "fox document", new Dictionary<string, object> { { "category", "nature" } }));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("fox", topK: 5,
@@ -554,8 +556,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateStoreWithDocuments(
                 ("doc1", "fox one"),
                 ("doc2", "fox two"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("fox", topK: 5,
@@ -571,8 +572,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "fox document"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act & Assert - null metadata filters should throw
             Assert.Throws<ArgumentNullException>(() =>
@@ -588,8 +588,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "fox"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("fox").ToList();
@@ -603,8 +602,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "fox"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("quick brown fox").ToList();
@@ -619,8 +617,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var longContent = string.Join(" ", Enumerable.Repeat("The quick brown fox jumps over the lazy dog.", 100));
             var store = CreateStoreWithDocuments(("doc1", longContent));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 50, maxQueryLength: 32);
+            var retriever = CreateRetriever(store, maxDocLength: 50, maxQueryLength: 32);
 
             // Act - document content exceeds maxDocLength
             var results = retriever.Retrieve("fox").ToList();
@@ -635,8 +632,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "The quick brown fox"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 5);
+            var retriever = CreateRetriever(store, maxDocLength: 512, maxQueryLength: 5);
             var longQuery = "one two three four five six seven eight nine ten";
 
             // Act - query exceeds maxQueryLength
@@ -651,8 +647,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "Hello, world! How are you?"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("hello world").ToList();
@@ -667,8 +662,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "Hello, world! Welcome to the test."));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act - should match "hello" and "world" despite punctuation
             var results = retriever.Retrieve("hello world test").ToList();
@@ -684,8 +678,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateStoreWithDocuments(
                 ("doc1", "The quick brown fox"),
                 ("doc2", "A lazy dog"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results1 = retriever.Retrieve("fox").ToList();
@@ -706,8 +699,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateStoreWithDocuments(
                 ("doc1", "fox one"),
                 ("doc2", "fox two"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("fox", topK: 100).ToList();
@@ -722,8 +714,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "Line one\nLine two\nLine three"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("line one two").ToList();
@@ -738,8 +729,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "Column1\tColumn2\tColumn3"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 32);
+            var retriever = CreateRetriever(store);
 
             // Act
             var results = retriever.Retrieve("column1 column2").ToList();
@@ -758,8 +748,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "one two three four five six seven eight nine ten"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 3);
+            var retriever = CreateRetriever(store, maxDocLength: 512, maxQueryLength: 3);
 
             // Act - only first 3 tokens should be used
             var results = retriever.Retrieve("one two three four five").ToList();
@@ -773,8 +762,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = CreateStoreWithDocuments(("doc1", "fox"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 512, maxQueryLength: 1);
+            var retriever = CreateRetriever(store, maxDocLength: 512, maxQueryLength: 1);
 
             // Act
             var results = retriever.Retrieve("fox jumps high").ToList();
@@ -789,8 +777,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateStoreWithDocuments(
                 ("doc1", "the quick brown fox jumps over lazy dog"));
-            var retriever = new ColBERTRetriever<double>(
-                store, "model.onnx", maxDocLength: 3, maxQueryLength: 32);
+            var retriever = CreateRetriever(store, maxDocLength: 3, maxQueryLength: 32);
 
             // Act - document truncated to 3 tokens
             var results = retriever.Retrieve("the quick brown").ToList();

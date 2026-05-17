@@ -382,8 +382,14 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.Retrievers
         [Fact(Timeout = 60000)]
         public async Task Retrieve_WithEmptyDocumentStore_ReturnsEmptyResults()
         {
-            // Arrange
-            var retriever = new ColBERTRetriever<double>(_documentStore, "model.onnx", 512, 32);
+            // Arrange — pass a deterministic embedder so RetrieveCore takes the
+            // scoring path (it throws NotSupportedException when no embedder is
+            // supplied; ColBERT has no defensible lexical fallback per the
+            // class doc). HashColBertEmbedder isn't needed here because the
+            // store is empty, but the constructor surface still requires one.
+            var retriever = new ColBERTRetriever<double>(
+                _documentStore, "model.onnx", 512, 32,
+                embedder: new TestColBertEmbedder<double>());
 
             // Act
             var results = retriever.Retrieve("test query");
