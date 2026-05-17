@@ -4476,6 +4476,18 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     }
 
     /// <summary>
+    /// Internal accessor exposing the most recently configured
+    /// <see cref="AdversarialRobustnessConfiguration{T, TInput, TOutput}"/> so
+    /// unit tests can verify <see cref="ConfigureAdversarialRobustness"/>
+    /// retained the user-supplied (or default) instance. The configuration
+    /// is consumed at build time by <c>AttachAdversarialRobustness</c>;
+    /// this accessor lets tests assert the configure-time storage step
+    /// without instantiating the full result pipeline.
+    /// </summary>
+    internal AdversarialRobustnessConfiguration<T, TInput, TOutput>? ConfiguredAdversarialRobustness
+        => _adversarialRobustnessConfiguration;
+
+    /// <summary>
     /// Configures fine-tuning for the model using preference learning, RLHF, or other alignment methods.
     /// </summary>
     /// <param name="configuration">The fine-tuning configuration including training data. When null, uses industry-standard defaults.</param>
@@ -4549,15 +4561,31 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // IPO/KTO/CPO/CAI/RLHF) is not yet integrated into the BuildAsync
         // pipeline. See the open AiDotNet issue for tracking; until then the
         // surface is reachable for migration via the returned result.
-        // Surface a one-time runtime warning so users discover the gap early
-        // rather than after Build returns silently.
-        System.Diagnostics.Trace.TraceWarning(
-            "ConfigureFineTuning: configuration stored but no in-engine consumer is wired yet. " +
-            "FineTuningConfiguration is reserved for future use. Track follow-up at " +
-            "AiDotNet 'fix(#1357 follow-up): wire ConfigureFineTuning to runner'.");
+        // One-time warning per process — repeated reconfiguration on the
+        // same builder shouldn't flood the trace log. Atomic CAS so
+        // concurrent first-callers race a single emit.
+        if (System.Threading.Interlocked.CompareExchange(
+                ref s_warnedConfigFineTuning, 1, 0) == 0)
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "ConfigureFineTuning: configuration stored but no in-engine consumer is wired yet. " +
+                "FineTuningConfiguration is reserved for future use. Track follow-up at " +
+                "AiDotNet 'fix(#1357 follow-up): wire ConfigureFineTuning to runner'.");
+        }
 
         return this;
     }
+
+    // One-time-warning latches for the four reserved Configure* facade
+    // methods (FineTuning / TrainingPipeline / CurriculumLearning /
+    // SelfSupervisedLearning). PR #1361 review pointed out that the
+    // unguarded Trace.TraceWarning calls fired on every reconfiguration —
+    // these flags make each warning emit at most once per process so the
+    // trace log stays usable.
+    private static int s_warnedConfigFineTuning;
+    private static int s_warnedConfigTrainingPipeline;
+    private static int s_warnedConfigCurriculumLearning;
+    private static int s_warnedConfigSelfSupervisedLearning;
 
     /// <summary>
     /// Internal accessor exposing the most recently configured
@@ -4641,7 +4669,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // are stored on the builder but the staged executor is not yet wired
         // into BuildAsync. Surface a one-time runtime warning so users discover
         // the gap early rather than after Build returns silently.
-        if (configuration is not null)
+        if (configuration is not null
+            && System.Threading.Interlocked.CompareExchange(
+                ref s_warnedConfigTrainingPipeline, 1, 0) == 0)
         {
             System.Diagnostics.Trace.TraceWarning(
                 "ConfigureTrainingPipeline: configuration stored but no in-engine consumer is wired yet. " +
@@ -4946,8 +4976,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // RESERVED FOR FUTURE USE: the underlying CurriculumLearner /
         // CurriculumScheduler types exist under src/CurriculumLearning, but the
         // builder does not yet thread these options into the training loop.
-        // Surface a one-time runtime warning so users discover the gap early
-        // rather than after Build returns silently.
+        // One-time runtime warning — same rationale as the FineTuning latch.
+        if (System.Threading.Interlocked.CompareExchange(
+                ref s_warnedConfigCurriculumLearning, 1, 0) == 0)
         System.Diagnostics.Trace.TraceWarning(
             "ConfigureCurriculumLearning: configuration stored but no in-engine consumer is wired yet. " +
             "CurriculumLearningOptions is reserved for future use. Track follow-up at " +
@@ -6182,9 +6213,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // MoCo, BYOL, DINO, MAE) exists under src/SelfSupervisedLearning, but
         // the builder does not yet run pretraining as a stage of BuildAsync.
         // Users that need SSL today should drive the SSLFineTuningPipeline /
-        // SSL method classes directly. Surface a one-time runtime warning so
-        // callers discover the gap early rather than after Build returns
-        // silently.
+        // SSL method classes directly. One-time runtime warning — same
+        // rationale as the FineTuning latch.
+        if (System.Threading.Interlocked.CompareExchange(
+                ref s_warnedConfigSelfSupervisedLearning, 1, 0) == 0)
         System.Diagnostics.Trace.TraceWarning(
             "ConfigureSelfSupervisedLearning: configuration stored but no in-engine consumer is wired yet. " +
             "SSLConfig is reserved for future use; in the meantime drive SSLFineTuningPipeline directly. " +
