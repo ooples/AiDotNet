@@ -2,7 +2,9 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NER.SequenceLabeling;
 
@@ -397,6 +399,139 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
                 return crf;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Pads or truncates a labels tensor along the sequence axis so its
+    /// length matches the CRF's locked sequence length (<paramref name="targetSeqLen"/>).
+    /// </summary>
+    /// <param name="labels">Gold-label tensor. Rank-1 <c>[seqLen]</c> for a
+    /// single example; rank-2 <c>[batch, seqLen]</c> for a batch. Each
+    /// element is an integer class index in <c>[0, NumLabels)</c>, NOT a
+    /// one-hot or multi-label encoding — the CRF NLL path interprets
+    /// values as scalar label indices.</param>
+    /// <param name="targetSeqLen">The sequence length the CRF layer expects
+    /// (typically <c>MaxSequenceLength</c>). Sequences shorter than this
+    /// are right-padded with zeros (label 0 = O in the default CoNLL BIO
+    /// scheme); sequences longer are truncated.</param>
+    /// <remarks>
+    /// Lives on the base class so every sequence-labeling NER subclass
+    /// shares the same labels-padding contract. The rank-2 path
+    /// deliberately treats axis 0 as <b>batch</b> and axis 1 as
+    /// <b>sequence</b> (matching <c>ComputeNegativeLogLikelihood</c>'s
+    /// <c>[batch, seqLen]</c> contract). The prior duplicated copies in
+    /// each subclass mis-interpreted rank-2 as <c>[seqLen, numLabels]</c>
+    /// one-hot, which silently mangled batched labels before they hit
+    /// the CRF NLL path — see PR #1356 review comment from CodeRabbit
+    /// for the failure mode.
+    /// </remarks>
+    protected virtual Tensor<T> PreprocessLabels(Tensor<T> labels, int targetSeqLen)
+    {
+        if (labels is null) throw new ArgumentNullException(nameof(labels));
+        if (labels.Rank == 0) return labels;
+
+        if (labels.Rank == 1)
+        {
+            int labelLen = labels.Shape[0];
+            if (labelLen == targetSeqLen) return labels;
+            var padded = new Tensor<T>([targetSeqLen]);
+            int copyLen = Math.Min(labelLen, targetSeqLen);
+            for (int i = 0; i < copyLen; i++)
+                padded[i] = labels[i];
+            return padded;
+        }
+
+        if (labels.Rank == 2)
+        {
+            // Rank-2 labels are [batch, seqLen] (matches the CRF NLL
+            // contract). Pad the second axis to targetSeqLen.
+            int batch = labels.Shape[0];
+            int labelLen = labels.Shape[1];
+            if (labelLen == targetSeqLen) return labels;
+            var padded2 = new Tensor<T>([batch, targetSeqLen]);
+            int copyLen2 = Math.Min(labelLen, targetSeqLen);
+            for (int b = 0; b < batch; b++)
+                for (int t = 0; t < copyLen2; t++)
+                    padded2[b, t] = labels[b, t];
+            return padded2;
+        }
+
+        throw new ArgumentException(
+            $"PreprocessLabels expects rank-1 [seqLen] or rank-2 [batch, seqLen]; got rank {labels.Rank}.",
+            nameof(labels));
+    }
+
+    /// <summary>
+    /// Runs one CRF-aware (when <paramref name="useCrf"/> is true and a CRF
+    /// layer is present) or cross-entropy training step. Shared between the
+    /// synchronous <c>Train(...)</c> entry point and the asynchronous
+    /// <c>INERModel{T}.TrainAsync(...)</c> loop so both code paths use the
+    /// same loss objective. Returns the scalar loss value as a double.
+    /// </summary>
+    /// <param name="input">Token embeddings (raw, NOT preprocessed).</param>
+    /// <param name="expected">Gold labels (raw, NOT preprocessed).</param>
+    /// <param name="useCrf">Whether to route through CRF NLL when a CRF
+    /// layer is present in <c>Layers</c>. False falls through to standard
+    /// tape-based cross-entropy training.</param>
+    /// <param name="optimizer">Optimizer to step. Required.</param>
+    /// <remarks>
+    /// Sets training mode to true for the duration of the step and restores
+    /// it to false in a finally block, mirroring the contract Train and
+    /// TrainAsync both want. Preprocesses input + labels via the virtual
+    /// <see cref="PreprocessLabels"/> + the subclass's <c>PreprocessTokens</c>
+    /// override.
+    /// </remarks>
+    protected double RunCrfAwareTrainStep(
+        Tensor<T> input,
+        Tensor<T> expected,
+        bool useCrf,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expected is null) throw new ArgumentNullException(nameof(expected));
+        if (optimizer is null) throw new ArgumentNullException(nameof(optimizer));
+
+        SetTrainingMode(true);
+        try
+        {
+            var preprocessedInput = PreprocessTokens(input);
+            int targetSeqLen = preprocessedInput.Rank == 3
+                ? preprocessedInput.Shape[1]
+                : preprocessedInput.Shape[0];
+            var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
+
+            if (useCrf)
+            {
+                var crfLayer = FindCrfLayer();
+                if (crfLayer is not null)
+                {
+                    // CRF-aware: log-partition − gold-score on the
+                    // emissions tensor + gold labels. Backprop flows
+                    // into upstream layers AND the CRF's own
+                    // transition / start / end scores.
+                    T crfLoss = TrainWithCustomLoss(
+                        preprocessedInput,
+                        emissions => crfLayer.ComputeNegativeLogLikelihood(emissions, preprocessedExpected),
+                        optimizer);
+                    return NumOps.ToDouble(crfLoss);
+                }
+                // No CRF in the layer stack despite useCrf=true — fall
+                // through to standard cross-entropy. Defensive; shouldn't
+                // happen with the default LayerHelper factories.
+            }
+
+            TrainWithTape(preprocessedInput, preprocessedExpected);
+            // LastLoss is nullable on the base; coerce to double via
+            // NumOps with a zero fallback when the tape path didn't
+            // record one (rare — typically only when the model has no
+            // trainable parameters at all). Pattern-matched so we
+            // don't need the null-forgiving operator.
+            return LastLoss is { } loss ? NumOps.ToDouble(loss) : 0.0;
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc />

@@ -560,42 +560,25 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // Single forward + backward pass (avoids duplicate forward computation)
-                SetTrainingMode(true);
-                try
-                {
-                    var preprocessed = PreprocessTokens(tokenEmbeddings);
-                    // Rank-aware seq-len lookup — for rank-3 batched inputs
-                    // [batch, seq, embed] Shape[0] is the batch size, not
-                    // the sequence length, and PreprocessLabels then sized
-                    // labels to the batch count and the CRF layer's
-                    // sequence-length contract was violated. Mirror Train's
-                    // logic so async and sync paths agree.
-                    int targetSeqLen = preprocessed.Rank == 3
-                        ? preprocessed.Shape[1]
-                        : preprocessed.Shape[0];
-                    var preprocessedLabels = PreprocessLabels(labels, targetSeqLen);
-                    var output = Forward(preprocessed);
-                    double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
-                        output.ToVector(), preprocessedLabels.ToVector()));
-                    var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
-                    var gt = Tensor<T>.FromVector(grad);
-                    // Backward removed — tape-based training handles gradients
-                    _optimizer.UpdateParameters(Layers);
+                // Route through the shared CRF-aware training step so the
+                // async path uses the same loss objective as Train(...) —
+                // CRF negative log-likelihood (log-partition − gold-score)
+                // when UseCRF is true, standard cross-entropy when not.
+                // Previously this loop fed the model output (Viterbi-
+                // decoded argmax labels) into LossFunction.CalculateLoss
+                // for the CRF case, which silently trained on a degenerate
+                // non-differentiable objective.
+                double loss = RunCrfAwareTrainStep(
+                    tokenEmbeddings, labels, _options.UseCRF, _optimizer);
 
-                    progress?.Report(new NERTrainingProgress
-                    {
-                        CurrentEpoch = epoch,
-                        TotalEpochs = epochs,
-                        CurrentBatch = 1,
-                        TotalBatches = 1,
-                        Loss = loss
-                    });
-                }
-                finally
+                progress?.Report(new NERTrainingProgress
                 {
-                    SetTrainingMode(false);
-                }
+                    CurrentEpoch = epoch,
+                    TotalEpochs = epochs,
+                    CurrentBatch = 1,
+                    TotalBatches = 1,
+                    Loss = loss
+                });
             }
         }, cancellationToken);
     }
@@ -817,58 +800,14 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
-        SetTrainingMode(true);
-        try
-        {
-            // Pad/truncate inputs and labels to MaxSequenceLength before the
-            // tape forward — the ConditionalRandomFieldLayer locks its
-            // internal Viterbi/transition buffers to the sequence length seen
-            // on construction (default MaxSequenceLength = 256), and the
-            // PredictLabels / PredictBatch paths already preprocess for that
-            // contract. The training path previously fed the raw input shape
-            // straight through, which exploded with
-            // "ConditionalRandomFieldLayer's sequence length mismatch" the
-            // moment any caller supplied a shorter sequence than the
-            // configured MaxSequenceLength.
-            var preprocessedInput = PreprocessTokens(input);
-            int targetSeqLen = preprocessedInput.Rank == 3
-                ? preprocessedInput.Shape[1]
-                : preprocessedInput.Shape[0];
-            var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
-
-            if (_options.UseCRF)
-            {
-                // CRF-aware training: the CRF layer's training-mode Forward
-                // returns emissions UNCHANGED, so the model output going into
-                // the loss is the post-projection emissions tensor. Compute
-                // the proper linear-chain CRF NLL (log-partition − gold-score)
-                // against the gold labels instead of cross-entropy on the
-                // viterbi-decoded labels (which would be non-differentiable
-                // and silently drive every gradient to zero — that was the
-                // root cause behind ~14 of the BiLSTMCRFTests training-
-                // quality failures in #1332 cluster 4). Backprop flows
-                // through emissions → upstream BiLSTM/projection AND through
-                // the CRF's own transition / start / end scores.
-                var crfLayer = FindCrfLayer();
-                if (crfLayer is not null)
-                {
-                    TrainWithCustomLoss(
-                        preprocessedInput,
-                        emissions => crfLayer.ComputeNegativeLogLikelihood(emissions, preprocessedExpected),
-                        _optimizer);
-                    return;
-                }
-                // No CRF layer found despite UseCRF=true — fall through to
-                // standard cross-entropy training. Defensive; shouldn't happen
-                // with the default factory.
-            }
-
-            TrainWithTape(preprocessedInput, preprocessedExpected);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        // Delegate to the shared CRF-aware training step (lives on
+        // SequenceLabelingNERBase) so this synchronous path and the
+        // async INERModel<T>.TrainAsync path agree on the loss
+        // objective + preprocessing contract. The shared helper pads
+        // input + labels to MaxSequenceLength, manages training-mode
+        // around the step, and routes through CRF NLL when UseCRF is
+        // true (falling back to tape-based cross-entropy otherwise).
+        RunCrfAwareTrainStep(input, expected, _options.UseCRF, _optimizer);
     }
 
     /// <inheritdoc />
@@ -981,35 +920,6 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                 padded[s, d] = rawEmbeddings[s, d];
 
         return padded;
-    }
-
-    /// <summary>
-    /// Pads or truncates labels to match the preprocessed input sequence length.
-    /// </summary>
-    private Tensor<T> PreprocessLabels(Tensor<T> labels, int targetSeqLen)
-    {
-        if (labels.Rank < 1) return labels;
-
-        int labelLen = labels.Shape[0];
-        if (labelLen == targetSeqLen) return labels;
-
-        if (labels.Rank == 1)
-        {
-            var padded = new Tensor<T>([targetSeqLen]);
-            int copyLen = Math.Min(labelLen, targetSeqLen);
-            for (int i = 0; i < copyLen; i++)
-                padded[i] = labels[i];
-            return padded;
-        }
-
-        // Rank-2 [seqLen, numLabels] (one-hot or multi-label)
-        int cols = labels.Shape[1];
-        var padded2 = new Tensor<T>([targetSeqLen, cols]);
-        int copyLen2 = Math.Min(labelLen, targetSeqLen);
-        for (int s = 0; s < copyLen2; s++)
-            for (int c = 0; c < cols; c++)
-                padded2[s, c] = labels[s, c];
-        return padded2;
     }
 
     /// <summary>

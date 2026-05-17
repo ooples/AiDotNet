@@ -711,7 +711,29 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        // Training-mode short-circuit: return raw emissions unchanged so the
+        // Apply the configured activation BEFORE the training-mode short-
+        // circuit so training and inference both decode the SAME score
+        // surface. Returning raw emissions in training mode while inference
+        // decoded the activated emissions would leave the model learning
+        // one objective and serving another — equivalent to silently
+        // training on a different layer than the one in production.
+        // For the common IdentityActivation case this is a no-op via the
+        // reference-equal early return inside ApplyActivation.
+        Tensor<T> sequenceScores;
+        if (UsingVectorActivation)
+        {
+            sequenceScores = ApplyActivation(input3D);
+        }
+        else if (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>))
+        {
+            sequenceScores = ApplyActivation(input3D);
+        }
+        else
+        {
+            sequenceScores = input3D;
+        }
+
+        // Training-mode short-circuit: return the activated emissions so the
         // tape sees an unbroken differentiable chain from the upstream
         // projection back to the loss. The proper CRF training loss is the
         // negative log-likelihood (log-partition − gold-path), which a
@@ -729,28 +751,13 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // doesn't need to be tape-tracked.
         if (IsTrainingMode)
         {
-            _lastOutput = input3D;
+            _lastOutput = sequenceScores;
             return _originalInputShape != null && _originalInputShape.Length != 3
-                ? Engine.Reshape(input3D, _originalInputShape)
-                : input3D;
+                ? Engine.Reshape(sequenceScores, _originalInputShape)
+                : sequenceScores;
         }
 
         var output = TensorAllocator.Rent<T>([batchSize, _sequenceLength, _numClasses]);
-
-        // === VECTORIZED: Apply activation to entire normalized input ===
-        Tensor<T> sequenceScores;
-        if (UsingVectorActivation)
-        {
-            sequenceScores = ApplyActivation(input3D);
-        }
-        else if (ScalarActivation != null && !(ScalarActivation is IdentityActivation<T>))
-        {
-            sequenceScores = ApplyActivation(input3D);
-        }
-        else
-        {
-            sequenceScores = input3D;
-        }
 
         // Process each batch item (Viterbi requires sequential time processing)
         for (int b = 0; b < batchSize; b++)
@@ -999,7 +1006,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// labels (which would be non-differentiable).
     /// </para>
     /// </remarks>
-    public Tensor<T> ComputeNegativeLogLikelihood(Tensor<T> emissions, Tensor<T> labels)
+    internal Tensor<T> ComputeNegativeLogLikelihood(Tensor<T> emissions, Tensor<T> labels)
     {
         if (emissions == null) throw new ArgumentNullException(nameof(emissions));
         if (labels == null) throw new ArgumentNullException(nameof(labels));
@@ -1197,10 +1204,26 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> BuildLabelOneHotForBatch(Tensor<T> labels2D, int b, int seqLen, int numClasses)
     {
+        // ComputeNegativeLogLikelihood documents that labels carry integer
+        // class indices. A fractional double like 0.51 would have been
+        // silently rounded to 1 by the prior implementation — that loses
+        // information (the caller almost certainly didn't mean "round
+        // 0.51 toward 1") and trains the model against fabricated targets.
+        // Fail fast instead: require values that round-trip exactly
+        // through int (within FP-representation tolerance) and reject
+        // anything else with a clear diagnostic.
+        const double IntegerTolerance = 1e-6;
         var oh = new Tensor<T>([seqLen, numClasses]);
         for (int t = 0; t < seqLen; t++)
         {
-            int label = (int)Math.Round(NumOps.ToDouble(labels2D[b, t]));
+            double rawLabel = NumOps.ToDouble(labels2D[b, t]);
+            double rounded = Math.Round(rawLabel);
+            if (Math.Abs(rawLabel - rounded) > IntegerTolerance)
+                throw new ArgumentException(
+                    $"Label at [b={b}, t={t}] is {rawLabel}, which is not an integer class index. " +
+                    "CRF training requires integer label indices in [0, NumClasses); fractional values are not allowed.",
+                    nameof(labels2D));
+            int label = (int)rounded;
             if (label < 0 || label >= numClasses)
                 throw new ArgumentOutOfRangeException(nameof(labels2D),
                     $"Label at [b={b}, t={t}] is {label}, must be in [0, {numClasses}).");
