@@ -397,9 +397,46 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                 ? preprocessedInput.Shape[1]
                 : preprocessedInput.Shape[0];
             var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
+
+            if (_options.UseCRF)
+            {
+                // CRF-aware training — see BiLSTMCRF.Train for the rationale.
+                var crfLayer = FindCrfLayer();
+                if (crfLayer is not null)
+                {
+                    TrainWithCustomLoss(
+                        preprocessedInput,
+                        emissions => crfLayer.ComputeNegativeLogLikelihood(emissions, preprocessedExpected),
+                        _optimizer);
+                    return;
+                }
+            }
+
             TrainWithTape(preprocessedInput, preprocessedExpected);
         }
         finally { SetTrainingMode(false); }
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // See BiLSTMCRF.GetNamedLayerActivations for rationale: preprocess
+        // before iterating layers so the CRF's locked sequence length matches.
+        var preprocessed = PreprocessTokens(input);
+        return base.GetNamedLayerActivations(preprocessed);
+    }
+
+    /// <summary>
+    /// Returns the CRF layer in the model's Layers list, or null if absent.
+    /// </summary>
+    private ConditionalRandomFieldLayer<T>? FindCrfLayer()
+    {
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            if (Layers[i] is ConditionalRandomFieldLayer<T> crf)
+                return crf;
+        }
+        return null;
     }
 
     /// <inheritdoc />

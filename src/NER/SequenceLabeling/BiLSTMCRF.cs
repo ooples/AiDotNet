@@ -835,12 +835,68 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
                 ? preprocessedInput.Shape[1]
                 : preprocessedInput.Shape[0];
             var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
+
+            if (_options.UseCRF)
+            {
+                // CRF-aware training: the CRF layer's training-mode Forward
+                // returns emissions UNCHANGED, so the model output going into
+                // the loss is the post-projection emissions tensor. Compute
+                // the proper linear-chain CRF NLL (log-partition − gold-score)
+                // against the gold labels instead of cross-entropy on the
+                // viterbi-decoded labels (which would be non-differentiable
+                // and silently drive every gradient to zero — that was the
+                // root cause behind ~14 of the BiLSTMCRFTests training-
+                // quality failures in #1332 cluster 4). Backprop flows
+                // through emissions → upstream BiLSTM/projection AND through
+                // the CRF's own transition / start / end scores.
+                var crfLayer = FindCrfLayer();
+                if (crfLayer is not null)
+                {
+                    TrainWithCustomLoss(
+                        preprocessedInput,
+                        emissions => crfLayer.ComputeNegativeLogLikelihood(emissions, preprocessedExpected),
+                        _optimizer);
+                    return;
+                }
+                // No CRF layer found despite UseCRF=true — fall through to
+                // standard cross-entropy training. Defensive; shouldn't happen
+                // with the default factory.
+            }
+
             TrainWithTape(preprocessedInput, preprocessedExpected);
         }
         finally
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // GetNamedLayerActivations iterates Layers raw — it bypasses the
+        // Predict/Train preprocessing path that pads input to MaxSequenceLength.
+        // Without preprocessing here, the CRF layer (constructed with a fixed
+        // sequenceLength = MaxSequenceLength) throws on any shorter input.
+        // Mirror PredictLabels' contract by preprocessing first.
+        var preprocessed = PreprocessTokens(input);
+        return base.GetNamedLayerActivations(preprocessed);
+    }
+
+    /// <summary>
+    /// Returns the CRF layer in the model's Layers list, or null if absent
+    /// (UseCRF == false in options). The CRF is canonically the LAST layer
+    /// in the default BiLSTM-CRF stack, so the search runs in reverse for
+    /// the common case.
+    /// </summary>
+    private ConditionalRandomFieldLayer<T>? FindCrfLayer()
+    {
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            if (Layers[i] is ConditionalRandomFieldLayer<T> crf)
+                return crf;
+        }
+        return null;
     }
 
     /// <summary>

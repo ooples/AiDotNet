@@ -1,6 +1,7 @@
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NER.SequenceLabeling;
 
@@ -377,6 +378,31 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
     /// <inheritdoc />
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        return PredictLabels(input);
+        // Mirror NeuralNetworkBase.Predict's contract:
+        //   1. NoGradScope so inference doesn't grow the autodiff tape and
+        //      so tape-tracked ops in stateful layers (CRF, etc.) take their
+        //      inference-only code paths.
+        //   2. SetTrainingMode(false) so stateful layers (Dropout / BatchNorm /
+        //      GaussianNoise / etc.) behave deterministically. Without this,
+        //      a freshly-constructed model (IsTrainingMode defaults to true on
+        //      every LayerBase) emits a fresh random Dropout mask on every
+        //      Predict call — making PredictLabels non-deterministic across
+        //      successive calls with identical inputs. We override Predict to
+        //      route through PredictLabels (so the BiLSTMCRF preprocess/CRF
+        //      pipeline runs end-to-end), which bypasses the base Predict's
+        //      mode-flip; restore the prior mode in finally so calling
+        //      Predict mid-training-loop doesn't permanently flip the
+        //      network out of training mode.
+        using var _ = new NoGradScope<T>();
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return PredictLabels(input);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
     }
 }

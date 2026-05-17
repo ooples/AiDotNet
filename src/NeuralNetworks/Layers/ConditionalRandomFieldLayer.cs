@@ -711,6 +711,30 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
+        // Training-mode short-circuit: return raw emissions unchanged so the
+        // tape sees an unbroken differentiable chain from the upstream
+        // projection back to the loss. The proper CRF training loss is the
+        // negative log-likelihood (log-partition − gold-path), which a
+        // CRF-aware caller (e.g. BiLSTMCRF.Train via the dedicated
+        // CrfNegativeLogLikelihood helpers below) computes against this
+        // emissions tensor and the gold labels separately. Returning
+        // Viterbi-decoded labels here (the prior behavior) silently broke
+        // backprop: the per-timestep argmax + one-hot encoding is not
+        // differentiable, and the per-class log-sum-exp loops with raw
+        // Math.Exp/Math.Log scalar arithmetic bypass the tape entirely
+        // — every test that asserts "params changed after Train" failed
+        // because the gradient chain ended at the CRF.
+        //
+        // Inference still runs the full Viterbi decode below; that path
+        // doesn't need to be tape-tracked.
+        if (IsTrainingMode)
+        {
+            _lastOutput = input3D;
+            return _originalInputShape != null && _originalInputShape.Length != 3
+                ? Engine.Reshape(input3D, _originalInputShape)
+                : input3D;
+        }
+
         var output = TensorAllocator.Rent<T>([batchSize, _sequenceLength, _numClasses]);
 
         // === VECTORIZED: Apply activation to entire normalized input ===
@@ -972,6 +996,255 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Computes the linear-chain CRF negative log-likelihood for a batched
+    /// emissions tensor and the corresponding gold-label sequence:
+    /// <c>NLL(emissions, labels) = logZ(emissions) − goldScore(emissions, labels)</c>
+    /// where <c>logZ</c> is the partition function (computed via the standard
+    /// forward algorithm) and <c>goldScore</c> sums the emission + transition
+    /// + start/end scores along the gold path. Per Lafferty et al. 2001 §3 +
+    /// the BiLSTM-CRF formulation in Lample et al. 2016 §3.2.
+    /// </summary>
+    /// <param name="emissions">Emission scores from the upstream projection.
+    /// Shape: <c>[batch, sequenceLength, numClasses]</c>. Must be tape-tracked
+    /// for backprop to flow into the upstream layers.</param>
+    /// <param name="labels">Gold label indices. Shape:
+    /// <c>[batch, sequenceLength]</c> with integer class indices in
+    /// <c>[0, numClasses)</c>, or 1D <c>[sequenceLength]</c> for a single
+    /// example (auto-promoted to a singleton batch).</param>
+    /// <returns>Per-batch-element NLL averaged. Single scalar tensor that
+    /// the caller can use directly as the training loss.</returns>
+    /// <remarks>
+    /// <para>
+    /// All operations route through tape-tracked <see cref="Engine"/> ops
+    /// (TensorAdd, TensorMultiplyScalar, ReduceLogSumExp, etc.) so backprop
+    /// reaches BOTH the upstream emission-producing layers AND this layer's
+    /// own transition matrix / start scores / end scores. The forward
+    /// algorithm's per-timestep log-sum-exp is implemented via the engine's
+    /// tape-aware <see cref="IEngine.LogSumExp{T}"/> when present, falling
+    /// back to a numerically stable <c>maxVal + log(sum(exp(x − maxVal)))</c>
+    /// chain built from engine ops.
+    /// </para>
+    /// <para>
+    /// Returning a scalar (not the decoded labels) is the contract a CRF
+    /// loss expects — the BiLSTMCRF / CNNBiLSTMCRF training step uses this
+    /// as the model's loss in place of cross-entropy on Viterbi-decoded
+    /// labels (which would be non-differentiable).
+    /// </para>
+    /// </remarks>
+    public Tensor<T> ComputeNegativeLogLikelihood(Tensor<T> emissions, Tensor<T> labels)
+    {
+        if (emissions == null) throw new ArgumentNullException(nameof(emissions));
+        if (labels == null) throw new ArgumentNullException(nameof(labels));
+
+        // Promote rank-2 emissions [seqLen, numClasses] to a singleton batch.
+        Tensor<T> emissions3D;
+        if (emissions.Rank == 2)
+            emissions3D = Engine.Reshape(emissions, [1, emissions.Shape[0], emissions.Shape[1]]);
+        else if (emissions.Rank == 3)
+            emissions3D = emissions;
+        else
+            throw new ArgumentException(
+                $"ComputeNegativeLogLikelihood requires rank-2 [seqLen, numClasses] or rank-3 [batch, seqLen, numClasses] emissions; got rank {emissions.Rank}.",
+                nameof(emissions));
+
+        int batchSize = emissions3D.Shape[0];
+        int seqLen = emissions3D.Shape[1];
+        int numClasses = emissions3D.Shape[2];
+        if (numClasses != _numClasses)
+            throw new ArgumentException(
+                $"emissions last axis ({numClasses}) doesn't match CRF numClasses ({_numClasses}).",
+                nameof(emissions));
+
+        // Promote rank-1 labels [seqLen] to a singleton batch [1, seqLen].
+        Tensor<T> labels2D;
+        if (labels.Rank == 1)
+            labels2D = Engine.Reshape(labels, [1, labels.Shape[0]]);
+        else if (labels.Rank == 2)
+            labels2D = labels;
+        else
+            throw new ArgumentException(
+                $"ComputeNegativeLogLikelihood requires rank-1 [seqLen] or rank-2 [batch, seqLen] labels; got rank {labels.Rank}.",
+                nameof(labels));
+
+        if (labels2D.Shape[0] != batchSize || labels2D.Shape[1] != seqLen)
+            throw new ArgumentException(
+                $"labels shape [{string.Join(",", labels2D.Shape.ToArray())}] doesn't match emissions [{batchSize}, {seqLen}, ...].",
+                nameof(labels));
+
+        // Per-batch tape-tracked NLL accumulator. All ops below route through
+        // Engine (TensorAdd, ReduceSum, TensorExp, etc.) so gradients flow into
+        // emissions (upstream layers) AND _transitionMatrix / _startScores /
+        // _endScores (this layer's parameters).
+        Tensor<T>? totalNll = null;
+        for (int b = 0; b < batchSize; b++)
+        {
+            // Slice this batch element: [seqLen, numClasses]
+            var emissionsB = Engine.TensorSliceAxis(emissions3D, axis: 0, index: b);
+
+            // Build constant one-hot encoding of labels for batch b — needed
+            // for tape-tracked gathers on emissions / transitions / start / end.
+            // Labels are integer indices stored as T; we read them as ints here
+            // and emit a constant one-hot tensor (no gradient w.r.t. labels).
+            var labelsOH = BuildLabelOneHotForBatch(labels2D, b, seqLen, numClasses);
+
+            // === logZ via tape-tracked forward algorithm ===
+            // alpha_0 = emissions[0] + startScores
+            var emit0 = Engine.TensorSliceAxis(emissionsB, axis: 0, index: 0); // [C]
+            var alpha = Engine.TensorAdd(emit0, _startScores);                 // [C]
+
+            for (int t = 1; t < seqLen; t++)
+            {
+                var emitT = Engine.TensorSliceAxis(emissionsB, axis: 0, index: t); // [C]
+
+                // scores[i, j] = alpha[i] + transitions[i, j] + emitT[j]
+                var alphaCol = Engine.Reshape(alpha, [_numClasses, 1]);            // [C, 1]
+                var emitRow = Engine.Reshape(emitT, [1, _numClasses]);             // [1, C]
+                var alphaPlusTrans = Engine.TensorBroadcastAdd(alphaCol, _transitionMatrix); // [C, C]
+                var scores = Engine.TensorBroadcastAdd(alphaPlusTrans, emitRow);   // [C, C]
+
+                // alpha_new = LogSumExp(scores, axis=0) → [C]
+                alpha = TapeLogSumExpAxis(scores, axis: 0); // [C] (axis-0 reduced)
+            }
+
+            // logZ = LogSumExp(alpha + endScores)
+            var alphaEnd = Engine.TensorAdd(alpha, _endScores);                // [C]
+            var alphaEnd2D = Engine.Reshape(alphaEnd, [1, _numClasses]);       // [1, C]
+            var logZ = TapeLogSumExpAxis(alphaEnd2D, axis: 1);                 // [1]
+
+            // === goldScore via one-hot encoding of labels ===
+            // emission contribution: sum_t emissions[t, labels[t]] = sum(emissionsB * labelsOH)
+            var emissionMasked = Engine.TensorMultiply(emissionsB, labelsOH);  // [seqLen, C]
+            var emissionTotal = Engine.ReduceSum(emissionMasked, [0, 1], keepDims: false); // scalar
+            var emissionTotal1D = Engine.Reshape(emissionTotal, [1]);
+
+            // start contribution: startScores[labels[0]] = sum(ohFirst * startScores)
+            var ohFirst = Engine.TensorSliceAxis(labelsOH, axis: 0, index: 0); // [C]
+            var startMasked = Engine.TensorMultiply(ohFirst, _startScores);    // [C]
+            var startTotal = Engine.ReduceSum(startMasked, [0], keepDims: true); // [1]
+
+            // end contribution: endScores[labels[seqLen-1]]
+            var ohLast = Engine.TensorSliceAxis(labelsOH, axis: 0, index: seqLen - 1); // [C]
+            var endMasked = Engine.TensorMultiply(ohLast, _endScores);         // [C]
+            var endTotal = Engine.ReduceSum(endMasked, [0], keepDims: true);   // [1]
+
+            // transition contribution (if seqLen > 1):
+            //   sum_{t=1..T-1} transitions[labels[t-1], labels[t]]
+            // = sum_{t, i, j} ohPrev[t, i] * transitions[i, j] * ohCurr[t, j]
+            // Build ohPrev [seqLen-1, C] and ohCurr [seqLen-1, C], take outer
+            // product per timestep [seqLen-1, C, C], elementwise-multiply by
+            // transitions broadcast to [1, C, C], reduce.
+            Tensor<T> goldScore;
+            if (seqLen > 1)
+            {
+                var ohPrev = SliceLabelOneHotSubrange(labelsOH, start: 0, count: seqLen - 1);     // [seqLen-1, C]
+                var ohCurr = SliceLabelOneHotSubrange(labelsOH, start: 1, count: seqLen - 1);     // [seqLen-1, C]
+
+                var ohPrevExpanded = Engine.Reshape(ohPrev, [seqLen - 1, _numClasses, 1]);
+                var ohCurrExpanded = Engine.Reshape(ohCurr, [seqLen - 1, 1, _numClasses]);
+                var ohOuter = Engine.TensorBroadcastMultiply(ohPrevExpanded, ohCurrExpanded);    // [seqLen-1, C, C]
+
+                var transExpanded = Engine.Reshape(_transitionMatrix, [1, _numClasses, _numClasses]);
+                var transMasked = Engine.TensorBroadcastMultiply(ohOuter, transExpanded);        // [seqLen-1, C, C]
+                var transTotal = Engine.ReduceSum(transMasked, [0, 1, 2], keepDims: false);      // scalar
+                var transTotal1D = Engine.Reshape(transTotal, [1]);
+
+                // goldScore = emission + transition + start + end
+                goldScore = Engine.TensorAdd(emissionTotal1D, transTotal1D);
+                goldScore = Engine.TensorAdd(goldScore, startTotal);
+                goldScore = Engine.TensorAdd(goldScore, endTotal);
+            }
+            else
+            {
+                // No transitions for seqLen == 1.
+                goldScore = Engine.TensorAdd(emissionTotal1D, startTotal);
+                goldScore = Engine.TensorAdd(goldScore, endTotal);
+            }
+
+            // Per-example NLL = logZ - goldScore  (both shape [1])
+            var perExampleNll = Engine.TensorSubtract(logZ, goldScore);
+
+            totalNll = totalNll == null
+                ? perExampleNll
+                : Engine.TensorAdd(totalNll, perExampleNll);
+        }
+
+        // Mean over batch
+        var invBatch = NumOps.FromDouble(1.0 / Math.Max(1, batchSize));
+        var meanNll = Engine.TensorMultiplyScalar(totalNll!, invBatch); // shape [1]
+        return meanNll;
+    }
+
+    /// <summary>
+    /// Tape-tracked log-sum-exp along a single axis, returning the reduced
+    /// tensor with that axis removed. Implemented as
+    /// <c>max + log(sum(exp(x − max)))</c> for numerical stability — all
+    /// sub-operations route through <see cref="Engine"/> so the autograd tape
+    /// can backprop through this composite reduction.
+    /// </summary>
+    private Tensor<T> TapeLogSumExpAxis(Tensor<T> x, int axis)
+    {
+        // max along axis, keepDims=true so we can broadcast-subtract
+        var max = Engine.ReduceMax(x, [axis], keepDims: true, out _);
+        var negMax = Engine.TensorNegate(max);
+        var shifted = Engine.TensorBroadcastAdd(x, negMax);
+        var expShifted = Engine.TensorExp(shifted);
+        var sumExp = Engine.ReduceSum(expShifted, [axis], keepDims: true);
+        var logSum = Engine.TensorLog(sumExp);
+        var lseKeepDim = Engine.TensorAdd(logSum, max);
+
+        // Now squeeze the reduced axis to match the shape contract.
+        var inShape = x.Shape.ToArray();
+        var outShape = new int[inShape.Length - 1];
+        int oi = 0;
+        for (int i = 0; i < inShape.Length; i++)
+        {
+            if (i == axis) continue;
+            outShape[oi++] = inShape[i];
+        }
+        return Engine.Reshape(lseKeepDim, outShape);
+    }
+
+    /// <summary>
+    /// Builds a [seqLen, numClasses] one-hot encoding of the gold labels for
+    /// a single batch element. Returned tensor is a constant — the tape will
+    /// treat it as a leaf with no gradient.
+    /// </summary>
+    private Tensor<T> BuildLabelOneHotForBatch(Tensor<T> labels2D, int b, int seqLen, int numClasses)
+    {
+        var oh = new Tensor<T>([seqLen, numClasses]);
+        for (int t = 0; t < seqLen; t++)
+        {
+            int label = (int)Math.Round(NumOps.ToDouble(labels2D[b, t]));
+            if (label < 0 || label >= numClasses)
+                throw new ArgumentOutOfRangeException(nameof(labels2D),
+                    $"Label at [b={b}, t={t}] is {label}, must be in [0, {numClasses}).");
+            oh[t, label] = NumOps.One;
+        }
+        return oh;
+    }
+
+    /// <summary>
+    /// Returns a tape-tracked slice of a [seqLen, numClasses] one-hot tensor
+    /// covering rows <c>[start, start+count)</c>. Used to construct the
+    /// previous/current label one-hots for transition-score gathering.
+    /// </summary>
+    private Tensor<T> SliceLabelOneHotSubrange(Tensor<T> labelsOH, int start, int count)
+    {
+        // Pull rows one-by-one via TensorSliceAxis and stack via repeated
+        // broadcast adds into a fresh tensor. Building the subrange directly
+        // from the dense one-hot keeps it constant (no gradient needed).
+        int numClasses = labelsOH.Shape[1];
+        var sub = new Tensor<T>([count, numClasses]);
+        for (int i = 0; i < count; i++)
+        {
+            int row = start + i;
+            for (int c = 0; c < numClasses; c++)
+                sub[i, c] = labelsOH[row, c];
+        }
+        return sub;
+    }
+
+    /// <summary>
     /// Sets the trainable parameters for the layer.
     /// </summary>
     /// <param name="parameters">A vector containing all parameters to set.</param>
@@ -1018,6 +1291,33 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         _transitionMatrixGradient = null;
         _startScoresGradient = null;
         _endScoresGradient = null;
+    }
+
+    /// <summary>
+    /// Persists CRF-specific constructor parameters so deserialization can
+    /// reconstruct the layer with the same <c>numClasses</c> and
+    /// <c>sequenceLength</c>. Without this override, the deserialization
+    /// helper's metadata-matcher derives <c>numClasses</c> from the
+    /// serialized <c>outputShape</c>'s last axis — which is unreliable when
+    /// the layer was constructed eagerly (the base ctor stores
+    /// <c>[-1, numClasses]</c> as the placeholder output shape, and any
+    /// rank-3 forward sets it to <c>[batch, seqLen, numClasses]</c>, so the
+    /// last-axis derivation only works coincidentally). Round-tripping
+    /// these values explicitly closes the Clone()/DeepCopy() failure with
+    /// "Expected N parameters, but got M" that broke every CRF-using model
+    /// when N == new instance's (numClasses² + 2·numClasses) and M == the
+    /// original instance's saved param count.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["NumClasses"] = _numClasses.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // _sequenceLength may be -1 in the lazy-ctor case (resolved on
+        // first Forward). Persist whatever the current value is — the
+        // deserialize-matcher will derive from inputShape[0] when the
+        // value is -1, matching the lazy-ctor contract.
+        metadata["SequenceLength"] = _sequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
     }
 
     public override void SetParameters(Vector<T> parameters)
