@@ -151,6 +151,11 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         _m = Vector<T>.Empty();
         _v = Vector<T>.Empty();
         _t = 0;
+        // Also reset the AMSGrad v̂_max buffer — reusing the optimizer
+        // instance for a second Optimize() would otherwise carry the
+        // previous run's running maximum as a lower bound and suppress
+        // early updates in the new run. (PR #1350 round-2 review.)
+        _vMaxVector = null;
 
         // Initialize parameters
         InitializeAdaptiveParameters();
@@ -1109,6 +1114,23 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 writer.Write(Convert.ToDouble(value));
             }
 
+            // Serialize the AMSGrad running-max buffer. A length of -1
+            // encodes "not yet allocated" (the AMSGrad option is off or
+            // the optimizer hasn't seen its first update); any
+            // non-negative length is the actual element count followed
+            // by that many doubles. Without this, a checkpoint restored
+            // on an AMSGrad optimizer would resume with a fresh empty
+            // v̂_max and diverge from uninterrupted training.
+            // (PR #1350 round-2 review.)
+            writer.Write(_vMaxVector?.Length ?? -1);
+            if (_vMaxVector is not null)
+            {
+                foreach (var value in _vMaxVector)
+                {
+                    writer.Write(Convert.ToDouble(value));
+                }
+            }
+
             return ms.ToArray();
         }
     }
@@ -1150,6 +1172,29 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
             for (int i = 0; i < vLength; i++)
             {
                 _v[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+
+            // Restore the AMSGrad running-max buffer if present in the
+            // checkpoint. Length -1 indicates "not yet allocated" (the
+            // sentinel emitted by Serialize when UseAMSGrad is off or the
+            // optimizer hadn't taken its first AMSGrad step yet); any
+            // non-negative length is a real vector. Older checkpoints
+            // without this trailing field will fail the ReadInt32 here —
+            // matching the broader Serialize/Deserialize contract that
+            // older checkpoints aren't forward-compatible across schema
+            // changes. (PR #1350 round-2 review.)
+            int vMaxLength = reader.ReadInt32();
+            if (vMaxLength < 0)
+            {
+                _vMaxVector = null;
+            }
+            else
+            {
+                _vMaxVector = new Vector<T>(vMaxLength);
+                for (int i = 0; i < vMaxLength; i++)
+                {
+                    _vMaxVector[i] = NumOps.FromDouble(reader.ReadDouble());
+                }
             }
 
             // Initialize adaptive parameters from deserialized options

@@ -51,7 +51,38 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
 
-        // Base / optimizer-wide settings used by this type.
+        // Inherited OptimizationAlgorithmOptions (base of base) settings.
+        // PR #1350 round-2 review: clone/round-trip would otherwise drop
+        // iteration / tolerance / adaptive-LR / batching / sampler state,
+        // silently reverting them to type defaults.
+        MaxIterations = other.MaxIterations;
+        UseEarlyStopping = other.UseEarlyStopping;
+        EarlyStoppingPatience = other.EarlyStoppingPatience;
+        BadFitPatience = other.BadFitPatience;
+        MinimumFeatures = other.MinimumFeatures;
+        MaximumFeatures = other.MaximumFeatures;
+        UseExpressionTrees = other.UseExpressionTrees;
+        UseAdaptiveLearningRate = other.UseAdaptiveLearningRate;
+        LearningRateDecay = other.LearningRateDecay;
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+        UseAdaptiveMomentum = other.UseAdaptiveMomentum;
+        InitialMomentum = other.InitialMomentum;
+        MomentumIncreaseFactor = other.MomentumIncreaseFactor;
+        MomentumDecreaseFactor = other.MomentumDecreaseFactor;
+        MinMomentum = other.MinMomentum;
+        MaxMomentum = other.MaxMomentum;
+        ExplorationRate = other.ExplorationRate;
+        MinExplorationRate = other.MinExplorationRate;
+        MaxExplorationRate = other.MaxExplorationRate;
+        Tolerance = other.Tolerance;
+        OptimizationMode = other.OptimizationMode;
+
+        // Inherited GradientBasedOptimizerOptions settings (between
+        // OptimizationAlgorithmOptions and this class).
+        Regularization = other.Regularization;
+        ShuffleData = other.ShuffleData;
+        RandomSeed = other.RandomSeed;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
 
