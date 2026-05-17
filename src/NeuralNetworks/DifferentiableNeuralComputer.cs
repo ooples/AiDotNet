@@ -968,6 +968,35 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// while also consulting their notes (memory reading) to produce a response.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Materialise every element of <paramref name="t"/>. DNC's memory-
+    /// op pipeline produces tensor chains whose values are materialised
+    /// only on first read — under <see cref="NeuralNetworkBase{T}.TrainWithTape"/>'s
+    /// re-evaluation loop the lazy nodes re-read shared state (_memory,
+    /// _readVectors) mutated between the original forward and the replay
+    /// forward, producing inconsistent gradients. Pinning the values
+    /// here snapshots them so downstream code sees a stable view. Issue
+    /// #1332 cluster 2 — required for ForwardPass_ShouldBeFinite_AfterTraining,
+    /// GradientFlow_*, OptimizerStep_ParamL2_*, MoreData_ShouldNotDegrade,
+    /// Clone_*, DifferentInputs_AfterTraining_*, LossStrictlyDecreasesOnMemorizationTask.
+    /// </summary>
+    private void PinElements(Tensor<T> t)
+    {
+        for (int i = 0; i < t.Length; i++)
+            if (NumOps.IsNaN(t.GetFlat(i)))
+                throw new InvalidOperationException(
+                    $"Lazy tensor produced NaN at index {i} during pin (#1332 cluster 2).");
+    }
+
+    private void PinElements(Matrix<T> m)
+    {
+        for (int i = 0; i < m.Rows; i++)
+            for (int j = 0; j < m.Columns; j++)
+                if (NumOps.IsNaN(m[i, j]))
+                    throw new InvalidOperationException(
+                        $"Lazy matrix produced NaN at [{i},{j}] during pin (#1332 cluster 2).");
+    }
+
     private Tensor<T> ProcessInput(Tensor<T> input, bool isTraining)
     {
         // Set training mode for all layers
@@ -976,17 +1005,34 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             layer.SetTrainingMode(isTraining);
         }
 
+        // Reset the per-call memory state at the start of EVERY forward pass.
+        // Previously this was reset in Predict and Train, but TrainWithTape
+        // calls ForwardForTraining multiple times within a single Train —
+        // the optimizer's re-evaluation step (see NeuralNetworkBase.TapeStepContext
+        // ComputeForward) replays the forward pass to recompute the loss
+        // after a tentative parameter update. Without a per-call reset,
+        // _memory keeps mutating across those replays, the read vectors
+        // pick up the corrupted state, and after a handful of training
+        // iterations the controller input slot for read vectors is NaN —
+        // exactly the failure surface of #1332 cluster 2
+        // (ForwardPass_ShouldBeFinite_AfterTraining, GradientFlow_*,
+        // OptimizerStep_ParamL2_DoesNotExplode all share this cascade).
+        ResetMemoryState();
+
         // Previous read vectors are concatenated with the input to provide context
         Tensor<T> controllerInput = PrepareControllerInput(input);
+        PinElements(controllerInput);
 
         // Process the input through the controller network
         Tensor<T> controllerOutput = ProcessThroughController(controllerInput);
+        PinElements(controllerOutput);
 
         // Parse the controller output to get memory interface signals
         var interfaceOutput = ParseControllerOutput(controllerOutput);
 
         // Update memory based on interface signals
         UpdateMemory(interfaceOutput);
+        PinElements(_memory);
 
         // Read from memory based on interface signals
         List<Vector<T>> newReadVectors = ReadFromMemory(interfaceOutput);
@@ -996,6 +1042,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // Combine controller output with read vectors to produce final output
         Tensor<T> finalOutput = CombineControllerOutputWithReadVectors(controllerOutput, newReadVectors);
+        PinElements(finalOutput);
 
         return finalOutput;
     }
@@ -1037,34 +1084,33 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             }
         }
 
-        // Flatten input tensor
-        Vector<T> flattenedInput = input.ToVector();
+        // Normalize the raw input to rank-2 [batch=1, features] and keep the
+        // tape connection. The previous implementation flattened to a fresh
+        // Vector<T> via ToVector() and rebuilt a tensor, which detaches the
+        // input from the gradient tape — backward then can't propagate
+        // dL/d(controller_input) to the leaf input, breaking the gradient
+        // pathway from loss → memory ops → controller_input → leaf.
+        int featuresFromInput = input.Length;
+        Tensor<T> inputFlat = Engine.Reshape(input, [1, featuresFromInput]);
 
-        // Calculate the total size of the controller input
-        int inputSize = flattenedInput.Length;
-        int totalSize = inputSize + (_readHeads * _memoryWordSize);
-
-        // Create a new vector for the combined input
-        Vector<T> combinedInput = new Vector<T>(totalSize);
-
-        // Copy the input
-        for (int i = 0; i < inputSize; i++)
-        {
-            combinedInput[i] = flattenedInput[i];
-        }
-
-        // Copy the read vectors
-        int offset = inputSize;
+        // Concatenate the read vectors as a single zero-filled (or
+        // previous-step) tensor. Read vectors are produced by the memory
+        // ops which currently run off the tape, so this addition is a
+        // constant for backward purposes — but the concat itself stays on
+        // the tape so dL/d(inputFlat) still flows back through the input
+        // axis. Issue #1332 cluster 2 / #2 in the work plan.
+        int readVecLen = _readHeads * _memoryWordSize;
+        Tensor<T> readVecTensor = new Tensor<T>([1, readVecLen]);
+        int offset = 0;
         for (int i = 0; i < _readHeads; i++)
         {
             for (int j = 0; j < _memoryWordSize; j++)
             {
-                combinedInput[offset++] = _readVectors[i][j];
+                readVecTensor[0, offset++] = _readVectors[i][j];
             }
         }
 
-        // Convert to tensor with appropriate shape for the controller
-        return Tensor<T>.FromVector(combinedInput).Reshape(1, totalSize);
+        return Engine.TensorConcatenate(new[] { inputFlat, readVecTensor }, axis: 1);
     }
 
     /// <summary>
@@ -1153,7 +1199,13 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
             ReadKeys = [],
             ReadStrengths = [],
             WriteKey = ExtractVector(interfaceVector, 2 * _memoryWordSize, _memoryWordSize),
-            WriteStrength = interfaceVector[3 * _memoryWordSize],
+            // β ≥ 1 from DNC paper §2.1.4. Without the 1+softplus
+            // constraint the strength can drift to large positive or
+            // large negative values during training, exploding the
+            // softmax-weighted similarities and producing NaN write
+            // weights after only a handful of Adam updates (#1332
+            // cluster 2 NaN cascade).
+            WriteStrength = PositiveStrength(interfaceVector[3 * _memoryWordSize]),
             AllocationGate = SigmoidActivation(interfaceVector[3 * _memoryWordSize + 1]),
             WriteGate = SigmoidActivation(interfaceVector[3 * _memoryWordSize + 2]),
             ReadModes = []
@@ -1165,7 +1217,7 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         {
             signals.ReadKeys.Add(ExtractVector(interfaceVector, offset, _memoryWordSize));
             offset += _memoryWordSize;
-            signals.ReadStrengths.Add(interfaceVector[offset++]);
+            signals.ReadStrengths.Add(PositiveStrength(interfaceVector[offset++]));
         }
 
         // Extract read modes (backward, content, forward)
@@ -1216,6 +1268,27 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
         double doubleValue = Convert.ToDouble(value);
         double sigmoid = 1.0 / (1.0 + Math.Exp(-doubleValue));
         return NumOps.FromDouble(sigmoid);
+    }
+
+    /// <summary>
+    /// DNC paper §2.1.4 requires β ≥ 1 for content-addressing strengths,
+    /// emitted as oneplus(raw) = 1 + softplus(raw). Without this
+    /// transform the strength is unbounded in both directions and a
+    /// single Adam update can push it past the softmax-overflow
+    /// threshold, producing NaN write weights and a memory cascade.
+    /// </summary>
+    private T PositiveStrength(T raw)
+    {
+        // 1 + softplus(x) = 1 + log(1 + exp(x)). Compute via Math.Log1p
+        // (stable for small exp(x)) when available, falling back to
+        // direct computation otherwise. Clip the exponent to avoid
+        // overflow in exp().
+        double v = Convert.ToDouble(raw);
+        if (double.IsNaN(v) || double.IsInfinity(v))
+            return NumOps.One;
+        double clipped = Math.Max(-50.0, Math.Min(50.0, v));
+        double softplus = clipped > 30.0 ? clipped : Math.Log(1.0 + Math.Exp(clipped));
+        return NumOps.FromDouble(1.0 + softplus);
     }
 
     /// <summary>
@@ -1428,11 +1501,21 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     {
         Vector<T> similarityScores = new Vector<T>(_memorySize);
 
-        // Calculate cosine similarity between key and each memory row
+        // Calculate cosine similarity between key and each memory row.
+        // ResetMemoryState zeros every row of _memory, so the very first
+        // content-addressing call inside the training forward computes
+        // cos_sim(key, [0,0,...,0]) which is NaN (0 / (||key||·0)). That
+        // NaN propagates through the subsequent softmax → write-weighting
+        // → WriteToMemory updates, corrupting the entire memory matrix and
+        // producing NaN outputs after the first training step (issue #1332
+        // cluster 2 — Clone_AfterTraining / ForwardPass_*_AfterTraining /
+        // MoreData_ShouldNotDegrade all share this cascade). Map NaN to
+        // zero so all-zero rows contribute uniformly under softmax.
         for (int i = 0; i < _memorySize; i++)
         {
             Vector<T> memoryRow = memory.GetRow(i);
-            similarityScores[i] = NumOps.FromDouble(VectorHelper.CosineSimilarity(key, memoryRow));
+            T sim = NumOps.FromDouble(VectorHelper.CosineSimilarity(key, memoryRow));
+            similarityScores[i] = NumOps.IsNaN(sim) ? NumOps.Zero : sim;
         }
 
         // Apply strength (temperature) to similarities (vectorized)
@@ -1661,15 +1744,25 @@ public class DifferentiableNeuralComputer<T> : NeuralNetworkBase<T>, IAuxiliaryL
     /// </remarks>
     private void WriteToMemory(Vector<T> writeVector, Vector<T> eraseVector)
     {
-        // First, erase from memory based on erase vector and write weighting
+        // DNC paper (Graves 2016 §2.2) defines write as
+        //     M_t(i, j) = M_{t-1}(i, j) * (1 - w(i)*e(j)) + w(i)*v(j)
+        // where w(i) ∈ [0,1] (post-softmax addressing) and e(j) ∈ [0,1]
+        // (sigmoid erase). For the retain factor (1 - w*e) to remain in
+        // [0, 1] the product w*e MUST also stay in [0, 1]; clamping
+        // catches the float-precision drift from combined content +
+        // allocation weighting that can push individual w(i) slightly
+        // above 1, which compounds across training steps into a NaN
+        // cascade (#1332 cluster 2, same root cause as NTM cluster 1.3).
         for (int i = 0; i < _memorySize; i++)
         {
             for (int j = 0; j < _memoryWordSize; j++)
             {
-                // Calculate erase amount
                 T eraseAmount = NumOps.Multiply(_writeWeighting[i], eraseVector[j]);
+                if (NumOps.LessThan(eraseAmount, NumOps.Zero))
+                    eraseAmount = NumOps.Zero;
+                else if (NumOps.GreaterThan(eraseAmount, NumOps.One))
+                    eraseAmount = NumOps.One;
 
-                // Erase from memory
                 _memory[i, j] = NumOps.Multiply(_memory[i, j], NumOps.Subtract(NumOps.One, eraseAmount));
             }
         }
