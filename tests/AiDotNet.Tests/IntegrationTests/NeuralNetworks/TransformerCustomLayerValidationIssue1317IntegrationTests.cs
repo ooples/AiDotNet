@@ -222,10 +222,10 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
             new EmbeddingLayer<float>(vocab, dModel),
             new FlashAttentionLayer<float>(seqLen, dModel, heads),
             new LayerNormalizationLayer<float>(),
-            new DenseLayer<float>(dModel, new ReLUActivation<float>()),
+            new DenseLayer<float>(dModel, (IActivationFunction<float>)new ReLUActivation<float>()),
             new LayerNormalizationLayer<float>(),
             new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.Last),
-            new DenseLayer<float>(vocab, new IdentityActivation<float>())
+            new DenseLayer<float>(vocab, (IActivationFunction<float>)new IdentityActivation<float>())
         };
 
         var arch = new TransformerArchitecture<float>(
