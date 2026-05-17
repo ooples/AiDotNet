@@ -86,30 +86,41 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
 
     public override Tensor<float>? GetBiases() => null;
 
+    /// <summary>
+    /// Total INT8 weight count (rows * cols). Internal accessor used by
+    /// <see cref="Int8InferenceModel"/> to compute artifact byte counts.
+    /// </summary>
+    internal long WeightCount => (long)_outputSize * _inputSize;
+
+    /// <summary>
+    /// Output row count. Internal accessor for stats reporting.
+    /// </summary>
+    internal int OutputSize => _outputSize;
+
     public override Tensor<float> Forward(Tensor<float> input)
     {
-        bool inputWas1D = false;
-        Tensor<float> flat;
-        if (input.Rank == 1)
-        {
-            inputWas1D = true;
-            flat = input.Reshape(1, input.Shape[0]);
-        }
-        else if (input.Rank == 2)
-        {
-            flat = input;
-        }
-        else
-        {
-            int batch = input.Shape[0];
-            int features = input.Length / batch;
-            flat = input.Reshape(batch, features);
-        }
+        // Industry-standard dense layer rank handling — mirror DenseLayer<T>.Forward:
+        // Apply the transformation along the LAST dimension and flatten every leading dim
+        // (batch, sequence, ...) into a single row dimension. Without this rank-3
+        // [batch, seq, embDim] inputs collapsed to [batch, seq*embDim] and broke the input
+        // size invariant (regressed pre-existing tests once we wired Transformer<float> end-
+        // to-end through Int8InferenceModel).
+        bool inputWas1D = input.Rank == 1;
+        int actualInputSize = input.Shape[^1];
+        if (actualInputSize != _inputSize)
+            throw new ArgumentException(
+                $"QuantizedDenseLayer input size mismatch. Expected {_inputSize}, got {actualInputSize}.");
+
+        int rowDim = 1;
+        for (int i = 0; i < input.Rank - 1; i++)
+            rowDim *= input.Shape[i];
+
+        Tensor<float> flat = inputWas1D
+            ? input.Reshape(1, _inputSize)
+            : (input.Rank == 2 ? input : input.Reshape(rowDim, _inputSize));
 
         int batchSize = flat.Shape[0];
         int featuresIn = flat.Shape[1];
-        if (featuresIn != _inputSize)
-            throw new ArgumentException($"QuantizedDenseLayer input size mismatch. Expected {_inputSize}, got {featuresIn}.");
 
         var output = new Tensor<float>(new[] { batchSize, _outputSize });
         var inputSpan = flat.AsSpan();
@@ -135,6 +146,17 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
         if (inputWas1D)
         {
             return activated.Reshape(_outputSize);
+        }
+
+        // Restore the original leading-dim layout so downstream layers see the same shape
+        // they would have seen from DenseLayer<T> (e.g. [batch, seq, outputSize]).
+        if (input.Rank > 2)
+        {
+            var outShape = new int[input.Rank];
+            for (int i = 0; i < input.Rank - 1; i++)
+                outShape[i] = input.Shape[i];
+            outShape[input.Rank - 1] = _outputSize;
+            return activated.Reshape(outShape);
         }
 
         return activated;
