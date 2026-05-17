@@ -55,11 +55,21 @@ public abstract class ContinualLearningTestBase
         get
         {
             if (_cachedNumParameters is { } v) return v;
-            using var probeNet = CreateMockNetwork() as IDisposable;
-            var net = probeNet as INeuralNetwork<double> ?? CreateMockNetwork();
-            int count = net.GetParameters().Length;
-            _cachedNumParameters = count;
-            return count;
+            // Construct the probe network exactly once. The prior shape
+            // (CreateMockNetwork() ?? CreateMockNetwork()) called the
+            // factory twice on a cache miss — wasted work and risky for
+            // overrides whose factory does side-effectful setup (RNG
+            // advancement, lazy allocation, etc.).
+            var probe = CreateMockNetwork();
+            try
+            {
+                _cachedNumParameters = probe.GetParameters().Length;
+                return _cachedNumParameters.Value;
+            }
+            finally
+            {
+                (probe as IDisposable)?.Dispose();
+            }
         }
     }
 
