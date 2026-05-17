@@ -2,7 +2,6 @@
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using SimdVector = System.Numerics.Vector<float>;
-using SimdVectorOps = System.Numerics.Vector;
 
 namespace AiDotNet.Inference.Quantization;
 
