@@ -1334,16 +1334,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
-    /// Computes a fast fingerprint of the model's current parameter state for
+    /// Computes a fingerprint of the model's current parameter state for
     /// gradient cache invalidation. Returns 0 for non-parameterizable models
     /// (the cache key still differentiates via reference identity for those).
     /// </summary>
     /// <remarks>
-    /// Uses a strided XOR of bit-cast parameter values so a single weight
-    /// changing flips the fingerprint, but the scan is O(min(N, 256)) — cheap
-    /// even for foundation-class models. Stride is chosen so 256 samples span
-    /// the full parameter vector. For tiny vectors (&lt; 256 params) every
-    /// parameter contributes.
+    /// Hashes EVERY parameter (XOR-mixed with index) so any in-place update
+    /// flips the fingerprint — sampled hashing would miss updates confined
+    /// to unsampled coordinates and serve stale gradients (PR #1351
+    /// round-2 review). The scan is O(N) per cache lookup; for foundation-
+    /// scale models that's ~1 ms per 1M params on commodity hardware,
+    /// which is well below the per-step cost of computing the gradient
+    /// the cache is meant to skip.
     /// </remarks>
     private static long ComputeParameterFingerprint(IFullModel<T, TInput, TOutput> model)
     {
@@ -1384,10 +1386,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return 0L;
         }
 
-        const int MaxSamples = 256;
-        int stride = Math.Max(1, parameters.Length / MaxSamples);
+        // Hash every parameter, not a strided sample. Sampled fingerprint
+        // missed unsampled-coordinate updates and could serve stale
+        // gradients (PR #1351 round-2 review). Per-parameter cost is a
+        // long multiply + xor — trivially fast vs the gradient
+        // computation the cache is gating.
         long hash = parameters.Length; // seed with length so size changes flip fingerprint
-        for (int i = 0; i < parameters.Length; i += stride)
+        for (int i = 0; i < parameters.Length; i++)
         {
             // Mix in both the bit pattern of the parameter and the index — two
             // params with the same value at different positions should produce
