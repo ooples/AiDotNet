@@ -1,4 +1,5 @@
 using AiDotNet.Configuration;
+using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.SelfSupervisedLearning;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -143,13 +144,14 @@ public class ConfigureMethodWiringTests
 
         builder.ConfigureCurriculumLearning(options: null);
 
-        // Non-null + documented defaults: ScheduleType=Linear,
-        // Verbosity=Normal, MetricType=Combined. Verifying concrete
-        // defaults catches the "default-flip regression" failure mode.
+        // Non-null + documented defaults: ScheduleType=Linear. Verbosity +
+        // MetricType live on the sibling CurriculumLearnerConfig class, not
+        // on CurriculumLearningOptions; they're not in scope for this options
+        // surface, which only carries the schedule-shape knobs.
+        // Verifying concrete defaults catches the "default-flip regression"
+        // failure mode for the property that IS on the options object.
         Assert.NotNull(builder.ConfiguredCurriculumLearning);
         Assert.Equal(CurriculumScheduleType.Linear, builder.ConfiguredCurriculumLearning!.ScheduleType);
-        Assert.Equal(CurriculumVerbosity.Normal, builder.ConfiguredCurriculumLearning.Verbosity);
-        Assert.Equal(CompetenceMetricType.Combined, builder.ConfiguredCurriculumLearning.MetricType);
     }
 
     [Fact(Timeout = 60000)]
