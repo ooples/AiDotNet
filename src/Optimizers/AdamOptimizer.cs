@@ -145,51 +145,80 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Initialize parameters
         InitializeAdaptiveParameters();
 
-        var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+        // Switch the model into training mode so dropout/batchnorm/etc. layers
+        // behave correctly during gradient computation. Without this the
+        // mini-batched Optimize path runs every forward pass in inference
+        // mode (no dropout, BatchNorm with running stats) while still
+        // applying gradient updates — the per-sample Train path already
+        // sets training mode at the top of its TrainWithTape call, so the
+        // batched Optimize path was the lone exception that produced
+        // mode-collapsed Transformer training under BuildAsync. Restored
+        // to eval mode in a finally so callers can immediately Predict
+        // after Optimize without an extra SetTrainingMode(false) call —
+        // mirrors the PyTorch contract that an optimizer.step() pass
+        // leaves the model in train mode and the caller flips to eval
+        // before validation.
+        //
+        // SetTrainingMode lives on INeuralNetwork, not IFullModel — for non-NN
+        // models (regression, clustering, etc.) there's no training-mode
+        // distinction so the gate is skipped.
+        var trainingModeModel = currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>;
+        trainingModeModel?.SetTrainingMode(true);
 
-        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
+        try
         {
-            // Notify sampler of new epoch (for curriculum/self-paced learning)
-            NotifyEpochStart(epoch);
+            var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-            // Create batcher for the current epoch using DataLoader infrastructure
-            var batcher = CreateBatcher(inputData, _options.BatchSize);
-
-            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
             {
-                _t++;
-                // Calculate gradient on the batch
-                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                // Notify sampler of new epoch (for curriculum/self-paced learning)
+                NotifyEpochStart(epoch);
 
-                // Update solution using Adam algorithm
-                var newSolution = UpdateSolution(currentSolution, gradient);
+                // Create batcher for the current epoch using DataLoader infrastructure
+                var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-                currentSolution = newSolution;
+                foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+                {
+                    _t++;
+                    // Calculate gradient on the batch
+                    var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+
+                    // Update solution using Adam algorithm
+                    var newSolution = UpdateSolution(currentSolution, gradient);
+
+                    currentSolution = newSolution;
+                }
+
+                // Evaluate after processing all batches in the epoch
+                var currentStepData = EvaluateSolution(currentSolution, inputData);
+                UpdateBestSolution(currentStepData, ref bestStepData);
+                UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+                // Check early stopping criteria
+                if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
+                {
+                    return CreateOptimizationResult(bestStepData, inputData);
+                }
+
+                // Check convergence
+                if (NumOps.LessThan(
+                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
+                    NumOps.FromDouble(_options.Tolerance)))
+                {
+                    return CreateOptimizationResult(bestStepData, inputData);
+                }
+
+                previousStepData = currentStepData;
             }
 
-            // Evaluate after processing all batches in the epoch
-            var currentStepData = EvaluateSolution(currentSolution, inputData);
-            UpdateBestSolution(currentStepData, ref bestStepData);
-            UpdateAdaptiveParameters(currentStepData, previousStepData);
-
-            // Check early stopping criteria
-            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
-            {
-                return CreateOptimizationResult(bestStepData, inputData);
-            }
-
-            // Check convergence
-            if (NumOps.LessThan(
-                NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
-                NumOps.FromDouble(_options.Tolerance)))
-            {
-                return CreateOptimizationResult(bestStepData, inputData);
-            }
-
-            previousStepData = currentStepData;
+            return CreateOptimizationResult(bestStepData, inputData);
         }
-
-        return CreateOptimizationResult(bestStepData, inputData);
+        finally
+        {
+            // Leave the model in eval mode so the next Predict / evaluation
+            // call doesn't accidentally engage dropout / batchnorm-train-stats.
+            trainingModeModel?.SetTrainingMode(false);
+        }
     }
 
     /// <summary>
