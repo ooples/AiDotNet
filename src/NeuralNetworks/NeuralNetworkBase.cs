@@ -5940,6 +5940,11 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 if (adam.GetOptions() is not Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
                     return false;
                 if (opts.UseAdaptiveLearningRate) return false;
+                // Fused Adam kernel doesn't implement AMSGrad's max-of-second-
+                // moment update rule. Fall back to the eager Adam step which
+                // does (see AdamOptimizer.Step). Mirrors the AdamW + AMSGrad
+                // bail-out a few cases below.
+                if (opts.UseAMSGrad) return false;
                 optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam;
                 learningRate = (float)adam.GetCurrentLearningRate();
                 beta1 = (float)opts.Beta1;
@@ -6039,9 +6044,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Gets or lazily creates the default optimizer for tape-based training.
     /// Used when a network doesn't provide its own optimizer.
     /// </summary>
+    /// <remarks>
+    /// Default is AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). Standard
+    /// Adam's bias-corrected m̂ / √v̂ ratio doesn't decay fast enough after
+    /// gradient convergence, so on fixed-input regression invariants
+    /// (MoreData_ShouldNotDegrade, Training_ShouldChangeParameters across
+    /// long horizons) it drifts the model away from a tight optimum.
+    /// AMSGrad's running v̂_max guarantees the denominator can only grow,
+    /// bounding post-convergence drift to negligible levels. Issue #1332
+    /// cluster 6 — optimizer-level fix for the entire model family rather
+    /// than per-model AdamOptimizer overrides.
+    /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
-        return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
     }
 
     /// <summary>

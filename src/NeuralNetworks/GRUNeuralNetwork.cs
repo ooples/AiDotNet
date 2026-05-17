@@ -101,25 +101,25 @@ public class GRUNeuralNetwork<T> : NeuralNetworkBase<T>
         base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType),
              // Tighter grad-norm clip than the base default of 1.0 because GRU
              // gates compound gradients across the unrolled sequence. 0.5
-             // mirrors Cho et al. 2014 §3. (See ConfigureDefaultOptimizer
-             // below for the LR side of the stability fix — gradient clipping
-             // alone is insufficient against Adam's post-convergence m/sqrt(v)
-             // drift on the MoreData_ShouldNotDegrade invariant.)
-             // Issue #1332 cluster 6.
+             // mirrors Cho et al. 2014 §3. AMSGrad on the default optimiser
+             // (below) handles the post-convergence drift; this clip is just
+             // recurrent-gradient-explosion insurance during the early
+             // high-loss phase.
              maxGradNorm: 0.5)
     {
-        // Provide a smaller default Adam LR than the framework-wide 0.001
-        // so the per-step displacement after convergence is small enough
-        // that 200 iterations on a fixed-input regression don't drift the
-        // model away from a tightly-converged loss. The recurrent through-
-        // gate Jacobian doesn't decay as quickly as feed-forward Adam
-        // expects, so the bias-corrected m_hat / sqrt(v_hat) ratio stays
-        // larger than ideal even after the gradient has shrunk; a lower
-        // base LR is the cleanest model-side knob. Callers who pass an
-        // explicit `optimizer` keep their own choice unchanged.
+        // Default to AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). GRU's
+        // recurrent through-gate Jacobian doesn't decay as quickly as
+        // feed-forward Adam expects, so the bias-corrected m̂ / √v̂ ratio
+        // keeps a fixed direction after the gradient has shrunk and walks
+        // the model away from a tightly-converged loss over 200 iterations
+        // on the MoreData_ShouldNotDegrade invariant. AMSGrad's
+        // max-of-second-moment update prevents that drift mathematically
+        // (v̂_max is non-decreasing, so the denominator can only grow).
+        // Issue #1332 cluster 6. Callers who pass an explicit `optimizer`
+        // keep their own choice unchanged.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 });
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
         _options = options ?? new GRUOptions();
         Options = _options;
         _learningRate = NumOps.FromDouble(learningRate);

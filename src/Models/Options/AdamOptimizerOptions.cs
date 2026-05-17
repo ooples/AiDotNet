@@ -189,4 +189,29 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// allowing it to adapt to changing conditions during training.</para>
     /// </remarks>
     public double MaxBeta2 { get; set; } = 0.9999;
+
+    /// <summary>
+    /// Gets or sets whether to use the AMSGrad variant of Adam.
+    /// </summary>
+    /// <value><c>true</c> to use AMSGrad; otherwise, <c>false</c>. Defaults to <c>false</c>.</value>
+    /// <remarks>
+    /// <para>
+    /// AMSGrad (Reddi, Kale, Kumar 2018, "On the Convergence of Adam and Beyond") replaces
+    /// the bias-corrected second-moment v̂_t with v̂_max_t = max(v̂_max_{t-1}, v̂_t) before
+    /// dividing m̂_t. The Adam paper's convergence proof relies on v_t being non-decreasing
+    /// on average; in practice v_t can shrink rapidly when gradients drop after convergence,
+    /// at which point m_t / sqrt(v_t) drifts the parameters away from a tight optimum. The
+    /// MoreData_ShouldNotDegrade invariant in the model-family test suite catches this as
+    /// 200-iter loss greater than 50-iter loss on fixed-input regression (NTM, GRU, DBM,
+    /// and similar recurrent / stateful models — see #1332 cluster 6 + cluster 1.1).
+    /// AMSGrad provably prevents this drift at the cost of slightly slower convergence on
+    /// well-conditioned objectives.
+    /// </para>
+    /// <para><b>For Beginners:</b> Standard Adam can drift its parameters away from a
+    /// good solution after the model has already converged on simple problems. AMSGrad
+    /// is a small math change to Adam that prevents this drift. Enable it for stateful
+    /// or recurrent models where you've observed loss climbing back up during long
+    /// training runs.</para>
+    /// </remarks>
+    public bool UseAMSGrad { get; set; } = false;
 }

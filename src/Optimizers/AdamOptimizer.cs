@@ -476,6 +476,15 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     // Per-parameter Adam state for tape-based training (keyed by tensor reference identity)
     private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    /// <summary>
+    /// Per-parameter running maximum of v̂_t when AMSGrad is enabled
+    /// (Reddi, Kale, Kumar 2018). Used as the denominator's
+    /// second-moment estimate instead of v̂_t itself, which prevents
+    /// the post-convergence m̂ / √v̂ drift that surfaces in
+    /// MoreData_ShouldNotDegrade across NTM / GRU / DBM / etc.
+    /// (#1332 cluster 6 + cluster 1.1).
+    /// </summary>
+    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVMax = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
     /// <inheritdoc />
@@ -578,6 +587,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 v = new Tensor<T>(param._shape);
                 _tapeV[param] = v;
             }
+            // AMSGrad running max of v̂. Initialised to a fresh zero tensor on
+            // first encounter of `param`; the max-accumulation guarantees the
+            // denominator √v̂_max is non-decreasing once gradients have been
+            // seen, which is the Reddi 2018 fix for Adam's m̂ / √v̂ drift on
+            // sparse-gradient and post-convergence regimes.
+            Tensor<T>? vMax = null;
+            bool useAmsgrad = _options.UseAMSGrad;
+            if (useAmsgrad)
+            {
+                if (!_tapeVMax.TryGetValue(param, out vMax) || !vMax._shape.SequenceEqual(param._shape))
+                {
+                    vMax = new Tensor<T>(param._shape);
+                    _tapeVMax[param] = vMax;
+                }
+            }
 
             // Reshape gradient to match parameter shape if element counts match
             // (can happen when Reshape adds/removes batch dimensions in forward pass)
@@ -624,7 +648,9 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 double[]? gradArr = (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
                 double[]? mArr = (double[]?)(object?)m.GetLiveBackingArrayOrNull();
                 double[]? vArr = (double[]?)(object?)v.GetLiveBackingArrayOrNull();
-                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null)
+                double[]? vMaxArr = useAmsgrad ? (double[]?)(object?)vMax!.GetLiveBackingArrayOrNull() : null;
+                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
+                    && (!useAmsgrad || vMaxArr is not null))
                 {
                     for (int i = 0; i < n; i++)
                     {
@@ -634,8 +660,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                         mArr[i] = mNew;
                         vArr[i] = vNew;
                         double mHat = mNew / bc1;
-                        double vHat = vNew / bc2;
-                        paramArr[i] -= lr * mHat / (Math.Sqrt(vHat) + eps);
+                        double vHatEff;
+                        if (useAmsgrad)
+                        {
+                            // AMSGrad: track running max of v̂ across all steps.
+                            double vHatNow = vNew / bc2;
+                            double vMaxPrev = vMaxArr![i];
+                            double vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
+                            vMaxArr[i] = vMaxNew;
+                            vHatEff = vMaxNew;
+                        }
+                        else
+                        {
+                            vHatEff = vNew / bc2;
+                        }
+                        paramArr[i] -= lr * mHat / (Math.Sqrt(vHatEff) + eps);
                     }
                 }
                 else
@@ -657,6 +696,13 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                     ref double gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
                     ref double mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
                     ref double vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
+                    ref double vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<double>();
+                    if (useAmsgrad)
+                    {
+                        var vMaxD = (Tensor<double>)(object)vMax!;
+                        System.Span<double> vMaxSpan = vMaxD.AsWritableSpan();
+                        vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
+                    }
                     for (int i = 0; i < n; i++)
                     {
                         double g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
@@ -667,9 +713,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                         System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
                         System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
                         double mHat = mNew / bc1;
-                        double vHat = vNew / bc2;
+                        double vHatEff;
+                        if (useAmsgrad)
+                        {
+                            double vHatNow = vNew / bc2;
+                            double vMaxPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i);
+                            double vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
+                            System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i) = vMaxNew;
+                            vHatEff = vMaxNew;
+                        }
+                        else
+                        {
+                            vHatEff = vNew / bc2;
+                        }
                         System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
-                            lr * mHat / (Math.Sqrt(vHat) + eps);
+                            lr * mHat / (Math.Sqrt(vHatEff) + eps);
                     }
                 }
             }
@@ -679,11 +737,13 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 float[]? gradArr = (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
                 float[]? mArr = (float[]?)(object?)m.GetLiveBackingArrayOrNull();
                 float[]? vArr = (float[]?)(object?)v.GetLiveBackingArrayOrNull();
+                float[]? vMaxArr = useAmsgrad ? (float[]?)(object?)vMax!.GetLiveBackingArrayOrNull() : null;
                 float fb1 = (float)b1, fb2 = (float)b2;
                 float f1mb1 = (float)oneMinusB1, f1mb2 = (float)oneMinusB2;
                 float fbc1 = (float)bc1, fbc2 = (float)bc2;
                 float feps = (float)eps, flr = (float)lr;
-                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null)
+                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
+                    && (!useAmsgrad || vMaxArr is not null))
                 {
                     for (int i = 0; i < n; i++)
                     {
@@ -693,8 +753,20 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                         mArr[i] = mNew;
                         vArr[i] = vNew;
                         float mHat = mNew / fbc1;
-                        float vHat = vNew / fbc2;
-                        paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                        float vHatEff;
+                        if (useAmsgrad)
+                        {
+                            float vHatNow = vNew / fbc2;
+                            float vMaxPrev = vMaxArr![i];
+                            float vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
+                            vMaxArr[i] = vMaxNew;
+                            vHatEff = vMaxNew;
+                        }
+                        else
+                        {
+                            vHatEff = vNew / fbc2;
+                        }
+                        paramArr[i] -= flr * mHat / ((float)Math.Sqrt(vHatEff) + feps);
                     }
                 }
                 else
@@ -711,6 +783,13 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                     ref float gradR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(gradSpan);
                     ref float mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
                     ref float vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
+                    ref float vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<float>();
+                    if (useAmsgrad)
+                    {
+                        var vMaxF = (Tensor<float>)(object)vMax!;
+                        System.Span<float> vMaxSpan = vMaxF.AsWritableSpan();
+                        vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
+                    }
                     for (int i = 0; i < n; i++)
                     {
                         float g = System.Runtime.CompilerServices.Unsafe.Add(ref gradR, i);
@@ -721,9 +800,21 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                         System.Runtime.CompilerServices.Unsafe.Add(ref mR, i) = mNew;
                         System.Runtime.CompilerServices.Unsafe.Add(ref vR, i) = vNew;
                         float mHat = mNew / fbc1;
-                        float vHat = vNew / fbc2;
+                        float vHatEff;
+                        if (useAmsgrad)
+                        {
+                            float vHatNow = vNew / fbc2;
+                            float vMaxPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i);
+                            float vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
+                            System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i) = vMaxNew;
+                            vHatEff = vMaxNew;
+                        }
+                        else
+                        {
+                            vHatEff = vNew / fbc2;
+                        }
                         System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
-                            flr * mHat / ((float)Math.Sqrt(vHat) + feps);
+                            flr * mHat / ((float)Math.Sqrt(vHatEff) + feps);
                     }
                 }
             }
@@ -745,7 +836,28 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
 
                 var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
                 var vHat = Engine.TensorDivideScalar(v, biasCorrection2);
-                var vHatSqrt = Engine.TensorSqrt(vHat);
+                Tensor<T> vHatEffective;
+                if (useAmsgrad)
+                {
+                    // vMax := max(vMax, vHat) element-wise. Element-wise max
+                    // via (a + b + |a - b|) / 2 because IEngine doesn't ship
+                    // a generic element-wise Max kernel; for the rare types
+                    // that hit this path (Half / Decimal / etc.) the extra
+                    // ops are negligible vs the matmul cost the model is
+                    // already paying.
+                    var diff = Engine.TensorSubtract(vHat, vMax!);
+                    var absDiff = Engine.TensorAbs(diff);
+                    var sum = Engine.TensorAdd(vHat, vMax!);
+                    var maxPlusSum = Engine.TensorAdd(sum, absDiff);
+                    var vMaxNew = Engine.TensorMultiplyScalar(maxPlusSum, NumOps.FromDouble(0.5));
+                    Engine.TensorCopy(vMaxNew, vMax!);
+                    vHatEffective = vMax!;
+                }
+                else
+                {
+                    vHatEffective = vHat;
+                }
+                var vHatSqrt = Engine.TensorSqrt(vHatEffective);
                 var denom = Engine.TensorAddScalar(vHatSqrt, epsilon);
                 var update = Engine.TensorDivide(mHat, denom);
                 var scaledUpdate = Engine.TensorMultiplyScalar(update, CurrentLearningRate);

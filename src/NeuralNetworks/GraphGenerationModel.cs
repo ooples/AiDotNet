@@ -255,6 +255,10 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
             LearningRateScheduler = learningRateScheduler ?? new ExponentialLRScheduler(
                 baseLearningRate: 0.001, gamma: 0.99),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            // AMSGrad keeps the model from drifting away from converged
+            // graph-generation parameters during the long training runs the
+            // MoreData / Training-loss invariants probe (#1332 cluster 6).
+            UseAMSGrad = true,
         };
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
         _random = RandomHelper.CreateSeededRandom(42);
