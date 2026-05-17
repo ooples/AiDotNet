@@ -17,7 +17,7 @@ using Xunit.Abstractions;
 namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 
 /// <summary>
-/// 5-arm diagnostic for the residual mode-collapse left after PR #1351.
+/// 8-arm diagnostic for the residual mode-collapse left after PR #1351.
 /// PR #1351 fixed two bugs in the BuildAsync batched optimizer path
 /// (gradient cache key collision + Adam early-stopping on epoch 0) but
 /// Transformer training still mode-collapsed at top-1 = 1/V (uniform
@@ -494,6 +494,21 @@ public class BuildAsyncResidualModeCollapseTests
             _output.WriteLine($"  first-step gradient max    = {gradMax:F6}");
             _output.WriteLine($"  finite-diff gradient check ({probeIndices.Length} indices): {fdMatches} match, {fdMismatches} mismatch");
             _output.WriteLine($"    worst rel error: {worstFdRel:F4} at idx {worstFdIdx} (analytic={worstFdAnalytic:F6}, numeric={worstFdNumeric:F6})");
+
+            // Post-fix the PR description records ~10/12 matches on this
+            // probe; pre-fix records 0/12 (analytic gradient was zero or
+            // wrong-sign). Require a clear majority so a future regression
+            // in the analytic-gradient path can't slip through as a
+            // silently-passing test. (PR #1364 review — Arm 6 now asserts
+            // on its finite-difference results instead of only logging them.)
+            int totalProbed = fdMatches + fdMismatches;
+            Assert.True(
+                totalProbed > 0 && fdMatches * 2 >= totalProbed,
+                $"Arm 6: finite-difference gradient agreement is {fdMatches}/{totalProbed}, " +
+                $"below the >= 50% threshold. Worst rel error {worstFdRel:F4} at idx {worstFdIdx} " +
+                $"(analytic={worstFdAnalytic:F6}, numeric={worstFdNumeric:F6}). " +
+                "The analytic gradient is likely zero or wrong-sign on a meaningful fraction " +
+                "of parameters — the residual mode-collapse fix has regressed.");
         }
 
         // ARM 7: long-horizon BuildAsync run with 0 tolerance + 200 epochs.
