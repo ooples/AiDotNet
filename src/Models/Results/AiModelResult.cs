@@ -1987,14 +1987,22 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // user-facing failure point moved to Build).
         if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
         {
-            if (!PostprocessingPipeline.IsFitted)
-            {
-                throw new System.InvalidOperationException(
-                    "PostprocessingPipeline became unfitted after AiModelResult construction. " +
-                    "Mutating the pipeline (Reset, clearing fitted state, or adding unfitted " +
-                    "transformers) after Build returns is unsupported — fit a fresh pipeline " +
-                    "and rebuild instead.");
-            }
+            // Defense-in-depth: AiModelBuilder's normal Build path fits
+            // the pipeline before constructing AiModelResult, and the
+            // ctor check already throws if a direct AiModelResultOptions
+            // caller hands us an unfitted pipeline. Reaching here with
+            // !IsFitted means the pipeline was mutated AFTER construction
+            // (Reset, clear, etc.) — a programming error that shouldn't
+            // happen in practice. Use Debug.Assert so Release builds
+            // don't pay the runtime branch + throw cost on every
+            // Predict (review #1368 C6WR2 — the ctor check is the
+            // user-facing failure point; this is a debug-only invariant).
+            System.Diagnostics.Debug.Assert(
+                PostprocessingPipeline.IsFitted,
+                "PostprocessingPipeline became unfitted after AiModelResult construction. " +
+                "Mutating the pipeline (Reset, clearing fitted state, or adding unfitted " +
+                "transformers) after Build returns is unsupported — fit a fresh pipeline " +
+                "and rebuild instead.");
             denormalized = PostprocessingPipeline.Transform(denormalized);
         }
 

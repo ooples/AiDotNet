@@ -179,7 +179,7 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
     /// concerns about Bucket 4 mutating process-global GpuDiagnosticsConfig
     /// state. NOTE: the static slot is a single value, NOT a per-thread
     /// stack, so xUnit-parallel collections still need
-    /// <c>[Collection(\"ConfigureMethodCoverage\")]</c> serialization
+    /// <c>[Collection("ConfigureMethodCoverage")]</c> serialization
     /// to prevent cross-test interference.
     /// </remarks>
     [Fact]

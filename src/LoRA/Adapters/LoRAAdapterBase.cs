@@ -411,13 +411,25 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
                 if (matrix.Shape[0] > 0) inputSize = matrix.Shape[0];
                 if (matrix.Shape[1] > 0) outputSize = matrix.Shape[1];
             }
-            return inputSize > 0 || outputSize > 0;
+            // Contract: bool return is true iff BOTH dims were resolved (review
+        // #1368 C6WO4/C6WPP). Partial resolutions (only one dim positive)
+        // are still surfaced via the out params for callers that want
+        // best-effort information, but the bool reflects "is this layer
+        // fully shape-known from its weight matrix?" which is what the
+        // CreateLoRALayer / InferInputSizeFromWeights call sites need.
+        return inputSize > 0 && outputSize > 0;
         }
 
         // Conv weight convention (rank ≥ 3): [outC, inC, ...spatial].
         if (matrix.Shape[0] > 0) outputSize = matrix.Shape[0];
         if (matrix.Shape[1] > 0) inputSize = matrix.Shape[1];
-        return inputSize > 0 || outputSize > 0;
+        // Contract: bool return is true iff BOTH dims were resolved (review
+        // #1368 C6WO4/C6WPP). Partial resolutions (only one dim positive)
+        // are still surfaced via the out params for callers that want
+        // best-effort information, but the bool reflects "is this layer
+        // fully shape-known from its weight matrix?" which is what the
+        // CreateLoRALayer / InferInputSizeFromWeights call sites need.
+        return inputSize > 0 && outputSize > 0;
     }
 
     /// <summary>
