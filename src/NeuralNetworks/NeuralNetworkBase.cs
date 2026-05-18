@@ -5444,11 +5444,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     var param = targets[p];
                     var snapshot = snaps[p];
-                    var span = param.Data.Span;
                     int len = Math.Min(snapshot.Length, param.Length);
-                    for (int i = 0; i < len; i++)
+                    // T == float in this branch (the MP path is gated on
+                    // typeof(T) == float upstream; mpFp32Snapshots is only
+                    // populated when paramAsFloat is non-null). Cast the
+                    // tensor to its Tensor<float> view and use Span<float>
+                    // CopyTo to avoid the per-element (T)(object) boxing
+                    // that the generic Span<T> write would force (review
+                    // #1362 C6NB0 — matches the corresponding fix on the
+                    // SnapshotAndRoundTrip path).
+                    var paramAsFloatLocal = (object)param as AiDotNet.Tensors.LinearAlgebra.Tensor<float>;
+                    if (paramAsFloatLocal is not null)
                     {
-                        span[i] = (T)(object)snapshot[i];
+                        snapshot.AsSpan(0, len).CopyTo(paramAsFloatLocal.Data.Span.Slice(0, len));
                     }
                 }
                 mpFp32Restored = true;
@@ -5883,19 +5891,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     var param = mpSnapshotTargets[p];
                     var snapshot = mpFp32Snapshots[p];
-                    var span = param.Data.Span;
                     int len = Math.Min(snapshot.Length, param.Length);
-                    for (int i = 0; i < len; i++)
+                    // T == float (gated upstream — snapshots are only
+                    // populated for float tensors). Use Span<float> CopyTo
+                    // instead of the per-element (T)(object) boxing fallback
+                    // (review #1362 C6NB0 — finally-block emergency restore
+                    // must match the happy-path's float-direct semantics).
+                    var paramAsFloatLocal = (object)param as AiDotNet.Tensors.LinearAlgebra.Tensor<float>;
+                    if (paramAsFloatLocal is not null)
                     {
-                        span[i] = (T)(object)snapshot[i];
+                        snapshot.AsSpan(0, len).CopyTo(paramAsFloatLocal.Data.Span.Slice(0, len));
                     }
                 }
                 mpFp32Restored = true;
             }
             // The mpCtxForFinally / pool entries are deliberately retained
             // across calls — they ARE the per-tensor master pool, reused on
-            // the next TrainWithTape invocation.
-            _ = mpCtxForFinally; // referenced for clarity; pool persists on the context.
+            // the next TrainWithTape invocation. The mpCtxForFinally local
+            // was used by the snapshot-pool lookup in the try-body; it
+            // remains in scope for clarity but the pool reuse semantics
+            // are managed by MixedPrecisionContext itself (review #1362
+            // C6NCl — removed the no-op discard).
 
             // Restore original tensor references so Clone/serialization see real tensors.
             // Copies updated weights from buffer views back to originals before restoring.
@@ -5971,21 +5987,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         return 0.001;
     }
 
-    /// <summary>
-    /// Emulate BF16 → FP32 round-trip by clearing the low 16 bits of the
-    /// FP32 mantissa (round-to-nearest-even). Used by the mixed-precision
-    /// path in <see cref="TrainWithTape"/> when
-    /// <c>_mixedPrecisionContext.Config.PrecisionType == BF16</c>: each
-    /// trainable parameter is round-tripped through BF16 before the forward
-    /// pass to match the activation noise a real BF16 forward would produce.
-    /// FP32 → BF16 = drop the low 16 mantissa bits; BF16 → FP32 = zero-extend
-    /// them; net = "zero the low 16 mantissa bits with RTE on the dropped
-    /// half". Identical bit-pattern semantics to BF16 hardware.
-    /// </summary>
     // Removed: MixedPrecisionBf16RoundTrip — deduplicated to
     // MixedPrecision.BitConverterHelper.Bf16RoundTrip (single source of
     // truth, review #1362). Call sites in TrainWithTape's MP path use the
-    // helper directly via the using-static import.
+    // helper directly via the using-static import. (Doc-comment kept as
+    // a plain comment so it doesn't attach to the next method via the
+    // XML doc-cascade — review #1362 C6NCS.)
 
     /// <summary>
     /// Overload for backward compatibility — accepts a learning rate instead of an optimizer.

@@ -97,6 +97,15 @@ public class MixedPrecisionContext : IDisposable
     internal float[] GetOrCreateFp32Snapshot(AiDotNet.Tensors.LinearAlgebra.Tensor<float> param)
     {
         if (param is null) throw new ArgumentNullException(nameof(param));
+        // Capture the needed length ONCE so the hot-path TryGetValue size
+        // check and the cold-path factory invocations all agree on the
+        // same target — if the tensor is concurrently resized between
+        // those reads, the two `param.Length` calls could disagree and
+        // produce a buffer too short for the actual write (review #1362
+        // C6NC0). Bound the buffer growth strictly: the factories grow
+        // ONLY when the existing buffer is smaller than `needed`,
+        // never shrink, never allocate when the existing array already
+        // satisfies the size requirement.
         int needed = param.Length;
         // Steady-state hot path: lock-free TryGetValue. Lands here every
         // training step on every trainable tensor once warm-up has run.
@@ -106,11 +115,12 @@ public class MixedPrecisionContext : IDisposable
         // updateValueFactory closures may run more than once under contention
         // (ConcurrentDictionary contract), but the result is idempotent — any
         // returned array of length >= needed is acceptable since the next
-        // hot-path TryGetValue will return the winning entry.
+        // hot-path TryGetValue will return the winning entry. The captured
+        // `needed` local makes both factories use the same target size.
         return _fp32SnapshotPool.AddOrUpdate(
             param,
-            addValueFactory: t => new float[t.Length],
-            updateValueFactory: (t, old) => old.Length >= t.Length ? old : new float[t.Length]);
+            addValueFactory: _ => new float[needed],
+            updateValueFactory: (_, old) => old.Length >= needed ? old : new float[needed]);
     }
 
     /// <summary>
