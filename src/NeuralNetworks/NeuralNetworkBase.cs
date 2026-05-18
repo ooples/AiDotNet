@@ -21,6 +21,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
+using System.Threading;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -5125,6 +5126,65 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Reentrancy sentinel for <see cref="TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>:
+    /// 0 = idle, 1 = a training step is currently in flight on this instance.
+    /// </summary>
+    /// <remarks>
+    /// <para>Mutated only via <see cref="Interlocked.CompareExchange(ref int, int, int)"/>
+    /// in <see cref="AcquireTrainSentinel"/> and released via
+    /// <see cref="Volatile.Write(ref int, int)"/> in
+    /// <see cref="TrainSentinel.Dispose"/>. Detects two threads calling
+    /// <c>TrainWithTape</c> on the SAME network instance concurrently — that
+    /// path interleaves Adam moment updates, GradientTape state, and the
+    /// fused-optimizer commit pipeline in ways the per-tensor
+    /// <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey, TValue}"/>
+    /// storage (swept across all 15 optimizers + the MP FP32 snapshot pool
+    /// in this PR) is not sufficient to make race-free at the step level.</para>
+    /// <para>The right path to multi-thread training is one network per
+    /// worker plus a separate distributed-trainer aggregating gradients
+    /// (HOGWILD!-style lock-free, or DDP-style all-reduce). That design is
+    /// tracked separately (see the multi-thread training design issue).
+    /// Until that lands, concurrent calls on a single instance throw with
+    /// a clear redirect.</para>
+    /// </remarks>
+    private int _trainInFlight;
+
+    /// <summary>
+    /// Acquires the per-instance training sentinel. Throws if another
+    /// thread is currently inside <see cref="TrainWithTape"/> on this
+    /// instance.
+    /// </summary>
+    private TrainSentinel AcquireTrainSentinel()
+    {
+        if (Interlocked.CompareExchange(ref _trainInFlight, 1, 0) != 0)
+        {
+            throw new InvalidOperationException(
+                "Concurrent TrainWithTape invocations on the same NeuralNetwork instance " +
+                "are not supported. Per-tensor optimizer state (Adam m/v, AdaMax u, " +
+                "AdaDelta E[g^2]/E[Δx^2], etc.) is thread-safe via ConcurrentDictionary, " +
+                "but the training step interleaves forward/backward/optimizer-step in a " +
+                "way that requires step-level mutual exclusion. To train in parallel, " +
+                "create one NeuralNetwork instance per worker and aggregate gradients via " +
+                "a distributed trainer (HOGWILD!-style lock-free or DDP-style all-reduce). " +
+                "See issue ooples/AiDotNet#1369 for the multi-thread training design.");
+        }
+        return new TrainSentinel(this);
+    }
+
+    /// <summary>
+    /// IDisposable struct released at the end of <see cref="TrainWithTape"/>'s
+    /// scope via <c>using var</c>; clears <see cref="_trainInFlight"/> on every
+    /// return path including exceptions. Allocation-free (value type) and
+    /// readonly so the compiler doesn't defensively-copy.
+    /// </summary>
+    private readonly struct TrainSentinel : IDisposable
+    {
+        private readonly NeuralNetworkBase<T> _owner;
+        internal TrainSentinel(NeuralNetworkBase<T> owner) { _owner = owner; }
+        public void Dispose() { Volatile.Write(ref _owner._trainInFlight, 0); }
+    }
+
+    /// <summary>
     /// Performs tape-based forward/backward pass and delegates the parameter update to the
     /// provided optimizer via <see cref="IGradientBasedOptimizer{T,TInput,TOutput}.Step"/>.
     /// </summary>
@@ -5134,6 +5194,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
+        // Reentrancy guard: a single instance is single-thread-per-step until
+        // the multi-thread training story (HOGWILD / DDP-shard) ships. The
+        // using-declaration generates the try/finally that releases the
+        // sentinel on every return path — early returns, exceptions, normal
+        // exit. See AcquireTrainSentinel for the contract.
+        using var __reentrancyGuard = AcquireTrainSentinel();
+
         var resolvedOptimizer = optimizer ?? GetOrCreateBaseOptimizer();
         // Reset the pending fused-miss reason so this call's emission
         // window starts clean. The fused-path try sets it via
@@ -5153,7 +5220,15 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // operate on float* directly). Returns false if any condition isn't
         // met or tracing fails; we then fall through to the eager tape path
         // below with behavior unchanged.
-        if (TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
+        //
+        // Mixed-precision (issue #1354): the fused path does NOT materialize
+        // intermediate gradient tensors that the loss-scaler needs to unscale
+        // + overflow-check, and does NOT consult _mixedPrecisionContext for
+        // forward-weight round-tripping. When MP is enabled we MUST take the
+        // eager tape path so the MP wiring below (cast weights to low precision,
+        // scale loss, unscale gradients, overflow detection) actually runs.
+        if (_mixedPrecisionContext is null
+            && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
             return;
 
         // The parameter walk here exists only to size the buffer on first Train()
@@ -5230,6 +5305,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             paramBuffer = _parameterBuffer;
         }
 
+        // Mixed-precision restore state — declared OUTSIDE the try so the
+        // finally below can call into the helper even when an exception
+        // mid-step prevents the happy-path restore from running. Stays
+        // function-LOCAL (no instance field) so TrainWithTape is reentrant
+        // across nested / concurrent invocations on the same instance
+        // (review #1362).
+        List<float[]>? mpFp32Snapshots = null;
+        List<Tensor<T>>? mpSnapshotTargets = null;
+        bool mpFp32Restored = true;
+        MixedPrecisionContext? mpCtxForFinally = null;
+
         try
         {
             // Re-collect after buffer initialization — references are now views
@@ -5248,6 +5334,133 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             var loss = LossFunction as LossFunctions.LossFunctionBase<T>
                 ?? throw new InvalidOperationException("LossFunction must derive from LossFunctionBase<T> for tape-based training.");
+
+            // ---------------- Mixed-precision (#1354) — pre-forward setup ----------------
+            // When _mixedPrecisionContext != null we are running mixed-precision
+            // training. The contract is:
+            //   1. master weights stay FP32 (in the layer storage)
+            //   2. forward + backward use low-precision (FP16 or BF16) working
+            //      weights — on CPU we approximate this by round-tripping each
+            //      trainable parameter through the target low precision and
+            //      writing the rounded value back in-place before the forward
+            //      pass. The tensor reference (which the optimizer's
+            //      TapeStepContext tracks) is unchanged.
+            //   3. loss is scaled up by LossScaler.Scale BEFORE backward so
+            //      gradients are S× larger (preventing FP16 underflow on real
+            //      hardware backends); we unscale gradients afterward.
+            //   4. master weights are restored to FP32 BEFORE the optimizer
+            //      step so the optimizer sees the precise FP32 trajectory.
+            //   5. if any unscaled gradient is NaN / Inf, LossScaler reduces
+            //      the scale and we skip the optimizer step.
+            // We snapshot the FP32 master values here so we can restore them
+            // before opt.Step, then on next Train() call the round-trip starts
+            // from the updated FP32 masters again.
+            // Snapshot order MUST stay aligned with the restore loop below:
+            //   [0 .. trainableParams.Count)        -> trainableParams
+            //   [trainableParams.Count .. end)      -> extraTrainableTensors
+            // The restore loop iterates both lists in the same order.
+            MixedPrecisionContext? mpCtx = _mixedPrecisionContext;
+            if (mpCtx is not null && typeof(T) != typeof(float))
+            {
+                // EnableMixedPrecision already throws on T != float, so reaching
+                // this branch indicates internal inconsistency (e.g. someone
+                // bypassed the public surface). Fail loud rather than silently
+                // skipping MP — the alternative is "configured but never
+                // consumed", the exact footgun this PR eliminates (review #1362).
+                throw new InvalidOperationException(
+                    $"MixedPrecisionContext is non-null but T = {typeof(T).Name} (only float is supported). " +
+                    $"This indicates the context was attached through a non-public path; use " +
+                    $"EnableMixedPrecision / AiModelBuilder.ConfigureMixedPrecision which validate T.");
+            }
+            if (mpCtx is not null && typeof(T) == typeof(float))
+            {
+                int totalParams = trainableParams.Count + extraTrainableTensors.Count;
+                mpFp32Snapshots = new List<float[]>(totalParams);
+                mpSnapshotTargets = new List<Tensor<T>>(totalParams);
+                mpFp32Restored = false; // we just took snapshots; restore is now pending
+                mpCtxForFinally = mpCtx;
+                bool useFp16 = mpCtx.Config.PrecisionType == Enums.MixedPrecisionType.FP16;
+
+                void SnapshotAndRoundTrip(Tensor<T> param)
+                {
+                    int len = param.Length;
+                    // Get-or-rent the per-tensor master snapshot buffer from
+                    // the MixedPrecisionContext pool — keyed by tensor
+                    // reference identity, reused step after step on the
+                    // steady state (review #1362). Eliminates the previous
+                    // `new float[len]` per parameter per step.
+                    // T is float in this branch; cast the tensor to its
+                    // float view for the pool lookup.
+                    var paramAsFloat = (object)param as AiDotNet.Tensors.LinearAlgebra.Tensor<float>;
+                    if (paramAsFloat is null)
+                        throw new InvalidOperationException(
+                            "MixedPrecision active but parameter tensor is not Tensor<float> — internal invariant violated.");
+                    float[] snapshot = mpCtx.GetOrCreateFp32Snapshot(paramAsFloat);
+                    // T == float in this branch (asserted via the
+                    // paramAsFloat null-check above). Operate directly
+                    // on the underlying Span<float> instead of the
+                    // generic Span<T> + Convert.ToSingle / (T)(object)
+                    // boxing round-trip, which would re-box every
+                    // element on the training hot path (review #1362:
+                    // measured non-trivial impact on large-model step
+                    // wall — boxing dominated when len was in the
+                    // millions of params).
+                    var fp32Span = paramAsFloat.Data.Span;
+                    for (int i = 0; i < len; i++)
+                    {
+                        float fp32Value = fp32Span[i];
+                        snapshot[i] = fp32Value;
+                        float rounded = useFp16
+                            ? (float)(Half)fp32Value
+                            : MixedPrecision.BitConverterHelper.Bf16RoundTrip(fp32Value);
+                        fp32Span[i] = rounded;
+                    }
+                    mpFp32Snapshots!.Add(snapshot);
+                    mpSnapshotTargets!.Add(param);
+                }
+
+                for (int p = 0; p < trainableParams.Count; p++)
+                    SnapshotAndRoundTrip(trainableParams[p]);
+                // Also round-trip GetExtraTrainableTensors() (CLS tokens,
+                // positional embeddings, etc.) — these participate in forward
+                // and get updated in the extras-update path below; without
+                // including them here they would train OUTSIDE mixed precision
+                // (review #1362).
+                for (int e = 0; e < extraTrainableTensors.Count; e++)
+                    SnapshotAndRoundTrip(extraTrainableTensors[e]);
+            }
+
+            // Local helper used by the normal restore path: writes FP32
+            // master values back to the tape-tracked tensor storage so the
+            // optimizer step sees the precise FP32 trajectory rather than
+            // the FP16/BF16-rounded working weights from the forward pass.
+            void RestoreFp32MastersIfNeeded()
+            {
+                if (mpFp32Restored) return;
+                if (mpSnapshotTargets is null || mpFp32Snapshots is null) return;
+                var targets = mpSnapshotTargets;
+                var snaps = mpFp32Snapshots;
+                for (int p = 0; p < targets.Count && p < snaps.Count; p++)
+                {
+                    var param = targets[p];
+                    var snapshot = snaps[p];
+                    int len = Math.Min(snapshot.Length, param.Length);
+                    // T == float in this branch (the MP path is gated on
+                    // typeof(T) == float upstream; mpFp32Snapshots is only
+                    // populated when paramAsFloat is non-null). Cast the
+                    // tensor to its Tensor<float> view and use Span<float>
+                    // CopyTo to avoid the per-element (T)(object) boxing
+                    // that the generic Span<T> write would force (review
+                    // #1362 C6NB0 — matches the corresponding fix on the
+                    // SnapshotAndRoundTrip path).
+                    var paramAsFloatLocal = (object)param as AiDotNet.Tensors.LinearAlgebra.Tensor<float>;
+                    if (paramAsFloatLocal is not null)
+                    {
+                        snapshot.AsSpan(0, len).CopyTo(paramAsFloatLocal.Data.Span.Slice(0, len));
+                    }
+                }
+                mpFp32Restored = true;
+            }
 
             // Activate a TensorArena for the forward/backward/update scope.
             // After the first iteration warms the arena, ALL subsequent TensorAllocator.Rent
@@ -5297,10 +5510,32 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
             var lossTensor = loss.ComputeTapeLoss(output, expected);
 
+            // ---------------- Mixed-precision (#1354) — scale loss before backward ----------------
+            // Multiply the tape-tracked loss by LossScaler.Scale so the backward
+            // pass produces gradients that are S× their natural magnitude. We
+            // unscale them post-backward and run the overflow check. For BF16
+            // the default scale is 1.0 (LossScaler is effectively a no-op),
+            // so this multiplication is a tape-safe identity.
+            //
+            // Important: build a SEPARATE scaledLossForBackward tensor instead
+            // of mutating lossTensor in place. The unmodified lossTensor is
+            // what feeds LastLoss / the TapeStepContext loss value / training
+            // diagnostics; rewriting it would surface a scaled loss to every
+            // caller observing training progress (see #1362 review).
+            var lossForBackward = lossTensor;
+            if (mpCtx is not null && typeof(T) == typeof(float))
+            {
+                double scale = mpCtx.LossScaler.Scale;
+                if (scale != 1.0)
+                {
+                    lossForBackward = Engine.TensorMultiplyScalar(lossTensor, NumOps.FromDouble(scale));
+                }
+            }
+
             // Compute all gradients then filter to trainable params.
             // Passing sources directly can miss parameters when the tape backward
             // can't match view tensor references through the GradFn chain.
-            var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+            var allGrads = tape.ComputeGradients(lossForBackward, sources: null);
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)
@@ -5351,6 +5586,92 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 return loss.ComputeTapeLoss(pred, tgt);
             }
 
+            // ---------------- Mixed-precision (#1354) — unscale gradients + overflow check ----------------
+            // (a) Divide every gradient (including those for extras) by
+            //     LossScaler.Scale so the optimizer sees the real magnitudes.
+            // (b) Run overflow detection: if ANY gradient is NaN/Inf the
+            //     LossScaler reduces its scale and we MUST skip the optimizer
+            //     step for this iteration (PyTorch GradScaler semantics).
+            // (c) Restore FP32 master weights to the layers BEFORE opt.Step
+            //     so the optimizer's update is applied to the precise FP32
+            //     trajectory (NOT the rounded values that drove the forward
+            //     pass). Restoration happens unconditionally — even on
+            //     overflow we don't want the FP16-rounded values to leak into
+            //     the next iteration's master state.
+            bool mpSkipOptimizerStep = false;
+            if (mpCtx is not null && typeof(T) == typeof(float) && mpFp32Snapshots is not null)
+            {
+                double scale = mpCtx.LossScaler.Scale;
+                float inverseScaleF = (float)(1.0 / scale);
+                bool hasOverflow = false;
+
+                // Unscale every gradient that BELONGS TO A TRAINABLE PARAMETER —
+                // both the layer-trainables (in `grads`) and the network-level
+                // extras (in `extraTrainableTensors`). The overflow flag is set
+                // ONLY from these gradients; allGrads can include tape entries
+                // for inputs/intermediates whose NaN/Inf would false-positive
+                // the overflow-skip branch even when every trainable gradient
+                // is finite (review #1362 follow-up).
+                //
+                // T == float in this branch (gated above). Cast each gradient
+                // tensor to its Tensor<float> view and operate on Span<float>
+                // directly to avoid NumOps.Multiply / NumOps.IsNaN / NumOps.IsInfinity
+                // virtual dispatch + boxing on every gradient element on every
+                // training step (review #1362 perf).
+                void UnscaleAndCheck(Tensor<T>? g)
+                {
+                    if (g is null || g.Length == 0) return;
+                    var gAsFloat = (object)g as AiDotNet.Tensors.LinearAlgebra.Tensor<float>;
+                    if (gAsFloat is null) return; // defensive — gated by typeof(T) == float
+                    var span = gAsFloat.Data.Span;
+                    int len = gAsFloat.Length;
+                    for (int i = 0; i < len; i++)
+                    {
+                        float v = span[i] * inverseScaleF;
+                        span[i] = v;
+                        if (!hasOverflow && (float.IsNaN(v) || float.IsInfinity(v)))
+                        {
+                            hasOverflow = true;
+                        }
+                    }
+                }
+
+                foreach (var kvp in grads)
+                {
+                    UnscaleAndCheck(kvp.Value);
+                }
+                foreach (var extra in extraTrainableTensors)
+                {
+                    if (allGrads.TryGetValue(extra, out var extraGrad))
+                        UnscaleAndCheck(extraGrad);
+                }
+
+                // Drive the LossScaler dynamic-scaling automaton DIRECTLY
+                // via the dedicated RecordOverflow / RecordSuccess APIs.
+                // Previously this path fabricated a 1-element probe vector
+                // (NaN to signal overflow, zero otherwise) and fed it to
+                // UnscaleGradientsAndCheck just for the side-effect state
+                // update — fragile (relied on probe-sized input behavior,
+                // discarded the return value, allocated a throwaway vector
+                // per step). The explicit APIs make the state transition
+                // unambiguous (review #1362).
+                if (hasOverflow)
+                    mpCtx.LossScaler.RecordOverflow();
+                else
+                    mpCtx.LossScaler.RecordSuccess();
+
+                // Restore FP32 master weights to the layer storage. The
+                // optimizer step below will then update FP32 values, not
+                // FP16-rounded ones. The tensor REFERENCE is preserved so
+                // the optimizer (which keyed on references in its own state)
+                // continues to work. Restores both trainableParams AND
+                // extraTrainableTensors via the snapshot target list
+                // (review #1362 fix #2).
+                RestoreFp32MastersIfNeeded();
+
+                mpSkipOptimizerStep = hasOverflow;
+            }
+
             // Apply global gradient-norm clipping when configured. Mirrors
             // PyTorch's torch.nn.utils.clip_grad_norm_ — total L2 norm across
             // all trainable-parameter gradients; when it exceeds MaxGradNorm,
@@ -5377,7 +5698,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 ComputeLossAligned,
                 paramBuffer);
 
-            opt.Step(context);
+            if (!mpSkipOptimizerStep)
+            {
+                opt.Step(context);
+            }
 
             // Apply gradient updates to network-level RAW trainable
             // tensors (ViT cls_token / positional_embeddings etc.).
@@ -5392,7 +5716,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // TRAINED — the previous behaviour left them frozen at
             // their initial random values forever, which was the
             // actual review concern.
-            if (extraTrainableTensors.Count > 0)
+            if (extraTrainableTensors.Count > 0 && !mpSkipOptimizerStep)
             {
                 T extrasLr = NumOps.FromDouble(GetOptimizerLearningRate(opt));
                 foreach (var extra in extraTrainableTensors)
@@ -5411,7 +5735,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // tick and the LR would stay pinned at its initial value.
             // Closes #1270.zKjB (single-source-of-truth helper across
             // every training entry point).
-            StepSchedulerIfSupported(opt);
+            //
+            // Skip the scheduler tick when MP overflow forced us to skip
+            // the optimizer step. Advancing the LR schedule on a step
+            // where no parameters were updated would desynchronize any
+            // per-step schedule during overflow/backoff periods (see
+            // #1362 review).
+            if (!mpSkipOptimizerStep)
+            {
+                StepSchedulerIfSupported(opt);
+            }
 
             // ---- Training diagnostics emission point (issue #1328 hook) ----
             // Emitted AFTER opt.Step and the extras-update path commit. If
@@ -5540,6 +5873,46 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         finally
         {
+            // Emergency FP32 master restore: if the happy-path unscale-and-
+            // restore block didn't run (an exception inside the try block —
+            // ForwardForTraining / ComputeTapeLoss / ComputeGradients —
+            // skipped past it), restore the FP32 master values now so the
+            // layer storage doesn't keep the FP16/BF16-rounded working
+            // weights from this aborted step (review #1362 fix #1).
+            // The locals (mpFp32Snapshots, mpSnapshotTargets, mpFp32Restored)
+            // were declared BEFORE the try block so they remain in scope
+            // here. Idempotent — when the happy-path block already ran the
+            // flag is true and this is a no-op.
+            if (!mpFp32Restored
+                && mpFp32Snapshots is not null
+                && mpSnapshotTargets is not null)
+            {
+                for (int p = 0; p < mpSnapshotTargets.Count && p < mpFp32Snapshots.Count; p++)
+                {
+                    var param = mpSnapshotTargets[p];
+                    var snapshot = mpFp32Snapshots[p];
+                    int len = Math.Min(snapshot.Length, param.Length);
+                    // T == float (gated upstream — snapshots are only
+                    // populated for float tensors). Use Span<float> CopyTo
+                    // instead of the per-element (T)(object) boxing fallback
+                    // (review #1362 C6NB0 — finally-block emergency restore
+                    // must match the happy-path's float-direct semantics).
+                    var paramAsFloatLocal = (object)param as AiDotNet.Tensors.LinearAlgebra.Tensor<float>;
+                    if (paramAsFloatLocal is not null)
+                    {
+                        snapshot.AsSpan(0, len).CopyTo(paramAsFloatLocal.Data.Span.Slice(0, len));
+                    }
+                }
+                mpFp32Restored = true;
+            }
+            // The mpCtxForFinally / pool entries are deliberately retained
+            // across calls — they ARE the per-tensor master pool, reused on
+            // the next TrainWithTape invocation. The mpCtxForFinally local
+            // was used by the snapshot-pool lookup in the try-body; it
+            // remains in scope for clarity but the pool reuse semantics
+            // are managed by MixedPrecisionContext itself (review #1362
+            // C6NCl — removed the no-op discard).
+
             // Restore original tensor references so Clone/serialization see real tensors.
             // Copies updated weights from buffer views back to originals before restoring.
             RestoreOriginalParameters();
@@ -5613,6 +5986,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // its LR. Logged via the trace path so users see the fallback.
         return 0.001;
     }
+
+    // Removed: MixedPrecisionBf16RoundTrip — deduplicated to
+    // MixedPrecision.BitConverterHelper.Bf16RoundTrip (single source of
+    // truth, review #1362). Call sites in TrainWithTape's MP path use the
+    // helper directly via the using-static import. (Doc-comment kept as
+    // a plain comment so it doesn't attach to the next method via the
+    // XML doc-cascade — review #1362 C6NCS.)
 
     /// <summary>
     /// Overload for backward compatibility — accepts a learning rate instead of an optimizer.

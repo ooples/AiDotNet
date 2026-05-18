@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -318,7 +319,7 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     }
 
     // Per-parameter accumulated squared gradient for tape-based training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeAccSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeAccSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -244,9 +245,9 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
     }
 
     // Per-parameter AMSGrad state for tape-based training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVHat = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeVHat = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
     /// <inheritdoc />

@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -537,9 +538,14 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// This override provides accurate reversal for Adam's adaptive update rule:
     /// params_old = params_new + lr * m_hat / (sqrt(v_hat) + epsilon)
     /// </para>
-    // Per-parameter Adam state for tape-based training (keyed by tensor reference identity)
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    // Per-parameter Adam state for tape-based training (keyed by tensor reference identity).
+    // ConcurrentDictionary so the per-tensor moments survive concurrent
+    // TrainWithTape steps once HOGWILD! / DDP-shard trainers land (#1369);
+    // until then the TrainWithTape sentinel serializes access. Never call
+    // .Count or .IsEmpty on these — bucket-Monitor lock (2026-04-22
+    // DeferredArrayMaterializer lesson).
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
     /// <summary>
     /// Per-parameter running maximum of v̂_t when AMSGrad is enabled
     /// (Reddi, Kale, Kumar 2018). Used as the denominator's
@@ -548,7 +554,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// MoreData_ShouldNotDegrade across NTM / GRU / DBM / etc.
     /// (#1332 cluster 6 + cluster 1.1).
     /// </summary>
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVMax = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeVMax = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 
     /// <inheritdoc />
