@@ -85,6 +85,18 @@ public class AdamPathDivergenceH6DiagnosticTests
         // Adam ctor signature is (model, options); model can be null when we drive
         // the optimizer directly through UpdateParameters / Step without ever
         // calling Optimize (which is what the diagnostic does).
+        //
+        // SCOPE NOTE (review #1364): this diagnostic-class suite intentionally
+        // compares only raw UpdateParameters / Step math; model-backed
+        // UpdateSolution / Optimize replace-vs-mutate semantics are
+        // documented as a separate suspect not exercised here. H6 was
+        // refuted in this suite by showing the two raw paths produce
+        // bit-identical results; the model-backed path falsification
+        // belongs in BuildAsyncResidualModeCollapseTests (8-arm full-stack
+        // diagnostic) which is the suite that does end-to-end model
+        // training. Adding a model-backed probe here would either
+        // duplicate that work OR test internal-state alignment between
+        // the two suites, which is out of scope for the H6 falsification.
         return new AdamOptimizer<float, Vector<float>, Vector<float>>(model: null, options: MakeOptions());
     }
 

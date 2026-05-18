@@ -61,7 +61,7 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// </para>
 ///
 /// <para>
-/// All five arms run sequentially in a single test so the per-arm
+/// All eight arms run sequentially in a single test so the per-arm
 /// numbers are produced under matched conditions — same wallclock
 /// startup, same JIT state, same collection (NonParallelIntegration).
 /// Each arm logs its top-1 accuracy via ITestOutputHelper; the
@@ -81,7 +81,7 @@ public class BuildAsyncResidualModeCollapseTests
 
     // Canary fixture: small Transformer + token-classification task at
     // dModel=32, heads=2, L=2, ctx=16, V=16. Picked to (a) keep wall
-    // under 60 s for the full 5-arm diagnostic, (b) match the
+    // under 60 s for the full 8-arm diagnostic, (b) match the
     // HarmonicEngine consumer ticket
     // (Phase_PAPER_A_PathB_SingleSeed_Runner) which reports the
     // residual collapse on the same kind of fixture, scaled down for
