@@ -1653,6 +1653,33 @@ public interface IAiModelBuilder<T, TInput, TOutput>
         CurriculumLearningOptions<T, TInput, TOutput>? options = null);
 
     /// <summary>
+    /// Configures self-supervised pretraining (configuration-only — SSL settings
+    /// are stored but no pretraining stage runs). Use the two-argument overload
+    /// to attach a typed pretrainAction that BuildAsync invokes before main
+    /// training.
+    /// </summary>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
+        Action<AiDotNet.SelfSupervisedLearning.SSLConfig>? configure = null);
+
+    /// <summary>
+    /// Configures self-supervised pretraining with a user-supplied typed hook
+    /// (AiDotNet#1361 wire-up).
+    /// </summary>
+    /// <param name="configure">Optional <see cref="AiDotNet.SelfSupervisedLearning.SSLConfig"/>
+    /// configurator. When null, a default <c>SSLConfig</c> is used.</param>
+    /// <param name="pretrainAction">User-supplied pretraining hook invoked BEFORE
+    /// main training. Receives the current base model + SSLConfig + cancellation
+    /// token; returns the model that should feed into main training (typically
+    /// the same model with its encoder updated via an
+    /// <see cref="AiDotNet.SelfSupervisedLearning.ISSLMethod{T}"/>'s TrainStep
+    /// loop).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
+        Action<AiDotNet.SelfSupervisedLearning.SSLConfig>? configure,
+        Func<IFullModel<T, TInput, TOutput>, AiDotNet.SelfSupervisedLearning.SSLConfig, CancellationToken,
+            Task<IFullModel<T, TInput, TOutput>>> pretrainAction);
+
+    /// <summary>
     /// Asynchronously builds a meta-trained model that can quickly adapt to new tasks.
     /// </summary>
     /// <remarks>

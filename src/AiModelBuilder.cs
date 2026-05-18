@@ -208,6 +208,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     // Self-supervised learning configuration
     private SelfSupervisedLearning.SSLConfig? _sslConfig;
+    // Optional user-supplied pretraining hook invoked BEFORE main training when
+    // ConfigureSelfSupervisedLearning is used with the action overload. Receives
+    // the current base model + SSLConfig + cancellation token; returns the model
+    // that should feed into main training. See #1361.
+    private Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig, CancellationToken,
+        Task<IFullModel<T, TInput, TOutput>>>? _sslPretrainAction;
 
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
@@ -1499,7 +1505,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var labels = inputOutputLoader.Labels;
 
             // Delegate to the internal supervised training method
-            result = await BuildSupervisedInternalAsync(features, labels);
+            result = await BuildSupervisedInternalAsync(features, labels, cancellationToken);
             await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
             return result;
         }
@@ -1626,6 +1632,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var programSynthesisResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
         ProcessKnowledgeGraphOptions(programSynthesisResult);
         AttachSafetyPipeline(programSynthesisResult);
+        AttachAdversarialRobustness(programSynthesisResult);
         return programSynthesisResult;
     }
 
@@ -1634,6 +1641,41 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         if (_safetyPipelineConfig != null)
         {
             result.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
+        }
+    }
+
+    /// <summary>
+    /// Threads any <see cref="_adversarialRobustnessConfiguration"/> set via
+    /// <see cref="ConfigureAdversarialRobustness"/> into the constructed
+    /// <see cref="AiModelResult{T, TInput, TOutput}"/> so the runtime
+    /// adversarial-robustness API (<c>PredictWithDefense</c>,
+    /// <c>EvaluateRobustness</c>) actually picks up the user's settings.
+    /// </summary>
+    /// <remarks>
+    /// Prior to this method the <see cref="ConfigureAdversarialRobustness"/>
+    /// call only stored the configuration in
+    /// <see cref="_adversarialRobustnessConfiguration"/>; the field was never
+    /// read elsewhere, so the call had no observable effect (issue #1357 —
+    /// "ConfigureAdversarialRobustness stores config, never consumes it").
+    /// This method mirrors <see cref="AttachSafetyPipeline"/> and is invoked
+    /// from every Build path so per-sample-train consumers also see the
+    /// configuration on the returned result.
+    /// </remarks>
+    private void AttachAdversarialRobustness(AiModelResult<T, TInput, TOutput> result)
+    {
+        if (_adversarialRobustnessConfiguration is null || !_adversarialRobustnessConfiguration.Enabled)
+        {
+            return;
+        }
+
+        // Always surface the underlying options so EvaluateRobustness /
+        // PredictWithDefense can read them at inference time even when no
+        // custom defense was supplied.
+        result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
+
+        if (_adversarialRobustnessConfiguration.CustomDefense is not null)
+        {
+            result.SetAdversarialDefense(_adversarialRobustnessConfiguration.CustomDefense);
         }
     }
 
@@ -2145,6 +2187,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var nnResult = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(options));
         ProcessKnowledgeGraphOptions(nnResult);
         AttachSafetyPipeline(nnResult);
+        AttachAdversarialRobustness(nnResult);
         return nnResult;
     }
 
@@ -2267,7 +2310,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <param name="x">Matrix of input features.</param>
     /// <param name="y">Vector of output values.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(TInput x, TOutput y)
+    private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(
+        TInput x, TOutput y, CancellationToken cancellationToken)
     {
         // SUPERVISED TRAINING PATH
 
@@ -2460,6 +2504,30 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Validate model is set (either by user, agent, or AutoML)
         if (_model == null)
             throw new InvalidOperationException("Model implementation must be specified. Use ConfigureModel() to set a model, ConfigureAutoML() for automatic model selection, or enable agent assistance.");
+
+        // ============================================================================
+        // SELF-SUPERVISED LEARNING PRETRAINING (#1361 #4) — runs BEFORE main training.
+        // ConfigureSelfSupervisedLearning(configure, pretrainAction) is the wire-up
+        // entry point — the SSL subsystem requires an encoder-shaped INeuralNetwork
+        // that can't be transparently extracted from arbitrary IFullModel<T, TInput,
+        // TOutput>. The user-supplied action is responsible for running the SSL
+        // method (SimCLR / MoCo / BYOL / DINO / MAE / Barlow Twins) over its
+        // pretraining batches and returning the model that should feed into main
+        // supervised training (typically the same model with its encoder updated).
+        // The single-argument overload (Action<SSLConfig>) stores configuration
+        // without running any pretraining stage — that path is config-only.
+        // ============================================================================
+        if (_sslPretrainAction is not null)
+        {
+            if (_sslConfig is null)
+                throw new InvalidOperationException(
+                    "_sslPretrainAction was set without _sslConfig — internal builder invariant violated.");
+            _model = await _sslPretrainAction(_model, _sslConfig, CancellationToken.None).ConfigureAwait(false);
+            if (_model is null)
+                throw new InvalidOperationException(
+                    "ConfigureSelfSupervisedLearning's pretrainAction returned null. " +
+                    "The hook must return a non-null IFullModel<T, TInput, TOutput> for main training to proceed.");
+        }
 
         // Wire instance-level preprocessing/postprocessing onto DocumentNeuralNetworkBase models.
         // This replaces the former static PreprocessingRegistry/PostprocessingRegistry approach,
@@ -3215,6 +3283,200 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             optimizationResult = finalOptimizer.Optimize(optimizationInputData);
         }
 
+        // ============================================================================
+        // FINE-TUNING (#1357 / #1361) — applies preference learning, RLHF, SFT, etc.
+        // to the optimizer-trained model BEFORE metric finalization so that any
+        // checkpoint/result returned reflects the post-fine-tune weights.
+        // ============================================================================
+        if (_fineTuningConfiguration?.Enabled == true)
+        {
+            var ftImpl = _fineTuningConfiguration.Implementation
+                ?? throw new InvalidOperationException(
+                    "ConfigureFineTuning was enabled but no Implementation was provided. " +
+                    "Set FineTuningConfiguration.Implementation to a concrete IFineTuning<T, TInput, TOutput> instance " +
+                    "(e.g. new SupervisedFineTuning<...>(options), new DirectPreferenceOptimization<...>(options)).");
+            if (_fineTuningConfiguration.TrainingData is null)
+                throw new InvalidOperationException(
+                    "ConfigureFineTuning was enabled but no TrainingData was supplied. " +
+                    "Set FineTuningConfiguration.TrainingData to a FineTuningData<T, TInput, TOutput> appropriate for the chosen method " +
+                    "(SFT needs Inputs+Outputs; DPO/SimPO need preference pairs; RLHF/GRPO need rewards).");
+            if (optimizationResult.BestSolution is null)
+                throw new InvalidOperationException(
+                    "ConfigureFineTuning was enabled but the optimizer did not produce a BestSolution to fine-tune. " +
+                    "This usually means main training failed silently — check earlier logs.");
+
+            // Honor the BuildAsync caller's cancellation token across the
+            // fine-tune await — without this the awaited operation cannot
+            // be cancelled once the optimizer's main-training pass returns
+            // (review #1361 fix #5).
+            var fineTunedModel = await ftImpl.FineTuneAsync(
+                optimizationResult.BestSolution,
+                _fineTuningConfiguration.TrainingData,
+                cancellationToken).ConfigureAwait(false);
+
+            // Rebind so downstream metric/checkpoint code sees the post-FT
+            // model. The optimizer-result metrics are still pre-FT (computed
+            // earlier in this method) — a full rebind that re-evaluates loss
+            // on the fine-tuned model is tracked as a heavy-lift follow-up
+            // (review #1361 fix #4 partial).
+            optimizationResult.BestSolution = fineTunedModel;
+            _model = fineTunedModel;
+        }
+
+        // ============================================================================
+        // STAGED TRAINING PIPELINE (#1361 #2) — executes the user-defined sequence of
+        // training stages after main training (and any one-shot fine-tuning). Each
+        // stage takes the previous stage's output model + its own training data and
+        // produces the next stage's input model. Stages with Enabled=false or whose
+        // RunCondition returns false are skipped. The final stage's output replaces
+        // optimizationResult.BestSolution so downstream consumers see the post-
+        // pipeline weights.
+        // ============================================================================
+        if (_trainingPipelineConfiguration?.Stages is { Count: > 0 } stages)
+        {
+            if (optimizationResult.BestSolution is null)
+                throw new InvalidOperationException(
+                    "ConfigureTrainingPipeline was provided but main training did not produce a BestSolution. " +
+                    "Check earlier logs for an upstream training failure.");
+
+            var currentModel = optimizationResult.BestSolution;
+            TrainingStageResult<T, TInput, TOutput>? previousStageResult = null;
+
+            for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
+            {
+                var stage = stages[stageIndex];
+                if (!stage.Enabled) continue;
+                if (stage.RunCondition is { } cond && !cond(previousStageResult)) continue;
+
+                if (stage.CustomTrainingFunction is null)
+                    throw new InvalidOperationException(
+                        $"TrainingPipeline stage '{stage.Name}' (index {stageIndex}) has Enabled=true but no " +
+                        $"CustomTrainingFunction. The current wire-up requires each enabled stage to provide " +
+                        $"its own training delegate; the StageType={stage.StageType} / FineTuningMethod=" +
+                        $"{stage.FineTuningMethod} auto-dispatch path is not yet implemented. " +
+                        $"Set stage.CustomTrainingFunction to an async (model, data, ct) => trainedModel delegate, " +
+                        $"or remove this stage from the pipeline.");
+                if (stage.TrainingData is null && !stage.IsEvaluationOnly)
+                    throw new InvalidOperationException(
+                        $"TrainingPipeline stage '{stage.Name}' (index {stageIndex}) has no TrainingData and is " +
+                        $"not marked IsEvaluationOnly. Each training stage needs a FineTuningData<T, TInput, " +
+                        $"TOutput> appropriate for its FineTuningMethod.");
+
+                var stageStart = DateTime.UtcNow;
+                var stageResult = new TrainingStageResult<T, TInput, TOutput>
+                {
+                    StageName = stage.Name,
+                    StageIndex = stageIndex,
+                };
+                try
+                {
+                    if (!stage.IsEvaluationOnly)
+                    {
+                        // Pass through the BuildAsync caller's cancellation token
+                        // so user-supplied stage delegates can honor cancellation
+                        // (review #1361 fix #5).
+                        currentModel = await stage.CustomTrainingFunction(
+                            currentModel,
+                            stage.TrainingData!,
+                            cancellationToken).ConfigureAwait(false);
+                        if (currentModel is null)
+                            throw new InvalidOperationException(
+                                $"TrainingPipeline stage '{stage.Name}' returned null from " +
+                                $"CustomTrainingFunction. Stages must return a non-null model.");
+                    }
+                    stageResult.Model = currentModel;
+                    stageResult.Success = true;
+                }
+                catch (Exception ex)
+                {
+                    stageResult.Success = false;
+                    stageResult.ErrorMessage = ex.Message;
+                    throw;
+                }
+                finally
+                {
+                    stageResult.Duration = DateTime.UtcNow - stageStart;
+                }
+                previousStageResult = stageResult;
+            }
+
+            // Rebind _model so downstream weight-streaming reports, checkpoint
+            // writes, and any other consumer that reads _model directly sees
+            // the post-pipeline model (review #1361 fix #4 partial — the
+            // optimizer metrics on optimizationResult are still pre-pipeline;
+            // re-evaluating them on the pipeline-output model is the heavy-
+            // lift follow-up).
+            optimizationResult.BestSolution = currentModel;
+            _model = currentModel;
+        }
+
+        // ============================================================================
+        // CURRICULUM LEARNING (#1361 #3) — runs a curriculum-scheduled refinement pass
+        // over a user-supplied Dataset after main training (and any fine-tuning /
+        // pipeline stages). The CurriculumLearner ranks samples by difficulty using
+        // either the user's CustomDifficultyEstimator or a LossBasedDifficultyEstimator
+        // tied to the trained model's internal loss, then trains in phases from easy
+        // to hard. The post-curriculum model replaces optimizationResult.BestSolution.
+        //
+        // Dataset auto-extraction from the configured DataLoader is out-of-scope for
+        // this wire-up — different loaders have different per-sample contracts. When
+        // the caller does not supply CurriculumLearningOptions.Dataset, the curriculum
+        // pass is skipped (configuration-only mode).
+        // ============================================================================
+        if (_curriculumLearningOptions is not null && _curriculumLearningOptions.Dataset is not null)
+        {
+            if (optimizationResult.BestSolution is null)
+                throw new InvalidOperationException(
+                    "ConfigureCurriculumLearning was provided with a Dataset but main training did not " +
+                    "produce a BestSolution to curriculum-train. Check earlier logs for an upstream " +
+                    "training failure.");
+
+            var curriculumConfig = new AiDotNet.CurriculumLearning.CurriculumLearnerConfig<T>
+            {
+                TotalEpochs = _curriculumLearningOptions.TotalEpochs ?? 100,
+                NumPhases = _curriculumLearningOptions.NumPhases ?? 5,
+                InitialDataFraction = MathHelper.GetNumericOperations<T>().FromDouble(
+                    _curriculumLearningOptions.InitialDataFraction ?? 0.2),
+                FinalDataFraction = MathHelper.GetNumericOperations<T>().FromDouble(
+                    _curriculumLearningOptions.FinalDataFraction ?? 1.0),
+                ScheduleType = _curriculumLearningOptions.ScheduleType,
+                RecalculateDifficulties = _curriculumLearningOptions.RecalculateDifficulties ?? false,
+                DifficultyRecalculationFrequency = _curriculumLearningOptions.DifficultyRecalculationFrequency ?? 10,
+                NormalizeDifficulties = _curriculumLearningOptions.NormalizeDifficulties ?? true,
+                EarlyStoppingPatience = _curriculumLearningOptions.EarlyStopping?.Patience ?? 10,
+                EarlyStoppingMinDelta = MathHelper.GetNumericOperations<T>().FromDouble(
+                    _curriculumLearningOptions.EarlyStopping?.MinDelta ?? 0.001),
+                UseEarlyStopping = _curriculumLearningOptions.EarlyStopping?.Enabled ?? true,
+                BatchSize = _curriculumLearningOptions.BatchSize ?? 32,
+                LearningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.001),
+                ShuffleWithinPhase = _curriculumLearningOptions.ShuffleWithinPhase ?? true,
+                UseDifficultyWeighting = _curriculumLearningOptions.UseDifficultyWeighting ?? false,
+                RandomSeed = _curriculumLearningOptions.RandomSeed,
+                Verbosity = _curriculumLearningOptions.Verbosity,
+            };
+
+            var difficultyEstimator = _curriculumLearningOptions.CustomDifficultyEstimator
+                ?? new AiDotNet.CurriculumLearning.DifficultyEstimators
+                       .LossBasedDifficultyEstimator<T, TInput, TOutput>(
+                           lossFunction: null,
+                           normalize: curriculumConfig.NormalizeDifficulties);
+
+            var curriculumLearner = new AiDotNet.CurriculumLearning.CurriculumLearner<T, TInput, TOutput>(
+                baseModel: optimizationResult.BestSolution,
+                config: curriculumConfig,
+                difficultyEstimator: difficultyEstimator,
+                scheduler: _curriculumLearningOptions.CustomScheduler);
+
+            curriculumLearner.Train(_curriculumLearningOptions.Dataset);
+
+            // The CurriculumLearner mutates BaseModel in place; reassign to make the
+            // post-curriculum weights explicit for downstream consumers.
+            // Rebind _model so downstream consumers see the post-curriculum
+            // weights (review #1361 fix #4 partial).
+            optimizationResult.BestSolution = curriculumLearner.BaseModel;
+            _model = curriculumLearner.BaseModel;
+        }
+
         var trainingEndTime = DateTime.UtcNow;
         var trainingDuration = trainingEndTime - trainingStartTime;
 
@@ -3501,6 +3763,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         // Build and attach the composable safety pipeline if configured
         AttachSafetyPipeline(finalResult);
+        AttachAdversarialRobustness(finalResult);
 
         return finalResult;
     }
@@ -3637,6 +3900,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(metaOptions));
         ProcessKnowledgeGraphOptions(result);
         AttachSafetyPipeline(result);
+        AttachAdversarialRobustness(result);
 
         return result;
     }
@@ -3969,6 +4233,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         var result = AttachDiagnostics(new AiModelResult<T, TInput, TOutput>(rlOptions));
         ProcessKnowledgeGraphOptions(result);
         AttachSafetyPipeline(result);
+        AttachAdversarialRobustness(result);
 
         return result;
     }
@@ -4464,6 +4729,18 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         _adversarialRobustnessConfiguration = configuration ?? new AdversarialRobustnessConfiguration<T, TInput, TOutput>();
         return this;
     }
+
+    /// <summary>
+    /// Internal accessor exposing the most recently configured
+    /// <see cref="AdversarialRobustnessConfiguration{T, TInput, TOutput}"/> so
+    /// unit tests can verify <see cref="ConfigureAdversarialRobustness"/>
+    /// retained the user-supplied (or default) instance. The configuration
+    /// is consumed at build time by <c>AttachAdversarialRobustness</c>;
+    /// this accessor lets tests assert the configure-time storage step
+    /// without instantiating the full result pipeline.
+    /// </summary>
+    internal AdversarialRobustnessConfiguration<T, TInput, TOutput>? ConfiguredAdversarialRobustness
+        => _adversarialRobustnessConfiguration;
 
     /// <summary>
     /// Configures fine-tuning for the model using preference learning, RLHF, or other alignment methods.
@@ -6108,6 +6385,39 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         _sslConfig = new SelfSupervisedLearning.SSLConfig();
         configure?.Invoke(_sslConfig);
+        return this;
+    }
+
+    /// <summary>
+    /// Configures self-supervised learning with a typed pretraining hook
+    /// (<see cref="AiDotNet"/>#1361).
+    /// </summary>
+    /// <param name="configure">Optional <see cref="SelfSupervisedLearning.SSLConfig"/>
+    /// configurator. When null, a default <c>SSLConfig</c> is used.</param>
+    /// <param name="pretrainAction">User-supplied pretraining hook invoked BEFORE
+    /// main training. Receives the current base model + SSLConfig + cancellation
+    /// token; returns the model that should feed into main training (typically the
+    /// same model with its encoder updated via <see cref="SelfSupervisedLearning
+    /// .ISSLMethod{T}"/>'s TrainStep loop). The configured-but-no-action pattern
+    /// preserves backwards compatibility — SSL settings are stored on the result
+    /// without forcing any pretraining stage to run.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// The two-argument overload is the wire-up entry point — the single-argument
+    /// overload above stores SSLConfig but does NOT run a pretraining stage (the
+    /// SSL subsystem requires an encoder-shaped <c>INeuralNetwork&lt;T&gt;</c> which
+    /// is not interchangeable with arbitrary <c>IFullModel&lt;T, TInput, TOutput&gt;
+    /// </c>; the user-supplied action is where the conversion happens).
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
+        Action<SelfSupervisedLearning.SSLConfig>? configure,
+        Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig, CancellationToken,
+            Task<IFullModel<T, TInput, TOutput>>> pretrainAction)
+    {
+        if (pretrainAction is null) throw new ArgumentNullException(nameof(pretrainAction));
+        _sslConfig = new SelfSupervisedLearning.SSLConfig();
+        configure?.Invoke(_sslConfig);
+        _sslPretrainAction = pretrainAction;
         return this;
     }
 
