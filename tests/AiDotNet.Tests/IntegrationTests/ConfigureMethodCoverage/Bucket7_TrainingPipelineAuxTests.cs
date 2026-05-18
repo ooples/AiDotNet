@@ -169,10 +169,22 @@ public class Bucket7_TrainingPipelineAuxTests : ConfigureMethodTestBase
             int nTrials)
         {
             OptimizeCalls++;
-            // Defer to the base class so we return a structurally valid
-            // result (it'll just run nTrials random samples — the recorder
-            // already captured the wiring proof).
-            return base.Optimize(objectiveFunction, searchSpace, nTrials);
+            // Short-circuit with a structurally-valid empty result so
+            // the test only validates the wiring proof (OptimizeCalls > 0)
+            // without the extra training round-trip that base.Optimize
+            // would trigger via objectiveFunction. Calling base.Optimize
+            // here would invoke the user's training loop nTrials times
+            // for what should be a pure wiring assertion — adds flakiness
+            // sources unrelated to the wiring claim.
+            return new HyperparameterOptimizationResult<TNum>
+            {
+                BestParameters = new System.Collections.Generic.Dictionary<string, object>(),
+                AllTrials = new System.Collections.Generic.List<HyperparameterTrial<TNum>>(),
+                SearchSpace = searchSpace,
+                TotalTrials = nTrials,
+                CompletedTrials = 0,
+                TotalTime = System.TimeSpan.Zero,
+            };
         }
     }
 }

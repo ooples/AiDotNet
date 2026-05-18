@@ -470,7 +470,21 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
                 : outShape[outShape.Length - 1];
         }
 
-        if (outputSize <= 0) outputSize = inputSize > 0 ? inputSize : 1;
+        // If BOTH dimensions are still unresolved, the LoRA layer would
+        // be constructed with a fabricated (outputSize * 2, 1) shape that
+        // silently produces nonsense activations at forward time. The
+        // ApplyLoRA caller is supposed to skip layers with
+        // IsShapeResolved=false; throw here to make sure that contract
+        // is honoured instead of degrading silently.
+        if (outputSize <= 0 && inputSize <= 0)
+        {
+            throw new System.InvalidOperationException(
+                $"LoRAAdapterBase.CreateLoRALayer cannot resolve either input or output dimension for base layer of type " +
+                $"{_baseLayer.GetType().Name}. Both GetInputShape() / GetOutputShape() returned empty or zero-dim shapes, " +
+                $"and InferInputSizeFromWeights returned -1. Callers should skip layers with IsShapeResolved=false " +
+                $"(see DefaultLoRAConfiguration.ApplyLoRA) before invoking the adapter constructor.");
+        }
+        if (outputSize <= 0) outputSize = inputSize;
         if (inputSize <= 0) inputSize = outputSize * 2;
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }

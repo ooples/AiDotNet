@@ -140,26 +140,60 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// Gets or sets the postprocessing pipeline configured via
     /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigurePostprocessing(AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput})"/>.
     /// </summary>
+    /// <value>
+    /// A <see cref="AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput}"/>
+    /// applied to the model's raw output during inference, or null if no
+    /// postprocessing was configured.
+    /// </value>
     /// <remarks>
+    /// <para>
     /// Applied inside <see cref="AiModelResult{T,TInput,TOutput}.Predict"/>
     /// after the model produces its raw output (and after any
-    /// PreprocessingInfo target-inverse transform). Without this wiring the
-    /// configured postprocessing pipeline was stored on the builder but
-    /// never invoked on predictions — a stored-but-not-consumed
-    /// regression of the same shape as PR #1357 (#1361 family).
+    /// <c>PreprocessingInfo</c> target-inverse transform). Without this
+    /// wiring the configured postprocessing pipeline was stored on the
+    /// builder but never invoked on predictions — a stored-but-not-
+    /// consumed regression of the same shape as PR #1357 (#1361 family).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Postprocessing is the "format the answer"
+    /// step that runs AFTER the model predicts. Common examples are
+    /// applying softmax to convert raw logits into probabilities,
+    /// decoding class indices back into label strings, or applying
+    /// thresholds to classification scores. Setting this property here
+    /// is how the builder hands the pipeline to the runtime so each
+    /// <c>Predict</c> call applies it automatically.
+    /// </para>
     /// </remarks>
     public AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; set; }
 
     /// <summary>
     /// Gets or sets the knowledge-distillation options configured via
     /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigureKnowledgeDistillation"/>.
+    /// </summary>
+    /// <value>
+    /// A <see cref="KnowledgeDistillationOptions{T,TInput,TOutput}"/>
+    /// instance carrying the configured teacher / temperature / alpha
+    /// settings, or null if no distillation was configured.
+    /// </value>
+    /// <remarks>
+    /// <para>
     /// Carried through to <see cref="AiModelResult{T,TInput,TOutput}"/>
     /// so consumers can drive distillation manually post-build via a
     /// teacher-aware loss function. Without this slot the options were
     /// stored on the builder but silently dropped before the result
     /// surface — discovered by AiDotNet#1345 Bucket9
     /// ConfigureKnowledgeDistillation test.
-    /// </summary>
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Knowledge distillation is a technique where
+    /// a smaller "student" model learns to mimic a larger "teacher"
+    /// model — the temperature setting controls how soft the teacher's
+    /// predictions become, and alpha balances the student's own labels
+    /// against the teacher's soft targets. This property surfaces those
+    /// configured settings on the result so downstream tooling can run
+    /// the distillation loop.
+    /// </para>
+    /// </remarks>
     public AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>? KnowledgeDistillationOptions { get; set; }
 
     /// <summary>

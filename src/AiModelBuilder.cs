@@ -272,6 +272,34 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Memory management configuration for gradient checkpointing, activation pooling, and model sharding
     private Training.Memory.TrainingMemoryConfig? _memoryConfig;
 
+    /// <summary>
+    /// Carves a 1-sample probe off the training input for LoRA warmup
+    /// forwards. Returns the full input unchanged if the type doesn't
+    /// expose a recognised slicing pattern — better to do a full forward
+    /// than to error out on shape-resolution.
+    /// </summary>
+    private static TInput TrySliceFirstSampleForLoRAWarmup(TInput x)
+    {
+        // Tensor<T>: take the first sample along axis 0.
+        if (x is Tensor<T> tensor && tensor.Shape.Length > 0 && tensor.Shape[0] > 1)
+        {
+            var sliceShape = new int[tensor.Shape.Length];
+            sliceShape[0] = 1;
+            for (int i = 1; i < tensor.Shape.Length; i++) sliceShape[i] = tensor.Shape[i];
+
+            int perSample = 1;
+            for (int i = 1; i < tensor.Shape.Length; i++) perSample *= tensor.Shape[i];
+            var slice = new Tensor<T>(sliceShape);
+            for (int i = 0; i < perSample; i++)
+            {
+                slice.SetFlat(i, tensor.GetFlat(i));
+            }
+            if (slice is TInput typedSlice) return typedSlice;
+        }
+        // Fallback: full forward.
+        return x;
+    }
+
     // Internal accessors for test verification (visible to AiDotNetTests via InternalsVisibleTo)
     internal IOptimizer<T, TInput, TOutput>? ConfiguredOptimizer => _optimizer;
     internal CacheConfig? ConfiguredCaching => _cacheConfig;
@@ -280,6 +308,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
     internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
     internal AiDotNetLicenseKey? ConfiguredLicenseKey => _licenseKey;
+    internal AgentConfiguration<T>? ConfiguredAgentAssistance => _agentConfig;
 
     /// <summary>
     /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.
@@ -2512,7 +2541,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 neuralNetForLoRA.SetTrainingMode(false);
                 try
                 {
-                    var warmupResult = _model.Predict(x);
+                    // One sample is enough to resolve lazy-layer shapes;
+                    // a full-dataset forward would do O(N) work and
+                    // allocate a full pass of activation tensors just to
+                    // shape-resolve. Carve off a 1-row probe.
+                    var warmupProbe = TrySliceFirstSampleForLoRAWarmup(x);
+                    var warmupResult = _model.Predict(warmupProbe);
                     System.GC.KeepAlive(warmupResult);
                 }
                 finally

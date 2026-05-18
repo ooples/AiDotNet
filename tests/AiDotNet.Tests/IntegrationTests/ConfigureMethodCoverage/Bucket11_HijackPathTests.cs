@@ -194,18 +194,19 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
             IsEnabled = false, // gate that skips the LLM round-trip
         };
 
-        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-            .ConfigureModel(model)
-            .ConfigureDataLoader(loader)
-            .ConfigureAgentAssistance(agentCfg)
-            .BuildAsync();
+        var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+        builder.ConfigureAgentAssistance(agentCfg);
+        builder.ConfigureModel(model);
+        builder.ConfigureDataLoader(loader);
+        await builder.BuildAsync();
 
         // The agent gate at AiModelBuilder.cs:2309 reads
         // _agentConfig.IsEnabled and only calls GetAgentRecommendationsAsync
-        // when true. A stored-but-not-consumed regression on the gate
-        // would unconditionally invoke the LLM. We assert that
-        // BuildAsync completed without a network call — the test runs
-        // in an environment with no LLM endpoint, so an unconditional
-        // call would throw. Reaching this line means the gate fired.
+        // when true. The test runs in an environment with no LLM
+        // endpoint, so an unconditional call would throw — successful
+        // BuildAsync proves the gate fired AND the configured value
+        // is reachable via the internal accessor (i.e. survives onto
+        // the builder for downstream consumers).
+        Assert.Same(agentCfg, builder.ConfiguredAgentAssistance);
     }
 }

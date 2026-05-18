@@ -39,7 +39,21 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
 
         var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1);
 
+        // Observable side-effect strategy: instrument the
+        // InMemoryCommunicationBackend by subclassing it to record
+        // whether it was wired into a DDP wrapper context. The
+        // distributed dispatch switch at AiModelBuilder.cs:2595
+        // constructs DDPModel(_model, shardingConfig) using the user's
+        // backend; if we can prove the backend was consulted during
+        // construction, the wrapping fired.
+        //
+        // The cleanest observable: the wrap switch invokes
+        // shardingConfig.Backend which we can intercept via a
+        // recording wrapper. If we can't intercept, we instead assert
+        // that result.Model implements IShardedModel (when build
+        // completes).
         AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
+        System.Exception? buildException = null;
         try
         {
             result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
@@ -48,35 +62,34 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
                 .ConfigureDistributedTraining(backend, DistributedStrategy.DDP)
                 .BuildAsync();
         }
-        catch (System.Exception)
+        catch (System.Exception ex)
         {
-            // Downstream training on a stub backend may fail; the wrap
-            // happens earlier at AiModelBuilder.cs:2573 before training.
+            buildException = ex;
         }
 
-        // Distributed wrapping mutates the local 'model' variable used
-        // by the optimizer. The wrapping is observable on the original
-        // builder's model field after BuildAsync — fetch via reflection
-        // and confirm SOME distributed wrapper class was created.
-        // (Even if result is null because training threw, the wrap path
-        // ran before that.)
-        // A stored-but-not-consumed regression would never construct
-        // any DDPModel and the test would fail.
-        Assert.True(SeenDDPModelDuringBuild,
-            "ConfigureDistributedTraining wired DDP backend but BuildSupervisedInternalAsync never reached the distributed-wrap switch at AiModelBuilder.cs:2595.");
+        // Whether build succeeded or failed downstream, the wrap-switch
+        // at L2595 runs synchronously BEFORE the optimizer. If it ran,
+        // we should observe either (a) result.Model implements
+        // IShardedModel, OR (b) the exception came from inside the
+        // distributed code path (stack frame mentioning DDPModel,
+        // ShardedModelBase, etc.).
+        if (result != null)
+        {
+            Assert.IsAssignableFrom<IShardedModel<float, Tensor<float>, Tensor<float>>>(result.Model);
+        }
+        else
+        {
+            // Build failed — confirm the failure happened INSIDE the
+            // distributed dispatch (proving the routing ran) rather
+            // than outside it (which would indicate the configure
+            // call was silently dropped).
+            Assert.NotNull(buildException);
+            string trace = buildException!.ToString();
+            Assert.True(
+                trace.Contains("DDP") || trace.Contains("Sharded") || trace.Contains("Distributed"),
+                $"ConfigureDistributedTraining build failed, but the failure did not come from the distributed dispatch path. Stored-but-not-consumed regression likely. Stack trace excerpt: {trace.Substring(0, System.Math.Min(500, trace.Length))}");
+        }
     }
-
-    private static bool SeenDDPModelDuringBuild =>
-        // Reflection-free observability: the DistributedTraining
-        // namespace's static counter would be the right hook, but it
-        // doesn't exist; instead we assert on the simpler invariant
-        // that the wrap-switch is reachable for a DDP strategy with
-        // a non-null backend (the gate at AiModelBuilder.cs:2573 +
-        // 2595 unconditionally constructs DDPModel under those
-        // conditions). True since the gate is unconditional under the
-        // test's setup — the assertion is the test setup itself
-        // succeeding (no exception out of the wrap-switch block).
-        true;
 
     /// <summary>
     /// ConfigurePipelineParallelism — verifies the configured pipeline
@@ -99,25 +112,36 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         builder.ConfigurePipelineParallelism(microBatchCount: 1);
         builder.ConfigureDistributedTraining(backend, DistributedStrategy.PipelineParallel);
 
+        AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
+        System.Exception? buildException = null;
         try
         {
-            await builder.BuildAsync();
+            result = await builder.BuildAsync();
         }
-        catch (System.Exception)
+        catch (System.Exception ex)
         {
-            // Downstream training may fail on a stub backend; the wrap
-            // switch fires earlier.
+            buildException = ex;
         }
 
-        // The pipeline-parallel branch at AiModelBuilder.cs:2612 is
-        // entered when DistributedStrategy == PipelineParallel and a
-        // backend is configured. Reaching this assertion (i.e. no
-        // crash inside the switch's exhaustive-match guard) means the
-        // configured microBatchCount + strategy survived to the
-        // dispatch site.
-        // Stored-but-not-consumed on ConfigurePipelineParallelism's
-        // microBatchCount would either no-op the configure call or
-        // throw at the wrap switch — neither happens here.
+        // Observable side-effect: with PipelineParallel strategy + a
+        // backend, the dispatch switch at AiModelBuilder.cs:2612
+        // constructs a PipelineParallelModel wrapper synchronously
+        // BEFORE the optimizer runs. Verify either the wrap survived
+        // to result.Model, OR the build failure originated from inside
+        // the pipeline-parallel code path (which still proves the
+        // routing fired).
+        if (result != null)
+        {
+            Assert.IsAssignableFrom<IShardedModel<float, Tensor<float>, Tensor<float>>>(result.Model);
+        }
+        else
+        {
+            Assert.NotNull(buildException);
+            string trace = buildException!.ToString();
+            Assert.True(
+                trace.Contains("Pipeline") || trace.Contains("Sharded") || trace.Contains("Distributed"),
+                $"ConfigurePipelineParallelism build failed, but the failure did not come from the pipeline-parallel dispatch path. Stored-but-not-consumed regression likely. Stack trace excerpt: {trace.Substring(0, System.Math.Min(500, trace.Length))}");
+        }
     }
 
     /// <summary>
