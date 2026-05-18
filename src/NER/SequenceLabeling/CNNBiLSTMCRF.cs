@@ -258,40 +258,21 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                SetTrainingMode(true);
-                try
-                {
-                    var preprocessed = PreprocessTokens(tokenEmbeddings);
-                    // Rank-aware seq-len lookup, mirroring Train. Shape[0]
-                    // is the batch size for rank-3 inputs and labels were
-                    // being sized to the batch count, violating the CRF
-                    // layer's sequence-length contract. See BiLSTMCRF.Train
-                    // for the full rationale.
-                    int targetSeqLen = preprocessed.Rank == 3
-                        ? preprocessed.Shape[1]
-                        : preprocessed.Shape[0];
-                    var preprocessedLabels = PreprocessLabels(labels, targetSeqLen);
-                    var output = Forward(preprocessed);
-                    double loss = NumOps.ToDouble(LossFunction.CalculateLoss(
-                        output.ToVector(), preprocessedLabels.ToVector()));
-                    var grad = LossFunction.CalculateDerivative(output.ToVector(), preprocessedLabels.ToVector());
-                    var gt = Tensor<T>.FromVector(grad);
-                    // Backward removed — tape-based training handles gradients
-                    _optimizer.UpdateParameters(Layers);
+                // Shared CRF-aware step — see BiLSTMCRF.TrainAsync for the
+                // longer-form rationale (in short: routes through CRF NLL
+                // when UseCRF=true so the async path doesn't silently
+                // train on a non-differentiable Viterbi-argmax objective).
+                double loss = RunCrfAwareTrainStep(
+                    tokenEmbeddings, labels, _options.UseCRF, _optimizer);
 
-                    progress?.Report(new NERTrainingProgress
-                    {
-                        CurrentEpoch = epoch,
-                        TotalEpochs = epochs,
-                        CurrentBatch = 1,
-                        TotalBatches = 1,
-                        Loss = loss
-                    });
-                }
-                finally
+                progress?.Report(new NERTrainingProgress
                 {
-                    SetTrainingMode(false);
-                }
+                    CurrentEpoch = epoch,
+                    TotalEpochs = epochs,
+                    CurrentBatch = 1,
+                    TotalBatches = 1,
+                    Loss = loss
+                });
             }
         }, cancellationToken);
     }
@@ -386,20 +367,18 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
-        SetTrainingMode(true);
-        try
-        {
-            // Mirror PredictLabels' preprocessing into Train so the CRF
-            // layer sees the locked sequence length it was constructed with
-            // (see BiLSTMCRF.Train for the longer-form rationale).
-            var preprocessedInput = PreprocessTokens(input);
-            int targetSeqLen = preprocessedInput.Rank == 3
-                ? preprocessedInput.Shape[1]
-                : preprocessedInput.Shape[0];
-            var preprocessedExpected = PreprocessLabels(expected, targetSeqLen);
-            TrainWithTape(preprocessedInput, preprocessedExpected);
-        }
-        finally { SetTrainingMode(false); }
+        // Delegate to the shared CRF-aware training step on
+        // SequenceLabelingNERBase — see BiLSTMCRF.Train for the rationale.
+        RunCrfAwareTrainStep(input, expected, _options.UseCRF, _optimizer);
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        // See BiLSTMCRF.GetNamedLayerActivations for rationale: preprocess
+        // before iterating layers so the CRF's locked sequence length matches.
+        var preprocessed = PreprocessTokens(input);
+        return base.GetNamedLayerActivations(preprocessed);
     }
 
     /// <inheritdoc />
@@ -547,11 +526,13 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         {
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
         }
-        else if (_useNativeMode)
-        {
-            Layers.Clear();
-            InitializeLayers();
-        }
+        // Native mode: do NOT clear+re-init Layers here. See the matching
+        // comment in BiLSTMCRF.DeserializeNetworkSpecificData — the base
+        // class already recreated every layer and called SetParameters
+        // with the saved trained weights; wiping them here drops those
+        // weights and replaces them with fresh random-init, which
+        // caused the Clone / DeepCopy round-trip to silently return a
+        // randomly-initialised model.
     }
 
     #endregion
@@ -589,30 +570,6 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         if (_options.NumLabels != _options.LabelNames.Length)
             throw new ArgumentException(
                 $"NumLabels ({_options.NumLabels}) must match LabelNames length ({_options.LabelNames.Length}).");
-    }
-
-    private Tensor<T> PreprocessLabels(Tensor<T> labels, int targetSeqLen)
-    {
-        if (labels.Rank < 1) return labels;
-
-        int labelLen = labels.Shape[0];
-        if (labelLen == targetSeqLen) return labels;
-
-        if (labels.Rank == 1)
-        {
-            var padded = new Tensor<T>([targetSeqLen]);
-            int copyLen = Math.Min(labelLen, targetSeqLen);
-            for (int i = 0; i < copyLen; i++) padded[i] = labels[i];
-            return padded;
-        }
-
-        int cols = labels.Shape[1];
-        var padded2 = new Tensor<T>([targetSeqLen, cols]);
-        int copyLen2 = Math.Min(labelLen, targetSeqLen);
-        for (int s = 0; s < copyLen2; s++)
-            for (int c = 0; c < cols; c++)
-                padded2[s, c] = labels[s, c];
-        return padded2;
     }
 
     private void ApplyOptionsToBase()
