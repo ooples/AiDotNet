@@ -50,7 +50,13 @@ namespace AiDotNet.Configuration;
 /// </example>
 public static class GpuDiagnosticsConfig
 {
-    private static GpuDiagnosticLevel _level = InitLevelFromEnvironment();
+    // Backing storage as a volatile int — the C# language spec doesn't
+    // guarantee Unsafe.As<TEnum, int> reinterpret preserves volatile
+    // semantics (review #1368 C88Jh / C88J4). A genuine volatile int
+    // field gives the language-guaranteed acquire/release fences directly
+    // and the enum cast happens lexically at the property boundary, which
+    // is a no-op at IL level for an int-backed enum.
+    private static volatile int _levelInt = (int)InitLevelFromEnvironment();
     private static GpuDiagnosticSink? _sink;
 
     /// <summary>
@@ -69,18 +75,15 @@ public static class GpuDiagnosticsConfig
     /// </remarks>
     public static GpuDiagnosticLevel Level
     {
-        // Volatile.Read/Write give an acquire/release fence on the backing
-        // int so concurrent readers outside the PushLevel/PopLevel lock
-        // see torn-free, fresh-ish values (review #1368 C8eez). The lock
-        // inside push/pop still serialises the stack mutation; this only
-        // closes the gap for direct property reads/writes from sibling
-        // code paths that bypass the lock.
-        get => (GpuDiagnosticLevel)System.Threading.Volatile.Read(ref System.Runtime.CompilerServices.Unsafe.As<GpuDiagnosticLevel, int>(ref _level));
+        // The backing field is `volatile int`, which is language-guaranteed
+        // to provide acquire/release semantics on every read/write
+        // (review #1368 C8eez / C88Jh / C88J4). The enum cast at the
+        // property boundary is a lexical no-op at IL level for an int-
+        // backed enum, so no reinterpret hazard remains.
+        get => (GpuDiagnosticLevel)_levelInt;
         set
         {
-            System.Threading.Volatile.Write(
-                ref System.Runtime.CompilerServices.Unsafe.As<GpuDiagnosticLevel, int>(ref _level),
-                (int)value);
+            _levelInt = (int)value;
             // Forward to Tensors layer. Silent/Minimal both suppress because
             // Tensors v0.38.0 only has a bool toggle — it doesn't yet support
             // per-message level tagging. Minimal-specific filtering becomes
@@ -104,7 +107,7 @@ public static class GpuDiagnosticsConfig
     /// </remarks>
     public static bool Verbose
     {
-        get => _level == GpuDiagnosticLevel.Verbose;
+        get => Level == GpuDiagnosticLevel.Verbose;
         set => Level = value ? GpuDiagnosticLevel.Verbose : GpuDiagnosticLevel.Silent;
     }
 
@@ -248,7 +251,7 @@ public static class GpuDiagnosticsConfig
         // Minimal = 1 permits Minimal + Verbose? No — Minimal permits Minimal-severity
         //   messages only. Verbose messages need level=Verbose.
         // So emit if current level >= message level in severity (numerically >=).
-        if (_level < level) return;
+        if (Level < level) return;
         var sink = _sink;
         if (sink is not null)
         {

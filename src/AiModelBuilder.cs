@@ -402,7 +402,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // contract break in debug builds without the runtime cost
             // in release (the bulk copy is the LoRA warmup's perf hot
             // path).
-            int totalElements = perSample * tensor.Shape[0];
+            // Long-typed product so a large tensor (e.g. [1024, 1024,
+            // 64, 64] = 4.3 GiB at fp32) doesn't silently overflow int —
+            // the assert below would otherwise fire spuriously on a
+            // legitimate tensor whose Data.Span.Length is correct (review
+            // #1368 C88RH). The slicing path only copies the first
+            // perSample elements anyway, so the assert is purely a
+            // contract sanity-check on the FULL backing storage.
+            long totalElements = (long)perSample * tensor.Shape[0];
             System.Diagnostics.Debug.Assert(
                 tensor.Data.Span.Length >= totalElements,
                 $"Tensor<T>.Data.Span ({tensor.Data.Span.Length}) shorter than logical " +
@@ -2842,7 +2849,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // OperationCanceledException + OutOfMemoryException +
                 // StackOverflowException propagate; everything else is
                 // genuine warmup variance and stays as a Trace warning).
-                System.Diagnostics.Trace.TraceWarning($"LoRA warmup forward failed: {ex.GetType().Name}: {ex.Message}. Proceeding — layers that materialised during the partial forward get wrapped; lazy ones get skipped via the IsShapeResolved guard.");
+                // Include ex.ToString() so the trace carries the full
+                // stack trace + inner exceptions, not just the top-frame
+                // message. Trace.TraceWarning is the only signal an
+                // operator has when the warmup fails silently (this PR's
+                // review C88M6: ex.Message dropped the origin frame and
+                // any chained inner exception, leaving a downstream
+                // skipped-lazy-layer mystery if the warmup actually
+                // failed inside an unrelated subsystem).
+                System.Diagnostics.Trace.TraceWarning(
+                    $"LoRA warmup forward failed (proceeding — layers that materialised get wrapped; " +
+                    $"lazy ones skipped via IsShapeResolved guard): {ex}");
             }
 
             int adaptedCount = 0;
@@ -3185,14 +3202,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var augContext = new AiDotNet.Augmentation.AugmentationContext<T>(
                 isTraining: true,
                 seed: _augmentationConfig.Seed);
-            var augmented = typedAug.Apply(preprocessedX, augContext);
+            // typedAug is IAugmentation<T, TInput>, so Apply returns
+            // TInput directly — no runtime cast needed (review #1368 C88R8:
+            // prior `augmented is TInput` was trivially true for reference
+            // types and a compile-time-known true for value types).
+            TInput augmented = typedAug.Apply(preprocessedX, augContext);
             // Update the train-side X with the augmented data so the
             // optimizer sees the transformed inputs.
             preprocessedX = augmented;
-            if (augmented is TInput typedAugmented)
-            {
-                XTrain = typedAugmented;
-            }
+            XTrain = augmented;
             // Emit the two ConfigureAugmentation constraint warnings
             // ONCE per process (not per Build) so multi-Build / CI
             // pipelines that exercise ConfigureAugmentation many times

@@ -44,7 +44,13 @@ public class Bucket7_TrainingPipelineAuxTests : ConfigureMethodTestBase
         // wiring fix, the optimizer keeps its default L2Regularization
         // and silently applies it.
         var sentinel = new NoRegularization<float, Tensor<float>, Tensor<float>>();
-        var adam = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null);
+        // Pass the configured model directly to the optimizer ctor — null
+        // is currently a supported sentinel but a future tightening to
+        // require IModel would silently break this test (review #1368
+        // C88Mk). The builder's BuildAsync re-resolves the model on its
+        // own, so this ctor argument is solely to satisfy the optimizer's
+        // construction-time invariant.
+        var adam = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(model);
 
         await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model)

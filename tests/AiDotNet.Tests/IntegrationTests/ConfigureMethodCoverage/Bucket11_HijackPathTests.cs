@@ -103,21 +103,43 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
     private static bool IsExceptionFromPostTrainSurface(System.Exception ex)
     {
         // Walk the chain (current + InnerException + AggregateException
-        // children). For each, scan StackTrace for any frame in the
-        // documented post-Train sites.
+        // children). For each, check TargetSite first (metadata, present
+        // even when StackTrace is null — happens for constructed-but-
+        // never-thrown exceptions and for some trimmed/AOT builds where
+        // the stack frames are elided) — then fall back to StackTrace
+        // string scanning (this PR's review C88O7: prior NRE catch with
+        // StackTrace-only filter would degrade to "no match" on a
+        // genuinely-thrown NRE whose StackTrace happened to be null,
+        // letting an unrelated pre-Train NRE escape the test as if it
+        // were the post-Train one).
+        var postTrainTypes = new[]
+        {
+            "AiDotNet.Models.Results.AiModelResult",
+            "BuildMetaLearningInternalAsync",
+            "AiModelResultOptions",
+            "GetModelMetadata",
+        };
         var visit = new System.Collections.Generic.Stack<System.Exception>();
         visit.Push(ex);
         while (visit.Count > 0)
         {
             var current = visit.Pop();
+            // Metadata path: declaring type of the immediate throw site.
+            if (current.TargetSite?.DeclaringType?.FullName is string declType)
+            {
+                foreach (var marker in postTrainTypes)
+                {
+                    if (declType.Contains(marker, System.StringComparison.Ordinal)) return true;
+                }
+            }
+            // Stack-trace path: works when frames haven't been trimmed
+            // (also handles the chained inner-exception case where the
+            // outer was wrapped after the inner's throw).
             if (current.StackTrace is string st)
             {
-                if (st.Contains("AiDotNet.Models.Results.AiModelResult", System.StringComparison.Ordinal)
-                    || st.Contains("BuildMetaLearningInternalAsync", System.StringComparison.Ordinal)
-                    || st.Contains("AiModelResultOptions", System.StringComparison.Ordinal)
-                    || st.Contains("GetModelMetadata", System.StringComparison.Ordinal))
+                foreach (var marker in postTrainTypes)
                 {
-                    return true;
+                    if (st.Contains(marker, System.StringComparison.Ordinal)) return true;
                 }
             }
             if (current.InnerException is not null) visit.Push(current.InnerException);

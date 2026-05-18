@@ -539,9 +539,12 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
                     ? "either input or output dimension"
                     : inputSize <= 0 ? "the input dimension" : "the output dimension") +
                 $" for base layer of type {_baseLayer.GetType().Name}. " +
-                $"Probed sources: weight-matrix infer (inputSize={inputSize}, outputSize={outputSize}); " +
+                $"Probe results: weight-matrix infer yielded inputSize={inputSize}, outputSize={outputSize} " +
+                $"(<=0 means the probe couldn't determine that dim); " +
                 $"GetInputShape() returned [{string.Join(", ", GetInputShape())}]; " +
-                $"GetOutputShape() returned [{string.Join(", ", GetOutputShape())}]. " +
+                $"GetOutputShape() returned [{string.Join(", ", GetOutputShape())}] " +
+                $"(review #1368 C88Pe: 'sources' was misleading — these are the OUTPUTS of probing those " +
+                $"sources, all <=0 meaning none of the probes succeeded). " +
                 "Callers should skip layers with IsShapeResolved=false before invoking the adapter constructor " +
                 "(see DefaultLoRAConfiguration.ApplyLoRA). Note: lazy-init layers (LayerNorm γ/β, MultiHeadAttention " +
                 "weight banks, etc.) materialise shapes only after first Forward. The LoRA warmup forward in " +
