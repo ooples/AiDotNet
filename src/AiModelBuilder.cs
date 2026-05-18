@@ -313,6 +313,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// expose a recognised slicing pattern — better to do a full forward
     /// than to error out on shape-resolution.
     /// </summary>
+    /// <remarks>
+    /// <para><b>Layout assumption</b> (review #1368): for Tensor&lt;T&gt;,
+    /// the slice loop assumes <see cref="Tensor{T}.GetFlat"/> /
+    /// <see cref="Tensor{T}.SetFlat"/> address a contiguous batch-first
+    /// row-major buffer (i.e. the first <c>perSample</c> flat positions
+    /// are the first sample's elements in row-major order). All
+    /// AiDotNet.Tensors tensor allocations satisfy this — the storage
+    /// is a contiguous <c>T[]</c> with row-major strides — but if a
+    /// future tensor backend exposes non-contiguous views (e.g. stride
+    /// tricks for slicing without copy), this loop would silently copy
+    /// the wrong elements. <see cref="Tensor{T}.GetFlat"/>'s contract
+    /// is "flat index across the contiguous storage in row-major
+    /// order" which holds today; revisit if that contract relaxes.</para>
+    /// <para><b>Future direction</b>: the proper fix is to eliminate
+    /// the warmup forward entirely via a layer-side
+    /// <c>TryDeclareShape()</c> oracle that lets lazy-init layers
+    /// declare their shapes from constructor / config args without
+    /// needing a forward pass. Tracked at
+    /// <see href="https://github.com/ooples/AiDotNet/issues/1370">#1370</see>.
+    /// Until that ships, this 1-sample slice is the perf-stopgap for the
+    /// warmup cost (one row, one forward, one-time at Build).</para>
+    /// </remarks>
     private static TInput TrySliceFirstSampleForLoRAWarmup(TInput x)
     {
         // Tensor<T>: take the first sample along axis 0.
@@ -325,13 +347,20 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             int perSample = 1;
             for (int i = 1; i < tensor.Shape.Length; i++) perSample *= tensor.Shape[i];
             var slice = new Tensor<T>(sliceShape);
+            // Contiguous batch-first row-major copy — see <remarks> above
+            // for the layout assumption. Per-element GetFlat/SetFlat is
+            // intentionally simple here; the loop runs once per Build
+            // call with perSample ≤ ctxLen × featureDim, so even on
+            // foundation-scale models this is well under the warmup
+            // forward's own work.
             for (int i = 0; i < perSample; i++)
             {
                 slice.SetFlat(i, tensor.GetFlat(i));
             }
             if (slice is TInput typedSlice) return typedSlice;
         }
-        // Fallback: full forward.
+        // Fallback: full forward (non-Tensor TInput, or single-sample
+        // input where slicing is unnecessary).
         return x;
     }
 
