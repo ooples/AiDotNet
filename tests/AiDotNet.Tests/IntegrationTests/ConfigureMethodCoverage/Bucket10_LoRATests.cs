@@ -105,11 +105,15 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
                 .ConfigureLoRA(loraConfig)
                 .BuildAsync();
         }
-        catch (System.ArgumentException ex) when (ex.Message.Contains("LoRA") || ex.StackTrace?.Contains("LoRA") == true)
+        // Filter expected lora-path exceptions by exception-chain provenance
+        // (TargetSite namespace OR stack-frame namespace prefix), NOT by
+        // message-substring on "LoRA" which would silently miss a renamed
+        // adapter class or message-text refactor (review #1368 C6WLs).
+        catch (System.ArgumentException ex) when (IsExceptionFromNamespace(ex, "AiDotNet.LoRA"))
         {
             buildEx = ex;
         }
-        catch (System.InvalidOperationException ex) when (ex.Message.Contains("LoRA") || ex.StackTrace?.Contains("LoRA") == true)
+        catch (System.InvalidOperationException ex) when (IsExceptionFromNamespace(ex, "AiDotNet.LoRA"))
         {
             buildEx = ex;
         }
@@ -132,5 +136,35 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
             (buildEx is null
                 ? "Build completed without throwing."
                 : $"Build threw {buildEx.GetType().Name}: {buildEx.Message}"));
+    }
+
+    /// <summary>
+    /// Provenance check: returns true if <paramref name="ex"/> originated
+    /// from a method inside <paramref name="namespacePrefix"/> (current
+    /// exception or any chained inner / aggregate child). Walks the
+    /// exception chain checking each TargetSite.DeclaringType.FullName
+    /// plus the stack-trace text for the "at <prefix>." pattern. Replaces
+    /// brittle message-substring matching (review #1368 C6WLs).
+    /// </summary>
+    private static bool IsExceptionFromNamespace(System.Exception ex, string namespacePrefix)
+    {
+        var visit = new System.Collections.Generic.Stack<System.Exception>();
+        visit.Push(ex);
+        while (visit.Count > 0)
+        {
+            var current = visit.Pop();
+            if (current.TargetSite?.DeclaringType?.FullName is string declType
+                && declType.StartsWith(namespacePrefix, System.StringComparison.Ordinal))
+                return true;
+            if (current.StackTrace is string st
+                && st.Contains("at " + namespacePrefix + ".", System.StringComparison.Ordinal))
+                return true;
+            if (current.InnerException is not null) visit.Push(current.InnerException);
+            if (current is System.AggregateException agg)
+            {
+                foreach (var inner in agg.InnerExceptions) visit.Push(inner);
+            }
+        }
+        return false;
     }
 }

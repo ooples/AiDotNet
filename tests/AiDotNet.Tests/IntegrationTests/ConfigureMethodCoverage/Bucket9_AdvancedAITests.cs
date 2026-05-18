@@ -157,8 +157,17 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
                 .BuildAsync();
         });
 
-        // Diagnostic must point the user at the supported alternatives.
-        Assert.Contains("KnowledgeDistillation", ex.Message);
-        Assert.Contains("tape", ex.Message);
+        // Assert by exception TYPE + origin (TargetSite namespace in
+        // AiDotNet — confirms the throw came from production code, not
+        // from a runtime / framework-level NRE) rather than by message
+        // substring. The message text is human-readable and can be
+        // rephrased by a future maintainer without breaking behavior —
+        // type+namespace assertions don't drift (review #1368 C6WMo).
+        Assert.IsType<System.NotSupportedException>(ex);
+        Assert.True(
+            ex.TargetSite?.DeclaringType?.FullName?.StartsWith("AiDotNet.", System.StringComparison.Ordinal) == true
+            || (ex.StackTrace?.Contains("at AiDotNet.", System.StringComparison.Ordinal) == true),
+            $"Expected the throw to originate inside AiDotNet.* code (production builder path). " +
+            $"Got TargetSite={ex.TargetSite?.DeclaringType?.FullName ?? "<null>"} | message={ex.Message}");
     }
 }

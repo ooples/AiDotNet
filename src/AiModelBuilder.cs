@@ -368,16 +368,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             int perSample = 1;
             for (int i = 1; i < tensor.Shape.Length; i++) perSample *= tensor.Shape[i];
             var slice = new Tensor<T>(sliceShape);
-            // Contiguous batch-first row-major copy — see <remarks> above
-            // for the layout assumption. Per-element GetFlat/SetFlat is
-            // intentionally simple here; the loop runs once per Build
-            // call with perSample ≤ ctxLen × featureDim, so even on
-            // foundation-scale models this is well under the warmup
-            // forward's own work.
-            for (int i = 0; i < perSample; i++)
-            {
-                slice.SetFlat(i, tensor.GetFlat(i));
-            }
+            // Bulk Span<T>.CopyTo over the first `perSample` elements of
+            // the source tensor's storage into the slice tensor's
+            // storage. Both are contiguous row-major Span<T> views over
+            // managed T[] arrays (AiDotNet.Tensors tensor allocation
+            // contract); CopyTo dispatches to the JIT's vectorized
+            // memmove. Replaces the prior per-element GetFlat/SetFlat
+            // loop, which made two virtual calls per element on the
+            // training hot path (review #1368 C6WM9). One call per
+            // Build instead of perSample calls.
+            tensor.Data.Span.Slice(0, perSample).CopyTo(slice.Data.Span);
             if (slice is TInput typedSlice) return typedSlice;
         }
         // Fallback: full forward (non-Tensor TInput, or single-sample
@@ -2657,8 +2657,31 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     neuralNetForLoRA.SetTrainingMode(prevTrainingMode);
                 }
             }
+            catch (OperationCanceledException)
+            {
+                // Cancellation propagates — caller wants out, not a swallowed warmup.
+                throw;
+            }
+            catch (OutOfMemoryException)
+            {
+                // Critical: don't mask. The host may need to abort.
+                throw;
+            }
+            catch (StackOverflowException)
+            {
+                // Critical, but technically uncatchable — included for documentation.
+                throw;
+            }
             catch (Exception ex)
             {
+                // Best-effort warmup: documented forward-mode requirements
+                // (e.g. layers that need IsTrainingMode=true) can throw here.
+                // The ApplyLoRA-side IsShapeResolved guard silently skips
+                // still-unresolved layers so the wrap loop succeeds on
+                // materialized ones (review #1368 C6WOG: narrowed to let
+                // OperationCanceledException + OutOfMemoryException +
+                // StackOverflowException propagate; everything else is
+                // genuine warmup variance and stays as a Trace warning).
                 System.Diagnostics.Trace.TraceWarning($"LoRA warmup forward failed: {ex.GetType().Name}: {ex.Message}. Proceeding — layers that materialised during the partial forward get wrapped; lazy ones get skipped via the IsShapeResolved guard.");
             }
 
@@ -2975,22 +2998,25 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     "AugmentationConfig<T, TInput>.Augmenter property for a compile-time-checked " +
                     "setter that catches this at the call site.");
             }
-            if (preprocessedX is not TInput xForAug)
+            // `preprocessedX` is statically `TInput` (declared at L2799), so the
+            // earlier `preprocessedX is not TInput` pattern-match was effectively
+            // an always-false branch for non-null values — the reviewer (review
+            // #1368 C6WKa) correctly flagged it as dead. Keep an explicit null
+            // guard since TInput may be a reference type and a buggy upstream
+            // preprocessing pipeline could legitimately produce null (caught
+            // here at Build time instead of NRE-ing inside the augmenter).
+            if (preprocessedX is null)
             {
                 throw new InvalidOperationException(
-                    $"ConfigureAugmentation: the preprocessing pipeline output is " +
-                    $"{preprocessedX?.GetType().Name ?? "null"}, not the expected {typeof(TInput).Name}. " +
-                    "ConfigurePreprocessing transformers that change the input type (e.g. matrix → tensor " +
-                    "conversion) must run AFTER ConfigureAugmentation, or the augmentation should be done " +
-                    "by the preprocessing pipeline itself. The augmenter type is correct " +
-                    $"({customAug.GetType().Name} : IAugmentation<{typeof(T).Name}, {typeof(TInput).Name}>); " +
-                    "the type mismatch is on the preprocessed input.");
+                    "ConfigureAugmentation: the preprocessing pipeline output is null. " +
+                    "ConfigurePreprocessing transformers must not return null for non-empty input. " +
+                    "Check the configured pipeline's FitTransform implementation.");
             }
 
             var augContext = new AiDotNet.Augmentation.AugmentationContext<T>(
                 isTraining: true,
                 seed: _augmentationConfig.Seed);
-            var augmented = typedAug.Apply(xForAug, augContext);
+            var augmented = typedAug.Apply(preprocessedX, augContext);
             // Update the train-side X with the augmented data so the
             // optimizer sees the transformed inputs.
             preprocessedX = augmented;
