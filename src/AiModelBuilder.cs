@@ -3344,6 +3344,70 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             optimizationResult.BestSolution = currentModel;
         }
 
+        // ============================================================================
+        // CURRICULUM LEARNING (#1361 #3) — runs a curriculum-scheduled refinement pass
+        // over a user-supplied Dataset after main training (and any fine-tuning /
+        // pipeline stages). The CurriculumLearner ranks samples by difficulty using
+        // either the user's CustomDifficultyEstimator or a LossBasedDifficultyEstimator
+        // tied to the trained model's internal loss, then trains in phases from easy
+        // to hard. The post-curriculum model replaces optimizationResult.BestSolution.
+        //
+        // Dataset auto-extraction from the configured DataLoader is out-of-scope for
+        // this wire-up — different loaders have different per-sample contracts. When
+        // the caller does not supply CurriculumLearningOptions.Dataset, the curriculum
+        // pass is skipped (configuration-only mode).
+        // ============================================================================
+        if (_curriculumLearningOptions is not null && _curriculumLearningOptions.Dataset is not null)
+        {
+            if (optimizationResult.BestSolution is null)
+                throw new InvalidOperationException(
+                    "ConfigureCurriculumLearning was provided with a Dataset but main training did not " +
+                    "produce a BestSolution to curriculum-train. Check earlier logs for an upstream " +
+                    "training failure.");
+
+            var curriculumConfig = new AiDotNet.CurriculumLearning.CurriculumLearnerConfig<T>
+            {
+                TotalEpochs = _curriculumLearningOptions.TotalEpochs ?? 100,
+                NumPhases = _curriculumLearningOptions.NumPhases ?? 5,
+                InitialDataFraction = MathHelper.GetNumericOperations<T>().FromDouble(
+                    _curriculumLearningOptions.InitialDataFraction ?? 0.2),
+                FinalDataFraction = MathHelper.GetNumericOperations<T>().FromDouble(
+                    _curriculumLearningOptions.FinalDataFraction ?? 1.0),
+                ScheduleType = _curriculumLearningOptions.ScheduleType,
+                RecalculateDifficulties = _curriculumLearningOptions.RecalculateDifficulties ?? false,
+                DifficultyRecalculationFrequency = _curriculumLearningOptions.DifficultyRecalculationFrequency ?? 10,
+                NormalizeDifficulties = _curriculumLearningOptions.NormalizeDifficulties ?? true,
+                EarlyStoppingPatience = _curriculumLearningOptions.EarlyStopping?.Patience ?? 10,
+                EarlyStoppingMinDelta = MathHelper.GetNumericOperations<T>().FromDouble(
+                    _curriculumLearningOptions.EarlyStopping?.MinDelta ?? 0.001),
+                UseEarlyStopping = _curriculumLearningOptions.EarlyStopping?.Enabled ?? true,
+                BatchSize = _curriculumLearningOptions.BatchSize ?? 32,
+                LearningRate = MathHelper.GetNumericOperations<T>().FromDouble(0.001),
+                ShuffleWithinPhase = _curriculumLearningOptions.ShuffleWithinPhase ?? true,
+                UseDifficultyWeighting = _curriculumLearningOptions.UseDifficultyWeighting ?? false,
+                RandomSeed = _curriculumLearningOptions.RandomSeed,
+                Verbosity = _curriculumLearningOptions.Verbosity,
+            };
+
+            var difficultyEstimator = _curriculumLearningOptions.CustomDifficultyEstimator
+                ?? new AiDotNet.CurriculumLearning.DifficultyEstimators
+                       .LossBasedDifficultyEstimator<T, TInput, TOutput>(
+                           lossFunction: null,
+                           normalize: curriculumConfig.NormalizeDifficulties);
+
+            var curriculumLearner = new AiDotNet.CurriculumLearning.CurriculumLearner<T, TInput, TOutput>(
+                baseModel: optimizationResult.BestSolution,
+                config: curriculumConfig,
+                difficultyEstimator: difficultyEstimator,
+                scheduler: _curriculumLearningOptions.CustomScheduler);
+
+            curriculumLearner.Train(_curriculumLearningOptions.Dataset);
+
+            // The CurriculumLearner mutates BaseModel in place; reassign to make the
+            // post-curriculum weights explicit for downstream consumers.
+            optimizationResult.BestSolution = curriculumLearner.BaseModel;
+        }
+
         var trainingEndTime = DateTime.UtcNow;
         var trainingDuration = trainingEndTime - trainingStartTime;
 
