@@ -1,6 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -112,7 +114,16 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new FeedForwardNeuralNetworkOptions();
         Options = _options;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default to AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). Standard
+        // Adam's bias-corrected m̂ / √v̂ ratio doesn't decay fast enough
+        // after gradient convergence, so on fixed-input regression tasks
+        // it drifts the parameters away from a tight optimum over long
+        // training runs (MoreData_ShouldNotDegrade invariant). AMSGrad's
+        // running v̂_max guarantees the denominator can only grow,
+        // bounding the drift to negligible levels. Issue #1332 cluster 6.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
 
         // Select appropriate loss function based on task type if not provided
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);

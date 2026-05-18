@@ -1483,6 +1483,16 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _lastProjectedKeys = null;
         _lastProjectedValues = null;
 
+        // #1340 / #1359: these three fields were previously missed by ResetState
+        // and accumulated across forward passes — contributing to the per-call
+        // heap retention measured at ~79 KB/call on AiDotNet 0.198.0 (down from
+        // 1.55 MB on 0.75.4 after Tensors PR #360 closed the CompiledDelegateChain
+        // gap, but still measurable). They also caused the stale-reference NaN
+        // bug for deeper-layer MHA documented in #1359.
+        _lastQueryInput = null;
+        _lastKeyInput = null;
+        _lastValueInput = null;
+
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;
@@ -1496,5 +1506,45 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _gpuV = null;
         _gpuContextFlat = null;
         _gpuAttentionWeights = null;
+    }
+
+    /// <summary>
+    /// Overrides the base SetTrainingMode to drop training-only caches when
+    /// transitioning to eval mode. Without this, the Forward path's
+    /// unconditional cache writes (lines 992-1094) retain tensors across
+    /// inference calls — the source of the per-call retention measured in
+    /// #1340 and the stale-reference NaN bugs in #1359.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The cache fields (<c>_lastQueryInput</c>, <c>_lastProjectedQueries</c>,
+    /// <c>_lastAttentionScores</c>, etc.) are written unconditionally inside
+    /// Forward because the backward pass needs them. When the consumer switches
+    /// to eval mode via <c>model.SetTrainingMode(false)</c>, those caches are
+    /// no longer needed but were previously leaked until the model itself was
+    /// disposed. This override drops them on the mode transition.
+    /// </para>
+    /// <para>
+    /// Training-mode → training-mode (re-entrant) is a no-op: the next Forward
+    /// will overwrite the cache fields anyway, so we only clear on
+    /// <c>training=false</c> to avoid pointless work.
+    /// </para>
+    /// </remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        // CodeRabbit feedback on #1366: only ResetState on a true
+        // training→eval transition. Calling SetTrainingMode(false) when the
+        // layer is ALREADY in eval mode (e.g. consumer re-asserts eval after
+        // a Predict batch) shouldn't clear caches a second time — the caches
+        // are already null and the bookkeeping would be wasted work + risk
+        // clearing other state the layer might have set since the last
+        // transition. Capture the previous mode before delegating to base,
+        // then gate the ResetState() on the actual edge.
+        bool wasTraining = IsTrainingMode;
+        base.SetTrainingMode(isTraining);
+        if (wasTraining && !isTraining)
+        {
+            ResetState();
+        }
     }
 }
