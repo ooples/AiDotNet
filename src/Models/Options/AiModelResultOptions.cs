@@ -184,6 +184,20 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// meta-learning / distributed) that own the trained model and
     /// training data but haven't called Fit yet.
     /// </para>
+    /// <para>
+    /// <b>Important — fit-sample shape:</b> <typeparamref name="TOutput"/>
+    /// must be a <i>batched</i> representation (e.g. <c>Tensor&lt;T&gt;</c>
+    /// with shape <c>[batch, features]</c> or <c>Matrix&lt;T&gt;</c>) when
+    /// the pipeline contains data-distribution-learning transformers
+    /// (StandardScaler, MinMaxScaler, QuantileTransformer, RobustScaler,
+    /// PowerTransformer, LabelEncoder, etc.) — a single-row sample will
+    /// fit those transformers to degenerate statistics
+    /// (zero variance, max == min). For these cases supply enough rows for
+    /// the statistic to stabilise (typically ≥ 256 rows; for power
+    /// transformers ≥ 4096), or pre-fit the pipeline yourself via
+    /// <c>PostprocessingPipeline.Fit(...)</c> on representative model
+    /// outputs and leave this slot null (review #1368 C7mlj).
+    /// </para>
     /// </remarks>
     public TOutput? PostprocessingFitSample { get; set; }
 

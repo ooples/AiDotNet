@@ -37,21 +37,12 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
 
-        var backend = new InMemoryCommunicationBackend<float>(rank: 0, worldSize: 1);
-
-        // Observable side-effect strategy: instrument the
-        // InMemoryCommunicationBackend by subclassing it to record
-        // whether it was wired into a DDP wrapper context. The
-        // distributed dispatch switch at AiModelBuilder.cs:2595
-        // constructs DDPModel(_model, shardingConfig) using the user's
-        // backend; if we can prove the backend was consulted during
-        // construction, the wrapping fired.
-        //
-        // The cleanest observable: the wrap switch invokes
-        // shardingConfig.Backend which we can intercept via a
-        // recording wrapper. If we can't intercept, we instead assert
-        // that result.Model implements IShardedModel (when build
-        // completes).
+        // Recording subclass tracks every method-call/property-read on
+        // the backend so we can prove the wrap switch ACTUALLY consulted
+        // it (vs. accepting "any exception in the AiDotNet.Distributed-
+        // Training namespace" which would silently mask a regression
+        // unrelated to routing — this PR's review C7G8U).
+        var backend = new RecordingCommBackend<float>(rank: 0, worldSize: 1);
         AiModelResult<float, Tensor<float>, Tensor<float>>? result = null;
         System.Exception? buildException = null;
         try
@@ -84,11 +75,54 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         else
         {
             Assert.NotNull(buildException);
+            // Tightened (this PR's review C7G8U): require BOTH a
+            // distributed-namespace origin AND evidence the backend was
+            // touched during construction. A permanent regression
+            // somewhere in AiDotNet.DistributedTraining unrelated to the
+            // routing wouldn't increment AccessCount; the routing fire
+            // must have read Rank/WorldSize at minimum.
             Assert.True(
                 IsExceptionFromNamespace(buildException!, "AiDotNet.DistributedTraining"),
                 $"ConfigureDistributedTraining build failed, but the failure did not originate inside " +
                 $"the AiDotNet.DistributedTraining namespace. Stored-but-not-consumed regression likely. " +
                 $"Top-frame: {buildException!.GetType().FullName} | message: {buildException.Message}");
+            Assert.True(
+                backend.AccessCount > 0,
+                $"ConfigureDistributedTraining build failed in the DistributedTraining namespace, but " +
+                $"the configured backend was never touched (AccessCount=0). This points at a regression " +
+                $"BEFORE the wrap switch ran, not at the wrap itself — stored-but-not-consumed.");
+        }
+    }
+
+    /// <summary>
+    /// Recording subclass of <see cref="InMemoryCommunicationBackend{T}"/>
+    /// that tallies every property read and collective-call entry. Used
+    /// by the DDP / pipeline-parallel / federated routing tests to
+    /// distinguish "wrap fired and downstream failed" (AccessCount &gt; 0)
+    /// from "regression before the wrap fired" (AccessCount == 0).
+    /// </summary>
+    private sealed class RecordingCommBackend<TNum> : InMemoryCommunicationBackend<TNum>
+    {
+        private int _accessCount;
+        public int AccessCount => System.Threading.Interlocked.CompareExchange(ref _accessCount, 0, 0);
+        public RecordingCommBackend(int rank, int worldSize) : base(rank, worldSize) { }
+        public override int Rank
+        {
+            get { System.Threading.Interlocked.Increment(ref _accessCount); return base.Rank; }
+        }
+        public override int WorldSize
+        {
+            get { System.Threading.Interlocked.Increment(ref _accessCount); return base.WorldSize; }
+        }
+        public override void Barrier()
+        {
+            System.Threading.Interlocked.Increment(ref _accessCount);
+            base.Barrier();
+        }
+        public override void AllReduce(Vector<TNum> data, ReductionOperation operation)
+        {
+            System.Threading.Interlocked.Increment(ref _accessCount);
+            base.AllReduce(data, operation);
         }
     }
 

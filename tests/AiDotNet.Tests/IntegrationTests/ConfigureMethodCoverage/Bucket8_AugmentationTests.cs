@@ -73,10 +73,17 @@ public class Bucket8_AugmentationTests : ConfigureMethodTestBase
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
 
-        var recorder = new RecordingAugmenter();
+        // Explicit IsEnabled=true on the inner recorder makes the test
+        // load-bearing for the OUTER AugmentationConfig.IsEnabled=false
+        // gate: if the builder failed to check the outer flag and instead
+        // checked the inner recorder's flag, ApplyCalls would still be
+        // > 0. Setting inner true forces the outer to be the only stopper
+        // (this PR's review C7mnX).
+        var recorder = new RecordingAugmenter { IsEnabled = true };
         var augCfg = new AugmentationConfig
         {
-            IsEnabled = false,
+            IsEnabled = false, // OUTER gate — this is the only thing
+                               // that can prevent Apply from firing.
             CustomAugmenter = recorder,
         };
 

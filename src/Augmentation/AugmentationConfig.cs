@@ -165,14 +165,23 @@ public class AugmentationConfig
     /// optimizer runs.
     /// </summary>
     /// <remarks>
-    /// <para>The slot is typed as <see cref="object"/> on this base class
-    /// because <see cref="AugmentationConfig"/> is non-generic and the
-    /// <c>IAugmentation&lt;T, TData&gt;</c> interface carries the concrete
-    /// data type. <b>Prefer the generic <see cref="AugmentationConfig{T, TInput}"/></b>
-    /// (review #1368) which exposes a strongly-typed
-    /// <see cref="AugmentationConfig{T, TInput}.Augmenter"/> property
-    /// with full IntelliSense and compile-time safety. The builder reads
-    /// from whichever surface is populated.</para>
+    /// <para><b>Type-safety warning (review #1368 C6WK-):</b> this slot is
+    /// typed as <see cref="object"/> because <see cref="AugmentationConfig"/>
+    /// is non-generic and the <c>IAugmentation&lt;T, TData&gt;</c>
+    /// interface carries the concrete data type. The builder's
+    /// augmentation-apply block runtime-casts to
+    /// <c>IAugmentation&lt;T, TInput&gt;</c> matching the
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}"/>'s generic
+    /// parameters; a mis-typed augmenter (wrong <c>T</c> or <c>TData</c>)
+    /// surfaces as an <see cref="InvalidOperationException"/> at Build
+    /// time, not at the IDE. <b>Always prefer the generic
+    /// <see cref="AugmentationConfig{T, TInput}"/></b> subclass which
+    /// exposes a strongly-typed
+    /// <see cref="AugmentationConfig{T, TInput}.Augmenter"/> property —
+    /// that surface catches the type mismatch at the call site with full
+    /// IntelliSense. The builder reads from whichever surface is populated,
+    /// so existing callers don't break, but new callers should use the
+    /// generic surface.</para>
     /// <para>This is the integration point between
     /// <c>AiModelBuilder.ConfigureAugmentation</c> and the existing
     /// <c>src/Augmentation/*</c> augmenter zoo (image / audio / text /
@@ -364,6 +373,17 @@ public class AugmentationConfig<T, TInput> : AugmentationConfig
     /// Image-modality preset with industry-standard defaults. Parameterised
     /// generic counterpart of <see cref="AugmentationConfig.ForImages"/>.
     /// </summary>
+    /// <remarks>
+    /// Uses the <c>new</c> modifier to hide the base-class static factory
+    /// (statics are not inherited and not virtual in C#). Method-resolution
+    /// is purely lexical on the type expression: <c>AugmentationConfig.ForImages()</c>
+    /// invokes the base factory and returns the non-generic
+    /// <see cref="AugmentationConfig"/>; <c>AugmentationConfig&lt;T, TInput&gt;.ForImages()</c>
+    /// invokes this factory and returns the strongly-typed subclass —
+    /// which is still assignment-compatible with an <see cref="AugmentationConfig"/>
+    /// reference via polymorphism (the runtime instance carries the
+    /// generic type) (review #1368 C7G_V / C7mpE).
+    /// </remarks>
     public static new AugmentationConfig<T, TInput> ForImages() => new()
     {
         ImageSettings = new ImageAugmentationSettings(),
