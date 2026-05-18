@@ -585,11 +585,19 @@ public class BuildAsyncResidualModeCollapseTests
             predFlat = lastSlice;
         }
         // CategoricalCrossEntropyLoss.CalculateLoss(Vector, Vector) returns the
-        // SUM over the full vector (no batch averaging). ComputeTapeLoss averages
-        // over batch axes. Match that mean to get a comparable finite-difference
-        // gradient. Divide by the leading (batch) dimension of the target shape.
+        // SUM over the full vector (no axis averaging). ComputeTapeLoss applies
+        // ReduceMean over ALL axes of the target tensor (e.g. for [batch, seq,
+        // class] targets the production reduction divides by batch*seq*class,
+        // not batch only). To match exactly, divide by the TOTAL element
+        // count of the targets tensor — that's the same denominator
+        // ReduceMean uses (review #1364 C4nL_: divide-by-batch-only was an
+        // axis mismatch with the production LossFunctionBase reductions for
+        // rank > 2 targets; for rank-2 [batch, classes] it happens to be
+        // arithmetic-equivalent to ReduceMean since classes is then the
+        // remaining axis size).
         float rawSum = loss.CalculateLoss(predFlat, tgtFlat);
-        int batchDim = targets.Shape[0];
-        return rawSum / Math.Max(1, batchDim);
+        int totalTargetElements = 1;
+        for (int i = 0; i < targets.Shape.Length; i++) totalTargetElements *= targets.Shape[i];
+        return rawSum / Math.Max(1, totalTargetElements);
     }
 }

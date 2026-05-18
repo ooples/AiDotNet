@@ -157,6 +157,60 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected SchedulerStepMode _schedulerStepMode;
 
     /// <summary>
+    /// Puts the model into training mode at the start of an Optimize run.
+    /// Mirror call: <see cref="EndOptimizeRun"/>. Lifted to base in
+    /// PR #1364 so every gradient optimizer can satisfy the H2 contract
+    /// (training-mode toggle around the epoch loop) with a single call
+    /// without duplicating the type-check + cast across 27 subclass
+    /// Optimize methods (review #1364 C4nLO).
+    /// </summary>
+    /// <param name="solution">The model being optimized.</param>
+    protected static void BeginOptimizeRun(object? solution)
+    {
+        (solution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
+    }
+
+    /// <summary>
+    /// Returns the model to eval mode at the end of an Optimize run.
+    /// MUST be called from a finally block so the eval-mode invariant
+    /// holds even if the epoch loop throws (next Predict / evaluation
+    /// call would otherwise accidentally engage dropout / batchnorm
+    /// running-stats).
+    /// </summary>
+    /// <param name="solution">The model being optimized.</param>
+    protected static void EndOptimizeRun(object? solution)
+    {
+        (solution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Returns true when the per-epoch convergence signal is below
+    /// <paramref name="tolerance"/>. Implements the H6/issue-#1340 fix:
+    /// compares CURRENT against PREVIOUS epoch fitness (not against
+    /// best, which would false-positive-converge on epoch 0 because
+    /// UpdateBestSolution copies currentStepData into bestStepData on
+    /// the first iteration) and SKIPS the check on epoch 0 (where
+    /// previousStepData is the pre-training baseline and a small
+    /// delta is meaningless — review #1364 C4nK1).
+    /// </summary>
+    /// <param name="epoch">The current epoch number (0-based).</param>
+    /// <param name="current">Fitness data from this epoch.</param>
+    /// <param name="previous">Fitness data from the prior epoch.</param>
+    /// <param name="tolerance">The convergence threshold.</param>
+    /// <returns>True if the optimizer should stop; false otherwise.</returns>
+    protected bool IsConvergedAgainstPreviousEpoch(
+        int epoch,
+        OptimizationStepData<T, TInput, TOutput> current,
+        OptimizationStepData<T, TInput, TOutput> previous,
+        double tolerance)
+    {
+        if (epoch <= 0) return false;
+        return NumOps.LessThan(
+            NumOps.Abs(NumOps.Subtract(previous.FitnessScore, current.FitnessScore)),
+            NumOps.FromDouble(tolerance));
+    }
+
+    /// <summary>
     /// The current step (batch) number for scheduler tracking.
     /// </summary>
     protected int _currentStep = 0;
@@ -900,10 +954,25 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             gradient = gradient.Divide(NumOps.FromDouble(batchSize));
         }
 
+        // Use the regularizer's gradient-aware Regularize overload
+        // (Regularize(gradient, coefficients)) which adds the proper
+        // gradient contribution: 2*lambda*p for L2, sign(p)*lambda for
+        // L1 (the SOFT-THRESHOLD identity `params - Regularize(params)`
+        // is WRONG for L1 — it only holds on the convex envelope, not
+        // on individual entries that crossed zero). Each regularizer
+        // already implements its own gradient math via this overload
+        // (see RegularizationBase.Regularize(TOutput, TOutput)) — the
+        // optimizer should ALWAYS go through it instead of
+        // reconstructing the gradient from the prox transform
+        // (review #1364 C4nKJ).
         var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        var regularizedParameters = Regularization.Regularize(parameters);
-        var regularizationContribution = (Vector<T>)Engine.Subtract(parameters, regularizedParameters);
-        gradient = (Vector<T>)Engine.Add(gradient, regularizationContribution);
+        // `Regularize(gradient, coefficients)` returns gradient + ∂R/∂p
+        // already summed. Cast through TOutput because the interface is
+        // generic — for Vector<T> it round-trips trivially.
+        var regularizedGradient = Regularization.Regularize(
+            (TOutput)(object)gradient,
+            (TOutput)(object)parameters);
+        gradient = (Vector<T>)(object)regularizedGradient!;
 
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
@@ -1388,49 +1457,140 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             return 0L;
         }
 
-        Vector<T> parameters;
+        // Stream over GetParameterChunks (the per-layer parameter tensors)
+        // and feed a strided sample of bit patterns into a 64-bit FNV-1a
+        // hash. Zero-allocation hot path — replaces the previous
+        // GetParameters() call that materialized a full flat Vector<T>
+        // per batch on every gradient-cache lookup. For foundation
+        // models (hundreds of millions of params) this was a real
+        // allocator + GC hit (review #1364 C4nJL).
+        //
+        // FNV-1a chosen over System.HashCode because the latter is
+        // unstable across process restarts (uses a random seed), which
+        // would break gradient-cache-hit semantics if the cache ever
+        // persists. FNV-1a is deterministic across runs and works on
+        // both net10 and net471 without conditional compilation.
+        const long Fnv1aOffset = unchecked((long)14695981039346656037UL);
+        const long Fnv1aPrime = 1099511628211L;
+        const int MaxSamples = 256;
+
+        IEnumerable<Tensor<T>> chunks;
         try
         {
-            parameters = parameterizable.GetParameters();
+            chunks = ResolveParameterChunks(parameterizable);
         }
         catch (InvalidOperationException)
         {
-            // Lazy-init models throw InvalidOperationException when
-            // GetParameters is called before the first forward has
-            // resolved their shapes. Fingerprint of 0 is safe here —
-            // the model identity in the cache key already differentiates
-            // models, and a not-yet-built model can't have stale cached
-            // gradients to invalidate. Narrowed from a bare `catch`
-            // (PR #1364 review) so genuinely unexpected exceptions
-            // propagate instead of being silently swallowed.
+            // Lazy-init models throw InvalidOperationException when chunks
+            // are requested before the first forward has resolved their
+            // shapes. Fingerprint of 0 is safe here — the model identity
+            // in the cache key already differentiates models, and a
+            // not-yet-built model can't have stale cached gradients to
+            // invalidate. Narrowed from a bare `catch` (PR #1364 review).
             return 0L;
         }
         catch (NotSupportedException)
         {
-            // Same rationale: some IParameterizable implementations gate
-            // GetParameters behind feature flags and throw
-            // NotSupportedException when the feature is off.
             return 0L;
         }
 
-        if (parameters is null || parameters.Length == 0)
+        // First pass: total parameter count + index of the next sample
+        // we want to read. We don't want to enumerate twice (would
+        // double-cost on IEnumerable backings) — keep state inline.
+        long hash = Fnv1aOffset;
+        long globalIndex = 0;
+        long nextSample = 0;
+        long totalLength = -1; // resolved by first-of-second-pass below
+
+        // Two-pass design over a materializing IEnumerable: first
+        // get the length to compute the stride, then walk again to
+        // sample. For non-buffered IEnumerable this would re-execute
+        // the producer — but GetParameterChunks returns the SAME
+        // tensor references on each call (they're the layer's own
+        // parameter tensors), so re-enumeration is cheap.
+        long count = 0;
+        foreach (var chunk in chunks)
+        {
+            if (chunk is not null) count += chunk.Length;
+        }
+        totalLength = count;
+        if (totalLength <= 0)
         {
             return 0L;
         }
+        // Seed with length so size changes flip the fingerprint.
+        hash = unchecked((hash ^ totalLength) * Fnv1aPrime);
 
-        const int MaxSamples = 256;
-        int stride = Math.Max(1, parameters.Length / MaxSamples);
-        long hash = parameters.Length; // seed with length so size changes flip fingerprint
-        for (int i = 0; i < parameters.Length; i += stride)
+        long stride = System.Math.Max(1L, totalLength / MaxSamples);
+        nextSample = 0;
+        foreach (var chunk in ResolveParameterChunks(parameterizable))
         {
-            // Mix in both the bit pattern of the parameter and the index — two
-            // params with the same value at different positions should produce
-            // different contributions.
-            long bits = ParameterBitsToLong(parameters[i]);
-            hash = unchecked(hash * 31L ^ bits ^ ((long)i << 17));
+            if (chunk is null || chunk.Length == 0) continue;
+            // Walk the chunk's storage and pick samples at the global
+            // stride. globalIndex is the running absolute index across
+            // all chunks; nextSample is the next absolute index we want.
+            int chunkLen = chunk.Length;
+            // Skip whole chunks that don't contain any sample positions.
+            if (nextSample >= globalIndex + chunkLen)
+            {
+                globalIndex += chunkLen;
+                continue;
+            }
+            // Use the chunk's Span<T> view to avoid per-element generic
+            // box-and-unbox if the chunk type is float / double.
+            var span = chunk.Data.Span;
+            while (nextSample < globalIndex + chunkLen)
+            {
+                int localIdx = (int)(nextSample - globalIndex);
+                long bits = ParameterBitsToLong(span[localIdx]);
+                hash = unchecked((hash ^ bits) * Fnv1aPrime);
+                // Mix the absolute index too so identical values at
+                // different positions produce different contributions.
+                hash = unchecked((hash ^ nextSample) * Fnv1aPrime);
+                nextSample += stride;
+            }
+            globalIndex += chunkLen;
         }
         return hash;
     }
+
+    /// <summary>
+    /// Resolves the per-layer parameter chunks for an arbitrary
+    /// <see cref="IParameterizable{T, TInput, TOutput}"/>. On net6+ the
+    /// IParameterizable default-interface-method is callable directly;
+    /// on net471 default interface methods aren't supported by the
+    /// runtime, so we have to reach the override through the concrete
+    /// type (<see cref="NeuralNetworks.NeuralNetworkBase{T}"/> defines
+    /// the override). Falls back to a single chunk built from
+    /// <see cref="IParameterizable{T, TInput, TOutput}.GetParameters"/>
+    /// when the concrete type isn't recognized — that path preserves
+    /// correctness (the fingerprint still flips on parameter changes)
+    /// at the cost of paying the flat-Vector allocation on that one
+    /// path (review #1364 C4nJL).
+    /// </summary>
+    private static IEnumerable<Tensor<T>> ResolveParameterChunks(IParameterizable<T, TInput, TOutput> parameterizable)
+    {
+#if !NETFRAMEWORK
+        return parameterizable.GetParameterChunks();
+#else
+        if (parameterizable is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
+        {
+            return nn.GetParameterChunks();
+        }
+        return ParameterChunksFlatFallback(parameterizable);
+#endif
+    }
+
+#if NETFRAMEWORK
+    private static IEnumerable<Tensor<T>> ParameterChunksFlatFallback(IParameterizable<T, TInput, TOutput> parameterizable)
+    {
+        var flat = parameterizable.GetParameters();
+        if (flat is null || flat.Length == 0) yield break;
+        var single = new Tensor<T>(new[] { flat.Length });
+        for (int i = 0; i < flat.Length; i++) single[i] = flat[i];
+        yield return single;
+    }
+#endif
 
     /// <summary>
     /// Converts a numeric parameter value into a stable 64-bit bit pattern for

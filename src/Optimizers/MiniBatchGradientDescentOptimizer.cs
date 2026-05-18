@@ -145,13 +145,16 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
 
-                // Check convergence
-                if (NumOps.LessThan(
-                    NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
-                    NumOps.FromDouble(_options.Tolerance)))
-                {
-                    return CreateOptimizationResult(bestStepData, inputData);
-                }
+                // H6 convergence fix (PR #1364): compare CURRENT vs PREVIOUS epoch
+            // (not bestStepData — UpdateBestSolution would falsely report
+            // converged on epoch 0 because best == current after the copy)
+            // AND skip the check on epoch 0 where previousStepData is the
+            // pre-training baseline. Lifted to GradientBasedOptimizerBase
+            // helper so every gradient optimizer satisfies the same contract.
+            if (IsConvergedAgainstPreviousEpoch(epoch, currentStepData, previousStepData, _options.Tolerance))
+            {
+                return CreateOptimizationResult(bestStepData, inputData);
+            }
 
                 currentSolution = newSolution;
                 previousStepData = currentStepData;

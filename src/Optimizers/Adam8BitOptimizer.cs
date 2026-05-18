@@ -347,10 +347,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(
-                NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
-                NumOps.FromDouble(_options.Tolerance)))
+            if (IsConvergedAgainstPreviousEpoch(epoch, currentStepData, previousStepData, _options.Tolerance))
             {
+                // H6 convergence fix (PR #1364): compare CURRENT vs PREVIOUS
+                // epoch (not bestStepData — UpdateBestSolution copies
+                // currentStepData into bestStepData on epoch 0, so |best -
+                // current| = 0 < tolerance would falsely converge). Skip
+                // check on epoch 0 where previousStepData is the pre-training
+                // baseline. Helper is on GradientBasedOptimizerBase.
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 

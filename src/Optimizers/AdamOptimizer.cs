@@ -230,12 +230,18 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 // "the fitness stopped changing from one epoch to the next",
                 // i.e. |current - previous| < tolerance. Issue #1340.
                 //
-                // Guard the first iteration explicitly: previousStepData is the
-                // pre-epoch baseline returned by PrepareAndEvaluateSolution
-                // (untrained model evaluation). At epoch=0 we have to compare
-                // current vs that pre-epoch baseline, so the per-epoch progress
-                // signal is meaningful starting from the very first epoch.
-                if (NumOps.LessThan(
+                // SKIP convergence check on epoch 0 (review #1364 C4nK1):
+                // previousStepData at epoch 0 is the pre-training baseline
+                // from PrepareAndEvaluateSolution (untrained model evaluation).
+                // If the first epoch happens to produce a fitness change
+                // smaller than Tolerance (e.g. a warmup scheduler that
+                // starts with a very small LR, or a model that's already
+                // near a local optimum at init), the optimizer would
+                // false-positive-converge before training has actually
+                // happened. From epoch 1 onward, previousStepData is the
+                // PRIOR EPOCH's post-training fitness, so |current - previous|
+                // is a meaningful per-epoch progress signal.
+                if (epoch > 0 && NumOps.LessThan(
                     NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)),
                     NumOps.FromDouble(_options.Tolerance)))
                 {

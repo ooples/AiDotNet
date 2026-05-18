@@ -7986,14 +7986,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // reason — surfaced by ResNet's
         // GradientFlow_ShouldBeNonZeroAndFinite, then locked in here
         // for the IGradientComputable contract.
-        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var param in trainableParams)
-        {
-            if (allGrads.TryGetValue(param, out var grad))
-                grads[param] = grad;
-        }
+        // Pass the trainable-param set DIRECTLY to ComputeGradients as the
+        // `sources` arg so the tape only computes gradients for those
+        // tensors — avoids the previous compute-then-discard cost where
+        // gradients accumulated for non-trainable tensors got dropped at
+        // the post-hoc filter step (review #1364 C4nM4: filter at tape
+        // construction, not after the full backward pass). Frozen /
+        // detached tensors that the tape doesn't see still get zero-
+        // padded in the flatten loop below to preserve length-alignment.
+        var allGrads = tape.ComputeGradients(lossTensor, sources: trainableParams);
+        var grads = allGrads;
 
         // Use GetParameterChunks to keep gradient/parameter ordering
         // aligned (fixes #1245 / #1232). Frozen-or-detached tensors that
