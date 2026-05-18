@@ -115,7 +115,7 @@ the Configure* methods those PRs don't touch.
 | ConfigurePostprocessing (all 3 overloads) | Pipeline stored on builder but never invoked by result.Predict | Wired through AiModelResultOptions.PostprocessingPipeline → AiModelResult.Predict |
 | ConfigureRegularization | Stored on builder but optimizer never read it | Added SetRegularization on GradientBasedOptimizerBase + wired in AiModelBuilder |
 | ConfigureAugmentation | AugmentationConfig was completely unused | Added CustomAugmenter slot on AugmentationConfig + Apply invocation in BuildSupervisedInternalAsync |
-| ConfigureKnowledgeDistillation | Options dropped at AiModelResultOptions; second NotSupportedException throw site | Added KnowledgeDistillationOptions slot + removed the second throw site |
+| ConfigureKnowledgeDistillation | Options dropped at AiModelResultOptions | Added KnowledgeDistillationOptions slot — the second NotSupportedException throw was *kept* per reviewer feedback (fail-fast: surfacing the missing tape-based integration at Build time beats a silent fall-through to standard supervised training on the regular-NN path) |
 | ConfigureLoRA (3 stacked bugs) | Lazy-layer wrap crash; CreateLoRALayer read batch dim; NormalOptimizer Clone-roundtrip incompatibility | IsShapeResolved guard + warmup forward; weight-inferred dims + last-axis fallback; route NN+LoRA through direct-training path |
 
 ## Adding a test for a new Configure* method
