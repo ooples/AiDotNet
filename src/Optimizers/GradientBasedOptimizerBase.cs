@@ -141,11 +141,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
-    /// Test-only accessor exposing the active regularization for
-    /// verification in <c>AiModelBuilder</c>-level integration tests.
-    /// Internal — production callers should not depend on this.
+    /// The active regularization applied during gradient updates. Set
+    /// by <see cref="SetRegularization"/>; defaults to L2 if the
+    /// constructor was not given an explicit regularization.
     /// </summary>
-    internal IRegularization<T, TInput, TOutput> GetRegularizationForTests() => Regularization;
+    /// <remarks>
+    /// Promoted from a test-only internal accessor
+    /// (<c>GetRegularizationForTests</c>) to a public read-only property
+    /// in PR #1368 (review comment: production code should not carry
+    /// test-only APIs). Production consumers can use this to introspect
+    /// the configured regularization without reflection.
+    /// </remarks>
+    public IRegularization<T, TInput, TOutput> ActiveRegularization => Regularization;
 
     /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).

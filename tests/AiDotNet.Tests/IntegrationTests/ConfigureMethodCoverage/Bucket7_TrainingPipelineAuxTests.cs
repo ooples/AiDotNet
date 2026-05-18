@@ -53,13 +53,14 @@ public class Bucket7_TrainingPipelineAuxTests : ConfigureMethodTestBase
             .ConfigureRegularization(sentinel)
             .BuildAsync();
 
-        // GradientBasedOptimizerBase exposes GetRegularizationForTests()
-        // as an internal test-only accessor (replaces brittle reflection
-        // on the protected `Regularization` field). Contract: after
-        // BuildAsync, the optimizer's regularization is the user-
-        // supplied instance. Stored-but-not-consumed would leave it at
-        // the default L2.
-        Assert.Same(sentinel, adam.GetRegularizationForTests());
+        // GradientBasedOptimizerBase exposes ActiveRegularization as a
+        // public read-only property (promoted from the test-only
+        // GetRegularizationForTests accessor in PR #1368 review — test
+        // coupling on production APIs was flagged for removal).
+        // Contract: after BuildAsync, the optimizer's regularization is
+        // the user-supplied instance. Stored-but-not-consumed would
+        // leave it at the default L2.
+        Assert.Same(sentinel, adam.ActiveRegularization);
     }
 
     /// <summary>

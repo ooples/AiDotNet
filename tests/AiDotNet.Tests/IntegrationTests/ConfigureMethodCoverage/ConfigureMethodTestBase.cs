@@ -13,11 +13,31 @@ namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 /// (filed upstream — DirectGpu OpenCL backend instability under concurrent
 /// kernel dispatch).
 /// </summary>
+/// <remarks>
+/// <para><b>Known limitation</b> (review #1368): <c>AiDotNetEngine.ResetToCpu()</c>
+/// is a one-way switch — the underlying <c>AiDotNet.Tensors.Engines.AiDotNetEngine</c>
+/// API exposes <c>Current</c> for read but no symmetric <c>SetCurrent(IEngine)</c>
+/// for write, so this fixture cannot restore the previous engine on
+/// disposal. Other test collections (or test runs that follow) inherit
+/// the CPU mode set here.</para>
+/// <para>Mitigations:</para>
+/// <list type="bullet">
+///   <item>All Configure* coverage tests are grouped into a single
+///         <c>[Collection("ConfigureMethodCoverage")]</c> so they execute
+///         serially relative to each other inside this fixture's lifetime.</item>
+///   <item>For cross-collection isolation, the broader fix is an upstream
+///         <c>AiDotNet.Tensors</c>-side push/pop engine API. Track that as
+///         a follow-up; the current behaviour is "process settles on CPU
+///         after any Configure* test runs", which is safe but not ideal.</item>
+/// </list>
+/// </remarks>
 public sealed class ConfigureMethodTestCpuFixture
 {
     public ConfigureMethodTestCpuFixture()
     {
         // Force CPU for the duration of all Configure* coverage tests.
+        // One-way: see class-level remarks for the upstream Tensors-side
+        // restore-API gap that prevents a clean dispose-time rollback.
         AiDotNetEngine.ResetToCpu();
     }
 }
