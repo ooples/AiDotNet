@@ -208,6 +208,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     // Self-supervised learning configuration
     private SelfSupervisedLearning.SSLConfig? _sslConfig;
+    // Optional user-supplied pretraining hook invoked BEFORE main training when
+    // ConfigureSelfSupervisedLearning is used with the action overload. Receives
+    // the current base model + SSLConfig + cancellation token; returns the model
+    // that should feed into main training. See #1361.
+    private Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig, CancellationToken,
+        Task<IFullModel<T, TInput, TOutput>>>? _sslPretrainAction;
 
     // Federated learning configuration (facade-first: orchestration is internal)
     private FederatedLearningOptions? _federatedLearningOptions;
@@ -2484,6 +2490,30 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Validate model is set (either by user, agent, or AutoML)
         if (_model == null)
             throw new InvalidOperationException("Model implementation must be specified. Use ConfigureModel() to set a model, ConfigureAutoML() for automatic model selection, or enable agent assistance.");
+
+        // ============================================================================
+        // SELF-SUPERVISED LEARNING PRETRAINING (#1361 #4) — runs BEFORE main training.
+        // ConfigureSelfSupervisedLearning(configure, pretrainAction) is the wire-up
+        // entry point — the SSL subsystem requires an encoder-shaped INeuralNetwork
+        // that can't be transparently extracted from arbitrary IFullModel<T, TInput,
+        // TOutput>. The user-supplied action is responsible for running the SSL
+        // method (SimCLR / MoCo / BYOL / DINO / MAE / Barlow Twins) over its
+        // pretraining batches and returning the model that should feed into main
+        // supervised training (typically the same model with its encoder updated).
+        // The single-argument overload (Action<SSLConfig>) stores configuration
+        // without running any pretraining stage — that path is config-only.
+        // ============================================================================
+        if (_sslPretrainAction is not null)
+        {
+            if (_sslConfig is null)
+                throw new InvalidOperationException(
+                    "_sslPretrainAction was set without _sslConfig — internal builder invariant violated.");
+            _model = await _sslPretrainAction(_model, _sslConfig, CancellationToken.None).ConfigureAwait(false);
+            if (_model is null)
+                throw new InvalidOperationException(
+                    "ConfigureSelfSupervisedLearning's pretrainAction returned null. " +
+                    "The hook must return a non-null IFullModel<T, TInput, TOutput> for main training to proceed.");
+        }
 
         // Wire instance-level preprocessing/postprocessing onto DocumentNeuralNetworkBase models.
         // This replaces the former static PreprocessingRegistry/PostprocessingRegistry approach,
@@ -6299,6 +6329,39 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     {
         _sslConfig = new SelfSupervisedLearning.SSLConfig();
         configure?.Invoke(_sslConfig);
+        return this;
+    }
+
+    /// <summary>
+    /// Configures self-supervised learning with a typed pretraining hook
+    /// (<see cref="AiDotNet"/>#1361).
+    /// </summary>
+    /// <param name="configure">Optional <see cref="SelfSupervisedLearning.SSLConfig"/>
+    /// configurator. When null, a default <c>SSLConfig</c> is used.</param>
+    /// <param name="pretrainAction">User-supplied pretraining hook invoked BEFORE
+    /// main training. Receives the current base model + SSLConfig + cancellation
+    /// token; returns the model that should feed into main training (typically the
+    /// same model with its encoder updated via <see cref="SelfSupervisedLearning
+    /// .ISSLMethod{T}"/>'s TrainStep loop). The configured-but-no-action pattern
+    /// preserves backwards compatibility — SSL settings are stored on the result
+    /// without forcing any pretraining stage to run.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// The two-argument overload is the wire-up entry point — the single-argument
+    /// overload above stores SSLConfig but does NOT run a pretraining stage (the
+    /// SSL subsystem requires an encoder-shaped <c>INeuralNetwork&lt;T&gt;</c> which
+    /// is not interchangeable with arbitrary <c>IFullModel&lt;T, TInput, TOutput&gt;
+    /// </c>; the user-supplied action is where the conversion happens).
+    /// </remarks>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureSelfSupervisedLearning(
+        Action<SelfSupervisedLearning.SSLConfig>? configure,
+        Func<IFullModel<T, TInput, TOutput>, SelfSupervisedLearning.SSLConfig, CancellationToken,
+            Task<IFullModel<T, TInput, TOutput>>> pretrainAction)
+    {
+        if (pretrainAction is null) throw new ArgumentNullException(nameof(pretrainAction));
+        _sslConfig = new SelfSupervisedLearning.SSLConfig();
+        configure?.Invoke(_sslConfig);
+        _sslPretrainAction = pretrainAction;
         return this;
     }
 
