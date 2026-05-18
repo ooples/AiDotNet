@@ -105,35 +105,48 @@ internal static class Int8WeightOnlyMatMul
         if (rows == 0 || outputSize == 0)
             return;
 
-        // Guard the inputSize == 0 case explicitly. SgemmAddInternal's behaviour
-        // with k=0 is unspecified by the IEngine contract; with no inner-dim
-        // contribution the matmul result is the zero matrix (plus bias, if any).
+        // Reject inputSize == 0 explicitly. The two production callers
+        // (QuantizedDenseLayer, QuantizedAttentionLayer Q/K/V/O projections)
+        // validate input dim upstream; an inputSize of 0 only arrives via a
+        // misconfigured caller, never via legitimate workloads. Failing
+        // fast surfaces the misconfiguration at the matmul call instead of
+        // producing a silent zero-matrix result that would mask the upstream
+        // bug (review #1363 C6XGR: prior permissive bias-or-zero return
+        // turned this edge case into a silent no-op).
         if (inputSize == 0)
-        {
-            for (int r = 0; r < rows; r++)
-            {
-                int dstRow = r * outputSize;
-                if (biases != null)
-                {
-                    for (int o = 0; o < outputSize; o++)
-                        output[dstRow + o] = biases[o];
-                }
-                else
-                {
-                    output.Slice(dstRow, outputSize).Clear();
-                }
-            }
-            return;
-        }
+            throw new ArgumentOutOfRangeException(
+                nameof(inputSize), 0,
+                "inputSize must be positive when rows > 0 and outputSize > 0; " +
+                "the empty-output early-return covers the rows==0 / outputSize==0 cases.");
 
         int outputTile = ChooseTileSize(outputSize, inputSize);
 
-        var pool = ArrayPool<float>.Shared;
-        float[] dequantScratch = pool.Rent(outputTile * inputSize);
-        float[] tileOutput = pool.Rent(rows * outputTile);
+        // Allocate using long-typed sizes so overflow against int.MaxValue
+        // surfaces explicitly (e.g. outputTile=3000 × inputSize=4096 +
+        // future scale-up to 1M-row batches would silently wrap to a
+        // negative int and pass to Rent — review #1363 C6XFg). At the
+        // canary shapes covered by tests these products stay well under
+        // 2 GiB / 4 bytes per float, but the bound check matters once
+        // wider FFN / longer sequences land.
+        long dequantScratchLen = (long)outputTile * inputSize;
+        long tileOutputLen = (long)rows * outputTile;
+        if (dequantScratchLen > int.MaxValue || tileOutputLen > int.MaxValue)
+            throw new InvalidOperationException(
+                $"Tiled INT8 matmul exceeded int.MaxValue per-tile buffer ({dequantScratchLen}, {tileOutputLen}). " +
+                "Reduce outputTile or split rows externally before calling MultiplyAddBias.");
 
+        var pool = ArrayPool<float>.Shared;
+        // Both rents inside the try block so that if the SECOND rent
+        // throws (rare: pool exhaustion / OOM), the first buffer is
+        // still returned to the pool by the finally (review #1363
+        // C6XF6 — prior code rented before try and leaked dequantScratch
+        // on a tileOutput rent throw).
+        float[]? dequantScratch = null;
+        float[]? tileOutput = null;
         try
         {
+            dequantScratch = pool.Rent((int)dequantScratchLen);
+            tileOutput = pool.Rent((int)tileOutputLen);
             for (int oBase = 0; oBase < outputSize; oBase += outputTile)
             {
                 int tileN = Math.Min(outputTile, outputSize - oBase);
@@ -157,18 +170,11 @@ internal static class Int8WeightOnlyMatMul
                         rowScales[o]);
                 }
 
-                // C_tile [rows, tileN] = A [rows, inputSize] @ B_tile^T,
-                // where B_tile [tileN, inputSize] row-major is the logical
-                // transpose of the matmul operand [inputSize, tileN].
-                //
-                // SimdGemm.Sgemm has C = A·B semantics (no β·C accumulation —
-                // see SimdGemm.cs Sgemm overload at line 962) and calls
-                // c.Clear() before writing, so the ArrayPool-rented
-                // `tileOutput` does NOT need to be pre-cleared even though
-                // Rent returns uninitialized memory. The explicit Clear
-                // below is belt-and-braces against a future SimdGemm
-                // refactor that drops the implicit clear; the cost is one
-                // Span<float>.Clear() per tile and is dwarfed by the GEMM.
+                // C_tile [rows, tileN] = A [rows, inputSize] @ B_tile^T (Sgemm
+                // overload with transB=true). Explicit tileSpan.Clear() is
+                // belt-and-braces against a future SimdGemm.Sgemm refactor
+                // that drops its implicit clear of c (review #1363 C6XGz
+                // shortened from the 8-line line-number reference).
                 var tileSpan = tileOutput.AsSpan(0, tileOutLen);
                 tileSpan.Clear();
                 SimdGemm.Sgemm(
@@ -184,34 +190,39 @@ internal static class Int8WeightOnlyMatMul
                     n: tileN);
 
                 // Scatter tile into the strided output [rows, outputSize],
-                // adding the bias for this output-column block. Bias-add is
-                // a per-element scalar loop: for FFN-wide biases (e.g. 2048)
-                // this becomes non-trivial relative to the SGEMM body. A
-                // vectorized in-place AddRow primitive on the Tensors engine
-                // would be the natural follow-up; deferred here because at
-                // the canary shapes covered by tests the GEMM body still
-                // dominates the scatter cost.
+                // adding the bias for this output-column block via
+                // AiDotNet.Tensors' SimdKernels.VectorAdd — the same
+                // accelerated SIMD primitive SimdGemm uses. Per the
+                // project-level rule, AiDotNet.Tensors is the in-tree
+                // SIMD library (full PyTorch parity); System.Numerics is
+                // banned. VectorAdd is one call per output row; tileN is
+                // a multiple of 16 per ChooseTileSize's alignment
+                // contract, keeping the kernel on its best-case path
+                // (review #1363 C6XGD).
                 for (int r = 0; r < rows; r++)
                 {
                     int srcRow = r * tileN;
                     int dstRow = r * outputSize + oBase;
+                    var srcSpan = tileOutput.AsSpan(srcRow, tileN);
+                    var dstSpan = output.Slice(dstRow, tileN);
                     if (biases != null)
                     {
-                        for (int oo = 0; oo < tileN; oo++)
-                            output[dstRow + oo] = tileOutput[srcRow + oo] + biases[oBase + oo];
+                        var biasSpan = new ReadOnlySpan<float>(biases, oBase, tileN);
+                        AiDotNet.Tensors.Engines.Simd.SimdKernels.VectorAdd(srcSpan, biasSpan, dstSpan);
                     }
                     else
                     {
-                        var src = tileOutput.AsSpan(srcRow, tileN);
-                        src.CopyTo(output.Slice(dstRow, tileN));
+                        srcSpan.CopyTo(dstSpan);
                     }
                 }
             }
         }
         finally
         {
-            pool.Return(dequantScratch);
-            pool.Return(tileOutput);
+            // Null-conditional Return so a mid-rent throw (only the FIRST
+            // rent succeeded) still returns what we have without an NRE.
+            if (dequantScratch is not null) pool.Return(dequantScratch);
+            if (tileOutput is not null) pool.Return(tileOutput);
         }
     }
 }

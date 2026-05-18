@@ -415,14 +415,9 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
             ?? throw new InvalidOperationException("Int8 scales not initialized for quantized projection.");
         var output = new Tensor<float>(new[] { rows, outDim });
 
-        // Q/K/V/O projections have no bias here — the attention output bias
-        // (_outputBias) is applied separately in the Forward pass after the
-        // O-projection scatter. Passing biases=null is safe because
-        // Int8WeightOnlyMatMul.MultiplyAddBias short-circuits the per-element
-        // bias-add scatter into a span-to-span CopyTo, so there is no implicit
-        // "where does this bias come from" branch a future change could trip
-        // by accident — adding a per-projection bias here would require
-        // explicitly populating the biases array at this call site.
+        // Q/K/V/O projections have no per-projection bias — attention's
+        // _outputBias is applied separately in Forward after the
+        // O-projection scatter (review #1363 C6XGz).
         Int8WeightOnlyMatMul.MultiplyAddBias(
             input: input,
             weightsInt8: weights,
