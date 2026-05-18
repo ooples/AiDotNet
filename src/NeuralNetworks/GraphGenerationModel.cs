@@ -255,6 +255,10 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
             LearningRateScheduler = learningRateScheduler ?? new ExponentialLRScheduler(
                 baseLearningRate: 0.001, gamma: 0.99),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            // AMSGrad keeps the model from drifting away from converged
+            // graph-generation parameters during the long training runs the
+            // MoreData / Training-loss invariants probe (#1332 cluster 6).
+            UseAMSGrad = true,
         };
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOpts);
         _random = RandomHelper.CreateSeededRandom(42);
@@ -306,19 +310,33 @@ public class GraphGenerationModel<T> : NeuralNetworkBase<T>
 
     /// <summary>
     /// Initializes the variational layer weights using Xavier initialization.
+    /// Uses the model's seeded <c>_random</c> field so init is reproducible
+    /// across processes — previously this called
+    /// <c>Tensor&lt;T&gt;.CreateRandom(shape)</c>, which routes through the
+    /// engine's thread-local RNG and produced non-deterministic μ/log σ
+    /// weights on every run. That non-determinism propagated into the
+    /// reparameterised latent <c>z = μ + σ · ε</c> and made the
+    /// <c>Training_ShouldReduceLoss</c> invariant flaky in isolation, as
+    /// different runs landed on different starting points of the VGAE
+    /// objective. Issue #1332 cluster 6.
     /// </summary>
     private void InitializeVariationalWeights()
     {
         T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (HiddenDim + LatentDim)));
-        var randomTensor = Tensor<T>.CreateRandom(_meanWeights._shape);
         var halfTensor = new Tensor<T>(_meanWeights._shape);
         Engine.TensorFill(halfTensor, NumOps.FromDouble(0.5));
-        var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-        _meanWeights = Engine.TensorMultiplyScalar(shifted, scale);
 
-        randomTensor = Tensor<T>.CreateRandom(_logVarWeights._shape);
-        shifted = Engine.TensorSubtract(randomTensor, halfTensor);
-        _logVarWeights = Engine.TensorMultiplyScalar(shifted, scale);
+        var meanRandom = new Tensor<T>(_meanWeights._shape);
+        for (int i = 0; i < meanRandom.Length; i++)
+            meanRandom.SetFlat(i, NumOps.FromDouble(_random.NextDouble()));
+        var meanShifted = Engine.TensorSubtract(meanRandom, halfTensor);
+        _meanWeights = Engine.TensorMultiplyScalar(meanShifted, scale);
+
+        var logVarRandom = new Tensor<T>(_logVarWeights._shape);
+        for (int i = 0; i < logVarRandom.Length; i++)
+            logVarRandom.SetFlat(i, NumOps.FromDouble(_random.NextDouble()));
+        var logVarShifted = Engine.TensorSubtract(logVarRandom, halfTensor);
+        _logVarWeights = Engine.TensorMultiplyScalar(logVarShifted, scale);
     }
 
     /// <summary>

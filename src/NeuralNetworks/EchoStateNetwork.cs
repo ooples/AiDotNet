@@ -1096,12 +1096,19 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override long ParameterCount => _reservoirSize * _outputSize;
+    public override long ParameterCount => (long)_reservoirSize * _outputSize + _outputSize;
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {
-        return _outputWeights.ToVector();
+        var p = new Vector<T>(_reservoirSize * _outputSize + _outputSize);
+        int idx = 0;
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _outputSize; j++)
+                p[idx++] = _outputWeights[i, j];
+        for (int j = 0; j < _outputSize; j++)
+            p[idx++] = _outputBias[j];
+        return p;
     }
 
     /// <inheritdoc/>
@@ -1111,6 +1118,37 @@ public class EchoStateNetwork<T> : NeuralNetworkBase<T>
         for (int i = 0; i < _reservoirSize; i++)
             for (int j = 0; j < _outputSize; j++)
                 _outputWeights[i, j] = parameters[idx++];
+        for (int j = 0; j < _outputSize; j++)
+            _outputBias[j] = parameters[idx++];
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// ESN's only trainable parameters are the readout: <c>_outputWeights</c>
+    /// (a <see cref="Matrix{T}"/> field set by <c>Train</c>'s gradient-descent
+    /// loop, see <c>EchoStateNetwork.Train</c>) and <c>_outputBias</c>. Neither
+    /// lives in the <c>Layers</c> list — the default base <c>GetParameterChunks</c>
+    /// walks <c>Layers</c> and would yield nothing, so the framework-level
+    /// invariant tests (<c>Training_ShouldChangeParameters</c>,
+    /// <c>GradientFlow_ShouldBeNonZeroAndFinite</c>) saw zero chunks and
+    /// reported "no parameters changed" even though Train was mutating the
+    /// readout. Yielding the readout tensors here matches the
+    /// <see cref="ParameterCount"/> / <see cref="GetParameters"/> /
+    /// <see cref="SetParameters"/> trio so callers that mix the flat and
+    /// chunked APIs see a consistent parameter set. Issue #1332 cluster 6.
+    /// </remarks>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        var weightTensor = new Tensor<T>([_reservoirSize, _outputSize]);
+        for (int i = 0; i < _reservoirSize; i++)
+            for (int j = 0; j < _outputSize; j++)
+                weightTensor[i, j] = _outputWeights[i, j];
+        yield return weightTensor;
+
+        var biasTensor = new Tensor<T>([_outputSize]);
+        for (int j = 0; j < _outputSize; j++)
+            biasTensor[j] = _outputBias[j];
+        yield return biasTensor;
     }
 
     public override Tensor<T> Predict(Tensor<T> input)

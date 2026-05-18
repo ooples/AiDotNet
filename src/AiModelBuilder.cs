@@ -3295,6 +3295,23 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 }
             }
 
+            // Register the model name first — CreateModelVersion requires a
+            // pre-existing registration. Without this call, the upstream
+            // CreateModelVersion throws ArgumentException ("Model not found
+            // in registry"). Discovered by AiDotNet#1345's integration-test
+            // framework (Bucket3_QualityOfLifeTests
+            // ConfigureModelRegistry_AndBuildAsync_TracksTrainedModel).
+            _modelRegistry.RegisterModel(
+                name: registeredModelName,
+                model: optimizationResult.BestSolution,
+                metadata: modelMetadata,
+                tags: new Dictionary<string, string>
+                {
+                    ["auto-registered"] = "true",
+                    ["source"] = "build-async",
+                    ["registered-at"] = trainingStartTime.ToString("yyyy-MM-ddTHH:mm:ssZ")
+                });
+
             modelVersion = _modelRegistry.CreateModelVersion(
                 modelName: registeredModelName,
                 model: optimizationResult.BestSolution,
