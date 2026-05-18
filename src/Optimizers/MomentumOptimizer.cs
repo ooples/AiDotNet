@@ -1,4 +1,5 @@
 using AiDotNet.Tensors.Engines.DirectGpu;
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 using AiDotNet.Helpers;
@@ -172,15 +173,13 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            // Check convergence against previousStepData (per-epoch progress),
-            // not bestStepData. UpdateBestSolution above copies currentStepData
-            // into bestStepData on the first iteration, so |best - current|
-            // would always be 0 < tolerance and the optimiser would exit after
-            // the first epoch. Issue #1340 / PR #1351 fix swept across the
-            // optimizer suite.
-            if (NumOps.LessThan(
-                NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)),
-                NumOps.FromDouble(_options.Tolerance)))
+            // H6 convergence fix (PR #1364): compare CURRENT vs PREVIOUS epoch
+            // (not bestStepData — UpdateBestSolution would falsely report
+            // converged on epoch 0 because best == current after the copy)
+            // AND skip the check on epoch 0 where previousStepData is the
+            // pre-training baseline. Lifted to GradientBasedOptimizerBase
+            // helper so every gradient optimizer satisfies the same contract.
+            if (IsConvergedAgainstPreviousEpoch(epoch, currentStepData, previousStepData, _options.Tolerance))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }
@@ -287,7 +286,7 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
 
     // Per-parameter velocity for tape-based training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)

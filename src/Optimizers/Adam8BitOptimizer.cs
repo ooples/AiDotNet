@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -347,16 +348,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            // Check convergence against previousStepData (per-epoch progress),
-            // not bestStepData. UpdateBestSolution above copies currentStepData
-            // into bestStepData on the first iteration, so |best - current|
-            // would always be 0 < tolerance and the optimiser would exit after
-            // the first epoch. Issue #1340 / PR #1351 fix swept across the
-            // optimizer suite.
-            if (NumOps.LessThan(
-                NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)),
-                NumOps.FromDouble(_options.Tolerance)))
+            if (IsConvergedAgainstPreviousEpoch(epoch, currentStepData, previousStepData, _options.Tolerance))
             {
+                // H6 convergence fix (PR #1364): compare CURRENT vs PREVIOUS
+                // epoch (not bestStepData — UpdateBestSolution copies
+                // currentStepData into bestStepData on epoch 0, so |best -
+                // current| = 0 < tolerance would falsely converge). Skip
+                // check on epoch 0 where previousStepData is the pre-training
+                // baseline. Helper is on GradientBasedOptimizerBase.
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
@@ -403,7 +402,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public Vector<double> VScales = null!;
     }
 
-    private readonly Dictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
+    private readonly ConcurrentDictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 

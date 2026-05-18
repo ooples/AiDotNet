@@ -371,6 +371,58 @@ public class LossScaler<T>
     }
 
     /// <summary>
+    /// Records that the current optimizer step OVERFLOWED — equivalent to
+    /// <see cref="UnscaleGradientsAndCheck(Tensor{T})"/> finding NaN/Inf
+    /// in the scaled gradients, but without touching any gradient buffer.
+    /// </summary>
+    /// <remarks>
+    /// <para>Callers that did their own gradient unscaling (e.g. the
+    /// per-trainable-param path in <c>NeuralNetworkBase.TrainWithTape</c>)
+    /// invoke this directly to drive the dynamic-scaling state machine
+    /// instead of fabricating a probe vector to feed into
+    /// <see cref="UnscaleGradientsAndCheck(Vector{T})"/> just for its
+    /// side effects (review #1362).</para>
+    /// <para>Effects: increments TotalUpdates and SkippedUpdates, resets
+    /// the consecutive-success counter, and (when DynamicScaling is on)
+    /// reduces Scale by BackoffFactor down to MinScale.</para>
+    /// </remarks>
+    public void RecordOverflow()
+    {
+        _totalUpdates++;
+        _skippedUpdates++;
+        _consecutiveSuccessfulUpdates = 0;
+
+        if (DynamicScaling)
+        {
+            Scale = Math.Max(Scale * BackoffFactor, MinScale);
+        }
+    }
+
+    /// <summary>
+    /// Records that the current optimizer step succeeded — equivalent to
+    /// <see cref="UnscaleGradientsAndCheck(Tensor{T})"/> finding no NaN/Inf
+    /// in the scaled gradients, but without touching any gradient buffer.
+    /// </summary>
+    /// <remarks>
+    /// <para>Pair with <see cref="RecordOverflow"/> when the caller does
+    /// its own gradient unscaling. Effects: increments TotalUpdates and
+    /// the consecutive-success counter, and (when DynamicScaling is on
+    /// and the consecutive-success counter reaches GrowthInterval) grows
+    /// Scale by GrowthFactor up to MaxScale.</para>
+    /// </remarks>
+    public void RecordSuccess()
+    {
+        _totalUpdates++;
+        _consecutiveSuccessfulUpdates++;
+
+        if (DynamicScaling && _consecutiveSuccessfulUpdates >= GrowthInterval)
+        {
+            Scale = Math.Min(Scale * GrowthFactor, MaxScale);
+            _consecutiveSuccessfulUpdates = 0;
+        }
+    }
+
+    /// <summary>
     /// Resets the statistics and scale to initial values.
     /// </summary>
     /// <param name="newInitialScale">Optional new initial scale value.</param>
