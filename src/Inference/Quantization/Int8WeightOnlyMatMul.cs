@@ -62,19 +62,67 @@ internal static class Int8WeightOnlyMatMul
         int inputSize,
         int outputSize)
     {
-        if (weightsInt8.Length < (long)outputSize * inputSize)
-            throw new ArgumentException("weightsInt8 too small for [outputSize, inputSize].", nameof(weightsInt8));
+        if (rows < 0)
+            throw new ArgumentOutOfRangeException(nameof(rows), rows, "rows must be non-negative.");
+        if (inputSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "inputSize must be non-negative.");
+        if (outputSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "outputSize must be non-negative.");
+
+        long expectedWeights = (long)outputSize * inputSize;
+        if (weightsInt8.Length < expectedWeights)
+            throw new ArgumentException(
+                $"weightsInt8 too small for [outputSize={outputSize}, inputSize={inputSize}]: " +
+                $"expected at least {expectedWeights} entries, got {weightsInt8.Length}.",
+                nameof(weightsInt8));
         if (rowScales.Length < outputSize)
-            throw new ArgumentException("rowScales must have outputSize entries.", nameof(rowScales));
+            throw new ArgumentException(
+                $"rowScales must have at least outputSize={outputSize} entries, got {rowScales.Length}.",
+                nameof(rowScales));
         if (biases != null && biases.Length < outputSize)
-            throw new ArgumentException("biases (when non-null) must have outputSize entries.", nameof(biases));
-        if (input.Length < (long)rows * inputSize)
-            throw new ArgumentException("input span too small for [rows, inputSize].", nameof(input));
-        if (output.Length < (long)rows * outputSize)
-            throw new ArgumentException("output span too small for [rows, outputSize].", nameof(output));
+            throw new ArgumentException(
+                $"biases (when non-null) must have at least outputSize={outputSize} entries, got {biases.Length}.",
+                nameof(biases));
+
+        long expectedInput = (long)rows * inputSize;
+        if (input.Length < expectedInput)
+            throw new ArgumentException(
+                $"input span too small for [rows={rows}, inputSize={inputSize}]: " +
+                $"expected at least {expectedInput} entries, got {input.Length}.",
+                nameof(input));
+
+        long expectedOutput = (long)rows * outputSize;
+        if (output.Length < expectedOutput)
+            throw new ArgumentException(
+                $"output span too small for [rows={rows}, outputSize={outputSize}]: " +
+                $"expected at least {expectedOutput} entries, got {output.Length}.",
+                nameof(output));
+
+        // No-op when the logical output is empty. Do NOT clear `output` here —
+        // the caller's span may be larger than the logical [rows, outputSize]
+        // region and `output.Clear()` would zero stale-but-valid data outside
+        // the region this call is responsible for.
         if (rows == 0 || outputSize == 0)
+            return;
+
+        // Guard the inputSize == 0 case explicitly. SgemmAddInternal's behaviour
+        // with k=0 is unspecified by the IEngine contract; with no inner-dim
+        // contribution the matmul result is the zero matrix (plus bias, if any).
+        if (inputSize == 0)
         {
-            output.Clear();
+            for (int r = 0; r < rows; r++)
+            {
+                int dstRow = r * outputSize;
+                if (biases != null)
+                {
+                    for (int o = 0; o < outputSize; o++)
+                        output[dstRow + o] = biases[o];
+                }
+                else
+                {
+                    output.Slice(dstRow, outputSize).Clear();
+                }
+            }
             return;
         }
 
@@ -94,7 +142,10 @@ internal static class Int8WeightOnlyMatMul
 
                 // Dequantize tileN consecutive rows of int8 weights with per-row
                 // scale into the scratch buffer. Each call uses AVX2 internally
-                // when supported (see Int8Quantizer.DequantizeInt8ToFloat32).
+                // when supported (see Int8Quantizer.DequantizeInt8ToFloat32) and
+                // fully writes its destination row from the int8 source, so the
+                // ArrayPool-returned uninitialized scratch is safe even though
+                // ArrayPool<T>.Shared.Rent does not zero on rent.
                 for (int oo = 0; oo < tileN; oo++)
                 {
                     int o = oBase + oo;
@@ -109,6 +160,17 @@ internal static class Int8WeightOnlyMatMul
                 // C_tile [rows, tileN] = A [rows, inputSize] @ B_tile^T,
                 // where B_tile [tileN, inputSize] row-major is the logical
                 // transpose of the matmul operand [inputSize, tileN].
+                //
+                // SimdGemm.Sgemm has C = A·B semantics (no β·C accumulation —
+                // see SimdGemm.cs Sgemm overload at line 962) and calls
+                // c.Clear() before writing, so the ArrayPool-rented
+                // `tileOutput` does NOT need to be pre-cleared even though
+                // Rent returns uninitialized memory. The explicit Clear
+                // below is belt-and-braces against a future SimdGemm
+                // refactor that drops the implicit clear; the cost is one
+                // Span<float>.Clear() per tile and is dwarfed by the GEMM.
+                var tileSpan = tileOutput.AsSpan(0, tileOutLen);
+                tileSpan.Clear();
                 SimdGemm.Sgemm(
                     a: input,
                     lda: inputSize,
@@ -116,13 +178,19 @@ internal static class Int8WeightOnlyMatMul
                     b: new ReadOnlySpan<float>(dequantScratch, 0, dequantLen),
                     ldb: inputSize,
                     transB: true,
-                    c: tileOutput.AsSpan(0, tileOutLen),
+                    c: tileSpan,
                     m: rows,
                     k: inputSize,
                     n: tileN);
 
                 // Scatter tile into the strided output [rows, outputSize],
-                // adding the bias for this output-column block.
+                // adding the bias for this output-column block. Bias-add is
+                // a per-element scalar loop: for FFN-wide biases (e.g. 2048)
+                // this becomes non-trivial relative to the SGEMM body. A
+                // vectorized in-place AddRow primitive on the Tensors engine
+                // would be the natural follow-up; deferred here because at
+                // the canary shapes covered by tests the GEMM body still
+                // dominates the scatter cost.
                 for (int r = 0; r < rows; r++)
                 {
                     int srcRow = r * tileN;

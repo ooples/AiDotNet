@@ -148,6 +148,123 @@ public class Int8WeightOnlyMatMulTests
         // No assertion needed — the contract is "do not throw / segfault".
     }
 
+    [Fact]
+    public void MultiplyAddBias_ZeroRows_OversizedOutputBuffer_PreservesSentinels()
+    {
+        // The early-return for rows == 0 must NOT zero the caller's span when
+        // the span is larger than the logical (rows*outputSize == 0) region.
+        // Pre-fill an oversized buffer with sentinels and assert they survive.
+        var input = Array.Empty<float>();
+        var weights = new sbyte[16];
+        var scales = new float[4];
+        var output = new float[8];
+        for (int i = 0; i < output.Length; i++) output[i] = 12345.0f;
+
+        Int8WeightOnlyMatMul.MultiplyAddBias(
+            input, weights, scales, biases: null, output.AsSpan(),
+            rows: 0, inputSize: 4, outputSize: 4);
+
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.Equal(12345.0f, output[i]);
+        }
+    }
+
+    [Fact]
+    public void MultiplyAddBias_OutputSizeZero_OversizedOutputBuffer_PreservesSentinels()
+    {
+        // Same as above but for the outputSize == 0 early-return branch.
+        var input = new float[8];
+        var weights = Array.Empty<sbyte>();
+        var scales = Array.Empty<float>();
+        var output = new float[8];
+        for (int i = 0; i < output.Length; i++) output[i] = 54321.0f;
+
+        Int8WeightOnlyMatMul.MultiplyAddBias(
+            input, weights, scales, biases: null, output.AsSpan(),
+            rows: 2, inputSize: 4, outputSize: 0);
+
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.Equal(54321.0f, output[i]);
+        }
+    }
+
+    [Fact]
+    public void MultiplyAddBias_InputSizeZero_FillsOutputWithBias()
+    {
+        // The inputSize == 0 branch must populate output with biases (or zero
+        // when biases is null) and skip the Sgemm call entirely. rowScales is
+        // still required at length outputSize (per-row scales exist
+        // independently of the inner dim).
+        var input = Array.Empty<float>();
+        var weights = Array.Empty<sbyte>();
+        var scales = new[] { 0.1f, 0.2f, 0.3f };
+        var biases = new[] { 1.5f, 2.5f, 3.5f };
+        var output = new float[6]; // 2 rows * 3 outputs
+
+        Int8WeightOnlyMatMul.MultiplyAddBias(
+            input, weights, scales, biases, output.AsSpan(),
+            rows: 2, inputSize: 0, outputSize: 3);
+
+        Assert.Equal(1.5f, output[0]);
+        Assert.Equal(2.5f, output[1]);
+        Assert.Equal(3.5f, output[2]);
+        Assert.Equal(1.5f, output[3]);
+        Assert.Equal(2.5f, output[4]);
+        Assert.Equal(3.5f, output[5]);
+
+        // No biases -> zero
+        var outputNoBias = new float[3];
+        for (int i = 0; i < outputNoBias.Length; i++) outputNoBias[i] = 99.0f;
+        Int8WeightOnlyMatMul.MultiplyAddBias(
+            input, weights, scales, biases: null, outputNoBias.AsSpan(),
+            rows: 1, inputSize: 0, outputSize: 3);
+        Assert.Equal(0f, outputNoBias[0]);
+        Assert.Equal(0f, outputNoBias[1]);
+        Assert.Equal(0f, outputNoBias[2]);
+    }
+
+    [Fact]
+    public void MultiplyAddBias_MultiTile_ActuallyTilesOutput()
+    {
+        // Force an outputSize that exceeds ChooseTileSize so the multi-tile
+        // scatter path is exercised — the existing "scatter doesn't leak" test
+        // happens to choose dimensions where ChooseTileSize returns outputSize
+        // and only one tile runs. inputSize=8192 → ChooseTileSize ≈ 16; with
+        // outputSize=64 we get 4 tiles.
+        const int rows = 2;
+        const int inputSize = 8192;
+        const int outputSize = 64;
+
+        int chosen = Int8WeightOnlyMatMul.ChooseTileSize(outputSize, inputSize);
+        Assert.True(chosen < outputSize,
+            $"Test fixture invariant: ChooseTileSize({outputSize}, {inputSize}) = {chosen} " +
+            $"must be < outputSize so the multi-tile scatter path runs.");
+
+        var rng = new Random(0xC0DE);
+        var input = new float[rows * inputSize];
+        for (int i = 0; i < input.Length; i++) input[i] = (float)(rng.NextDouble() * 2 - 1);
+        var weights = new sbyte[outputSize * inputSize];
+        for (int i = 0; i < weights.Length; i++) weights[i] = (sbyte)rng.Next(-127, 128);
+        var scales = new float[outputSize];
+        for (int o = 0; o < outputSize; o++) scales[o] = (float)(rng.NextDouble() * 0.01 + 0.001);
+
+        var output = new float[rows * outputSize];
+        // Pre-fill with sentinel so an unwritten tile would surface.
+        for (int i = 0; i < output.Length; i++) output[i] = 9999.0f;
+
+        Int8WeightOnlyMatMul.MultiplyAddBias(
+            input, weights, scales, biases: null, output,
+            rows, inputSize, outputSize);
+
+        // Every output element must have been overwritten — sentinel cannot survive.
+        for (int i = 0; i < output.Length; i++)
+        {
+            Assert.NotEqual(9999.0f, output[i]);
+        }
+    }
+
     [Theory]
     [InlineData(16, 16)]
     [InlineData(64, 4096)]
