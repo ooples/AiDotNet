@@ -82,8 +82,10 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         }
         catch (System.NullReferenceException ex)
             when (IsExceptionFromPostTrainSurface(ex)) { /* mock metadata access AFTER Train */ }
-        catch (System.ArgumentException) { /* downstream shape mismatch */ }
-        catch (System.InvalidOperationException) { /* option-validation gate */ }
+        catch (System.ArgumentException ex)
+            when (IsExceptionFromPostTrainSurface(ex)) { /* downstream shape mismatch */ }
+        catch (System.InvalidOperationException ex)
+            when (IsExceptionFromPostTrainSurface(ex)) { /* option-validation gate */ }
 
         learnerMock.Verify(l => l.Train(), Times.Once,
             "ConfigureMetaLearning was wired but BuildAsync never invoked IMetaLearner.Train. The Meta-Learning branch at AiModelBuilder.cs:1512 should detect _metaLearner and route to BuildMetaLearningInternalAsync.");
@@ -164,8 +166,10 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         }
         catch (System.NullReferenceException ex)
             when (IsExceptionFromPostTrainSurface(ex)) { /* mock metadata access AFTER SearchAsync */ }
-        catch (System.ArgumentException) { /* shape / model construction */ }
-        catch (System.InvalidOperationException) { /* option-validation gate */ }
+        catch (System.ArgumentException ex)
+            when (IsExceptionFromPostTrainSurface(ex)) { /* shape / model construction */ }
+        catch (System.InvalidOperationException ex)
+            when (IsExceptionFromPostTrainSurface(ex)) { /* option-validation gate */ }
 
         autoMLMock.Verify(a => a.SearchAsync(
             It.IsAny<Tensor<float>>(), It.IsAny<Tensor<float>>(),

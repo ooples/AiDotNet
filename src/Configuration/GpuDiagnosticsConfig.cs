@@ -174,8 +174,11 @@ public static class GpuDiagnosticsConfig
         {
             // Push prior level onto the stack, then install the new level.
             // Both operations together under the lock — no other thread
-            // can observe a half-finished push.
-            _levelStack.Push(_level);
+            // can observe a half-finished push. Read via the Level property
+            // getter (not _level directly) so any future getter-side memory
+            // barrier or value transform applies symmetrically with the
+            // property-setter write below (review #1368 C7HA7).
+            _levelStack.Push(Level);
             Level = level;
             return new LevelScope();
         }
