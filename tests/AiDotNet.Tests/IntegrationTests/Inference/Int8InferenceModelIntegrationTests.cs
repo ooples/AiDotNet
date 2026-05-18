@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace AiDotNet.Tests.IntegrationTests.Inference;
 
@@ -20,6 +21,13 @@ namespace AiDotNet.Tests.IntegrationTests.Inference;
 /// </summary>
 public class Int8InferenceModelIntegrationTests
 {
+    private readonly ITestOutputHelper _output;
+
+    public Int8InferenceModelIntegrationTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
+
     private static Tensor<float> CreateRandomInput(int seqLen, int embDim, int seed = 1342)
     {
         // Transformer<float> expects [batch, seqLen, embDim] for its attention path; build a
@@ -149,19 +157,30 @@ public class Int8InferenceModelIntegrationTests
     [Fact(Timeout = 180000)]
     public async Task FromTrained_PredictWallClockGapVsFP32_DocumentsCurrentState()
     {
-        // This test documents the perf gap from AiDotNet#1342 — the *current* INT8 inference
-        // path through QuantizedAttentionLayer / QuantizedDenseLayer is SLOWER than FP32 at
-        // wall-clock time, because both layers use a scalar 3-loop dequant-on-the-fly matmul
-        // rather than the SIMD INT8 cached-B path that already exists in
-        // SimdGemm.SgemmWithInt8CachedB. Until QuantizedAttentionLayer is wired to that path
-        // (tracked as a follow-up issue), INT8 wall-clock is dominated by the
-        // dequant-into-scalar-FMA loop versus the FP32 path's AVX-512 FusedLinear.
+        // Wall-clock perf gap for AiDotNet#1342. The SIMD INT8 wiring landed
+        // (#1363 / Int8WeightOnlyMatMul.MultiplyAddBias) — QuantizedAttentionLayer
+        // and QuantizedDenseLayer now route through AiDotNet.Tensors' tiled SGEMM
+        // + AVX2 dequant primitives instead of the scalar 3-loop dequant-on-fly
+        // matmul this test originally documented.
         //
-        // The test asserts a generous 50x ceiling — this is purely a regression guard. The
-        // assertion fails LOUDLY if the gap grows beyond 50x, which would indicate something
-        // worse than the documented scalar baseline (e.g. cold cache, page faults, or a
-        // regression in the existing scalar path). When the SIMD INT8 cached-B path lands
-        // in QuantizedAttentionLayer, this test should be tightened to assert ratio < 1.0.
+        // Measured baseline on this 16x64 canary post-SIMD: ratio ≈ 15x
+        // (int8 ~5.4 ms vs fp32 ~0.35 ms). The gap is no longer the scalar inner
+        // loop — at this canary size the GEMM body (16×64×64 = 65k FMAs) is
+        // small enough that per-call overhead dominates: per-row dequant calls,
+        // ArrayPool.Rent/Return, scatter into the strided output. The FP32 path
+        // goes through a single FusedLinear GEMM with none of that bookkeeping.
+        //
+        // Tightening below ~20x at THIS canary requires a Tensors-side primitive
+        // that keeps weights as sbyte all the way through the kernel (true 4x
+        // DRAM bandwidth saving on weight loads plus elimination of the per-tile
+        // dequant scratch). That work is tracked separately. On BERT-class
+        // shapes (e.g. 768×3072) the GEMM body dominates and the same Int8-
+        // WeightOnlyMatMul wiring lands much closer to FP32 — but the
+        // diagnostic-time-budgeted canary fixture is what's measured here.
+        //
+        // The ceiling tightens from the pre-SIMD 50x guard to 20x: tight enough
+        // to catch a real regression, loose enough to absorb CI variance on
+        // warm/cold cache and turbo-boost noise at the small canary size.
         await Task.Yield();
         int seqLen = 16;
         int embDim = 64;
@@ -203,12 +222,20 @@ public class Int8InferenceModelIntegrationTests
         double int8Ms = swInt8.Elapsed.TotalMilliseconds / measureIters;
         double ratio = int8Ms / Math.Max(fp32Ms, 0.0001);
 
-        // 50x ceiling guards against catastrophic regression past the documented baseline.
-        // The current measured baseline is ~20x on small canary shapes (16x64 with 4 heads).
-        Assert.True(ratio < 50.0,
+        _output.WriteLine(
+            $"INT8 wall-clock ratio: {ratio:F2}x (int8={int8Ms:F3}ms vs fp32={fp32Ms:F3}ms) " +
+            $"on {seqLen}x{embDim} transformer canary, {numHeads} heads, {measureIters} iters.");
+
+        // 20x post-SIMD ceiling (down from the pre-SIMD 50x). The measured
+        // canary ratio is ~15x — small-matrix per-call overhead dominates here.
+        // A larger-shape benchmark would show much closer to FP32; that is what
+        // a future int8-through-the-kernel GEMM would unlock at canary sizes too.
+        Assert.True(ratio < 20.0,
             $"INT8 wall-clock ratio {ratio:F2}x (int8={int8Ms:F3}ms vs fp32={fp32Ms:F3}ms) " +
-            $"exceeds the 50x regression ceiling. Expected baseline is ~20x slower than FP32 " +
-            $"until SimdGemm.SgemmWithInt8CachedB is wired into QuantizedAttentionLayer.");
+            $"exceeds the 20x post-SIMD regression ceiling. The Int8WeightOnlyMatMul.MultiplyAddBias " +
+            $"tiled SGEMM + AVX2 dequant path keeps this around 15x on the canary; a number above 20x " +
+            $"indicates a regression in the dequant primitive, the tile size choice, or the engine " +
+            $"FusedLinear baseline. Run the test under a profiler if you see this.");
     }
 
     [Fact(Timeout = 60000)]
