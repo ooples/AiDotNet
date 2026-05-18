@@ -1441,7 +1441,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         if (value is float f)
         {
-            return BitConverter.SingleToInt32Bits(f);
+            // BitConverter.SingleToInt32Bits is .NET Core 2.1+ — net471 needs
+            // the BitConverterHelper shim that wraps an unsafe-union fallback.
+            return AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(f);
         }
         if (value is double d)
         {
