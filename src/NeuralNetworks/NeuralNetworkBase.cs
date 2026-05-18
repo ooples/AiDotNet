@@ -5497,14 +5497,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 T inverseScale = NumOps.FromDouble(1.0 / scale);
                 bool hasOverflow = false;
 
-                // Unscale every gradient we have a tape entry for (grads dict
-                // for trainable params + allGrads entries for extras). The
-                // grads dict references the same Tensor<T> objects as allGrads
-                // so we iterate allGrads to cover both at once.
-                foreach (var kvp in allGrads)
+                // Unscale every gradient that BELONGS TO A TRAINABLE PARAMETER —
+                // both the layer-trainables (in `grads`) and the network-level
+                // extras (in `extraTrainableTensors`). The overflow flag is set
+                // ONLY from these gradients; allGrads can include tape entries
+                // for inputs/intermediates whose NaN/Inf would false-positive
+                // the overflow-skip branch even when every trainable gradient
+                // is finite (review #1362 follow-up).
+                void UnscaleAndCheck(Tensor<T>? g)
                 {
-                    var g = kvp.Value;
-                    if (g is null || g.Length == 0) continue;
+                    if (g is null || g.Length == 0) return;
                     var span = g.Data.Span;
                     int len = g.Length;
                     for (int i = 0; i < len; i++)
@@ -5515,6 +5517,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                             hasOverflow = true;
                         }
                     }
+                }
+
+                foreach (var kvp in grads)
+                {
+                    UnscaleAndCheck(kvp.Value);
+                }
+                foreach (var extra in extraTrainableTensors)
+                {
+                    if (allGrads.TryGetValue(extra, out var extraGrad))
+                        UnscaleAndCheck(extraGrad);
                 }
 
                 // Update LossScaler state — this drives the dynamic-scaling
