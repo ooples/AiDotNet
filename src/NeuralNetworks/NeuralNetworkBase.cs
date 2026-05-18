@@ -5277,15 +5277,22 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // We snapshot the FP32 master values here so we can restore them
             // before opt.Step, then on next Train() call the round-trip starts
             // from the updated FP32 masters again.
+            // Snapshot order MUST stay aligned with the restore loop below:
+            //   [0 .. trainableParams.Count)        -> trainableParams
+            //   [trainableParams.Count .. end)      -> extraTrainableTensors
+            // The restore loop iterates both lists in the same order.
             List<float[]>? mpFp32Snapshots = null;
+            List<Tensor<T>>? mpSnapshotTargets = null;
             MixedPrecisionContext? mpCtx = _mixedPrecisionContext;
             if (mpCtx is not null && typeof(T) == typeof(float))
             {
-                mpFp32Snapshots = new List<float[]>(trainableParams.Count);
+                int totalParams = trainableParams.Count + extraTrainableTensors.Count;
+                mpFp32Snapshots = new List<float[]>(totalParams);
+                mpSnapshotTargets = new List<Tensor<T>>(totalParams);
                 bool useFp16 = mpCtx.Config.PrecisionType == Enums.MixedPrecisionType.FP16;
-                for (int p = 0; p < trainableParams.Count; p++)
+
+                void SnapshotAndRoundTrip(Tensor<T> param)
                 {
-                    var param = trainableParams[p];
                     int len = param.Length;
                     var snapshot = new float[len];
                     var paramSpan = param.Data.Span;
@@ -5301,7 +5308,50 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         paramSpan[i] = (T)(object)rounded;
                     }
                     mpFp32Snapshots.Add(snapshot);
+                    mpSnapshotTargets.Add(param);
                 }
+
+                for (int p = 0; p < trainableParams.Count; p++)
+                    SnapshotAndRoundTrip(trainableParams[p]);
+                // Also round-trip GetExtraTrainableTensors() (CLS tokens,
+                // positional embeddings, etc.) — these participate in forward
+                // and get updated in the extras-update path below; without
+                // including them here they would train OUTSIDE mixed precision
+                // (review #1362).
+                for (int e = 0; e < extraTrainableTensors.Count; e++)
+                    SnapshotAndRoundTrip(extraTrainableTensors[e]);
+            }
+
+            // Stash the snapshot pair into a class-level field so the
+            // try/finally guard at the end of this method can do the FP32
+            // restore if forward / loss / backward threw before the happy-
+            // path restore ran. Without this, an exception mid-step would
+            // leak FP16/BF16-rounded values into the master weights (review
+            // #1362 fix #1). The field is reset to default at end of finally.
+            _mpFinallyState = (mpFp32Snapshots, mpSnapshotTargets, Restored: mpFp32Snapshots is null);
+
+            // Local helper used by the normal restore path: writes FP32
+            // master values back to the tape-tracked tensor storage so the
+            // optimizer step sees the precise FP32 trajectory rather than
+            // the FP16/BF16-rounded working weights from the forward pass.
+            void RestoreFp32MastersIfNeeded()
+            {
+                if (_mpFinallyState.Restored) return;
+                if (_mpFinallyState.Targets is null || _mpFinallyState.Snapshots is null) return;
+                var targets = _mpFinallyState.Targets;
+                var snaps = _mpFinallyState.Snapshots;
+                for (int p = 0; p < targets.Count && p < snaps.Count; p++)
+                {
+                    var param = targets[p];
+                    var snapshot = snaps[p];
+                    var span = param.Data.Span;
+                    int len = Math.Min(snapshot.Length, param.Length);
+                    for (int i = 0; i < len; i++)
+                    {
+                        span[i] = (T)(object)snapshot[i];
+                    }
+                }
+                _mpFinallyState.Restored = true;
             }
 
             // Activate a TensorArena for the forward/backward/update scope.
@@ -5358,19 +5408,26 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // unscale them post-backward and run the overflow check. For BF16
             // the default scale is 1.0 (LossScaler is effectively a no-op),
             // so this multiplication is a tape-safe identity.
+            //
+            // Important: build a SEPARATE scaledLossForBackward tensor instead
+            // of mutating lossTensor in place. The unmodified lossTensor is
+            // what feeds LastLoss / the TapeStepContext loss value / training
+            // diagnostics; rewriting it would surface a scaled loss to every
+            // caller observing training progress (see #1362 review).
+            var lossForBackward = lossTensor;
             if (mpCtx is not null && typeof(T) == typeof(float))
             {
                 double scale = mpCtx.LossScaler.Scale;
                 if (scale != 1.0)
                 {
-                    lossTensor = Engine.TensorMultiplyScalar(lossTensor, NumOps.FromDouble(scale));
+                    lossForBackward = Engine.TensorMultiplyScalar(lossTensor, NumOps.FromDouble(scale));
                 }
             }
 
             // Compute all gradients then filter to trainable params.
             // Passing sources directly can miss parameters when the tape backward
             // can't match view tensor references through the GradFn chain.
-            var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+            var allGrads = tape.ComputeGradients(lossForBackward, sources: null);
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)
@@ -5478,18 +5535,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // optimizer step below will then update FP32 values, not
                 // FP16-rounded ones. The tensor REFERENCE is preserved so
                 // the optimizer (which keyed on references in its own state)
-                // continues to work.
-                for (int p = 0; p < trainableParams.Count && p < mpFp32Snapshots.Count; p++)
-                {
-                    var param = trainableParams[p];
-                    var snapshot = mpFp32Snapshots[p];
-                    var span = param.Data.Span;
-                    int len = Math.Min(snapshot.Length, param.Length);
-                    for (int i = 0; i < len; i++)
-                    {
-                        span[i] = (T)(object)snapshot[i];
-                    }
-                }
+                // continues to work. Restores both trainableParams AND
+                // extraTrainableTensors via the snapshot target list
+                // (review #1362 fix #2).
+                RestoreFp32MastersIfNeeded();
 
                 mpSkipOptimizerStep = hasOverflow;
             }
@@ -5557,7 +5606,16 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // tick and the LR would stay pinned at its initial value.
             // Closes #1270.zKjB (single-source-of-truth helper across
             // every training entry point).
-            StepSchedulerIfSupported(opt);
+            //
+            // Skip the scheduler tick when MP overflow forced us to skip
+            // the optimizer step. Advancing the LR schedule on a step
+            // where no parameters were updated would desynchronize any
+            // per-step schedule during overflow/backoff periods (see
+            // #1362 review).
+            if (!mpSkipOptimizerStep)
+            {
+                StepSchedulerIfSupported(opt);
+            }
 
             // ---- Training diagnostics emission point (issue #1328 hook) ----
             // Emitted AFTER opt.Step and the extras-update path commit. If
@@ -5686,11 +5744,56 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
         finally
         {
+            // Restore FP32 master weights to the layer storage FIRST if any
+            // mid-step exception left the model in FP16/BF16-rounded state.
+            // Idempotent: a no-op when the happy-path unscale+restore block
+            // already ran. Without this, an exception thrown by
+            // ForwardForTraining / ComputeTapeLoss / ComputeGradients on a
+            // failed step would leak rounded values into the master weights
+            // and corrupt subsequent training (review #1362 fix #1).
+            //
+            // The local function `RestoreFp32MastersIfNeeded` is defined
+            // inside the try block above (closing over mpFp32Snapshots,
+            // mpSnapshotTargets, mpFp32Restored). It is NOT in scope here
+            // — we re-do the restore inline using the same idempotency
+            // contract. Skipped when MP wasn't enabled this iteration.
+            // Use class-level fields to communicate state across the
+            // try/finally boundary: mp_snapshot_state is set inside the
+            // try block when MP is active.
+            if (_mpFinallyState.Snapshots is not null
+                && _mpFinallyState.Targets is not null
+                && !_mpFinallyState.Restored)
+            {
+                var snaps = _mpFinallyState.Snapshots;
+                var targets = _mpFinallyState.Targets;
+                for (int p = 0; p < targets.Count && p < snaps.Count; p++)
+                {
+                    var param = targets[p];
+                    var snapshot = snaps[p];
+                    var span = param.Data.Span;
+                    int len = Math.Min(snapshot.Length, param.Length);
+                    for (int i = 0; i < len; i++)
+                    {
+                        span[i] = (T)(object)snapshot[i];
+                    }
+                }
+            }
+            // Clear MP finally state so the next call's state is fresh.
+            _mpFinallyState = default;
+
             // Restore original tensor references so Clone/serialization see real tensors.
             // Copies updated weights from buffer views back to originals before restoring.
             RestoreOriginalParameters();
         }
     }
+
+    /// <summary>
+    /// Per-TrainWithTape-call mixed-precision restore state, shared between
+    /// the try block (where it's populated) and the finally (where it's
+    /// consumed if the try block didn't complete the restore inline). Reset
+    /// to default at the end of the finally block.
+    /// </summary>
+    private (List<float[]>? Snapshots, List<Tensor<T>>? Targets, bool Restored) _mpFinallyState;
 
     /// <summary>
     /// Best-effort read of the supplied optimizer's current learning

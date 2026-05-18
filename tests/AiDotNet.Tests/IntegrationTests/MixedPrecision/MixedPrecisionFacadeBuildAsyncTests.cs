@@ -100,12 +100,20 @@ public class MixedPrecisionFacadeBuildAsyncTests
         Assert.NotNull(result);
         Assert.NotNull(result.Model);
 
-        // The MP wire-up under test: the network handed to BuildAsync should
-        // have IsMixedPrecisionEnabled == true after the build completes.
-        Assert.True(network.IsMixedPrecisionEnabled,
-            "BuildAsync must apply ConfigureMixedPrecision(config) to the constructed model.");
+        // The MP wire-up under test: the model returned by BuildAsync must
+        // have IsMixedPrecisionEnabled == true. Assert on result.Model
+        // (not just `network`) so a regression where BuildAsync swaps in a
+        // different model instance with incorrect MP state will fail loudly
+        // (review #1362). result.Model SHOULD be the same instance as
+        // `network` for this configuration (no AutoML / wrapper substitution),
+        // verified via Assert.Same below.
+        Assert.Same(network, result.Model);
+        var built = result.Model as NeuralNetworkBase<float>;
+        Assert.NotNull(built);
+        Assert.True(built!.IsMixedPrecisionEnabled,
+            "BuildAsync must apply ConfigureMixedPrecision(config) to the returned model.");
 
-        var ctx = network.GetMixedPrecisionContext();
+        var ctx = built.GetMixedPrecisionContext();
         Assert.NotNull(ctx);
         Assert.Equal(MixedPrecisionType.FP16, ctx!.Config.PrecisionType);
         Assert.Equal(256.0, ctx.LossScaler.Scale);
@@ -125,10 +133,12 @@ public class MixedPrecisionFacadeBuildAsyncTests
 
         var result = await builder.BuildAsync();
         Assert.NotNull(result);
-
-        Assert.True(network.IsMixedPrecisionEnabled,
+        Assert.Same(network, result.Model);
+        var built = result.Model as NeuralNetworkBase<float>;
+        Assert.NotNull(built);
+        Assert.True(built!.IsMixedPrecisionEnabled,
             "BuildAsync must wire BF16 MP config when ConfigureMixedPrecision uses ForBF16().");
-        var ctx = network.GetMixedPrecisionContext();
+        var ctx = built.GetMixedPrecisionContext();
         Assert.NotNull(ctx);
         Assert.Equal(MixedPrecisionType.BF16, ctx!.Config.PrecisionType);
         // BF16 default — no loss scaling required.
@@ -151,10 +161,12 @@ public class MixedPrecisionFacadeBuildAsyncTests
 
         var result = await builder.BuildAsync();
         Assert.NotNull(result);
-
-        Assert.False(network.IsMixedPrecisionEnabled,
+        Assert.Same(network, result.Model);
+        var built = result.Model as NeuralNetworkBase<float>;
+        Assert.NotNull(built);
+        Assert.False(built!.IsMixedPrecisionEnabled,
             "Without ConfigureMixedPrecision the resulting model must remain in FP32 mode.");
-        Assert.Null(network.GetMixedPrecisionContext());
+        Assert.Null(built.GetMixedPrecisionContext());
     }
 
     [Fact(Timeout = 120000)]
@@ -174,10 +186,12 @@ public class MixedPrecisionFacadeBuildAsyncTests
 
         var result = await builder.BuildAsync();
         Assert.NotNull(result);
-
-        Assert.True(network.IsMixedPrecisionEnabled,
+        Assert.Same(network, result.Model);
+        var built = result.Model as NeuralNetworkBase<float>;
+        Assert.NotNull(built);
+        Assert.True(built!.IsMixedPrecisionEnabled,
             "ConfigureMixedPrecision() with no argument should still wire a default MP config.");
-        var ctx = network.GetMixedPrecisionContext();
+        var ctx = built.GetMixedPrecisionContext();
         Assert.NotNull(ctx);
     }
 }

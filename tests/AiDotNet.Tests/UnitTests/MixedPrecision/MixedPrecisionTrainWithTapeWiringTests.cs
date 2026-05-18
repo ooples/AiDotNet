@@ -77,13 +77,16 @@ public class MixedPrecisionTrainWithTapeWiringTests
     }
 
     [Fact(Timeout = 30000)]
-    public async Task EnableMixedPrecision_PublicSurface_AcceptsConfig()
+    public async Task EnableMixedPrecision_Internal_AcceptsConfig()
     {
+        // This is an INTERNAL-access test reached via InternalsVisibleTo.
+        // The public facade path is covered by
+        // MixedPrecisionFacadeBuildAsyncTests in IntegrationTests/MixedPrecision.
+        // Naming this test "PublicSurface" was misleading — it's testing the
+        // internal EnableMixedPrecision call directly, not the facade
+        // (review #1362).
         await Task.Yield();
         var model = BuildTinyDeterministicNetwork();
-        // BEFORE issue #1354: EnableMixedPrecision was `internal virtual` — this
-        // line was a compile error from outside the assembly. Asserting it
-        // compiles + executes proves the public-surface change shipped.
         model.EnableMixedPrecision(new MixedPrecisionConfig
         {
             PrecisionType = MixedPrecisionType.FP16,
@@ -236,15 +239,31 @@ public class MixedPrecisionTrainWithTapeWiringTests
         // its job. The forward pass is rounded identically (same FP16
         // round-trip), so the gradient direction is identical. After
         // scale/unscale, the magnitudes must match within float noise.
+        //
+        // Track how many comparable (non-near-zero) deltas we measured;
+        // if every deltaA is below 1e-8, the loop skips all comparisons
+        // and maxRelDiff stays 0 — yielding a false pass with no signal
+        // (review #1362).
         double maxRelDiff = 0;
+        int compared = 0;
         for (int i = 0; i < beforeA.Length; i++)
         {
             float deltaA = afterA[i] - beforeA[i];
             float deltaB = afterB[i] - beforeB[i];
-            if (System.Math.Abs(deltaA) < 1e-8f) continue;
+            if (System.Math.Abs(deltaA) < 1e-8f)
+            {
+                // For near-zero deltaA, deltaB must also be near-zero —
+                // both paths should agree the parameter barely moved.
+                Assert.True(System.Math.Abs(deltaB) < 1e-7f,
+                    $"Expected near-zero delta match at index {i}, got deltaA={deltaA}, deltaB={deltaB}");
+                continue;
+            }
+            compared++;
             double rel = System.Math.Abs((deltaB - deltaA) / deltaA);
             if (rel > maxRelDiff) maxRelDiff = rel;
         }
+        Assert.True(compared > 0,
+            "No comparable parameter deltas were found; the invariance check was not exercised.");
         Assert.True(maxRelDiff < 0.05,
             $"Per-parameter delta should match across scale=1 and scale=1024 within 5% relative; got maxRel={maxRelDiff:G4}");
     }
