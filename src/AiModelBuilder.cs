@@ -8077,6 +8077,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private object? ResolveModalityAugmenter(Augmentation.AugmentationConfig config)
     {
         var globalProb = config.Probability;
+        // typeof equality on the OPEN generic types — derived classes of
+        // the AiDotNet shape primitives would NOT have a built-in
+        // augmenter that knows their layout, and the factory's pipeline
+        // would silently fail at the typed cast back to
+        // IAugmentation<T,TInput> (review #1368 C8ehc). Exact-type match
+        // is the safe contract: callers with custom subclasses must
+        // supply their own CustomAugmenter.
         if (config.ImageSettings is { } img && typeof(TInput) == typeof(Augmentation.Image.ImageTensor<T>))
         {
             return Augmentation.ModalityAugmenterFactory.BuildImageAugmenter<T>(img, globalProb);

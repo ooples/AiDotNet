@@ -167,11 +167,27 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; set; }
 
     /// <summary>
-    /// Optional training-target sample handed in alongside an unfitted
-    /// <see cref="PostprocessingPipeline"/> so the
-    /// <see cref="AiModelResult{T,TInput,TOutput}"/> ctor can lazy-fit
-    /// the pipeline at construction time instead of throwing.
+    /// Optional sample of model-output predictions (NOT training targets)
+    /// handed in alongside an unfitted <see cref="PostprocessingPipeline"/>
+    /// so the <see cref="AiModelResult{T,TInput,TOutput}"/> ctor can
+    /// lazy-fit the pipeline at construction time instead of throwing.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Important:</b> the postprocessing pipeline transforms model
+    /// PREDICTIONS (e.g. raw logits → softmax probabilities, raw scores →
+    /// thresholded labels), so its <c>Fit</c> needs the distribution of
+    /// model outputs, not the training-target distribution. If you
+    /// supply training targets here the pipeline will be fit on the
+    /// wrong distribution and silently transform predictions
+    /// incorrectly at inference time (review #1368 C8efy). The
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}"/> supervised path
+    /// produces this sample correctly by calling
+    /// <c>bestSolution.Predict(XTrain)</c> internally; only direct
+    /// <c>AiModelResultOptions</c> construction callers need to
+    /// materialise it themselves.
+    /// </para>
+    /// </remarks>
     /// <remarks>
     /// <para>
     /// When <see cref="PostprocessingPipeline"/> is non-null and not yet
