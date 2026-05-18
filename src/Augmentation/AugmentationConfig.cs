@@ -160,6 +160,30 @@ public class AugmentationConfig
     public VideoAugmentationSettings? VideoSettings { get; set; }
 
     /// <summary>
+    /// User-supplied custom augmenter object — when set, BuildAsync will
+    /// invoke its <c>Apply</c> method on each training input before the
+    /// optimizer runs. Stored as <see cref="object"/> because
+    /// <see cref="AugmentationConfig"/> is non-generic and the
+    /// <c>IAugmentation&lt;T, TData&gt;</c> interface carries the concrete
+    /// data type. The builder dispatches to the matching
+    /// <see cref="AugmentationConfig"/>-aware code path based on
+    /// <c>TInput</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is the integration point between
+    /// <c>AiModelBuilder.ConfigureAugmentation</c> and the existing
+    /// <c>src/Augmentation/*</c> augmenter zoo (image / audio / text /
+    /// tabular / video augmenters under
+    /// <see cref="AugmentationBase{T, TData}"/>). Without this slot the
+    /// configure call was a no-op: the <c>ImageSettings</c> /
+    /// <c>TabularSettings</c> etc. on this config are documentation-only
+    /// in the current codebase (no factory translates them into
+    /// <c>IAugmentation</c> instances). Discovered by AiDotNet#1345
+    /// Bucket8 ConfigureAugmentation test.
+    /// </remarks>
+    public object? CustomAugmenter { get; set; }
+
+    /// <summary>
     /// Creates a new augmentation configuration with industry-standard defaults.
     /// </summary>
     public AugmentationConfig()

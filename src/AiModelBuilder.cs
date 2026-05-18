@@ -2747,6 +2747,34 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
         }
 
+        // Apply ConfigureAugmentation if a CustomAugmenter is wired. Without
+        // this step the AugmentationConfig was stored on the builder and
+        // never invoked — the entire ImageSettings/TabularSettings/etc.
+        // surface on AugmentationConfig is documentation-only in the
+        // current codebase (no factory translates them into IAugmentation
+        // instances), so the user's recourse is to supply a typed
+        // IAugmentation<T, TInput> via the new CustomAugmenter slot.
+        // Applied once before the optimizer runs (offline data augmentation);
+        // per-batch / per-epoch (online) augmentation would require deeper
+        // hooks into the optimizer's batch loop. Discovered by AiDotNet#1345
+        // Bucket8 ConfigureAugmentation test.
+        if (_augmentationConfig is { IsEnabled: true, CustomAugmenter: { } customAug }
+            && customAug is AiDotNet.Augmentation.IAugmentation<T, TInput> typedAug
+            && preprocessedX is TInput xForAug)
+        {
+            var augContext = new AiDotNet.Augmentation.AugmentationContext<T>(
+                isTraining: true,
+                seed: _augmentationConfig.Seed);
+            var augmented = typedAug.Apply(xForAug, augContext);
+            // Update the train-side X with the augmented data so the
+            // optimizer sees the transformed inputs.
+            preprocessedX = augmented;
+            if (augmented is TInput typedAugmented)
+            {
+                XTrain = typedAugmented;
+            }
+        }
+
         // Cross-validation can be performed using the new evaluation framework via AiModelResult.
         // Users can call CrossValidationEngine<T> directly for cross-validation needs.
         CrossValidationResult<T, TInput, TOutput>? cvResults = null;
