@@ -112,16 +112,28 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
     }
 
     /// <summary>
-    /// ConfigureKnowledgeDistillation — verifies the configured
-    /// <c>KnowledgeDistillationOptions</c> reaches
-    /// <c>result.KnowledgeDistillationOptions</c>. Without the wiring
-    /// fix in this PR the field was stored on the builder but never
-    /// flowed to the result, so consumers couldn't read the
-    /// configured options post-build.
+    /// ConfigureKnowledgeDistillation — verifies the regular-training
+    /// path FAILS FAST when KD is configured but the model path doesn't
+    /// support tape-based distillation yet (review #1368 restored the
+    /// NotSupportedException at AiModelBuilder.cs's regular-training
+    /// branch; the previous Trace-warning downgrade silently fell
+    /// through to standard supervised training, breaking the contract a
+    /// user who called ConfigureKnowledgeDistillation expects).
     /// </summary>
+    /// <remarks>
+    /// The Bucket9 wiring assertion under the OLD contract (verify the
+    /// options round-trip to result.KnowledgeDistillationOptions) is
+    /// preserved on the direct-training paths (parametric / clustering /
+    /// LoRA-wrapped NN), where the options ARE attached without going
+    /// through the KD-aware training loop. The standard supervised path
+    /// (regular Transformer / regular NN without LoRA) throws so the
+    /// user discovers the missing integration at Build time. Once KD
+    /// integrates with the tape-based flow upstream, this assertion
+    /// flips back to the LandsOnResult shape.
+    /// </remarks>
     [Fact]
     [Trait("category", "integration-configure-method")]
-    public async Task ConfigureKnowledgeDistillation_NonDefaultOptions_LandsOnResult()
+    public async Task ConfigureKnowledgeDistillation_RegularTrainingPath_ThrowsUntilTapeIntegrationLands()
     {
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
@@ -132,13 +144,21 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
             Temperature = 7.0, // non-default sentinel
         };
 
-        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-            .ConfigureModel(model)
-            .ConfigureDataLoader(loader)
-            .ConfigureKnowledgeDistillation(kdOptions)
-            .BuildAsync();
+        // Canary Transformer is a NeuralNetworkBase + IParameterizable,
+        // and the test does not configure LoRA — so UseDirectTrainingPath
+        // returns false and BuildAsync routes to the regular training
+        // path where the KD-not-integrated throw fires.
+        var ex = await Assert.ThrowsAsync<System.NotSupportedException>(async () =>
+        {
+            await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                .ConfigureModel(model)
+                .ConfigureDataLoader(loader)
+                .ConfigureKnowledgeDistillation(kdOptions)
+                .BuildAsync();
+        });
 
-        Assert.NotNull(result.KnowledgeDistillationOptions);
-        Assert.Equal(7.0, result.KnowledgeDistillationOptions!.Temperature);
+        // Diagnostic must point the user at the supported alternatives.
+        Assert.Contains("KnowledgeDistillation", ex.Message);
+        Assert.Contains("tape", ex.Message);
     }
 }
