@@ -2006,10 +2006,15 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // caller hands us an unfitted pipeline. Reaching here with
             // !IsFitted means the pipeline was mutated AFTER construction
             // (Reset, clear, etc.) — a programming error that shouldn't
-            // happen in practice. Use Debug.Assert so Release builds
-            // don't pay the runtime branch + throw cost on every
-            // Predict (review #1368 C6WR2 — the ctor check is the
-            // user-facing failure point; this is a debug-only invariant).
+            // happen in practice. Debug.Assert surfaces the specific
+            // diagnostic in dev builds; Release builds still get a
+            // clear failure because PostprocessingPipeline.Transform()
+            // calls EnsureFitted() internally and throws
+            // InvalidOperationException("Pipeline has not been fitted...")
+            // (review #1368 C6WR2 / C8eks: NOT silent in Release —
+            // there's a downstream throw from Transform). The
+            // Debug.Assert just adds the post-construction-mutation
+            // hint to dev builds.
             System.Diagnostics.Debug.Assert(
                 PostprocessingPipeline.IsFitted,
                 "PostprocessingPipeline became unfitted after AiModelResult construction. " +

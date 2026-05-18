@@ -149,9 +149,15 @@ internal static class ModalityAugmenterFactory
         if (s.EnableNoise)
         {
             // NoiseSNR is a single fixed-SNR target; spread by ±10dB so the
-            // augmenter's min/max contract is non-degenerate.
+            // augmenter's min/max contract is non-degenerate. Clamp the
+            // lower bound at 0 dB to avoid passing a negative SNR (which
+            // would push noise above the signal and produce uniformly
+            // destroyed audio) — most consumers calling
+            // AudioAugmentationSettings.NoiseSNR mean a snr-floor target,
+            // not a wraparound (review #1368 C8ekA). Upper bound +∞ is
+            // fine (clean signal).
             pipeline.Add(new AudioNoise<T>(
-                minSnrDb: s.NoiseSNR - 10.0,
+                minSnrDb: System.Math.Max(0.0, s.NoiseSNR - 10.0),
                 maxSnrDb: s.NoiseSNR + 10.0,
                 probability: globalProbability));
             added++;
