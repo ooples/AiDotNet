@@ -10,13 +10,17 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Inference.Quantization;
 
 /// <summary>
-/// Public, inference-only wrapper around a trained <see cref="NeuralNetworkBase{T}"/> that
-/// rewrites compatible layers into their INT8-storage quantized counterparts and produces a
-/// runnable <see cref="Predict(Tensor{float})"/> entry point.
+/// Internal inference-only wrapper around a trained <see cref="NeuralNetworkBase{T}"/> that
+/// rewrites compatible layers into their INT8-storage quantized counterparts. The PUBLIC entry
+/// point for INT8 weight-only inference is the facade method on
+/// <see cref="AiModelBuilder{T, TInput, TOutput}"/> (or the equivalent method on
+/// <c>NeuralNetworkBase&lt;T&gt;</c> that returns the built model); this class is the
+/// in-memory representation those facade paths produce. See the class-level remarks below for
+/// the rationale.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is the "true INT8 weight-only inference" surface. The existing
+/// This is the "true INT8 weight-only inference" surface used internally. The existing
 /// <c>Int8Quantizer&lt;T, TInput, TOutput&gt;</c> performs fake quantization
 /// (round-trips weights through FP32 storage via <c>IParameterizable.WithParameters</c>) and
 /// therefore produces no inference speedup or memory reduction at runtime. This wrapper
@@ -31,27 +35,24 @@ namespace AiDotNet.Inference.Quantization;
 /// <c>cloneModel: false</c> to mutate in place when the caller no longer needs the FP32
 /// model and wants to save the deep-copy time and memory.
 /// </para>
-/// <para><b>For Beginners:</b> After you have trained a model, this wrapper lets you produce
-/// a smaller and (on memory-bandwidth-bound matmuls) faster inference-only copy that stores
+/// <para><b>For Beginners:</b> After you have trained a model, this wrapper produces a
+/// smaller and (on memory-bandwidth-bound matmuls) faster inference-only copy that stores
 /// weights as 8-bit signed integers (one byte each) instead of 32-bit floats (four bytes each).
 /// You typically lose less than 0.1% accuracy and gain ~4x reduction in weight memory.
 /// </para>
 /// <example>
+/// Internal / assembly-internal usage (reachable from tests via
+/// <c>InternalsVisibleTo</c> and from <c>AiDotNet</c> consumer code via the facade):
 /// <code>
 /// // Train a model as normal
 /// var transformer = new Transformer&lt;float&gt;(architecture, lossFn);
 /// transformer.Train(features, targets);
 ///
-/// // Wrap for INT8 inference
+/// // Wrap for INT8 inference (internal call site)
 /// var int8 = Int8InferenceModel.FromTrained(transformer);
 ///
 /// // Predict (uses INT8-stored weights with per-row symmetric scales)
 /// var prediction = int8.Predict(input);
-///
-/// // Inspect quantization stats
-/// Console.WriteLine($"INT8 weight bytes: {int8.QuantizedWeightBytes}");
-/// Console.WriteLine($"FP32 weight bytes: {int8.OriginalWeightBytes}");
-/// Console.WriteLine($"Compression ratio: {int8.CompressionRatio:F2}x");
 /// </code>
 /// </example>
 /// </remarks>
