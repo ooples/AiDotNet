@@ -120,27 +120,24 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
             : (input.Rank == 2 ? input : input.Reshape(rowDim, _inputSize));
 
         int batchSize = flat.Shape[0];
-        int featuresIn = flat.Shape[1];
 
         var output = new Tensor<float>(new[] { batchSize, _outputSize });
-        var inputSpan = flat.AsSpan();
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            int inputBase = b * featuresIn;
-            int outputBase = b * _outputSize;
-            for (int o = 0; o < _outputSize; o++)
-            {
-                float sum = _biases[o];
-                float scale = _rowScales[o];
-                int wBase = o * _inputSize;
-                for (int i = 0; i < _inputSize; i++)
-                {
-                    sum += inputSpan[inputBase + i] * (_weightsInt8[wBase + i] * scale);
-                }
-                output.SetFlat(outputBase + o, sum);
-            }
-        }
+        // INT8 weight-only matmul routed through AiDotNet.Tensors' tiled SGEMM
+        // + AVX2 dequant primitives. See Int8WeightOnlyMatMul for the layout
+        // contract and tile sizing strategy. Replaces the scalar dequant-on-fly
+        // loop the #1348 PR description called out as a follow-up; the SIMD
+        // wiring (originally #1363) lands in this branch so the wall-clock
+        // assertion below can tighten to a real perf target.
+        Int8WeightOnlyMatMul.MultiplyAddBias(
+            input: flat.AsSpan(),
+            weightsInt8: _weightsInt8,
+            rowScales: _rowScales,
+            biases: _biases,
+            output: output.AsWritableSpan(),
+            rows: batchSize,
+            inputSize: _inputSize,
+            outputSize: _outputSize);
 
         var activated = ApplyActivation(output);
         if (inputWas1D)
