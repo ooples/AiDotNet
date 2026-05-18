@@ -2456,6 +2456,21 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Use defaults for the optimizer if not set
         var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
 
+        // Wire ConfigureRegularization through to the optimizer. Without
+        // this, the user's regularization was stored on the builder
+        // (_regularization) but the gradient-application loop inside
+        // GradientBasedOptimizerBase read its own default L2 instead —
+        // a stored-but-not-consumed bug discovered by AiDotNet#1345
+        // Bucket7 ConfigureRegularization test. The setter on
+        // GradientBasedOptimizerBase swaps the protected field at runtime
+        // so optimizers constructed before ConfigureRegularization was
+        // called still pick up the user's choice.
+        if (_regularization is not null
+            && optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradOptForReg)
+        {
+            gradOptForReg.SetRegularization(_regularization);
+        }
+
         // LORA ADAPTATION (if configured)
         // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning
         if (_loraConfiguration != null && _model is NeuralNetworks.NeuralNetworkBase<T> neuralNetForLoRA)
