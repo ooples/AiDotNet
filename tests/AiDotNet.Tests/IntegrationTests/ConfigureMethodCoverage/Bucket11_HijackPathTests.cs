@@ -259,6 +259,6 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         // setter-check alone isn't a routing assertion, but combined
         // with successful BuildAsync under a config that would crash
         // an unconditional call path it forms a real gate test).
-        Assert.Same(agentCfg, builder.ConfiguredAgentAssistance);
+        Assert.Same(agentCfg, ((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredAgentAssistance);
     }
 }

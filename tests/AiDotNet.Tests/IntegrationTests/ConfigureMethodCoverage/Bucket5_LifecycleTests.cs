@@ -71,7 +71,7 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
         // Internal accessor (added by PR #1361 for this exact wiring check)
         // confirms the setter wrote the field that the BuildAsync
         // licenseScope at AiModelBuilder.cs:1414 will read.
-        Assert.Same(key, builder.ConfiguredLicenseKey);
+        Assert.Same(key, ((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredLicenseKey);
 
         var result = await builder.BuildAsync();
 

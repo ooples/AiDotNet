@@ -305,9 +305,9 @@ caching:
             Assert.NotNull(builder);
 
             // Verify YAML values were actually applied to the builder
-            Assert.NotNull(builder.ConfiguredCaching);
-            Assert.True(builder.ConfiguredCaching.Enabled);
-            Assert.Equal(2000, builder.ConfiguredCaching.MaxCacheSize);
+            Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching);
+            Assert.True(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching.Enabled);
+            Assert.Equal(2000, ((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching.MaxCacheSize);
         }
         finally
         {
@@ -339,9 +339,9 @@ caching:
             Assert.NotNull(builder);
 
             // Verify the fluent override took effect over YAML values
-            Assert.NotNull(builder.ConfiguredCaching);
-            Assert.False(builder.ConfiguredCaching.Enabled);
-            Assert.Equal(100, builder.ConfiguredCaching.MaxCacheSize);
+            Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching);
+            Assert.False(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching.Enabled);
+            Assert.Equal(100, ((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching.MaxCacheSize);
         }
         finally
         {
@@ -646,7 +646,7 @@ optimizer:
         YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder);
 
         // Verify the optimizer was actually configured on the builder
-        Assert.NotNull(builder.ConfiguredOptimizer);
+        Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredOptimizer);
     }
 
     [Fact(Timeout = 120000)]
@@ -663,7 +663,7 @@ optimizer:
         YamlConfigApplier<double, Matrix<double>, Vector<double>>.Apply(config, builder);
 
         // Verify the optimizer was actually configured on the builder
-        Assert.NotNull(builder.ConfiguredOptimizer);
+        Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredOptimizer);
     }
 
     #endregion
@@ -781,20 +781,20 @@ memoryManagement:
             Assert.NotNull(builder);
 
             // Verify each section was actually applied
-            Assert.NotNull(builder.ConfiguredOptimizer);
+            Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredOptimizer);
 
-            Assert.NotNull(builder.ConfiguredCaching);
-            Assert.True(builder.ConfiguredCaching.Enabled);
-            Assert.Equal(1000, builder.ConfiguredCaching.MaxCacheSize);
+            Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching);
+            Assert.True(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching.Enabled);
+            Assert.Equal(1000, ((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredCaching.MaxCacheSize);
 
-            Assert.NotNull(builder.ConfiguredInferenceOptimizations);
-            Assert.True(builder.ConfiguredInferenceOptimizations.EnableKVCache);
+            Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredInferenceOptimizations);
+            Assert.True(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredInferenceOptimizations.EnableKVCache);
 
-            Assert.NotNull(builder.ConfiguredInterpretability);
-            Assert.True(builder.ConfiguredInterpretability.EnableSHAP);
+            Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredInterpretability);
+            Assert.True(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredInterpretability.EnableSHAP);
 
-            Assert.NotNull(builder.ConfiguredMemoryManagement);
-            Assert.True(builder.ConfiguredMemoryManagement.UseGradientCheckpointing);
+            Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredMemoryManagement);
+            Assert.True(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredMemoryManagement.UseGradientCheckpointing);
         }
         finally
         {

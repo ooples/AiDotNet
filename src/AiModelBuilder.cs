@@ -136,7 +136,7 @@ namespace AiDotNet;
 /// modelRegistry.TransitionStage(modelVersion.ModelId, modelVersion.Version, ModelStage.Production);
 /// </code>
 /// </remarks>
-public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>, IWeightStreamingCapableBuilder<T, TInput, TOutput>
+public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>, IWeightStreamingCapableBuilder<T, TInput, TOutput>, AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
@@ -385,15 +385,21 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         return x;
     }
 
-    // Internal accessors for test verification (visible to AiDotNetTests via InternalsVisibleTo)
-    internal IOptimizer<T, TInput, TOutput>? ConfiguredOptimizer => _optimizer;
-    internal CacheConfig? ConfiguredCaching => _cacheConfig;
-    internal AiDotNet.Configuration.InferenceOptimizationConfig? ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
-    internal AiDotNet.Configuration.JitCompilationConfig? ConfiguredJitCompilation => _jitCompilationConfig;
-    internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
-    internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
-    internal AiDotNetLicenseKey? ConfiguredLicenseKey => _licenseKey;
-    internal AgentConfiguration<T>? ConfiguredAgentAssistance => _agentConfig;
+    // Explicit-interface implementation of IConfiguredView<T,TInput,TOutput>:
+    // these accessors exist solely for the integration-test bucket suite to
+    // verify post-Configure*() state, and previously sat on the AiModelBuilder
+    // internal surface. Moving them behind an explicit interface keeps them
+    // off the regular type surface entirely — test code casts to
+    // IConfiguredView<T,TInput,TOutput> to read; production callers never
+    // see (or accidentally bind against) the accessors (review #1368 C6WRW).
+    IOptimizer<T, TInput, TOutput>? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredOptimizer => _optimizer;
+    CacheConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredCaching => _cacheConfig;
+    AiDotNet.Configuration.InferenceOptimizationConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
+    AiDotNet.Configuration.JitCompilationConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredJitCompilation => _jitCompilationConfig;
+    InterpretabilityOptions? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredInterpretability => _interpretabilityOptions;
+    Training.Memory.TrainingMemoryConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredMemoryManagement => _memoryConfig;
+    AiDotNetLicenseKey? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredLicenseKey => _licenseKey;
+    AgentConfiguration<T>? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredAgentAssistance => _agentConfig;
 
     /// <summary>
     /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.
