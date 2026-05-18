@@ -2982,19 +2982,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
         }
 
-        // Apply ConfigureAugmentation if a CustomAugmenter is wired. Without
-        // this step the AugmentationConfig was stored on the builder and
-        // never invoked — the entire ImageSettings/TabularSettings/etc.
-        // surface on AugmentationConfig is documentation-only in the
-        // current codebase (no factory translates them into IAugmentation
-        // instances), so the user's recourse is to supply a typed
-        // IAugmentation<T, TInput> via the new CustomAugmenter slot.
-        // Applied once before the optimizer runs (offline data augmentation);
-        // per-batch / per-epoch (online) augmentation would require deeper
-        // hooks into the optimizer's batch loop. Discovered by AiDotNet#1345
-        // Bucket8 ConfigureAugmentation test.
-        if (_augmentationConfig is { IsEnabled: true, CustomAugmenter: { } customAug })
+        // Resolve the effective augmenter: explicit CustomAugmenter wins,
+        // otherwise fall back to the modality factory which translates the
+        // ImageSettings / TabularSettings / AudioSettings / TextSettings /
+        // VideoSettings blocks into a pipeline of built-in augmenters
+        // (review #1368 C6WKu). The factory returns null when no modality
+        // settings are populated, leaving augmentation disabled — that
+        // preserves the prior no-op behavior for callers who only set
+        // IsEnabled without populating a settings block.
+        object? effectiveAugmenter = null;
+        if (_augmentationConfig is { IsEnabled: true } augCfg)
         {
+            effectiveAugmenter = augCfg.CustomAugmenter ?? ResolveModalityAugmenter(augCfg);
+        }
+        // Apply ConfigureAugmentation if an augmenter (explicit or
+        // modality-derived) resolved. Applied once before the optimizer
+        // runs (offline data augmentation); per-batch / per-epoch (online)
+        // augmentation would require deeper hooks into the optimizer's
+        // batch loop. Discovered by AiDotNet#1345 Bucket8 ConfigureAugmentation
+        // test.
+        if (effectiveAugmenter is not null && _augmentationConfig is not null)
+        {
+            object customAug = effectiveAugmenter;
             // Split the cast check + the TInput cast into two separate
             // branches so the diagnostic can distinguish "augmenter type
             // mismatch" from "preprocessed input is not the expected
@@ -7604,6 +7613,53 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 "or omit ConfigurePostprocessing if the pipeline is meant to be fitted by the " +
                 "caller after Build (review #1368 C6WJG).", ex);
         }
+    }
+
+    /// <summary>
+    /// Resolves a modality-specific built-in augmenter from
+    /// <paramref name="config"/>'s settings blocks. Returns null if no
+    /// modality settings are populated for a type matching
+    /// <typeparamref name="TInput"/>, leaving augmentation disabled
+    /// (review #1368 C6WKu).
+    /// </summary>
+    /// <remarks>
+    /// The factory output types are modality-specific
+    /// (<c>ImageTensor&lt;T&gt;</c>, <c>Tensor&lt;T&gt;</c>, <c>string[]</c>,
+    /// <c>ImageTensor&lt;T&gt;[]</c>); this method picks the branch
+    /// whose data type matches <typeparamref name="TInput"/>. When no
+    /// modality matches the current TInput the method returns null and
+    /// the caller treats augmentation as not configured rather than
+    /// throwing — settings populated for a TInput-mismatched modality
+    /// are simply inert (e.g. ImageSettings on a tabular AiModelBuilder).
+    /// </remarks>
+    private object? ResolveModalityAugmenter(Augmentation.AugmentationConfig config)
+    {
+        var globalProb = config.Probability;
+        if (config.ImageSettings is { } img && typeof(TInput) == typeof(Augmentation.Image.ImageTensor<T>))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildImageAugmenter<T>(img, globalProb);
+        }
+        // Tabular and Audio both target Tensor<T>; if both settings are
+        // populated on the same config the audio path wins (audio
+        // augmenters are domain-specific and likely intentional). Most
+        // configs populate only one.
+        if (config.AudioSettings is { } aud && typeof(TInput) == typeof(AiDotNet.Tensors.LinearAlgebra.Tensor<T>))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildAudioAugmenter<T>(aud, globalProb);
+        }
+        if (config.TabularSettings is { } tab && typeof(TInput) == typeof(AiDotNet.Tensors.LinearAlgebra.Matrix<T>))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildTabularAugmenter<T>(tab, globalProb);
+        }
+        if (config.TextSettings is { } txt && typeof(TInput) == typeof(string[]))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildTextAugmenter<T>(txt, globalProb);
+        }
+        if (config.VideoSettings is { } vid && typeof(TInput) == typeof(Augmentation.Image.ImageTensor<T>[]))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildVideoAugmenter<T>(vid, globalProb);
+        }
+        return null;
     }
 
     private void ApplyGpuConfiguration()
