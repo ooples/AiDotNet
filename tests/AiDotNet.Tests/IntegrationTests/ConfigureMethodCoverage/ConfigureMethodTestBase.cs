@@ -406,9 +406,10 @@ public abstract class ConfigureMethodTestBase
         DataLoaders.FromTensors<float>(features, labels);
 
     /// <summary>
-    /// Times a no-arg action, returning wall-clock seconds. Uses 3 warmup iterations
-    /// to amortize JIT, then averages 3 timed iterations. Intended for the speedup
-    /// assertions; not high-precision but stable across machines for &gt; 2× speedups.
+    /// Times a no-arg action, returning wall-clock seconds. Runs <paramref name="warmup"/>
+    /// untimed warmup iterations to amortize JIT, then averages <paramref name="iterations"/>
+    /// timed iterations. Intended for the speedup assertions; not high-precision but
+    /// stable across machines for &gt; 2× speedups.
     /// </summary>
     protected static double TimeAction(Action action, int warmup = 1, int iterations = 3)
     {

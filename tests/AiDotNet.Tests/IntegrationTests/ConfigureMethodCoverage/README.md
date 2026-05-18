@@ -9,12 +9,12 @@ Configure* methods that produce broken behavior with zero existing test coverage
 
 | Configure* | Bug | Status |
 |---|---|---|
-| `BuildAsync + ConfigureOptimizer(Adam)` | top1=0%, uniform output on Transformer LM | Upstream PR in flight |
-| `ConfigureQuantization` (Int8Quantizer) | 0.36× inference slowdown (fake quantization, no real INT8 matmul) | AiDotNet#1342 |
-| `EnableMemoryManagement` (GradientCheckpointing) | Wrong chain rule for non-elementwise ops | AiDotNet#1341 (fixed in Tensors PR #361) |
+| `BuildAsync + ConfigureOptimizer(Adam)` | top1=0%, uniform output on Transformer LM | Upstream PR in flight ([#1351](https://github.com/ooples/AiDotNet/issues/1351)) |
+| `ConfigureQuantization` (Int8Quantizer) | 0.36× inference slowdown (fake quantization, no real INT8 matmul) | [AiDotNet#1342](https://github.com/ooples/AiDotNet/issues/1342) |
+| `EnableMemoryManagement` (GradientCheckpointing) | Wrong chain rule for non-elementwise ops | [AiDotNet#1341](https://github.com/ooples/AiDotNet/issues/1341) (fixed in Tensors PR #361) |
 | FlashAttentionLayer<T> swap | top1=0%, top5=100% (uniform output), 3.76× slower instead of 2-4× faster | Not yet filed |
 | `ConfigureFitnessCalculator` (CategoricalCE) | Collapses post-build model to uniform output | **Discovered by this suite** |
-| `ConfigureModelRegistry` | BuildAsync throws "Model not found in registry" | **Discovered by this suite** |
+| `ConfigureModelRegistry` | BuildAsync throws "Model not found in registry" | **Discovered by this suite** ([#1367](https://github.com/ooples/AiDotNet/issues/1367)) |
 | OpenCL DirectGpu backend | `SetKernelArg` 0xC0000005 access violation during MultiHeadAttention training | **Discovered by this suite** — worked around with `AiDotNetEngine.ResetToCpu()` in fixture |
 
 Each of those would be caught by "train tiny model, assert top-1 > random chance
@@ -28,7 +28,8 @@ PR's extension closing the remaining surface.
 
 1. **Training-pipeline** (`Bucket1_TrainingPipelineTests`) — affects how training works
    (ConfigureModel, ConfigureOptimizer, ConfigureDataLoader, ConfigureFitnessCalculator,
-   ConfigureFitDetector, ConfigureRegularization).
+   ConfigureFitDetector). Note: `ConfigureRegularization` is exercised in Bucket 7
+   (training-pipeline auxiliaries) where its wiring-bug-fix tests live.
 2. **Acceleration** (`Bucket2_AccelerationTests`) — affects perf (ConfigureMixedPrecision,
    ConfigureJitCompilation, ConfigurePlanCaching, ConfigureGpuAcceleration,
    ConfigureMemoryManagement, ConfigureQuantization, ConfigureCompression,
@@ -83,9 +84,9 @@ PR's extension closing the remaining surface.
 
 | Bucket | Tests | Pass | Skip (tracked elsewhere) |
 |---|---|---|---|
-| 1. Training-pipeline (existing) | 6 | 3 | 3 (Adam batched #1351, default-opt #1351, CategoricalCE) |
-| 2. Acceleration (existing) | 13 | 12 | 1 (INT8 cached-B #1349/#1363) |
-| 3. Quality-of-life (existing) | 14 | 13 | 1 (ModelRegistry #1367) |
+| 1. Training-pipeline (existing) | 6 | 3 | 3 (Adam batched [#1351](https://github.com/ooples/AiDotNet/issues/1351), default-opt [#1351](https://github.com/ooples/AiDotNet/issues/1351), CategoricalCE) |
+| 2. Acceleration (existing) | 13 | 12 | 1 (INT8 cached-B [#1349](https://github.com/ooples/AiDotNet/issues/1349)/[#1363](https://github.com/ooples/AiDotNet/issues/1363)) |
+| 3. Quality-of-life (existing) | 14 | 13 | 1 (ModelRegistry [#1367](https://github.com/ooples/AiDotNet/issues/1367)) |
 | 4. Deployment metadata | 5 | 5 | 0 |
 | 5. Lifecycle | 3 | 3 | 0 |
 | 6. Pre/post-processing | 6 | 6 | 0 |
@@ -98,9 +99,14 @@ PR's extension closing the remaining surface.
 | 13. Program synthesis | 3 | 3 | 0 |
 | **Total** | **67** | **62** | **5** |
 
-The 5 skips are all tracked by other open PRs (#1351, #1349, #1363, #1367)
-or are PR #1345's own discovered bugs — out of scope for this PR which
-extends coverage to the Configure* methods those PRs don't touch.
+The 5 skips are all tracked by other open PRs
+([#1351](https://github.com/ooples/AiDotNet/issues/1351),
+[#1349](https://github.com/ooples/AiDotNet/issues/1349),
+[#1363](https://github.com/ooples/AiDotNet/pull/1363),
+[#1367](https://github.com/ooples/AiDotNet/issues/1367)) or are
+[PR #1345](https://github.com/ooples/AiDotNet/pull/1345)'s own
+discovered bugs — out of scope for this PR which extends coverage to
+the Configure* methods those PRs don't touch.
 
 ### Real source bugs fixed in this PR
 
