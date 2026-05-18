@@ -175,7 +175,7 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
     /// restored even if BuildAsync or the assertion throws (which the
     /// hand-rolled try/finally + Level = previous pattern would also
     /// catch but is easier to forget on future edits). The scoped
-    /// override pattern was added in PR #1368 to address review
+    /// override pattern was added in this PR to address review
     /// concerns about Bucket 4 mutating process-global GpuDiagnosticsConfig
     /// state. NOTE: the static slot is a single value, NOT a per-thread
     /// stack, so xUnit-parallel collections still need
@@ -191,8 +191,13 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
 
-        // Scoped override — auto-restored on dispose, even if BuildAsync
-        // or the assertion throws below.
+        // Snapshot the level via PushLevel — the no-op "push current,
+        // assign current" pair is intentional: PushLevel's primary value
+        // here is the lifo-stack restoration on Dispose, not the
+        // intermediate assignment. ConfigureGpuDiagnostics below installs
+        // the sentinel; the scope's Dispose pops back to whatever the
+        // level was at the start of the test (this PR's review C7mmp:
+        // the apparent no-op middle is a deliberate save-point, not a bug).
         using var _scope = GpuDiagnosticsConfig.PushLevel(GpuDiagnosticsConfig.Level);
 
         var diag = new GpuDiagnosticsOptions { Level = sentinel };

@@ -2684,11 +2684,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             catch (OutOfMemoryException)
             {
                 // Critical: don't mask. The host may need to abort.
-                throw;
-            }
-            catch (StackOverflowException)
-            {
-                // Critical, but technically uncatchable — included for documentation.
+                // StackOverflowException is intentionally NOT listed —
+                // modern .NET terminates the process on SOE rather than
+                // letting it propagate, so a catch clause for it is
+                // unreachable (review #1368 C7mpq).
                 throw;
             }
             catch (Exception ex)
@@ -7609,8 +7608,21 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var trainPreds = bestSolution.Predict(trainingInput);
             _postprocessingPipeline.Fit(trainPreds);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (OutOfMemoryException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
+            // Narrowed (review #1368 C7mmQ): OCE/OOM rethrown above so they
+            // surface with their original type; only genuine fit-time
+            // failures (shape mismatch, pipeline transform misconfiguration)
+            // get re-wrapped in InvalidOperationException with the
+            // diagnostic-friendly message below.
             throw new InvalidOperationException(
                 $"ConfigurePostprocessing on the {buildPathName} build path: failed to fit " +
                 $"pipeline on training predictions: {ex.GetType().Name}: {ex.Message}. " +

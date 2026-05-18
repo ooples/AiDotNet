@@ -93,7 +93,7 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
         //   sizes is non-positive.
         // - InvalidOperationException from LoRAAdapterBase.CreateLoRALayer
         //   when neither weight-matrix probing nor the shape API can
-        //   resolve a dimension (review-#1368 try-harder fix that
+        //   resolve a dimension (this PR's review try-harder fix that
         //   replaced the silent outputSize=1 / inputSize=outSize*2
         //   fabrication).
         System.Exception? buildEx = null;
