@@ -62,6 +62,20 @@ internal static class Int8WeightOnlyMatMul
         int inputSize,
         int outputSize)
     {
+        // Validate scalar shape inputs FIRST so negative / zero-input
+        // values produce a clear ArgumentOutOfRangeException instead of
+        // cascading into ArrayPool.Rent's overflow / negative-length
+        // failures or ChooseTileSize's negative tile-size return value
+        // (review #1348).
+        if (rows < 0)
+            throw new ArgumentOutOfRangeException(nameof(rows), rows, "rows must be non-negative.");
+        if (inputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "inputSize must be positive.");
+        if (outputSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "outputSize must be non-negative.");
+        if (weightsInt8 is null) throw new ArgumentNullException(nameof(weightsInt8));
+        if (rowScales is null) throw new ArgumentNullException(nameof(rowScales));
+
         if (weightsInt8.Length < (long)outputSize * inputSize)
             throw new ArgumentException("weightsInt8 too small for [outputSize, inputSize].", nameof(weightsInt8));
         if (rowScales.Length < outputSize)

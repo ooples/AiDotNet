@@ -119,7 +119,18 @@ internal sealed class Int8InferenceModel
     /// asymptotic ratio approaches 4.0x as <c>inDim</c> grows.
     /// </summary>
     public double CompressionRatio
-        => _originalWeightBytes == 0 ? 1.0 : (double)_originalWeightBytes / _quantizedWeightBytes;
+    {
+        get
+        {
+            // Guard both inputs: original==0 means no source (degenerate),
+            // quantized==0 means no INT8 storage attached yet (also
+            // degenerate — would otherwise DivideByZeroException). Both
+            // collapse to 1.0 (no-op compression) which is the intent
+            // for "ratio of nothing-vs-nothing" (review #1348).
+            if (_originalWeightBytes == 0 || _quantizedWeightBytes == 0) return 1.0;
+            return (double)_originalWeightBytes / _quantizedWeightBytes;
+        }
+    }
 
     /// <summary>
     /// Run inference. Routes through the underlying network whose attention and dense layers
