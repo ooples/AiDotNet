@@ -184,6 +184,31 @@ public class AugmentationConfig
     public object? CustomAugmenter { get; set; }
 
     /// <summary>
+    /// Strongly-typed setter that constrains the augmenter's type
+    /// arguments at the call site. Prefer this over assigning to
+    /// <see cref="CustomAugmenter"/> directly — the object-typed
+    /// property exists because <see cref="AugmentationConfig"/> is
+    /// non-generic, so misconfiguration here surfaces as a silent
+    /// skip inside <c>AiModelBuilder</c> (the
+    /// <c>is IAugmentation&lt;T, TInput&gt;</c> cast falls through).
+    /// This helper at least catches null and unboxes the value through
+    /// the typed parameter so IDE intellisense / compile-time checks
+    /// guide callers to a correct shape.
+    /// </summary>
+    /// <typeparam name="TNum">Numeric type the augmenter operates on
+    /// (must match the <c>AiModelBuilder&lt;T, …&gt;</c> T).</typeparam>
+    /// <typeparam name="TData">Data type the augmenter operates on
+    /// (must match the <c>AiModelBuilder&lt;…, TInput, …&gt;</c>
+    /// TInput).</typeparam>
+    /// <param name="augmenter">Augmenter instance to wire into
+    /// BuildSupervisedInternalAsync.</param>
+    public void SetCustomAugmenter<TNum, TData>(IAugmentation<TNum, TData> augmenter)
+    {
+        if (augmenter is null) throw new System.ArgumentNullException(nameof(augmenter));
+        CustomAugmenter = augmenter;
+    }
+
+    /// <summary>
     /// Creates a new augmentation configuration with industry-standard defaults.
     /// </summary>
     public AugmentationConfig()

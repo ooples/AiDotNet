@@ -20,6 +20,21 @@ namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 /// found across the Configure* surface.
 /// </para>
 /// <para>
+/// <b>Process-wide state warning:</b> The ConfigureGpuDiagnostics
+/// test mutates the process-wide static
+/// <c>GpuDiagnosticsConfig.Level</c>. The collection fixture
+/// (<see cref="ConfigureMethodTestCpuFixture"/>) serialises tests
+/// inside the <c>ConfigureMethodCoverage</c> collection, but xUnit
+/// runs OTHER test collections in parallel by default — concurrently-
+/// running tests that read <c>GpuDiagnosticsConfig.Level</c> may
+/// observe the sentinel <c>Verbose</c> setting briefly while the
+/// test is mid-run. The test restores the previous value in a
+/// <c>finally</c> block; any future test that reads
+/// <c>GpuDiagnosticsConfig.Level</c> must either join the
+/// <c>ConfigureMethodCoverage</c> collection or tolerate transient
+/// observations of the sentinel.
+/// </para>
+/// <para>
 /// Methods covered (5 of the methods not touched by the other open PRs
 /// in flight — #1361 covers AdversarialRobustness, #1362 covers
 /// MixedPrecision, #1367 covers ModelRegistry, #1351 covers Adam,

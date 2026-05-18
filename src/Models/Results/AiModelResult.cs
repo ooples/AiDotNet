@@ -213,6 +213,16 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// detected by AiDotNet#1345 Bucket6 pre/post tests; wiring added here
     /// so the configured pipeline actually runs against predictions.
     /// </summary>
+    /// <remarks>
+    /// The pipeline is typed as <c>TOutput → TOutput</c>, matching the
+    /// existing <c>ConfigurePostprocessing</c> overload signatures on
+    /// <c>IAiModelBuilder</c>. This means the pipeline can transform
+    /// the output in-place (softmax, threshold, clamp) but cannot
+    /// change the output TYPE (e.g. <c>logits → label string</c>).
+    /// Use cases that need a type-changing postprocessor must apply
+    /// the transformation themselves on the value returned by
+    /// <c>Predict</c>, or wait for a future widened API.
+    /// </remarks>
     [JsonIgnore]
     internal AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; private set; }
 
