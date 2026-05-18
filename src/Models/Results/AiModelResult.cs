@@ -1238,6 +1238,28 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new ArgumentNullException(nameof(options));
         }
 
+        // Fail fast at AiModelResult construction (i.e. Build time) if a
+        // postprocessing pipeline was wired but never fitted. Previously
+        // the unfitted pipeline rode through to AiModelResult.Predict and
+        // threw on the first inference call, which surfaced the
+        // misconfiguration at the wrong layer of the stack. AiModelBuilder
+        // fits the pipeline before constructing AiModelResult (see
+        // BuildSupervisedInternalAsync's postprocessing-fit block); if a
+        // caller bypasses the builder and supplies a pipeline directly,
+        // they must fit it first (review #1368).
+        if (options.PostprocessingPipeline is not null
+            && options.PostprocessingPipeline.Count > 0
+            && !options.PostprocessingPipeline.IsFitted)
+        {
+            throw new InvalidOperationException(
+                "AiModelResult was constructed with a postprocessing pipeline that has not been fitted. " +
+                "AiModelBuilder.BuildSupervisedInternalAsync fits the pipeline automatically; if you " +
+                "constructed AiModelResultOptions directly, call PostprocessingPipeline.Fit(...) " +
+                "(or use FitTransform on the trainer's predictions) BEFORE passing the options to " +
+                "the AiModelResult ctor. This check at Build time replaces the previous Predict-time " +
+                "throw to fail fast (review #1368).");
+        }
+
         // Store the options for use by partial classes (e.g., TTA augmentation)
         Options = options;
 
@@ -1955,32 +1977,23 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
             : normalizedPredictions;
 
-        // Apply ConfigurePostprocessing pipeline. Without this step the
-        // pipeline configured by the user was stored on the builder,
-        // flowed onto AiModelResultOptions, but never invoked on
-        // predictions — the same "stored-but-not-consumed" pattern PR
-        // #1357 / #1361 swept across the Configure* surface. Pipeline
-        // MUST be fitted at build time (in AiModelBuilder) — fitting on
-        // the first single Predict would parameterize a data-distribution-
-        // learning transformer (StandardScaler, MinMaxScaler, calibrator)
-        // on one example and lock that in for all subsequent predictions,
-        // which is statistically wrong. Concurrent Predict calls would
-        // also race the Fit. Throw clearly if a pipeline was wired
-        // without being fitted before reaching here — Bucket6 tests use
-        // an identity transformer that fits trivially via FitTransform
-        // in AiModelBuilder. Caught by AiDotNet#1345 Bucket6
-        // ConfigurePostprocessing tests.
+        // Apply ConfigurePostprocessing pipeline. The pipeline's
+        // IsFitted invariant is enforced at AiModelResult construction
+        // (Build time, see the ctor) so reaching here with an unfitted
+        // pipeline means the pipeline was mutated post-construction —
+        // an unsupported runtime change we defensively detect, but
+        // which AiModelBuilder's normal Build path can't produce
+        // (review #1368: this check stays as defense-in-depth but the
+        // user-facing failure point moved to Build).
         if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
         {
             if (!PostprocessingPipeline.IsFitted)
             {
                 throw new System.InvalidOperationException(
-                    "ConfigurePostprocessing pipeline reached AiModelResult.Predict without being fitted. " +
-                    "AiModelBuilder.BuildSupervisedInternalAsync should have called Fit on the pipeline " +
-                    "during build; either the wiring is broken or the user passed a pre-built pipeline " +
-                    "containing transformers that require an external Fit before they can Transform. " +
-                    "Fit the pipeline manually before configuring it, or use the Action/transformer " +
-                    "overloads of ConfigurePostprocessing which let the builder manage Fit lifecycle.");
+                    "PostprocessingPipeline became unfitted after AiModelResult construction. " +
+                    "Mutating the pipeline (Reset, clearing fitted state, or adding unfitted " +
+                    "transformers) after Build returns is unsupported — fit a fresh pipeline " +
+                    "and rebuild instead.");
             }
             denormalized = PostprocessingPipeline.Transform(denormalized);
         }

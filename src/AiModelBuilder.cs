@@ -2556,15 +2556,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 // Non-gradient optimizers (NormalOptimizer, evolutionary,
                 // any custom IOptimizer outside the GradientBasedOptimizerBase
-                // family) don't have a Regularization slot — surface the
-                // configure-call no-op via Trace so users discover the gap
-                // rather than seeing silently-dropped regularization.
-                // Matches PR #1361's Trace-warning pattern for reserved
-                // Configure* methods.
-                System.Diagnostics.Trace.TraceWarning(
-                    "ConfigureRegularization: configured regularization is not applied to non-gradient optimizers " +
-                    $"(active optimizer is {optimizer.GetType().Name}). Use a gradient-based optimizer " +
-                    "(AdamOptimizer/SGDOptimizer/AdamWOptimizer/etc.) to opt into runtime regularization.");
+                // family) don't have a Regularization slot. Fail fast here
+                // so the misconfiguration surfaces at Build time rather than
+                // as silently-dropped regularization at training time
+                // (review #1368).
+                throw new InvalidOperationException(
+                    "ConfigureRegularization is only supported on gradient-based optimizers " +
+                    $"(AdamOptimizer / SGDOptimizer / AdamWOptimizer / etc.); the active optimizer " +
+                    $"is {optimizer.GetType().Name} which has no Regularization slot. " +
+                    "Either switch to a GradientBasedOptimizerBase subclass or remove the " +
+                    "ConfigureRegularization call.");
             }
         }
 
@@ -2945,13 +2946,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
             else
             {
-                // Cast failed — augmentation silently dropped. Surface
-                // the mismatch so users discover the type-arg error
-                // rather than seeing untrained augmentation behaviour.
-                System.Diagnostics.Trace.TraceWarning(
+                // Cast failed — augmentation would be silently dropped if we
+                // continued. Fail fast so the user discovers the type-arg
+                // error at Build time rather than after Build returns with
+                // untrained augmentation behaviour (review #1368).
+                throw new InvalidOperationException(
                     $"ConfigureAugmentation: CustomAugmenter of type {customAug.GetType().Name} is not " +
-                    $"IAugmentation<{typeof(T).Name}, {typeof(TInput).Name}>. The cast failed and augmentation " +
-                    "was skipped. Check that the augmenter's TData generic argument matches the builder's TInput.");
+                    $"IAugmentation<{typeof(T).Name}, {typeof(TInput).Name}>. " +
+                    "The augmenter's TData generic argument must match the AiModelBuilder's TInput. " +
+                    "Use AugmentationConfig.SetCustomAugmenter<TNum, TData>(...) for a type-checked " +
+                    "setter that catches this at the call site.");
             }
         }
 
@@ -3417,19 +3421,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // wrapper around the standard loss to keep gradients
                 // flowing through both terms). Until that lands, surface
                 // a runtime warning so users discover the gap early
-                // rather than after Build returns silently — and
-                // continue with the standard supervised training so the
-                // configured options round-trip onto the
-                // AiModelResult.KnowledgeDistillationOptions surface for
-                // consumers to drive distillation manually. Same
-                // behaviour change as the parametric-model branch above
-                // (AiModelBuilder.cs:~3115) so both branches stay
-                // consistent.
-                System.Diagnostics.Trace.TraceWarning(
-                    "ConfigureKnowledgeDistillation: options stored but not yet integrated with the tape-based training flow. " +
-                    "BuildAsync will proceed with the standard supervised training path; the configured options are " +
-                    "carried on the AiModelResult so a teacher-aware loss function can drive distillation manually post-build. " +
-                    "Track the upstream integration via the open AiDotNet issue.");
+                // rather than after Build returns silently. Restore the
+                // hard contract: a user who called ConfigureKnowledgeDistillation
+                // expects KD to actually run; downgrading the original
+                // NotSupportedException to a Trace warning silently broke
+                // that contract (review #1368). The configured options
+                // still round-trip onto AiModelResult.KnowledgeDistillationOptions
+                // for consumers who want to drive distillation manually,
+                // but they must opt out of automatic Build-time KD by
+                // omitting ConfigureKnowledgeDistillation OR by switching
+                // to a model path that supports it.
+                throw new NotSupportedException(
+                    "ConfigureKnowledgeDistillation is not yet integrated with the tape-based training flow " +
+                    "for this model path. Either omit ConfigureKnowledgeDistillation, switch to a model " +
+                    "type that supports it (parametric-model branch), or drive distillation manually " +
+                    "post-build via AiModelResult.KnowledgeDistillationOptions. Track upstream integration " +
+                    "in the AiDotNet repo issues.");
             }
 
             // Ensure the optimizer has the model configured before optimization
@@ -3639,18 +3646,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             && _postprocessingPipeline.Count > 0
             && !_postprocessingPipeline.IsFitted)
         {
+            // Fail fast at Build if pipeline fitting fails. Previous Trace-
+            // warning + carry-on left an unfitted pipeline on AiModelResult
+            // that threw at first Predict() instead — a footgun where the
+            // user discovers the problem at the wrong layer of the stack
+            // (review #1368). Wrap the underlying failure in a clear
+            // InvalidOperationException at the Build call site.
+            var bestSolution = optimizationResult.BestSolution
+                ?? throw new InvalidOperationException(
+                    "OptimizationResult.BestSolution is null after training — cannot fit the configured postprocessing pipeline.");
             try
             {
-                var bestSolution = optimizationResult.BestSolution
-                    ?? throw new InvalidOperationException("OptimizationResult.BestSolution is null after training — cannot fit postprocessing pipeline.");
                 var trainPreds = bestSolution.Predict(XTrain);
                 _postprocessingPipeline.Fit(trainPreds);
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"ConfigurePostprocessing: failed to fit pipeline on training predictions ({ex.GetType().Name}: {ex.Message}). " +
-                    "AiModelResult.Predict will throw if the pipeline isn't fitted by the time inference runs.");
+                throw new InvalidOperationException(
+                    $"ConfigurePostprocessing: failed to fit pipeline on training predictions: " +
+                    $"{ex.GetType().Name}: {ex.Message}. " +
+                    "Inspect the pipeline's transform definition and the training-prediction shape, " +
+                    "or omit ConfigurePostprocessing if the pipeline is meant to be fitted by the caller " +
+                    "after Build.", ex);
             }
         }
 
