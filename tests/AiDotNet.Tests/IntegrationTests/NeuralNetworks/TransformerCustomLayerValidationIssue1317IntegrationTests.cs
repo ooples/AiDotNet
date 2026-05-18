@@ -1,3 +1,4 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
@@ -197,6 +198,79 @@ public class TransformerCustomLayerValidationIssue1317IntegrationTests
 
         Assert.Contains(model.Layers, layer => layer is MultiHeadAttentionLayer<float>);
         Assert.Contains(model.Layers, layer => layer is LayerNormalizationLayer<float>);
+    }
+
+    [Fact]
+    public void CustomTransformerLayerStack_AcceptsFlashAttentionLayerAsDropInReplacement()
+    {
+        // Regression coverage: FlashAttentionLayer is documented as a drop-in
+        // replacement for MultiHeadAttentionLayer ("FlashAttentionLayer provides
+        // the same functionality as MultiHeadAttentionLayer but uses the Flash
+        // Attention algorithm which is 2-4x faster and uses significantly less
+        // memory. It can be used as a drop-in replacement in transformer
+        // architectures.") The relaxed ValidateCustomLayers contract (#1317 /
+        // #1320) accepts shape-compatible layer stacks; this test pins down
+        // that the type-based "must include MultiHeadAttentionLayer" check is
+        // gone for good and FlashAttention specifically rides the same path.
+        const int seqLen = 16;
+        const int dModel = 16;
+        const int heads = 2;
+        const int vocab = 256;
+
+        var layers = new List<ILayer<float>>
+        {
+            new EmbeddingLayer<float>(vocab, dModel),
+            new FlashAttentionLayer<float>(seqLen, dModel, heads),
+            new LayerNormalizationLayer<float>(),
+            new DenseLayer<float>(dModel, (IActivationFunction<float>)new ReLUActivation<float>()),
+            new LayerNormalizationLayer<float>(),
+            new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.Last),
+            new DenseLayer<float>(vocab, (IActivationFunction<float>)new IdentityActivation<float>())
+        };
+
+        var arch = new TransformerArchitecture<float>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 1,
+            numDecoderLayers: 0,
+            numHeads: heads,
+            modelDimension: dModel,
+            feedForwardDimension: dModel,
+            complexity: NetworkComplexity.Medium,
+            inputSize: seqLen,
+            outputSize: vocab,
+            dropoutRate: 0.0,
+            maxSequenceLength: seqLen,
+            vocabularySize: vocab,
+            usePositionalEncoding: true,
+            temperature: 1.0,
+            sequencePooling: null,
+            layers: layers);
+
+        var model = new Transformer<float>(arch);
+
+        Assert.Contains(model.Layers, layer => layer is FlashAttentionLayer<float>);
+        Assert.DoesNotContain(model.Layers, layer => layer is MultiHeadAttentionLayer<float>);
+    }
+
+    [Fact]
+    public void CustomTransformerArchitecture_WithoutAnyAttentionLayer_StillPassesValidation()
+    {
+        // The validator contract is shape-based, not type-based — a research
+        // architecture that replaces attention with, e.g., an SSM/MLP-only
+        // stack must be accepted as long as the shapes line up. This test
+        // pins down that no concrete-attention-type requirement leaks back
+        // in.
+        var layers = new List<ILayer<float>>
+        {
+            new ProjectingCustomLayer([1, 16], [1, 32]),
+            new ProjectingCustomLayer([32], [1, 256])
+        };
+
+        var model = new Transformer<float>(CreateCustomLayerArchitecture(layers));
+
+        Assert.DoesNotContain(model.Layers, layer => layer is MultiHeadAttentionLayer<float>);
+        Assert.DoesNotContain(model.Layers, layer => layer is FlashAttentionLayer<float>);
     }
 
     private static TransformerArchitecture<float> CreateCustomLayerArchitecture(List<ILayer<float>> layers)

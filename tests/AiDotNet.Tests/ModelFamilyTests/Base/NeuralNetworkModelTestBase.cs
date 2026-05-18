@@ -463,7 +463,14 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // regardless of training duration; a healthy network just trains
         // toward the target).
         var trainInput = CreateRandomTensor(InputShape, rng);
-        var trainTarget = CreateRandomTensor(EffectiveOutputShape, rng);
+        // Use CreateRandomTargetTensor (not CreateRandomTensor) so
+        // model families with type-constrained targets (e.g.
+        // SequenceLabelingNER's CRF NLL path, which requires integer
+        // class indices) can supply legal target tensors via their
+        // scaffold-generated override. Plain CreateRandomTensor here
+        // emitted random floats and tripped strict label validation
+        // in the CRF NLL path.
+        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
@@ -693,7 +700,14 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         // Train so weights have non-default values.
         var trainInput = CreateRandomTensor(InputShape, rng);
-        var trainTarget = CreateRandomTensor(EffectiveOutputShape, rng);
+        // Use CreateRandomTargetTensor (not CreateRandomTensor) so
+        // model families with type-constrained targets (e.g.
+        // SequenceLabelingNER's CRF NLL path, which requires integer
+        // class indices) can supply legal target tensors via their
+        // scaffold-generated override. Plain CreateRandomTensor here
+        // emitted random floats and tripped strict label validation
+        // in the CRF NLL path.
+        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);
         for (int i = 0; i < TrainingIterations; i++)
             network.Train(trainInput, trainTarget);
 
@@ -813,7 +827,11 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var input = CreateRandomTensor(InputShape, rng1);
         var target = CreateRandomTargetTensor(EffectiveOutputShape, rng1);
         var input2 = CreateRandomTensor(InputShape, rng2);
-        var target2 = CreateRandomTensor(EffectiveOutputShape, rng2);
+        // Use the CreateRandomTargetTensor hook so type-constrained
+        // target families (NER + CRF) get legal labels — matches the
+        // sibling assignment two lines above and the rationale at
+        // line 466/696.
+        var target2 = CreateRandomTargetTensor(EffectiveOutputShape, rng2);
 
         // Run a probe Predict on network1 BEFORE cloning so any lazy
         // layers (PyTorch-style LazyConv2d / FullyConnectedLayer's lazy
@@ -908,7 +926,10 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         double trainMSE = ComputeMSE(network.Predict(input), target);
         var testInput = CreateRandomTensor(InputShape, ModelTestHelpers.CreateSeededRandom(99));
-        var testTarget = CreateRandomTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(99));
+        // CreateRandomTargetTensor for the same reason the trainTarget
+        // a few lines above uses it — type-constrained families (NER /
+        // CRF) need legal label values.
+        var testTarget = CreateRandomTargetTensor(EffectiveOutputShape, ModelTestHelpers.CreateSeededRandom(99));
         double testMSE = ComputeMSE(network.Predict(testInput), testTarget);
 
         if (!double.IsNaN(trainMSE) && !double.IsNaN(testMSE))

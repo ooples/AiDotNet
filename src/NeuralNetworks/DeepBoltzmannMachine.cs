@@ -282,7 +282,16 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default to AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). DBM updates
+        // compound through stacked RBM layers; standard Adam's bias-corrected
+        // m̂ / √v̂ ratio doesn't decay fast enough after the loss converges
+        // and the model drifts away from the optimum over 200 iterations on
+        // the MoreData_ShouldNotDegrade invariant. AMSGrad guarantees v̂_max
+        // is non-decreasing so the denominator can only grow — drift bounded.
+        // Issue #1332 cluster 6.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
         _options = options ?? new DeepBoltzmannMachineOptions();
         Options = _options;
         _epochs = epochs;
@@ -325,7 +334,16 @@ public class DeepBoltzmannMachine<T> : NeuralNetworkBase<T>
         DeepBoltzmannMachineOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default to AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). DBM updates
+        // compound through stacked RBM layers; standard Adam's bias-corrected
+        // m̂ / √v̂ ratio doesn't decay fast enough after the loss converges
+        // and the model drifts away from the optimum over 200 iterations on
+        // the MoreData_ShouldNotDegrade invariant. AMSGrad guarantees v̂_max
+        // is non-decreasing so the denominator can only grow — drift bounded.
+        // Issue #1332 cluster 6.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
         _options = options ?? new DeepBoltzmannMachineOptions();
         Options = _options;
         _epochs = epochs;

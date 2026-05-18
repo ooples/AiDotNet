@@ -1,6 +1,8 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -110,7 +112,12 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
     {
         _options = options ?? new ConvolutionalNeuralNetworkOptions();
         Options = _options;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default to AMSGrad to suppress Adam's post-convergence drift on
+        // fixed-input regression invariants (MoreData_ShouldNotDegrade).
+        // Issue #1332 cluster 6.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();

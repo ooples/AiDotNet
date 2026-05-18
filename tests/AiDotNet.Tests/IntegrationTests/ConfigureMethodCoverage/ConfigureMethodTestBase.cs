@@ -1,6 +1,7 @@
 using AiDotNet.Data.Loaders;
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models.Results;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.Engines;
 
@@ -13,36 +14,23 @@ namespace AiDotNet.Tests.IntegrationTests.ConfigureMethodCoverage;
 /// (filed upstream — DirectGpu OpenCL backend instability under concurrent
 /// kernel dispatch).
 /// </summary>
-/// <remarks>
-/// <para><b>Known limitation</b> (review #1368): <c>AiDotNetEngine.ResetToCpu()</c>
-/// is a one-way switch — the underlying <c>AiDotNet.Tensors.Engines.AiDotNetEngine</c>
-/// API exposes <c>Current</c> for read but no symmetric <c>SetCurrent(IEngine)</c>
-/// for write, so this fixture cannot restore the previous engine on
-/// disposal. Other test collections (or test runs that follow) inherit
-/// the CPU mode set here.</para>
-/// <para>Mitigations:</para>
-/// <list type="bullet">
-///   <item>All Configure* coverage tests are grouped into a single
-///         <c>[Collection("ConfigureMethodCoverage")]</c> so they execute
-///         serially relative to each other inside this fixture's lifetime.</item>
-///   <item>For cross-collection isolation, the broader fix is an upstream
-///         <c>AiDotNet.Tensors</c>-side push/pop engine API. Track that as
-///         a follow-up; the current behaviour is "process settles on CPU
-///         after any Configure* test runs", which is safe but not ideal.</item>
-/// </list>
-/// </remarks>
 public sealed class ConfigureMethodTestCpuFixture
 {
     public ConfigureMethodTestCpuFixture()
     {
         // Force CPU for the duration of all Configure* coverage tests.
-        // One-way: see class-level remarks for the upstream Tensors-side
-        // restore-API gap that prevents a clean dispose-time rollback.
         AiDotNetEngine.ResetToCpu();
     }
 }
 
-[Xunit.CollectionDefinition("ConfigureMethodCoverage")]
+// DisableParallelization=true: the fixture's AiDotNetEngine.ResetToCpu()
+// mutates process-wide engine state. Other test collections (notably
+// NeuralNetworkModelTestBase) also reset the engine — running them
+// concurrently with this collection produces race conditions on the
+// shared engine singleton and intermittent crashes. Serialize the
+// whole collection so the engine state is stable for the duration.
+// (PR #1345 round-2 review.)
+[Xunit.CollectionDefinition("ConfigureMethodCoverage", DisableParallelization = true)]
 public sealed class ConfigureMethodCoverageCollection : Xunit.ICollectionFixture<ConfigureMethodTestCpuFixture> { }
 
 /// <summary>
@@ -60,9 +48,11 @@ public sealed class ConfigureMethodCoverageCollection : Xunit.ICollectionFixture
 /// </para>
 /// <para>
 /// The "canary" config is intentionally small so every test runs in &lt; 60 s on CI:
-/// vocab=16, ctxLen=8, dModel=16, layers=1, heads=2, ~64 training examples, &lt;= 200 steps.
-/// At those sizes single-example or small-batch memorization is fully achievable for
-/// any working training pipeline; degenerate-output bugs flip the top-1 assertion.
+/// vocab=8, ctxLen=4, dModel=16, layers=1, heads=2, ~64 training examples, &lt;= 200 steps.
+/// (Values mirror the per-constant declarations below: <c>CanaryVocab = 8</c>,
+/// <c>CanaryCtxLen = 4</c>.) At those sizes single-example or small-batch
+/// memorization is fully achievable for any working training pipeline;
+/// degenerate-output bugs flip the top-1 assertion.
 /// </para>
 /// </remarks>
 public abstract class ConfigureMethodTestBase
@@ -321,12 +311,17 @@ public abstract class ConfigureMethodTestBase
         string featureName,
         double minRetentionRatio = 0.5)
     {
-        // If baseline itself failed (top-1 below chance), the comparison is meaningless.
-        // The baseline test fires first; this guard avoids a misleading retention pass.
-        if (baselineTopOne <= 1.0 / CanaryVocab + 0.05)
-        {
-            return;
-        }
+        // Baseline must clear chance + 5pp before a retention comparison is
+        // meaningful — silently returning here would let a broken feature-arm
+        // test pass when the baseline itself was bad (an always-pass bug
+        // pattern). Surface the bad baseline as the test failure instead.
+        // (PR #1345 review.)
+        Xunit.Assert.True(
+            baselineTopOne > 1.0 / CanaryVocab + 0.05,
+            $"{featureName}: baseline top-1 {baselineTopOne:P2} is at or below " +
+            $"random chance ({1.0 / CanaryVocab:P2} + 5pp). Fix the baseline before " +
+            "asserting retention — comparing against a degenerate baseline would " +
+            "let a broken feature arm silently pass.");
         double minRequired = baselineTopOne * minRetentionRatio;
         Xunit.Assert.True(
             featureTopOne >= minRequired,
@@ -389,6 +384,33 @@ public abstract class ConfigureMethodTestBase
     }
 
     /// <summary>
+    /// Convenience wrapper: take the first row of <paramref name="features"/>
+    /// as a probe, run it through the facade's Predict, and assert the
+    /// output is non-degenerate. Reduces the 3-line probe-construction
+    /// boilerplate that the Configure* coverage tests repeated 14 times.
+    /// PR #1345 round-2 review nitpick.
+    /// </summary>
+    protected static void AssertConfiguredModelProducesNonDegenerateOutput(
+        AiModelResult<float, Tensor<float>, Tensor<float>> result,
+        Tensor<float> features,
+        string featureName)
+    {
+        if (result is null) throw new ArgumentNullException(nameof(result));
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        // CodeRabbit feedback on #1345: derive probe width from the caller's
+        // feature tensor instead of hard-coding CanaryCtxLen. Hard-coding
+        // would truncate inputs (when features is wider) or throw on indexing
+        // (when narrower), either of which silently invalidates the non-
+        // degenerate assertion. Read features.Shape[1] for the row width.
+        Xunit.Assert.True(features.Shape[0] > 0, $"{featureName}: features must contain at least one row.");
+        Xunit.Assert.True(features.Shape.Length >= 2, $"{featureName}: features must be at least 2-D.");
+        int ctxLen = features.Shape[1];
+        var probe = new Tensor<float>([1, ctxLen]);
+        for (int s = 0; s < ctxLen; s++) probe[0, s] = features[0, s];
+        AssertFacadePredictNonDegenerate(result.Predict(probe), featureName);
+    }
+
+    /// <summary>
     /// Returns argmax of one-hot row b in <paramref name="labels"/>.
     /// </summary>
     private static int OneHotArgmaxRow(Tensor<float> labels, int row, int vocab)
@@ -426,12 +448,11 @@ public abstract class ConfigureMethodTestBase
         DataLoaders.FromTensors<float>(features, labels);
 
     /// <summary>
-    /// Times a no-arg action, returning wall-clock seconds. Runs <paramref name="warmup"/>
-    /// untimed warmup iterations to amortize JIT, then averages <paramref name="iterations"/>
-    /// timed iterations. Intended for the speedup assertions; not high-precision but
-    /// stable across machines for &gt; 2× speedups.
+    /// Times a no-arg action, returning wall-clock seconds. Uses 3 warmup iterations
+    /// to amortize JIT, then averages 3 timed iterations. Intended for the speedup
+    /// assertions; not high-precision but stable across machines for &gt; 2× speedups.
     /// </summary>
-    protected static double TimeAction(Action action, int warmup = 1, int iterations = 3)
+    protected static double TimeAction(Action action, int warmup = 3, int iterations = 3)
     {
         for (int i = 0; i < warmup; i++) action();
         var sw = System.Diagnostics.Stopwatch.StartNew();

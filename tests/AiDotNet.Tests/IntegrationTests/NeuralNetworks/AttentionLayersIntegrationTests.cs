@@ -5,6 +5,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Xunit;
 
 /// <summary>
@@ -330,6 +332,259 @@ public class AttentionLayersIntegrationTests
         // Assert
         Assert.Equal(input.Shape.ToArray(), output.Shape.ToArray());
         Assert.False(ContainsNaN(output));
+    }
+
+    /// <summary>
+    /// Regression test: FlashAttentionLayer must propagate non-zero gradients to ALL
+    /// of its registered trainable parameters (Q/K/V/O projection weights + output bias).
+    ///
+    /// <para>This guards against the FA-vs-MHA degenerate-output bug observed in the
+    /// HarmonicEngine consumer at dModel=128/L=2/ctx=64/10KB WikiText-2: FA arm produced
+    /// top1=0% / top5=100% / ppl=V=256 uniform-output, indicating that gradient flow
+    /// through Engine.FlashAttention to the layer's projection weights was broken.</para>
+    ///
+    /// <para>If this test fails, the layer's Forward composition is using Engine ops that
+    /// don't propagate gradients on the autodiff tape, OR Engine.FlashAttention itself
+    /// fails to record a tape op for the registered parameters' downstream computation.</para>
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task FlashAttentionLayer_GradientFlow_ReachesAllRegisteredParameters()
+    {
+        await Task.Yield();
+
+        // Arrange — same shapes as a tiny transformer training block.
+        int batchSize = 2;
+        int seqLen = 8;
+        int embedDim = 16;
+        int headCount = 2;
+
+        var layer = new FlashAttentionLayer<double>(seqLen, embedDim, headCount);
+        layer.SetTrainingMode(true);
+        var input = CreateRandomTensor<double>([batchSize, seqLen, embedDim]);
+
+        var trainable = layer as ITrainableLayer<double>;
+        Assert.NotNull(trainable);
+
+        // Act — forward through a tape, then random-projection scalar loss.
+        using var tape = new GradientTape<double>();
+        var output = layer.Forward(input);
+
+        // Pull params AFTER Forward (lazy-init layers reassign their tensor refs).
+        var trainableParams = trainable.GetTrainableParameters();
+        Assert.True(trainableParams.Count > 0, "FlashAttentionLayer must expose trainable parameters.");
+
+        var projection = CreateRandomTensor<double>(output.Shape.ToArray());
+        var elementwise = AiDotNetEngine.Current.TensorMultiply(output, projection);
+        var allAxes = new int[elementwise.Shape.Length];
+        for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+        var loss = AiDotNetEngine.Current.ReduceSum(elementwise, allAxes, keepDims: false);
+
+        var grads = tape.ComputeGradients(loss, trainableParams);
+
+        // Assert — EVERY registered parameter must have a non-zero gradient.
+        // Per-parameter check (not just "some param got a grad") because the bug
+        // could leave one weight tensor stranded outside the tape graph.
+        int paramsWithGrad = 0;
+        int paramsWithNonZeroGrad = 0;
+        var failed = new System.Text.StringBuilder();
+        for (int p = 0; p < trainableParams.Count; p++)
+        {
+            var param = trainableParams[p];
+            if (!grads.TryGetValue(param, out var grad) || grad is null)
+            {
+                failed.AppendLine($"Param {p} (shape [{string.Join(",", param.Shape)}]): no gradient recorded on tape.");
+                continue;
+            }
+            paramsWithGrad++;
+            bool anyNonZero = false;
+            for (int i = 0; i < grad.Length; i++)
+            {
+                if (Math.Abs(grad[i]) > 1e-9)
+                {
+                    anyNonZero = true;
+                    break;
+                }
+            }
+            if (!anyNonZero)
+            {
+                failed.AppendLine($"Param {p} (shape [{string.Join(",", param.Shape)}]): gradient is all-zero (length={grad.Length}).");
+                continue;
+            }
+            paramsWithNonZeroGrad++;
+        }
+
+        Assert.True(
+            paramsWithNonZeroGrad == trainableParams.Count,
+            $"FlashAttentionLayer gradient flow broken. {paramsWithNonZeroGrad}/{trainableParams.Count} " +
+            $"registered params received non-zero gradients (got grad: {paramsWithGrad}). " +
+            $"Failures:\n{failed}");
+    }
+
+    /// <summary>
+    /// Regression test: a tiny model built around FlashAttentionLayer must train
+    /// (loss decreases by at least 5% over 20 SGD steps on a random target).
+    ///
+    /// <para>This reproduces the HarmonicEngine PathB FlashAttention sanity failure
+    /// (top1=0% / top5=100% / ppl=V on 10KB WikiText-2) at a tiny scale that runs in
+    /// under a second. If the layer trains here, the HE consumer test will also train.</para>
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FlashAttentionLayer_TrainsViaTape_LossDecreases()
+    {
+        await Task.Yield();
+
+        // Arrange — single layer + scalar SGD loop on a random regression target.
+        int batchSize = 2;
+        int seqLen = 8;
+        int embedDim = 16;
+        int headCount = 2;
+        const double LearningRate = 0.01;
+        const int Steps = 20;
+
+        var layer = new FlashAttentionLayer<double>(seqLen, embedDim, headCount);
+        layer.SetTrainingMode(true);
+        var input = CreateRandomTensor<double>([batchSize, seqLen, embedDim]);
+        // Fixed random target — the layer must learn to map input → target.
+        var target = CreateRandomTensor<double>([batchSize, seqLen, embedDim]);
+
+        var trainable = (ITrainableLayer<double>)layer;
+
+        double LossAt()
+        {
+            // No tape — pure forward pass for loss observation.
+            var fwd = layer.Forward(input);
+            double sse = 0.0;
+            for (int i = 0; i < fwd.Length; i++)
+            {
+                double d = fwd[i] - target[i];
+                sse += d * d;
+            }
+            return sse;
+        }
+
+        double initialLoss = LossAt();
+
+        // Manual SGD on the layer's registered parameters via tape gradients.
+        for (int step = 0; step < Steps; step++)
+        {
+            using var tape = new GradientTape<double>();
+            var output = layer.Forward(input);
+            var trainableParams = trainable.GetTrainableParameters();
+
+            // Loss = sum((output - target)^2). Engine ops only — all tape-tracked.
+            var diff = AiDotNetEngine.Current.TensorSubtract(output, target);
+            var sq = AiDotNetEngine.Current.TensorMultiply(diff, diff);
+            var allAxes = new int[sq.Shape.Length];
+            for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+            var loss = AiDotNetEngine.Current.ReduceSum(sq, allAxes, keepDims: false);
+
+            var grads = tape.ComputeGradients(loss, trainableParams);
+
+            // Apply SGD step in-place on each registered parameter.
+            for (int p = 0; p < trainableParams.Count; p++)
+            {
+                var param = trainableParams[p];
+                if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
+                var pSpan = param.Data.Span;
+                var gSpan = grad.Data.Span;
+                for (int i = 0; i < pSpan.Length; i++)
+                {
+                    pSpan[i] = pSpan[i] - LearningRate * gSpan[i];
+                }
+            }
+        }
+
+        double finalLoss = LossAt();
+
+        Assert.True(
+            finalLoss < initialLoss * 0.95,
+            $"FlashAttentionLayer failed to train. Initial loss = {initialLoss:F6}, " +
+            $"final loss after {Steps} SGD steps = {finalLoss:F6} (must be < {initialLoss * 0.95:F6}). " +
+            "This indicates that gradient flow through Engine.FlashAttention to the layer's " +
+            "Q/K/V/O projection weights is broken — the parameters are not being updated.");
+    }
+
+    /// <summary>
+    /// Sanity test: FlashAttentionLayer should train AT LEAST as well as MultiHeadAttentionLayer
+    /// on the same regression task. FA is documented as a drop-in replacement; loss reduction
+    /// magnitudes should be within an order of magnitude.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FlashAttentionLayer_VsMultiHeadAttention_TrainsComparably()
+    {
+        await Task.Yield();
+
+        int batchSize = 2;
+        int seqLen = 8;
+        int embedDim = 16;
+        int headCount = 2;
+        const double LearningRate = 0.01;
+        const int Steps = 20;
+
+        // Shared input + target across both arms.
+        var input = CreateRandomTensor<double>([batchSize, seqLen, embedDim]);
+        var target = CreateRandomTensor<double>([batchSize, seqLen, embedDim]);
+
+        double TrainLayerAndGetRatio(LayerBase<double> layer)
+        {
+            layer.SetTrainingMode(true);
+            var trainable = (ITrainableLayer<double>)layer;
+            double Loss()
+            {
+                var fwd = layer.Forward(input);
+                double sse = 0.0;
+                for (int i = 0; i < fwd.Length; i++)
+                {
+                    double d = fwd[i] - target[i];
+                    sse += d * d;
+                }
+                return sse;
+            }
+            double initial = Loss();
+            for (int step = 0; step < Steps; step++)
+            {
+                using var tape = new GradientTape<double>();
+                var output = layer.Forward(input);
+                var trainableParams = trainable.GetTrainableParameters();
+                var diff = AiDotNetEngine.Current.TensorSubtract(output, target);
+                var sq = AiDotNetEngine.Current.TensorMultiply(diff, diff);
+                var allAxes = new int[sq.Shape.Length];
+                for (int i = 0; i < allAxes.Length; i++) allAxes[i] = i;
+                var loss = AiDotNetEngine.Current.ReduceSum(sq, allAxes, keepDims: false);
+                var grads = tape.ComputeGradients(loss, trainableParams);
+                for (int p = 0; p < trainableParams.Count; p++)
+                {
+                    var param = trainableParams[p];
+                    if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
+                    var pSpan = param.Data.Span;
+                    var gSpan = grad.Data.Span;
+                    for (int i = 0; i < pSpan.Length; i++)
+                    {
+                        pSpan[i] = pSpan[i] - LearningRate * gSpan[i];
+                    }
+                }
+            }
+            double final = Loss();
+            return final / initial;
+        }
+
+        // FlashAttention arm
+        var faLayer = new FlashAttentionLayer<double>(seqLen, embedDim, headCount);
+        double faRatio = TrainLayerAndGetRatio(faLayer);
+
+        // MultiHeadAttention arm — MHA ctor takes (headCount, headDimension), so
+        // headDimension = embedDim/headCount to keep the same total embedding width.
+        var mhaLayer = new MultiHeadAttentionLayer<double>(headCount, embedDim / headCount);
+        double mhaRatio = TrainLayerAndGetRatio(mhaLayer);
+
+        // Both must reduce loss; FA must be within 10x of MHA's reduction quality
+        // (FA cannot regress wildly versus the documented drop-in replacement target).
+        Assert.True(faRatio < 1.0, $"FlashAttention did not decrease loss (final/initial = {faRatio:F4}).");
+        Assert.True(mhaRatio < 1.0, $"MultiHeadAttention did not decrease loss (final/initial = {mhaRatio:F4}).");
+        Assert.True(
+            faRatio < mhaRatio * 10.0,
+            $"FlashAttention loss-reduction ({faRatio:F4}) is more than 10x worse than MultiHeadAttention ({mhaRatio:F4}). " +
+            "FlashAttention is documented as a drop-in replacement; this gap indicates a backward-pass bug.");
     }
 
 

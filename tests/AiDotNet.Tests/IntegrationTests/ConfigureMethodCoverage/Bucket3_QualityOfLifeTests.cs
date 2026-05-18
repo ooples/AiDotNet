@@ -5,6 +5,7 @@ using AiDotNet.Deployment.Configuration;
 using AiDotNet.ExperimentTracking;
 using AiDotNet.Interpretability;
 using AiDotNet.Models.Options;
+using AiDotNet.ModelRegistry;
 using AiDotNet.TrainingMonitoring;
 using AiDotNet.Configuration;
 using Xunit;
@@ -47,7 +48,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// training output. Profiling is a wrapper around the training loop; bugs here
     /// would surface as crashes or stale-data output.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureProfiling_DefaultEnabled_ProducesNonDegenerateOutput()
     {
@@ -69,7 +70,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// <summary>
     /// ConfigureProfiling with custom config (detailed timing, low sampling rate).
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureProfiling_DetailedTiming_ProducesNonDegenerateOutput()
     {
@@ -100,7 +101,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// <summary>
     /// ConfigureTelemetry — verifies the metadata path doesn't crash builds.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureTelemetry_Default_ProducesNonDegenerateOutput()
     {
@@ -123,7 +124,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// ConfigureBenchmarking — verifies no-suite default config doesn't break the
     /// pipeline. Real benchmarking is a separate test infrastructure concern.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureBenchmarking_EmptyDefault_ProducesNonDegenerateOutput()
     {
@@ -147,7 +148,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// ConfigureInterpretability — claims SHAP/LIME/permutation importance. Smoke
     /// test that the metadata path doesn't break training.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureInterpretability_Default_ProducesNonDegenerateOutput()
     {
@@ -169,7 +170,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// <summary>
     /// ConfigureInterpretability with custom options enabling SHAP.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureInterpretability_WithSHAP_ProducesNonDegenerateOutput()
     {
@@ -198,7 +199,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// ConfigureAdversarialRobustness — default config should be a no-op for the
     /// canary task (no adversarial training enabled). Verifies build path.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureAdversarialRobustness_Default_ProducesNonDegenerateOutput()
     {
@@ -221,7 +222,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// ConfigureBiasDetector with a DisparateImpactBiasDetector — verifies the
     /// metadata path doesn't break the build.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureBiasDetector_DisparateImpact_ProducesNonDegenerateOutput()
     {
@@ -243,7 +244,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// <summary>
     /// ConfigureFairnessEvaluator with a BasicFairnessEvaluator — smoke test.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureFairnessEvaluator_Basic_ProducesNonDegenerateOutput()
     {
@@ -266,7 +267,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// ConfigureCrossValidation with KFold (k=3) — exercises the alternative
     /// training-evaluation path through the builder.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureCrossValidation_KFold3_ProducesNonDegenerateOutput()
     {
@@ -275,7 +276,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
         var model = MakeCanaryModel();
 
         var cv = new KFoldCrossValidator<float, Tensor<float>, Tensor<float>>(
-            new AiDotNet.Models.Options.CrossValidationOptions { NumberOfFolds = 3 });
+            new CrossValidationOptions { NumberOfFolds = 3 });
 
         var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model)
@@ -289,10 +290,16 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     }
 
     /// <summary>
-    /// ConfigureExperimentTracker with default storage — should not crash on
-    /// missing storage directory (auto-create or in-memory fallback).
+    /// ConfigureExperimentTracker pointed at a freshly-created temp directory —
+    /// verifies the tracker reads / writes correctly when given a real
+    /// pre-existing storage path. (The original docstring claimed
+    /// "missing storage directory" but the test always pre-created the
+    /// directory; renamed to match what the test actually validates per
+    /// PR #1345 review. A separate "missing directory" test would need
+    /// to skip the CreateDirectory call and rely on the tracker's
+    /// auto-create / in-memory-fallback behavior.)
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureExperimentTracker_TempStorage_ProducesNonDegenerateOutput()
     {
@@ -326,7 +333,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// <summary>
     /// ConfigureCheckpointManager with temp directory.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureCheckpointManager_TempDir_ProducesNonDegenerateOutput()
     {
@@ -360,14 +367,14 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
     /// <summary>
     /// ConfigureTrainingMonitor with default monitor.
     /// </summary>
-    [Fact]
+    [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureTrainingMonitor_Default_ProducesNonDegenerateOutput()
     {
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
-        var monitor = new AiDotNet.TrainingMonitoring.TrainingMonitor<float>();
+        var monitor = new TrainingMonitor<float>();
 
         var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model)
@@ -400,7 +407,7 @@ public class Bucket3_QualityOfLifeTests : ConfigureMethodTestBase
         try
         {
             Directory.CreateDirectory(tempDir);
-            var registry = new AiDotNet.ModelRegistry.ModelRegistry<float, Tensor<float>, Tensor<float>>(tempDir);
+            var registry = new ModelRegistry<float, Tensor<float>, Tensor<float>>(tempDir);
 
             var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureModel(model)
