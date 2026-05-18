@@ -208,21 +208,27 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
     /// </summary>
     private sealed class RecordingTensorTransformer : IDataTransformer<float, Tensor<float>, Tensor<float>>
     {
-        // Counters are written under Interlocked so the recorder is safe
-        // to reuse from concurrent Predict paths (e.g. if a future test
-        // exercises parallel inference). Without this the counters could
-        // race and undercount.
+        // Counters AND IsFitted are written under Interlocked / volatile
+        // semantics so the recorder is safe to reuse from concurrent
+        // Predict paths (e.g. if a future test exercises parallel
+        // inference). Without this both the counters and the IsFitted
+        // flag could race and undercount / observe-stale (review #1368).
         private int _fitCalls;
         private int _transformCalls;
         private int _fitTransformCalls;
+        private int _isFitted; // 0 = false, 1 = true (mutated via Interlocked)
         public int FitCalls => _fitCalls;
         public int TransformCalls => _transformCalls;
         public int FitTransformCalls => _fitTransformCalls;
-        public bool IsFitted { get; private set; }
+        public bool IsFitted => System.Threading.Volatile.Read(ref _isFitted) != 0;
         public int[]? ColumnIndices => null;
         public bool SupportsInverseTransform => false;
 
-        public void Fit(Tensor<float> data) { System.Threading.Interlocked.Increment(ref _fitCalls); IsFitted = true; }
+        public void Fit(Tensor<float> data)
+        {
+            System.Threading.Interlocked.Increment(ref _fitCalls);
+            System.Threading.Interlocked.Exchange(ref _isFitted, 1);
+        }
 
         public Tensor<float> Transform(Tensor<float> data)
         {
@@ -233,11 +239,22 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
         public Tensor<float> FitTransform(Tensor<float> data)
         {
             System.Threading.Interlocked.Increment(ref _fitTransformCalls);
-            IsFitted = true;
+            System.Threading.Interlocked.Exchange(ref _isFitted, 1);
             return data;
         }
 
-        public Tensor<float> InverseTransform(Tensor<float> data) => data;
+        public Tensor<float> InverseTransform(Tensor<float> data)
+        {
+            // SupportsInverseTransform = false ⇒ honour the contract and
+            // throw rather than silently returning data. A consumer that
+            // probes SupportsInverseTransform first won't reach here;
+            // a consumer that doesn't probe gets a clear failure pointing
+            // at the contract violation (review #1368).
+            throw new System.NotSupportedException(
+                "RecordingTensorTransformer.InverseTransform was called but " +
+                "SupportsInverseTransform is false. Probe SupportsInverseTransform " +
+                "before calling InverseTransform.");
+        }
         public string[] GetFeatureNamesOut(string[]? inputFeatureNames = null) => inputFeatureNames ?? System.Array.Empty<string>();
     }
 }
