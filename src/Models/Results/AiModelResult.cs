@@ -206,6 +206,17 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal PreprocessingInfo<T, TInput, TOutput>? PreprocessingInfo { get; private set; }
 
     /// <summary>
+    /// Postprocessing pipeline configured via
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigurePostprocessing(AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput})"/>.
+    /// Applied inside <see cref="Predict"/> after the model produces its
+    /// raw output. Stored-but-not-consumed regression on this surface was
+    /// detected by AiDotNet#1345 Bucket6 pre/post tests; wiring added here
+    /// so the configured pipeline actually runs against predictions.
+    /// </summary>
+    [JsonIgnore]
+    internal AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; private set; }
+
+    /// <summary>
     /// Gets or sets the metadata associated with the model.
     /// </summary>
     /// <value>A ModelMetaData&lt;T&gt; object containing descriptive information about the model.</value>
@@ -1235,6 +1246,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // Create default OptimizationResult for consistency
             OptimizationResult = options.OptimizationResult ?? new OptimizationResult<T, TInput, TOutput>();
             PreprocessingInfo = options.PreprocessingInfo;
+            PostprocessingPipeline = options.PostprocessingPipeline;
         }
         else
         {
@@ -1247,6 +1259,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Model = options.OptimizationResult.BestSolution;
             OptimizationResult = options.OptimizationResult;
             PreprocessingInfo = options.PreprocessingInfo;
+            PostprocessingPipeline = options.PostprocessingPipeline;
             MetaLearner = options.MetaLearner;
             MetaTrainingResult = options.MetaTrainingResult;
         }
@@ -1960,6 +1973,25 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         var denormalized = PreprocessingInfo?.IsTargetFitted == true
             ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
             : normalizedPredictions;
+
+        // Apply ConfigurePostprocessing pipeline. Without this step the
+        // pipeline configured by the user was stored on the builder,
+        // flowed onto AiModelResultOptions, but never invoked on
+        // predictions — the same "stored-but-not-consumed" pattern PR
+        // #1357 / #1361 swept across the Configure* surface. Fit the
+        // pipeline on the model's first output if it isn't already
+        // fitted (postprocessing pipelines typically have no learned
+        // parameters but the Fit contract is part of the IDataTransformer
+        // surface). Caught by AiDotNet#1345 Bucket6 ConfigurePostprocessing
+        // tests.
+        if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
+        {
+            if (!PostprocessingPipeline.IsFitted)
+            {
+                PostprocessingPipeline.Fit(denormalized);
+            }
+            denormalized = PostprocessingPipeline.Transform(denormalized);
+        }
 
         if (SafetyFilter != null && denormalized is Vector<T> vectorOutput && typeof(TOutput) == typeof(Vector<T>))
         {

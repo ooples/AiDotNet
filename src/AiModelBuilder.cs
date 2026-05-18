@@ -3397,6 +3397,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             OptimizationResult = optimizationResult,
             PreprocessingInfo = preprocessingInfo,
+            PostprocessingPipeline = _postprocessingPipeline,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,

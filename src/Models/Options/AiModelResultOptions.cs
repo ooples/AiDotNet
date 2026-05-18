@@ -137,6 +137,20 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public PreprocessingInfo<T, TInput, TOutput>? PreprocessingInfo { get; set; }
 
     /// <summary>
+    /// Gets or sets the postprocessing pipeline configured via
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigurePostprocessing(AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput})"/>.
+    /// </summary>
+    /// <remarks>
+    /// Applied inside <see cref="AiModelResult{T,TInput,TOutput}.Predict"/>
+    /// after the model produces its raw output (and after any
+    /// PreprocessingInfo target-inverse transform). Without this wiring the
+    /// configured postprocessing pipeline was stored on the builder but
+    /// never invoked on predictions — a stored-but-not-consumed
+    /// regression of the same shape as PR #1357 (#1361 family).
+    /// </remarks>
+    public AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; set; }
+
+    /// <summary>
     /// Gets or sets an optional AutoML run summary for this trained model.
     /// </summary>
     /// <remarks>
