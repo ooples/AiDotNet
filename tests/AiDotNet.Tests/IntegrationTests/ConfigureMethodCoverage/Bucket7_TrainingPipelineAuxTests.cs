@@ -53,18 +53,13 @@ public class Bucket7_TrainingPipelineAuxTests : ConfigureMethodTestBase
             .ConfigureRegularization(sentinel)
             .BuildAsync();
 
-        // The Regularization field on GradientBasedOptimizerBase is
-        // protected, so read it via reflection. Contract: after
+        // GradientBasedOptimizerBase exposes GetRegularizationForTests()
+        // as an internal test-only accessor (replaces brittle reflection
+        // on the protected `Regularization` field). Contract: after
         // BuildAsync, the optimizer's regularization is the user-
-        // supplied instance. A stored-but-not-consumed regression
-        // would leave it at the default L2.
-        var regField = typeof(GradientBasedOptimizerBase<float, Tensor<float>, Tensor<float>>)
-            .GetField("Regularization",
-                System.Reflection.BindingFlags.Instance
-                | System.Reflection.BindingFlags.NonPublic);
-        Assert.NotNull(regField);
-        var actualReg = regField!.GetValue(adam);
-        Assert.Same(sentinel, actualReg);
+        // supplied instance. Stored-but-not-consumed would leave it at
+        // the default L2.
+        Assert.Same(sentinel, adam.GetRegularizationForTests());
     }
 
     /// <summary>

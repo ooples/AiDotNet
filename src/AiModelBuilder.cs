@@ -2465,17 +2465,33 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // GradientBasedOptimizerBase swaps the protected field at runtime
         // so optimizers constructed before ConfigureRegularization was
         // called still pick up the user's choice.
-        if (_regularization is not null
-            && optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradOptForReg)
+        if (_regularization is not null)
         {
-            gradOptForReg.SetRegularization(_regularization);
+            if (optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradOptForReg)
+            {
+                gradOptForReg.SetRegularization(_regularization);
+            }
+            else
+            {
+                // Non-gradient optimizers (NormalOptimizer, evolutionary,
+                // any custom IOptimizer outside the GradientBasedOptimizerBase
+                // family) don't have a Regularization slot — surface the
+                // configure-call no-op via Trace so users discover the gap
+                // rather than seeing silently-dropped regularization.
+                // Matches PR #1361's Trace-warning pattern for reserved
+                // Configure* methods.
+                System.Diagnostics.Trace.TraceWarning(
+                    "ConfigureRegularization: configured regularization is not applied to non-gradient optimizers " +
+                    $"(active optimizer is {optimizer.GetType().Name}). Use a gradient-based optimizer " +
+                    "(AdamOptimizer/SGDOptimizer/AdamWOptimizer/etc.) to opt into runtime regularization.");
+            }
         }
 
         // LORA ADAPTATION (if configured)
         // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning
         if (_loraConfiguration != null && _model is NeuralNetworks.NeuralNetworkBase<T> neuralNetForLoRA)
         {
-            Console.WriteLine("Applying LoRA adapters to neural network layers...");
+            System.Diagnostics.Trace.TraceInformation("Applying LoRA adapters to neural network layers...");
 
             // Warmup forward to materialise lazy-init layers BEFORE LoRA
             // wrapping. LoRAAdapterBase.CreateLoRALayer needs the
@@ -2506,7 +2522,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"LoRA warmup forward failed: {ex.GetType().Name}: {ex.Message}. Proceeding — layers that materialised during the partial forward get wrapped; lazy ones get skipped via the IsShapeResolved guard.");
+                System.Diagnostics.Trace.TraceWarning($"LoRA warmup forward failed: {ex.GetType().Name}: {ex.Message}. Proceeding — layers that materialised during the partial forward get wrapped; lazy ones get skipped via the IsShapeResolved guard.");
             }
 
             int adaptedCount = 0;
@@ -2534,9 +2550,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
             if (skippedLazyCount > 0)
             {
-                Console.WriteLine($"LoRA skipped {skippedLazyCount} layer(s) whose shape was not resolved post-warmup.");
+                System.Diagnostics.Trace.TraceInformation($"LoRA skipped {skippedLazyCount} layer(s) whose shape was not resolved post-warmup.");
             }
-            Console.WriteLine($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
+            System.Diagnostics.Trace.TraceInformation($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
         }
 
 
@@ -3507,6 +3523,30 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             catch (Exception ex)
             {
                 Console.WriteLine($"Warning: Quantization failed: {ex.Message}. Model will use original precision.");
+            }
+        }
+
+        // Fit the postprocessing pipeline on the model's training-set
+        // predictions BEFORE attaching it to the result. AiModelResult.Predict
+        // will throw if it receives an unfitted pipeline (data-distribution-
+        // learning transformers shouldn't be fitted on the first single
+        // inference call — that locks in parameters on one example).
+        if (_postprocessingPipeline is not null
+            && _postprocessingPipeline.Count > 0
+            && !_postprocessingPipeline.IsFitted)
+        {
+            try
+            {
+                var bestSolution = optimizationResult.BestSolution
+                    ?? throw new InvalidOperationException("OptimizationResult.BestSolution is null after training — cannot fit postprocessing pipeline.");
+                var trainPreds = bestSolution.Predict(XTrain);
+                _postprocessingPipeline.Fit(trainPreds);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"ConfigurePostprocessing: failed to fit pipeline on training predictions ({ex.GetType().Name}: {ex.Message}). " +
+                    "AiModelResult.Predict will throw if the pipeline isn't fitted by the time inference runs.");
             }
         }
 

@@ -96,20 +96,39 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
 
         string trackerDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AiDotNetTrackerTest_" + System.Guid.NewGuid().ToString("N"));
         var recordingDvc = new RecordingDataVersionControl<float>();
-        var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<float>(trackerDir);
+        try
+        {
+            var tracker = new AiDotNet.ExperimentTracking.ExperimentTracker<float>(trackerDir);
 
-        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-            .ConfigureModel(model)
-            .ConfigureDataLoader(loader)
-            .ConfigureDataVersionControl(recordingDvc)
-            .ConfigureExperimentTracker(tracker)
-            .BuildAsync();
+            var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+                .ConfigureModel(model)
+                .ConfigureDataLoader(loader)
+                .ConfigureDataVersionControl(recordingDvc)
+                .ConfigureExperimentTracker(tracker)
+                .BuildAsync();
 
-        // BuildSupervisedInternalAsync calls _dataVersionControl
-        // .LinkDatasetToRun(...) when both DVC and tracker are wired
-        // and dataVersionHash is non-null. A stored-but-not-consumed bug
-        // would never call this; the recording DVC catches the call.
-        Assert.NotEmpty(recordingDvc.LinkedRuns);
+            // BuildSupervisedInternalAsync calls _dataVersionControl
+            // .LinkDatasetToRun(...) when both DVC and tracker are wired
+            // and dataVersionHash is non-null. A stored-but-not-consumed bug
+            // would never call this; the recording DVC catches the call.
+            Assert.NotEmpty(recordingDvc.LinkedRuns);
+        }
+        finally
+        {
+            // Clean up both temp dirs the test created — matches Bucket3
+            // ConfigureModelRegistry's cleanup pattern. Without this each
+            // run leaks a tracker dir + a RecordingDataVersionControl dir
+            // into %TEMP%, accumulating on CI.
+            TryDeleteDir(trackerDir);
+            TryDeleteDir(recordingDvc.StorageDirectory);
+        }
+    }
+
+    private static void TryDeleteDir(string path)
+    {
+        try { if (System.IO.Directory.Exists(path)) System.IO.Directory.Delete(path, recursive: true); }
+        catch (System.IO.IOException) { }
+        catch (System.UnauthorizedAccessException) { }
     }
 
     /// <summary>
@@ -152,9 +171,17 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
         public readonly System.Collections.Generic.List<(string Dataset, string Version, string Run, string? Model)> LinkedRuns
             = new();
 
+        public string StorageDirectory { get; }
+
         public RecordingDataVersionControl()
-            : base(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AiDotNetDVCRecorder_" + System.Guid.NewGuid().ToString("N")))
+            : this(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "AiDotNetDVCRecorder_" + System.Guid.NewGuid().ToString("N")))
         {
+        }
+
+        private RecordingDataVersionControl(string storageDirectory)
+            : base(storageDirectory)
+        {
+            StorageDirectory = storageDirectory;
         }
 
         public override void LinkDatasetToRun(string datasetName, string versionHash, string runId, string? modelId = null)

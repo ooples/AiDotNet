@@ -1933,53 +1933,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // that's a bug to fix at the build site, not by clobbering state
         // here in every Predict invocation.
 
-        // Use JIT-compiled function if available for 5-10x faster predictions
-        TOutput normalizedPredictions;
-
-        // INFERENCE OPTIMIZATION PATH: apply configured inference optimizations for neural network models
-        if (InferenceOptimizationConfig != null &&
-            Model is NeuralNetworkBase<T> neuralModel &&
-            normalizedNewData is Tensor<T> inputTensor)
-        {
-            var optimizedNeuralModel = EnsureStatelessInferenceOptimizationsInitialized(neuralModel);
-            if (optimizedNeuralModel != null)
-            {
-                var optimizedOutput = optimizedNeuralModel.Predict(inputTensor);
-                if (optimizedOutput is TOutput output)
-                {
-                    normalizedPredictions = output;
-                }
-                else
-                {
-                    // Fallback to the wrapped model if type mismatch occurs
-                    normalizedPredictions = Model.Predict(normalizedNewData);
-                }
-
-                return PreprocessingInfo?.IsTargetFitted == true
-                    ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
-                    : normalizedPredictions;
-            }
-        }
-
-        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor2)
-        {
-            // JIT PATH: Use compiled function for accelerated inference
-            var jitResult = JitCompiledFunction(new[] { inputTensor2 });
-            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output)
-            {
-                normalizedPredictions = output;
-            }
-            else
-            {
-                // Fallback to model if JIT result is unexpected
-                normalizedPredictions = Model.Predict(normalizedNewData);
-            }
-        }
-        else
-        {
-            // NORMAL PATH: Use model's standard prediction
-            normalizedPredictions = Model.Predict(normalizedNewData);
-        }
+        // Inference dispatch. All three paths (optimized / JIT / standard)
+        // fall through to the same shared tail (denormalize → postprocessing →
+        // safety filter). The previous implementation had an early return
+        // from the optimized path that silently bypassed postprocessing
+        // and safety, making the public Predict APIs behave inconsistently
+        // across configurations.
+        TOutput normalizedPredictions = DispatchModelInference(normalizedNewData);
 
         var denormalized = PreprocessingInfo?.IsTargetFitted == true
             ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
@@ -1989,17 +1949,28 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // pipeline configured by the user was stored on the builder,
         // flowed onto AiModelResultOptions, but never invoked on
         // predictions — the same "stored-but-not-consumed" pattern PR
-        // #1357 / #1361 swept across the Configure* surface. Fit the
-        // pipeline on the model's first output if it isn't already
-        // fitted (postprocessing pipelines typically have no learned
-        // parameters but the Fit contract is part of the IDataTransformer
-        // surface). Caught by AiDotNet#1345 Bucket6 ConfigurePostprocessing
-        // tests.
+        // #1357 / #1361 swept across the Configure* surface. Pipeline
+        // MUST be fitted at build time (in AiModelBuilder) — fitting on
+        // the first single Predict would parameterize a data-distribution-
+        // learning transformer (StandardScaler, MinMaxScaler, calibrator)
+        // on one example and lock that in for all subsequent predictions,
+        // which is statistically wrong. Concurrent Predict calls would
+        // also race the Fit. Throw clearly if a pipeline was wired
+        // without being fitted before reaching here — Bucket6 tests use
+        // an identity transformer that fits trivially via FitTransform
+        // in AiModelBuilder. Caught by AiDotNet#1345 Bucket6
+        // ConfigurePostprocessing tests.
         if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
         {
             if (!PostprocessingPipeline.IsFitted)
             {
-                PostprocessingPipeline.Fit(denormalized);
+                throw new System.InvalidOperationException(
+                    "ConfigurePostprocessing pipeline reached AiModelResult.Predict without being fitted. " +
+                    "AiModelBuilder.BuildSupervisedInternalAsync should have called Fit on the pipeline " +
+                    "during build; either the wiring is broken or the user passed a pre-built pipeline " +
+                    "containing transformers that require an external Fit before they can Transform. " +
+                    "Fit the pipeline manually before configuring it, or use the Action/transformer " +
+                    "overloads of ConfigurePostprocessing which let the builder manage Fit lifecycle.");
             }
             denormalized = PostprocessingPipeline.Transform(denormalized);
         }
@@ -2020,6 +1991,51 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         return denormalized;
+    }
+
+    /// <summary>
+    /// Single-source-of-truth inference dispatch for <see cref="Predict"/>.
+    /// Picks the InferenceOptimizationConfig fast path, then the JIT
+    /// compiled function, then the standard <see cref="Model"/>.Predict.
+    /// Returning a single <typeparamref name="TOutput"/> lets the caller
+    /// route every path through the same denormalize → postprocessing →
+    /// safety-filter tail without early returns.
+    /// </summary>
+    private TOutput DispatchModelInference(TInput normalizedNewData)
+    {
+        if (InferenceOptimizationConfig != null &&
+            Model is NeuralNetworkBase<T> neuralModel &&
+            normalizedNewData is Tensor<T> inputTensor)
+        {
+            var optimizedNeuralModel = EnsureStatelessInferenceOptimizationsInitialized(neuralModel);
+            if (optimizedNeuralModel != null)
+            {
+                var optimizedOutput = optimizedNeuralModel.Predict(inputTensor);
+                if (optimizedOutput is TOutput typedOptimized) return typedOptimized;
+                // Fallback to the wrapped model if type mismatch occurs.
+                return PredictViaModelOrThrow(normalizedNewData);
+            }
+        }
+
+        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor2)
+        {
+            var jitResult = JitCompiledFunction(new[] { inputTensor2 });
+            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput typedJit)
+            {
+                return typedJit;
+            }
+            // Fallback to model if JIT result is unexpected.
+            return PredictViaModelOrThrow(normalizedNewData);
+        }
+
+        return PredictViaModelOrThrow(normalizedNewData);
+    }
+
+    private TOutput PredictViaModelOrThrow(TInput normalizedNewData)
+    {
+        if (Model is null)
+            throw new System.InvalidOperationException("AiModelResult.Model is null; cannot dispatch Predict.");
+        return Model.Predict(normalizedNewData);
     }
 
     /// <summary>

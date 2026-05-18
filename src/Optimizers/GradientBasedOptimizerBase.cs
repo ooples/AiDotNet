@@ -120,6 +120,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     /// <summary>
     /// Replaces the active regularization on this optimizer at runtime.
+    /// Internal because this is builder-wiring, not a user-facing API
+    /// — mirrors the <see cref="EnableMixedPrecision"/> pattern at L626.
     /// </summary>
     /// <remarks>
     /// Used by <see cref="AiModelBuilder{T, TInput, TOutput}"/> when the
@@ -132,11 +134,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <param name="regularization">Replacement regularization strategy.</param>
     /// <exception cref="ArgumentNullException">Thrown when
     /// <paramref name="regularization"/> is null.</exception>
-    public void SetRegularization(IRegularization<T, TInput, TOutput> regularization)
+    internal void SetRegularization(IRegularization<T, TInput, TOutput> regularization)
     {
         Guard.NotNull(regularization);
         Regularization = regularization;
     }
+
+    /// <summary>
+    /// Test-only accessor exposing the active regularization for
+    /// verification in <c>AiModelBuilder</c>-level integration tests.
+    /// Internal — production callers should not depend on this.
+    /// </summary>
+    internal IRegularization<T, TInput, TOutput> GetRegularizationForTests() => Regularization;
 
     /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).

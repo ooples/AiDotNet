@@ -208,24 +208,31 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
     /// </summary>
     private sealed class RecordingTensorTransformer : IDataTransformer<float, Tensor<float>, Tensor<float>>
     {
-        public int FitCalls;
-        public int TransformCalls;
-        public int FitTransformCalls;
+        // Counters are written under Interlocked so the recorder is safe
+        // to reuse from concurrent Predict paths (e.g. if a future test
+        // exercises parallel inference). Without this the counters could
+        // race and undercount.
+        private int _fitCalls;
+        private int _transformCalls;
+        private int _fitTransformCalls;
+        public int FitCalls => _fitCalls;
+        public int TransformCalls => _transformCalls;
+        public int FitTransformCalls => _fitTransformCalls;
         public bool IsFitted { get; private set; }
         public int[]? ColumnIndices => null;
         public bool SupportsInverseTransform => false;
 
-        public void Fit(Tensor<float> data) { FitCalls++; IsFitted = true; }
+        public void Fit(Tensor<float> data) { System.Threading.Interlocked.Increment(ref _fitCalls); IsFitted = true; }
 
         public Tensor<float> Transform(Tensor<float> data)
         {
-            TransformCalls++;
+            System.Threading.Interlocked.Increment(ref _transformCalls);
             return data;
         }
 
         public Tensor<float> FitTransform(Tensor<float> data)
         {
-            FitTransformCalls++;
+            System.Threading.Interlocked.Increment(ref _fitTransformCalls);
             IsFitted = true;
             return data;
         }
