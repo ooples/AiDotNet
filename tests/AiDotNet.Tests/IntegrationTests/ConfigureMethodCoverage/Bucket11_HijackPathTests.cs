@@ -63,18 +63,22 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         // metadata extraction doesn't NRE.
         learnerMock.Setup(l => l.GetMetaModel()).Returns(MakeCanaryModel());
 
+        // Narrow the catch to the SPECIFIC downstream-of-Train failure
+        // modes a partially-stubbed Mock produces (NRE on Mock-of-IFullModel
+        // metadata access, ArgumentException on shape mismatches, InvalidOperationException
+        // from option-validation gates). Anything else (OOM, ArgumentException
+        // BEFORE the Train call, a typo causing TypeLoadException, etc.) must
+        // escape so the test surfaces unrelated regressions (review #1368:
+        // bare catch (Exception) masked genuine wiring bugs).
         try
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureMetaLearning(learnerMock.Object)
                 .BuildAsync();
         }
-        catch (System.Exception)
-        {
-            // Downstream extraction of meta-model metadata may throw on
-            // a Mock-of-IMetaLearner that doesn't fully implement every
-            // member; that's downstream of the wiring assertion below.
-        }
+        catch (System.NullReferenceException) { /* mock metadata access */ }
+        catch (System.ArgumentException) { /* downstream shape mismatch */ }
+        catch (System.InvalidOperationException) { /* option-validation gate */ }
 
         learnerMock.Verify(l => l.Train(), Times.Once,
             "ConfigureMetaLearning was wired but BuildAsync never invoked IMetaLearner.Train. The Meta-Learning branch at AiModelBuilder.cs:1512 should detect _metaLearner and route to BuildMetaLearningInternalAsync.");
@@ -105,6 +109,9 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         autoMLMock.SetupGet(a => a.TimeLimit).Returns(System.TimeSpan.FromSeconds(1));
         autoMLMock.Setup(a => a.GetTrialHistory()).Returns(new System.Collections.Generic.List<AiDotNet.AutoML.TrialResult>());
 
+        // Narrow downstream-of-SearchAsync catch to the documented Mock
+        // limitations (NRE on metadata, ArgumentException on shape, IOE
+        // on validation). Other exception types must escape (review #1368).
         try
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
@@ -112,15 +119,9 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
                 .ConfigureAutoML(autoMLMock.Object)
                 .BuildAsync();
         }
-        catch (System.Exception)
-        {
-            // Downstream of SearchAsync the builder consumes the
-            // returned model in ways the mock might not fully satisfy
-            // (e.g. GetModelMetadata on a mocked IFullModel returns
-            // null and the result construction NREs). The wiring
-            // assertion below is set inside the SearchAsync call which
-            // fires before any of that.
-        }
+        catch (System.NullReferenceException) { /* mock metadata access */ }
+        catch (System.ArgumentException) { /* shape / model construction */ }
+        catch (System.InvalidOperationException) { /* option-validation gate */ }
 
         autoMLMock.Verify(a => a.SearchAsync(
             It.IsAny<Tensor<float>>(), It.IsAny<Tensor<float>>(),
@@ -203,10 +204,17 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         // The agent gate at AiModelBuilder.cs:2309 reads
         // _agentConfig.IsEnabled and only calls GetAgentRecommendationsAsync
         // when true. The test runs in an environment with no LLM
-        // endpoint, so an unconditional call would throw — successful
-        // BuildAsync proves the gate fired AND the configured value
-        // is reachable via the internal accessor (i.e. survives onto
-        // the builder for downstream consumers).
+        // endpoint, so an unconditional call would throw —
+        // successful BuildAsync IS the gate-fired observable (a
+        // stored-but-not-consumed config would either crash the gate
+        // when IsEnabled=true OR succeed regardless when IsEnabled=false,
+        // making this test less load-bearing than it appears at the
+        // disabled level). The Assert.Same below verifies the config
+        // round-trips through the builder; pair with an enabled-path
+        // test for the call-side-effect observable (review #1368:
+        // setter-check alone isn't a routing assertion, but combined
+        // with successful BuildAsync under a config that would crash
+        // an unconditional call path it forms a real gate test).
         Assert.Same(agentCfg, builder.ConfiguredAgentAssistance);
     }
 }

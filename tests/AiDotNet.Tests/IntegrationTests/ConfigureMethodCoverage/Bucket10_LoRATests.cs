@@ -81,7 +81,22 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
         // whose per-layer-type shape inference isn't yet correct (e.g.
         // Embedding, MultiHeadAttention). The wrap loop itself runs
         // BEFORE the training loop, so the model's Layers list is
-        // updated regardless. Catch and inspect.
+        // updated regardless. We narrow the catch to the SPECIFIC types
+        // that the LoRA shape-inference path is documented to throw —
+        // any other exception (NRE, OOM, unrelated build-config error)
+        // must escape so the test fails (review #1368: catching
+        // System.Exception masked unrelated regressions).
+        //
+        // Documented thrown types from the LoRA path:
+        // - ArgumentException / ArgumentOutOfRangeException from
+        //   LoRALayer's ctor when rank > min(in, out) or one of the
+        //   sizes is non-positive.
+        // - InvalidOperationException from LoRAAdapterBase.CreateLoRALayer
+        //   when neither weight-matrix probing nor the shape API can
+        //   resolve a dimension (review-#1368 try-harder fix that
+        //   replaced the silent outputSize=1 / inputSize=outSize*2
+        //   fabrication).
+        System.Exception? buildEx = null;
         try
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
@@ -90,21 +105,32 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
                 .ConfigureLoRA(loraConfig)
                 .BuildAsync();
         }
-        catch (System.ArgumentException)
+        catch (System.ArgumentException ex) when (ex.Message.Contains("LoRA") || ex.StackTrace?.Contains("LoRA") == true)
         {
-            // Expected for non-Dense layer types (per-layer-type LoRA
-            // shape inference is a separate follow-up). The wrap loop
-            // ran successfully; the inspection below proves it.
+            buildEx = ex;
+        }
+        catch (System.InvalidOperationException ex) when (ex.Message.Contains("LoRA") || ex.StackTrace?.Contains("LoRA") == true)
+        {
+            buildEx = ex;
         }
 
+        // Detection via concrete type — every LoRA adapter inherits from
+        // LoRAAdapterBase<float>, so a single `is` check replaces the
+        // prior brittle string-match `GetType().Name.Contains("LoRA")`
+        // that would also match a future unrelated class with "LoRA"
+        // in its name (or fail after a rename) (review #1368).
         int wrappedCount = 0;
         foreach (var layer in model.Layers)
         {
-            if (layer is StandardLoRAAdapter<float>) wrappedCount++;
-            else if (layer.GetType().Name.Contains("LoRA")) wrappedCount++;
+            if (layer is LoRAAdapterBase<float>) wrappedCount++;
         }
 
         Assert.True(wrappedCount > 0,
-            $"ConfigureLoRA wired a rank=4 configuration but the wrap loop produced 0 LoRA adapters in the model's Layers list. Either the warmup forward isn't materialising any layers, every layer is hitting the IsShapeResolved=false guard, or the loop short-circuited.");
+            $"ConfigureLoRA wired a rank=4 configuration but the wrap loop produced 0 LoRAAdapterBase<float> instances in the model's Layers list. " +
+            $"Either the warmup forward isn't materialising any layers, every layer is hitting the IsShapeResolved=false guard, " +
+            $"or the loop short-circuited. " +
+            (buildEx is null
+                ? "Build completed without throwing."
+                : $"Build threw {buildEx.GetType().Name}: {buildEx.Message}"));
     }
 }
