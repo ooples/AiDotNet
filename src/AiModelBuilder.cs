@@ -2752,8 +2752,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // which caused race conditions when multiple models were built concurrently.
         ConfigureDocumentTransformers(_model);
 
-        // Use defaults for the optimizer if not set
-        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
+        // Use defaults for the optimizer if not set. When the caller
+        // ALSO configured regularization but did not pick an optimizer,
+        // promote to AdamOptimizer (a GradientBasedOptimizerBase) so the
+        // SetRegularization wiring below succeeds instead of throwing
+        // — the regularization request is the strong signal that the user
+        // expects a gradient-based optimizer (review #1368 C88Kn:
+        // NormalOptimizer default + non-default regularization gave a
+        // surprising Build-time throw with no clear fix because the user
+        // never explicitly chose NormalOptimizer).
+        IOptimizer<T, TInput, TOutput> optimizer;
+        if (_optimizer is not null)
+        {
+            optimizer = _optimizer;
+        }
+        else if (_regularization is not null)
+        {
+            optimizer = new Optimizers.AdamOptimizer<T, TInput, TOutput>(_model);
+        }
+        else
+        {
+            optimizer = new NormalOptimizer<T, TInput, TOutput>(_model);
+        }
 
         // Wire ConfigureRegularization through to the optimizer. Without
         // this, the user's regularization was stored on the builder
