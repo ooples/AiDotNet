@@ -141,6 +141,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private static IEngine Engine => AiDotNetEngine.Current;
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
+
+    /// <summary>
+    /// Optional cap on the number of training rows fed into the
+    /// post-train pipeline-fit Predict call (review #1368 C7HAu). Default
+    /// is null = no cap = full <c>XTrain</c> tensor. Set via
+    /// <see cref="ConfigurePostprocessingFitMaxRows"/> when the user's
+    /// pipeline transformers stabilise on a subsample and the doubled
+    /// build-time inference cost matters.
+    /// </summary>
+    private int? _postprocessingFitMaxRows;
     private IRegularization<T, TInput, TOutput>? _regularization;
     private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
@@ -382,6 +392,23 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // loop, which made two virtual calls per element on the
             // training hot path (review #1368 C6WM9). One call per
             // Build instead of perSample calls.
+            //
+            // Defense-in-depth (review #1368 C7mpf): verify the storage
+            // contract before issuing the bulk copy. If a future
+            // AiDotNet.Tensors refactor introduces strided / non-
+            // contiguous backing or a smaller Span view, the Slice below
+            // would silently copy garbage or throw an opaque
+            // ArgumentOutOfRangeException. Debug.Assert catches the
+            // contract break in debug builds without the runtime cost
+            // in release (the bulk copy is the LoRA warmup's perf hot
+            // path).
+            int totalElements = perSample * tensor.Shape[0];
+            System.Diagnostics.Debug.Assert(
+                tensor.Data.Span.Length >= totalElements,
+                $"Tensor<T>.Data.Span ({tensor.Data.Span.Length}) shorter than logical " +
+                $"shape ({string.Join("x", tensor.Shape)} = {totalElements}); the row-major " +
+                "contiguous-storage contract this slicing relies on no longer holds. " +
+                "Update TrySliceFirstSampleForLoRAWarmup before this Span<T>.CopyTo can run.");
             tensor.Data.Span.Slice(0, perSample).CopyTo(slice.Data.Span);
             if (slice is TInput typedSlice) return typedSlice;
         }
@@ -705,6 +732,30 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
         }
 
+        return this;
+    }
+
+    /// <summary>
+    /// Caps the number of training rows that the post-train pipeline-fit
+    /// step feeds into <c>bestSolution.Predict(...)</c>. Default (when not
+    /// called) is no cap — the full <c>XTrain</c> tensor goes through one
+    /// extra forward pass solely to materialise predictions for the
+    /// pipeline's <c>Fit</c>. For users with large training sets and
+    /// postprocessing transformers that stabilise on a subsample
+    /// (StandardScaler, MinMaxScaler, label encoders), capping here cuts
+    /// the doubled Build-time inference cost (review #1368 C7HAu).
+    /// </summary>
+    /// <param name="maxRows">Maximum number of leading training rows to
+    /// feed into Predict for fit. Pass a non-positive value to clear the
+    /// cap (revert to full-set fit).</param>
+    // NOTE: deliberately not named `ConfigurePostprocessingFitMaxRows` —
+    // the YAML source-generator scans `Configure*` methods and would
+    // misrender a primitive `int?` parameter as a POCO YAML section. This
+    // is an opt-in perf knob, not a configuration surface that belongs in
+    // a YAML model recipe.
+    public AiModelBuilder<T, TInput, TOutput> SetPostprocessingFitMaxRows(int? maxRows)
+    {
+        _postprocessingFitMaxRows = maxRows is int v && v > 0 ? v : (int?)null;
         return this;
     }
 
@@ -7928,7 +7979,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
         try
         {
-            var trainPreds = bestSolution.Predict(trainingInput);
+            // Optionally slice trainingInput to the configured max-rows cap
+            // (review #1368 C7HAu) so the post-train fit doesn't double the
+            // Build-time inference cost when the user's pipeline
+            // transformers don't need the full training set.
+            var fitInput = _postprocessingFitMaxRows is int cap
+                ? TrySliceFirstNSamples(trainingInput, cap)
+                : trainingInput;
+            var trainPreds = bestSolution.Predict(fitInput);
             _postprocessingPipeline.Fit(trainPreds);
         }
         catch (OperationCanceledException)
@@ -7953,6 +8011,40 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 "or omit ConfigurePostprocessing if the pipeline is meant to be fitted by the " +
                 "caller after Build (review #1368 C6WJG).", ex);
         }
+    }
+
+    /// <summary>
+    /// Returns a prefix slice of <paramref name="x"/> containing at most
+    /// <paramref name="maxRows"/> leading samples. For <see cref="Tensor{T}"/>
+    /// inputs uses the same row-major bulk Span CopyTo path as
+    /// <see cref="TrySliceFirstSampleForLoRAWarmup"/>; for non-Tensor TInput
+    /// (or inputs already smaller than the cap) returns x unchanged. Used
+    /// by <see cref="FitPostprocessingIfNeeded"/> to cap the doubled
+    /// Build-time inference cost (review #1368 C7HAu).
+    /// </summary>
+    private static TInput TrySliceFirstNSamples(TInput x, int maxRows)
+    {
+        if (x is Tensor<T> tensor && tensor.Shape.Length > 0 && tensor.Shape[0] > maxRows)
+        {
+            var sliceShape = new int[tensor.Shape.Length];
+            sliceShape[0] = maxRows;
+            for (int i = 1; i < tensor.Shape.Length; i++) sliceShape[i] = tensor.Shape[i];
+
+            int perSample = 1;
+            for (int i = 1; i < tensor.Shape.Length; i++) perSample *= tensor.Shape[i];
+            long total = (long)maxRows * perSample;
+            if (total > int.MaxValue)
+            {
+                // Cap that would overflow int slice — fall back to full input
+                // rather than truncating to int.MaxValue and silently losing
+                // the trailing rows.
+                return x;
+            }
+            var slice = new Tensor<T>(sliceShape);
+            tensor.Data.Span.Slice(0, (int)total).CopyTo(slice.Data.Span);
+            if (slice is TInput typedSlice) return typedSlice;
+        }
+        return x;
     }
 
     /// <summary>
