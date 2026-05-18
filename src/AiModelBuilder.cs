@@ -2027,18 +2027,28 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // ConfigureAugmentation isn't wired into the streaming path —
         // BuildSupervisedInternalAsync's one-shot offline augmentation
         // applies to the materialised X tensor, which a streaming loader
-        // doesn't produce. Fail loudly when the user configures both;
-        // silently dropping the augmentation here would reintroduce the
-        // stored-but-not-consumed pattern this PR is trying to eliminate.
-        if (_augmentationConfig is { IsEnabled: true, CustomAugmenter: not null })
+        // doesn't produce. Fail loudly when the user configures EITHER
+        // a custom augmenter OR a modality settings block (modality
+        // factory dispatches the same offline apply path) — silently
+        // dropping the augmentation here would reintroduce the stored-
+        // but-not-consumed pattern this PR is trying to eliminate
+        // (review #1368 C8eil: modality settings were unsupported on
+        // streaming path but the gate only checked CustomAugmenter).
+        if (_augmentationConfig is { IsEnabled: true } augCfg
+            && (augCfg.CustomAugmenter is not null
+                || augCfg.ImageSettings is not null
+                || augCfg.TabularSettings is not null
+                || augCfg.AudioSettings is not null
+                || augCfg.TextSettings is not null
+                || augCfg.VideoSettings is not null))
         {
             throw new NotSupportedException(
                 "ConfigureAugmentation is not yet supported on the streaming data-loader path. " +
                 "The augmentation hook is wired into BuildSupervisedInternalAsync's one-shot offline " +
                 "augmentation against a materialised X tensor, which a streaming loader does not produce. " +
                 "Either switch to an IInputOutputDataLoader (e.g. InMemoryDataLoader) or drop the " +
-                "ConfigureAugmentation call until streaming augmentation is wired through the optimizer's " +
-                "per-batch hooks.");
+                "ConfigureAugmentation call (CustomAugmenter or any *Settings block) until streaming " +
+                "augmentation is wired through the optimizer's per-batch hooks.");
         }
 
         // Apply GPU configuration first

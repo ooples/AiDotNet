@@ -300,7 +300,6 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         // that proves the gate ran (a stored-but-not-consumed regression
         // would never emit it).
         var traceLines = new System.Collections.Concurrent.ConcurrentBag<string>();
-        var listener = new System.Diagnostics.DelimitedListTraceListener(System.IO.Stream.Null);
         var captureListener = new TraceCapture(traceLines);
         System.Diagnostics.Trace.Listeners.Add(captureListener);
         try

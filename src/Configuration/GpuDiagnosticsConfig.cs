@@ -69,10 +69,18 @@ public static class GpuDiagnosticsConfig
     /// </remarks>
     public static GpuDiagnosticLevel Level
     {
-        get => _level;
+        // Volatile.Read/Write give an acquire/release fence on the backing
+        // int so concurrent readers outside the PushLevel/PopLevel lock
+        // see torn-free, fresh-ish values (review #1368 C8eez). The lock
+        // inside push/pop still serialises the stack mutation; this only
+        // closes the gap for direct property reads/writes from sibling
+        // code paths that bypass the lock.
+        get => (GpuDiagnosticLevel)System.Threading.Volatile.Read(ref System.Runtime.CompilerServices.Unsafe.As<GpuDiagnosticLevel, int>(ref _level));
         set
         {
-            _level = value;
+            System.Threading.Volatile.Write(
+                ref System.Runtime.CompilerServices.Unsafe.As<GpuDiagnosticLevel, int>(ref _level),
+                (int)value);
             // Forward to Tensors layer. Silent/Minimal both suppress because
             // Tensors v0.38.0 only has a bool toggle — it doesn't yet support
             // per-message level tagging. Minimal-specific filtering becomes

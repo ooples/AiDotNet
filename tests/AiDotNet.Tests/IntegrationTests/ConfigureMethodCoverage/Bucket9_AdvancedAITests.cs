@@ -163,11 +163,23 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
         // substring. The message text is human-readable and can be
         // rephrased by a future maintainer without breaking behavior —
         // type+namespace assertions don't drift (this PR's review C6WMo).
+        //
+        // Narrowed: require the throw to originate INSIDE the
+        // AiModelBuilder method that gates the KD-on-regular-training-path
+        // contract, not just anywhere under AiDotNet.* — any unrelated
+        // NotSupportedException thrown deeper in the build would satisfy
+        // the broader namespace check (this PR's review C8eiD). The KD
+        // throw lives in AiModelBuilder.BuildSupervisedInternalAsync;
+        // the type-and-method assertion below pins it to that gate.
         Assert.IsType<System.NotSupportedException>(ex);
+        bool fromBuilder = ex.TargetSite?.DeclaringType?.FullName?
+            .StartsWith("AiDotNet.AiModelBuilder", System.StringComparison.Ordinal) == true;
+        bool stackThroughBuilder = ex.StackTrace?
+            .Contains("AiDotNet.AiModelBuilder", System.StringComparison.Ordinal) == true;
         Assert.True(
-            ex.TargetSite?.DeclaringType?.FullName?.StartsWith("AiDotNet.", System.StringComparison.Ordinal) == true
-            || (ex.StackTrace?.Contains("at AiDotNet.", System.StringComparison.Ordinal) == true),
-            $"Expected the throw to originate inside AiDotNet.* code (production builder path). " +
-            $"Got TargetSite={ex.TargetSite?.DeclaringType?.FullName ?? "<null>"} | message={ex.Message}");
+            fromBuilder || stackThroughBuilder,
+            $"Expected the KD-not-integrated throw to originate inside AiDotNet.AiModelBuilder " +
+            $"(the supervised-path KD gate). Got TargetSite={ex.TargetSite?.DeclaringType?.FullName ?? "<null>"} | " +
+            $"message={ex.Message}");
     }
 }

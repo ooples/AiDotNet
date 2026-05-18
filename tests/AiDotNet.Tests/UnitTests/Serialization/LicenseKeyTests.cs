@@ -222,7 +222,7 @@ public class LicenseKeyTests
     {
         var builder = new AiModelBuilder<double, double[], double>();
 
-        Assert.Null(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredLicenseKey);
+        Assert.Null(((AiDotNet.Configuration.IConfiguredView<double, double[], double>)builder).ConfiguredLicenseKey);
     }
 
     [Fact(Timeout = 60000)]
@@ -231,8 +231,8 @@ public class LicenseKeyTests
         var license = new AiDotNetLicenseKey("test-key-123");
         var builder = new AiModelBuilder<double, double[], double>(license);
 
-        Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredLicenseKey);
-        Assert.Equal("test-key-123", ((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredLicenseKey.Key);
+        Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<double, double[], double>)builder).ConfiguredLicenseKey);
+        Assert.Equal("test-key-123", ((AiDotNet.Configuration.IConfiguredView<double, double[], double>)builder).ConfiguredLicenseKey.Key);
     }
 
     [Fact(Timeout = 60000)]
@@ -243,8 +243,8 @@ public class LicenseKeyTests
 
         builder.ConfigureLicenseKey(license);
 
-        Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredLicenseKey);
-        Assert.Equal("fluent-key", ((AiDotNet.Configuration.IConfiguredView<float, Tensor<float>, Tensor<float>>)builder).ConfiguredLicenseKey.Key);
+        Assert.NotNull(((AiDotNet.Configuration.IConfiguredView<double, double[], double>)builder).ConfiguredLicenseKey);
+        Assert.Equal("fluent-key", ((AiDotNet.Configuration.IConfiguredView<double, double[], double>)builder).ConfiguredLicenseKey.Key);
     }
 
     [Fact(Timeout = 60000)]
