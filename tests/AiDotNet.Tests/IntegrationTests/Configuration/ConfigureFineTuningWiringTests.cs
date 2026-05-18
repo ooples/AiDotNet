@@ -161,19 +161,24 @@ public class ConfigureFineTuningWiringTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task BuildAsync_WithoutConfigureFineTuning_DoesNotInvokeFineTuneAsync()
+    public async Task BuildAsync_WithoutConfigureFineTuning_CompletesNormally()
     {
+        // Negative-path sanity: when no ConfigureFineTuning is supplied,
+        // BuildAsync completes successfully without errors. The "stub is
+        // not invoked" claim isn't observable here (the stub is never
+        // wired anywhere — that's a false-positive assertion, see review
+        // #1361). The Disabled and the Enabled paths are covered above
+        // with stubs wired explicitly so their counters are meaningful.
         var (x, y) = BuildDataset();
         var loader = DataLoaders.FromMatrixVector(x, y);
-        var stubFt = new RecordingFineTuner();
-        // Stub is not attached to the builder — so it must remain unused.
+
         var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(loader)
             .ConfigureModel(new RidgeRegression<double>())
             .BuildAsync();
 
         Assert.NotNull(result);
-        Assert.Equal(0, stubFt.FineTuneCalls);
+        Assert.NotNull(result.Model);
     }
 
     [Fact(Timeout = 60000)]

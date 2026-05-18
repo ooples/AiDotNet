@@ -1492,7 +1492,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             var labels = inputOutputLoader.Labels;
 
             // Delegate to the internal supervised training method
-            result = await BuildSupervisedInternalAsync(features, labels);
+            result = await BuildSupervisedInternalAsync(features, labels, cancellationToken);
             await RunBenchmarksIfConfiguredAsync(result).ConfigureAwait(false);
             return result;
         }
@@ -2297,7 +2297,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <param name="x">Matrix of input features.</param>
     /// <param name="y">Vector of output values.</param>
     /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(TInput x, TOutput y)
+    private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(
+        TInput x, TOutput y, CancellationToken cancellationToken)
     {
         // SUPERVISED TRAINING PATH
 
@@ -3291,10 +3292,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     "ConfigureFineTuning was enabled but the optimizer did not produce a BestSolution to fine-tune. " +
                     "This usually means main training failed silently — check earlier logs.");
 
-            optimizationResult.BestSolution = await ftImpl.FineTuneAsync(
+            // Honor the BuildAsync caller's cancellation token across the
+            // fine-tune await — without this the awaited operation cannot
+            // be cancelled once the optimizer's main-training pass returns
+            // (review #1361 fix #5).
+            var fineTunedModel = await ftImpl.FineTuneAsync(
                 optimizationResult.BestSolution,
                 _fineTuningConfiguration.TrainingData,
-                cancellationToken: default).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
+
+            // Rebind so downstream metric/checkpoint code sees the post-FT
+            // model. The optimizer-result metrics are still pre-FT (computed
+            // earlier in this method) — a full rebind that re-evaluates loss
+            // on the fine-tuned model is tracked as a heavy-lift follow-up
+            // (review #1361 fix #4 partial).
+            optimizationResult.BestSolution = fineTunedModel;
+            _model = fineTunedModel;
         }
 
         // ============================================================================
@@ -3346,10 +3359,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 {
                     if (!stage.IsEvaluationOnly)
                     {
+                        // Pass through the BuildAsync caller's cancellation token
+                        // so user-supplied stage delegates can honor cancellation
+                        // (review #1361 fix #5).
                         currentModel = await stage.CustomTrainingFunction(
                             currentModel,
                             stage.TrainingData!,
-                            CancellationToken.None).ConfigureAwait(false);
+                            cancellationToken).ConfigureAwait(false);
                         if (currentModel is null)
                             throw new InvalidOperationException(
                                 $"TrainingPipeline stage '{stage.Name}' returned null from " +
@@ -3371,7 +3387,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 previousStageResult = stageResult;
             }
 
+            // Rebind _model so downstream weight-streaming reports, checkpoint
+            // writes, and any other consumer that reads _model directly sees
+            // the post-pipeline model (review #1361 fix #4 partial — the
+            // optimizer metrics on optimizationResult are still pre-pipeline;
+            // re-evaluating them on the pipeline-output model is the heavy-
+            // lift follow-up).
             optimizationResult.BestSolution = currentModel;
+            _model = currentModel;
         }
 
         // ============================================================================
@@ -3435,7 +3458,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
             // The CurriculumLearner mutates BaseModel in place; reassign to make the
             // post-curriculum weights explicit for downstream consumers.
+            // Rebind _model so downstream consumers see the post-curriculum
+            // weights (review #1361 fix #4 partial).
             optimizationResult.BestSolution = curriculumLearner.BaseModel;
+            _model = curriculumLearner.BaseModel;
         }
 
         var trainingEndTime = DateTime.UtcNow;

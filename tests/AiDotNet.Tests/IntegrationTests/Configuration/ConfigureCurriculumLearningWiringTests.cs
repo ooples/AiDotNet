@@ -177,17 +177,23 @@ public class ConfigureCurriculumLearningWiringTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task BuildAsync_WithoutConfigureCurriculumLearning_DoesNotInvokeLearner()
+    public async Task BuildAsync_WithoutConfigureCurriculumLearning_CompletesNormally()
     {
+        // Negative-path sanity: when no ConfigureCurriculumLearning is
+        // supplied, BuildAsync completes successfully. The previous
+        // assertion ("estimator.EstimateDifficultiesCalls == 0") was a
+        // false positive because the estimator was never wired into the
+        // builder (review #1361). The disabled-dataset path above and the
+        // wired-stub paths cover the observable invariants meaningfully.
         var (x, y) = BuildDataset();
-        var estimator = new RecordingDifficultyEstimator();
 
-        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(DataLoaders.FromMatrixVector(x, y))
             .ConfigureModel(new RidgeRegression<double>())
             .BuildAsync();
 
-        Assert.Equal(0, estimator.EstimateDifficultiesCalls);
+        Assert.NotNull(result);
+        Assert.NotNull(result.Model);
     }
 
     [Fact(Timeout = 120000)]

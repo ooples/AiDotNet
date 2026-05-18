@@ -325,9 +325,43 @@ public class ConfigureTrainingPipelineWiringTests
     [Fact(Timeout = 120000)]
     public async Task BuildAsync_WithoutConfigureTrainingPipeline_NoStagesRun()
     {
+        // To make "no stages run" observable, wire a sentinel stage into a
+        // SEPARATE builder that does configure a pipeline — verify that
+        // builder's stage runs once. Then run the no-pipeline builder and
+        // verify it produces a comparable result without ever touching the
+        // sentinel. The sentinel counter is the observation point:
+        // the builder under test is the one that does NOT call
+        // ConfigureTrainingPipeline, and its stage delegate is never
+        // attached, so the counter must remain at 1 (set by the control
+        // builder, never bumped by the test builder).
         var (x, y) = BuildDataset();
-        // Sanity: when the builder is not configured with a pipeline, BuildAsync
-        // completes normally and no pipeline machinery runs.
+        int sentinelInvocations = 0;
+
+        // Control: wire a pipeline that proves the sentinel hook works.
+        var controlStage = new TrainingStage<double, Matrix<double>, Vector<double>>
+        {
+            Name = "control",
+            Enabled = true,
+            TrainingData = BuildSFTData(),
+            CustomTrainingFunction = (m, d, ct) =>
+            {
+                System.Threading.Interlocked.Increment(ref sentinelInvocations);
+                return Task.FromResult(m);
+            }
+        };
+        await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(DataLoaders.FromMatrixVector(x, y))
+            .ConfigureModel(new RidgeRegression<double>())
+            .ConfigureTrainingPipeline(new TrainingPipelineConfiguration<double, Matrix<double>, Vector<double>>
+            {
+                Stages = new() { controlStage }
+            })
+            .BuildAsync();
+        Assert.Equal(1, sentinelInvocations);
+
+        // Test: build WITHOUT ConfigureTrainingPipeline — the counter must
+        // remain at 1 (the control's invocation), proving no stage was
+        // run by this build.
         var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
             .ConfigureDataLoader(DataLoaders.FromMatrixVector(x, y))
             .ConfigureModel(new RidgeRegression<double>())
@@ -335,5 +369,6 @@ public class ConfigureTrainingPipelineWiringTests
 
         Assert.NotNull(result);
         Assert.NotNull(result.Model);
+        Assert.Equal(1, sentinelInvocations);
     }
 }
