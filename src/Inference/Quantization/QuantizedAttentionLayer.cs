@@ -166,6 +166,23 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
     /// <summary>Gets the quantization format used.</summary>
     public InferenceQuantizationMode QuantizationFormat => _format;
 
+    /// <summary>
+    /// Enumerates (numWeights, numOutRows) for each projection (Q, K, V, O).
+    /// Internal accessor used by <see cref="Int8InferenceModel"/> for storage-byte accounting.
+    /// </summary>
+    internal IEnumerable<(long NumWeights, int NumOutRows)> GetProjectionDimensions()
+    {
+        yield return ((long)_qProj.OutDim * _qProj.InDim, _qProj.OutDim);
+        yield return ((long)_kProj.OutDim * _kProj.InDim, _kProj.OutDim);
+        yield return ((long)_vProj.OutDim * _vProj.InDim, _vProj.OutDim);
+        yield return ((long)_oProj.OutDim * _oProj.InDim, _oProj.OutDim);
+    }
+
+    /// <summary>
+    /// Length of the output bias vector. Internal accessor for stats reporting.
+    /// </summary>
+    internal int OutputBiasLength => _outputBias.Length;
+
     public override Tensor<float> Forward(Tensor<float> input)
     {
         int rank = input.Shape.Length;
@@ -417,7 +434,10 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
 
         // Q/K/V/O projections have no per-projection bias — attention's
         // _outputBias is applied separately in Forward after the
-        // O-projection scatter (review #1363 C6XGz).
+        // O-projection scatter (review #1363 C6XGz). Routed through
+        // AiDotNet.Tensors' tiled SGEMM + AVX2 dequant primitives
+        // (Int8WeightOnlyMatMul) instead of the scalar dequant-on-fly loop
+        // the #1348 PR description called out as a follow-up.
         Int8WeightOnlyMatMul.MultiplyAddBias(
             input: input,
             weightsInt8: weights,

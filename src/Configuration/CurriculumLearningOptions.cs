@@ -1,6 +1,8 @@
+using AiDotNet.ActiveLearning.Interfaces;
 using AiDotNet.CurriculumLearning;
 using AiDotNet.CurriculumLearning.Interfaces;
 using AiDotNet.CurriculumLearning.Schedulers;
+using AiDotNet.Interfaces;
 
 namespace AiDotNet.Configuration;
 
@@ -182,6 +184,33 @@ public class CurriculumLearningOptions<T, TInput, TOutput>
     /// Gets or sets the verbosity level for logging.
     /// </summary>
     public CurriculumVerbosity Verbosity { get; set; } = CurriculumVerbosity.Normal;
+
+    /// <summary>
+    /// Gets or sets the dataset on which to run the curriculum-learning training pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>The curriculum learner needs an indexable dataset to estimate per-sample
+    /// difficulties and schedule phases over. The current BuildAsync wire-up does NOT
+    /// auto-extract a dataset from the configured DataLoader (different loader shapes
+    /// have different sample contracts), so callers must supply one here. When this
+    /// property is null, ConfigureCurriculumLearning is treated as configuration-only
+    /// and no curriculum training pass runs.</para>
+    /// </remarks>
+    public IDataset<T, TInput, TOutput>? Dataset { get; set; }
+
+    /// <summary>
+    /// Gets or sets a pre-built difficulty estimator. If null, BuildAsync constructs
+    /// a <see cref="DifficultyEstimators.LossBasedDifficultyEstimator{T,TInput,TOutput}"/>
+    /// using the trained model's internal loss function.
+    /// </summary>
+    public IDifficultyEstimator<T, TInput, TOutput>? CustomDifficultyEstimator { get; set; }
+
+    /// <summary>
+    /// Gets or sets a custom curriculum scheduler. If null, BuildAsync constructs a
+    /// scheduler matching <see cref="ScheduleType"/> using the standard Schedulers
+    /// catalog.
+    /// </summary>
+    public ICurriculumScheduler<T>? CustomScheduler { get; set; }
 }
 
 /// <summary>
