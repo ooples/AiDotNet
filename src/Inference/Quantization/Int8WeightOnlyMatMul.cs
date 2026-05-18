@@ -52,7 +52,7 @@ internal static class Int8WeightOnlyMatMul
     /// when AVX is unavailable is the engine's scalar fallback (still vector-
     /// register friendly via the BLIS micro-kernel).
     /// </summary>
-    public static void MultiplyAddBias(
+    internal static void MultiplyAddBias(
         ReadOnlySpan<float> input,
         sbyte[] weightsInt8,
         float[] rowScales,

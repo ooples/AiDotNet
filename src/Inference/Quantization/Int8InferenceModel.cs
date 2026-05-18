@@ -1,8 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using AiDotNet.Configuration;
-using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -36,9 +33,15 @@ namespace AiDotNet.Inference.Quantization;
 /// model and wants to save the deep-copy time and memory.
 /// </para>
 /// <para><b>For Beginners:</b> After you have trained a model, this wrapper produces a
-/// smaller and (on memory-bandwidth-bound matmuls) faster inference-only copy that stores
-/// weights as 8-bit signed integers (one byte each) instead of 32-bit floats (four bytes each).
-/// You typically lose less than 0.1% accuracy and gain ~4x reduction in weight memory.
+/// smaller inference-only copy that stores weights as 8-bit signed integers (one byte each)
+/// instead of 32-bit floats (four bytes each), giving roughly 4x reduction in raw weight
+/// memory. Whether INT8 inference is actually faster than FP32 depends on the model,
+/// hardware (memory-bandwidth-bound matmuls benefit more than compute-bound ones), and
+/// quantization settings; the prior unconditional "faster" claim was misleading. Accuracy
+/// impact also varies with model architecture and task — typically a few percentage points
+/// or less for well-calibrated symmetric per-row INT8, but not guaranteed under all
+/// architectures. Validate on your own evaluation set before relying on either claim
+/// (review #1348 C6T40 toned down the previously absolute language).
 /// </para>
 /// <example>
 /// Internal / assembly-internal usage (reachable from tests via
