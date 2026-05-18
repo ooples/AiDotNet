@@ -519,8 +519,13 @@ public class BuildAsyncResidualModeCollapseTests
         // stopping criterion. If accuracy plateaus at ~10%, the bug is in
         // the optimizer step itself. (No try-catch: see Arm 6 rationale.)
         {
-            var (_, xLong, yLong) = BuildFixture();
-            var modelArm7 = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+            // Build a fresh architecture too, not just fresh (X, Y). Every
+            // other arm constructs its own architecture inside the per-arm
+            // helper; reusing the outer-scope `arch` here would inherit any
+            // mutable layer state (lazy-shape caches, layer registries)
+            // populated by earlier arms 0-6 (review #1364).
+            var (archArm7, xLong, yLong) = BuildFixture();
+            var modelArm7 = new Transformer<float>(archArm7, lossFunction: new CategoricalCrossEntropyLoss<float>());
             var optionsArm7 = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
             {
                 InitialLearningRate = LearningRate,

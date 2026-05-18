@@ -51,6 +51,7 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// message identifies which element diverges first and by how much —
 /// that's the empirical evidence for the unification PR's design.</para>
 /// </summary>
+[Collection("NonParallelIntegration")]
 public class AdamPathDivergenceH6DiagnosticTests
 {
     private readonly ITestOutputHelper _output;

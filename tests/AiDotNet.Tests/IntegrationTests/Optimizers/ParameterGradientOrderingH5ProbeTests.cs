@@ -184,11 +184,17 @@ public class ParameterGradientOrderingH5ProbeTests
         Assert.Equal(template.Length, flatBack.Length);
 
         // Verify the pattern round-tripped through SetParameters/GetParameters
+        // — use EXACT equality. The pattern is integer-valued (i+1 ≤ 17000 for
+        // the Transformer canary), float32 represents integers exactly up to
+        // 2^24, and the SetParameters→GetParameters round-trip should perform
+        // no arithmetic. A 1e-3 absolute tolerance would mask a real bug where
+        // SetParameters internally normalizes, clips, or casts through a
+        // reduced-precision buffer (review #1364).
         bool flatRoundtrip = true;
         int firstMismatchFlat = -1;
         for (int i = 0; i < flatBack.Length; i++)
         {
-            if (Math.Abs(flatBack[i] - (i + 1)) > 1e-3f)
+            if (flatBack[i] != i + 1)
             {
                 flatRoundtrip = false;
                 if (firstMismatchFlat < 0) firstMismatchFlat = i;
@@ -209,7 +215,10 @@ public class ParameterGradientOrderingH5ProbeTests
             {
                 float expected = offsetB + j + 1;
                 float actual = chunk[j];
-                if (Math.Abs(actual - expected) > 1e-3f)
+                // Exact equality — same rationale as the flat-round-trip
+                // check above (integer-valued pattern + no FP arithmetic on
+                // the read path). 1e-3 tolerance would mask round-trip bugs.
+                if (actual != expected)
                 {
                     chunkCorrespondence = false;
                     if (firstMismatchChunk < 0)
