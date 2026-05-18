@@ -167,6 +167,27 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; set; }
 
     /// <summary>
+    /// Optional training-target sample handed in alongside an unfitted
+    /// <see cref="PostprocessingPipeline"/> so the
+    /// <see cref="AiModelResult{T,TInput,TOutput}"/> ctor can lazy-fit
+    /// the pipeline at construction time instead of throwing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When <see cref="PostprocessingPipeline"/> is non-null and not yet
+    /// fitted, the ctor will call <c>PostprocessingPipeline.Fit(this)</c>
+    /// if this value is non-null; if it is null the ctor throws the
+    /// fail-fast diagnostic (review #1368 C6WMS). AiModelBuilder's
+    /// supervised path normally fits the pipeline itself before
+    /// constructing the result; this slot exists for direct
+    /// <c>AiModelResultOptions</c> construction paths (federated /
+    /// meta-learning / distributed) that own the trained model and
+    /// training data but haven't called Fit yet.
+    /// </para>
+    /// </remarks>
+    public TOutput? PostprocessingFitSample { get; set; }
+
+    /// <summary>
     /// Gets or sets the knowledge-distillation options configured via
     /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigureKnowledgeDistillation"/>.
     /// </summary>

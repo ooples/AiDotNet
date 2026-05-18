@@ -1251,13 +1251,26 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             && options.PostprocessingPipeline.Count > 0
             && !options.PostprocessingPipeline.IsFitted)
         {
-            throw new InvalidOperationException(
-                "AiModelResult was constructed with a postprocessing pipeline that has not been fitted. " +
-                "AiModelBuilder.BuildSupervisedInternalAsync fits the pipeline automatically; if you " +
-                "constructed AiModelResultOptions directly, call PostprocessingPipeline.Fit(...) " +
-                "(or use FitTransform on the trainer's predictions) BEFORE passing the options to " +
-                "the AiModelResult ctor. This check at Build time replaces the previous Predict-time " +
-                "throw to fail fast (review #1368).");
+            // Lazy-fit at construction time when the caller supplied a
+            // training-target sample on PostprocessingFitSample. Keeps the
+            // direct AiModelResultOptions construction path (federated /
+            // meta-learning / distributed) ergonomic without forcing every
+            // caller to thread a manual .Fit() call (review #1368 C6WMS).
+            if (options.PostprocessingFitSample is not null)
+            {
+                options.PostprocessingPipeline.Fit(options.PostprocessingFitSample);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "AiModelResult was constructed with a postprocessing pipeline that has not been fitted, " +
+                    "and PostprocessingFitSample was not supplied. AiModelBuilder.BuildSupervisedInternalAsync " +
+                    "fits the pipeline automatically; if you construct AiModelResultOptions directly, either " +
+                    "(a) call PostprocessingPipeline.Fit(...) before passing the options to this ctor, or " +
+                    "(b) set PostprocessingFitSample to a representative training-target sample so the ctor " +
+                    "can lazy-fit. This check at Build time replaces the previous Predict-time throw " +
+                    "(review #1368 C6WMS).");
+            }
         }
 
         // Store the options for use by partial classes (e.g., TTA augmentation)
