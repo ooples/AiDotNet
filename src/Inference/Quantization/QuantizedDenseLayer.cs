@@ -112,36 +112,19 @@ internal sealed class QuantizedDenseLayer : LayerBase<float>
             throw new ArgumentException($"QuantizedDenseLayer input size mismatch. Expected {_inputSize}, got {featuresIn}.");
 
         var output = new Tensor<float>(new[] { batchSize, _outputSize });
-        var inputSpan = flat.AsSpan();
 
-        // Scalar dequant-on-fly matmul. The proper SIMD speedup for INT8
-        // weight-only inference belongs in AiDotNet.Tensors (which has full
-        // PyTorch-parity custom SIMD/AVX-512 acceleration faster than the
-        // System.Numerics primitives). Specifically, AiDotNet.Tensors already
-        // has `SimdGemm.SgemmWithInt8CachedB` for this exact use case, but it's
-        // currently internal to the Tensors-namespace. Once Tensors exposes a
-        // public INT8 weight matmul entry point (tracked in AiDotNet#1349),
-        // this loop should be replaced with a call to that engine op. Until
-        // then, the scalar path remains correct (just slow) — the inference-
-        // side perf gap is the same scope as #1349 and shouldn't be patched
-        // here with a third-party-library workaround that diverges from the
-        // engine layer's official SIMD path.
-        for (int b = 0; b < batchSize; b++)
-        {
-            int inputBase = b * featuresIn;
-            int outputBase = b * _outputSize;
-            for (int o = 0; o < _outputSize; o++)
-            {
-                float sum = _biases[o];
-                float scale = _rowScales[o];
-                int wBase = o * _inputSize;
-                for (int i = 0; i < _inputSize; i++)
-                {
-                    sum += inputSpan[inputBase + i] * (_weightsInt8[wBase + i] * scale);
-                }
-                output.SetFlat(outputBase + o, sum);
-            }
-        }
+        // INT8 weight-only matmul routed through AiDotNet.Tensors' tiled SGEMM
+        // + AVX2 dequant primitives. See Int8WeightOnlyMatMul for the layout
+        // contract and tile sizing strategy.
+        Int8WeightOnlyMatMul.MultiplyAddBias(
+            input: flat.AsSpan(),
+            weightsInt8: _weightsInt8,
+            rowScales: _rowScales,
+            biases: _biases,
+            output: output.AsWritableSpan(),
+            rows: batchSize,
+            inputSize: _inputSize,
+            outputSize: _outputSize);
 
         var activated = ApplyActivation(output);
         if (inputWas1D)

@@ -415,28 +415,18 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
             ?? throw new InvalidOperationException("Int8 scales not initialized for quantized projection.");
         var output = new Tensor<float>(new[] { rows, outDim });
 
-        // Scalar dequant-on-fly matmul. The proper SIMD speedup belongs in
-        // AiDotNet.Tensors (which has full PyTorch-parity custom SIMD/AVX-512
-        // acceleration faster than the System.Numerics primitives). Tracked
-        // in AiDotNet#1349 — once Tensors exposes a public INT8 weight matmul
-        // entry point this loop should be replaced with a call to that engine
-        // op.
-        for (int r = 0; r < rows; r++)
-        {
-            int inputBase = r * inDim;
-            int outputBase = r * outDim;
-            for (int o = 0; o < outDim; o++)
-            {
-                float sum = 0f;
-                float scale = scales[o];
-                int wBase = o * inDim;
-                for (int i = 0; i < inDim; i++)
-                {
-                    sum += input[inputBase + i] * (weights[wBase + i] * scale);
-                }
-                output.SetFlat(outputBase + o, sum);
-            }
-        }
+        // Q/K/V/O projections have no bias here — the attention output bias
+        // is applied separately in the Forward pass.
+        Int8WeightOnlyMatMul.MultiplyAddBias(
+            input: input,
+            weightsInt8: weights,
+            rowScales: scales,
+            biases: null,
+            output: output.AsWritableSpan(),
+            rows: rows,
+            inputSize: inDim,
+            outputSize: outDim);
+
         return output;
     }
 
