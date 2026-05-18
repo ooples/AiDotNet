@@ -1668,6 +1668,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             BestSolution = _model ?? throw new InvalidOperationException("Model has not been configured. Call ConfigureModel() before BuildForInference().")
         };
 
+        // Inference-only path has no training data — pipeline must be
+        // pre-fitted. The shared helper throws with a clear diagnostic if
+        // postprocessing is configured but unfit (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(optimizationResult.BestSolution, default, nameof(BuildProgramSynthesisInferenceOnlyResult));
+
         var deploymentConfig = DeploymentConfiguration.Create(
             _quantizationConfig,
             _cacheConfig,
@@ -1685,6 +1690,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             PreprocessingInfo = _preprocessingPipeline is not null && _preprocessingPipeline.IsFitted
                 ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
                 : null,
+            PostprocessingPipeline = _postprocessingPipeline,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -2220,6 +2226,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _compressionConfig,
             _profilingConfig);
 
+        // Fit postprocessing pipeline through the shared helper. Streaming
+        // path has no materialised X tensor, so passing trainingInput=null
+        // causes the helper to throw the "no training data" diagnostic
+        // when the user did configure postprocessing — failing fast with
+        // a clear redirect to the supervised batch path (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(optimizationResult.BestSolution, default, nameof(BuildStreamingSupervisedAsync));
+
         // Build result using options pattern like other Build methods
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
@@ -2227,6 +2240,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             PreprocessingInfo = _preprocessingPipeline is not null && pipelineFitted
                 ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
                 : null,
+            PostprocessingPipeline = _postprocessingPipeline,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -3744,38 +3758,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
 
         // Fit the postprocessing pipeline on the model's training-set
-        // predictions BEFORE attaching it to the result. AiModelResult.Predict
-        // will throw if it receives an unfitted pipeline (data-distribution-
-        // learning transformers shouldn't be fitted on the first single
-        // inference call — that locks in parameters on one example).
-        if (_postprocessingPipeline is not null
-            && _postprocessingPipeline.Count > 0
-            && !_postprocessingPipeline.IsFitted)
-        {
-            // Fail fast at Build if pipeline fitting fails. Previous Trace-
-            // warning + carry-on left an unfitted pipeline on AiModelResult
-            // that threw at first Predict() instead — a footgun where the
-            // user discovers the problem at the wrong layer of the stack
-            // (review #1368). Wrap the underlying failure in a clear
-            // InvalidOperationException at the Build call site.
-            var bestSolution = optimizationResult.BestSolution
-                ?? throw new InvalidOperationException(
-                    "OptimizationResult.BestSolution is null after training — cannot fit the configured postprocessing pipeline.");
-            try
-            {
-                var trainPreds = bestSolution.Predict(XTrain);
-                _postprocessingPipeline.Fit(trainPreds);
-            }
-            catch (Exception ex)
-            {
-                throw new InvalidOperationException(
-                    $"ConfigurePostprocessing: failed to fit pipeline on training predictions: " +
-                    $"{ex.GetType().Name}: {ex.Message}. " +
-                    "Inspect the pipeline's transform definition and the training-prediction shape, " +
-                    "or omit ConfigurePostprocessing if the pipeline is meant to be fitted by the caller " +
-                    "after Build.", ex);
-            }
-        }
+        // predictions BEFORE attaching it to the result. Routed through
+        // the shared FitPostprocessingIfNeeded helper so every Build*
+        // path applies identical fit/fail logic (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(optimizationResult.BestSolution, XTrain, nameof(BuildSupervisedInternalAsync));
 
         // Return AiModelResult with CV results, agent data, JIT compilation, reasoning config, and training infrastructure
         var options = new AiModelResultOptions<T, TInput, TOutput>
@@ -3942,6 +3928,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Perform meta-training using parameters from config (specified during meta-learner construction)
         var metaResult = _metaLearner.Train();
 
+        // Meta-learning has no single training-X tensor (the meta-learner
+        // trains over a distribution of tasks). The shared helper throws a
+        // clear diagnostic when postprocessing is configured but unfit
+        // here, redirecting the user to pre-fit (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(null, default, nameof(BuildMetaLearningInternalAsync));
+
         // Create deployment configuration from individual configs
         var deploymentConfig = DeploymentConfiguration.Create(
             _quantizationConfig,
@@ -3959,6 +3951,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             MetaLearner = _metaLearner,
             MetaTrainingResult = metaResult,
+            PostprocessingPipeline = _postprocessingPipeline,
             JitCompilationConfig = _jitCompilationConfig,
             AllowNondeterminism = _allowNondeterminism,
             LoRAConfiguration = _loraConfiguration,
@@ -4281,6 +4274,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _compressionConfig,
             _profilingConfig);
 
+        // RL has no single training-X tensor (the agent trains by acting in
+        // an environment, not against a static dataset). The shared helper
+        // throws a clear diagnostic when postprocessing is configured but
+        // unfit here, redirecting the user to pre-fit (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(optimizationResult.BestSolution, default, nameof(BuildRLInternalAsync));
+
         // Return standard AiModelResult
         // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
         // so JitCompiledFunction is not set
@@ -4288,6 +4287,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             OptimizationResult = optimizationResult,
             PreprocessingInfo = preprocessingInfo,
+            PostprocessingPipeline = _postprocessingPipeline,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
@@ -7536,6 +7536,74 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
 
         // Transformers are now configured through the pipeline directly, not on the model
+    }
+
+    /// <summary>
+    /// Fits the configured <see cref="_postprocessingPipeline"/> on the model's
+    /// training-set predictions BEFORE attaching it to an
+    /// <see cref="AiModelResultOptions{T,TInput,TOutput}"/>. Shared across every
+    /// Build* path so each routing variant (supervised / direct-training /
+    /// meta-learning / RL / federated / distributed / inference-only) goes
+    /// through the same fit-vs-fail decision (review #1368 C6WJG).
+    /// </summary>
+    /// <param name="bestSolution">
+    /// The trained model used to produce training-set predictions. When non-null
+    /// alongside <paramref name="trainingInput"/>, the helper fits the pipeline
+    /// inline by calling <c>bestSolution.Predict(trainingInput)</c> and feeding
+    /// the result to <c>PostprocessingPipeline.Fit</c>.
+    /// </param>
+    /// <param name="trainingInput">
+    /// The training-set features. Required alongside <paramref name="bestSolution"/>
+    /// for inline fit. When null, this path is treated as "no training data
+    /// available" (inference-only / meta-learning / RL) and the pipeline
+    /// must be pre-fitted by the caller.
+    /// </param>
+    /// <param name="buildPathName">
+    /// Human-readable name of the Build* path emitting the call (used in the
+    /// thrown diagnostic to point the user at the right configuration step).
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the configured pipeline is non-empty and not yet fitted AND
+    /// either the build path supplies no training data, or the inline fit
+    /// throws (predict shape mismatch, pipeline transform failure, etc.).
+    /// </exception>
+    private void FitPostprocessingIfNeeded(
+        IFullModel<T, TInput, TOutput>? bestSolution,
+        TInput? trainingInput,
+        string buildPathName)
+    {
+        if (_postprocessingPipeline is null
+            || _postprocessingPipeline.Count == 0
+            || _postprocessingPipeline.IsFitted)
+        {
+            return;
+        }
+
+        if (bestSolution is null || trainingInput is null)
+        {
+            throw new InvalidOperationException(
+                $"ConfigurePostprocessing is configured but the {buildPathName} build path " +
+                "does not have training data available to fit the pipeline (the path runs " +
+                "without supervised features, or the trained model was not produced). " +
+                "Pre-fit the pipeline via PostprocessingPipeline.Fit(...) on representative " +
+                "model outputs before calling BuildAsync(), or remove ConfigurePostprocessing " +
+                "on this build path (review #1368 C6WJG).");
+        }
+
+        try
+        {
+            var trainPreds = bestSolution.Predict(trainingInput);
+            _postprocessingPipeline.Fit(trainPreds);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"ConfigurePostprocessing on the {buildPathName} build path: failed to fit " +
+                $"pipeline on training predictions: {ex.GetType().Name}: {ex.Message}. " +
+                "Inspect the pipeline's transform definition and the training-prediction shape, " +
+                "or omit ConfigurePostprocessing if the pipeline is meant to be fitted by the " +
+                "caller after Build (review #1368 C6WJG).", ex);
+        }
     }
 
     private void ApplyGpuConfiguration()
