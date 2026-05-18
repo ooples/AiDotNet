@@ -6783,7 +6783,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// after the typed slot is captured.
     /// </summary>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
-        Augmentation.AugmentationConfig<T, TInput> config)
+        Augmentation.AugmentationConfig<T, TInput>? config)
         => ConfigureAugmentation((Augmentation.AugmentationConfig?)config);
 
     /// <summary>
@@ -8126,10 +8126,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             return Augmentation.ModalityAugmenterFactory.BuildImageAugmenter<T>(img, globalProb);
         }
-        // Tabular and Audio both target Tensor<T>; if both settings are
-        // populated on the same config the audio path wins (audio
-        // augmenters are domain-specific and likely intentional). Most
-        // configs populate only one.
+        // Audio dispatches on Tensor<T> (waveform) and Tabular dispatches
+        // on Matrix<T> (rows-by-features) — different TInput types, so
+        // they cannot fire on the same builder (review #1368 C88Lb:
+        // earlier comment mistakenly said both target Tensor<T>, which
+        // would have made the audio-wins-over-tabular ordering
+        // load-bearing — it isn't, because the two settings produce
+        // pipelines for distinct TInput types and the typeof guards
+        // already pick the unique match).
         if (config.AudioSettings is { } aud && typeof(TInput) == typeof(AiDotNet.Tensors.LinearAlgebra.Tensor<T>))
         {
             return Augmentation.ModalityAugmenterFactory.BuildAudioAugmenter<T>(aud, globalProb);

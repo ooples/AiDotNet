@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes (PR #1368)
 
+- **`AiModelBuilder<T,TInput,TOutput>`'s test-only `Configured*` accessors
+  moved behind an explicit-interface implementation.** PR #1368 extracted
+  the 8 `internal Configured*` properties on `AiModelBuilder` into an
+  explicitly-implemented `internal interface IConfiguredView<T,TInput,TOutput>`
+  to keep them off the regular type surface. **Migration for other
+  `InternalsVisibleTo` consumers:** cast the builder to
+  `AiDotNet.Configuration.IConfiguredView<T,TInput,TOutput>` before
+  accessing `ConfiguredOptimizer`, `ConfiguredCaching`,
+  `ConfiguredInferenceOptimizations`, `ConfiguredJitCompilation`,
+  `ConfiguredInterpretability`, `ConfiguredMemoryManagement`,
+  `ConfiguredLicenseKey`, or `ConfiguredAgentAssistance`. Source:
+  `src/Configuration/IConfiguredView.cs`, `src/AiModelBuilder.cs` (review
+  #1368 C8eN_).
+
+- **`AiModelResult.Predict` now throws `InvalidOperationException` with a
+  clear diagnostic when `Model` is null.** Previously a null Model would
+  surface as a `NullReferenceException` deep inside the dispatch path.
+  The new path throws "AiModelResult.Model is null; cannot dispatch
+  Predict." at the call site (review #1368 C8eRj). **Migration:** if any
+  caller was catching `NullReferenceException` to detect "no model
+  configured", switch to catching `InvalidOperationException` or check
+  `result.Model is not null` before calling Predict.
+
 - **`ConfigureRegularization` now throws when paired with a non-gradient optimizer.**
   Previously, calling `ConfigureRegularization(...)` while the active optimizer
   was `NormalOptimizer` / an evolutionary search / any custom `IOptimizer`

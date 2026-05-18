@@ -63,8 +63,18 @@ PR's extension closing the remaining surface.
    ConfigureKnowledgeDistillation.
    **WIRING BUG FIX**: KnowledgeDistillation options were stored on the builder
    but dropped at AiModelResultOptions; added the slot, captured on
-   AiModelResult, and removed the second NotSupportedException throw site
-   that blocked the supervised training path.
+   AiModelResult, and on the DIRECT-TRAINING / LoRA-wrapped paths the
+   options now flow through to result.KnowledgeDistillationOptions
+   without going through the KD-aware training loop. On the REGULAR
+   (non-LoRA, non-direct-training) NN training path the second
+   NotSupportedException throw site was intentionally KEPT — that gate
+   surfaces the missing tape-based KD integration at Build time instead
+   of silently substituting standard supervised training for the
+   requested distillation (matches review feedback: fail-fast on
+   genuinely-unintegrated paths beats silent fall-through). The
+   Bucket9 test asserts the throw, then bucket-coverage on direct-
+   training-eligible models will confirm options propagation once
+   such a fixture lands.
 10. **LoRA** (`Bucket10_LoRATests`) — ConfigureLoRA.
    **3 STACKED WIRING BUG FIXES**:
    - Lazy-layer wrap crash (IsShapeResolved guard + warmup forward).
