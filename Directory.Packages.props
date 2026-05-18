@@ -9,7 +9,7 @@
          (paired with this PR's GraFPrint perf-overhaul + scheduler-fused + determinism work).
          CI will fail to restore until that Tensors PR merges and the new NuGet publishes;
          after release, bump the literal here. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.81.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.81.3" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.80.3" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.80.3" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.3" />
