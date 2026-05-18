@@ -361,10 +361,17 @@ public class BuildAsyncResidualModeCollapseTests
         {
             var modelArm6 = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
-            // Materialize lazy-init layers via a Predict pass (no-grad) so
-            // GetParameters returns the full flat vector. Otherwise
-            // GetParameters on a freshly-constructed model with lazy
-            // (Embedding, FF, etc.) layers can return Length=0.
+            // Materialize lazy-init layers via a Predict pass (which
+            // runs through NoGradScope + eval mode internally). Note:
+            // layers whose lazy init is gated on the IsTraining mode
+            // (e.g. layers that allocate buffers only in training mode)
+            // will NOT materialize here — those need a training-mode
+            // forward pass instead. For the current canary Transformer
+            // (Embedding, attention QKV, FF), Predict materializes all
+            // lazy banks because their init is mode-independent. If a
+            // future layer is added whose init depends on training
+            // mode, switch this to a SetTrainingMode(true) + Predict +
+            // SetTrainingMode(false) bracket (review #1364 C4nLp).
             _ = modelArm6.Predict(xTrain);
 
             // Capture gradient on the FULL training set (the same batch

@@ -58,13 +58,23 @@ public class ParameterGradientOrderingH5ProbeTests
 
     /// <summary>
     /// Direct test for length equality between
-    /// <c>GetParameters()</c> and the gradient flat vector produced by
-    /// <c>ComputeGradients</c>. Length equality is a necessary
-    /// condition for per-index correspondence — if the lengths
-    /// disagree, Adam's vector ops would throw <c>ArgumentException</c>
-    /// before any update is applied (this is the path the #1245
-    /// regression test covers).
+    /// <c>NeuralNetworkBase.GetParameters()</c> and the gradient flat
+    /// vector returned by <c>NeuralNetworkBase.ComputeGradients(x, y, loss)</c>.
+    /// Length equality is a necessary condition for per-index
+    /// correspondence — if the lengths disagree, downstream optimizer
+    /// vector ops (Adam's <c>UpdateParameters</c> etc.) would throw
+    /// <c>ArgumentException</c> before any update is applied (this is
+    /// the path the #1245 regression test covers).
     /// </summary>
+    /// <remarks>
+    /// This test directly invokes <c>model.ComputeGradients</c>
+    /// (returning the flat gradient vector); it does NOT pass through
+    /// an optimizer's <c>UpdateParameters(parameters, gradient)</c>
+    /// length-validation gate. That gate is the SYMPTOM the H5 bug
+    /// surfaces through; this test catches the ROOT-CAUSE asymmetry
+    /// between the two sources of the flat-parameter / flat-gradient
+    /// shape contract (review #1364 C4nNd doc clarification).
+    /// </remarks>
     [Fact(Timeout = 60000)]
     public async Task GetParameters_And_ComputeGradients_LengthsMustMatch()
     {
