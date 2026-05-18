@@ -3267,6 +3267,83 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 cancellationToken: default).ConfigureAwait(false);
         }
 
+        // ============================================================================
+        // STAGED TRAINING PIPELINE (#1361 #2) — executes the user-defined sequence of
+        // training stages after main training (and any one-shot fine-tuning). Each
+        // stage takes the previous stage's output model + its own training data and
+        // produces the next stage's input model. Stages with Enabled=false or whose
+        // RunCondition returns false are skipped. The final stage's output replaces
+        // optimizationResult.BestSolution so downstream consumers see the post-
+        // pipeline weights.
+        // ============================================================================
+        if (_trainingPipelineConfiguration?.Stages is { Count: > 0 } stages)
+        {
+            if (optimizationResult.BestSolution is null)
+                throw new InvalidOperationException(
+                    "ConfigureTrainingPipeline was provided but main training did not produce a BestSolution. " +
+                    "Check earlier logs for an upstream training failure.");
+
+            var currentModel = optimizationResult.BestSolution;
+            TrainingStageResult<T, TInput, TOutput>? previousStageResult = null;
+
+            for (int stageIndex = 0; stageIndex < stages.Count; stageIndex++)
+            {
+                var stage = stages[stageIndex];
+                if (!stage.Enabled) continue;
+                if (stage.RunCondition is { } cond && !cond(previousStageResult)) continue;
+
+                if (stage.CustomTrainingFunction is null)
+                    throw new InvalidOperationException(
+                        $"TrainingPipeline stage '{stage.Name}' (index {stageIndex}) has Enabled=true but no " +
+                        $"CustomTrainingFunction. The current wire-up requires each enabled stage to provide " +
+                        $"its own training delegate; the StageType={stage.StageType} / FineTuningMethod=" +
+                        $"{stage.FineTuningMethod} auto-dispatch path is not yet implemented. " +
+                        $"Set stage.CustomTrainingFunction to an async (model, data, ct) => trainedModel delegate, " +
+                        $"or remove this stage from the pipeline.");
+                if (stage.TrainingData is null && !stage.IsEvaluationOnly)
+                    throw new InvalidOperationException(
+                        $"TrainingPipeline stage '{stage.Name}' (index {stageIndex}) has no TrainingData and is " +
+                        $"not marked IsEvaluationOnly. Each training stage needs a FineTuningData<T, TInput, " +
+                        $"TOutput> appropriate for its FineTuningMethod.");
+
+                var stageStart = DateTime.UtcNow;
+                var stageResult = new TrainingStageResult<T, TInput, TOutput>
+                {
+                    StageName = stage.Name,
+                    StageIndex = stageIndex,
+                };
+                try
+                {
+                    if (!stage.IsEvaluationOnly)
+                    {
+                        currentModel = await stage.CustomTrainingFunction(
+                            currentModel,
+                            stage.TrainingData!,
+                            CancellationToken.None).ConfigureAwait(false);
+                        if (currentModel is null)
+                            throw new InvalidOperationException(
+                                $"TrainingPipeline stage '{stage.Name}' returned null from " +
+                                $"CustomTrainingFunction. Stages must return a non-null model.");
+                    }
+                    stageResult.Model = currentModel;
+                    stageResult.Success = true;
+                }
+                catch (Exception ex)
+                {
+                    stageResult.Success = false;
+                    stageResult.ErrorMessage = ex.Message;
+                    throw;
+                }
+                finally
+                {
+                    stageResult.Duration = DateTime.UtcNow - stageStart;
+                }
+                previousStageResult = stageResult;
+            }
+
+            optimizationResult.BestSolution = currentModel;
+        }
+
         var trainingEndTime = DateTime.UtcNow;
         var trainingDuration = trainingEndTime - trainingStartTime;
 
