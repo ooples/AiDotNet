@@ -120,6 +120,24 @@ public class MixedPrecisionContext : IDisposable
     internal void ClearFp32SnapshotPool() => _fp32SnapshotPool.Clear();
 
     /// <summary>
+    /// Evict the cached FP32 master snapshot for <paramref name="param"/>.
+    /// Layers that reallocate their parameter tensor in place (replacing
+    /// the <see cref="AiDotNet.Tensors.LinearAlgebra.Tensor{T}"/> instance
+    /// rather than mutating its storage) should call this on the OLD
+    /// tensor reference so the pool doesn't accumulate stale entries
+    /// that pin the now-unused tensor via the dictionary key
+    /// (review #1362: long training runs with any tensor-replacement
+    /// path were a slow leak under the prior never-evict contract).
+    /// </summary>
+    /// <param name="param">The parameter tensor whose snapshot should be dropped.</param>
+    /// <returns>True if a snapshot entry was found and removed; false otherwise.</returns>
+    public bool EvictFp32Snapshot(AiDotNet.Tensors.LinearAlgebra.Tensor<float> param)
+    {
+        if (param is null) return false;
+        return _fp32SnapshotPool.TryRemove(param, out _);
+    }
+
+    /// <summary>
     /// Configuration for mixed-precision training.
     /// </summary>
     public MixedPrecisionConfig Config { get; }

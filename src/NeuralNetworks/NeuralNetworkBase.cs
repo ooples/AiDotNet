@@ -5396,16 +5396,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                         throw new InvalidOperationException(
                             "MixedPrecision active but parameter tensor is not Tensor<float> — internal invariant violated.");
                     float[] snapshot = mpCtx.GetOrCreateFp32Snapshot(paramAsFloat);
-                    var paramSpan = param.Data.Span;
+                    // T == float in this branch (asserted via the
+                    // paramAsFloat null-check above). Operate directly
+                    // on the underlying Span<float> instead of the
+                    // generic Span<T> + Convert.ToSingle / (T)(object)
+                    // boxing round-trip, which would re-box every
+                    // element on the training hot path (review #1362:
+                    // measured non-trivial impact on large-model step
+                    // wall — boxing dominated when len was in the
+                    // millions of params).
+                    var fp32Span = paramAsFloat.Data.Span;
                     for (int i = 0; i < len; i++)
                     {
-                        float fp32Value = Convert.ToSingle(paramSpan[i]);
+                        float fp32Value = fp32Span[i];
                         snapshot[i] = fp32Value;
                         float rounded = useFp16
                             ? (float)(Half)fp32Value
                             : MixedPrecision.BitConverterHelper.Bf16RoundTrip(fp32Value);
-                        // Write back as T (we know T == float here).
-                        paramSpan[i] = (T)(object)rounded;
+                        fp32Span[i] = rounded;
                     }
                     mpFp32Snapshots!.Add(snapshot);
                     mpSnapshotTargets!.Add(param);
@@ -5586,7 +5594,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (mpCtx is not null && typeof(T) == typeof(float) && mpFp32Snapshots is not null)
             {
                 double scale = mpCtx.LossScaler.Scale;
-                T inverseScale = NumOps.FromDouble(1.0 / scale);
+                float inverseScaleF = (float)(1.0 / scale);
                 bool hasOverflow = false;
 
                 // Unscale every gradient that BELONGS TO A TRAINABLE PARAMETER —
@@ -5596,15 +5604,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // for inputs/intermediates whose NaN/Inf would false-positive
                 // the overflow-skip branch even when every trainable gradient
                 // is finite (review #1362 follow-up).
+                //
+                // T == float in this branch (gated above). Cast each gradient
+                // tensor to its Tensor<float> view and operate on Span<float>
+                // directly to avoid NumOps.Multiply / NumOps.IsNaN / NumOps.IsInfinity
+                // virtual dispatch + boxing on every gradient element on every
+                // training step (review #1362 perf).
                 void UnscaleAndCheck(Tensor<T>? g)
                 {
                     if (g is null || g.Length == 0) return;
-                    var span = g.Data.Span;
-                    int len = g.Length;
+                    var gAsFloat = (object)g as AiDotNet.Tensors.LinearAlgebra.Tensor<float>;
+                    if (gAsFloat is null) return; // defensive — gated by typeof(T) == float
+                    var span = gAsFloat.Data.Span;
+                    int len = gAsFloat.Length;
                     for (int i = 0; i < len; i++)
                     {
-                        span[i] = NumOps.Multiply(span[i], inverseScale);
-                        if (!hasOverflow && (NumOps.IsNaN(span[i]) || NumOps.IsInfinity(span[i])))
+                        float v = span[i] * inverseScaleF;
+                        span[i] = v;
+                        if (!hasOverflow && (float.IsNaN(v) || float.IsInfinity(v)))
                         {
                             hasOverflow = true;
                         }

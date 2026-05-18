@@ -347,4 +347,62 @@ public class MixedPrecisionTrainWithTapeWiringTests
             $"Expected loss scale to back off from {initialScale} after overflow, " +
             $"but scale is still {ctx.LossScaler.Scale}.");
     }
+
+    /// <summary>
+    /// CastWeightsToBF16 round-trips the registered master weights through
+    /// the BF16 representation (low 16 mantissa bits cleared with round-
+    /// to-nearest-even) and returns the FP32-encoded result. Verifies the
+    /// public helper (review #1362 flagged it as untested) by checking
+    /// (a) NaN/Inf inputs pass through unchanged, (b) finite inputs have
+    /// the low 16 mantissa bits cleared in their IEEE binary representation,
+    /// and (c) the returned vector length matches the registered master.
+    /// </summary>
+    [Fact(Timeout = 30000)]
+    public async Task CastWeightsToBF16_RegisteredMaster_ReturnsBf16RoundTripped()
+    {
+        await Task.Yield();
+        // Build a context with deterministic master weights spanning a few
+        // numeric categories: a zero, a normal positive, a normal negative,
+        // a denormal-near value, a NaN, a positive infinity.
+        var master = new AiDotNetVector(new float[] {
+            0.0f,
+            0.10000000149011612f,    // 0x3DCCCCCD — has non-zero low 16 bits
+            -1.5f,                   // 0xBFC00000 — low 16 bits are zero
+            1.0e-30f,                // 0x0C24EB55 — small normal, non-zero low bits
+            float.NaN,
+            float.PositiveInfinity,
+        });
+
+        var ctx = new MixedPrecisionContext(new MixedPrecisionConfig
+        {
+            PrecisionType = MixedPrecisionType.BF16,
+        });
+        ctx.Initialize(master);
+
+        var result = ctx.CastWeightsToBF16();
+
+        Assert.Equal(master.Length, result.Length);
+
+        // (a) NaN propagates (test specifically for NaN; equality on NaN
+        // is always false so we use float.IsNaN).
+        Assert.True(float.IsNaN(result[4]),
+            $"Expected NaN at index 4, got {result[4]}.");
+        // (b) +Inf propagates.
+        Assert.True(float.IsPositiveInfinity(result[5]),
+            $"Expected +Infinity at index 5, got {result[5]}.");
+
+        // (c) Finite values have the low 16 mantissa bits cleared. Verify
+        // by checking the IEEE binary representation directly.
+        for (int i = 0; i < 4; i++)
+        {
+            int bits = AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(result[i]);
+            uint low16 = (uint)bits & 0x0000FFFFu;
+            Assert.Equal(0u, low16);
+        }
+
+        // 0.0 round-trips to 0.0.
+        Assert.Equal(0.0f, result[0]);
+        // -1.5 round-trips to -1.5 (its low 16 bits are already zero).
+        Assert.Equal(-1.5f, result[2]);
+    }
 }
