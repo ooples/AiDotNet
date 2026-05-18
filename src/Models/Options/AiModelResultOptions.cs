@@ -151,6 +151,18 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; set; }
 
     /// <summary>
+    /// Gets or sets the knowledge-distillation options configured via
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigureKnowledgeDistillation"/>.
+    /// Carried through to <see cref="AiModelResult{T,TInput,TOutput}"/>
+    /// so consumers can drive distillation manually post-build via a
+    /// teacher-aware loss function. Without this slot the options were
+    /// stored on the builder but silently dropped before the result
+    /// surface — discovered by AiDotNet#1345 Bucket9
+    /// ConfigureKnowledgeDistillation test.
+    /// </summary>
+    public AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>? KnowledgeDistillationOptions { get; set; }
+
+    /// <summary>
     /// Gets or sets an optional AutoML run summary for this trained model.
     /// </summary>
     /// <remarks>

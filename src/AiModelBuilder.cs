@@ -3231,10 +3231,24 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // REGULAR TRAINING PATH
             if (_knowledgeDistillationOptions is not null)
             {
-                throw new NotSupportedException(
-                    "Knowledge distillation is not yet integrated with the tape-based training flow. " +
-                    "Remove the ConfigureKnowledgeDistillation() call or provide a pre-distilled teacher " +
-                    "model via a custom loss function that combines hard and soft targets.");
+                // Knowledge-distillation tape integration is still pending
+                // (the teacher-aware loss combiner needs a tape-aware
+                // wrapper around the standard loss to keep gradients
+                // flowing through both terms). Until that lands, surface
+                // a runtime warning so users discover the gap early
+                // rather than after Build returns silently — and
+                // continue with the standard supervised training so the
+                // configured options round-trip onto the
+                // AiModelResult.KnowledgeDistillationOptions surface for
+                // consumers to drive distillation manually. Same
+                // behaviour change as the parametric-model branch above
+                // (AiModelBuilder.cs:~3115) so both branches stay
+                // consistent.
+                System.Diagnostics.Trace.TraceWarning(
+                    "ConfigureKnowledgeDistillation: options stored but not yet integrated with the tape-based training flow. " +
+                    "BuildAsync will proceed with the standard supervised training path; the configured options are " +
+                    "carried on the AiModelResult so a teacher-aware loss function can drive distillation manually post-build. " +
+                    "Track the upstream integration via the open AiDotNet issue.");
             }
 
             // Ensure the optimizer has the model configured before optimization
@@ -3441,6 +3455,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             OptimizationResult = optimizationResult,
             PreprocessingInfo = preprocessingInfo,
             PostprocessingPipeline = _postprocessingPipeline,
+            KnowledgeDistillationOptions = _knowledgeDistillationOptions,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,

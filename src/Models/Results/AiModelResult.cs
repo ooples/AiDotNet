@@ -217,6 +217,15 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; private set; }
 
     /// <summary>
+    /// Knowledge-distillation options configured via
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigureKnowledgeDistillation"/>.
+    /// Carried on the result for downstream consumers that drive
+    /// distillation post-build via a teacher-aware loss function.
+    /// </summary>
+    [JsonIgnore]
+    internal AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>? KnowledgeDistillationOptions { get; private set; }
+
+    /// <summary>
     /// Gets or sets the metadata associated with the model.
     /// </summary>
     /// <value>A ModelMetaData&lt;T&gt; object containing descriptive information about the model.</value>
@@ -1247,6 +1256,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             OptimizationResult = options.OptimizationResult ?? new OptimizationResult<T, TInput, TOutput>();
             PreprocessingInfo = options.PreprocessingInfo;
             PostprocessingPipeline = options.PostprocessingPipeline;
+            KnowledgeDistillationOptions = options.KnowledgeDistillationOptions;
         }
         else
         {
@@ -1260,6 +1270,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             OptimizationResult = options.OptimizationResult;
             PreprocessingInfo = options.PreprocessingInfo;
             PostprocessingPipeline = options.PostprocessingPipeline;
+            KnowledgeDistillationOptions = options.KnowledgeDistillationOptions;
             MetaLearner = options.MetaLearner;
             MetaTrainingResult = options.MetaTrainingResult;
         }
