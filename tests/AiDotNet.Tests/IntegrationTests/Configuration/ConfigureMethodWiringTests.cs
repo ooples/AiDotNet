@@ -1,4 +1,4 @@
-using AiDotNet.Configuration;
+using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 

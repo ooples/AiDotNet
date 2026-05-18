@@ -3239,6 +3239,34 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             optimizationResult = finalOptimizer.Optimize(optimizationInputData);
         }
 
+        // ============================================================================
+        // FINE-TUNING (#1357 / #1361) — applies preference learning, RLHF, SFT, etc.
+        // to the optimizer-trained model BEFORE metric finalization so that any
+        // checkpoint/result returned reflects the post-fine-tune weights.
+        // ============================================================================
+        if (_fineTuningConfiguration?.Enabled == true)
+        {
+            var ftImpl = _fineTuningConfiguration.Implementation
+                ?? throw new InvalidOperationException(
+                    "ConfigureFineTuning was enabled but no Implementation was provided. " +
+                    "Set FineTuningConfiguration.Implementation to a concrete IFineTuning<T, TInput, TOutput> instance " +
+                    "(e.g. new SupervisedFineTuning<...>(options), new DirectPreferenceOptimization<...>(options)).");
+            if (_fineTuningConfiguration.TrainingData is null)
+                throw new InvalidOperationException(
+                    "ConfigureFineTuning was enabled but no TrainingData was supplied. " +
+                    "Set FineTuningConfiguration.TrainingData to a FineTuningData<T, TInput, TOutput> appropriate for the chosen method " +
+                    "(SFT needs Inputs+Outputs; DPO/SimPO need preference pairs; RLHF/GRPO need rewards).");
+            if (optimizationResult.BestSolution is null)
+                throw new InvalidOperationException(
+                    "ConfigureFineTuning was enabled but the optimizer did not produce a BestSolution to fine-tune. " +
+                    "This usually means main training failed silently — check earlier logs.");
+
+            optimizationResult.BestSolution = await ftImpl.FineTuneAsync(
+                optimizationResult.BestSolution,
+                _fineTuningConfiguration.TrainingData,
+                cancellationToken: default).ConfigureAwait(false);
+        }
+
         var trainingEndTime = DateTime.UtcNow;
         var trainingDuration = trainingEndTime - trainingStartTime;
 
