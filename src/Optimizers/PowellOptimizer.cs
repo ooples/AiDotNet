@@ -232,7 +232,13 @@ public class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            // Check convergence against previousStepData (per-iteration progress),
+            // not bestStepData. UpdateBestSolution above copies currentStepData
+            // into bestStepData on the first iteration, so |best - current|
+            // would always be 0 < tolerance and the optimiser would exit after
+            // the first iteration. Issue #1340 / PR #1351 fix swept across the
+            // optimizer suite.
+            if (iteration > 0 && NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
             {
                 return CreateOptimizationResult(bestStepData, inputData);
             }

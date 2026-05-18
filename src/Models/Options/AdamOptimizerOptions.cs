@@ -37,6 +37,71 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     }
 
     /// <summary>
+    /// Copy constructor — clones every property declared on this options
+    /// class plus the base-class gradient-clipping settings used here.
+    /// Required by the <c>src/Models/Options/**</c> coding-guideline
+    /// copy-constructor contract; without it, <c>UseAMSGrad</c> and the
+    /// other Adam-specific knobs would silently revert to their type
+    /// defaults whenever an options instance is round-tripped through a
+    /// generic copy/clone path. PR #1350 review.
+    /// </summary>
+    /// <param name="other">Source options to copy. Must be non-null.</param>
+    /// <exception cref="ArgumentNullException">When <paramref name="other"/> is null.</exception>
+    public AdamOptimizerOptions(AdamOptimizerOptions<T, TInput, TOutput> other)
+    {
+        if (other is null) throw new ArgumentNullException(nameof(other));
+
+        // Inherited OptimizationAlgorithmOptions (base of base) settings.
+        // PR #1350 round-2 review: clone/round-trip would otherwise drop
+        // iteration / tolerance / adaptive-LR / batching / sampler state,
+        // silently reverting them to type defaults.
+        MaxIterations = other.MaxIterations;
+        UseEarlyStopping = other.UseEarlyStopping;
+        EarlyStoppingPatience = other.EarlyStoppingPatience;
+        BadFitPatience = other.BadFitPatience;
+        MinimumFeatures = other.MinimumFeatures;
+        MaximumFeatures = other.MaximumFeatures;
+        UseExpressionTrees = other.UseExpressionTrees;
+        UseAdaptiveLearningRate = other.UseAdaptiveLearningRate;
+        LearningRateDecay = other.LearningRateDecay;
+        MinLearningRate = other.MinLearningRate;
+        MaxLearningRate = other.MaxLearningRate;
+        UseAdaptiveMomentum = other.UseAdaptiveMomentum;
+        InitialMomentum = other.InitialMomentum;
+        MomentumIncreaseFactor = other.MomentumIncreaseFactor;
+        MomentumDecreaseFactor = other.MomentumDecreaseFactor;
+        MinMomentum = other.MinMomentum;
+        MaxMomentum = other.MaxMomentum;
+        ExplorationRate = other.ExplorationRate;
+        MinExplorationRate = other.MinExplorationRate;
+        MaxExplorationRate = other.MaxExplorationRate;
+        Tolerance = other.Tolerance;
+        OptimizationMode = other.OptimizationMode;
+
+        // Inherited GradientBasedOptimizerOptions settings (between
+        // OptimizationAlgorithmOptions and this class).
+        Regularization = other.Regularization;
+        ShuffleData = other.ShuffleData;
+        RandomSeed = other.RandomSeed;
+        EnableGradientClipping = other.EnableGradientClipping;
+        MaxGradientNorm = other.MaxGradientNorm;
+
+        // Adam-specific settings (must mirror every property declared on this class).
+        BatchSize = other.BatchSize;
+        InitialLearningRate = other.InitialLearningRate;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        Epsilon = other.Epsilon;
+        AnomalyGuardMode = other.AnomalyGuardMode;
+        UseAdaptiveBetas = other.UseAdaptiveBetas;
+        MinBeta1 = other.MinBeta1;
+        MaxBeta1 = other.MaxBeta1;
+        MinBeta2 = other.MinBeta2;
+        MaxBeta2 = other.MaxBeta2;
+        UseAMSGrad = other.UseAMSGrad;
+    }
+
+    /// <summary>
     /// Gets or sets the batch size for mini-batch gradient descent.
     /// </summary>
     /// <value>A positive integer, defaulting to 32.</value>
@@ -189,4 +254,29 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// allowing it to adapt to changing conditions during training.</para>
     /// </remarks>
     public double MaxBeta2 { get; set; } = 0.9999;
+
+    /// <summary>
+    /// Gets or sets whether to use the AMSGrad variant of Adam.
+    /// </summary>
+    /// <value><c>true</c> to use AMSGrad; otherwise, <c>false</c>. Defaults to <c>false</c>.</value>
+    /// <remarks>
+    /// <para>
+    /// AMSGrad (Reddi, Kale, Kumar 2018, "On the Convergence of Adam and Beyond") replaces
+    /// the bias-corrected second-moment v̂_t with v̂_max_t = max(v̂_max_{t-1}, v̂_t) before
+    /// dividing m̂_t. The Adam paper's convergence proof relies on v_t being non-decreasing
+    /// on average; in practice v_t can shrink rapidly when gradients drop after convergence,
+    /// at which point m_t / sqrt(v_t) drifts the parameters away from a tight optimum. The
+    /// MoreData_ShouldNotDegrade invariant in the model-family test suite catches this as
+    /// 200-iter loss greater than 50-iter loss on fixed-input regression (NTM, GRU, DBM,
+    /// and similar recurrent / stateful models — see #1332 cluster 6 + cluster 1.1).
+    /// AMSGrad provably prevents this drift at the cost of slightly slower convergence on
+    /// well-conditioned objectives.
+    /// </para>
+    /// <para><b>For Beginners:</b> Standard Adam can drift its parameters away from a
+    /// good solution after the model has already converged on simple problems. AMSGrad
+    /// is a small math change to Adam that prevents this drift. Enable it for stateful
+    /// or recurrent models where you've observed loss climbing back up during long
+    /// training runs.</para>
+    /// </remarks>
+    public bool UseAMSGrad { get; set; } = false;
 }
