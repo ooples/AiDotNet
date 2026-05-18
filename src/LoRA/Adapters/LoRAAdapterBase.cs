@@ -424,15 +424,53 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
     protected virtual LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
-        int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
-        if (inputSize <= 0 && _baseLayer is LayerBase<T> layerBase)
+        // Prefer weight-inferred dimensions when the base layer has its
+        // weights materialised. GetInputShape() / GetOutputShape() return
+        // the layer's I/O shape which on a batched-input layer includes
+        // the batch axis as Shape[0] (e.g. [batch=1, features=N]) —
+        // reading [0] silently feeds the batch dim into LoRALayer as
+        // inputSize, which then crashes on first forward with
+        // "Input size N does not match expected input size 1".
+        // InferInputSizeFromWeights already knows about the Dense vs
+        // FullyConnected output-major / input-major conventions and
+        // picks the FAN-IN axis correctly. Discovered by AiDotNet#1345
+        // ConfigureLoRA test on the canary Transformer.
+        int inputSize = -1;
+        if (_baseLayer is LayerBase<T> layerBase)
         {
-            // Pass _baseLayer so InferInputSizeFromWeights can pick the
-            // right axis for output-major layers like FullyConnectedLayer.
-            int inferred = InferInputSizeFromWeights(_baseLayer, layerBase.GetTrainableParameters());
-            if (inferred > 0) inputSize = inferred;
+            var weights = layerBase.GetTrainableParameters();
+            if (weights.Count > 0)
+            {
+                int inferred = InferInputSizeFromWeights(_baseLayer, weights);
+                if (inferred > 0) inputSize = inferred;
+            }
         }
+
+        // Fall back to shape API. Multi-dim shapes have the feature axis
+        // as the LAST element, NOT [0] (which is typically batch). This
+        // matches the convention used elsewhere in the LoRA stack — e.g.
+        // ResolveBaseInputShapeWithProvenance's outSize*2 heuristic
+        // reads outShape[0] but that's because GetOutputShape on a
+        // Dense/FC layer returns a rank-1 shape [features].
+        var inShape = GetInputShape();
+        if (inputSize <= 0 && inShape.Length > 0)
+        {
+            inputSize = inShape.Length == 1
+                ? inShape[0]
+                : inShape[inShape.Length - 1];
+        }
+
+        // Output size: same last-axis rule for multi-dim outputs.
+        var outShape = GetOutputShape();
+        int outputSize = -1;
+        if (outShape.Length > 0)
+        {
+            outputSize = outShape.Length == 1
+                ? outShape[0]
+                : outShape[outShape.Length - 1];
+        }
+
+        if (outputSize <= 0) outputSize = inputSize > 0 ? inputSize : 1;
         if (inputSize <= 0) inputSize = outputSize * 2;
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }

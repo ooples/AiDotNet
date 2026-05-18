@@ -2477,10 +2477,51 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             Console.WriteLine("Applying LoRA adapters to neural network layers...");
 
+            // Warmup forward to materialise lazy-init layers BEFORE LoRA
+            // wrapping. LoRAAdapterBase.CreateLoRALayer needs the
+            // layer's input/output dimensions at adapter-construction
+            // time; lazy layers (LayerNorm gamma/beta, MultiHeadAttention
+            // lazy weight banks) report (0, …) until first Forward
+            // materialises the shape. Without the warmup, LoRALayer's
+            // ctor would throw ArgumentOutOfRangeException("Output size
+            // must be positive"). Best-effort: if the warmup throws
+            // (e.g. the user wired a forward path that requires training
+            // mode), the ApplyLoRA-side IsShapeResolved guard silently
+            // skips still-unresolved layers so the wrap loop succeeds on
+            // the materialised ones. Discovered by AiDotNet#1345 Bucket10
+            // ConfigureLoRA test.
+            try
+            {
+                bool prevTrainingMode = neuralNetForLoRA.IsTrainingMode;
+                neuralNetForLoRA.SetTrainingMode(false);
+                try
+                {
+                    var warmupResult = _model.Predict(x);
+                    System.GC.KeepAlive(warmupResult);
+                }
+                finally
+                {
+                    neuralNetForLoRA.SetTrainingMode(prevTrainingMode);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"LoRA warmup forward failed: {ex.GetType().Name}: {ex.Message}. Proceeding — layers that materialised during the partial forward get wrapped; lazy ones get skipped via the IsShapeResolved guard.");
+            }
+
             int adaptedCount = 0;
+            int skippedLazyCount = 0;
             for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
             {
                 var originalLayer = neuralNetForLoRA.Layers[i];
+
+                if (originalLayer is NeuralNetworks.Layers.LayerBase<T> lazyCheck
+                    && !lazyCheck.IsShapeResolved)
+                {
+                    skippedLazyCount++;
+                    continue;
+                }
+
                 var adaptedLayer = _loraConfiguration.ApplyLoRA(originalLayer);
 
                 // If the layer was adapted (wrapped with LoRA), update the list
@@ -2491,6 +2532,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 }
             }
 
+            if (skippedLazyCount > 0)
+            {
+                Console.WriteLine($"LoRA skipped {skippedLazyCount} layer(s) whose shape was not resolved post-warmup.");
+            }
             Console.WriteLine($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
         }
 
@@ -3111,8 +3156,24 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             };
         }
         else if (model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true }
-                 || _model is Clustering.Base.ClusteringBase<T>)
+                 || _model is Clustering.Base.ClusteringBase<T>
+                 || (_loraConfiguration is not null && _model is NeuralNetworks.NeuralNetworkBase<T>))
         {
+            // Neural networks with LoRA adapters route through the
+            // direct-training path instead of the outer optimizer's
+            // Clone-evaluate-select loop. NormalOptimizer.SpawnIndividual
+            // calls Clone() → Serialize → Deserialize → SetParameters,
+            // and LoRA serialization round-trips a parameter vector
+            // whose size doesn't match the LoRA-wrapped model's
+            // parameter count (the frozen base weights round-trip via
+            // ILayerSerializationExtras, the trainable LoRA weights via
+            // the parameter vector — those two paths get out of sync
+            // and SetParameters throws "Expected N parameters, got M").
+            // The NN's own Train method handles LoRA adapters correctly
+            // (it just calls Forward on each layer, which dispatches
+            // through the adapter), so direct training bypasses the
+            // serialization round-trip entirely. Discovered by
+            // AiDotNet#1345 Bucket10 ConfigureLoRA test.
             if (_knowledgeDistillationOptions is not null)
             {
                 throw new NotSupportedException(
