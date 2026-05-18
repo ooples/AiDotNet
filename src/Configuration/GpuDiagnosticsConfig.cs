@@ -128,6 +128,52 @@ public static class GpuDiagnosticsConfig
     }
 
     /// <summary>
+    /// Push a scoped override of <see cref="Level"/> that automatically
+    /// restores the previous value when the returned <see cref="IDisposable"/>
+    /// is disposed (typically via <c>using var _ = PushLevel(...)</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>Use this from tests / measurement blocks that need to toggle
+    /// diagnostic verbosity for a bounded scope WITHOUT racing with parallel
+    /// test workers that read or mutate the same process-global static.
+    /// Direct <c>Level = ...</c> assignment plus a finally-block restore
+    /// pattern is functionally equivalent but easy to forget — and the
+    /// xUnit-default parallel test collections WILL observe another
+    /// collection's mutation if the restore is skipped (review #1368
+    /// flagged this on the Bucket 4 GpuDiagnostics tests).</para>
+    /// <para>Stack semantics: nested <c>PushLevel</c> calls restore in
+    /// reverse order. Concurrent pushes from different threads still race
+    /// each other (the static slot is a single value, not a per-thread
+    /// stack) — callers that need isolation across parallel test workers
+    /// must put their tests in a serialized <c>[Collection]</c>.</para>
+    /// </remarks>
+    /// <param name="level">The level to apply while the returned scope is alive.</param>
+    /// <returns>An <see cref="IDisposable"/> that restores the previous level on Dispose.</returns>
+    public static System.IDisposable PushLevel(GpuDiagnosticLevel level)
+    {
+        var previous = _level;
+        Level = level;
+        return new LevelScope(previous);
+    }
+
+    private sealed class LevelScope : System.IDisposable
+    {
+        private readonly GpuDiagnosticLevel _previous;
+        private int _disposed;
+        internal LevelScope(GpuDiagnosticLevel previous) { _previous = previous; }
+        public void Dispose()
+        {
+            // Idempotent dispose — double-dispose on a using-declaration that
+            // also gets an explicit Dispose() call would otherwise re-write
+            // the level back to a stale value.
+            if (System.Threading.Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                Level = _previous;
+            }
+        }
+    }
+
+    /// <summary>
     /// Emits a diagnostic message, respecting the current <see cref="Level"/>
     /// and routing through <see cref="Sink"/> if set (else Console).
     /// Callable from AiDotNet-side diagnostic code that wants to participate

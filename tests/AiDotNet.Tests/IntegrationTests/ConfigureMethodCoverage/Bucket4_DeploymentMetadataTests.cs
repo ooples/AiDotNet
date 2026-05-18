@@ -169,6 +169,19 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
     /// <c>Level</c> at <c>Silent</c>; asserts the explicit Configure call
     /// flipped the global to the requested value.
     /// </summary>
+    /// <remarks>
+    /// Uses <c>GpuDiagnosticsConfig.PushLevel</c> for scoped restoration:
+    /// the <c>using</c>-declaration guarantees the previous level is
+    /// restored even if BuildAsync or the assertion throws (which the
+    /// hand-rolled try/finally + Level = previous pattern would also
+    /// catch but is easier to forget on future edits). The scoped
+    /// override pattern was added in PR #1368 to address review
+    /// concerns about Bucket 4 mutating process-global GpuDiagnosticsConfig
+    /// state. NOTE: the static slot is a single value, NOT a per-thread
+    /// stack, so xUnit-parallel collections still need
+    /// <c>[Collection(\"ConfigureMethodCoverage\")]</c> serialization
+    /// to prevent cross-test interference.
+    /// </remarks>
     [Fact]
     [Trait("category", "integration-configure-method")]
     public async Task ConfigureGpuDiagnostics_LevelOverride_AppliesToGlobalConfig()
@@ -178,23 +191,17 @@ public class Bucket4_DeploymentMetadataTests : ConfigureMethodTestBase
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
 
-        var previous = GpuDiagnosticsConfig.Level;
-        try
-        {
-            var diag = new GpuDiagnosticsOptions { Level = sentinel };
-            var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
-                .ConfigureModel(model)
-                .ConfigureDataLoader(loader)
-                .ConfigureGpuDiagnostics(diag)
-                .BuildAsync();
+        // Scoped override — auto-restored on dispose, even if BuildAsync
+        // or the assertion throws below.
+        using var _scope = GpuDiagnosticsConfig.PushLevel(GpuDiagnosticsConfig.Level);
 
-            Assert.Equal(sentinel, GpuDiagnosticsConfig.Level);
-        }
-        finally
-        {
-            // Restore the previous global so we don't bleed state into
-            // other tests that read GpuDiagnosticsConfig.Level.
-            GpuDiagnosticsConfig.Level = previous;
-        }
+        var diag = new GpuDiagnosticsOptions { Level = sentinel };
+        var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureDataLoader(loader)
+            .ConfigureGpuDiagnostics(diag)
+            .BuildAsync();
+
+        Assert.Equal(sentinel, GpuDiagnosticsConfig.Level);
     }
 }
