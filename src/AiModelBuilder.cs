@@ -207,14 +207,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private Augmentation.AugmentationConfig? _augmentationConfig;
 
     // Process-wide once-per-run latch for the ConfigureAugmentation
-    // informational messages (review #1368 C4TPM: warnings were firing
-    // on every successful Build, polluting traces in production / CI).
-    // Mutated only via Interlocked.Exchange. Static so multiple
-    // AiModelBuilder<T,...> instantiations across the process share the
-    // single emit slot — the constraint is the same regardless of the
-    // builder's type parameters.
-    private static int _augmentationOfflineWarningEmitted;
-    private static int _augmentationXOnlyWarningEmitted;
+    // informational messages (review #1368 C4TPM: warnings were firing on
+    // every successful Build, polluting traces in production / CI).
+    // Mutated via Interlocked.Exchange on the NON-GENERIC
+    // AugmentationWarningLatch helper class — without that indirection,
+    // each closed-generic instantiation of AiModelBuilder<T,TIn,TOut>
+    // gets its own static field (review #1368 C7HAP) and the once-per-
+    // run guarantee silently breaks for mixed-generic test runs.
 
     // Self-supervised learning configuration
     private SelfSupervisedLearning.SSLConfig? _sslConfig;
@@ -3060,7 +3059,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // #1368 C4TPM). The flags are static so they're shared
             // across all AiModelBuilder<T, TInput, TOutput> instances —
             // the contract is process-wide informational.
-            if (System.Threading.Interlocked.Exchange(ref _augmentationOfflineWarningEmitted, 1) == 0)
+            if (System.Threading.Interlocked.Exchange(ref AugmentationWarningLatch.OfflineEmitted, 1) == 0)
             {
                 System.Diagnostics.Trace.TraceInformation(
                     "ConfigureAugmentation: applied a single offline pass to the training set before the optimizer runs. " +
@@ -3068,7 +3067,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                     "non-deterministic augmenters (random crop, noise, masking) will produce one fixed augmented " +
                     "copy reused every epoch. (This message logs once per process.)");
             }
-            if (System.Threading.Interlocked.Exchange(ref _augmentationXOnlyWarningEmitted, 1) == 0)
+            if (System.Threading.Interlocked.Exchange(ref AugmentationWarningLatch.XOnlyEmitted, 1) == 0)
             {
                 System.Diagnostics.Trace.TraceInformation(
                     "ConfigureAugmentation: only transforms training X, not labels y. The configured augmenter " +

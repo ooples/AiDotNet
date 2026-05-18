@@ -172,7 +172,7 @@ regressions.
 
 ## Filter
 
-```
+```bash
 dotnet test --filter "FullyQualifiedName~ConfigureMethodCoverage"
 dotnet test --filter "category=integration-configure-method"
 ```

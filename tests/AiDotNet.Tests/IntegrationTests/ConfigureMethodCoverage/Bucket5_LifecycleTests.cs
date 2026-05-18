@@ -128,14 +128,22 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
             // Clean up both temp dirs the test created — matches Bucket3
             // ConfigureModelRegistry's cleanup pattern. Without this each
             // run leaks a tracker dir + a RecordingDataVersionControl dir
-            // into %TEMP%, accumulating on CI.
+            // into %TEMP%, accumulating on CI. Both guards are defensive:
+            // trackerDir is always non-null (the Path.Combine above can't
+            // fail), but the directory may not exist if the ExperimentTracker
+            // ctor threw before creating it. recordingDvc was initialized
+            // OUTSIDE the try (L108) so it can't be null when the finally
+            // runs, but a future refactor that moves it inside the try
+            // would re-introduce a NRE here — keep the null-conditional
+            // (this PR's review C6WPz).
             TryDeleteDir(trackerDir);
-            TryDeleteDir(recordingDvc.StorageDirectory);
+            TryDeleteDir(recordingDvc?.StorageDirectory);
         }
     }
 
-    private static void TryDeleteDir(string path)
+    private static void TryDeleteDir(string? path)
     {
+        if (string.IsNullOrEmpty(path)) return;
         try { if (System.IO.Directory.Exists(path)) System.IO.Directory.Delete(path, recursive: true); }
         catch (System.IO.IOException) { }
         catch (System.UnauthorizedAccessException) { }
