@@ -320,7 +320,7 @@ public class Bucket2_AccelerationTests : ConfigureMethodTestBase
 
     /// <summary>
     /// ConfigureWeightStreaming with invalid (zero) threshold must throw — closes
-    /// the #1271.s-Ne validation gap (silently-ignored invalid config).
+    /// the #1271 validation gap (silently-ignored invalid config).
     /// </summary>
     [Fact(Timeout = 60_000)]
     [Trait("category", "integration-configure-method")]

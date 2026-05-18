@@ -136,11 +136,21 @@ namespace AiDotNet;
 /// modelRegistry.TransitionStage(modelVersion.ModelId, modelVersion.Version, ModelStage.Production);
 /// </code>
 /// </remarks>
-public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>, IWeightStreamingCapableBuilder<T, TInput, TOutput>
+public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>, IWeightStreamingCapableBuilder<T, TInput, TOutput>, AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
+
+    /// <summary>
+    /// Optional cap on the number of training rows fed into the
+    /// post-train pipeline-fit Predict call (review #1368 C7HAu). Default
+    /// is null = no cap = full <c>XTrain</c> tensor. Set via
+    /// <see cref="ConfigurePostprocessingFitMaxRows"/> when the user's
+    /// pipeline transformers stabilise on a subsample and the doubled
+    /// build-time inference cost matters.
+    /// </summary>
+    private int? _postprocessingFitMaxRows;
     private IRegularization<T, TInput, TOutput>? _regularization;
     private IFitnessCalculator<T, TInput, TOutput>? _fitnessCalculator;
     private IFitDetector<T, TInput, TOutput>? _fitDetector;
@@ -205,6 +215,15 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     // Unified augmentation configuration
     private Augmentation.AugmentationConfig? _augmentationConfig;
+
+    // Process-wide once-per-run latch for the ConfigureAugmentation
+    // informational messages (review #1368 C4TPM: warnings were firing on
+    // every successful Build, polluting traces in production / CI).
+    // Mutated via Interlocked.Exchange on the NON-GENERIC
+    // AugmentationWarningLatch helper class — without that indirection,
+    // each closed-generic instantiation of AiModelBuilder<T,TIn,TOut>
+    // gets its own static field (review #1368 C7HAP) and the once-per-
+    // run guarantee silently breaks for mixed-generic test runs.
 
     // Self-supervised learning configuration
     private SelfSupervisedLearning.SSLConfig? _sslConfig;
@@ -278,14 +297,148 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Memory management configuration for gradient checkpointing, activation pooling, and model sharding
     private Training.Memory.TrainingMemoryConfig? _memoryConfig;
 
-    // Internal accessors for test verification (visible to AiDotNetTests via InternalsVisibleTo)
-    internal IOptimizer<T, TInput, TOutput>? ConfiguredOptimizer => _optimizer;
-    internal CacheConfig? ConfiguredCaching => _cacheConfig;
-    internal AiDotNet.Configuration.InferenceOptimizationConfig? ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
-    internal AiDotNet.Configuration.JitCompilationConfig? ConfiguredJitCompilation => _jitCompilationConfig;
-    internal InterpretabilityOptions? ConfiguredInterpretability => _interpretabilityOptions;
-    internal Training.Memory.TrainingMemoryConfig? ConfiguredMemoryManagement => _memoryConfig;
-    internal AiDotNetLicenseKey? ConfiguredLicenseKey => _licenseKey;
+    /// <summary>
+    /// Decides whether BuildSupervisedInternalAsync should route through
+    /// the model's own <c>Train</c> method instead of the outer
+    /// optimizer's clone-evaluate-select loop.
+    /// </summary>
+    /// <remarks>
+    /// Direct-training kicks in when ANY of these conditions hold:
+    /// <list type="number">
+    ///   <item>Model isn't <see cref="IParameterizable{T,TInput,TOutput}"/>
+    ///   (time-series, density-based clustering, etc.) — no parameters to
+    ///   optimize, the model handles its own training.</item>
+    ///   <item>Model is a <see cref="Clustering.Base.ClusteringBase{T}"/>
+    ///   — clustering uses K-means EM not gradient updates; the outer
+    ///   optimizer's random search runs hundreds of unrelated trials
+    ///   then leaves the model untrained (the bug pattern that caused
+    ///   25 clustering builder tests to time out in #1224 cluster B).</item>
+    ///   <item>Model is a <see cref="NeuralNetworks.NeuralNetworkBase{T}"/>
+    ///   with LoRA wrapping — NormalOptimizer.SpawnIndividual
+    ///   Clone-serialize round-trip throws on LoRA-wrapped layers
+    ///   because the frozen base + LoRA delta parameter counts get out
+    ///   of sync. Routing through model.Train uses the NN's own
+    ///   gradient path which handles LoRA adapters correctly via
+    ///   Forward dispatch.</item>
+    /// </list>
+    /// </remarks>
+    private bool UseDirectTrainingPath(IFullModel<T, TInput, TOutput> model)
+    {
+        // The `model` parameter is the resolved model at the call site
+        // (possibly post-wrapping), while the other two clauses read
+        // the builder's _model field for the predicates that need the
+        // original (non-wrapped) instance (clustering-base check and
+        // LoRA-wrapped detection both look at the user-supplied model
+        // type, not whatever wrapper is now in `model`). Reviewer
+        // (#1368) noted the asymmetry — documented inline so future
+        // edits don't accidentally swap `model` ↔ `_model` in one of
+        // these clauses without realising the intent (the
+        // IParameterizable check follows the wrapped chain; the other
+        // two follow the original user choice).
+        bool modelLacksParameterizableInit =
+            model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true };
+        bool isClusteringBase = _model is Clustering.Base.ClusteringBase<T>;
+        bool isLoraWrappedNeuralNetwork =
+            _loraConfiguration is not null && _model is NeuralNetworks.NeuralNetworkBase<T>;
+        return modelLacksParameterizableInit || isClusteringBase || isLoraWrappedNeuralNetwork;
+    }
+
+    /// <summary>
+    /// Carves a 1-sample probe off the training input for LoRA warmup
+    /// forwards. Returns the full input unchanged if the type doesn't
+    /// expose a recognised slicing pattern — better to do a full forward
+    /// than to error out on shape-resolution.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Layout assumption</b> (review #1368): for Tensor&lt;T&gt;,
+    /// the slice loop assumes <see cref="Tensor{T}.GetFlat"/> /
+    /// <see cref="Tensor{T}.SetFlat"/> address a contiguous batch-first
+    /// row-major buffer (i.e. the first <c>perSample</c> flat positions
+    /// are the first sample's elements in row-major order). All
+    /// AiDotNet.Tensors tensor allocations satisfy this — the storage
+    /// is a contiguous <c>T[]</c> with row-major strides — but if a
+    /// future tensor backend exposes non-contiguous views (e.g. stride
+    /// tricks for slicing without copy), this loop would silently copy
+    /// the wrong elements. <see cref="Tensor{T}.GetFlat"/>'s contract
+    /// is "flat index across the contiguous storage in row-major
+    /// order" which holds today; revisit if that contract relaxes.</para>
+    /// <para><b>Future direction</b>: the proper fix is to eliminate
+    /// the warmup forward entirely via a layer-side
+    /// <c>TryDeclareShape()</c> oracle that lets lazy-init layers
+    /// declare their shapes from constructor / config args without
+    /// needing a forward pass. Tracked at
+    /// <see href="https://github.com/ooples/AiDotNet/issues/1370">#1370</see>.
+    /// Until that ships, this 1-sample slice is the perf-stopgap for the
+    /// warmup cost (one row, one forward, one-time at Build).</para>
+    /// </remarks>
+    private static TInput TrySliceFirstSampleForLoRAWarmup(TInput x)
+    {
+        // Tensor<T>: take the first sample along axis 0.
+        if (x is Tensor<T> tensor && tensor.Shape.Length > 0 && tensor.Shape[0] > 1)
+        {
+            var sliceShape = new int[tensor.Shape.Length];
+            sliceShape[0] = 1;
+            for (int i = 1; i < tensor.Shape.Length; i++) sliceShape[i] = tensor.Shape[i];
+
+            int perSample = 1;
+            for (int i = 1; i < tensor.Shape.Length; i++) perSample *= tensor.Shape[i];
+            var slice = new Tensor<T>(sliceShape);
+            // Bulk Span<T>.CopyTo over the first `perSample` elements of
+            // the source tensor's storage into the slice tensor's
+            // storage. Both are contiguous row-major Span<T> views over
+            // managed T[] arrays (AiDotNet.Tensors tensor allocation
+            // contract); CopyTo dispatches to the JIT's vectorized
+            // memmove. Replaces the prior per-element GetFlat/SetFlat
+            // loop, which made two virtual calls per element on the
+            // training hot path (review #1368 C6WM9). One call per
+            // Build instead of perSample calls.
+            //
+            // Defense-in-depth (review #1368 C7mpf): verify the storage
+            // contract before issuing the bulk copy. If a future
+            // AiDotNet.Tensors refactor introduces strided / non-
+            // contiguous backing or a smaller Span view, the Slice below
+            // would silently copy garbage or throw an opaque
+            // ArgumentOutOfRangeException. Debug.Assert catches the
+            // contract break in debug builds without the runtime cost
+            // in release (the bulk copy is the LoRA warmup's perf hot
+            // path).
+            // Long-typed product so a large tensor (e.g. [1024, 1024,
+            // 64, 64] = 4.3 GiB at fp32) doesn't silently overflow int —
+            // the assert below would otherwise fire spuriously on a
+            // legitimate tensor whose Data.Span.Length is correct (review
+            // #1368 C88RH). The slicing path only copies the first
+            // perSample elements anyway, so the assert is purely a
+            // contract sanity-check on the FULL backing storage.
+            long totalElements = (long)perSample * tensor.Shape[0];
+            System.Diagnostics.Debug.Assert(
+                tensor.Data.Span.Length >= totalElements,
+                $"Tensor<T>.Data.Span ({tensor.Data.Span.Length}) shorter than logical " +
+                $"shape ({string.Join("x", tensor.Shape)} = {totalElements}); the row-major " +
+                "contiguous-storage contract this slicing relies on no longer holds. " +
+                "Update TrySliceFirstSampleForLoRAWarmup before this Span<T>.CopyTo can run.");
+            tensor.Data.Span.Slice(0, perSample).CopyTo(slice.Data.Span);
+            if (slice is TInput typedSlice) return typedSlice;
+        }
+        // Fallback: full forward (non-Tensor TInput, or single-sample
+        // input where slicing is unnecessary).
+        return x;
+    }
+
+    // Explicit-interface implementation of IConfiguredView<T,TInput,TOutput>:
+    // these accessors exist solely for the integration-test bucket suite to
+    // verify post-Configure*() state, and previously sat on the AiModelBuilder
+    // internal surface. Moving them behind an explicit interface keeps them
+    // off the regular type surface entirely — test code casts to
+    // IConfiguredView<T,TInput,TOutput> to read; production callers never
+    // see (or accidentally bind against) the accessors (review #1368 C6WRW).
+    IOptimizer<T, TInput, TOutput>? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredOptimizer => _optimizer;
+    CacheConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredCaching => _cacheConfig;
+    AiDotNet.Configuration.InferenceOptimizationConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredInferenceOptimizations => _inferenceOptimizationConfig;
+    AiDotNet.Configuration.JitCompilationConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredJitCompilation => _jitCompilationConfig;
+    InterpretabilityOptions? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredInterpretability => _interpretabilityOptions;
+    Training.Memory.TrainingMemoryConfig? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredMemoryManagement => _memoryConfig;
+    AiDotNetLicenseKey? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredLicenseKey => _licenseKey;
+    AgentConfiguration<T>? AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>.ConfiguredAgentAssistance => _agentConfig;
 
     /// <summary>
     /// Creates a new <see cref="AiModelBuilder{T, TInput, TOutput}"/> with configuration loaded from a YAML file.
@@ -586,6 +739,30 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
         }
 
+        return this;
+    }
+
+    /// <summary>
+    /// Caps the number of training rows that the post-train pipeline-fit
+    /// step feeds into <c>bestSolution.Predict(...)</c>. Default (when not
+    /// called) is no cap — the full <c>XTrain</c> tensor goes through one
+    /// extra forward pass solely to materialise predictions for the
+    /// pipeline's <c>Fit</c>. For users with large training sets and
+    /// postprocessing transformers that stabilise on a subsample
+    /// (StandardScaler, MinMaxScaler, label encoders), capping here cuts
+    /// the doubled Build-time inference cost (review #1368 C7HAu).
+    /// </summary>
+    /// <param name="maxRows">Maximum number of leading training rows to
+    /// feed into Predict for fit. Pass a non-positive value to clear the
+    /// cap (revert to full-set fit).</param>
+    // NOTE: deliberately not named `ConfigurePostprocessingFitMaxRows` —
+    // the YAML source-generator scans `Configure*` methods and would
+    // misrender a primitive `int?` parameter as a POCO YAML section. This
+    // is an opt-in perf knob, not a configuration surface that belongs in
+    // a YAML model recipe.
+    public AiModelBuilder<T, TInput, TOutput> SetPostprocessingFitMaxRows(int? maxRows)
+    {
+        _postprocessingFitMaxRows = maxRows is int v && v > 0 ? v : (int?)null;
         return this;
     }
 
@@ -1573,6 +1750,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             BestSolution = _model ?? throw new InvalidOperationException("Model has not been configured. Call ConfigureModel() before BuildForInference().")
         };
 
+        // Inference-only path has no training data — pipeline must be
+        // pre-fitted. The shared helper throws with a clear diagnostic if
+        // postprocessing is configured but unfit (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(optimizationResult.BestSolution, default, nameof(BuildProgramSynthesisInferenceOnlyResult));
+
         var deploymentConfig = DeploymentConfiguration.Create(
             _quantizationConfig,
             _cacheConfig,
@@ -1590,6 +1772,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             PreprocessingInfo = _preprocessingPipeline is not null && _preprocessingPipeline.IsFitted
                 ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
                 : null,
+            PostprocessingPipeline = _postprocessingPipeline,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -1848,6 +2031,33 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private async Task<AiModelResult<T, TInput, TOutput>> BuildStreamingSupervisedAsync(
         IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
     {
+        // ConfigureAugmentation isn't wired into the streaming path —
+        // BuildSupervisedInternalAsync's one-shot offline augmentation
+        // applies to the materialised X tensor, which a streaming loader
+        // doesn't produce. Fail loudly when the user configures EITHER
+        // a custom augmenter OR a modality settings block (modality
+        // factory dispatches the same offline apply path) — silently
+        // dropping the augmentation here would reintroduce the stored-
+        // but-not-consumed pattern this PR is trying to eliminate
+        // (review #1368 C8eil: modality settings were unsupported on
+        // streaming path but the gate only checked CustomAugmenter).
+        if (_augmentationConfig is { IsEnabled: true } augCfg
+            && (augCfg.CustomAugmenter is not null
+                || augCfg.ImageSettings is not null
+                || augCfg.TabularSettings is not null
+                || augCfg.AudioSettings is not null
+                || augCfg.TextSettings is not null
+                || augCfg.VideoSettings is not null))
+        {
+            throw new NotSupportedException(
+                "ConfigureAugmentation is not yet supported on the streaming data-loader path. " +
+                "The augmentation hook is wired into BuildSupervisedInternalAsync's one-shot offline " +
+                "augmentation against a materialised X tensor, which a streaming loader does not produce. " +
+                "Either switch to an IInputOutputDataLoader (e.g. InMemoryDataLoader) or drop the " +
+                "ConfigureAugmentation call (CustomAugmenter or any *Settings block) until streaming " +
+                "augmentation is wired through the optimizer's per-batch hooks.");
+        }
+
         // Apply GPU configuration first
         ApplyGpuConfiguration();
 
@@ -2144,6 +2354,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _compressionConfig,
             _profilingConfig);
 
+        // Fit postprocessing pipeline through the shared helper. Streaming
+        // path has no materialised X tensor, so passing trainingInput=null
+        // causes the helper to throw the "no training data" diagnostic
+        // when the user did configure postprocessing — failing fast with
+        // a clear redirect to the supervised batch path (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(optimizationResult.BestSolution, default, nameof(BuildStreamingSupervisedAsync));
+
         // Build result using options pattern like other Build methods
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
@@ -2151,6 +2368,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             PreprocessingInfo = _preprocessingPipeline is not null && pipelineFitted
                 ? new PreprocessingInfo<T, TInput, TOutput>(_preprocessingPipeline)
                 : null,
+            PostprocessingPipeline = _postprocessingPipeline,
             Tokenizer = _tokenizer,
             TokenizationConfig = _tokenizationConfig,
             ProgramSynthesisModel = _programSynthesisModel,
@@ -2534,19 +2752,149 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // which caused race conditions when multiple models were built concurrently.
         ConfigureDocumentTransformers(_model);
 
-        // Use defaults for the optimizer if not set
-        var optimizer = _optimizer ?? new NormalOptimizer<T, TInput, TOutput>(_model);
+        // Use defaults for the optimizer if not set. When the caller
+        // ALSO configured regularization but did not pick an optimizer,
+        // promote to AdamOptimizer (a GradientBasedOptimizerBase) so the
+        // SetRegularization wiring below succeeds instead of throwing
+        // — the regularization request is the strong signal that the user
+        // expects a gradient-based optimizer (review #1368 C88Kn:
+        // NormalOptimizer default + non-default regularization gave a
+        // surprising Build-time throw with no clear fix because the user
+        // never explicitly chose NormalOptimizer).
+        IOptimizer<T, TInput, TOutput> optimizer;
+        if (_optimizer is not null)
+        {
+            optimizer = _optimizer;
+        }
+        else if (_regularization is not null)
+        {
+            optimizer = new Optimizers.AdamOptimizer<T, TInput, TOutput>(_model);
+        }
+        else
+        {
+            optimizer = new NormalOptimizer<T, TInput, TOutput>(_model);
+        }
+
+        // Wire ConfigureRegularization through to the optimizer. Without
+        // this, the user's regularization was stored on the builder
+        // (_regularization) but the gradient-application loop inside
+        // GradientBasedOptimizerBase read its own default L2 instead —
+        // a stored-but-not-consumed bug discovered by AiDotNet#1345
+        // Bucket7 ConfigureRegularization test. The setter on
+        // GradientBasedOptimizerBase swaps the protected field at runtime
+        // so optimizers constructed before ConfigureRegularization was
+        // called still pick up the user's choice.
+        if (_regularization is not null)
+        {
+            if (optimizer is Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradOptForReg)
+            {
+                gradOptForReg.SetRegularization(_regularization);
+            }
+            else
+            {
+                // Non-gradient optimizers (NormalOptimizer, evolutionary,
+                // any custom IOptimizer outside the GradientBasedOptimizerBase
+                // family) don't have a Regularization slot. Fail fast here
+                // so the misconfiguration surfaces at Build time rather than
+                // as silently-dropped regularization at training time
+                // (review #1368).
+                throw new InvalidOperationException(
+                    "ConfigureRegularization is only supported on gradient-based optimizers " +
+                    $"(AdamOptimizer / SGDOptimizer / AdamWOptimizer / etc.); the active optimizer " +
+                    $"is {optimizer.GetType().Name} which has no Regularization slot. " +
+                    "Either switch to a GradientBasedOptimizerBase subclass or remove the " +
+                    "ConfigureRegularization call.");
+            }
+        }
 
         // LORA ADAPTATION (if configured)
         // Apply LoRA adapters to neural network layers for parameter-efficient fine-tuning
         if (_loraConfiguration != null && _model is NeuralNetworks.NeuralNetworkBase<T> neuralNetForLoRA)
         {
-            Console.WriteLine("Applying LoRA adapters to neural network layers...");
+            System.Diagnostics.Trace.TraceInformation("Applying LoRA adapters to neural network layers...");
+
+            // Warmup forward to materialise lazy-init layers BEFORE LoRA
+            // wrapping. LoRAAdapterBase.CreateLoRALayer needs the
+            // layer's input/output dimensions at adapter-construction
+            // time; lazy layers (LayerNorm gamma/beta, MultiHeadAttention
+            // lazy weight banks) report (0, …) until first Forward
+            // materialises the shape. Without the warmup, LoRALayer's
+            // ctor would throw ArgumentOutOfRangeException("Output size
+            // must be positive"). Best-effort: if the warmup throws
+            // (e.g. the user wired a forward path that requires training
+            // mode), the ApplyLoRA-side IsShapeResolved guard silently
+            // skips still-unresolved layers so the wrap loop succeeds on
+            // the materialised ones. Discovered by AiDotNet#1345 Bucket10
+            // ConfigureLoRA test.
+            try
+            {
+                bool prevTrainingMode = neuralNetForLoRA.IsTrainingMode;
+                neuralNetForLoRA.SetTrainingMode(false);
+                try
+                {
+                    // One sample is enough to resolve lazy-layer shapes;
+                    // a full-dataset forward would do O(N) work and
+                    // allocate a full pass of activation tensors just to
+                    // shape-resolve. Carve off a 1-row probe.
+                    var warmupProbe = TrySliceFirstSampleForLoRAWarmup(x);
+                    var warmupResult = _model.Predict(warmupProbe);
+                    System.GC.KeepAlive(warmupResult);
+                }
+                finally
+                {
+                    neuralNetForLoRA.SetTrainingMode(prevTrainingMode);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Cancellation propagates — caller wants out, not a swallowed warmup.
+                throw;
+            }
+            catch (OutOfMemoryException)
+            {
+                // Critical: don't mask. The host may need to abort.
+                // StackOverflowException is intentionally NOT listed —
+                // modern .NET terminates the process on SOE rather than
+                // letting it propagate, so a catch clause for it is
+                // unreachable (review #1368 C7mpq).
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Best-effort warmup: documented forward-mode requirements
+                // (e.g. layers that need IsTrainingMode=true) can throw here.
+                // The ApplyLoRA-side IsShapeResolved guard silently skips
+                // still-unresolved layers so the wrap loop succeeds on
+                // materialized ones (review #1368 C6WOG: narrowed to let
+                // OperationCanceledException + OutOfMemoryException +
+                // StackOverflowException propagate; everything else is
+                // genuine warmup variance and stays as a Trace warning).
+                // Include ex.ToString() so the trace carries the full
+                // stack trace + inner exceptions, not just the top-frame
+                // message. Trace.TraceWarning is the only signal an
+                // operator has when the warmup fails silently (this PR's
+                // review C88M6: ex.Message dropped the origin frame and
+                // any chained inner exception, leaving a downstream
+                // skipped-lazy-layer mystery if the warmup actually
+                // failed inside an unrelated subsystem).
+                System.Diagnostics.Trace.TraceWarning(
+                    $"LoRA warmup forward failed (proceeding — layers that materialised get wrapped; " +
+                    $"lazy ones skipped via IsShapeResolved guard): {ex}");
+            }
 
             int adaptedCount = 0;
+            int skippedLazyCount = 0;
             for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
             {
                 var originalLayer = neuralNetForLoRA.Layers[i];
+
+                if (originalLayer is NeuralNetworks.Layers.LayerBase<T> lazyCheck
+                    && !lazyCheck.IsShapeResolved)
+                {
+                    skippedLazyCount++;
+                    continue;
+                }
+
                 var adaptedLayer = _loraConfiguration.ApplyLoRA(originalLayer);
 
                 // If the layer was adapted (wrapped with LoRA), update the list
@@ -2557,7 +2905,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 }
             }
 
-            Console.WriteLine($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
+            if (skippedLazyCount > 0)
+            {
+                System.Diagnostics.Trace.TraceInformation($"LoRA skipped {skippedLazyCount} layer(s) whose shape was not resolved post-warmup.");
+            }
+            System.Diagnostics.Trace.TraceInformation($"LoRA applied to {adaptedCount} layers (rank={_loraConfiguration.Rank}, alpha={_loraConfiguration.Alpha})");
         }
 
 
@@ -2810,6 +3162,96 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // No preprocessing pipeline configured - pass through, but keep any training-only data preparation
                 preprocessedX = XTrain;
                 preprocessedY = yTrain;
+            }
+        }
+
+        // Resolve the effective augmenter: explicit CustomAugmenter wins,
+        // otherwise fall back to the modality factory which translates the
+        // ImageSettings / TabularSettings / AudioSettings / TextSettings /
+        // VideoSettings blocks into a pipeline of built-in augmenters
+        // (review #1368 C6WKu). The factory returns null when no modality
+        // settings are populated, leaving augmentation disabled — that
+        // preserves the prior no-op behavior for callers who only set
+        // IsEnabled without populating a settings block.
+        object? effectiveAugmenter = null;
+        if (_augmentationConfig is { IsEnabled: true } augCfg)
+        {
+            effectiveAugmenter = augCfg.CustomAugmenter ?? ResolveModalityAugmenter(augCfg);
+        }
+        // Apply ConfigureAugmentation if an augmenter (explicit or
+        // modality-derived) resolved. Applied once before the optimizer
+        // runs (offline data augmentation); per-batch / per-epoch (online)
+        // augmentation would require deeper hooks into the optimizer's
+        // batch loop. Discovered by AiDotNet#1345 Bucket8 ConfigureAugmentation
+        // test.
+        if (effectiveAugmenter is not null && _augmentationConfig is not null)
+        {
+            object customAug = effectiveAugmenter;
+            // Split the cast check + the TInput cast into two separate
+            // branches so the diagnostic can distinguish "augmenter type
+            // mismatch" from "preprocessed input is not the expected
+            // TInput at this point" (review #1368 C4TP1: a correctly-
+            // typed augmenter with a TInput-changing preprocessor was
+            // misleadingly blamed on the augmenter under the prior
+            // combined-conditional).
+            if (customAug is not AiDotNet.Augmentation.IAugmentation<T, TInput> typedAug)
+            {
+                throw new InvalidOperationException(
+                    $"ConfigureAugmentation: CustomAugmenter of type {customAug.GetType().Name} is not " +
+                    $"IAugmentation<{typeof(T).Name}, {typeof(TInput).Name}>. " +
+                    "The augmenter's TData generic argument must match the AiModelBuilder's TInput. " +
+                    "Use AugmentationConfig.SetCustomAugmenter<TNum, TData>(...) or the strongly-typed " +
+                    "AugmentationConfig<T, TInput>.Augmenter property for a compile-time-checked " +
+                    "setter that catches this at the call site.");
+            }
+            // `preprocessedX` is statically `TInput` (declared at L2799), so the
+            // earlier `preprocessedX is not TInput` pattern-match was effectively
+            // an always-false branch for non-null values — the reviewer (review
+            // #1368 C6WKa) correctly flagged it as dead. Keep an explicit null
+            // guard since TInput may be a reference type and a buggy upstream
+            // preprocessing pipeline could legitimately produce null (caught
+            // here at Build time instead of NRE-ing inside the augmenter).
+            if (preprocessedX is null)
+            {
+                throw new InvalidOperationException(
+                    "ConfigureAugmentation: the preprocessing pipeline output is null. " +
+                    "ConfigurePreprocessing transformers must not return null for non-empty input. " +
+                    "Check the configured pipeline's FitTransform implementation.");
+            }
+
+            var augContext = new AiDotNet.Augmentation.AugmentationContext<T>(
+                isTraining: true,
+                seed: _augmentationConfig.Seed);
+            // typedAug is IAugmentation<T, TInput>, so Apply returns
+            // TInput directly — no runtime cast needed (review #1368 C88R8:
+            // prior `augmented is TInput` was trivially true for reference
+            // types and a compile-time-known true for value types).
+            TInput augmented = typedAug.Apply(preprocessedX, augContext);
+            // Update the train-side X with the augmented data so the
+            // optimizer sees the transformed inputs.
+            preprocessedX = augmented;
+            XTrain = augmented;
+            // Emit the two ConfigureAugmentation constraint warnings
+            // ONCE per process (not per Build) so multi-Build / CI
+            // pipelines that exercise ConfigureAugmentation many times
+            // don't get the same two lines in every trace (review
+            // #1368 C4TPM). The flags are static so they're shared
+            // across all AiModelBuilder<T, TInput, TOutput> instances —
+            // the contract is process-wide informational.
+            if (System.Threading.Interlocked.Exchange(ref AugmentationWarningLatch.OfflineEmitted, 1) == 0)
+            {
+                System.Diagnostics.Trace.TraceInformation(
+                    "ConfigureAugmentation: applied a single offline pass to the training set before the optimizer runs. " +
+                    "Per-epoch / per-batch stochastic augmentation is not yet wired into the optimizer batch loop; " +
+                    "non-deterministic augmenters (random crop, noise, masking) will produce one fixed augmented " +
+                    "copy reused every epoch. (This message logs once per process.)");
+            }
+            if (System.Threading.Interlocked.Exchange(ref AugmentationWarningLatch.XOnlyEmitted, 1) == 0)
+            {
+                System.Diagnostics.Trace.TraceInformation(
+                    "ConfigureAugmentation: only transforms training X, not labels y. The configured augmenter " +
+                    "must be 1:1 row-preserving on inputs (no row reorder / drop / N->M expansion). " +
+                    "Non-1:1 augmenters will silently desynchronise X and y. (This message logs once per process.)");
             }
         }
 
@@ -3148,9 +3590,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Iterations = federatedLearningMetadata.RoundsCompleted
             };
         }
-        else if (model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true }
-                 || _model is Clustering.Base.ClusteringBase<T>)
+        else if (UseDirectTrainingPath(model))
         {
+            // Branch rationale documented on UseDirectTrainingPath
+            // (non-parametric models, ClusteringBase, NN + LoRA).
             if (_knowledgeDistillationOptions is not null)
             {
                 throw new NotSupportedException(
@@ -3269,10 +3712,27 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // REGULAR TRAINING PATH
             if (_knowledgeDistillationOptions is not null)
             {
+                // Knowledge-distillation tape integration is still pending
+                // (the teacher-aware loss combiner needs a tape-aware
+                // wrapper around the standard loss to keep gradients
+                // flowing through both terms). Until that lands, surface
+                // a runtime warning so users discover the gap early
+                // rather than after Build returns silently. Restore the
+                // hard contract: a user who called ConfigureKnowledgeDistillation
+                // expects KD to actually run; downgrading the original
+                // NotSupportedException to a Trace warning silently broke
+                // that contract (review #1368). The configured options
+                // still round-trip onto AiModelResult.KnowledgeDistillationOptions
+                // for consumers who want to drive distillation manually,
+                // but they must opt out of automatic Build-time KD by
+                // omitting ConfigureKnowledgeDistillation OR by switching
+                // to a model path that supports it.
                 throw new NotSupportedException(
-                    "Knowledge distillation is not yet integrated with the tape-based training flow. " +
-                    "Remove the ConfigureKnowledgeDistillation() call or provide a pre-distilled teacher " +
-                    "model via a custom loss function that combines hard and soft targets.");
+                    "ConfigureKnowledgeDistillation is not yet integrated with the tape-based training flow " +
+                    "for this model path. Either omit ConfigureKnowledgeDistillation, switch to a model " +
+                    "type that supports it (parametric-model branch), or drive distillation manually " +
+                    "post-build via AiModelResult.KnowledgeDistillationOptions. Track upstream integration " +
+                    "in the AiDotNet repo issues.");
             }
 
             // Ensure the optimizer has the model configured before optimization
@@ -3684,11 +4144,19 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             }
         }
 
+        // Fit the postprocessing pipeline on the model's training-set
+        // predictions BEFORE attaching it to the result. Routed through
+        // the shared FitPostprocessingIfNeeded helper so every Build*
+        // path applies identical fit/fail logic (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(optimizationResult.BestSolution, XTrain, nameof(BuildSupervisedInternalAsync));
+
         // Return AiModelResult with CV results, agent data, JIT compilation, reasoning config, and training infrastructure
         var options = new AiModelResultOptions<T, TInput, TOutput>
         {
             OptimizationResult = optimizationResult,
             PreprocessingInfo = preprocessingInfo,
+            PostprocessingPipeline = _postprocessingPipeline,
+            KnowledgeDistillationOptions = _knowledgeDistillationOptions,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
@@ -3848,6 +4316,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Perform meta-training using parameters from config (specified during meta-learner construction)
         var metaResult = _metaLearner.Train();
 
+        // Meta-learning has no single training-X tensor (the meta-learner
+        // trains over a distribution of tasks). The shared helper throws a
+        // clear diagnostic when postprocessing is configured but unfit
+        // here, redirecting the user to pre-fit (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(null, default, nameof(BuildMetaLearningInternalAsync));
+
         // Create deployment configuration from individual configs
         var deploymentConfig = DeploymentConfiguration.Create(
             _quantizationConfig,
@@ -3865,6 +4339,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             MetaLearner = _metaLearner,
             MetaTrainingResult = metaResult,
+            PostprocessingPipeline = _postprocessingPipeline,
             JitCompilationConfig = _jitCompilationConfig,
             AllowNondeterminism = _allowNondeterminism,
             LoRAConfiguration = _loraConfiguration,
@@ -4188,6 +4663,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             _compressionConfig,
             _profilingConfig);
 
+        // RL has no single training-X tensor (the agent trains by acting in
+        // an environment, not against a static dataset). The shared helper
+        // throws a clear diagnostic when postprocessing is configured but
+        // unfit here, redirecting the user to pre-fit (review #1368 C6WJG).
+        FitPostprocessingIfNeeded(optimizationResult.BestSolution, default, nameof(BuildRLInternalAsync));
+
         // Return standard AiModelResult
         // Note: This Build() overload doesn't perform JIT compilation (only the main Build() does),
         // so JitCompiledFunction is not set
@@ -4195,6 +4676,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             OptimizationResult = optimizationResult,
             PreprocessingInfo = preprocessingInfo,
+            PostprocessingPipeline = _postprocessingPipeline,
             AutoMLSummary = autoMLSummary,
             BiasDetector = _biasDetector,
             FairnessEvaluator = _fairnessEvaluator,
@@ -6254,10 +6736,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <para>
     /// Example - Custom configuration:
     /// <code>
+    /// // Strongly-typed (recommended — review #1368): use the generic
+    /// // AugmentationConfig&lt;T, TInput&gt; subclass for compile-time-checked
+    /// // augmenter type matching the builder's generics.
     /// var result = builder
     ///     .ConfigureModel(myModel)
-    ///     .ConfigureAugmentation(new AugmentationConfig
+    ///     .ConfigureAugmentation(new AugmentationConfig&lt;float, Tensor&lt;float&gt;&gt;
     ///     {
+    ///         Augmenter = new MyTensorAugmenter(), // IntelliSense + compile check
     ///         EnableTTA = true,
     ///         TTANumAugmentations = 8,
     ///         ImageSettings = new ImageAugmentationSettings
@@ -6272,8 +6758,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </para>
     /// </remarks>
     /// <param name="config">
-    /// Augmentation configuration. If null, uses industry-standard defaults
-    /// with automatic data-type detection.
+    /// Augmentation configuration. Prefer the strongly-typed
+    /// <see cref="AugmentationConfig{T, TInput}"/> subclass (which inherits
+    /// from this base type so it slots into this method) for compile-time
+    /// validation of the custom augmenter. If null, uses industry-standard
+    /// defaults with automatic data-type detection.
     /// </param>
     /// <returns>The builder instance for method chaining.</returns>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
@@ -6282,6 +6771,20 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         _augmentationConfig = config ?? CreateDefaultAugmentationConfig();
         return this;
     }
+
+    /// <summary>
+    /// Strongly-typed overload of <see cref="ConfigureAugmentation(Augmentation.AugmentationConfig?)"/>
+    /// that accepts the generic <see cref="AugmentationConfig{T, TInput}"/>
+    /// (introduced in review #1368 to replace the <c>object?</c>-typed
+    /// custom-augmenter slot). Provides IDE-discoverable
+    /// <see cref="AugmentationConfig{T, TInput}.Augmenter"/> property type
+    /// so users get IntelliSense and compile-time checks without having
+    /// to drill into the non-generic base. Delegates to the base overload
+    /// after the typed slot is captured.
+    /// </summary>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
+        Augmentation.AugmentationConfig<T, TInput>? config)
+        => ConfigureAugmentation((Augmentation.AugmentationConfig?)config);
 
     /// <summary>
     /// Creates a default augmentation configuration with auto-detected modality settings.
@@ -7468,6 +7971,186 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         }
 
         // Transformers are now configured through the pipeline directly, not on the model
+    }
+
+    /// <summary>
+    /// Fits the configured <see cref="_postprocessingPipeline"/> on the model's
+    /// training-set predictions BEFORE attaching it to an
+    /// <see cref="AiModelResultOptions{T,TInput,TOutput}"/>. Shared across every
+    /// Build* path so each routing variant (supervised / direct-training /
+    /// meta-learning / RL / federated / distributed / inference-only) goes
+    /// through the same fit-vs-fail decision (review #1368 C6WJG).
+    /// </summary>
+    /// <param name="bestSolution">
+    /// The trained model used to produce training-set predictions. When non-null
+    /// alongside <paramref name="trainingInput"/>, the helper fits the pipeline
+    /// inline by calling <c>bestSolution.Predict(trainingInput)</c> and feeding
+    /// the result to <c>PostprocessingPipeline.Fit</c>.
+    /// </param>
+    /// <param name="trainingInput">
+    /// The training-set features. Required alongside <paramref name="bestSolution"/>
+    /// for inline fit. When null, this path is treated as "no training data
+    /// available" (inference-only / meta-learning / RL) and the pipeline
+    /// must be pre-fitted by the caller.
+    /// </param>
+    /// <param name="buildPathName">
+    /// Human-readable name of the Build* path emitting the call (used in the
+    /// thrown diagnostic to point the user at the right configuration step).
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if the configured pipeline is non-empty and not yet fitted AND
+    /// either the build path supplies no training data, or the inline fit
+    /// throws (predict shape mismatch, pipeline transform failure, etc.).
+    /// </exception>
+    private void FitPostprocessingIfNeeded(
+        IFullModel<T, TInput, TOutput>? bestSolution,
+        TInput? trainingInput,
+        string buildPathName)
+    {
+        if (_postprocessingPipeline is null
+            || _postprocessingPipeline.Count == 0
+            || _postprocessingPipeline.IsFitted)
+        {
+            return;
+        }
+
+        if (bestSolution is null || trainingInput is null)
+        {
+            throw new InvalidOperationException(
+                $"ConfigurePostprocessing is configured but the {buildPathName} build path " +
+                "does not have training data available to fit the pipeline (the path runs " +
+                "without supervised features, or the trained model was not produced). " +
+                "Pre-fit the pipeline via PostprocessingPipeline.Fit(...) on representative " +
+                "model outputs before calling BuildAsync(), or remove ConfigurePostprocessing " +
+                "on this build path (review #1368 C6WJG).");
+        }
+
+        try
+        {
+            // Optionally slice trainingInput to the configured max-rows cap
+            // (review #1368 C7HAu) so the post-train fit doesn't double the
+            // Build-time inference cost when the user's pipeline
+            // transformers don't need the full training set.
+            var fitInput = _postprocessingFitMaxRows is int cap
+                ? TrySliceFirstNSamples(trainingInput, cap)
+                : trainingInput;
+            var trainPreds = bestSolution.Predict(fitInput);
+            _postprocessingPipeline.Fit(trainPreds);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (OutOfMemoryException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Narrowed (review #1368 C7mmQ): OCE/OOM rethrown above so they
+            // surface with their original type; only genuine fit-time
+            // failures (shape mismatch, pipeline transform misconfiguration)
+            // get re-wrapped in InvalidOperationException with the
+            // diagnostic-friendly message below.
+            throw new InvalidOperationException(
+                $"ConfigurePostprocessing on the {buildPathName} build path: failed to fit " +
+                $"pipeline on training predictions: {ex.GetType().Name}: {ex.Message}. " +
+                "Inspect the pipeline's transform definition and the training-prediction shape, " +
+                "or omit ConfigurePostprocessing if the pipeline is meant to be fitted by the " +
+                "caller after Build (review #1368 C6WJG).", ex);
+        }
+    }
+
+    /// <summary>
+    /// Returns a prefix slice of <paramref name="x"/> containing at most
+    /// <paramref name="maxRows"/> leading samples. For <see cref="Tensor{T}"/>
+    /// inputs uses the same row-major bulk Span CopyTo path as
+    /// <see cref="TrySliceFirstSampleForLoRAWarmup"/>; for non-Tensor TInput
+    /// (or inputs already smaller than the cap) returns x unchanged. Used
+    /// by <see cref="FitPostprocessingIfNeeded"/> to cap the doubled
+    /// Build-time inference cost (review #1368 C7HAu).
+    /// </summary>
+    private static TInput TrySliceFirstNSamples(TInput x, int maxRows)
+    {
+        if (x is Tensor<T> tensor && tensor.Shape.Length > 0 && tensor.Shape[0] > maxRows)
+        {
+            var sliceShape = new int[tensor.Shape.Length];
+            sliceShape[0] = maxRows;
+            for (int i = 1; i < tensor.Shape.Length; i++) sliceShape[i] = tensor.Shape[i];
+
+            int perSample = 1;
+            for (int i = 1; i < tensor.Shape.Length; i++) perSample *= tensor.Shape[i];
+            long total = (long)maxRows * perSample;
+            if (total > int.MaxValue)
+            {
+                // Cap that would overflow int slice — fall back to full input
+                // rather than truncating to int.MaxValue and silently losing
+                // the trailing rows.
+                return x;
+            }
+            var slice = new Tensor<T>(sliceShape);
+            tensor.Data.Span.Slice(0, (int)total).CopyTo(slice.Data.Span);
+            if (slice is TInput typedSlice) return typedSlice;
+        }
+        return x;
+    }
+
+    /// <summary>
+    /// Resolves a modality-specific built-in augmenter from
+    /// <paramref name="config"/>'s settings blocks. Returns null if no
+    /// modality settings are populated for a type matching
+    /// <typeparamref name="TInput"/>, leaving augmentation disabled
+    /// (review #1368 C6WKu).
+    /// </summary>
+    /// <remarks>
+    /// The factory output types are modality-specific
+    /// (<c>ImageTensor&lt;T&gt;</c>, <c>Tensor&lt;T&gt;</c>, <c>string[]</c>,
+    /// <c>ImageTensor&lt;T&gt;[]</c>); this method picks the branch
+    /// whose data type matches <typeparamref name="TInput"/>. When no
+    /// modality matches the current TInput the method returns null and
+    /// the caller treats augmentation as not configured rather than
+    /// throwing — settings populated for a TInput-mismatched modality
+    /// are simply inert (e.g. ImageSettings on a tabular AiModelBuilder).
+    /// </remarks>
+    private object? ResolveModalityAugmenter(Augmentation.AugmentationConfig config)
+    {
+        var globalProb = config.Probability;
+        // typeof equality on the OPEN generic types — derived classes of
+        // the AiDotNet shape primitives would NOT have a built-in
+        // augmenter that knows their layout, and the factory's pipeline
+        // would silently fail at the typed cast back to
+        // IAugmentation<T,TInput> (review #1368 C8ehc). Exact-type match
+        // is the safe contract: callers with custom subclasses must
+        // supply their own CustomAugmenter.
+        if (config.ImageSettings is { } img && typeof(TInput) == typeof(Augmentation.Image.ImageTensor<T>))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildImageAugmenter<T>(img, globalProb);
+        }
+        // Audio dispatches on Tensor<T> (waveform) and Tabular dispatches
+        // on Matrix<T> (rows-by-features) — different TInput types, so
+        // they cannot fire on the same builder (review #1368 C88Lb:
+        // earlier comment mistakenly said both target Tensor<T>, which
+        // would have made the audio-wins-over-tabular ordering
+        // load-bearing — it isn't, because the two settings produce
+        // pipelines for distinct TInput types and the typeof guards
+        // already pick the unique match).
+        if (config.AudioSettings is { } aud && typeof(TInput) == typeof(AiDotNet.Tensors.LinearAlgebra.Tensor<T>))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildAudioAugmenter<T>(aud, globalProb);
+        }
+        if (config.TabularSettings is { } tab && typeof(TInput) == typeof(AiDotNet.Tensors.LinearAlgebra.Matrix<T>))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildTabularAugmenter<T>(tab, globalProb);
+        }
+        if (config.TextSettings is { } txt && typeof(TInput) == typeof(string[]))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildTextAugmenter<T>(txt, globalProb);
+        }
+        if (config.VideoSettings is { } vid && typeof(TInput) == typeof(Augmentation.Image.ImageTensor<T>[]))
+        {
+            return Augmentation.ModalityAugmenterFactory.BuildVideoAugmenter<T>(vid, globalProb);
+        }
+        return null;
     }
 
     private void ApplyGpuConfiguration()

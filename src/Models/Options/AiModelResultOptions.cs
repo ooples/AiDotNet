@@ -137,6 +137,117 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     public PreprocessingInfo<T, TInput, TOutput>? PreprocessingInfo { get; set; }
 
     /// <summary>
+    /// Gets or sets the postprocessing pipeline configured via
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigurePostprocessing(AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput})"/>.
+    /// </summary>
+    /// <value>
+    /// A <see cref="AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput}"/>
+    /// applied to the model's raw output during inference, or null if no
+    /// postprocessing was configured.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Applied inside <see cref="AiModelResult{T,TInput,TOutput}.Predict"/>
+    /// after the model produces its raw output (and after any
+    /// <c>PreprocessingInfo</c> target-inverse transform). Without this
+    /// wiring the configured postprocessing pipeline was stored on the
+    /// builder but never invoked on predictions — a stored-but-not-
+    /// consumed regression of the same shape as PR #1357 (#1361 family).
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Postprocessing is the "format the answer"
+    /// step that runs AFTER the model predicts. Common examples are
+    /// applying softmax to convert raw logits into probabilities,
+    /// decoding class indices back into label strings, or applying
+    /// thresholds to classification scores. Setting this property here
+    /// is how the builder hands the pipeline to the runtime so each
+    /// <c>Predict</c> call applies it automatically.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; set; }
+
+    /// <summary>
+    /// Optional sample of model-output predictions (NOT training targets)
+    /// handed in alongside an unfitted <see cref="PostprocessingPipeline"/>
+    /// so the <see cref="AiModelResult{T,TInput,TOutput}"/> ctor can
+    /// lazy-fit the pipeline at construction time instead of throwing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Important:</b> the postprocessing pipeline transforms model
+    /// PREDICTIONS (e.g. raw logits → softmax probabilities, raw scores →
+    /// thresholded labels), so its <c>Fit</c> needs the distribution of
+    /// model outputs, not the training-target distribution. If you
+    /// supply training targets here the pipeline will be fit on the
+    /// wrong distribution and silently transform predictions
+    /// incorrectly at inference time (review #1368 C8efy). The
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}"/> supervised path
+    /// produces this sample correctly by calling
+    /// <c>bestSolution.Predict(XTrain)</c> internally; only direct
+    /// <c>AiModelResultOptions</c> construction callers need to
+    /// materialise it themselves.
+    /// </para>
+    /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// When <see cref="PostprocessingPipeline"/> is non-null and not yet
+    /// fitted, the ctor will call <c>PostprocessingPipeline.Fit(this)</c>
+    /// if this value is non-null; if it is null the ctor throws the
+    /// fail-fast diagnostic (review #1368 C6WMS). AiModelBuilder's
+    /// supervised path normally fits the pipeline itself before
+    /// constructing the result; this slot exists for direct
+    /// <c>AiModelResultOptions</c> construction paths (federated /
+    /// meta-learning / distributed) that own the trained model and
+    /// training data but haven't called Fit yet.
+    /// </para>
+    /// <para>
+    /// <b>Important — fit-sample shape:</b> <typeparamref name="TOutput"/>
+    /// must be a <i>batched</i> representation (e.g. <c>Tensor&lt;T&gt;</c>
+    /// with shape <c>[batch, features]</c> or <c>Matrix&lt;T&gt;</c>) when
+    /// the pipeline contains data-distribution-learning transformers
+    /// (StandardScaler, MinMaxScaler, QuantileTransformer, RobustScaler,
+    /// PowerTransformer, LabelEncoder, etc.) — a single-row sample will
+    /// fit those transformers to degenerate statistics
+    /// (zero variance, max == min). For these cases supply enough rows for
+    /// the statistic to stabilise (typically ≥ 256 rows; for power
+    /// transformers ≥ 4096), or pre-fit the pipeline yourself via
+    /// <c>PostprocessingPipeline.Fit(...)</c> on representative model
+    /// outputs and leave this slot null (review #1368 C7mlj).
+    /// </para>
+    /// </remarks>
+    public TOutput? PostprocessingFitSample { get; set; }
+
+    /// <summary>
+    /// Gets or sets the knowledge-distillation options configured via
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigureKnowledgeDistillation"/>.
+    /// </summary>
+    /// <value>
+    /// A <see cref="KnowledgeDistillationOptions{T,TInput,TOutput}"/>
+    /// instance carrying the configured teacher / temperature / alpha
+    /// settings, or null if no distillation was configured.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Carried through to <see cref="AiModelResult{T,TInput,TOutput}"/>
+    /// so consumers can drive distillation manually post-build via a
+    /// teacher-aware loss function. Without this slot the options were
+    /// stored on the builder but silently dropped before the result
+    /// surface — discovered by AiDotNet#1345 Bucket9
+    /// ConfigureKnowledgeDistillation test.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Knowledge distillation is a technique where
+    /// a smaller "student" model learns to mimic a larger "teacher"
+    /// model — the temperature setting controls how soft the teacher's
+    /// predictions become, and alpha balances the student's own labels
+    /// against the teacher's soft targets. This property surfaces those
+    /// configured settings on the result so downstream tooling can run
+    /// the distillation loop.
+    /// </para>
+    /// </remarks>
+    public AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>? KnowledgeDistillationOptions { get; set; }
+
+    /// <summary>
     /// Gets or sets an optional AutoML run summary for this trained model.
     /// </summary>
     /// <remarks>

@@ -337,15 +337,43 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
     /// </remarks>
     private static int InferInputSizeFromWeights(ILayer<T>? baseLayer, IReadOnlyList<Tensor<T>> weights)
     {
-        if (weights.Count == 0) return -1;
+        TryInferBothDimsFromWeights(baseLayer, weights, out var inSize, out _);
+        return inSize;
+    }
+
+    /// <summary>
+    /// Try to infer BOTH input and output dimensions from the base layer's
+    /// trainable weight matrix in a single pass. Returns true when at least
+    /// one dimension was resolved.
+    /// </summary>
+    /// <remarks>
+    /// FullyConnectedLayer&lt;T&gt; stores weights as [outputSize, inputSize];
+    /// DenseLayer&lt;T&gt; and the LoRA test suite's canonical convention store
+    /// weights as [inputSize, outputSize]. For Conv (rank ≥ 3) we use the
+    /// [outC, inC, ...spatial] convention so axis 1 is input channels and
+    /// axis 0 is output channels. A single weight matrix yields both dims —
+    /// extracting them together replaces the prior pattern that read the
+    /// fan-in axis only and then fabricated outputSize via heuristics
+    /// (review #1368: "try harder before falling back").
+    /// </remarks>
+    private static bool TryInferBothDimsFromWeights(
+        ILayer<T>? baseLayer,
+        IReadOnlyList<Tensor<T>> weights,
+        out int inputSize,
+        out int outputSize)
+    {
+        inputSize = -1;
+        outputSize = -1;
+
+        if (weights.Count == 0) return false;
 
         // Find the first WEIGHT-MATRIX-shaped tensor (rank >= 2). A naive
         // weights[0] inspection breaks when the first parameter is a 1-D
         // bias / LayerNorm gamma — those have outSize as their only axis,
-        // so InferInputSizeFromWeights would return outSize as inputSize
-        // and produce wrong adapter dimensions on every Dense layer once
-        // lazily resolved. Scan for the first rank-≥-2 tensor first; only
-        // if none is found do we fall back to the rank-1 case.
+        // so reading [0] would return outSize as inputSize and produce wrong
+        // adapter dimensions on every Dense layer once lazily resolved.
+        // Scan for the first rank-≥-2 tensor first; only if none is found
+        // do we fall back to the rank-1 case (LayerNorm/BatchNorm: in == out).
         Tensor<T>? matrix = null;
         for (int i = 0; i < weights.Count; i++)
         {
@@ -359,36 +387,51 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
         if (matrix is null)
         {
             // No weight matrix — fall back to the first 1-D tensor's length
-            // (LayerNorm/BatchNorm wrappers where in == out).
+            // (LayerNorm / BatchNorm wrappers where in == out).
             var w0 = weights[0];
-            if (w0.Shape.Length == 1 && w0.Shape[0] > 0) return w0.Shape[0];
-            return -1;
+            if (w0.Shape.Length == 1 && w0.Shape[0] > 0)
+            {
+                inputSize = w0.Shape[0];
+                outputSize = w0.Shape[0];
+                return true;
+            }
+            return false;
         }
 
         if (matrix.Shape.Length == 2)
         {
-            // FullyConnectedLayer<T> uses output-major storage:
-            // weights are allocated as [outputSize, inputSize] (see this
-            // class's MergeWeights / Forward paths at L504+ which assume
-            // that layout). For an FCL, the fan-in axis is Shape[1].
-            //
-            // DenseLayer<T> uses the inverse convention:
-            // weights are allocated as [inputSize, outputSize]
-            // (DenseLayer's TensorAllocator.Rent<T>([inputSize, outputSize])).
-            // For Dense, the fan-in axis is Shape[0].
-            //
-            // Without distinguishing, an FCL wrapped via lazy LoRA would
-            // produce LoRA tensors with swapped dimensions and crash on
-            // first forward.
             if (baseLayer is FullyConnectedLayer<T>)
             {
-                return matrix.Shape[1] > 0 ? matrix.Shape[1] : -1;
+                if (matrix.Shape[0] > 0) outputSize = matrix.Shape[0];
+                if (matrix.Shape[1] > 0) inputSize = matrix.Shape[1];
             }
-            return matrix.Shape[0] > 0 ? matrix.Shape[0] : -1;
+            else
+            {
+                // DenseLayer + LoRA-test convention: [inputSize, outputSize].
+                if (matrix.Shape[0] > 0) inputSize = matrix.Shape[0];
+                if (matrix.Shape[1] > 0) outputSize = matrix.Shape[1];
+            }
+            return BothDimsResolved(inputSize, outputSize);
         }
-        // Conv weight convention (rank ≥ 3): [outC, inC, ...spatial] ⇒ axis 1 is
-        // input channels. The trailing dim would be wrong (kernel width / depth).
-        return matrix.Shape[1] > 0 ? matrix.Shape[1] : -1;
+
+        // Conv weight convention (rank ≥ 3): [outC, inC, ...spatial].
+        if (matrix.Shape[0] > 0) outputSize = matrix.Shape[0];
+        if (matrix.Shape[1] > 0) inputSize = matrix.Shape[1];
+        return BothDimsResolved(inputSize, outputSize);
+    }
+
+    /// <summary>
+    /// Contract helper for <see cref="TryInferBothDimsFromWeights"/>: bool
+    /// return is true iff BOTH dims were resolved (review #1368 C6WO4 /
+    /// C6WPP / C7mmB / C7G8-). Partial resolutions (only one dim positive)
+    /// are still surfaced via the out params for callers that want
+    /// best-effort information, but the bool reflects "is this layer
+    /// fully shape-known from its weight matrix?" — which is what the
+    /// CreateLoRALayer / InferInputSizeFromWeights call sites need.
+    /// </summary>
+    private static bool BothDimsResolved(int inputSize, int outputSize)
+    {
+        return inputSize > 0 && outputSize > 0;
     }
 
     /// <summary>
@@ -424,16 +467,89 @@ public abstract class LoRAAdapterBase<T> : LayerBase<T>, ILoRAAdapter<T>, ILayer
 
     protected virtual LoRALayer<T> CreateLoRALayer(int rank, double alpha)
     {
-        int inputSize = GetInputShape()[0];
-        int outputSize = GetOutputShape()[0];
-        if (inputSize <= 0 && _baseLayer is LayerBase<T> layerBase)
+        // Resolution strategy: try every authoritative source for each
+        // dimension BEFORE falling through to a throw. Heuristics like
+        // "outputSize = inputSize" (symmetric assumption) or
+        // "inputSize = outputSize * 2" (LoRA-test convention) were
+        // flagged in review #1368 as silent fabrication; replaced with
+        // an explicit throw so callers either get the right dim from a
+        // real source or a clear error message naming the layer.
+        //
+        // Sources, in preference order:
+        //   1. Weight-matrix probe (TryInferBothDimsFromWeights): a
+        //      rank-≥-2 trainable tensor gives both dims via the
+        //      Dense / FullyConnected / Conv convention.
+        //   2. Shape API (GetInputShape / GetOutputShape) using the
+        //      last-axis-is-features rule so batched shapes like
+        //      [batch, features] return features, not batch.
+        //   3. Rank-1 fallback (LayerNorm / BatchNorm where in == out)
+        //      already handled inside TryInferBothDimsFromWeights.
+        int inputSize = -1;
+        int outputSize = -1;
+
+        // 1. Weight matrix
+        if (_baseLayer is LayerBase<T> layerBase)
         {
-            // Pass _baseLayer so InferInputSizeFromWeights can pick the
-            // right axis for output-major layers like FullyConnectedLayer.
-            int inferred = InferInputSizeFromWeights(_baseLayer, layerBase.GetTrainableParameters());
-            if (inferred > 0) inputSize = inferred;
+            var weights = layerBase.GetTrainableParameters();
+            if (TryInferBothDimsFromWeights(_baseLayer, weights, out var winSize, out var woutSize))
+            {
+                if (winSize > 0) inputSize = winSize;
+                if (woutSize > 0) outputSize = woutSize;
+            }
         }
-        if (inputSize <= 0) inputSize = outputSize * 2;
+
+        // 2. Shape API — multi-dim shapes have the feature axis as the
+        // LAST element, NOT [0] (which is typically batch). Reading [0]
+        // would silently feed the batch dim into LoRALayer as
+        // inputSize/outputSize, which then crashes on first forward with
+        // "Input size N does not match expected input size 1".
+        if (inputSize <= 0)
+        {
+            var inShape = GetInputShape();
+            if (inShape.Length > 0)
+            {
+                inputSize = inShape.Length == 1
+                    ? inShape[0]
+                    : inShape[inShape.Length - 1];
+            }
+        }
+        if (outputSize <= 0)
+        {
+            var outShape = GetOutputShape();
+            if (outShape.Length > 0)
+            {
+                outputSize = outShape.Length == 1
+                    ? outShape[0]
+                    : outShape[outShape.Length - 1];
+            }
+        }
+
+        // If either dimension is still unresolved, fail fast. Callers are
+        // supposed to skip layers with IsShapeResolved=false (see
+        // DefaultLoRAConfiguration.ApplyLoRA) before invoking the adapter
+        // constructor. The previous fallback ("outputSize = inputSize" or
+        // "inputSize = outputSize * 2") would silently construct a LoRA
+        // layer with fabricated dimensions that produced nonsense
+        // activations at forward time (review #1368).
+        if (inputSize <= 0 || outputSize <= 0)
+        {
+            throw new InvalidOperationException(
+                $"LoRAAdapterBase.CreateLoRALayer cannot resolve " +
+                (inputSize <= 0 && outputSize <= 0
+                    ? "either input or output dimension"
+                    : inputSize <= 0 ? "the input dimension" : "the output dimension") +
+                $" for base layer of type {_baseLayer.GetType().Name}. " +
+                $"Probe results: weight-matrix infer yielded inputSize={inputSize}, outputSize={outputSize} " +
+                $"(<=0 means the probe couldn't determine that dim); " +
+                $"GetInputShape() returned [{string.Join(", ", GetInputShape())}]; " +
+                $"GetOutputShape() returned [{string.Join(", ", GetOutputShape())}] " +
+                $"(review #1368 C88Pe: 'sources' was misleading — these are the OUTPUTS of probing those " +
+                $"sources, all <=0 meaning none of the probes succeeded). " +
+                "Callers should skip layers with IsShapeResolved=false before invoking the adapter constructor " +
+                "(see DefaultLoRAConfiguration.ApplyLoRA). Note: lazy-init layers (LayerNorm γ/β, MultiHeadAttention " +
+                "weight banks, etc.) materialise shapes only after first Forward. The LoRA warmup forward in " +
+                "AiModelBuilder.BuildSupervisedInternalAsync resolves these before wrapping.");
+        }
         return new LoRALayer<T>(inputSize, outputSize, rank, alpha);
     }
 

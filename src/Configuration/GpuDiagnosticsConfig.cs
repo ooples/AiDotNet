@@ -50,7 +50,13 @@ namespace AiDotNet.Configuration;
 /// </example>
 public static class GpuDiagnosticsConfig
 {
-    private static GpuDiagnosticLevel _level = InitLevelFromEnvironment();
+    // Backing storage as a volatile int — the C# language spec doesn't
+    // guarantee Unsafe.As<TEnum, int> reinterpret preserves volatile
+    // semantics (review #1368 C88Jh / C88J4). A genuine volatile int
+    // field gives the language-guaranteed acquire/release fences directly
+    // and the enum cast happens lexically at the property boundary, which
+    // is a no-op at IL level for an int-backed enum.
+    private static volatile int _levelInt = (int)InitLevelFromEnvironment();
     private static GpuDiagnosticSink? _sink;
 
     /// <summary>
@@ -69,10 +75,15 @@ public static class GpuDiagnosticsConfig
     /// </remarks>
     public static GpuDiagnosticLevel Level
     {
-        get => _level;
+        // The backing field is `volatile int`, which is language-guaranteed
+        // to provide acquire/release semantics on every read/write
+        // (review #1368 C8eez / C88Jh / C88J4). The enum cast at the
+        // property boundary is a lexical no-op at IL level for an int-
+        // backed enum, so no reinterpret hazard remains.
+        get => (GpuDiagnosticLevel)_levelInt;
         set
         {
-            _level = value;
+            _levelInt = (int)value;
             // Forward to Tensors layer. Silent/Minimal both suppress because
             // Tensors v0.38.0 only has a bool toggle — it doesn't yet support
             // per-message level tagging. Minimal-specific filtering becomes
@@ -96,7 +107,7 @@ public static class GpuDiagnosticsConfig
     /// </remarks>
     public static bool Verbose
     {
-        get => _level == GpuDiagnosticLevel.Verbose;
+        get => Level == GpuDiagnosticLevel.Verbose;
         set => Level = value ? GpuDiagnosticLevel.Verbose : GpuDiagnosticLevel.Silent;
     }
 
@@ -128,6 +139,100 @@ public static class GpuDiagnosticsConfig
     }
 
     /// <summary>
+    /// Push-lock for the level stack. The push + capture-prev sequence is
+    /// not naturally atomic; if two threads call <see cref="PushLevel"/>
+    /// concurrently, each could capture the OTHER's mid-flight value as
+    /// "previous" — restoration on Dispose then writes the wrong level
+    /// back. Synchronising push/pop on this single object preserves true
+    /// scope-stack semantics across threads (review #1368 C6WQg).
+    /// </summary>
+    private static readonly object _pushLockSync = new();
+
+    /// <summary>
+    /// LIFO stack of previously-active levels. Each <see cref="PushLevel"/>
+    /// pushes the prior level; Dispose pops + restores. Mutated only under
+    /// <see cref="_pushLockSync"/>.
+    /// </summary>
+    private static readonly System.Collections.Generic.Stack<GpuDiagnosticLevel> _levelStack = new();
+
+    /// <summary>
+    /// Push a scoped override of <see cref="Level"/> that automatically
+    /// restores the previous value when the returned <see cref="IDisposable"/>
+    /// is disposed (typically via <c>using var _ = PushLevel(...)</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para>Use this from tests / measurement blocks that need to toggle
+    /// diagnostic verbosity for a bounded scope WITHOUT racing with parallel
+    /// test workers that read or mutate the same process-global static.
+    /// Direct <c>Level = ...</c> assignment plus a finally-block restore
+    /// pattern is functionally equivalent but easy to forget.</para>
+    /// <para><b>Thread-safe LIFO stack semantics</b> (review #1368 C6WQg):
+    /// concurrent <c>PushLevel</c> calls serialize through an internal
+    /// lock so each push captures the previous level atomically with the
+    /// new level's installation. Dispose pops in LIFO order; nested pushes
+    /// across threads restore in reverse-push-order. Note: while the stack
+    /// itself is thread-safe, callers should still treat the diagnostic
+    /// level as a process-global — interleaved pushes from concurrent
+    /// threads produce a deterministic but possibly surprising effective
+    /// level (the topmost-pushed wins). Tests that need full isolation
+    /// should still group via <c>[Collection]</c> serialization.</para>
+    /// </remarks>
+    /// <param name="level">The level to apply while the returned scope is alive.</param>
+    /// <returns>An <see cref="IDisposable"/> that restores the previous level on Dispose.</returns>
+    public static System.IDisposable PushLevel(GpuDiagnosticLevel level)
+    {
+        lock (_pushLockSync)
+        {
+            // Push prior level onto the stack, then install the new level.
+            // Both operations together under the lock — no other thread
+            // can observe a half-finished push. Read via the Level property
+            // getter (not _level directly) so any future getter-side memory
+            // barrier or value transform applies symmetrically with the
+            // property-setter write below (review #1368 C7HA7).
+            _levelStack.Push(Level);
+            Level = level;
+            return new LevelScope();
+        }
+    }
+
+    /// <summary>
+    /// Pops the most recently pushed level from the stack and restores it
+    /// as the active level. Called by <see cref="LevelScope.Dispose"/>.
+    /// Synchronised on the same lock as push so concurrent pushes/pops
+    /// observe a consistent stack.
+    /// </summary>
+    private static void PopLevel()
+    {
+        lock (_pushLockSync)
+        {
+            if (_levelStack.Count > 0)
+            {
+                Level = _levelStack.Pop();
+            }
+            // Empty-stack pop is a double-dispose (Dispose called twice
+            // on the same scope): silently no-op, the level stays where
+            // it is. The Interlocked flag in LevelScope normally prevents
+            // this from being reached.
+        }
+    }
+
+    private sealed class LevelScope : System.IDisposable
+    {
+        private int _disposed;
+        internal LevelScope() { }
+        public void Dispose()
+        {
+            // Idempotent dispose — double-dispose on a using-declaration
+            // that also gets an explicit Dispose() call would otherwise
+            // pop the stack twice.
+            if (System.Threading.Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                PopLevel();
+            }
+        }
+    }
+
+    /// <summary>
     /// Emits a diagnostic message, respecting the current <see cref="Level"/>
     /// and routing through <see cref="Sink"/> if set (else Console).
     /// Callable from AiDotNet-side diagnostic code that wants to participate
@@ -146,7 +251,7 @@ public static class GpuDiagnosticsConfig
         // Minimal = 1 permits Minimal + Verbose? No — Minimal permits Minimal-severity
         //   messages only. Verbose messages need level=Verbose.
         // So emit if current level >= message level in severity (numerically >=).
-        if (_level < level) return;
+        if (Level < level) return;
         var sink = _sink;
         if (sink is not null)
         {

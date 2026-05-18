@@ -206,6 +206,36 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal PreprocessingInfo<T, TInput, TOutput>? PreprocessingInfo { get; private set; }
 
     /// <summary>
+    /// Postprocessing pipeline configured via
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigurePostprocessing(AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput})"/>.
+    /// Applied inside <see cref="Predict"/> after the model produces its
+    /// raw output. Stored-but-not-consumed regression on this surface was
+    /// detected by AiDotNet#1345 Bucket6 pre/post tests; wiring added here
+    /// so the configured pipeline actually runs against predictions.
+    /// </summary>
+    /// <remarks>
+    /// The pipeline is typed as <c>TOutput → TOutput</c>, matching the
+    /// existing <c>ConfigurePostprocessing</c> overload signatures on
+    /// <c>IAiModelBuilder</c>. This means the pipeline can transform
+    /// the output in-place (softmax, threshold, clamp) but cannot
+    /// change the output TYPE (e.g. <c>logits → label string</c>).
+    /// Use cases that need a type-changing postprocessor must apply
+    /// the transformation themselves on the value returned by
+    /// <c>Predict</c>, or wait for a future widened API.
+    /// </remarks>
+    [JsonIgnore]
+    internal AiDotNet.Postprocessing.PostprocessingPipeline<T, TOutput, TOutput>? PostprocessingPipeline { get; private set; }
+
+    /// <summary>
+    /// Knowledge-distillation options configured via
+    /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigureKnowledgeDistillation"/>.
+    /// Carried on the result for downstream consumers that drive
+    /// distillation post-build via a teacher-aware loss function.
+    /// </summary>
+    [JsonIgnore]
+    internal AiDotNet.Models.Options.KnowledgeDistillationOptions<T, TInput, TOutput>? KnowledgeDistillationOptions { get; private set; }
+
+    /// <summary>
     /// Gets or sets the metadata associated with the model.
     /// </summary>
     /// <value>A ModelMetaData&lt;T&gt; object containing descriptive information about the model.</value>
@@ -1208,6 +1238,41 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new ArgumentNullException(nameof(options));
         }
 
+        // Fail fast at AiModelResult construction (i.e. Build time) if a
+        // postprocessing pipeline was wired but never fitted. Previously
+        // the unfitted pipeline rode through to AiModelResult.Predict and
+        // threw on the first inference call, which surfaced the
+        // misconfiguration at the wrong layer of the stack. AiModelBuilder
+        // fits the pipeline before constructing AiModelResult (see
+        // BuildSupervisedInternalAsync's postprocessing-fit block); if a
+        // caller bypasses the builder and supplies a pipeline directly,
+        // they must fit it first (review #1368).
+        if (options.PostprocessingPipeline is not null
+            && options.PostprocessingPipeline.Count > 0
+            && !options.PostprocessingPipeline.IsFitted)
+        {
+            // Lazy-fit at construction time when the caller supplied a
+            // training-target sample on PostprocessingFitSample. Keeps the
+            // direct AiModelResultOptions construction path (federated /
+            // meta-learning / distributed) ergonomic without forcing every
+            // caller to thread a manual .Fit() call (review #1368 C6WMS).
+            if (options.PostprocessingFitSample is not null)
+            {
+                options.PostprocessingPipeline.Fit(options.PostprocessingFitSample);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "AiModelResult was constructed with a postprocessing pipeline that has not been fitted, " +
+                    "and PostprocessingFitSample was not supplied. AiModelBuilder.BuildSupervisedInternalAsync " +
+                    "fits the pipeline automatically; if you construct AiModelResultOptions directly, either " +
+                    "(a) call PostprocessingPipeline.Fit(...) before passing the options to this ctor, or " +
+                    "(b) set PostprocessingFitSample to a representative training-target sample so the ctor " +
+                    "can lazy-fit. This check at Build time replaces the previous Predict-time throw " +
+                    "(review #1368 C6WMS).");
+            }
+        }
+
         // Store the options for use by partial classes (e.g., TTA augmentation)
         Options = options;
 
@@ -1235,6 +1300,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // Create default OptimizationResult for consistency
             OptimizationResult = options.OptimizationResult ?? new OptimizationResult<T, TInput, TOutput>();
             PreprocessingInfo = options.PreprocessingInfo;
+            PostprocessingPipeline = options.PostprocessingPipeline;
+            KnowledgeDistillationOptions = options.KnowledgeDistillationOptions;
         }
         else
         {
@@ -1247,6 +1314,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             Model = options.OptimizationResult.BestSolution;
             OptimizationResult = options.OptimizationResult;
             PreprocessingInfo = options.PreprocessingInfo;
+            PostprocessingPipeline = options.PostprocessingPipeline;
+            KnowledgeDistillationOptions = options.KnowledgeDistillationOptions;
             MetaLearner = options.MetaLearner;
             MetaTrainingResult = options.MetaTrainingResult;
         }
@@ -1909,57 +1978,51 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // that's a bug to fix at the build site, not by clobbering state
         // here in every Predict invocation.
 
-        // Use JIT-compiled function if available for 5-10x faster predictions
-        TOutput normalizedPredictions;
-
-        // INFERENCE OPTIMIZATION PATH: apply configured inference optimizations for neural network models
-        if (InferenceOptimizationConfig != null &&
-            Model is NeuralNetworkBase<T> neuralModel &&
-            normalizedNewData is Tensor<T> inputTensor)
-        {
-            var optimizedNeuralModel = EnsureStatelessInferenceOptimizationsInitialized(neuralModel);
-            if (optimizedNeuralModel != null)
-            {
-                var optimizedOutput = optimizedNeuralModel.Predict(inputTensor);
-                if (optimizedOutput is TOutput output)
-                {
-                    normalizedPredictions = output;
-                }
-                else
-                {
-                    // Fallback to the wrapped model if type mismatch occurs
-                    normalizedPredictions = Model.Predict(normalizedNewData);
-                }
-
-                return PreprocessingInfo?.IsTargetFitted == true
-                    ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
-                    : normalizedPredictions;
-            }
-        }
-
-        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor2)
-        {
-            // JIT PATH: Use compiled function for accelerated inference
-            var jitResult = JitCompiledFunction(new[] { inputTensor2 });
-            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput output)
-            {
-                normalizedPredictions = output;
-            }
-            else
-            {
-                // Fallback to model if JIT result is unexpected
-                normalizedPredictions = Model.Predict(normalizedNewData);
-            }
-        }
-        else
-        {
-            // NORMAL PATH: Use model's standard prediction
-            normalizedPredictions = Model.Predict(normalizedNewData);
-        }
+        // Inference dispatch. All three paths (optimized / JIT / standard)
+        // fall through to the same shared tail (denormalize → postprocessing →
+        // safety filter). The previous implementation had an early return
+        // from the optimized path that silently bypassed postprocessing
+        // and safety, making the public Predict APIs behave inconsistently
+        // across configurations.
+        TOutput normalizedPredictions = DispatchModelInference(normalizedNewData);
 
         var denormalized = PreprocessingInfo?.IsTargetFitted == true
             ? PreprocessingInfo.InverseTransformPredictions(normalizedPredictions)
             : normalizedPredictions;
+
+        // Apply ConfigurePostprocessing pipeline. The pipeline's
+        // IsFitted invariant is enforced at AiModelResult construction
+        // (Build time, see the ctor) so reaching here with an unfitted
+        // pipeline means the pipeline was mutated post-construction —
+        // an unsupported runtime change we defensively detect, but
+        // which AiModelBuilder's normal Build path can't produce
+        // (review #1368: this check stays as defense-in-depth but the
+        // user-facing failure point moved to Build).
+        if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
+        {
+            // Defense-in-depth: AiModelBuilder's normal Build path fits
+            // the pipeline before constructing AiModelResult, and the
+            // ctor check already throws if a direct AiModelResultOptions
+            // caller hands us an unfitted pipeline. Reaching here with
+            // !IsFitted means the pipeline was mutated AFTER construction
+            // (Reset, clear, etc.) — a programming error that shouldn't
+            // happen in practice. Debug.Assert surfaces the specific
+            // diagnostic in dev builds; Release builds still get a
+            // clear failure because PostprocessingPipeline.Transform()
+            // calls EnsureFitted() internally and throws
+            // InvalidOperationException("Pipeline has not been fitted...")
+            // (review #1368 C6WR2 / C8eks: NOT silent in Release —
+            // there's a downstream throw from Transform). The
+            // Debug.Assert just adds the post-construction-mutation
+            // hint to dev builds.
+            System.Diagnostics.Debug.Assert(
+                PostprocessingPipeline.IsFitted,
+                "PostprocessingPipeline became unfitted after AiModelResult construction. " +
+                "Mutating the pipeline (Reset, clearing fitted state, or adding unfitted " +
+                "transformers) after Build returns is unsupported — fit a fresh pipeline " +
+                "and rebuild instead.");
+            denormalized = PostprocessingPipeline.Transform(denormalized);
+        }
 
         if (SafetyFilter != null && denormalized is Vector<T> vectorOutput && typeof(TOutput) == typeof(Vector<T>))
         {
@@ -1977,6 +2040,51 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         return denormalized;
+    }
+
+    /// <summary>
+    /// Single-source-of-truth inference dispatch for <see cref="Predict"/>.
+    /// Picks the InferenceOptimizationConfig fast path, then the JIT
+    /// compiled function, then the standard <see cref="Model"/>.Predict.
+    /// Returning a single <typeparamref name="TOutput"/> lets the caller
+    /// route every path through the same denormalize → postprocessing →
+    /// safety-filter tail without early returns.
+    /// </summary>
+    private TOutput DispatchModelInference(TInput normalizedNewData)
+    {
+        if (InferenceOptimizationConfig != null &&
+            Model is NeuralNetworkBase<T> neuralModel &&
+            normalizedNewData is Tensor<T> inputTensor)
+        {
+            var optimizedNeuralModel = EnsureStatelessInferenceOptimizationsInitialized(neuralModel);
+            if (optimizedNeuralModel != null)
+            {
+                var optimizedOutput = optimizedNeuralModel.Predict(inputTensor);
+                if (optimizedOutput is TOutput typedOptimized) return typedOptimized;
+                // Fallback to the wrapped model if type mismatch occurs.
+                return PredictViaModelOrThrow(normalizedNewData);
+            }
+        }
+
+        if (JitCompiledFunction != null && normalizedNewData is Tensor<T> inputTensor2)
+        {
+            var jitResult = JitCompiledFunction(new[] { inputTensor2 });
+            if (jitResult != null && jitResult.Length > 0 && jitResult[0] is TOutput typedJit)
+            {
+                return typedJit;
+            }
+            // Fallback to model if JIT result is unexpected.
+            return PredictViaModelOrThrow(normalizedNewData);
+        }
+
+        return PredictViaModelOrThrow(normalizedNewData);
+    }
+
+    private TOutput PredictViaModelOrThrow(TInput normalizedNewData)
+    {
+        if (Model is null)
+            throw new System.InvalidOperationException("AiModelResult.Model is null; cannot dispatch Predict.");
+        return Model.Predict(normalizedNewData);
     }
 
     /// <summary>

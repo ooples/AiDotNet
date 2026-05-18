@@ -257,6 +257,25 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
             throw new ArgumentNullException(nameof(layer));
         }
 
+        // Skip lazy-init layers whose shape hasn't been resolved yet —
+        // LoRAAdapterBase.CreateLoRALayer needs the layer's input/output
+        // dimensions at adapter-construction time, and layers like
+        // LayerNormalization (lazy gamma/beta) or PyTorch-style
+        // LazyConv2d / LazyLinear analogs report (0, …) until first
+        // Forward materialises the shape. Wrapping them at zero-shape
+        // produces ArgumentOutOfRangeException("Output size must be
+        // positive") inside LoRALayer's ctor. Callers (typically
+        // AiModelBuilder) should run a warmup Predict BEFORE invoking
+        // ApplyLoRA, so this guard only catches the unresolvable-
+        // without-input edge case; here we return the layer unchanged so
+        // the rest of the LoRA application loop succeeds on layers whose
+        // shape is known. Discovered by AiDotNet#1345 Bucket10
+        // ConfigureLoRA test.
+        if (layer is LayerBase<T> shapeAwareLayer && !shapeAwareLayer.IsShapeResolved)
+        {
+            return layer;
+        }
+
         // Check if this is a layer type that benefits from LoRA adaptation
         // (layers with trainable weight matrices)
 

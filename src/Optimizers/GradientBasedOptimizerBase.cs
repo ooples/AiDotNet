@@ -119,6 +119,42 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected IRegularization<T, TInput, TOutput> Regularization;
 
     /// <summary>
+    /// Replaces the active regularization on this optimizer at runtime.
+    /// Internal because this is builder-wiring, not a user-facing API
+    /// — mirrors the <see cref="EnableMixedPrecision"/> pattern at L626.
+    /// </summary>
+    /// <remarks>
+    /// Used by <see cref="AiModelBuilder{T, TInput, TOutput}"/> when the
+    /// caller invokes <c>ConfigureRegularization</c> after constructing
+    /// the optimizer — without this setter the field is set on the
+    /// builder but never reaches the optimizer that owns the L1/L2 /
+    /// dropout / elastic-net term during gradient application.
+    /// Discovered by AiDotNet#1345 Bucket7 ConfigureRegularization test.
+    /// </remarks>
+    /// <param name="regularization">Replacement regularization strategy.</param>
+    /// <exception cref="ArgumentNullException">Thrown when
+    /// <paramref name="regularization"/> is null.</exception>
+    internal void SetRegularization(IRegularization<T, TInput, TOutput> regularization)
+    {
+        Guard.NotNull(regularization);
+        Regularization = regularization;
+    }
+
+    /// <summary>
+    /// The active regularization applied during gradient updates. Set
+    /// by <see cref="SetRegularization"/>; defaults to L2 if the
+    /// constructor was not given an explicit regularization.
+    /// </summary>
+    /// <remarks>
+    /// Promoted from a test-only internal accessor
+    /// (<c>GetRegularizationForTests</c>) to a public read-only property
+    /// in PR #1368 (review comment: production code should not carry
+    /// test-only APIs). Production consumers can use this to introspect
+    /// the configured regularization without reflection.
+    /// </remarks>
+    public IRegularization<T, TInput, TOutput> ActiveRegularization => Regularization;
+
+    /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).
     /// </summary>
     /// <remarks>
