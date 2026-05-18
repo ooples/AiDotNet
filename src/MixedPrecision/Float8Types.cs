@@ -41,6 +41,31 @@ internal static class BitConverterHelper
 #endif
     }
 
+    /// <summary>
+    /// FP32 → BF16 → FP32 round-trip with round-to-nearest-even on the
+    /// dropped low 16 mantissa bits. Models the precision loss of a
+    /// hardware BF16 working-weight pass without ever materializing a BF16
+    /// value; used by mixed-precision training to apply the BF16 forward-
+    /// pass rounding in place before the FP32 master is restored for the
+    /// optimizer step.
+    /// </summary>
+    /// <remarks>
+    /// Single source of truth for the BF16 round-trip — replaces the prior
+    /// duplicates in <c>MixedPrecisionContext.TruncateFloatToBF16RoundTrip</c>
+    /// and <c>NeuralNetworkBase.MixedPrecisionBf16RoundTrip</c> (review
+    /// #1362). NaN / ±Inf pass through unchanged.
+    /// </remarks>
+    public static float Bf16RoundTrip(float value)
+    {
+        if (float.IsNaN(value) || float.IsInfinity(value)) return value;
+        uint bits = unchecked((uint)SingleToInt32Bits(value));
+        uint truncated = bits & 0xFFFF0000u;
+        uint rounding = bits & 0x0000FFFFu;
+        if (rounding > 0x8000u) truncated += 0x10000u;
+        else if (rounding == 0x8000u && (truncated & 0x10000u) != 0) truncated += 0x10000u;
+        return Int32BitsToSingle(unchecked((int)truncated));
+    }
+
     [StructLayout(LayoutKind.Explicit)]
     private struct SingleInt32Union
     {

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
 
@@ -397,7 +398,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public Vector<double> VScales = null!;
     }
 
-    private readonly Dictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
+    private readonly ConcurrentDictionary<Tensor<T>, QuantizedTapeState> _tapeStates =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
     private int _tapeStep;
 

@@ -55,6 +55,71 @@ public class MixedPrecisionContext : IDisposable
     public LossScaler<float> LossScaler { get; }
 
     /// <summary>
+    /// Per-tensor FP32 master snapshot pool — keyed by tensor reference
+    /// identity so the SAME tensor across training steps reuses the same
+    /// backing array. Allocated lazily on first
+    /// <see cref="GetOrCreateFp32Snapshot"/> call for a given tensor and
+    /// resized in place when shape changes. Drives the inline FP32
+    /// round-trip in <c>NeuralNetworkBase.TrainWithTape</c>'s mixed-
+    /// precision path so each step amortizes the snapshot cost across
+    /// the entire training run instead of allocating a new
+    /// <c>float[len]</c> per parameter per step (review #1362).
+    ///
+    /// <para><b>Concurrency:</b> <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}"/>
+    /// for thread-safe access from multi-threaded training loops (a feature
+    /// gap vs. PyTorch / TensorFlow whose model state is single-thread-per-
+    /// instance). The hot path uses <c>TryGetValue</c> + <c>AddOrUpdate</c>,
+    /// which are lock-free reads. <b>DO NOT</b> call <c>.Count</c> or
+    /// <c>.IsEmpty</c> on this dictionary — those acquire per-bucket
+    /// Monitor locks and serialize parallel readers (root-caused 2026-04-22
+    /// in <c>DeferredArrayMaterializer</c> where high-fanout parallel
+    /// tensor forwards observed 44 s of unmanaged wait per 30 s of work).
+    /// If a "pool populated?" indicator is ever needed, add a separate
+    /// <c>Interlocked.Increment</c>-driven volatile counter alongside the
+    /// dictionary, following the <c>DeferredArrayMaterializer._pendingCount</c>
+    /// pattern.</para>
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<float>, float[]> _fp32SnapshotPool
+        = new(AiDotNet.Helpers.TensorReferenceComparer<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>.Instance);
+
+    /// <summary>
+    /// Get (or grow) the cached FP32 master snapshot for <paramref name="param"/>.
+    /// </summary>
+    /// <remarks>
+    /// The pool's buffer is keyed by tensor REFERENCE identity, not by tensor
+    /// content. NeuralNetworkBase's MP path reuses the same Tensor&lt;float&gt;
+    /// references across training steps (the optimizer mutates in place), so
+    /// the cached buffer is reused step-after-step on the steady state.
+    /// Returns a <c>float[]</c> sized to at least <paramref name="param"/>.Length.
+    /// Lock-free on the steady-state hot path (cached buffer hits); the
+    /// allocate-or-grow path uses ConcurrentDictionary's atomic AddOrUpdate.
+    /// </remarks>
+    internal float[] GetOrCreateFp32Snapshot(AiDotNet.Tensors.LinearAlgebra.Tensor<float> param)
+    {
+        if (param is null) throw new ArgumentNullException(nameof(param));
+        int needed = param.Length;
+        // Steady-state hot path: lock-free TryGetValue. Lands here every
+        // training step on every trainable tensor once warm-up has run.
+        if (_fp32SnapshotPool.TryGetValue(param, out var existing) && existing.Length >= needed)
+            return existing;
+        // Cold / shape-grew path: atomic add-or-update. The valueFactory /
+        // updateValueFactory closures may run more than once under contention
+        // (ConcurrentDictionary contract), but the result is idempotent — any
+        // returned array of length >= needed is acceptable since the next
+        // hot-path TryGetValue will return the winning entry.
+        return _fp32SnapshotPool.AddOrUpdate(
+            param,
+            addValueFactory: t => new float[t.Length],
+            updateValueFactory: (t, old) => old.Length >= t.Length ? old : new float[t.Length]);
+    }
+
+    /// <summary>
+    /// Drop the FP32 snapshot pool. Called on Dispose; callers can also
+    /// invoke explicitly to free the snapshots between training campaigns.
+    /// </summary>
+    internal void ClearFp32SnapshotPool() => _fp32SnapshotPool.Clear();
+
+    /// <summary>
     /// Configuration for mixed-precision training.
     /// </summary>
     public MixedPrecisionConfig Config { get; }
@@ -221,7 +286,7 @@ public class MixedPrecisionContext : IDisposable
         var result = new Vector<float>(masterParams.Length);
         for (int i = 0; i < masterParams.Length; i++)
         {
-            result[i] = TruncateFloatToBF16RoundTrip(masterParams[i]);
+            result[i] = BitConverterHelper.Bf16RoundTrip(masterParams[i]);
         }
         return result;
     }
@@ -237,16 +302,8 @@ public class MixedPrecisionContext : IDisposable
     /// Net: "zero the low 16 mantissa bits with round-to-nearest-even on the
     /// dropped half".
     /// </remarks>
-    private static float TruncateFloatToBF16RoundTrip(float value)
-    {
-        if (float.IsNaN(value) || float.IsInfinity(value)) return value;
-        uint bits = unchecked((uint)BitConverterHelper.SingleToInt32Bits(value));
-        uint truncated = bits & 0xFFFF0000u;
-        uint rounding = bits & 0x0000FFFFu;
-        if (rounding > 0x8000u) truncated += 0x10000u;
-        else if (rounding == 0x8000u && (truncated & 0x10000u) != 0) truncated += 0x10000u;
-        return BitConverterHelper.Int32BitsToSingle(unchecked((int)truncated));
-    }
+    // Removed: TruncateFloatToBF16RoundTrip — deduplicated to
+    // BitConverterHelper.Bf16RoundTrip (single source of truth, review #1362).
 
     /// <summary>
     /// Returns true if <paramref name="masterWeight"/> carries low-mantissa

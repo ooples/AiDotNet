@@ -807,6 +807,19 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </example>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null)
     {
+        // Fail FAST at configure-time when T is not float. Mixed precision
+        // is only meaningful for FP32 master + FP16/BF16 working weights,
+        // and the EnableMixedPrecision path that BuildAsync invokes also
+        // rejects non-float T. Validating here too means the misconfiguration
+        // surfaces at the line the user typed, not at first Train() call —
+        // and prevents the "configured but never consumed" footgun that
+        // motivated this whole PR family (review #1362).
+        if (typeof(T) != typeof(float))
+        {
+            throw new NotSupportedException(
+                $"Mixed-precision training requires T = float; got T = {typeof(T).Name}. " +
+                $"Use AiModelBuilder<float, ...> when calling ConfigureMixedPrecision.");
+        }
         _mixedPrecisionConfig = config ?? new MixedPrecisionConfig();
         return this;
     }

@@ -1,4 +1,5 @@
 using AiDotNet.Engines;
+using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 using Newtonsoft.Json;
@@ -281,7 +282,7 @@ public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     // Per-parameter squared gradient cache for tape-based training
-    private readonly Dictionary<Tensor<T>, Tensor<T>> _tapeSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
+    private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
     public override void Step(TapeStepContext<T> context)
