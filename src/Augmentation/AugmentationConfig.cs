@@ -162,38 +162,32 @@ public class AugmentationConfig
     /// <summary>
     /// User-supplied custom augmenter object — when set, BuildAsync will
     /// invoke its <c>Apply</c> method on each training input before the
-    /// optimizer runs. Stored as <see cref="object"/> because
-    /// <see cref="AugmentationConfig"/> is non-generic and the
-    /// <c>IAugmentation&lt;T, TData&gt;</c> interface carries the concrete
-    /// data type. The builder dispatches to the matching
-    /// <see cref="AugmentationConfig"/>-aware code path based on
-    /// <c>TInput</c>.
+    /// optimizer runs.
     /// </summary>
     /// <remarks>
-    /// This is the integration point between
+    /// <para>The slot is typed as <see cref="object"/> on this base class
+    /// because <see cref="AugmentationConfig"/> is non-generic and the
+    /// <c>IAugmentation&lt;T, TData&gt;</c> interface carries the concrete
+    /// data type. <b>Prefer the generic <see cref="AugmentationConfig{T, TInput}"/></b>
+    /// (review #1368) which exposes a strongly-typed
+    /// <see cref="AugmentationConfig{T, TInput}.Augmenter"/> property
+    /// with full IntelliSense and compile-time safety. The builder reads
+    /// from whichever surface is populated.</para>
+    /// <para>This is the integration point between
     /// <c>AiModelBuilder.ConfigureAugmentation</c> and the existing
     /// <c>src/Augmentation/*</c> augmenter zoo (image / audio / text /
     /// tabular / video augmenters under
-    /// <see cref="AugmentationBase{T, TData}"/>). Without this slot the
-    /// configure call was a no-op: the <c>ImageSettings</c> /
-    /// <c>TabularSettings</c> etc. on this config are documentation-only
-    /// in the current codebase (no factory translates them into
-    /// <c>IAugmentation</c> instances). Discovered by AiDotNet#1345
-    /// Bucket8 ConfigureAugmentation test.
+    /// <see cref="AugmentationBase{T, TData}"/>).</para>
     /// </remarks>
     public object? CustomAugmenter { get; set; }
 
     /// <summary>
     /// Strongly-typed setter that constrains the augmenter's type
-    /// arguments at the call site. Prefer this over assigning to
-    /// <see cref="CustomAugmenter"/> directly — the object-typed
-    /// property exists because <see cref="AugmentationConfig"/> is
-    /// non-generic, so misconfiguration here surfaces as a silent
-    /// skip inside <c>AiModelBuilder</c> (the
-    /// <c>is IAugmentation&lt;T, TInput&gt;</c> cast falls through).
-    /// This helper at least catches null and unboxes the value through
-    /// the typed parameter so IDE intellisense / compile-time checks
-    /// guide callers to a correct shape.
+    /// arguments at the call site. <b>New code should prefer
+    /// <see cref="AugmentationConfig{T, TInput}"/></b> (review #1368)
+    /// where the <see cref="AugmentationConfig{T, TInput}.Augmenter"/>
+    /// property is fully typed at compile time without needing a
+    /// helper-method indirection.
     /// </summary>
     /// <typeparam name="TNum">Numeric type the augmenter operates on
     /// (must match the <c>AiModelBuilder&lt;T, …&gt;</c> T).</typeparam>
@@ -323,6 +317,93 @@ public class AugmentationConfig
 
         return config;
     }
+}
+
+/// <summary>
+/// Strongly-typed augmentation configuration parameterised by the model's
+/// numeric type and input type. Exposes a compile-time-checked
+/// <see cref="Augmenter"/> slot in place of the base class's <c>object?</c>
+/// <see cref="AugmentationConfig.CustomAugmenter"/> property — IntelliSense
+/// guides callers to a valid <see cref="IAugmentation{T, TInput}"/>
+/// implementation and the compiler rejects type-mismatch at the call site
+/// instead of failing as a runtime cast deep inside
+/// <c>AiModelBuilder.BuildSupervisedInternalAsync</c> (review #1368).
+/// </summary>
+/// <typeparam name="T">Numeric type — matches <c>AiModelBuilder&lt;T, ...&gt;</c>.</typeparam>
+/// <typeparam name="TInput">Input data type — matches <c>AiModelBuilder&lt;..., TInput, ...&gt;</c>.</typeparam>
+/// <example>
+/// <code>
+/// var config = new AugmentationConfig&lt;float, Tensor&lt;float&gt;&gt;
+/// {
+///     Augmenter = new MyTensorAugmenter(), // fully typed — IntelliSense + compile check
+///     ImageSettings = new ImageAugmentationSettings { EnableFlips = true },
+/// };
+/// builder.ConfigureAugmentation(config);
+/// </code>
+/// </example>
+public class AugmentationConfig<T, TInput> : AugmentationConfig
+{
+    /// <summary>
+    /// Strongly-typed augmenter. When set, mirrors into the base class's
+    /// <see cref="AugmentationConfig.CustomAugmenter"/> slot so the existing
+    /// builder dispatch path (which reads CustomAugmenter and casts) still
+    /// picks it up. The cast at the builder site succeeds trivially because
+    /// the compile-time generic constraint already guarantees the right
+    /// type — no runtime mismatch is possible.
+    /// </summary>
+    public IAugmentation<T, TInput>? Augmenter
+    {
+        get => CustomAugmenter as IAugmentation<T, TInput>;
+        set => CustomAugmenter = value;
+    }
+
+    /// <summary>Default-constructed strongly-typed configuration.</summary>
+    public AugmentationConfig() : base() { }
+
+    /// <summary>
+    /// Image-modality preset with industry-standard defaults. Parameterised
+    /// generic counterpart of <see cref="AugmentationConfig.ForImages"/>.
+    /// </summary>
+    public static new AugmentationConfig<T, TInput> ForImages() => new()
+    {
+        ImageSettings = new ImageAugmentationSettings(),
+    };
+
+    /// <summary>
+    /// Tabular-modality preset. Generic counterpart of
+    /// <see cref="AugmentationConfig.ForTabular"/>.
+    /// </summary>
+    public static new AugmentationConfig<T, TInput> ForTabular() => new()
+    {
+        TabularSettings = new TabularAugmentationSettings(),
+    };
+
+    /// <summary>
+    /// Audio-modality preset. Generic counterpart of
+    /// <see cref="AugmentationConfig.ForAudio"/>.
+    /// </summary>
+    public static new AugmentationConfig<T, TInput> ForAudio() => new()
+    {
+        AudioSettings = new AudioAugmentationSettings(),
+    };
+
+    /// <summary>
+    /// Text-modality preset. Generic counterpart of
+    /// <see cref="AugmentationConfig.ForText"/>.
+    /// </summary>
+    public static new AugmentationConfig<T, TInput> ForText() => new()
+    {
+        TextSettings = new TextAugmentationSettings(),
+    };
+
+    /// <summary>
+    /// Video-modality preset. Generic counterpart of
+    /// <see cref="AugmentationConfig.ForVideo"/>.
+    /// </summary>
+    public static new AugmentationConfig<T, TInput> ForVideo() => new()
+    {
+        VideoSettings = new VideoAugmentationSettings(),
+    };
 }
 
 /// <summary>

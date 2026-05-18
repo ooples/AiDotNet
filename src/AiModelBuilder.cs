@@ -6228,10 +6228,14 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <para>
     /// Example - Custom configuration:
     /// <code>
+    /// // Strongly-typed (recommended — review #1368): use the generic
+    /// // AugmentationConfig&lt;T, TInput&gt; subclass for compile-time-checked
+    /// // augmenter type matching the builder's generics.
     /// var result = builder
     ///     .ConfigureModel(myModel)
-    ///     .ConfigureAugmentation(new AugmentationConfig
+    ///     .ConfigureAugmentation(new AugmentationConfig&lt;float, Tensor&lt;float&gt;&gt;
     ///     {
+    ///         Augmenter = new MyTensorAugmenter(), // IntelliSense + compile check
     ///         EnableTTA = true,
     ///         TTANumAugmentations = 8,
     ///         ImageSettings = new ImageAugmentationSettings
@@ -6246,8 +6250,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </para>
     /// </remarks>
     /// <param name="config">
-    /// Augmentation configuration. If null, uses industry-standard defaults
-    /// with automatic data-type detection.
+    /// Augmentation configuration. Prefer the strongly-typed
+    /// <see cref="AugmentationConfig{T, TInput}"/> subclass (which inherits
+    /// from this base type so it slots into this method) for compile-time
+    /// validation of the custom augmenter. If null, uses industry-standard
+    /// defaults with automatic data-type detection.
     /// </param>
     /// <returns>The builder instance for method chaining.</returns>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
@@ -6256,6 +6263,20 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         _augmentationConfig = config ?? CreateDefaultAugmentationConfig();
         return this;
     }
+
+    /// <summary>
+    /// Strongly-typed overload of <see cref="ConfigureAugmentation(Augmentation.AugmentationConfig?)"/>
+    /// that accepts the generic <see cref="AugmentationConfig{T, TInput}"/>
+    /// (introduced in review #1368 to replace the <c>object?</c>-typed
+    /// custom-augmenter slot). Provides IDE-discoverable
+    /// <see cref="AugmentationConfig{T, TInput}.Augmenter"/> property type
+    /// so users get IntelliSense and compile-time checks without having
+    /// to drill into the non-generic base. Delegates to the base overload
+    /// after the typed slot is captured.
+    /// </summary>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
+        Augmentation.AugmentationConfig<T, TInput> config)
+        => ConfigureAugmentation((Augmentation.AugmentationConfig?)config);
 
     /// <summary>
     /// Creates a default augmentation configuration with auto-detected modality settings.
