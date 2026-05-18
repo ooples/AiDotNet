@@ -1,4 +1,5 @@
 using AiDotNet.Inference.Quantization;
+using AiDotNet.Tensors.Helpers;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Inference;
@@ -51,7 +52,7 @@ public class Int8WeightOnlyMatMulTests
     public void MultiplyAddBias_MatchesScalarReference(
         int rows, int inputSize, int outputSize, bool withBias)
     {
-        var rng = new Random(0xC0DE);
+        var rng = RandomHelper.CreateSeededRandom(0xC0DE); // CSPRNG-aware seeded Random per RandomHelper contract; deterministic seed retained for test reproducibility
 
         var input = new float[rows * inputSize];
         for (int i = 0; i < input.Length; i++)
@@ -244,7 +245,7 @@ public class Int8WeightOnlyMatMulTests
         for (int o = 0; o < outputSize; o++) scales[o] = 0.5f; // every scale = 0.5
 
         var biases = new float[outputSize];
-        for (int o = 0; o < outputSize; o++) biases[o] = (float)o * 0.25f; // distinct per-row bias
+        for (int o = 0; o < outputSize; o++) biases[o] = (float)o * 0.25f; // distinct per-output-column bias (length == outputSize; indexed by output column o in [0, outputSize), NOT by row — review #1363 C8QYR)
 
         var output = new float[rows * outputSize];
 
@@ -279,16 +280,28 @@ public class Int8WeightOnlyMatMulTests
         // happens to choose dimensions where ChooseTileSize returns outputSize
         // and only one tile runs. inputSize=8192 → ChooseTileSize ≈ 16; with
         // outputSize=64 we get 4 tiles.
+        //
+        // Test-fixture invariant: this test EXPLICITLY depends on
+        // ChooseTileSize's current heuristic returning a value < outputSize
+        // for (outputSize=64, inputSize=8192). If a future tuning of
+        // ChooseTileSize raises the multi-tile threshold past this point,
+        // the assert below will fire with a clear "test fixture invariant"
+        // message — the failing test then signals "pick a larger
+        // outputSize / inputSize to force tiling" rather than the test
+        // silently degrading to a single-tile path (review #1363 C8QYu).
         const int rows = 2;
         const int inputSize = 8192;
         const int outputSize = 64;
 
         int chosen = Int8WeightOnlyMatMul.ChooseTileSize(outputSize, inputSize);
         Assert.True(chosen < outputSize,
-            $"Test fixture invariant: ChooseTileSize({outputSize}, {inputSize}) = {chosen} " +
-            $"must be < outputSize so the multi-tile scatter path runs.");
+            $"Test fixture invariant broken: ChooseTileSize({outputSize}, {inputSize}) = {chosen} " +
+            $"must be < outputSize so the multi-tile scatter path runs. Either ChooseTileSize's " +
+            $"tile-selection heuristic changed (raise outputSize / inputSize in this test to force " +
+            $"tiling), or the heuristic is intentionally collapsing single-tile for these dims " +
+            $"(then split this test into a separate fixture that hits the multi-tile path).");
 
-        var rng = new Random(0xC0DE);
+        var rng = RandomHelper.CreateSeededRandom(0xC0DE); // CSPRNG-aware seeded Random per RandomHelper contract; deterministic seed retained for test reproducibility
         var input = new float[rows * inputSize];
         for (int i = 0; i < input.Length; i++) input[i] = (float)(rng.NextDouble() * 2 - 1);
         var weights = new sbyte[outputSize * inputSize];

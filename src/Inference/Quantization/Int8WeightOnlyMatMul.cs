@@ -117,7 +117,11 @@ internal static class Int8WeightOnlyMatMul
             throw new ArgumentOutOfRangeException(
                 nameof(inputSize), 0,
                 "inputSize must be positive when rows > 0 and outputSize > 0; " +
-                "the empty-output early-return covers the rows==0 / outputSize==0 cases.");
+                "the empty-output early-return covers the rows==0 / outputSize==0 cases. " +
+                "Note: this is a BEHAVIOR CHANGE from the prior #1348 surface, which silently " +
+                "produced a zero-or-bias-only output for inputSize==0. Callers that relied on " +
+                "that fall-through must now either guard the call themselves or pre-fill the " +
+                "output span with the bias values before invocation (review #1363 C8QXn).");
 
         int outputTile = ChooseTileSize(outputSize, inputSize);
 
@@ -128,12 +132,23 @@ internal static class Int8WeightOnlyMatMul
         // canary shapes covered by tests these products stay well under
         // 2 GiB / 4 bytes per float, but the bound check matters once
         // wider FFN / longer sequences land.
+        //
+        // Both products are guaranteed > 0 here (rows >= 1 by the
+        // outputSize/rows==0 early-return; inputSize > 0 by the
+        // inputSize==0 throw above; outputTile > 0 by ChooseTileSize's
+        // ≥ 1 contract). So this check is purely an overflow ceiling,
+        // not a positivity check (review #1363 C8QY_).
         long dequantScratchLen = (long)outputTile * inputSize;
         long tileOutputLen = (long)rows * outputTile;
         if (dequantScratchLen > int.MaxValue || tileOutputLen > int.MaxValue)
             throw new InvalidOperationException(
-                $"Tiled INT8 matmul exceeded int.MaxValue per-tile buffer ({dequantScratchLen}, {tileOutputLen}). " +
-                "Reduce outputTile or split rows externally before calling MultiplyAddBias.");
+                $"Tiled INT8 matmul exceeded int.MaxValue per-tile buffer (" +
+                $"dequantScratch={dequantScratchLen} from outputTile={outputTile}*inputSize={inputSize}; " +
+                $"tileOutput={tileOutputLen} from rows={rows}*outputTile={outputTile}). " +
+                "outputTile is chosen internally by ChooseTileSize; the caller-actionable knob is to " +
+                "split the call into smaller row batches (rows-by-rows external loop) before invoking " +
+                "MultiplyAddBias, OR to reduce inputSize / outputSize at the layer-shape level " +
+                "(review #1363 C8QXT).");
 
         var pool = ArrayPool<float>.Shared;
         // Both rents inside the try block so that if the SECOND rent
@@ -195,10 +210,19 @@ internal static class Int8WeightOnlyMatMul
                 // accelerated SIMD primitive SimdGemm uses. Per the
                 // project-level rule, AiDotNet.Tensors is the in-tree
                 // SIMD library (full PyTorch parity); System.Numerics is
-                // banned. VectorAdd is one call per output row; tileN is
-                // a multiple of 16 per ChooseTileSize's alignment
-                // contract, keeping the kernel on its best-case path
-                // (review #1363 C6XGD).
+                // banned. VectorAdd is one call per output row.
+                //
+                // tileN alignment: INTERIOR tiles (where oBase + outputTile
+                // < outputSize) are exactly outputTile elements wide,
+                // which ChooseTileSize sizes as a multiple of 16 for the
+                // AVX2 best-case path. The TAIL tile (last iteration when
+                // outputSize % outputTile != 0) is the remainder
+                // outputSize - oBase, which may not be a multiple of 16 —
+                // VectorAdd's scalar epilogue handles the unaligned tail
+                // correctly, just without the best-case throughput
+                // (review #1363 C8QW7 — earlier comment claimed all
+                // tiles are 16-aligned which was only true for interior
+                // tiles).
                 for (int r = 0; r < rows; r++)
                 {
                     int srcRow = r * tileN;
