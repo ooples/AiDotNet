@@ -299,6 +299,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     private bool UseDirectTrainingPath(IFullModel<T, TInput, TOutput> model)
     {
+        // The `model` parameter is the resolved model at the call site
+        // (possibly post-wrapping), while the other two clauses read
+        // the builder's _model field for the predicates that need the
+        // original (non-wrapped) instance (clustering-base check and
+        // LoRA-wrapped detection both look at the user-supplied model
+        // type, not whatever wrapper is now in `model`). Reviewer
+        // (#1368) noted the asymmetry — documented inline so future
+        // edits don't accidentally swap `model` ↔ `_model` in one of
+        // these clauses without realising the intent (the
+        // IParameterizable check follows the wrapped chain; the other
+        // two follow the original user choice).
         bool modelLacksParameterizableInit =
             model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true };
         bool isClusteringBase = _model is Clustering.Base.ClusteringBase<T>;
