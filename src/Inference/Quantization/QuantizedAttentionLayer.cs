@@ -432,11 +432,12 @@ internal sealed class QuantizedAttentionLayer : LayerBase<float>
             ?? throw new InvalidOperationException("Int8 scales not initialized for quantized projection.");
         var output = new Tensor<float>(new[] { rows, outDim });
 
-        // Q/K/V/O projections have no bias here — the attention output bias
-        // is applied separately in the Forward pass. Routed through
-        // AiDotNet.Tensors' tiled SGEMM + AVX2 dequant primitives (Int8-
-        // WeightOnlyMatMul) instead of the scalar dequant-on-fly loop the
-        // #1348 PR description called out as a follow-up.
+        // Q/K/V/O projections have no per-projection bias — attention's
+        // _outputBias is applied separately in Forward after the
+        // O-projection scatter (review #1363 C6XGz). Routed through
+        // AiDotNet.Tensors' tiled SGEMM + AVX2 dequant primitives
+        // (Int8WeightOnlyMatMul) instead of the scalar dequant-on-fly loop
+        // the #1348 PR description called out as a follow-up.
         Int8WeightOnlyMatMul.MultiplyAddBias(
             input: input,
             weightsInt8: weights,

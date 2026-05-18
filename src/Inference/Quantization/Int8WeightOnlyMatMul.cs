@@ -62,44 +62,106 @@ internal static class Int8WeightOnlyMatMul
         int inputSize,
         int outputSize)
     {
-        // Validate scalar shape inputs FIRST so negative / zero-input
-        // values produce a clear ArgumentOutOfRangeException instead of
-        // cascading into ArrayPool.Rent's overflow / negative-length
-        // failures or ChooseTileSize's negative tile-size return value
-        // (review #1348).
         if (rows < 0)
             throw new ArgumentOutOfRangeException(nameof(rows), rows, "rows must be non-negative.");
-        if (inputSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "inputSize must be positive.");
+        if (inputSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(inputSize), inputSize, "inputSize must be non-negative.");
         if (outputSize < 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "outputSize must be non-negative.");
-        if (weightsInt8 is null) throw new ArgumentNullException(nameof(weightsInt8));
-        if (rowScales is null) throw new ArgumentNullException(nameof(rowScales));
 
-        if (weightsInt8.Length < (long)outputSize * inputSize)
-            throw new ArgumentException("weightsInt8 too small for [outputSize, inputSize].", nameof(weightsInt8));
+        long expectedWeights = (long)outputSize * inputSize;
+        if (weightsInt8.Length < expectedWeights)
+            throw new ArgumentException(
+                $"weightsInt8 too small for [outputSize={outputSize}, inputSize={inputSize}]: " +
+                $"expected at least {expectedWeights} entries, got {weightsInt8.Length}.",
+                nameof(weightsInt8));
         if (rowScales.Length < outputSize)
-            throw new ArgumentException("rowScales must have outputSize entries.", nameof(rowScales));
+            throw new ArgumentException(
+                $"rowScales must have at least outputSize={outputSize} entries, got {rowScales.Length}.",
+                nameof(rowScales));
         if (biases != null && biases.Length < outputSize)
-            throw new ArgumentException("biases (when non-null) must have outputSize entries.", nameof(biases));
-        if (input.Length < (long)rows * inputSize)
-            throw new ArgumentException("input span too small for [rows, inputSize].", nameof(input));
-        if (output.Length < (long)rows * outputSize)
-            throw new ArgumentException("output span too small for [rows, outputSize].", nameof(output));
+            throw new ArgumentException(
+                $"biases (when non-null) must have at least outputSize={outputSize} entries, got {biases.Length}.",
+                nameof(biases));
+
+        long expectedInput = (long)rows * inputSize;
+        if (input.Length < expectedInput)
+            throw new ArgumentException(
+                $"input span too small for [rows={rows}, inputSize={inputSize}]: " +
+                $"expected at least {expectedInput} entries, got {input.Length}.",
+                nameof(input));
+
+        long expectedOutput = (long)rows * outputSize;
+        if (output.Length < expectedOutput)
+            throw new ArgumentException(
+                $"output span too small for [rows={rows}, outputSize={outputSize}]: " +
+                $"expected at least {expectedOutput} entries, got {output.Length}.",
+                nameof(output));
+
+        // No-op when the logical output is empty. Do NOT clear `output` here —
+        // the caller's span may be larger than the logical [rows, outputSize]
+        // region and `output.Clear()` would zero stale-but-valid data outside
+        // the region this call is responsible for.
         if (rows == 0 || outputSize == 0)
-        {
-            output.Clear();
             return;
-        }
+
+        // Reject inputSize == 0 explicitly. The two production callers
+        // (QuantizedDenseLayer, QuantizedAttentionLayer Q/K/V/O projections)
+        // validate input dim upstream; an inputSize of 0 only arrives via a
+        // misconfigured caller, never via legitimate workloads. Failing
+        // fast surfaces the misconfiguration at the matmul call instead of
+        // producing a silent zero-matrix result that would mask the upstream
+        // bug (review #1363 C6XGR: prior permissive bias-or-zero return
+        // turned this edge case into a silent no-op).
+        if (inputSize == 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(inputSize), 0,
+                "inputSize must be positive when rows > 0 and outputSize > 0; " +
+                "the empty-output early-return covers the rows==0 / outputSize==0 cases. " +
+                "Note: this is a BEHAVIOR CHANGE from the prior #1348 surface, which silently " +
+                "produced a zero-or-bias-only output for inputSize==0. Callers that relied on " +
+                "that fall-through must now either guard the call themselves or pre-fill the " +
+                "output span with the bias values before invocation (review #1363 C8QXn).");
 
         int outputTile = ChooseTileSize(outputSize, inputSize);
 
-        var pool = ArrayPool<float>.Shared;
-        float[] dequantScratch = pool.Rent(outputTile * inputSize);
-        float[] tileOutput = pool.Rent(rows * outputTile);
+        // Allocate using long-typed sizes so overflow against int.MaxValue
+        // surfaces explicitly (e.g. outputTile=3000 × inputSize=4096 +
+        // future scale-up to 1M-row batches would silently wrap to a
+        // negative int and pass to Rent — review #1363 C6XFg). At the
+        // canary shapes covered by tests these products stay well under
+        // 2 GiB / 4 bytes per float, but the bound check matters once
+        // wider FFN / longer sequences land.
+        //
+        // Both products are guaranteed > 0 here (rows >= 1 by the
+        // outputSize/rows==0 early-return; inputSize > 0 by the
+        // inputSize==0 throw above; outputTile > 0 by ChooseTileSize's
+        // ≥ 1 contract). So this check is purely an overflow ceiling,
+        // not a positivity check (review #1363 C8QY_).
+        long dequantScratchLen = (long)outputTile * inputSize;
+        long tileOutputLen = (long)rows * outputTile;
+        if (dequantScratchLen > int.MaxValue || tileOutputLen > int.MaxValue)
+            throw new InvalidOperationException(
+                $"Tiled INT8 matmul exceeded int.MaxValue per-tile buffer (" +
+                $"dequantScratch={dequantScratchLen} from outputTile={outputTile}*inputSize={inputSize}; " +
+                $"tileOutput={tileOutputLen} from rows={rows}*outputTile={outputTile}). " +
+                "outputTile is chosen internally by ChooseTileSize; the caller-actionable knob is to " +
+                "split the call into smaller row batches (rows-by-rows external loop) before invoking " +
+                "MultiplyAddBias, OR to reduce inputSize / outputSize at the layer-shape level " +
+                "(review #1363 C8QXT).");
 
+        var pool = ArrayPool<float>.Shared;
+        // Both rents inside the try block so that if the SECOND rent
+        // throws (rare: pool exhaustion / OOM), the first buffer is
+        // still returned to the pool by the finally (review #1363
+        // C6XF6 — prior code rented before try and leaked dequantScratch
+        // on a tileOutput rent throw).
+        float[]? dequantScratch = null;
+        float[]? tileOutput = null;
         try
         {
+            dequantScratch = pool.Rent((int)dequantScratchLen);
+            tileOutput = pool.Rent((int)tileOutputLen);
             for (int oBase = 0; oBase < outputSize; oBase += outputTile)
             {
                 int tileN = Math.Min(outputTile, outputSize - oBase);
@@ -108,7 +170,10 @@ internal static class Int8WeightOnlyMatMul
 
                 // Dequantize tileN consecutive rows of int8 weights with per-row
                 // scale into the scratch buffer. Each call uses AVX2 internally
-                // when supported (see Int8Quantizer.DequantizeInt8ToFloat32).
+                // when supported (see Int8Quantizer.DequantizeInt8ToFloat32) and
+                // fully writes its destination row from the int8 source, so the
+                // ArrayPool-returned uninitialized scratch is safe even though
+                // ArrayPool<T>.Shared.Rent does not zero on rent.
                 for (int oo = 0; oo < tileN; oo++)
                 {
                     int o = oBase + oo;
@@ -120,9 +185,13 @@ internal static class Int8WeightOnlyMatMul
                         rowScales[o]);
                 }
 
-                // C_tile [rows, tileN] = A [rows, inputSize] @ B_tile^T,
-                // where B_tile [tileN, inputSize] row-major is the logical
-                // transpose of the matmul operand [inputSize, tileN].
+                // C_tile [rows, tileN] = A [rows, inputSize] @ B_tile^T (Sgemm
+                // overload with transB=true). Explicit tileSpan.Clear() is
+                // belt-and-braces against a future SimdGemm.Sgemm refactor
+                // that drops its implicit clear of c (review #1363 C6XGz
+                // shortened from the 8-line line-number reference).
+                var tileSpan = tileOutput.AsSpan(0, tileOutLen);
+                tileSpan.Clear();
                 SimdGemm.Sgemm(
                     a: input,
                     lda: inputSize,
@@ -130,34 +199,54 @@ internal static class Int8WeightOnlyMatMul
                     b: new ReadOnlySpan<float>(dequantScratch, 0, dequantLen),
                     ldb: inputSize,
                     transB: true,
-                    c: tileOutput.AsSpan(0, tileOutLen),
+                    c: tileSpan,
                     m: rows,
                     k: inputSize,
                     n: tileN);
 
                 // Scatter tile into the strided output [rows, outputSize],
-                // adding the bias for this output-column block.
+                // adding the bias for this output-column block via
+                // AiDotNet.Tensors' SimdKernels.VectorAdd — the same
+                // accelerated SIMD primitive SimdGemm uses. Per the
+                // project-level rule, AiDotNet.Tensors is the in-tree
+                // SIMD library (full PyTorch parity); System.Numerics is
+                // banned. VectorAdd is one call per output row.
+                //
+                // tileN alignment: INTERIOR tiles (where oBase + outputTile
+                // < outputSize) are exactly outputTile elements wide,
+                // which ChooseTileSize sizes as a multiple of 16 for the
+                // AVX2 best-case path. The TAIL tile (last iteration when
+                // outputSize % outputTile != 0) is the remainder
+                // outputSize - oBase, which may not be a multiple of 16 —
+                // VectorAdd's scalar epilogue handles the unaligned tail
+                // correctly, just without the best-case throughput
+                // (review #1363 C8QW7 — earlier comment claimed all
+                // tiles are 16-aligned which was only true for interior
+                // tiles).
                 for (int r = 0; r < rows; r++)
                 {
                     int srcRow = r * tileN;
                     int dstRow = r * outputSize + oBase;
+                    var srcSpan = tileOutput.AsSpan(srcRow, tileN);
+                    var dstSpan = output.Slice(dstRow, tileN);
                     if (biases != null)
                     {
-                        for (int oo = 0; oo < tileN; oo++)
-                            output[dstRow + oo] = tileOutput[srcRow + oo] + biases[oBase + oo];
+                        var biasSpan = new ReadOnlySpan<float>(biases, oBase, tileN);
+                        AiDotNet.Tensors.Engines.Simd.SimdKernels.VectorAdd(srcSpan, biasSpan, dstSpan);
                     }
                     else
                     {
-                        var src = tileOutput.AsSpan(srcRow, tileN);
-                        src.CopyTo(output.Slice(dstRow, tileN));
+                        srcSpan.CopyTo(dstSpan);
                     }
                 }
             }
         }
         finally
         {
-            pool.Return(dequantScratch);
-            pool.Return(tileOutput);
+            // Null-conditional Return so a mid-rent throw (only the FIRST
+            // rent succeeded) still returns what we have without an NRE.
+            if (dequantScratch is not null) pool.Return(dequantScratch);
+            if (tileOutput is not null) pool.Return(tileOutput);
         }
     }
 }
