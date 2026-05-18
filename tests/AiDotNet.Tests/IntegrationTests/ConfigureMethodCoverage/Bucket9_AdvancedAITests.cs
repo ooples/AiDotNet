@@ -114,7 +114,7 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
     /// <summary>
     /// ConfigureKnowledgeDistillation — verifies the regular-training
     /// path FAILS FAST when KD is configured but the model path doesn't
-    /// support tape-based distillation yet (review #1368 restored the
+    /// support tape-based distillation yet (this PR's review restored the
     /// NotSupportedException at AiModelBuilder.cs's regular-training
     /// branch; the previous Trace-warning downgrade silently fell
     /// through to standard supervised training, breaking the contract a
@@ -162,7 +162,7 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
         // from a runtime / framework-level NRE) rather than by message
         // substring. The message text is human-readable and can be
         // rephrased by a future maintainer without breaking behavior —
-        // type+namespace assertions don't drift (review #1368 C6WMo).
+        // type+namespace assertions don't drift (this PR's review C6WMo).
         Assert.IsType<System.NotSupportedException>(ex);
         Assert.True(
             ex.TargetSite?.DeclaringType?.FullName?.StartsWith("AiDotNet.", System.StringComparison.Ordinal) == true

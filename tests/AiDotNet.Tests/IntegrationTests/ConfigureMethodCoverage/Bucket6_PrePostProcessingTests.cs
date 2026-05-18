@@ -212,7 +212,7 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
         // semantics so the recorder is safe to reuse from concurrent
         // Predict paths (e.g. if a future test exercises parallel
         // inference). Without this both the counters and the IsFitted
-        // flag could race and undercount / observe-stale (review #1368).
+        // flag could race and undercount / observe-stale (this PR's review).
         private int _fitCalls;
         private int _transformCalls;
         private int _fitTransformCalls;
@@ -249,7 +249,7 @@ public class Bucket6_PrePostProcessingTests : ConfigureMethodTestBase
             // throw rather than silently returning data. A consumer that
             // probes SupportsInverseTransform first won't reach here;
             // a consumer that doesn't probe gets a clear failure pointing
-            // at the contract violation (review #1368).
+            // at the contract violation (this PR's review).
             throw new System.NotSupportedException(
                 "RecordingTensorTransformer.InverseTransform was called but " +
                 "SupportsInverseTransform is false. Probe SupportsInverseTransform " +

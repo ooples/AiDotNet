@@ -74,7 +74,7 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         // raw Transformer. If build failed, fall back to checking the
         // exception originated FROM the distributed namespace by
         // walking the stack-trace frames for a known DistributedTraining /
-        // ShardedModelBase frame (review #1368: substring-match on the
+        // ShardedModelBase frame (this PR's review: substring-match on the
         // raw ex.ToString() is brittle to message renames and matches
         // frame text from unrelated places).
         if (result != null)
@@ -97,7 +97,7 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
     /// InnerExceptions) and returns true if any frame's declaring type
     /// is in <paramref name="targetNamespacePrefix"/>. Used by the
     /// distributed / federated routing assertions to replace brittle
-    /// substring matching on raw exception ToString() (review #1368).
+    /// substring matching on raw exception ToString() (this PR's review).
     /// </summary>
     private static bool IsExceptionFromNamespace(System.Exception ex, string targetNamespacePrefix)
     {
@@ -106,19 +106,29 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         while (visit.Count > 0)
         {
             var current = visit.Pop();
+            // Primary signal: TargetSite's declaring type's namespace. This is
+            // metadata-driven and survives trimming/AOT/Release-inlining
+            // (this PR's review C6WLV: the stack-trace text is locale-dependent
+            // and can be empty on trimmed builds, but TargetSite metadata is
+            // attached at throw-time and persists).
             if (current.TargetSite?.DeclaringType?.FullName is string declType
                 && declType.StartsWith(targetNamespacePrefix, System.StringComparison.Ordinal))
                 return true;
-            // Also walk the StackTrace for frames in the target namespace —
-            // TargetSite is only the innermost throw, but a routing failure
-            // might surface as an unrelated exception type thrown deep
-            // inside our target code.
-            if (current.StackTrace is string st)
-            {
-                // Frame format: "at AiDotNet.DistributedTraining.X.Method(...)".
-                if (st.Contains("at " + targetNamespacePrefix + ".", System.StringComparison.Ordinal))
-                    return true;
-            }
+            // Secondary signal: the assembly the throwing method lives in.
+            // Even when DeclaringType.FullName is mangled or null after
+            // aggressive inlining, the module's assembly identifies origin.
+            if (current.TargetSite?.Module?.Assembly?.GetName().Name is string asmName
+                && asmName.StartsWith("AiDotNet", System.StringComparison.Ordinal))
+                return true;
+            // Fallback signal: walk the StackTrace string. Only useful when
+            // frames haven't been trimmed; the "at <prefix>." token isn't
+            // localized in current .NET runtimes (the "at " prefix can be
+            // localized so we don't require it on its own — substring is
+            // namespace-anchored so a localized "à" or "在" prefix still
+            // contains the frame's namespace).
+            if (current.StackTrace is string st
+                && st.Contains(targetNamespacePrefix + ".", System.StringComparison.Ordinal))
+                return true;
             if (current.InnerException is not null) visit.Push(current.InnerException);
             if (current is System.AggregateException agg)
             {
@@ -217,7 +227,7 @@ public class Bucket12_DistributedTests : ConfigureMethodTestBase
         // provides (e.g. an aggregation strategy); a throw inside the
         // branch still proves the routing fired. We capture the
         // exception and assert it originated from the FederatedLearning
-        // namespace (review #1368: bare ThrowsAnyAsync<Exception>
+        // namespace (this PR's review: bare ThrowsAnyAsync<Exception>
         // accepts unrelated NRE / OOM / a builder-side bug thrown
         // BEFORE the federated branch — narrow to provenance instead).
         System.Exception? buildException = null;

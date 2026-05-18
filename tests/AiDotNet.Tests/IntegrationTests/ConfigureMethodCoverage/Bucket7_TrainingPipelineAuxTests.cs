@@ -55,7 +55,7 @@ public class Bucket7_TrainingPipelineAuxTests : ConfigureMethodTestBase
 
         // GradientBasedOptimizerBase exposes ActiveRegularization as a
         // public read-only property (promoted from the test-only
-        // GetRegularizationForTests accessor in PR #1368 review — test
+        // GetRegularizationForTests accessor in this PR's review — test
         // coupling on production APIs was flagged for removal).
         // Contract: after BuildAsync, the optimizer's regularization is
         // the user-supplied instance. Stored-but-not-consumed would

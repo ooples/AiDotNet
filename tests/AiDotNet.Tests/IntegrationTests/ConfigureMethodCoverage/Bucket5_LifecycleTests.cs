@@ -51,7 +51,7 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
         // (empty ServerUrl); if upstream tightens validation, this test
         // becomes a canary that the license-key wiring contract changed —
         // the test's failure surface will point at the key-construction
-        // line, not at the wiring assertion (review #1368: documented
+        // line, not at the wiring assertion (this PR's review: documented
         // for future readers; not switching to a "real" test key because
         // any such key would need to be checked in and would either be
         // an actual offline-license credential or another placeholder
@@ -181,7 +181,7 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
         // ConcurrentBag (thread-safe lock-free append) instead of a raw List
         // so a concurrent BuildSupervisedInternalAsync path that fans
         // LinkDatasetToRun across multiple threads doesn't tear the list
-        // (review #1368). Order-of-arrival is not asserted on, so the
+        // (this PR's review). Order-of-arrival is not asserted on, so the
         // bag's unordered semantics are fine.
         public readonly System.Collections.Concurrent.ConcurrentBag<(string Dataset, string Version, string Run, string? Model)> LinkedRuns
             = new();
@@ -206,7 +206,7 @@ public class Bucket5_LifecycleTests : ConfigureMethodTestBase
             // creates it), and the test only cares about observing the
             // side effect — chaining would force test setup to materialise
             // a real DVC store and assert on more than the wiring claim
-            // (review #1368: justified because this is a recording test
+            // (this PR's review: justified because this is a recording test
             // double, not a production substitute. If the DVC base contract
             // ever starts requiring side effects that production callers
             // depend on, that contract change should be caught by a unit

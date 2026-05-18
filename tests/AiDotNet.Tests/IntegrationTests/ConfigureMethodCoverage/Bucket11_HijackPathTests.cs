@@ -73,7 +73,7 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         // NOT match the filter and will escape the test, matching the
         // intent: a regression that prevents Train() from being called
         // must fail the verify-Train.Once assertion below, not be
-        // masked here (review #1368 C4TPf).
+        // masked here (this PR's review C4TPf).
         try
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
@@ -96,7 +96,7 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
     /// BuildMetaLearningInternalAsync's finalization steps. Used by the
     /// MetaLearning / AutoML hijack-path tests' NRE filters so a
     /// pre-Train regression (typo, unrelated builder bug) doesn't get
-    /// swallowed (review #1368 C4TPf).
+    /// swallowed (this PR's review C4TPf).
     /// </summary>
     private static bool IsExceptionFromPostTrainSurface(System.Exception ex)
     {
@@ -154,7 +154,7 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
 
         // Same narrowing as the MetaLearning test: NRE catch is gated by
         // IsExceptionFromPostTrainSurface so a pre-SearchAsync NRE
-        // regression escapes and fails the test (review #1368 C4TPf).
+        // regression escapes and fails the test (this PR's review C4TPf).
         try
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
@@ -255,7 +255,7 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         // making this test less load-bearing than it appears at the
         // disabled level). The Assert.Same below verifies the config
         // round-trips through the builder; pair with an enabled-path
-        // test for the call-side-effect observable (review #1368:
+        // test for the call-side-effect observable (this PR's review:
         // setter-check alone isn't a routing assertion, but combined
         // with successful BuildAsync under a config that would crash
         // an unconditional call path it forms a real gate test).

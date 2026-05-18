@@ -84,7 +84,7 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
         // updated regardless. We narrow the catch to the SPECIFIC types
         // that the LoRA shape-inference path is documented to throw —
         // any other exception (NRE, OOM, unrelated build-config error)
-        // must escape so the test fails (review #1368: catching
+        // must escape so the test fails (this PR's review: catching
         // System.Exception masked unrelated regressions).
         //
         // Documented thrown types from the LoRA path:
@@ -108,7 +108,7 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
         // Filter expected lora-path exceptions by exception-chain provenance
         // (TargetSite namespace OR stack-frame namespace prefix), NOT by
         // message-substring on "LoRA" which would silently miss a renamed
-        // adapter class or message-text refactor (review #1368 C6WLs).
+        // adapter class or message-text refactor (this PR's review C6WLs).
         catch (System.ArgumentException ex) when (IsExceptionFromNamespace(ex, "AiDotNet.LoRA"))
         {
             buildEx = ex;
@@ -122,7 +122,7 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
         // LoRAAdapterBase<float>, so a single `is` check replaces the
         // prior brittle string-match `GetType().Name.Contains("LoRA")`
         // that would also match a future unrelated class with "LoRA"
-        // in its name (or fail after a rename) (review #1368).
+        // in its name (or fail after a rename) (this PR's review).
         int wrappedCount = 0;
         foreach (var layer in model.Layers)
         {
@@ -144,7 +144,7 @@ public class Bucket10_LoRATests : ConfigureMethodTestBase
     /// exception or any chained inner / aggregate child). Walks the
     /// exception chain checking each TargetSite.DeclaringType.FullName
     /// plus the stack-trace text for the "at <prefix>." pattern. Replaces
-    /// brittle message-substring matching (review #1368 C6WLs).
+    /// brittle message-substring matching (this PR's review C6WLs).
     /// </summary>
     private static bool IsExceptionFromNamespace(System.Exception ex, string namespacePrefix)
     {
