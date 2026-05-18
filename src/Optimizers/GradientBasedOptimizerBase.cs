@@ -157,6 +157,60 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected SchedulerStepMode _schedulerStepMode;
 
     /// <summary>
+    /// Puts the model into training mode at the start of an Optimize run.
+    /// Mirror call: <see cref="EndOptimizeRun"/>. Lifted to base in
+    /// PR #1364 so every gradient optimizer can satisfy the H2 contract
+    /// (training-mode toggle around the epoch loop) with a single call
+    /// without duplicating the type-check + cast across 27 subclass
+    /// Optimize methods (review #1364 C4nLO).
+    /// </summary>
+    /// <param name="solution">The model being optimized.</param>
+    protected static void BeginOptimizeRun(object? solution)
+    {
+        (solution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
+    }
+
+    /// <summary>
+    /// Returns the model to eval mode at the end of an Optimize run.
+    /// MUST be called from a finally block so the eval-mode invariant
+    /// holds even if the epoch loop throws (next Predict / evaluation
+    /// call would otherwise accidentally engage dropout / batchnorm
+    /// running-stats).
+    /// </summary>
+    /// <param name="solution">The model being optimized.</param>
+    protected static void EndOptimizeRun(object? solution)
+    {
+        (solution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(false);
+    }
+
+    /// <summary>
+    /// Returns true when the per-epoch convergence signal is below
+    /// <paramref name="tolerance"/>. Implements the H6/issue-#1340 fix:
+    /// compares CURRENT against PREVIOUS epoch fitness (not against
+    /// best, which would false-positive-converge on epoch 0 because
+    /// UpdateBestSolution copies currentStepData into bestStepData on
+    /// the first iteration) and SKIPS the check on epoch 0 (where
+    /// previousStepData is the pre-training baseline and a small
+    /// delta is meaningless — review #1364 C4nK1).
+    /// </summary>
+    /// <param name="epoch">The current epoch number (0-based).</param>
+    /// <param name="current">Fitness data from this epoch.</param>
+    /// <param name="previous">Fitness data from the prior epoch.</param>
+    /// <param name="tolerance">The convergence threshold.</param>
+    /// <returns>True if the optimizer should stop; false otherwise.</returns>
+    protected bool IsConvergedAgainstPreviousEpoch(
+        int epoch,
+        OptimizationStepData<T, TInput, TOutput> current,
+        OptimizationStepData<T, TInput, TOutput> previous,
+        double tolerance)
+    {
+        if (epoch <= 0) return false;
+        return NumOps.LessThan(
+            NumOps.Abs(NumOps.Subtract(previous.FitnessScore, current.FitnessScore)),
+            NumOps.FromDouble(tolerance));
+    }
+
+    /// <summary>
     /// The current step (batch) number for scheduler tracking.
     /// </summary>
     protected int _currentStep = 0;
@@ -772,15 +826,30 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         Vector<T> gradient;
 
+        // Track whether the gradient came from the IGradientComputable fast-path
+        // (which back-propagates through a tape-built scalar loss whose
+        // ComputeTapeLoss already averages over the batch via ReduceMean) or
+        // the loss-derivative fallback (which returns the per-element loss
+        // derivative summed over the batch). The fast-path gradient is
+        // ALREADY the mean-batch gradient — dividing again by the batch size
+        // below produces a 1/N² scale and reduces effective step magnitude
+        // proportionally, which mode-collapses Transformer training under
+        // BuildAsync's batched Optimize loop (Adam.UpdateSolution at
+        // BatchSize=8 sees gradients 8× too small for any meaningful step).
+        // Fixes the residual mode collapse left by PR #1351.
+        bool gradientIsAlreadyMeanScaled;
+
         // Try to use explicit gradient computation if available (more efficient and accurate)
         if (solution is IGradientComputable<T, TInput, TOutput> gradientComputable)
         {
             gradient = gradientComputable.ComputeGradients(X, y, LossFunction);
+            gradientIsAlreadyMeanScaled = true;
         }
         else
         {
             // Fallback to traditional gradient computation via loss function derivative
             TOutput predictions = solution.Predict(X);
+            gradientIsAlreadyMeanScaled = false;
 
             if (predictions is Tensor<T> tensorPredictions && y is Tensor<T> tensorY)
             {
@@ -850,14 +919,60 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
         }
 
-        // Apply regularization to the gradient
-        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        var regularizationGradient = Regularization.Regularize(parameters);
-        gradient = gradient.Add(regularizationGradient);
+        // Apply regularization to the gradient. The previous code called the
+        // 1-arg Regularize(Vector<T>) overload on the parameters, then ADDED
+        // its return value to the gradient — but that overload is defined as
+        // "return the regularized COEFFICIENTS" (e.g. L2 returns (1-λ)·params),
+        // not "return the regularization gradient contribution". For default
+        // L2 (strength=0.01) this added 0.99·params to every gradient on
+        // every step, which alone collapsed every weight toward zero and was
+        // the root cause of the residual mode collapse left by PR #1351.
+        //
+        // Correct semantics: the regularization gradient contribution is
+        // d/dθ(R(θ)). For L2 R(θ)=½λ‖θ‖² that's λ·θ; for L1 R(θ)=λ‖θ‖₁ that
+        // is λ·sign(θ). Both can be derived from the 1-arg overload via
+        // `params - Regularize(params)` (= λ·θ for L2; = soft-thresholding
+        // shift for L1), so the gradient contribution is the DIFFERENCE
+        // between params and the regularizer's coefficient transform — the
+        // exact opposite of what the previous code computed.
+        // Scale the gradient by the batch size ONLY for the loss-derivative
+        // fallback path. The IGradientComputable fast-path returns a gradient
+        // that the loss function's ComputeTapeLoss already averaged over the
+        // batch (and over any sequence/spatial axes) — dividing by batchSize
+        // a second time would compound to 1/N² and collapse Transformer
+        // training under BuildAsync's batched Optimize loop.
+        //
+        // CRITICAL: this divide must run BEFORE the regularization
+        // contribution is added — otherwise non-IGradientComputable
+        // models optimize `mean(loss) + R(θ)/N` while
+        // IGradientComputable models optimize `mean(loss) + R(θ)`, and
+        // the effective regularization strength becomes batch-size
+        // dependent and inconsistent across paths. (PR #1364 review.)
+        if (!gradientIsAlreadyMeanScaled)
+        {
+            int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
+            gradient = gradient.Divide(NumOps.FromDouble(batchSize));
+        }
 
-        // Scale the gradient by the batch size
-        int batchSize = InputHelper<T, TInput>.GetBatchSize(X);
-        gradient = gradient.Divide(NumOps.FromDouble(batchSize));
+        // Use the regularizer's gradient-aware Regularize overload
+        // (Regularize(gradient, coefficients)) which adds the proper
+        // gradient contribution: 2*lambda*p for L2, sign(p)*lambda for
+        // L1 (the SOFT-THRESHOLD identity `params - Regularize(params)`
+        // is WRONG for L1 — it only holds on the convex envelope, not
+        // on individual entries that crossed zero). Each regularizer
+        // already implements its own gradient math via this overload
+        // (see RegularizationBase.Regularize(TOutput, TOutput)) — the
+        // optimizer should ALWAYS go through it instead of
+        // reconstructing the gradient from the prox transform
+        // (review #1364 C4nKJ).
+        var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
+        // `Regularize(gradient, coefficients)` returns gradient + ∂R/∂p
+        // already summed. Cast through TOutput because the interface is
+        // generic — for Vector<T> it round-trips trivially.
+        var regularizedGradient = Regularization.Regularize(
+            (TOutput)(object)gradient,
+            (TOutput)(object)parameters);
+        gradient = (Vector<T>)(object)regularizedGradient!;
 
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
@@ -1278,6 +1393,34 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <para><b>For Beginners:</b> This method creates a unique identifier for each gradient calculation.
     /// It's like labeling each spot on the hill so you can remember what the gradient was there.
     /// </para>
+    /// <para>
+    /// Issue #1340: the previous implementation keyed only by
+    /// <c>(modelType, batchSize, inputSize, optionsType)</c>, which made every
+    /// mini-batch within a training run produce the SAME cache key.
+    /// <c>AdamOptimizer.Optimize</c> calls <see cref="CalculateGradient"/> once
+    /// per batch; the FIRST batch's gradient was cached and every subsequent
+    /// call returned that stale cached gradient regardless of which batch was
+    /// actually fed in. The optimizer therefore replayed the same step over
+    /// and over and the model's parameters never drifted away from their
+    /// initial Xavier weights — the bug surfaced as
+    /// <c>AiModelBuilder.BuildAsync(...)</c> producing uniform predictions
+    /// despite a model that trains fine via per-sample <c>model.Train(x, y)</c>.
+    /// </para>
+    /// <para>
+    /// The fix is to also key by the runtime identity of the model, the batch
+    /// inputs, and the batch targets, plus a parameter-state fingerprint that
+    /// changes whenever <see cref="UpdateSolution"/> writes back new
+    /// parameters. <c>OptimizationDataBatcher.ExtractBatch</c> allocates fresh
+    /// <c>Tensor&lt;T&gt;</c> / <c>Matrix&lt;T&gt;</c> instances per iteration,
+    /// so reference identity alone differentiates batches even when shuffle is
+    /// off; the parameter fingerprint additionally guards against (1) legitimate
+    /// re-evaluation of the same (X, y) pair after a parameter update
+    /// (e.g. trust-region accept/reject cycles, line search) and (2) the
+    /// existing-mode case where the user calls <c>CalculateGradient</c> twice
+    /// in a row with the same arguments (cache should hit). The legitimate
+    /// caching scenarios still work because identity-based keys only collide
+    /// when the caller actually reuses the same tensor instances.
+    /// </para>
     /// </remarks>
     /// <param name="model">The current model.</param>
     /// <param name="X">The input features.</param>
@@ -1285,7 +1428,203 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <returns>A string key for caching the gradient.</returns>
     protected virtual string GenerateGradientCacheKey(IFullModel<T, TInput, TOutput> model, TInput X, TOutput y)
     {
-        return $"{model.GetType().Name}_{InputHelper<T, TInput>.GetBatchSize(X)}_{InputHelper<T, TInput>.GetInputSize(X)}_{GradientOptions.GetType().Name}";
+        int modelIdentity = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(model);
+        int xIdentity = X is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(X);
+        int yIdentity = y is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(y);
+        long paramFingerprint = ComputeParameterFingerprint(model);
+
+        return $"{model.GetType().Name}_{InputHelper<T, TInput>.GetBatchSize(X)}_{InputHelper<T, TInput>.GetInputSize(X)}"
+            + $"_{GradientOptions.GetType().Name}_{modelIdentity:X8}_{xIdentity:X8}_{yIdentity:X8}_{paramFingerprint:X16}";
+    }
+
+    /// <summary>
+    /// Computes a fast fingerprint of the model's current parameter state for
+    /// gradient cache invalidation. Returns 0 for non-parameterizable models
+    /// (the cache key still differentiates via reference identity for those).
+    /// </summary>
+    /// <remarks>
+    /// Uses a strided XOR of bit-cast parameter values so a single weight
+    /// changing flips the fingerprint, but the scan is O(min(N, 256)) — cheap
+    /// even for foundation-class models. Stride is chosen so 256 samples span
+    /// the full parameter vector. For tiny vectors (&lt; 256 params) every
+    /// parameter contributes.
+    /// </remarks>
+    private static long ComputeParameterFingerprint(IFullModel<T, TInput, TOutput> model)
+    {
+        if (model is not IParameterizable<T, TInput, TOutput> parameterizable
+            || !parameterizable.SupportsParameterInitialization)
+        {
+            return 0L;
+        }
+
+        // Stream over GetParameterChunks (the per-layer parameter tensors)
+        // and feed a strided sample of bit patterns into a 64-bit FNV-1a
+        // hash. Zero-allocation hot path — replaces the previous
+        // GetParameters() call that materialized a full flat Vector<T>
+        // per batch on every gradient-cache lookup. For foundation
+        // models (hundreds of millions of params) this was a real
+        // allocator + GC hit (review #1364 C4nJL).
+        //
+        // FNV-1a chosen over System.HashCode because the latter is
+        // unstable across process restarts (uses a random seed), which
+        // would break gradient-cache-hit semantics if the cache ever
+        // persists. FNV-1a is deterministic across runs and works on
+        // both net10 and net471 without conditional compilation.
+        const long Fnv1aOffset = unchecked((long)14695981039346656037UL);
+        const long Fnv1aPrime = 1099511628211L;
+        const int MaxSamples = 256;
+
+        IEnumerable<Tensor<T>> chunks;
+        try
+        {
+            chunks = ResolveParameterChunks(parameterizable);
+        }
+        catch (InvalidOperationException)
+        {
+            // Lazy-init models throw InvalidOperationException when chunks
+            // are requested before the first forward has resolved their
+            // shapes. Fingerprint of 0 is safe here — the model identity
+            // in the cache key already differentiates models, and a
+            // not-yet-built model can't have stale cached gradients to
+            // invalidate. Narrowed from a bare `catch` (PR #1364 review).
+            return 0L;
+        }
+        catch (NotSupportedException)
+        {
+            return 0L;
+        }
+
+        // First pass: total parameter count + index of the next sample
+        // we want to read. We don't want to enumerate twice (would
+        // double-cost on IEnumerable backings) — keep state inline.
+        long hash = Fnv1aOffset;
+        long globalIndex = 0;
+        long nextSample = 0;
+        long totalLength = -1; // resolved by first-of-second-pass below
+
+        // Two-pass design over a materializing IEnumerable: first
+        // get the length to compute the stride, then walk again to
+        // sample. For non-buffered IEnumerable this would re-execute
+        // the producer — but GetParameterChunks returns the SAME
+        // tensor references on each call (they're the layer's own
+        // parameter tensors), so re-enumeration is cheap.
+        long count = 0;
+        foreach (var chunk in chunks)
+        {
+            if (chunk is not null) count += chunk.Length;
+        }
+        totalLength = count;
+        if (totalLength <= 0)
+        {
+            return 0L;
+        }
+        // Seed with length so size changes flip the fingerprint.
+        hash = unchecked((hash ^ totalLength) * Fnv1aPrime);
+
+        long stride = System.Math.Max(1L, totalLength / MaxSamples);
+        nextSample = 0;
+        foreach (var chunk in ResolveParameterChunks(parameterizable))
+        {
+            if (chunk is null || chunk.Length == 0) continue;
+            // Walk the chunk's storage and pick samples at the global
+            // stride. globalIndex is the running absolute index across
+            // all chunks; nextSample is the next absolute index we want.
+            int chunkLen = chunk.Length;
+            // Skip whole chunks that don't contain any sample positions.
+            if (nextSample >= globalIndex + chunkLen)
+            {
+                globalIndex += chunkLen;
+                continue;
+            }
+            // Use the chunk's Span<T> view to avoid per-element generic
+            // box-and-unbox if the chunk type is float / double.
+            var span = chunk.Data.Span;
+            while (nextSample < globalIndex + chunkLen)
+            {
+                int localIdx = (int)(nextSample - globalIndex);
+                long bits = ParameterBitsToLong(span[localIdx]);
+                hash = unchecked((hash ^ bits) * Fnv1aPrime);
+                // Mix the absolute index too so identical values at
+                // different positions produce different contributions.
+                hash = unchecked((hash ^ nextSample) * Fnv1aPrime);
+                nextSample += stride;
+            }
+            globalIndex += chunkLen;
+        }
+        return hash;
+    }
+
+    /// <summary>
+    /// Resolves the per-layer parameter chunks for an arbitrary
+    /// <see cref="IParameterizable{T, TInput, TOutput}"/>. On net6+ the
+    /// IParameterizable default-interface-method is callable directly;
+    /// on net471 default interface methods aren't supported by the
+    /// runtime, so we have to reach the override through the concrete
+    /// type (<see cref="NeuralNetworks.NeuralNetworkBase{T}"/> defines
+    /// the override). Falls back to a single chunk built from
+    /// <see cref="IParameterizable{T, TInput, TOutput}.GetParameters"/>
+    /// when the concrete type isn't recognized — that path preserves
+    /// correctness (the fingerprint still flips on parameter changes)
+    /// at the cost of paying the flat-Vector allocation on that one
+    /// path (review #1364 C4nJL).
+    /// </summary>
+    private static IEnumerable<Tensor<T>> ResolveParameterChunks(IParameterizable<T, TInput, TOutput> parameterizable)
+    {
+#if !NETFRAMEWORK
+        return parameterizable.GetParameterChunks();
+#else
+        if (parameterizable is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
+        {
+            return nn.GetParameterChunks();
+        }
+        return ParameterChunksFlatFallback(parameterizable);
+#endif
+    }
+
+#if NETFRAMEWORK
+    private static IEnumerable<Tensor<T>> ParameterChunksFlatFallback(IParameterizable<T, TInput, TOutput> parameterizable)
+    {
+        var flat = parameterizable.GetParameters();
+        if (flat is null || flat.Length == 0) yield break;
+        var single = new Tensor<T>(new[] { flat.Length });
+        for (int i = 0; i < flat.Length; i++) single[i] = flat[i];
+        yield return single;
+    }
+#endif
+
+    /// <summary>
+    /// Converts a numeric parameter value into a stable 64-bit bit pattern for
+    /// fingerprint mixing. Float/double get IEEE-754 bit reinterpretation;
+    /// other numeric types fall back to <c>Convert.ToDouble</c> then bit-cast.
+    /// </summary>
+    private static long ParameterBitsToLong(T value)
+    {
+        if (value is float f)
+        {
+            // BitConverter.SingleToInt32Bits is .NET Core 2.1+ — net471 needs
+            // the BitConverterHelper shim that wraps an unsafe-union fallback.
+            return AiDotNet.MixedPrecision.BitConverterHelper.SingleToInt32Bits(f);
+        }
+        if (value is double d)
+        {
+            return BitConverter.DoubleToInt64Bits(d);
+        }
+        try
+        {
+            return BitConverter.DoubleToInt64Bits(Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture));
+        }
+        catch (InvalidCastException)
+        {
+            return 0L;
+        }
+        catch (FormatException)
+        {
+            return 0L;
+        }
+        catch (OverflowException)
+        {
+            return 0L;
+        }
     }
 
     /// <summary>

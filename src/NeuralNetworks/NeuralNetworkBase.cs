@@ -8367,8 +8367,36 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             lossTensor = new Tensor<T>(prediction._shape, derivVec);
         }
 
-        // Reverse-mode AD: compute gradients for all trainable parameters
-        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+        // Reverse-mode AD: compute gradients across the FULL tape, then
+        // filter to trainable parameters via reference-keyed lookup. The
+        // earlier `tape.ComputeGradients(lossTensor, trainableParams)` form
+        // passed sources directly, which silently dropped gradients when
+        // the tape's backward walk could not match a trainable parameter
+        // tensor reference through a view / GradFn chain (the parameter
+        // pointer surfaced in the forward pass may differ from the
+        // pointer the trainable-parameter walk hands in if any layer
+        // wraps its weight in a buffer view, alias, or pooled
+        // allocation). The result was finite-difference gradients of
+        // magnitude ~5e-2 reported as analytic gradients of ~1e-4 by
+        // ComputeGradients — mode-collapsing every gradient-based
+        // optimizer (BuildAsync's AdamOptimizer.Optimize loop) on
+        // Transformers and other lazy-allocation networks. Per-sample
+        // model.Train via TrainWithTape was unaffected because its
+        // backward path (NeuralNetworkBase.TrainWithTape line ~5303)
+        // already used the compute-then-filter idiom for the same
+        // reason — surfaced by ResNet's
+        // GradientFlow_ShouldBeNonZeroAndFinite, then locked in here
+        // for the IGradientComputable contract.
+        // Pass the trainable-param set DIRECTLY to ComputeGradients as the
+        // `sources` arg so the tape only computes gradients for those
+        // tensors — avoids the previous compute-then-discard cost where
+        // gradients accumulated for non-trainable tensors got dropped at
+        // the post-hoc filter step (review #1364 C4nM4: filter at tape
+        // construction, not after the full backward pass). Frozen /
+        // detached tensors that the tape doesn't see still get zero-
+        // padded in the flatten loop below to preserve length-alignment.
+        var allGrads = tape.ComputeGradients(lossTensor, sources: trainableParams);
+        var grads = allGrads;
 
         // Use GetParameterChunks to keep gradient/parameter ordering
         // aligned (fixes #1245 / #1232). Frozen-or-detached tensors that

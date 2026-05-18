@@ -183,14 +183,14 @@ public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 
-            // Check convergence against previousStepData (per-epoch progress),
-            // not bestStepData. UpdateBestSolution above copies currentStepData
-            // into bestStepData on the first iteration, so |best - current|
-            // would always be 0 < tolerance and the optimiser would exit after
-            // the first epoch. Issue #1340 / PR #1351 fix swept across the
-            // optimizer suite.
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)), NumOps.FromDouble(_options.Tolerance)))
+            if (IsConvergedAgainstPreviousEpoch(epoch, currentStepData, previousStepData, _options.Tolerance))
             {
+                // H6 convergence fix (PR #1364): compare CURRENT vs PREVIOUS
+                // epoch (not bestStepData — UpdateBestSolution copies
+                // currentStepData into bestStepData on epoch 0, so |best -
+                // current| = 0 < tolerance would falsely converge). Skip
+                // check on epoch 0 where previousStepData is the pre-training
+                // baseline. Helper is on GradientBasedOptimizerBase.
                 return CreateOptimizationResult(bestStepData, inputData);
             }
 

@@ -161,51 +161,126 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // Initialize parameters
         InitializeAdaptiveParameters();
 
-        var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
+        // Switch the model into training mode so dropout/batchnorm/etc. layers
+        // behave correctly during gradient computation. Without this the
+        // mini-batched Optimize path runs every forward pass in inference
+        // mode (no dropout, BatchNorm with running stats) while still
+        // applying gradient updates — the per-sample Train path already
+        // sets training mode at the top of its TrainWithTape call, so the
+        // batched Optimize path was the lone exception that produced
+        // mode-collapsed Transformer training under BuildAsync. Restored
+        // to eval mode in a finally so callers can immediately Predict
+        // after Optimize without an extra SetTrainingMode(false) call —
+        // mirrors the PyTorch contract that an optimizer.step() pass
+        // leaves the model in train mode and the caller flips to eval
+        // before validation.
+        //
+        // SetTrainingMode lives on INeuralNetwork, not IFullModel — for non-NN
+        // models (regression, clustering, etc.) there's no training-mode
+        // distinction so the gate is skipped.
+        //
+        // CRITICAL: must follow the LIVE currentSolution, not the original
+        // pre-loop instance. UpdateSolution returns WithParameters(...)
+        // replacements; if we toggle the pre-loop instance only, the
+        // batch-N+1 model is in unknown mode. Sync the flag on every new
+        // currentSolution and flip back to eval on the final live
+        // instance in the finally block. (PR #1364 review.)
+        (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
 
-        for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
+        try
         {
-            // Notify sampler of new epoch (for curriculum/self-paced learning)
-            NotifyEpochStart(epoch);
+            var previousStepData = PrepareAndEvaluateSolution(currentSolution, inputData);
 
-            // Create batcher for the current epoch using DataLoader infrastructure
-            var batcher = CreateBatcher(inputData, _options.BatchSize);
-
-            foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+            for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
             {
-                _t++;
-                // Calculate gradient on the batch
-                var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+                // Notify sampler of new epoch (for curriculum/self-paced learning)
+                NotifyEpochStart(epoch);
 
-                // Update solution using Adam algorithm
-                var newSolution = UpdateSolution(currentSolution, gradient);
+                // Create batcher for the current epoch using DataLoader infrastructure
+                var batcher = CreateBatcher(inputData, _options.BatchSize);
 
-                currentSolution = newSolution;
+                foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
+                {
+                    _t++;
+                    // Calculate gradient on the batch
+                    var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
+
+                    // Update solution using Adam algorithm
+                    var newSolution = UpdateSolution(currentSolution, gradient);
+
+                    // Sync training mode onto the new live instance —
+                    // WithParameters(...) returns a fresh model that
+                    // doesn't inherit the prior instance's training-mode flag.
+                    (newSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
+
+                    currentSolution = newSolution;
+
+                    // Advance the scheduler's per-batch hook so StepPerBatch /
+                    // WarmupThenEpoch schedulers actually progress. The
+                    // batched Optimize loop previously never called
+                    // OnBatchEnd, so any caller wiring an Adam-with-scheduler
+                    // optimizer to BuildAsync got a flat learning rate
+                    // regardless of configuration. (PR #1364 review.)
+                    OnBatchEnd();
+                }
+
+                // Evaluate after processing all batches in the epoch
+                var currentStepData = EvaluateSolution(currentSolution, inputData);
+                UpdateBestSolution(currentStepData, ref bestStepData);
+                UpdateAdaptiveParameters(currentStepData, previousStepData);
+
+                // Check early stopping criteria
+                if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
+                {
+                    return CreateOptimizationResult(bestStepData, inputData);
+                }
+
+                // Check convergence against the PREVIOUS epoch, not against
+                // bestStepData. UpdateBestSolution above copies currentStepData
+                // into bestStepData on the first iteration (because bestStepData
+                // starts uninitialised), so |best - current| would always be 0
+                // < tolerance and the optimiser would exit after the first epoch
+                // — observed as AiModelBuilder.BuildAsync producing uniform
+                // (1/V) predictions because only ~3 batched Adam steps ran
+                // before Optimize returned. The correct convergence signal is
+                // "the fitness stopped changing from one epoch to the next",
+                // i.e. |current - previous| < tolerance. Issue #1340.
+                //
+                // SKIP convergence check on epoch 0 (review #1364 C4nK1):
+                // previousStepData at epoch 0 is the pre-training baseline
+                // from PrepareAndEvaluateSolution (untrained model evaluation).
+                // If the first epoch happens to produce a fitness change
+                // smaller than Tolerance (e.g. a warmup scheduler that
+                // starts with a very small LR, or a model that's already
+                // near a local optimum at init), the optimizer would
+                // false-positive-converge before training has actually
+                // happened. From epoch 1 onward, previousStepData is the
+                // PRIOR EPOCH's post-training fitness, so |current - previous|
+                // is a meaningful per-epoch progress signal.
+                if (epoch > 0 && NumOps.LessThan(
+                    NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)),
+                    NumOps.FromDouble(_options.Tolerance)))
+                {
+                    return CreateOptimizationResult(bestStepData, inputData);
+                }
+
+                previousStepData = currentStepData;
+
+                // Per-epoch scheduler tick — same rationale as OnBatchEnd
+                // above. Epoch-level schedulers (StepPerEpoch, etc.) need
+                // this to advance.
+                OnEpochEnd();
             }
 
-            // Evaluate after processing all batches in the epoch
-            var currentStepData = EvaluateSolution(currentSolution, inputData);
-            UpdateBestSolution(currentStepData, ref bestStepData);
-            UpdateAdaptiveParameters(currentStepData, previousStepData);
-
-            // Check early stopping criteria
-            if (UpdateIterationHistoryAndCheckEarlyStopping(epoch, bestStepData))
-            {
-                return CreateOptimizationResult(bestStepData, inputData);
-            }
-
-            // Check convergence
-            if (NumOps.LessThan(
-                NumOps.Abs(NumOps.Subtract(bestStepData.FitnessScore, currentStepData.FitnessScore)),
-                NumOps.FromDouble(_options.Tolerance)))
-            {
-                return CreateOptimizationResult(bestStepData, inputData);
-            }
-
-            previousStepData = currentStepData;
+            return CreateOptimizationResult(bestStepData, inputData);
         }
-
-        return CreateOptimizationResult(bestStepData, inputData);
+        finally
+        {
+            // Leave the LIVE model (not the original pre-loop instance) in
+            // eval mode so the next Predict / evaluation call doesn't
+            // accidentally engage dropout / batchnorm-train-stats.
+            (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(false);
+        }
     }
 
     /// <summary>

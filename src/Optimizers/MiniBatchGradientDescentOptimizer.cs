@@ -145,18 +145,16 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
                     return CreateOptimizationResult(bestStepData, inputData);
                 }
 
-                // Check convergence against previousStepData (per-batch progress),
-                // not bestStepData. UpdateBestSolution above copies currentStepData
-                // into bestStepData on the first iteration, so |best - current|
-                // would always be 0 < tolerance and the optimiser would exit after
-                // the first batch. Issue #1340 / PR #1351 fix swept across the
-                // optimizer suite.
-                if (NumOps.LessThan(
-                    NumOps.Abs(NumOps.Subtract(previousStepData.FitnessScore, currentStepData.FitnessScore)),
-                    NumOps.FromDouble(_options.Tolerance)))
-                {
-                    return CreateOptimizationResult(bestStepData, inputData);
-                }
+                // H6 convergence fix (PR #1364): compare CURRENT vs PREVIOUS epoch
+            // (not bestStepData — UpdateBestSolution would falsely report
+            // converged on epoch 0 because best == current after the copy)
+            // AND skip the check on epoch 0 where previousStepData is the
+            // pre-training baseline. Lifted to GradientBasedOptimizerBase
+            // helper so every gradient optimizer satisfies the same contract.
+            if (IsConvergedAgainstPreviousEpoch(epoch, currentStepData, previousStepData, _options.Tolerance))
+            {
+                return CreateOptimizationResult(bestStepData, inputData);
+            }
 
                 currentSolution = newSolution;
                 previousStepData = currentStepData;
