@@ -64,24 +64,67 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         learnerMock.Setup(l => l.GetMetaModel()).Returns(MakeCanaryModel());
 
         // Narrow the catch to the SPECIFIC downstream-of-Train failure
-        // modes a partially-stubbed Mock produces (NRE on Mock-of-IFullModel
-        // metadata access, ArgumentException on shape mismatches, InvalidOperationException
-        // from option-validation gates). Anything else (OOM, ArgumentException
-        // BEFORE the Train call, a typo causing TypeLoadException, etc.) must
-        // escape so the test surfaces unrelated regressions (review #1368:
-        // bare catch (Exception) masked genuine wiring bugs).
+        // modes a partially-stubbed Mock produces. The NRE catch is
+        // gated by a stack-trace `when` filter that requires the failure
+        // to originate inside AiModelResult / AiModelResultOptions /
+        // BuildMetaLearningInternalAsync — i.e. AFTER Train() has been
+        // invoked. An NRE thrown BEFORE Train() (e.g. from a typo or
+        // unrelated builder regression introducing a null deref) will
+        // NOT match the filter and will escape the test, matching the
+        // intent: a regression that prevents Train() from being called
+        // must fail the verify-Train.Once assertion below, not be
+        // masked here (review #1368 C4TPf).
         try
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureMetaLearning(learnerMock.Object)
                 .BuildAsync();
         }
-        catch (System.NullReferenceException) { /* mock metadata access */ }
+        catch (System.NullReferenceException ex)
+            when (IsExceptionFromPostTrainSurface(ex)) { /* mock metadata access AFTER Train */ }
         catch (System.ArgumentException) { /* downstream shape mismatch */ }
         catch (System.InvalidOperationException) { /* option-validation gate */ }
 
         learnerMock.Verify(l => l.Train(), Times.Once,
             "ConfigureMetaLearning was wired but BuildAsync never invoked IMetaLearner.Train. The Meta-Learning branch at AiModelBuilder.cs:1512 should detect _metaLearner and route to BuildMetaLearningInternalAsync.");
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="ex"/> originated INSIDE the
+    /// post-Train surface — i.e. AiModelResult construction,
+    /// AiModelResultOptions assembly, or
+    /// BuildMetaLearningInternalAsync's finalization steps. Used by the
+    /// MetaLearning / AutoML hijack-path tests' NRE filters so a
+    /// pre-Train regression (typo, unrelated builder bug) doesn't get
+    /// swallowed (review #1368 C4TPf).
+    /// </summary>
+    private static bool IsExceptionFromPostTrainSurface(System.Exception ex)
+    {
+        // Walk the chain (current + InnerException + AggregateException
+        // children). For each, scan StackTrace for any frame in the
+        // documented post-Train sites.
+        var visit = new System.Collections.Generic.Stack<System.Exception>();
+        visit.Push(ex);
+        while (visit.Count > 0)
+        {
+            var current = visit.Pop();
+            if (current.StackTrace is string st)
+            {
+                if (st.Contains("AiDotNet.Models.Results.AiModelResult", System.StringComparison.Ordinal)
+                    || st.Contains("BuildMetaLearningInternalAsync", System.StringComparison.Ordinal)
+                    || st.Contains("AiModelResultOptions", System.StringComparison.Ordinal)
+                    || st.Contains("GetModelMetadata", System.StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            if (current.InnerException is not null) visit.Push(current.InnerException);
+            if (current is System.AggregateException agg)
+            {
+                foreach (var inner in agg.InnerExceptions) visit.Push(inner);
+            }
+        }
+        return false;
     }
 
     /// <summary>
@@ -109,9 +152,9 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
         autoMLMock.SetupGet(a => a.TimeLimit).Returns(System.TimeSpan.FromSeconds(1));
         autoMLMock.Setup(a => a.GetTrialHistory()).Returns(new System.Collections.Generic.List<AiDotNet.AutoML.TrialResult>());
 
-        // Narrow downstream-of-SearchAsync catch to the documented Mock
-        // limitations (NRE on metadata, ArgumentException on shape, IOE
-        // on validation). Other exception types must escape (review #1368).
+        // Same narrowing as the MetaLearning test: NRE catch is gated by
+        // IsExceptionFromPostTrainSurface so a pre-SearchAsync NRE
+        // regression escapes and fails the test (review #1368 C4TPf).
         try
         {
             await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
@@ -119,7 +162,8 @@ public class Bucket11_HijackPathTests : ConfigureMethodTestBase
                 .ConfigureAutoML(autoMLMock.Object)
                 .BuildAsync();
         }
-        catch (System.NullReferenceException) { /* mock metadata access */ }
+        catch (System.NullReferenceException ex)
+            when (IsExceptionFromPostTrainSurface(ex)) { /* mock metadata access AFTER SearchAsync */ }
         catch (System.ArgumentException) { /* shape / model construction */ }
         catch (System.InvalidOperationException) { /* option-validation gate */ }
 

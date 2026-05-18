@@ -206,6 +206,16 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Unified augmentation configuration
     private Augmentation.AugmentationConfig? _augmentationConfig;
 
+    // Process-wide once-per-run latch for the ConfigureAugmentation
+    // informational messages (review #1368 C4TPM: warnings were firing
+    // on every successful Build, polluting traces in production / CI).
+    // Mutated only via Interlocked.Exchange. Static so multiple
+    // AiModelBuilder<T,...> instantiations across the process share the
+    // single emit slot — the constraint is the same regardless of the
+    // builder's type parameters.
+    private static int _augmentationOfflineWarningEmitted;
+    private static int _augmentationXOnlyWarningEmitted;
+
     // Self-supervised learning configuration
     private SelfSupervisedLearning.SSLConfig? _sslConfig;
 
@@ -2948,54 +2958,67 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // Bucket8 ConfigureAugmentation test.
         if (_augmentationConfig is { IsEnabled: true, CustomAugmenter: { } customAug })
         {
-            if (customAug is AiDotNet.Augmentation.IAugmentation<T, TInput> typedAug
-                && preprocessedX is TInput xForAug)
+            // Split the cast check + the TInput cast into two separate
+            // branches so the diagnostic can distinguish "augmenter type
+            // mismatch" from "preprocessed input is not the expected
+            // TInput at this point" (review #1368 C4TP1: a correctly-
+            // typed augmenter with a TInput-changing preprocessor was
+            // misleadingly blamed on the augmenter under the prior
+            // combined-conditional).
+            if (customAug is not AiDotNet.Augmentation.IAugmentation<T, TInput> typedAug)
             {
-                var augContext = new AiDotNet.Augmentation.AugmentationContext<T>(
-                    isTraining: true,
-                    seed: _augmentationConfig.Seed);
-                var augmented = typedAug.Apply(xForAug, augContext);
-                // Update the train-side X with the augmented data so the
-                // optimizer sees the transformed inputs.
-                preprocessedX = augmented;
-                if (augmented is TInput typedAugmented)
-                {
-                    XTrain = typedAugmented;
-                }
-                // Surface that augmentation is one-shot here, not
-                // per-epoch / per-batch. Stochastic augmenters (random
-                // crop, noise, masking) produce a single fixed
-                // augmented copy reused every epoch — reducing rather
-                // than expanding training variability. Track upstream
-                // for per-batch augmentation hooks in the optimizer
-                // batch loop.
-                System.Diagnostics.Trace.TraceWarning(
-                    "ConfigureAugmentation: applied a single offline pass to the training set before the optimizer runs. " +
-                    "Per-epoch / per-batch stochastic augmentation is not yet wired into the optimizer batch loop; " +
-                    "non-deterministic augmenters (random crop, noise, masking) will produce one fixed augmented " +
-                    "copy reused every epoch.");
-                // Augmentation only transforms X — labels are NOT
-                // re-aligned. For augmenters that change row order, drop
-                // rows, or produce N->M outputs, X and y will fall out
-                // of sync. Document the constraint loudly so users
-                // discover it before training diverges.
-                System.Diagnostics.Trace.TraceWarning(
-                    "ConfigureAugmentation: only transforms training X, not labels y. The configured augmenter " +
-                    "must be 1:1 row-preserving on inputs (no row reorder / drop / N->M expansion). " +
-                    "Non-1:1 augmenters will silently desynchronise X and y.");
-            }
-            else
-            {
-                // Cast failed — augmentation would be silently dropped if we
-                // continued. Fail fast so the user discovers the type-arg
-                // error at Build time rather than after Build returns with
-                // untrained augmentation behaviour (review #1368).
                 throw new InvalidOperationException(
                     $"ConfigureAugmentation: CustomAugmenter of type {customAug.GetType().Name} is not " +
                     $"IAugmentation<{typeof(T).Name}, {typeof(TInput).Name}>. " +
                     "The augmenter's TData generic argument must match the AiModelBuilder's TInput. " +
-                    "Use AugmentationConfig.SetCustomAugmenter<TNum, TData>(...) for a type-checked " +
+                    "Use AugmentationConfig.SetCustomAugmenter<TNum, TData>(...) or the strongly-typed " +
+                    "AugmentationConfig<T, TInput>.Augmenter property for a compile-time-checked " +
                     "setter that catches this at the call site.");
+            }
+            if (preprocessedX is not TInput xForAug)
+            {
+                throw new InvalidOperationException(
+                    $"ConfigureAugmentation: the preprocessing pipeline output is " +
+                    $"{preprocessedX?.GetType().Name ?? "null"}, not the expected {typeof(TInput).Name}. " +
+                    "ConfigurePreprocessing transformers that change the input type (e.g. matrix → tensor " +
+                    "conversion) must run AFTER ConfigureAugmentation, or the augmentation should be done " +
+                    "by the preprocessing pipeline itself. The augmenter type is correct " +
+                    $"({customAug.GetType().Name} : IAugmentation<{typeof(T).Name}, {typeof(TInput).Name}>); " +
+                    "the type mismatch is on the preprocessed input.");
+            }
+
+            var augContext = new AiDotNet.Augmentation.AugmentationContext<T>(
+                isTraining: true,
+                seed: _augmentationConfig.Seed);
+            var augmented = typedAug.Apply(xForAug, augContext);
+            // Update the train-side X with the augmented data so the
+            // optimizer sees the transformed inputs.
+            preprocessedX = augmented;
+            if (augmented is TInput typedAugmented)
+            {
+                XTrain = typedAugmented;
+            }
+            // Emit the two ConfigureAugmentation constraint warnings
+            // ONCE per process (not per Build) so multi-Build / CI
+            // pipelines that exercise ConfigureAugmentation many times
+            // don't get the same two lines in every trace (review
+            // #1368 C4TPM). The flags are static so they're shared
+            // across all AiModelBuilder<T, TInput, TOutput> instances —
+            // the contract is process-wide informational.
+            if (System.Threading.Interlocked.Exchange(ref _augmentationOfflineWarningEmitted, 1) == 0)
+            {
+                System.Diagnostics.Trace.TraceInformation(
+                    "ConfigureAugmentation: applied a single offline pass to the training set before the optimizer runs. " +
+                    "Per-epoch / per-batch stochastic augmentation is not yet wired into the optimizer batch loop; " +
+                    "non-deterministic augmenters (random crop, noise, masking) will produce one fixed augmented " +
+                    "copy reused every epoch. (This message logs once per process.)");
+            }
+            if (System.Threading.Interlocked.Exchange(ref _augmentationXOnlyWarningEmitted, 1) == 0)
+            {
+                System.Diagnostics.Trace.TraceInformation(
+                    "ConfigureAugmentation: only transforms training X, not labels y. The configured augmenter " +
+                    "must be 1:1 row-preserving on inputs (no row reorder / drop / N->M expansion). " +
+                    "Non-1:1 augmenters will silently desynchronise X and y. (This message logs once per process.)");
             }
         }
 
