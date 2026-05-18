@@ -273,6 +273,41 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private Training.Memory.TrainingMemoryConfig? _memoryConfig;
 
     /// <summary>
+    /// Decides whether BuildSupervisedInternalAsync should route through
+    /// the model's own <c>Train</c> method instead of the outer
+    /// optimizer's clone-evaluate-select loop.
+    /// </summary>
+    /// <remarks>
+    /// Direct-training kicks in when ANY of these conditions hold:
+    /// <list type="number">
+    ///   <item>Model isn't <see cref="IParameterizable{T,TInput,TOutput}"/>
+    ///   (time-series, density-based clustering, etc.) — no parameters to
+    ///   optimize, the model handles its own training.</item>
+    ///   <item>Model is a <see cref="Clustering.Base.ClusteringBase{T}"/>
+    ///   — clustering uses K-means EM not gradient updates; the outer
+    ///   optimizer's random search runs hundreds of unrelated trials
+    ///   then leaves the model untrained (the bug pattern that caused
+    ///   25 clustering builder tests to time out in #1224 cluster B).</item>
+    ///   <item>Model is a <see cref="NeuralNetworks.NeuralNetworkBase{T}"/>
+    ///   with LoRA wrapping — NormalOptimizer.SpawnIndividual
+    ///   Clone-serialize round-trip throws on LoRA-wrapped layers
+    ///   because the frozen base + LoRA delta parameter counts get out
+    ///   of sync. Routing through model.Train uses the NN's own
+    ///   gradient path which handles LoRA adapters correctly via
+    ///   Forward dispatch.</item>
+    /// </list>
+    /// </remarks>
+    private bool UseDirectTrainingPath(IFullModel<T, TInput, TOutput> model)
+    {
+        bool modelLacksParameterizableInit =
+            model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true };
+        bool isClusteringBase = _model is Clustering.Base.ClusteringBase<T>;
+        bool isLoraWrappedNeuralNetwork =
+            _loraConfiguration is not null && _model is NeuralNetworks.NeuralNetworkBase<T>;
+        return modelLacksParameterizableInit || isClusteringBase || isLoraWrappedNeuralNetwork;
+    }
+
+    /// <summary>
     /// Carves a 1-sample probe off the training input for LoRA warmup
     /// forwards. Returns the full input unchanged if the type doesn't
     /// expose a recognised slicing pattern — better to do a full forward
@@ -1822,6 +1857,23 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private async Task<AiModelResult<T, TInput, TOutput>> BuildStreamingSupervisedAsync(
         IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
     {
+        // ConfigureAugmentation isn't wired into the streaming path —
+        // BuildSupervisedInternalAsync's one-shot offline augmentation
+        // applies to the materialised X tensor, which a streaming loader
+        // doesn't produce. Fail loudly when the user configures both;
+        // silently dropping the augmentation here would reintroduce the
+        // stored-but-not-consumed pattern this PR is trying to eliminate.
+        if (_augmentationConfig is { IsEnabled: true, CustomAugmenter: not null })
+        {
+            throw new NotSupportedException(
+                "ConfigureAugmentation is not yet supported on the streaming data-loader path. " +
+                "The augmentation hook is wired into BuildSupervisedInternalAsync's one-shot offline " +
+                "augmentation against a materialised X tensor, which a streaming loader does not produce. " +
+                "Either switch to an IInputOutputDataLoader (e.g. InMemoryDataLoader) or drop the " +
+                "ConfigureAugmentation call until streaming augmentation is wired through the optimizer's " +
+                "per-batch hooks.");
+        }
+
         // Apply GPU configuration first
         ApplyGpuConfiguration();
 
@@ -2853,20 +2905,53 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         // per-batch / per-epoch (online) augmentation would require deeper
         // hooks into the optimizer's batch loop. Discovered by AiDotNet#1345
         // Bucket8 ConfigureAugmentation test.
-        if (_augmentationConfig is { IsEnabled: true, CustomAugmenter: { } customAug }
-            && customAug is AiDotNet.Augmentation.IAugmentation<T, TInput> typedAug
-            && preprocessedX is TInput xForAug)
+        if (_augmentationConfig is { IsEnabled: true, CustomAugmenter: { } customAug })
         {
-            var augContext = new AiDotNet.Augmentation.AugmentationContext<T>(
-                isTraining: true,
-                seed: _augmentationConfig.Seed);
-            var augmented = typedAug.Apply(xForAug, augContext);
-            // Update the train-side X with the augmented data so the
-            // optimizer sees the transformed inputs.
-            preprocessedX = augmented;
-            if (augmented is TInput typedAugmented)
+            if (customAug is AiDotNet.Augmentation.IAugmentation<T, TInput> typedAug
+                && preprocessedX is TInput xForAug)
             {
-                XTrain = typedAugmented;
+                var augContext = new AiDotNet.Augmentation.AugmentationContext<T>(
+                    isTraining: true,
+                    seed: _augmentationConfig.Seed);
+                var augmented = typedAug.Apply(xForAug, augContext);
+                // Update the train-side X with the augmented data so the
+                // optimizer sees the transformed inputs.
+                preprocessedX = augmented;
+                if (augmented is TInput typedAugmented)
+                {
+                    XTrain = typedAugmented;
+                }
+                // Surface that augmentation is one-shot here, not
+                // per-epoch / per-batch. Stochastic augmenters (random
+                // crop, noise, masking) produce a single fixed
+                // augmented copy reused every epoch — reducing rather
+                // than expanding training variability. Track upstream
+                // for per-batch augmentation hooks in the optimizer
+                // batch loop.
+                System.Diagnostics.Trace.TraceWarning(
+                    "ConfigureAugmentation: applied a single offline pass to the training set before the optimizer runs. " +
+                    "Per-epoch / per-batch stochastic augmentation is not yet wired into the optimizer batch loop; " +
+                    "non-deterministic augmenters (random crop, noise, masking) will produce one fixed augmented " +
+                    "copy reused every epoch.");
+                // Augmentation only transforms X — labels are NOT
+                // re-aligned. For augmenters that change row order, drop
+                // rows, or produce N->M outputs, X and y will fall out
+                // of sync. Document the constraint loudly so users
+                // discover it before training diverges.
+                System.Diagnostics.Trace.TraceWarning(
+                    "ConfigureAugmentation: only transforms training X, not labels y. The configured augmenter " +
+                    "must be 1:1 row-preserving on inputs (no row reorder / drop / N->M expansion). " +
+                    "Non-1:1 augmenters will silently desynchronise X and y.");
+            }
+            else
+            {
+                // Cast failed — augmentation silently dropped. Surface
+                // the mismatch so users discover the type-arg error
+                // rather than seeing untrained augmentation behaviour.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"ConfigureAugmentation: CustomAugmenter of type {customAug.GetType().Name} is not " +
+                    $"IAugmentation<{typeof(T).Name}, {typeof(TInput).Name}>. The cast failed and augmentation " +
+                    "was skipped. Check that the augmenter's TData generic argument matches the builder's TInput.");
             }
         }
 
@@ -3205,25 +3290,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 Iterations = federatedLearningMetadata.RoundsCompleted
             };
         }
-        else if (model is not IParameterizable<T, TInput, TOutput> { SupportsParameterInitialization: true }
-                 || _model is Clustering.Base.ClusteringBase<T>
-                 || (_loraConfiguration is not null && _model is NeuralNetworks.NeuralNetworkBase<T>))
+        else if (UseDirectTrainingPath(model))
         {
-            // Neural networks with LoRA adapters route through the
-            // direct-training path instead of the outer optimizer's
-            // Clone-evaluate-select loop. NormalOptimizer.SpawnIndividual
-            // calls Clone() → Serialize → Deserialize → SetParameters,
-            // and LoRA serialization round-trips a parameter vector
-            // whose size doesn't match the LoRA-wrapped model's
-            // parameter count (the frozen base weights round-trip via
-            // ILayerSerializationExtras, the trainable LoRA weights via
-            // the parameter vector — those two paths get out of sync
-            // and SetParameters throws "Expected N parameters, got M").
-            // The NN's own Train method handles LoRA adapters correctly
-            // (it just calls Forward on each layer, which dispatches
-            // through the adapter), so direct training bypasses the
-            // serialization round-trip entirely. Discovered by
-            // AiDotNet#1345 Bucket10 ConfigureLoRA test.
+            // Branch rationale documented on UseDirectTrainingPath
+            // (non-parametric models, ClusteringBase, NN + LoRA).
             if (_knowledgeDistillationOptions is not null)
             {
                 throw new NotSupportedException(

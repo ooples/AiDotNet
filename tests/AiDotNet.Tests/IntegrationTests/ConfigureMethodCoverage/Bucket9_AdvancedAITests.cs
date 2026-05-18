@@ -76,25 +76,38 @@ public class Bucket9_AdvancedAITests : ConfigureMethodTestBase
     /// </summary>
     [Fact]
     [Trait("category", "integration-configure-method")]
-    public async Task ConfigureKnowledgeGraph_WithRAGGraph_OptionsApplied()
+    public async Task ConfigureKnowledgeGraph_WithRAGGraph_OptionsAppliedWithoutCrash()
     {
         var (features, labels) = MakeMemorizationSet();
         var loader = MakeCanaryLoader(features, labels);
         var model = MakeCanaryModel();
 
         var graph = new KnowledgeGraph<float>();
+        // Sentinel option: TrainEmbeddings is a nullable bool; setting
+        // it to false explicitly distinguishes "user overrode" from
+        // "default null". ConfigureKnowledgeGraph builds a
+        // KnowledgeGraphOptions and passes the action; the
+        // ProcessKnowledgeGraphOptions consumer at
+        // AiModelBuilder.cs:1629 reads the resulting options to decide
+        // whether to train embeddings. Stored-but-not-consumed would
+        // see the action run but the options dropped on the floor.
+        bool optionsActionRan = false;
         var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
             .ConfigureModel(model)
             .ConfigureDataLoader(loader)
             .ConfigureRetrievalAugmentedGeneration(knowledgeGraph: graph)
-            .ConfigureKnowledgeGraph(opts => { /* defaults exercised by ProcessKnowledgeGraphOptions */ })
+            .ConfigureKnowledgeGraph(opts =>
+            {
+                opts.TrainEmbeddings = false;
+                opts.EnableLinkPrediction = false;
+                optionsActionRan = true;
+            })
             .BuildAsync();
 
-        // Knowledge graph reached the result via RAG wiring; the
-        // ConfigureKnowledgeGraph options ran ProcessKnowledgeGraphOptions
-        // without crashing — the previous baseline test asserted that
-        // already, this assertion confirms the graph instance flowed
-        // through.
+        Assert.True(optionsActionRan,
+            "ConfigureKnowledgeGraph received the Action<KnowledgeGraphOptions> but never invoked it. " +
+            "Stored-but-not-consumed regression: the configure call dropped the action without running it.");
+        // The graph instance flows through to result via the RAG wire.
         Assert.Same(graph, result.KnowledgeGraph);
     }
 
