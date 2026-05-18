@@ -128,6 +128,23 @@ public static class GpuDiagnosticsConfig
     }
 
     /// <summary>
+    /// Push-lock for the level stack. The push + capture-prev sequence is
+    /// not naturally atomic; if two threads call <see cref="PushLevel"/>
+    /// concurrently, each could capture the OTHER's mid-flight value as
+    /// "previous" — restoration on Dispose then writes the wrong level
+    /// back. Synchronising push/pop on this single object preserves true
+    /// scope-stack semantics across threads (review #1368 C6WQg).
+    /// </summary>
+    private static readonly object _pushLockSync = new();
+
+    /// <summary>
+    /// LIFO stack of previously-active levels. Each <see cref="PushLevel"/>
+    /// pushes the prior level; Dispose pops + restores. Mutated only under
+    /// <see cref="_pushLockSync"/>.
+    /// </summary>
+    private static readonly System.Collections.Generic.Stack<GpuDiagnosticLevel> _levelStack = new();
+
+    /// <summary>
     /// Push a scoped override of <see cref="Level"/> that automatically
     /// restores the previous value when the returned <see cref="IDisposable"/>
     /// is disposed (typically via <c>using var _ = PushLevel(...)</c>).
@@ -137,38 +154,66 @@ public static class GpuDiagnosticsConfig
     /// diagnostic verbosity for a bounded scope WITHOUT racing with parallel
     /// test workers that read or mutate the same process-global static.
     /// Direct <c>Level = ...</c> assignment plus a finally-block restore
-    /// pattern is functionally equivalent but easy to forget — and the
-    /// xUnit-default parallel test collections WILL observe another
-    /// collection's mutation if the restore is skipped (review #1368
-    /// flagged this on the Bucket 4 GpuDiagnostics tests).</para>
-    /// <para>Stack semantics: nested <c>PushLevel</c> calls restore in
-    /// reverse order. Concurrent pushes from different threads still race
-    /// each other (the static slot is a single value, not a per-thread
-    /// stack) — callers that need isolation across parallel test workers
-    /// must put their tests in a serialized <c>[Collection]</c>.</para>
+    /// pattern is functionally equivalent but easy to forget.</para>
+    /// <para><b>Thread-safe LIFO stack semantics</b> (review #1368 C6WQg):
+    /// concurrent <c>PushLevel</c> calls serialize through an internal
+    /// lock so each push captures the previous level atomically with the
+    /// new level's installation. Dispose pops in LIFO order; nested pushes
+    /// across threads restore in reverse-push-order. Note: while the stack
+    /// itself is thread-safe, callers should still treat the diagnostic
+    /// level as a process-global — interleaved pushes from concurrent
+    /// threads produce a deterministic but possibly surprising effective
+    /// level (the topmost-pushed wins). Tests that need full isolation
+    /// should still group via <c>[Collection]</c> serialization.</para>
     /// </remarks>
     /// <param name="level">The level to apply while the returned scope is alive.</param>
     /// <returns>An <see cref="IDisposable"/> that restores the previous level on Dispose.</returns>
     public static System.IDisposable PushLevel(GpuDiagnosticLevel level)
     {
-        var previous = _level;
-        Level = level;
-        return new LevelScope(previous);
+        lock (_pushLockSync)
+        {
+            // Push prior level onto the stack, then install the new level.
+            // Both operations together under the lock — no other thread
+            // can observe a half-finished push.
+            _levelStack.Push(_level);
+            Level = level;
+            return new LevelScope();
+        }
+    }
+
+    /// <summary>
+    /// Pops the most recently pushed level from the stack and restores it
+    /// as the active level. Called by <see cref="LevelScope.Dispose"/>.
+    /// Synchronised on the same lock as push so concurrent pushes/pops
+    /// observe a consistent stack.
+    /// </summary>
+    private static void PopLevel()
+    {
+        lock (_pushLockSync)
+        {
+            if (_levelStack.Count > 0)
+            {
+                Level = _levelStack.Pop();
+            }
+            // Empty-stack pop is a double-dispose (Dispose called twice
+            // on the same scope): silently no-op, the level stays where
+            // it is. The Interlocked flag in LevelScope normally prevents
+            // this from being reached.
+        }
     }
 
     private sealed class LevelScope : System.IDisposable
     {
-        private readonly GpuDiagnosticLevel _previous;
         private int _disposed;
-        internal LevelScope(GpuDiagnosticLevel previous) { _previous = previous; }
+        internal LevelScope() { }
         public void Dispose()
         {
-            // Idempotent dispose — double-dispose on a using-declaration that
-            // also gets an explicit Dispose() call would otherwise re-write
-            // the level back to a stale value.
+            // Idempotent dispose — double-dispose on a using-declaration
+            // that also gets an explicit Dispose() call would otherwise
+            // pop the stack twice.
             if (System.Threading.Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                Level = _previous;
+                PopLevel();
             }
         }
     }
