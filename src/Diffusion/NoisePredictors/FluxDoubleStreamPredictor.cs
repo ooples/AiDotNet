@@ -132,17 +132,146 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Patchify + DiT-style block stack + unpatchify. The previous
+    /// implementation skipped patchify/unpatchify and just ran the
+    /// Dense layers on the spatial tensor's last axis directly, which
+    /// projects W → patchDim and emits [B, C, H, patchDim] (= 2× the
+    /// latent on the FLUX default 32×32×16, since patchSize=2 →
+    /// patchDim=64 so output elements = 1·16·32·64 = 32768 vs latent
+    /// 16384) — exactly the "PredictNoise output length 32768 does
+    /// not match the latent/sample length 16384" failure
+    /// <c>Flux2SchnellModelTests.ScaledInput_ShouldChangeOutput</c>
+    /// caught (#1305 cluster #6, sibling to the MMDiTXNoisePredictor
+    /// fix in #1224 Cluster F).
+    /// </remarks>
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
-        var x = _patchEmbed.Forward(noisySample);
+        // Normalize input to rank-4 [B, C, H, W]. Tests pass rank-3
+        // [C, H, W] as a single sample; promote a leading batch dim of 1.
+        var input4d = noisySample;
+        bool wasUnbatched = false;
+        if (input4d.Rank == 3)
+        {
+            wasUnbatched = true;
+            input4d = input4d.Reshape(new[] { 1, input4d.Shape[0], input4d.Shape[1], input4d.Shape[2] });
+        }
+        if (input4d.Rank != 4)
+            throw new ArgumentException(
+                $"FluxDoubleStreamPredictor expects rank-3 [C,H,W] or rank-4 [B,C,H,W] input; got rank {input4d.Rank}.",
+                nameof(noisySample));
 
+        int batch = input4d.Shape[0];
+        int channels = input4d.Shape[1];
+        int height = input4d.Shape[2];
+        int width = input4d.Shape[3];
+
+        if (channels != _inputChannels)
+            throw new ArgumentException(
+                $"FluxDoubleStreamPredictor configured for {_inputChannels} channels; got {channels}.",
+                nameof(noisySample));
+        // FLUX uses 2x2 patches (patchDim = inputChannels * 4 in
+        // InitializeLayers). Spatial dims must be divisible by 2 — at
+        // smaller test fixtures (e.g. [1, 16, 32, 32]) this always
+        // holds but we guard explicitly so a misconfigured caller gets
+        // a clear shape error instead of an obscure index OOB inside
+        // Patchify.
+        const int PatchSize = 2;
+        if (height % PatchSize != 0 || width % PatchSize != 0)
+            throw new ArgumentException(
+                $"FluxDoubleStreamPredictor requires spatial dims divisible by patchSize ({PatchSize}); got {height}×{width}.",
+                nameof(noisySample));
+
+        int patchDim = channels * PatchSize * PatchSize;
+        int hPatches = height / PatchSize;
+        int wPatches = width / PatchSize;
+
+        // Patchify: [B, C, H, W] → [B, numTokens, patchDim].
+        var tokens = Patchify(input4d, batch, channels, height, width, hPatches, wPatches, patchDim, PatchSize);
+
+        // Embed + propagate through joint (double) + single block stack.
+        var x = _patchEmbed.Forward(tokens);
         foreach (var block in _doubleBlocks)
             x = block.Forward(x);
-
         foreach (var block in _singleBlocks)
             x = block.Forward(x);
+        var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
 
-        return _finalLayer.Forward(x);
+        // Unpatchify back to [B, C, H, W].
+        var output = Unpatchify(projected, batch, channels, height, width, hPatches, wPatches, PatchSize);
+
+        if (wasUnbatched)
+            output = output.Reshape(new[] { channels, height, width });
+        return output;
+    }
+
+    /// <summary>
+    /// [B, C, H, W] → [B, (H/P)·(W/P), C·P²] via the standard
+    /// rearrange("b c (h p1) (w p2) → b (h w) (c p1 p2)") that the
+    /// FLUX / MMDiT reference implementation uses.
+    /// </summary>
+    private static Tensor<T> Patchify(Tensor<T> input, int batch, int channels, int height, int width,
+        int hPatches, int wPatches, int patchDim, int patchSize)
+    {
+        var output = new Tensor<T>(new[] { batch, hPatches * wPatches, patchDim });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int hp = 0; hp < hPatches; hp++)
+            {
+                for (int wp = 0; wp < wPatches; wp++)
+                {
+                    int tokenIdx = hp * wPatches + wp;
+                    int featIdx = 0;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int p1 = 0; p1 < patchSize; p1++)
+                        {
+                            for (int p2 = 0; p2 < patchSize; p2++)
+                            {
+                                int hSrc = hp * patchSize + p1;
+                                int wSrc = wp * patchSize + p2;
+                                output[b, tokenIdx, featIdx++] = input[b, c, hSrc, wSrc];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return output;
+    }
+
+    /// <summary>
+    /// [B, (H/P)·(W/P), C·P²] → [B, C, H, W] — inverse of
+    /// <see cref="Patchify"/>.
+    /// </summary>
+    private static Tensor<T> Unpatchify(Tensor<T> tokens, int batch, int channels, int height, int width,
+        int hPatches, int wPatches, int patchSize)
+    {
+        var output = new Tensor<T>(new[] { batch, channels, height, width });
+        for (int b = 0; b < batch; b++)
+        {
+            for (int hp = 0; hp < hPatches; hp++)
+            {
+                for (int wp = 0; wp < wPatches; wp++)
+                {
+                    int tokenIdx = hp * wPatches + wp;
+                    int featIdx = 0;
+                    for (int c = 0; c < channels; c++)
+                    {
+                        for (int p1 = 0; p1 < patchSize; p1++)
+                        {
+                            for (int p2 = 0; p2 < patchSize; p2++)
+                            {
+                                int hDst = hp * patchSize + p1;
+                                int wDst = wp * patchSize + p2;
+                                output[b, c, hDst, wDst] = tokens[b, tokenIdx, featIdx++];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return output;
     }
 
     /// <inheritdoc />
