@@ -467,6 +467,47 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
                 "For a budget too small to warm up over (less than ~100 steps), drop the schedule entirely and use a constant LR.");
         }
 
+        // Closes #1382: when a custom `layers:` list is provided, the
+        // Transformer's InitializeLayers path uses ONLY that list — the
+        // auto-built encoder block (numEncoderLayers × MultiHeadAttention,
+        // numDecoderLayers × DecoderLayer, head, etc) is NOT composed
+        // with it. Previously the structural parameters were silently
+        // accepted and ignored, leaving the user to discover the
+        // miswiring as either:
+        //   (a) a zero-trainable-parameter model that "trains" vacuously
+        //       (the HRE-substitution consumer reproducer in #1382), OR
+        //   (b) a shape mismatch on the very first batch when the
+        //       custom chain's final shape doesn't match outputSize.
+        // Both surface FAR from the constructor where the mistake was
+        // made. Fail-fast here with a diagnostic that names the actual
+        // contract: layers: REPLACES the auto-built block, so structural
+        // parameters that would have driven that block must be left at
+        // their no-op defaults when layers: is supplied.
+        if (layers is not null && layers.Count > 0)
+        {
+            if (numEncoderLayers > 0)
+            {
+                throw new ArgumentException(
+                    $"TransformerArchitecture cannot accept both a custom 'layers:' list ({layers.Count} layers) " +
+                    $"and numEncoderLayers={numEncoderLayers}. Providing layers: REPLACES the auto-built encoder " +
+                    "block (numEncoderLayers × MultiHeadAttention + feed-forward + norm); the structural parameters " +
+                    "would be silently ignored otherwise, leaving the model with 0 trainable parameters and no " +
+                    "optimizer signal. Either (a) pass numEncoderLayers: 0 and include your own attention blocks " +
+                    "in the layers: list, or (b) omit layers: to get the default encoder. See #1382.",
+                    nameof(numEncoderLayers));
+            }
+            if (numDecoderLayers > 0)
+            {
+                throw new ArgumentException(
+                    $"TransformerArchitecture cannot accept both a custom 'layers:' list ({layers.Count} layers) " +
+                    $"and numDecoderLayers={numDecoderLayers}. Same reasoning as numEncoderLayers above — providing " +
+                    "layers: REPLACES the auto-built decoder block. Either (a) pass numDecoderLayers: 0 and include " +
+                    "your own decoder blocks in the layers: list, or (b) omit layers: to get the default decoder. " +
+                    "See #1382.",
+                    nameof(numDecoderLayers));
+            }
+        }
+
         NumEncoderLayers = numEncoderLayers;
         NumDecoderLayers = numDecoderLayers;
         NumHeads = numHeads;
