@@ -5,6 +5,7 @@ using AiDotNet;
 using AiDotNet.Data.Loaders;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
@@ -311,6 +312,38 @@ public class BuildAsyncFacadeTransformerLMTests
         Assert.Contains("REPLACES", ex.Message);
     }
 
+    [Fact]
+    public void TransformerArchitecture_CustomLayers_WithDecoderLayers_FailsFast()
+    {
+        // Symmetric companion to the encoder-branch test above.
+        // TransformerArchitecture has TWO fail-fast branches —
+        // numEncoderLayers > 0 + layers: AND numDecoderLayers > 0 + layers:
+        // — and both should surface the same #1382 diagnostic shape. Without
+        // a parallel test, a future refactor that breaks the decoder branch
+        // (e.g., swapping the throw for a Trace warning) would slip through
+        // the encoder-only test.
+        var customLayers = BuildZeroParamCustomLayerChain();
+
+        var ex = Assert.Throws<ArgumentException>(() => new TransformerArchitecture<float>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 0,
+            numDecoderLayers: NumLayers,       // > 0 + layers: provided = ambiguous
+            numHeads: Heads,
+            modelDimension: DModel,
+            feedForwardDimension: FfDim,
+            inputSize: CtxLen,
+            outputSize: VocabSize,
+            maxSequenceLength: CtxLen,
+            vocabularySize: VocabSize,
+            layers: new List<ILayer<float>>(customLayers)));
+
+        _output.WriteLine($"Diagnostic: {ex.Message}");
+        Assert.Contains("#1382", ex.Message);
+        Assert.Contains("numDecoderLayers", ex.Message);
+        Assert.Contains("REPLACES", ex.Message);
+    }
+
     [Fact(Timeout = 300_000)]
     public async Task TransformerArchitecture_CustomLayers_WithoutEncoderLayers_BuildsCleanly()
     {
@@ -399,7 +432,7 @@ public class BuildAsyncFacadeTransformerLMTests
         // both training drivers reach measurable non-uniform output in
         // a few thousand steps on the CI budget. What this test probes
         // is path-divergence between drivers, not absolute learnability.
-        var rng = new Random(Seed);
+        var rng = RandomHelper.CreateSeededRandom(Seed);
         var xTrain = new Tensor<float>([SampleCount, CtxLen]);
         var yTrain = new Tensor<float>([SampleCount, VocabSize]);
         for (int i = 0; i < SampleCount; i++)

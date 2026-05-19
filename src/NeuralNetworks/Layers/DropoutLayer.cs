@@ -276,10 +276,16 @@ public class DropoutLayer<T> : LayerBase<T>
         // the same seed give different weights" bug. When RandomSeed is
         // null (user opted out of reproducibility) we leave seed=null and
         // let the engine pick its default non-reproducible source.
+        // Atomic increment so two concurrent Forward calls on the same
+        // layer instance (multi-stream eval, parallel inference) never
+        // observe the same counter value and defeat the determinism
+        // contract. Interlocked.Increment also acts as a memory barrier
+        // so the read-then-increment cannot tear.
+        ulong currentCounter = unchecked((ulong)System.Threading.Interlocked.Increment(
+            ref System.Runtime.CompilerServices.Unsafe.As<ulong, long>(ref _seedCounter)) - 1);
         int? perCallSeed = RandomSeed.HasValue
-            ? unchecked((int)(((uint)RandomSeed.Value * 2654435761u) ^ (uint)_seedCounter))
+            ? unchecked((int)(((uint)RandomSeed.Value * 2654435761u) ^ (uint)currentCounter))
             : (int?)null;
-        _seedCounter++;
 
         // === Vectorized: Use TensorDropoutMask for optimized dropout mask generation (Phase C: New IEngine methods) ===
         // TensorDropoutMask generates the mask with proper scaling in a single GPU/SIMD-accelerated call
@@ -432,10 +438,15 @@ public class DropoutLayer<T> : LayerBase<T>
         // counter via a Knuth-multiplicative hash; when null we fall back
         // to TickCount for non-reproducible behavior (matches the CPU
         // path's ThreadSafeRandom fallback).
+        // Atomic increment matching the CPU Forward path above. Without
+        // this, concurrent ForwardGpu calls on the same layer instance
+        // could observe the same _seedCounter value and defeat the
+        // determinism contract.
+        ulong currentGpuCounter = unchecked((ulong)System.Threading.Interlocked.Increment(
+            ref System.Runtime.CompilerServices.Unsafe.As<ulong, long>(ref _seedCounter)) - 1);
         ulong seed = RandomSeed.HasValue
-            ? unchecked(((ulong)(uint)RandomSeed.Value * 2654435761ul) ^ _seedCounter)
-            : _seedCounter ^ (uint)Environment.TickCount;
-        _seedCounter++;
+            ? unchecked(((ulong)(uint)RandomSeed.Value * 2654435761ul) ^ currentGpuCounter)
+            : currentGpuCounter ^ (uint)Environment.TickCount;
 
         // Generate uniform random mask [0, 1) on GPU
         var randoms = gpuEngine.RandomUniformGpu<T>(input._shape, 0f, 1f, seed);

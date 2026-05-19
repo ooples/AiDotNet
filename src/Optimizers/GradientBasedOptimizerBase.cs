@@ -3,6 +3,9 @@ using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.MixedPrecision;
+// Alias the namespace because `Regularization` is also a property name on the
+// base class, which would otherwise shadow the namespace at member-access sites.
+using RegularizationNs = AiDotNet.Regularization;
 // 0.68.0 of AiDotNet.Tensors introduced its own MixedPrecisionConfig under
 // Engines.Autodiff (the engine-side fp16/bf16 mixed-precision plumbing the
 // repo asked for in ooples/AiDotNet.Tensors#276). Alias the local one to a
@@ -1022,43 +1025,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Tensor<T>) — that exception was the root cause of #1380's
         // "BuildAsync produces uniform output" symptom (model never
         // got past its first batch step).
-        if (Regularization is Regularization.RegularizationBase<T, TInput, TOutput> regBase)
+        if (Regularization is RegularizationNs.RegularizationBase<T, TInput, TOutput> regBase)
         {
             gradient = regBase.Regularize(gradient, parameters);
         }
         else
         {
-            // External IRegularization implementations: bridge through
-            // TOutput. Same type-aware bridge as
-            // RegularizationBase.Regularize(Vector<T>, Vector<T>)'s
-            // default fallback — Vector→TOutput via FromVector for
-            // Tensor TOutput, identity for Vector TOutput; unwrap the
-            // same way on return.
-            TOutput gradientOut, paramsOut;
-            if (typeof(TOutput) == typeof(Vector<T>))
-            {
-                gradientOut = (TOutput)(object)gradient;
-                paramsOut = (TOutput)(object)parameters;
-            }
-            else if (typeof(TOutput) == typeof(Tensor<T>))
-            {
-                gradientOut = (TOutput)(object)Tensor<T>.FromVector(gradient);
-                paramsOut = (TOutput)(object)Tensor<T>.FromVector(parameters);
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    $"External IRegularization<T, TInput, {typeof(TOutput).Name}> implementation " +
-                    $"({Regularization.GetType().Name}) — Vector→TOutput bridge supports only " +
-                    "Vector<T> and Tensor<T>. Either inherit RegularizationBase and override " +
-                    "Regularize(Vector<T>, Vector<T>) for direct Vector math, or contribute a " +
-                    "bridge for your TOutput type.");
-            }
-            var result = Regularization.Regularize(gradientOut, paramsOut);
-            if (result is Vector<T> vec) gradient = vec;
-            else if (result is Tensor<T> tensor) gradient = tensor.ToVector();
-            else throw new InvalidOperationException(
-                $"External IRegularization returned unexpected type {result?.GetType().Name ?? "null"}.");
+            // External IRegularization implementations: route through the
+            // shared Vector↔TOutput bridge so the wrap/unwrap logic stays
+            // in one place. RegularizationBase's Vector-direct fallback
+            // uses the same bridge — adding a new TOutput shape only
+            // requires updating RegularizationVectorBridge.
+            gradient = RegularizationNs.RegularizationVectorBridge<T, TInput, TOutput>
+                .Invoke(Regularization, gradient, parameters);
         }
 
         // Apply gradient clipping if enabled
