@@ -87,11 +87,13 @@ public class CompiledInferenceLazyCallbackSideEffectRegressionTests
             var thrown = Assert.ThrowsAny<System.Exception>(() =>
                 cache.GetOrCompileInference(input, () =>
                 {
-                    // Two chained LayerNorms: neither survives DCE
-                    // independently (A has consumer B; B is a leaf), so
-                    // both stay in the realized node list and would BOTH
-                    // re-fire if scope.Dispose's safety-net Realize ran
-                    // on the partial graph.
+                    // Two chained LayerNorms — neither is eliminated by
+                    // DeadCodeEliminationPass (node A has node B as
+                    // consumer, node B is a graph leaf, and the pass
+                    // keeps both consumers AND leaves). Both stay in
+                    // the realized node list and would BOTH re-fire if
+                    // scope.Dispose's safety-net Realize ran on the
+                    // partial graph.
                     var ln1 = AiDotNetEngine.Current.LayerNorm(
                         input, gamma, beta, 1e-5,
                         out _, out _);
@@ -113,6 +115,23 @@ public class CompiledInferenceLazyCallbackSideEffectRegressionTests
                 twoLayerNormsRecorded,
                 "Test precondition failed: lazy LayerNorm ops never ran, " +
                 "so the scope's auto-realize channel can't be exercised.");
+
+            // PR #1387 review C8XnD: also pin that the spy ACTUALLY
+            // observed `LayerNorm` invocations. Without this guard, a
+            // future change that stopped routing `AiDotNetEngine.Current`
+            // through `LayerNormSpyEngine` (e.g. a static-Current-cache
+            // change, or an engine-binding refactor that captures the
+            // pre-test engine reference) would leave both counters at 0
+            // and the delta assertion below would pass vacuously —
+            // turning this regression pin into a no-op signal.
+            Assert.True(
+                eagerCountAtThrow > 0,
+                $"Test precondition failed: the spy engine observed " +
+                $"{eagerCountAtThrow} LayerNorm invocations at the throw " +
+                "point, but the two user-visible calls should produce at " +
+                "least 2 hits. The `AiDotNetEngine.Current` override may " +
+                "not be reaching `LayerNormSpyEngine.LayerNorm` — fix the " +
+                "spy wiring before trusting the delta check below.");
 
             // The original exception must propagate unmasked. The
             // partial-trace path's safety-net Realize can only mask this
