@@ -124,8 +124,17 @@ public class CompiledInferenceLazyCallbackSideEffectRegressionTests
             // pre-test engine reference) would leave both counters at 0
             // and the delta assertion below would pass vacuously —
             // turning this regression pin into a no-op signal.
+            //
+            // Follow-up review C9TmK: tightened the threshold from > 0
+            // to >= 2 — this test makes exactly two user-visible
+            // LayerNorm calls, so anything less means at least one
+            // didn't route through the spy. The exact count varies
+            // (~6 per visible call due to GraphMode-recursive entry +
+            // AsWritableSpan auto-materialization — see the spy class
+            // XML doc) so we only assert the lower bound, not the
+            // precise number.
             Assert.True(
-                eagerCountAtThrow > 0,
+                eagerCountAtThrow >= 2,
                 $"Test precondition failed: the spy engine observed " +
                 $"{eagerCountAtThrow} LayerNorm invocations at the throw " +
                 "point, but the two user-visible calls should produce at " +
