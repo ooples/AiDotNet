@@ -72,16 +72,21 @@ public class ReleaseSmokeTests
     }
 
     [Fact]
-    public void AdamOptimizer_NullModelConstruction_DoesNotThrow()
+    public void AdamOptimizer_NullModelConstruction_RegistersOptionsAndDeferredModel()
     {
         // Smoke: the null-model ctor path AiModelBuilder uses (construct
         // optimizer first, SetModel later) does not throw at construction
-        // time. PR #1380 root-caused as an InvalidCastException on the
-        // hot path; this asserts the build-and-construct sequence stays
-        // exception-free.
+        // time AND lands in the expected initial state. PR #1380
+        // root-caused as an InvalidCastException; this asserts the
+        // build-and-construct sequence stays exception-free AND that the
+        // optimizer holds onto the supplied options + leaves Model null
+        // for a subsequent SetModel call (the contract the AiModelBuilder
+        // facade relies on).
         var opts = new AiDotNet.Models.Options.AdamOptimizerOptions<float, Vector<float>, Vector<float>>();
         var optimizer = new AdamOptimizer<float, Vector<float>, Vector<float>>(model: null, opts);
 
         Assert.NotNull(optimizer);
+        Assert.Null(optimizer.Model);
+        Assert.Same(opts, optimizer.GetOptions());
     }
 }

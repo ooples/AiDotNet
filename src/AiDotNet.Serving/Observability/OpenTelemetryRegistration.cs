@@ -66,6 +66,32 @@ public static class AiDotNetServingTelemetry
     public static readonly Meter Meter = new(MeterName);
 
     /// <summary>
+    /// Disposes the static <see cref="ActivitySource"/> and
+    /// <see cref="Meter"/> singletons. Reserved for test-teardown
+    /// scenarios where the serving host is repeatedly created and torn
+    /// down inside the same process; production hosts rely on
+    /// app-domain teardown for cleanup and should NOT call this.
+    /// </summary>
+    /// <remarks>
+    /// Both <see cref="ActivitySource"/> and <see cref="Meter"/>
+    /// implement <see cref="System.IDisposable"/> but are exposed as
+    /// static readonly singletons because the OpenTelemetry SDK
+    /// expects long-lived instruments. Repeated factory-create /
+    /// dispose cycles in integration tests can otherwise leak
+    /// instrument-side listeners; tests that exercise that lifecycle
+    /// should call this at teardown. After disposal the singletons
+    /// remain referenced — re-entering the host without restarting
+    /// the process will use the disposed instances, so this is
+    /// strictly a "test teardown right before app-domain exit" hook,
+    /// not a "reset between tests" hook.
+    /// </remarks>
+    public static void DisposeTelemetry()
+    {
+        ActivitySource.Dispose();
+        Meter.Dispose();
+    }
+
+    /// <summary>
     /// Reserved opt-in registration point for AiDotNet.Serving's
     /// OpenTelemetry-facing configuration. Currently a no-op — the
     /// instruments consumers actually wire into their OpenTelemetry

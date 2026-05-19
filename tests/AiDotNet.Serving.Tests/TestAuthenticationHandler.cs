@@ -61,7 +61,13 @@ public sealed class TestAuthenticationHandler : AuthenticationHandler<ApiKeyAuth
         SubscriptionTier tier = SubscriptionTier.Enterprise;
         if (Request.Headers.TryGetValue(TestTierHeader, out var tierHeader) &&
             tierHeader.Count > 0 &&
-            System.Enum.TryParse<SubscriptionTier>(tierHeader[0], ignoreCase: true, out var parsed))
+            System.Enum.TryParse<SubscriptionTier>(tierHeader[0], ignoreCase: true, out var parsed) &&
+            // Enum.TryParse accepts numeric strings whose integral value
+            // is not a defined member (e.g. "999"), which would let a
+            // typo'd header silently assign an invalid Tier claim. Guard
+            // with IsDefined so only the named members
+            // (Free / Pro / Enterprise / ...) are accepted.
+            System.Enum.IsDefined(typeof(SubscriptionTier), parsed))
         {
             tier = parsed;
         }
