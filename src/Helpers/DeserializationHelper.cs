@@ -835,20 +835,70 @@ public static class DeserializationHelper
             // legacy paths serialize without the batch dim, so accept rank 3 too.
             if (instance is ConvolutionalLayer<T> conv && inputShape != null && inputShape.Length >= 3)
             {
-                int inDepth, inH, inW;
+                // Saved-record axes: rank-4 = [batch, channels, H, W],
+                // rank-3 = [channels, H, W] (legacy unbatched).
+                int savedInDepth, savedInH, savedInW;
                 if (inputShape.Length == 4)
                 {
-                    inDepth = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inH = inputShape[2] > 0 ? inputShape[2] : 1;
-                    inW = inputShape[3] > 0 ? inputShape[3] : 1;
+                    savedInDepth = inputShape[1];
+                    savedInH = inputShape[2];
+                    savedInW = inputShape[3];
                 }
                 else
                 {
-                    inDepth = inputShape[0] > 0 ? inputShape[0] : 1;
-                    inH = inputShape[1] > 0 ? inputShape[1] : 1;
-                    inW = inputShape[2] > 0 ? inputShape[2] : 1;
+                    savedInDepth = inputShape[0];
+                    savedInH = inputShape[1];
+                    savedInW = inputShape[2];
                 }
-                conv.ResolveShapesOnly(new[] { inDepth, inH, inW });
+
+                // Three branches based on what the saved inputShape resolved
+                // by serialize time:
+                //
+                // (a) InputDepth concrete: pre-resolve so SetParameters sees
+                //     the correct InputDepth and the kernel/bias counts match
+                //     the saved parameter vector exactly. Without this the
+                //     auto-resolve heuristic in ConvolutionalLayer.SetParameters
+                //     can pick a different InputDepth than the original
+                //     (especially when outputDepth × kernelSize² happens to
+                //     factor the saved parameter count more than one way),
+                //     and Clone()/DeepCopy() throw "Expected N parameters,
+                //     but got M". Spatial dims that were never forwarded
+                //     fall back to Math.Max(1, kernelSize) so
+                //     ConvolutionalLayer.OnFirstForward's kernel-size
+                //     constraint (inH + 2*Padding >= KernelSize) passes —
+                //     DCGAN's discriminator (kernel=4, padding=1, needs
+                //     inH >= 2) is the canary. The stored OutputShape after
+                //     this resolve is a placeholder; the first real Forward
+                //     call recomputes the actual output tensor dimensions
+                //     from the real input.
+                //
+                // (b) InputDepth deferred (saved as -1 because the layer
+                //     was serialized before its first Forward): skip the
+                //     pre-resolve entirely. ConvolutionalLayer.SetParameters
+                //     has its own auto-resolve fallback (~ line 1598) that
+                //     derives InputDepth from the saved parameter vector's
+                //     length — (length - OutputDepth) / (OutputDepth *
+                //     KernelSize²) — and that fallback uses KernelSize as
+                //     the spatial placeholder. Pre-resolving with a
+                //     placeholder InputDepth=1 would have locked
+                //     InputDepth=1 into the layer's state, then Forward
+                //     with the real RGB-3 input would throw
+                //     "Expected input depth 1, but got 3" before the lazy
+                //     resolve had a chance to fire. This is the failure
+                //     mode that surfaced on DCGAN clones where the
+                //     discriminator's layers had never seen the
+                //     [3, 64, 64] image input at clone time (the test's
+                //     pre-clone Predict only runs the generator).
+                //
+                // (c) inputShape supplied but malformed (rank < 3 case
+                //     handled by the outer guard).
+                if (savedInDepth > 0)
+                {
+                    int spatialFallback = Math.Max(1, kernelSize);
+                    int inH = savedInH > 0 ? savedInH : spatialFallback;
+                    int inW = savedInW > 0 ? savedInW : spatialFallback;
+                    conv.ResolveShapesOnly(new[] { savedInDepth, inH, inW });
+                }
             }
         }
         else if (genericDef == typeof(Conv3DLayer<>))
