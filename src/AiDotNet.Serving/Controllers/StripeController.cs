@@ -27,6 +27,7 @@ public sealed class StripeController : ControllerBase
     /// <summary>
     /// Creates a Stripe Checkout session and returns the URL to redirect the customer to.
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("checkout/session")]
     [ProducesResponseType(typeof(CheckoutResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -101,7 +102,11 @@ public sealed class StripeController : ControllerBase
 
     /// <summary>
     /// Stripe webhook endpoint. Validates the webhook signature and processes events.
+    /// Authenticated via the Stripe-Signature header (HMAC over body + signing secret) —
+    /// not via the serving app's API-key scheme — so this endpoint is anonymous
+    /// from the framework's perspective and the FallbackPolicy doesn't apply.
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("webhooks/stripe")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

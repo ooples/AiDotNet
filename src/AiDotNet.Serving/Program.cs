@@ -139,6 +139,33 @@ public class Program
         {
             options.AddPolicy("AiDotNetAdmin", policy =>
                 policy.RequireClaim(ApiKeyClaimTypes.Scope, ApiKeyScopes.Admin.ToString()));
+
+            // Default authorization is REQUIRED for every endpoint that
+            // doesn't explicitly opt out with [AllowAnonymous]. Without
+            // this fallback, the AddAuthentication registration above
+            // only takes effect on controllers/actions that carry an
+            // [Authorize] attribute — leaving inference, embeddings,
+            // federated, models, and program-synthesis controllers
+            // reachable without credentials.
+            //
+            // Endpoints that legitimately serve anonymous traffic:
+            //   - /health (minimal API below, tagged .AllowAnonymous())
+            //   - Stripe checkout-session creation + webhook
+            //     (StripeController, [AllowAnonymous] on those actions —
+            //     webhook authenticates via Stripe-Signature header,
+            //     checkout-session is intentionally public)
+            //   - License-key validation (LicenseValidationController,
+            //     [AllowAnonymous] on the class — the license key itself
+            //     IS the credential, so requiring an API key first would
+            //     be circular)
+            //
+            // Swagger UI is registered via UseSwagger/UseSwaggerUI
+            // middleware (NOT an MVC endpoint), so it bypasses the
+            // FallbackPolicy entirely — and Swagger is only mounted in
+            // Development environments anyway (see UseSwagger gate below).
+            options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build();
         });
 
         // Register services as singletons for thread-safe shared access
@@ -202,18 +229,68 @@ public class Program
             }
         });
 
-        // Configure CORS for development
+        // Configure CORS. Wide-open (AllowAnyOrigin/Method/Header) is
+        // appropriate for local development but a real attack surface
+        // in production — a misconfigured proxy + this policy is enough
+        // for cross-origin POST against unprotected serving endpoints.
+        // Production reads an allow-list from configuration
+        // ("Cors:AllowedOrigins": ["https://app.example.com", ...]) and
+        // applies it ONLY to that origin list. The dev fallback stays
+        // unchanged so local hacking experience is unaffected.
+        // Resolve the production CORS allow-list once during service
+        // registration so we can both (a) bind it into the AddCors
+        // policy and (b) log a startup warning via the host logger AFTER
+        // builder.Build() when the list is empty. The warning lives on
+        // the host logger (not System.Diagnostics.Trace) so it shows up
+        // in standard ASP.NET Core logging pipelines that operators
+        // configure (e.g. Serilog / OpenTelemetry log exporters).
+        string[] productionCorsOrigins = builder.Environment.IsDevelopment()
+            ? System.Array.Empty<string>()
+            : builder.Configuration.GetSection("Cors:AllowedOrigins")
+                .Get<string[]>() ?? System.Array.Empty<string>();
+
         builder.Services.AddCors(options =>
         {
-            options.AddDefaultPolicy(policy =>
+            if (builder.Environment.IsDevelopment())
             {
-                policy.AllowAnyOrigin()
-                      .AllowAnyMethod()
-                      .AllowAnyHeader();
-            });
+                options.AddDefaultPolicy(policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
+            }
+            else
+            {
+                options.AddDefaultPolicy(policy =>
+                {
+                    if (productionCorsOrigins.Length > 0)
+                    {
+                        policy.WithOrigins(productionCorsOrigins)
+                              .AllowAnyMethod()
+                              .AllowAnyHeader();
+                    }
+                    // else: no CORS at all in production unless explicitly
+                    // configured — fail closed (warning logged below).
+                });
+            }
         });
 
         var app = builder.Build();
+
+        // Surface the fail-closed default through the host logger so
+        // operators who deployed without configuring Cors:AllowedOrigins
+        // see a clear startup warning in their standard logs instead of
+        // debugging "why does my cross-origin request silently fail in
+        // production".
+        if (!app.Environment.IsDevelopment() && productionCorsOrigins.Length == 0)
+        {
+            app.Logger.LogWarning(
+                "CORS Cors:AllowedOrigins is empty in a non-Development environment. " +
+                "Cross-origin requests will be REJECTED. Configure Cors:AllowedOrigins " +
+                "(e.g. [\"https://app.example.com\"]) to enable CORS from specific origins, " +
+                "or accept the fail-closed default for same-origin-only deployments.");
+        }
 
         // Apply migrations on startup (configurable)
         if (persistenceOptions.MigrateOnStartup)
@@ -240,8 +317,12 @@ public class Program
         app.UseAuthorization();
         app.MapControllers();
 
-        // Health check endpoint for Azure warmup probes
-        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+        // Health check endpoint for Azure warmup probes. AllowAnonymous
+        // so the FallbackPolicy (RequireAuthenticatedUser) doesn't block
+        // load-balancer / Azure App Service health probes that arrive
+        // without credentials.
+        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
+            .AllowAnonymous();
 
         // Log startup information
         var logger = app.Services.GetRequiredService<ILogger<Program>>();

@@ -1,10 +1,25 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+	  <!--
+	    net10.0 is the latest .NET; net471 covers legacy Framework consumers.
+	    net8.0 LTS is intentionally NOT yet in the target list — the
+	    AiDotNet.Tensors transitive dependency does not currently ship an
+	    explicit net8.0 build, so adding the target produces NU1701 warnings.
+	    Tracked as a follow-up: bump AiDotNet.Tensors to a release with
+	    explicit net8.0 support, then add net8.0 here.
+	  -->
 	  <TargetFrameworks>net10.0;net471</TargetFrameworks>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
-		<Version>0.0.5-preview</Version>
+		<!-- Static fallback only. The automated-release workflow injects
+		     the real package version via -p:PackageVersion=$version at
+		     pack time; this static <Version> is what `dotnet build`
+		     stamps onto assemblies when consumers build from source.
+		     Kept in sync with the latest published NuGet version so
+		     source-built binaries don't appear "older" than the
+		     published package. -->
+		<Version>0.204.0</Version>
 		<Title>Ai for .Net</Title>
 		<Description>A comprehensive .NET library for machine learning, deep learning, NLP, computer vision, and AI model serving. Licensed under BSL 1.1 — free for non-commercial use, community license available at aidotnet.dev. Model save/load requires a free or paid license after a 10-operation trial. Optional anonymous telemetry (opt-in via AIDOTNET_TELEMETRY=true) collects usage metrics — no PII or model data is collected.</Description>
 		<Company>Ooples Finance</Company>

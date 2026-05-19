@@ -1,15 +1,19 @@
 using AiDotNet.Serving.Security.Licensing;
 using AiDotNet.Validation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AiDotNet.Serving.Controllers;
 
 /// <summary>
 /// Public endpoint for license key validation. No authentication required — the license key itself
-/// is the credential.
+/// is the credential. Marked [AllowAnonymous] so the serving FallbackPolicy
+/// (RequireAuthenticatedUser) doesn't block clients whose entire purpose for hitting this endpoint
+/// is to validate their license before they have an authenticated session.
 /// </summary>
 [ApiController]
 [Route("api/licenses")]
+[AllowAnonymous]
 public sealed class LicenseValidationController : ControllerBase
 {
     private readonly ILicenseService _licenses;

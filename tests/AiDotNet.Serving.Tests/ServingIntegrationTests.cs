@@ -27,17 +27,17 @@ namespace AiDotNet.Serving.Tests;
 /// including model management, request batching, and inference endpoints.
 /// </summary>
 [Collection("ServingIntegrationTests")]
-public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
+public class ServingIntegrationTests : IClassFixture<ServingTestWebApplicationFactory>, IAsyncLifetime
 {
     private static readonly JsonSerializerSettings JsonSettings = new()
     {
         Converters = { new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false) }
     };
 
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ServingTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
-    public ServingIntegrationTests(WebApplicationFactory<Program> factory)
+    public ServingIntegrationTests(ServingTestWebApplicationFactory factory)
     {
         _factory = factory;
         _client = _factory.CreateClient();
@@ -446,6 +446,11 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
         repository.LoadModel(modelName, CreateSimpleTestModel(modelName), sourcePath: artifactPath);
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/models/{modelName}/artifact");
+        // Pin the principal's tier claim to Free for this test —
+        // TestAuthenticationHandler defaults to Enterprise (so the bulk
+        // of integration tests don't need any per-request setup), and
+        // this test specifically verifies the Free-tier rejection path.
+        request.Headers.Add(TestAuthenticationHandler.TestTierHeader, SubscriptionTier.Free.ToString());
 
         var response = await _client.SendAsync(request);
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
@@ -475,6 +480,12 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/models/{modelName}/artifact");
         request.Headers.Add("X-AiDotNet-ApiKey", proApiKey);
+        // Pin the test handler's Tier claim to Pro for this request —
+        // the production X-AiDotNet-ApiKey header is preserved for the
+        // tier resolver to see, but the test factory swaps in
+        // TestAuthenticationHandler as the default scheme so we
+        // explicitly carry the Tier through the test-header path.
+        request.Headers.Add(TestAuthenticationHandler.TestTierHeader, SubscriptionTier.Pro.ToString());
 
         var response = await _client.SendAsync(request);
         response.EnsureSuccessStatusCode();
@@ -487,6 +498,7 @@ public class ServingIntegrationTests : IClassFixture<WebApplicationFactory<Progr
 
         var keyRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/models/{modelName}/artifact/key");
         keyRequest.Headers.Add("X-AiDotNet-ApiKey", proApiKey);
+        keyRequest.Headers.Add(TestAuthenticationHandler.TestTierHeader, SubscriptionTier.Pro.ToString());
         var keyResponse = await _client.SendAsync(keyRequest);
         keyResponse.EnsureSuccessStatusCode();
 

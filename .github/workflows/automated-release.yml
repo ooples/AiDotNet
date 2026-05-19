@@ -291,10 +291,26 @@ jobs:
         if: steps.version.outputs.should_release == 'true'
         run: dotnet build -c Release --no-restore
 
-  # NOTE: Tests are NOT run in the release pipeline because:
-  # 1. Tests are already required to pass before PRs can be merged
-  # 2. This avoids duplicate test runs and speeds up releases
-  # 3. SDK version conflicts between CI runners and project requirements are avoided
+      # Smoke-test gate before pack/publish. Master-CI gating IS the
+      # primary safety net (PRs cannot merge if tests fail), but a
+      # release-time smoke test catches:
+      #   - master-CI flakiness that landed a passing-by-retry commit
+      #   - drift between CI test SDK and release-runner SDK
+      #   - last-minute pre-publish commits (auto-commit version bumps,
+      #     CHANGELOG generation) that altered behavior without
+      #     re-triggering CI
+      # The filter `Category=Smoke|FullyQualifiedName~SmokeTests` selects
+      # a fast subset (~< 1 minute target). When no smoke-tagged tests
+      # exist, the test discovery completes successfully with zero tests
+      # run — the gate passes without blocking releases that haven't yet
+      # adopted the Category=Smoke convention.
+      - name: Smoke tests (release gate)
+        if: steps.version.outputs.should_release == 'true'
+        run: |
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj \
+            --no-build -c Release --framework net10.0 \
+            --filter "Category=Smoke|FullyQualifiedName~SmokeTests" \
+            --logger "console;verbosity=normal"
 
   # Pack NuGet after version-and-build completes
   pack:

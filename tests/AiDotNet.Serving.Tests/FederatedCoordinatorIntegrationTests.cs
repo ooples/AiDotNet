@@ -25,7 +25,7 @@ using System.Threading.Tasks;
 namespace AiDotNet.Serving.Tests;
 
 [Collection("ServingIntegrationTests")]
-public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
+public class FederatedCoordinatorIntegrationTests : IClassFixture<ServingTestWebApplicationFactory>, IAsyncLifetime
 {
     private const string ApiKeyHeaderName = "X-AiDotNet-ApiKey";
 
@@ -34,12 +34,12 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         Converters = { new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false) }
     };
 
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ServingTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly List<string> _createdModelFiles = new();
     private readonly List<string> _loadedModels = new();
 
-    public FederatedCoordinatorIntegrationTests(WebApplicationFactory<Program> factory)
+    public FederatedCoordinatorIntegrationTests(ServingTestWebApplicationFactory factory)
     {
         _factory = factory;
         _client = _factory.CreateClient();
@@ -109,7 +109,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         Assert.NotNull(createResponse);
 
         var enterpriseApiKey = await CreateApiKeyAsync(SubscriptionTier.Enterprise);
-        SetApiKey(enterpriseApiKey);
+        SetApiKey(enterpriseApiKey, SubscriptionTier.Enterprise);
         var join = await PostAsJsonAsync($"/api/federated/runs/{createResponse.RunId}/join", new JoinFederatedRunRequest
         {
             ClientId = null,
@@ -207,12 +207,12 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         Assert.Equal(2.0, after.Parameters[after.Parameters.Length - 1], precision: 6);
 
         // Option A (Free) forbids artifact download.
-        SetApiKey(null);
+        SetApiKey(null, SubscriptionTier.Free);
         var freeArtifact = await _client.GetAsync($"/api/federated/runs/{createResponse.RunId}/artifact");
         Assert.Equal(HttpStatusCode.Forbidden, freeArtifact.StatusCode);
 
         // Option B (Pro) returns an encrypted artifact; key release is allowed without attestation.
-        SetApiKey(proApiKey);
+        SetApiKey(proApiKey, SubscriptionTier.Pro);
         var proArtifact = await _client.GetAsync($"/api/federated/runs/{createResponse.RunId}/artifact");
         proArtifact.EnsureSuccessStatusCode();
         Assert.Equal("true", proArtifact.Headers.GetValues("X-AiDotNet-Artifact-Encrypted").Single());
@@ -245,7 +245,7 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         }
 
         // Option C (Enterprise) returns encrypted artifact and requires key release via attestation.
-        SetApiKey(enterpriseApiKey);
+        SetApiKey(enterpriseApiKey, SubscriptionTier.Enterprise);
         var enterpriseArtifact = await _client.GetAsync($"/api/federated/runs/{createResponse.RunId}/artifact");
         enterpriseArtifact.EnsureSuccessStatusCode();
         Assert.Equal("true", enterpriseArtifact.Headers.GetValues("X-AiDotNet-Artifact-Encrypted").Single());
@@ -284,13 +284,25 @@ public class FederatedCoordinatorIntegrationTests : IClassFixture<WebApplication
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
-    private void SetApiKey(string? apiKey)
+    private void SetApiKey(string? apiKey, SubscriptionTier? tier = null)
     {
         _client.DefaultRequestHeaders.Remove(ApiKeyHeaderName);
+        _client.DefaultRequestHeaders.Remove(TestAuthenticationHandler.TestTierHeader);
 
         if (!string.IsNullOrWhiteSpace(apiKey))
         {
             _client.DefaultRequestHeaders.Add(ApiKeyHeaderName, apiKey);
+        }
+        // Pin the test-handler's Tier claim. The production handler
+        // would derive this from the API key; the test handler ignores
+        // the API key and reads the X-Test-Tier header instead. Tests
+        // that rely on tier-gated endpoints pass the matching tier
+        // here so both production and test paths agree.
+        if (tier.HasValue)
+        {
+            _client.DefaultRequestHeaders.Add(
+                TestAuthenticationHandler.TestTierHeader,
+                tier.Value.ToString());
         }
     }
 
