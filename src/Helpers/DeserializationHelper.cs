@@ -836,19 +836,33 @@ public static class DeserializationHelper
             if (instance is ConvolutionalLayer<T> conv && inputShape != null && inputShape.Length >= 3)
             {
                 // Saved-record axes: rank-4 = [batch, channels, H, W],
-                // rank-3 = [channels, H, W] (legacy unbatched).
+                // rank-3 = [channels, H, W] (legacy unbatched). Any other
+                // rank is malformed and must fail fast — silently
+                // reinterpreting a rank-5 or rank-6 payload's leading
+                // axes as the legacy [C, H, W] layout would deserialize
+                // ConvolutionalLayer with the wrong channels/InputDepth
+                // and produce a Clone that disagrees with the original
+                // model's contract several layers downstream.
                 int savedInDepth, savedInH, savedInW;
-                if (inputShape.Length == 4)
+                switch (inputShape.Length)
                 {
-                    savedInDepth = inputShape[1];
-                    savedInH = inputShape[2];
-                    savedInW = inputShape[3];
-                }
-                else
-                {
-                    savedInDepth = inputShape[0];
-                    savedInH = inputShape[1];
-                    savedInW = inputShape[2];
+                    case 4:
+                        savedInDepth = inputShape[1];
+                        savedInH = inputShape[2];
+                        savedInW = inputShape[3];
+                        break;
+                    case 3:
+                        savedInDepth = inputShape[0];
+                        savedInH = inputShape[1];
+                        savedInW = inputShape[2];
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            $"ConvolutionalLayer deserialize: saved inputShape rank must be 3 ([C, H, W]) " +
+                            $"or 4 ([N, C, H, W]); got rank {inputShape.Length} ([{string.Join(", ", inputShape)}]). " +
+                            "This usually indicates a corrupted layer record or a forward-incompatible " +
+                            "newer-format payload — abort deserialize rather than silently misinterpret " +
+                            "the trailing axes.");
                 }
 
                 // Three branches based on what the saved inputShape resolved
