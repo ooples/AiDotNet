@@ -83,7 +83,7 @@ public class ReleaseSmokeTests
         // for a subsequent SetModel call (the contract the AiModelBuilder
         // facade relies on).
         var opts = new AiDotNet.Models.Options.AdamOptimizerOptions<float, Vector<float>, Vector<float>>();
-        var optimizer = new AdamOptimizer<float, Vector<float>, Vector<float>>(model: null, opts);
+        var optimizer = new AdamOptimizer<float, Vector<float>, Vector<float>>(model: null, options: opts);
 
         Assert.NotNull(optimizer);
         Assert.Null(optimizer.Model);

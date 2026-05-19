@@ -66,8 +66,10 @@ public sealed class TestAuthenticationHandler : AuthenticationHandler<ApiKeyAuth
             // is not a defined member (e.g. "999"), which would let a
             // typo'd header silently assign an invalid Tier claim. Guard
             // with IsDefined so only the named members
-            // (Free / Pro / Enterprise / ...) are accepted.
-            System.Enum.IsDefined(typeof(SubscriptionTier), parsed))
+            // (Free / Pro / Enterprise / ...) are accepted. Uses the
+            // generic overload (.NET 5+) for compile-time type safety
+            // instead of typeof(SubscriptionTier).
+            System.Enum.IsDefined(parsed))
         {
             tier = parsed;
         }

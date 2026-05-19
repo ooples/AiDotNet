@@ -237,6 +237,18 @@ public class Program
         // ("Cors:AllowedOrigins": ["https://app.example.com", ...]) and
         // applies it ONLY to that origin list. The dev fallback stays
         // unchanged so local hacking experience is unaffected.
+        // Resolve the production CORS allow-list once during service
+        // registration so we can both (a) bind it into the AddCors
+        // policy and (b) log a startup warning via the host logger AFTER
+        // builder.Build() when the list is empty. The warning lives on
+        // the host logger (not System.Diagnostics.Trace) so it shows up
+        // in standard ASP.NET Core logging pipelines that operators
+        // configure (e.g. Serilog / OpenTelemetry log exporters).
+        string[] productionCorsOrigins = builder.Environment.IsDevelopment()
+            ? System.Array.Empty<string>()
+            : builder.Configuration.GetSection("Cors:AllowedOrigins")
+                .Get<string[]>() ?? System.Array.Empty<string>();
+
         builder.Services.AddCors(options =>
         {
             if (builder.Environment.IsDevelopment())
@@ -250,37 +262,35 @@ public class Program
             }
             else
             {
-                var allowedOrigins = builder.Configuration
-                    .GetSection("Cors:AllowedOrigins")
-                    .Get<string[]>() ?? System.Array.Empty<string>();
-                if (allowedOrigins.Length == 0)
-                {
-                    // Surface the fail-closed default so an operator who
-                    // deployed without configuring CORS sees a clear log
-                    // line instead of debugging "why does my cross-origin
-                    // request silently fail in production".
-                    System.Diagnostics.Trace.TraceWarning(
-                        "AiDotNet.Serving CORS: Cors:AllowedOrigins is empty in a non-Development " +
-                        "environment. Cross-origin requests will be REJECTED. Configure " +
-                        "Cors:AllowedOrigins (e.g. [\"https://app.example.com\"]) to enable CORS " +
-                        "from specific origins, or accept the fail-closed default for same-origin-only " +
-                        "deployments.");
-                }
                 options.AddDefaultPolicy(policy =>
                 {
-                    if (allowedOrigins.Length > 0)
+                    if (productionCorsOrigins.Length > 0)
                     {
-                        policy.WithOrigins(allowedOrigins)
+                        policy.WithOrigins(productionCorsOrigins)
                               .AllowAnyMethod()
                               .AllowAnyHeader();
                     }
                     // else: no CORS at all in production unless explicitly
-                    // configured — fail closed (warning logged above).
+                    // configured — fail closed (warning logged below).
                 });
             }
         });
 
         var app = builder.Build();
+
+        // Surface the fail-closed default through the host logger so
+        // operators who deployed without configuring Cors:AllowedOrigins
+        // see a clear startup warning in their standard logs instead of
+        // debugging "why does my cross-origin request silently fail in
+        // production".
+        if (!app.Environment.IsDevelopment() && productionCorsOrigins.Length == 0)
+        {
+            app.Logger.LogWarning(
+                "CORS Cors:AllowedOrigins is empty in a non-Development environment. " +
+                "Cross-origin requests will be REJECTED. Configure Cors:AllowedOrigins " +
+                "(e.g. [\"https://app.example.com\"]) to enable CORS from specific origins, " +
+                "or accept the fail-closed default for same-origin-only deployments.");
+        }
 
         // Apply migrations on startup (configurable)
         if (persistenceOptions.MigrateOnStartup)

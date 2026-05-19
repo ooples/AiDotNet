@@ -70,7 +70,7 @@ public static class AiDotNetServingTelemetry
     /// <see cref="Meter"/> singletons. Reserved for test-teardown
     /// scenarios where the serving host is repeatedly created and torn
     /// down inside the same process; production hosts rely on
-    /// app-domain teardown for cleanup and should NOT call this.
+    /// app-domain teardown for cleanup and MUST NOT call this.
     /// </summary>
     /// <remarks>
     /// Both <see cref="ActivitySource"/> and <see cref="Meter"/>
@@ -83,9 +83,13 @@ public static class AiDotNetServingTelemetry
     /// remain referenced — re-entering the host without restarting
     /// the process will use the disposed instances, so this is
     /// strictly a "test teardown right before app-domain exit" hook,
-    /// not a "reset between tests" hook.
+    /// not a "reset between tests" hook. Visibility is intentionally
+    /// <c>internal</c> (with
+    /// <see cref="System.Runtime.CompilerServices.InternalsVisibleToAttribute"/>
+    /// exposing it to <c>AiDotNet.Serving.Tests</c>) so production code
+    /// can't accidentally call it.
     /// </remarks>
-    public static void DisposeTelemetry()
+    internal static void DisposeTelemetry()
     {
         ActivitySource.Dispose();
         Meter.Dispose();
