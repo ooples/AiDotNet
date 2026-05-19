@@ -1002,13 +1002,58 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // reconstructing the gradient from the prox transform
         // (review #1364 C4nKJ).
         var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        // `Regularize(gradient, coefficients)` returns gradient + ∂R/∂p
-        // already summed. Cast through TOutput because the interface is
-        // generic — for Vector<T> it round-trips trivially.
-        var regularizedGradient = Regularization.Regularize(
-            (TOutput)(object)gradient,
-            (TOutput)(object)parameters);
-        gradient = (Vector<T>)(object)regularizedGradient!;
+
+        // Bridge Vector<T> → TOutput → Vector<T>. The accumulated
+        // `gradient` and the model's flat `parameters` are both
+        // Vector<T> here, but RegularizationBase.Regularize is generic
+        // in TOutput so its `Vector<T>` and `Tensor<T>` paths route
+        // through the SAME entry point with different runtime branches.
+        // Forcing `(TOutput)(object)Vector<T>` when TOutput is Tensor<T>
+        // (the canonical NN optimizer parameterization
+        // <T, Tensor<T>, Tensor<T>>) throws InvalidCastException
+        // because Vector<T> does NOT derive from Tensor<T> — they're
+        // sibling LinearAlgebra types — and that exception propagates
+        // up through AdamOptimizer.Optimize, surfacing in #1380 as
+        // "BuildAsync produces uniform output" (the model never gets
+        // past its first batch step). Wrap via Tensor<T>.FromVector for
+        // Tensor TOutput; pass through unchanged for Vector TOutput.
+        TOutput gradientOut, paramsOut;
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            gradientOut = (TOutput)(object)gradient;
+            paramsOut = (TOutput)(object)parameters;
+        }
+        else if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            gradientOut = (TOutput)(object)Tensor<T>.FromVector(gradient);
+            paramsOut = (TOutput)(object)Tensor<T>.FromVector(parameters);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"CalculateGradient regularization bridge does not support TOutput = " +
+                $"{typeof(TOutput).Name}. The supported optimizer parameterizations are " +
+                $"<T, TInput, Vector<T>> and <T, TInput, Tensor<T>>; both go through " +
+                "RegularizationBase.Regularize(TOutput, TOutput).");
+        }
+
+        var regularizedGradient = Regularization.Regularize(gradientOut, paramsOut);
+
+        // Unwrap back to Vector<T> for the optimizer step's Engine ops.
+        if (regularizedGradient is Vector<T> regVec)
+        {
+            gradient = regVec;
+        }
+        else if (regularizedGradient is Tensor<T> regTensor)
+        {
+            gradient = regTensor.ToVector();
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                "RegularizationBase.Regularize returned an unexpected type " +
+                $"({regularizedGradient?.GetType().Name ?? "null"}); expected Vector<T> or Tensor<T>.");
+        }
 
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
