@@ -434,6 +434,20 @@ public class BuildAsyncResidualModeCollapseTests
             var freshArch = BuildFixture().Arch;
             var modelFd = new Transformer<float>(freshArch, lossFunction: new CategoricalCrossEntropyLoss<float>());
             var lossFn = new CategoricalCrossEntropyLoss<float>();
+            // Disable stochastic layers (dropout, etc.) for the
+            // finite-difference probe. ComputeGradients runs the model's
+            // ForwardForTraining path with IsTrainingMode honoured by every
+            // layer — leaving the default IsTrainingMode=true would mix
+            // stochastic dropout masks into the analytic gradient,
+            // producing a per-call random gradient that can't be compared
+            // against the eval-mode numeric finite-difference (modelFd.Predict
+            // flips to eval internally, so dropout is OFF there). With
+            // dropout active on analytic but off on numeric the two compute
+            // gradients of DIFFERENT loss surfaces and disagree by a margin
+            // that varies with parameter sensitivity to the dropout mask —
+            // the 7/12 mismatch the post-test-helper-fix run reports
+            // converges to ~12/12 once both sides see the same loss surface.
+            modelFd.SetTrainingMode(false);
             // Materialize and grab analytic gradient.
             var analyticGrad = modelFd.ComputeGradients(xTrain, yTrain, lossFn);
             var fdParams = modelFd.GetParameters();
@@ -561,43 +575,47 @@ public class BuildAsyncResidualModeCollapseTests
     }
 
     /// <summary>
-    /// Compute scalar MEAN loss from prediction and target tensors using the
-    /// supplied loss function. Used by Arm 6's finite-difference gradient check.
-    /// Matches the per-batch averaging in <c>LossFunctionBase{T}.ComputeTapeLoss</c>
-    /// — without this, the analytic gradient (mean-batch) would compare to a
-    /// sum-batch numerical gradient and the ratio would be batch-size-scaled,
-    /// which would falsely flag every gradient as a magnitude bug.
+    /// Compute scalar mean loss from prediction and target tensors. Used by
+    /// Arm 6's finite-difference gradient check. Routes through
+    /// <c>LossFunctionBase{T}.ComputeTapeLoss</c> so the scalar this returns
+    /// is the EXACT same scalar that <c>NeuralNetworkBase.ComputeGradients</c>
+    /// (the analytic-gradient producer) backpropagates through — any
+    /// finite-difference comparison against analytic gradient must use the
+    /// same scalar or it's a normalization bug, not a gradient bug.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The previous implementation called <c>loss.CalculateLoss(Vector, Vector)</c>
+    /// (which returns a raw sum, no reduction) and divided by
+    /// <c>totalTargetElements = B*V</c>. That matched the BASE
+    /// <see cref="LossFunctions.CrossEntropyLoss{T}"/>'s ReduceMean-over-all-axes
+    /// normalization, but the test uses <see cref="LossFunctions.CategoricalCrossEntropyLoss{T}"/>,
+    /// which overrides <c>ComputeTapeLoss</c> to do ReduceSum-over-classes
+    /// then ReduceMean-over-batch — divisor B, not B*V. The mismatch made
+    /// every finite-diff probe report numeric ≈ analytic / V (V=16 here),
+    /// which falsely tripped Arm 6's "gradient agreement &lt; 50%"
+    /// assertion as a regression. Pinned by
+    /// <see cref="LossNormalizationConsistencyIssue1380Tests.CategoricalCrossEntropyLoss_ComputeTapeLoss_DividesByBatchOnly_OnRank2Target"/>.
+    /// </para>
+    /// <para>
+    /// Routing through <c>ComputeTapeLoss</c> here makes the test agnostic
+    /// to whichever reduction the production loss uses — categorical CE
+    /// (mean over batch) vs binary CE (mean over all elements) vs any
+    /// future loss with a different reduction will all just work, because
+    /// the test reads the same scalar the analytic gradient is computed
+    /// against.
+    /// </para>
+    /// </remarks>
     private static float ScalarLoss(Tensor<float> predictions, Tensor<float> targets, ILossFunction<float> loss)
     {
-        var predFlat = predictions.ToVector();
-        var tgtFlat = targets.ToVector();
-        // Targets length may differ from predictions length when SequenceClassification
-        // is producing [B, S, V] but the test only provides [B, V] one-hot for the last
-        // position. Pull only the last-position slice of predictions to match.
-        if (predFlat.Length > tgtFlat.Length)
-        {
-            int batchSize = targets.Shape[0];
-            int vocab = targets.Shape[1];
-            int strideOffset = predFlat.Length - batchSize * vocab;
-            var lastSlice = new Vector<float>(batchSize * vocab);
-            for (int i = 0; i < lastSlice.Length; i++) lastSlice[i] = predFlat[strideOffset + i];
-            predFlat = lastSlice;
-        }
-        // CategoricalCrossEntropyLoss.CalculateLoss(Vector, Vector) returns the
-        // SUM over the full vector (no axis averaging). ComputeTapeLoss applies
-        // ReduceMean over ALL axes of the target tensor (e.g. for [batch, seq,
-        // class] targets the production reduction divides by batch*seq*class,
-        // not batch only). To match exactly, divide by the TOTAL element
-        // count of the targets tensor — that's the same denominator
-        // ReduceMean uses (review #1364 C4nL_: divide-by-batch-only was an
-        // axis mismatch with the production LossFunctionBase reductions for
-        // rank > 2 targets; for rank-2 [batch, classes] it happens to be
-        // arithmetic-equivalent to ReduceMean since classes is then the
-        // remaining axis size).
-        float rawSum = loss.CalculateLoss(predFlat, tgtFlat);
-        int totalTargetElements = 1;
-        for (int i = 0; i < targets.Shape.Length; i++) totalTargetElements *= targets.Shape[i];
-        return rawSum / Math.Max(1, totalTargetElements);
+        var lossBase = loss as LossFunctionBase<float>
+            ?? throw new System.ArgumentException(
+                $"ScalarLoss requires a LossFunctionBase<float> so ComputeTapeLoss " +
+                $"can produce the same scalar as the analytic-gradient path. Got " +
+                $"{loss.GetType().Name}.");
+
+        var lossTensor = lossBase.ComputeTapeLoss(predictions, targets);
+        // ComputeTapeLoss returns a rank-0 scalar tensor wrapping one float.
+        return lossTensor[0];
     }
 }
