@@ -2171,9 +2171,19 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // ConvTranspose2D layer reports [channels, -1, -1] before first
         // Forward and is compared against OutputSize = channels * H * W
         // (a single flat scalar that can't be element-wise-matched).
-        // -1 is the lazy/deferred sentinel; zero-sized dimensions are
-        // genuinely invalid and should fail validation rather than getting
-        // waved through to fail later at runtime with a less clear error.
+        //
+        // Only -1 sentinels trigger the deferral. Zero-sized dimensions
+        // would ALSO escape the AreShapesCompatible check below — the
+        // ShapesMatchKnownDimensions wildcard rule treats any d <= 0
+        // as matching anything, so a stray d == 0 in either operand
+        // silently passes. That's the existing wildcard convention
+        // across this validator (matches lazy-layer rank-2 [-1, F] vs
+        // resolved rank-3 [B, S, F] etc); a layer that emits d == 0 in
+        // a resolved output shape is a bug a different validator should
+        // catch — not this one's job. Restricting deferral to d < 0
+        // keeps the surface narrow: any future "d > 0 but doesn't
+        // match" path still gets the clear "output shape ... must match
+        // architecture output size" error.
         if (outputShape.Any(d => d < 0))
         {
             error = string.Empty;
