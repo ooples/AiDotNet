@@ -360,6 +360,25 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// parameters to the base NeuralNetworkArchitecture class and initializes the Transformer-specific
     /// parameters.
     /// </para>
+    /// <para>
+    /// <b>Breaking change (closes #1382):</b> when <paramref name="layers"/> is non-null AND
+    /// non-empty, <paramref name="numEncoderLayers"/> and <paramref name="numDecoderLayers"/>
+    /// MUST be 0. The constructor throws <see cref="ArgumentException"/> otherwise. Previously
+    /// these parameters were silently ignored when <c>layers:</c> was supplied (the custom list
+    /// REPLACES the auto-built encoder/decoder block), which presented as a model with 0 trainable
+    /// parameters or a first-batch shape-mismatch crash inside the loss function. Migration:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>If you want auto-built encoder blocks composed AROUND your custom layers</b> —
+    /// not supported. The <c>layers:</c> contract is "consumer owns the entire forward graph".
+    /// Include your own <see cref="NeuralNetworks.Layers.MultiHeadAttentionLayer{T}"/> /
+    /// feed-forward / norm layers explicitly in the list.</item>
+    /// <item><b>If you intentionally want the custom list to be the whole graph</b> — pass
+    /// <c>numEncoderLayers: 0, numDecoderLayers: 0</c> alongside your <c>layers:</c> list.</item>
+    /// <item><b>If you want the default Vaswani-style encoder</b> — omit <c>layers:</c> (pass
+    /// <c>null</c>) and the constructor uses your <c>numEncoderLayers</c> /
+    /// <c>numDecoderLayers</c> / <c>numHeads</c> to build a standard layer stack.</item>
+    /// </list>
     /// <para><b>For Beginners:</b> This constructor is where you set all the options for your Transformer.
     /// 
     /// When creating a new Transformer architecture, you need to decide:

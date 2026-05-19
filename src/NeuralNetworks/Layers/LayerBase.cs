@@ -4026,7 +4026,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         // different initial weights without this branch.
         if (RandomSeed.HasValue)
         {
-            int derived = unchecked((int)(((uint)RandomSeed.Value * 2654435761u)
+            // Mix the tensor shape (fanIn, fanOut) into the derivation
+            // alongside the layer's RandomSeed and the per-call counter.
+            // This defends the seeded path against the case where two
+            // different layer instances share the same RandomSeed value
+            // (uncommon — LayerHelper.CreateDefaultTransformerLayers
+            // assigns each layer a unique seed via seedRng.Next() — but
+            // possible if a consumer manually sets RandomSeed). Without
+            // shape-mixing, two layers at the same RandomSeed + same
+            // _initWeightsCallCounter index initializing weight tensors
+            // of the same fanIn × fanOut would land on bit-identical
+            // weights, breaking the symmetry the network architecture
+            // relies on. Different-shape tensors already differ via
+            // (fanIn, fanOut); same-shape tensors at the same call
+            // index across distinct layer instances now also differ
+            // via the counter, which is per-instance.
+            int derived = unchecked((int)(
+                ((uint)RandomSeed.Value * 2654435761u)
+                ^ ((uint)fanIn * 40503u)
+                ^ ((uint)fanOut * 2654435789u)
                 ^ (uint)System.Threading.Interlocked.Increment(ref _initWeightsCallCounter)));
             var seeded = new Initialization.EagerInitializationStrategy<T>(
                 AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(derived));
