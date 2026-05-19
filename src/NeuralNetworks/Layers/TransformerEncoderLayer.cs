@@ -476,6 +476,21 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     private bool _isInitialized;
 
     /// <summary>
+    /// AiDotNet#1370 shape oracle override: when the eager-dimension ctor
+    /// (<c>(numHeads, feedForwardDim, embeddingSize)</c>) supplied a concrete
+    /// embedding width, sublayers were constructed at ctor time
+    /// (<see cref="EnsureInitialized"/> ran from the eager ctor). LoRA wrapping
+    /// can then introspect sublayer weights without a warmup forward.
+    /// Returns <c>true</c> when sublayers are allocated, even though
+    /// <see cref="LayerBase{T}.InputShape"/> still carries <c>[-1, -1, -1]</c>
+    /// (sequence + batch dims are genuinely dynamic and resolve at first forward).
+    /// The lazy ctor (<c>embeddingSize == -1</c>) returns <c>false</c> so the
+    /// warmup-forward fallback in <see cref="AiModelBuilder{T, TInput, TOutput}"/>
+    /// still runs for that path.
+    /// </summary>
+    public override bool TryDeclareShape() => _isInitialized || IsShapeResolved;
+
+    /// <summary>
     /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c> and propagates
     /// the full input shape into the layer's resolved shapes (input == output for an
     /// encoder block).
