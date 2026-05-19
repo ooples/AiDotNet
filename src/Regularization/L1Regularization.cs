@@ -64,6 +64,21 @@ public class L1Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     /// the regularization strength) to the original gradient, steering the optimization toward sparse solutions.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// L1 gradient contribution: <c>gradient + λ · sign(coefficients)</c>
+    /// (subdifferential of <c>‖θ‖₁</c>). Override avoids the wrap/unwrap
+    /// round-trip the base
+    /// <see cref="RegularizationBase{T, TInput, TOutput}.Regularize(Vector{T}, Vector{T})"/>
+    /// would take through <c>TOutput</c> on the optimizer's hot path.
+    /// </remarks>
+    public override Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients)
+    {
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        return gradient.Add(coefficients.Transform(c =>
+            NumOps.Multiply(regularizationStrength, NumOps.SignOrZero(c))));
+    }
+
     public override TOutput Regularize(TOutput gradient, TOutput coefficients)
     {
         if (gradient is Vector<T> gradientVector && coefficients is Vector<T> coefficientVector)

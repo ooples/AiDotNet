@@ -65,6 +65,22 @@ public class L2Regularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     /// strength) to the original gradient, steering the optimization toward solutions with smaller coefficient values.
     /// </para>
     /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>
+    /// L2 gradient contribution: <c>gradient + λ · coefficients</c>.
+    /// Override avoids the wrap/unwrap round-trip the base
+    /// <see cref="RegularizationBase{T, TInput, TOutput}.Regularize(Vector{T}, Vector{T})"/>
+    /// would take through <c>TOutput</c>, which matters in the
+    /// gradient-based optimizer's per-batch hot loop where
+    /// <c>Tensor&lt;T&gt;.ToVector()</c> would otherwise allocate an
+    /// N-element copy on every step.
+    /// </remarks>
+    public override Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients)
+    {
+        var regularizationStrength = NumOps.FromDouble(Options.Strength);
+        return gradient.Add(coefficients.Multiply(regularizationStrength));
+    }
+
     public override TOutput Regularize(TOutput gradient, TOutput coefficients)
     {
         var regularizationStrength = NumOps.FromDouble(Options.Strength);

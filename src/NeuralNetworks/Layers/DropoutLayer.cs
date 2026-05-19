@@ -267,9 +267,30 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return input;
 
+        // Closes #1383: derive a deterministic seed from the layer's
+        // RandomSeed + a forward-call counter so consecutive trainings in
+        // the same process produce bit-identical dropout masks at the same
+        // seed. Without this, TensorDropoutMask falls through to
+        // RandomHelper.ThreadSafeRandom whose per-thread state advances
+        // cumulatively across trainings — the canonical "two trainings at
+        // the same seed give different weights" bug. When RandomSeed is
+        // null (user opted out of reproducibility) we leave seed=null and
+        // let the engine pick its default non-reproducible source.
+        // Atomic increment via the shared AdvanceSeedCounter helper —
+        // two concurrent Forward calls on the same layer instance
+        // (multi-stream eval, parallel inference) never observe the
+        // same counter value and defeat the determinism contract. The
+        // helper centralizes the Interlocked.Increment + Unsafe.As
+        // reinterpret so the GPU forward path below shares the exact
+        // same atomic increment semantics.
+        ulong counter = AdvanceSeedCounter();
+        int? perCallSeed = RandomSeed.HasValue
+            ? DeriveSeed32(RandomSeed.Value, counter)
+            : (int?)null;
+
         // === Vectorized: Use TensorDropoutMask for optimized dropout mask generation (Phase C: New IEngine methods) ===
         // TensorDropoutMask generates the mask with proper scaling in a single GPU/SIMD-accelerated call
-        _dropoutMask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale);
+        _dropoutMask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale, perCallSeed);
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
         return Engine.TensorMultiply(input, _dropoutMask);
@@ -410,7 +431,21 @@ public class DropoutLayer<T> : LayerBase<T>
 
         float rate = (float)NumOps.ToDouble(_dropoutRate);
         float scale = (float)NumOps.ToDouble(_scale);
-        ulong seed = _seedCounter++ ^ (uint)Environment.TickCount;
+        // Closes #1383: deterministic seed derivation. Shared helpers with
+        // the CPU Forward path above (DeriveSeed32 / DeriveSeed64 +
+        // AdvanceSeedCounter) ensure CPU and GPU produce bit-identical
+        // dropout masks at the same RandomSeed — prerequisite for the
+        // cross-engine determinism check in GpuTransformerDeterminismTests.
+        // Was previously XORing with Environment.TickCount, which is
+        // process-uptime — different on every process invocation — so
+        // same-seed trainings produced different GPU dropout masks across
+        // runs. The AdvanceSeedCounter helper performs the atomic
+        // Interlocked.Increment so concurrent ForwardGpu calls on the same
+        // layer instance never observe the same _seedCounter value.
+        ulong counter = AdvanceSeedCounter();
+        ulong seed = RandomSeed.HasValue
+            ? DeriveSeed64(RandomSeed.Value, counter)
+            : counter ^ (uint)Environment.TickCount;
 
         // Generate uniform random mask [0, 1) on GPU
         var randoms = gpuEngine.RandomUniformGpu<T>(input._shape, 0f, 1f, seed);
@@ -455,5 +490,66 @@ public class DropoutLayer<T> : LayerBase<T>
         // Clean up GPU resources
         _gpuDropoutMask?.Dispose();
         _gpuDropoutMask = null;
+
+        // Reset the dropout-mask seed counter. Closes #1383: ResetState
+        // is the canonical "fresh training session" boundary; without
+        // this, a second training on the same layer instance would
+        // resume the counter where the previous left off, producing
+        // different masks than a fresh layer instance at the same
+        // RandomSeed would.
+        //
+        // Use Interlocked.Exchange (via Unsafe.As reinterpret to long)
+        // so this write has the same memory-ordering semantics as the
+        // Interlocked.Increment in AdvanceSeedCounter — mixing plain
+        // assignment with Interlocked operations on the same field can
+        // produce torn or stale reads on 32-bit runtimes.
+        System.Threading.Interlocked.Exchange(
+            ref System.Runtime.CompilerServices.Unsafe.As<ulong, long>(ref _seedCounter), 0L);
+    }
+
+    /// <summary>
+    /// Advances the internal forward-call counter atomically and returns
+    /// the PRE-increment value (i.e., the same semantics as a post-fix
+    /// <c>_seedCounter++</c>). Used by both the CPU and GPU Forward paths
+    /// to read+increment the counter under a single
+    /// <see cref="System.Threading.Interlocked"/>-ordered operation so
+    /// the field's memory model is consistent with the
+    /// <see cref="System.Threading.Interlocked.Exchange(ref long, long)"/>
+    /// reset in <see cref="ResetState"/>.
+    /// </summary>
+    private ulong AdvanceSeedCounter()
+    {
+        long incremented = System.Threading.Interlocked.Increment(
+            ref System.Runtime.CompilerServices.Unsafe.As<ulong, long>(ref _seedCounter));
+        // Interlocked.Increment returns the POST-increment value; subtract
+        // 1 to recover the pre-increment value the callers expect.
+        return unchecked((ulong)(incremented - 1));
+    }
+
+    /// <summary>
+    /// Shared seed-derivation helper for the CPU Forward path. Mixes the
+    /// layer's <see cref="LayerBase{T}.RandomSeed"/> with the per-call
+    /// counter via a Knuth-multiplicative hash. The 32-bit width matches
+    /// <see cref="Tensors.Helpers.RandomHelper.CreateSeededRandom(int)"/>'s
+    /// seed parameter type that <c>TensorDropoutMask</c> consumes on CPU.
+    /// </summary>
+    private static int DeriveSeed32(int randomSeed, ulong counter)
+    {
+        return unchecked((int)(((uint)randomSeed * 2654435761u) ^ (uint)counter));
+    }
+
+    /// <summary>
+    /// Shared seed-derivation helper for the GPU Forward path. The 64-bit
+    /// width matches <see cref="Tensors.Engines.Gpu.DirectGpuTensorEngine.RandomUniformGpu{T}"/>'s
+    /// <c>ulong seed</c> parameter. The 32-bit projection
+    /// <c>(uint)randomSeed * 2654435761ul ^ counter</c> in the low 64
+    /// bits is bit-identical to <see cref="DeriveSeed32"/>'s output once
+    /// reinterpreted as int — so CPU and GPU forward paths derive the
+    /// same dropout-mask seed from the same (RandomSeed, counter) pair,
+    /// which is the prerequisite for cross-engine determinism checks.
+    /// </summary>
+    private static ulong DeriveSeed64(int randomSeed, ulong counter)
+    {
+        return unchecked(((ulong)(uint)randomSeed * 2654435761ul) ^ counter);
     }
 }

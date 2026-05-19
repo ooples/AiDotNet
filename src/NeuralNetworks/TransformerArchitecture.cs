@@ -360,6 +360,25 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     /// parameters to the base NeuralNetworkArchitecture class and initializes the Transformer-specific
     /// parameters.
     /// </para>
+    /// <para>
+    /// <b>Breaking change (closes #1382):</b> when <paramref name="layers"/> is non-null AND
+    /// non-empty, <paramref name="numEncoderLayers"/> and <paramref name="numDecoderLayers"/>
+    /// MUST be 0. The constructor throws <see cref="ArgumentException"/> otherwise. Previously
+    /// these parameters were silently ignored when <c>layers:</c> was supplied (the custom list
+    /// REPLACES the auto-built encoder/decoder block), which presented as a model with 0 trainable
+    /// parameters or a first-batch shape-mismatch crash inside the loss function. Migration:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>If you want auto-built encoder blocks composed AROUND your custom layers</b> —
+    /// not supported. The <c>layers:</c> contract is "consumer owns the entire forward graph".
+    /// Include your own <see cref="NeuralNetworks.Layers.MultiHeadAttentionLayer{T}"/> /
+    /// feed-forward / norm layers explicitly in the list.</item>
+    /// <item><b>If you intentionally want the custom list to be the whole graph</b> — pass
+    /// <c>numEncoderLayers: 0, numDecoderLayers: 0</c> alongside your <c>layers:</c> list.</item>
+    /// <item><b>If you want the default Vaswani-style encoder</b> — omit <c>layers:</c> (pass
+    /// <c>null</c>) and the constructor uses your <c>numEncoderLayers</c> /
+    /// <c>numDecoderLayers</c> / <c>numHeads</c> to build a standard layer stack.</item>
+    /// </list>
     /// <para><b>For Beginners:</b> This constructor is where you set all the options for your Transformer.
     /// 
     /// When creating a new Transformer architecture, you need to decide:
@@ -465,6 +484,47 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
                 warmupSteps,
                 "warmupSteps must be positive — the Vaswani 2017 Noam schedule has no defined behavior for non-positive warmup. " +
                 "For a budget too small to warm up over (less than ~100 steps), drop the schedule entirely and use a constant LR.");
+        }
+
+        // Closes #1382: when a custom `layers:` list is provided, the
+        // Transformer's InitializeLayers path uses ONLY that list — the
+        // auto-built encoder block (numEncoderLayers × MultiHeadAttention,
+        // numDecoderLayers × DecoderLayer, head, etc) is NOT composed
+        // with it. Previously the structural parameters were silently
+        // accepted and ignored, leaving the user to discover the
+        // miswiring as either:
+        //   (a) a zero-trainable-parameter model that "trains" vacuously
+        //       (the HRE-substitution consumer reproducer in #1382), OR
+        //   (b) a shape mismatch on the very first batch when the
+        //       custom chain's final shape doesn't match outputSize.
+        // Both surface FAR from the constructor where the mistake was
+        // made. Fail-fast here with a diagnostic that names the actual
+        // contract: layers: REPLACES the auto-built block, so structural
+        // parameters that would have driven that block must be left at
+        // their no-op defaults when layers: is supplied.
+        if (layers is not null && layers.Count > 0)
+        {
+            if (numEncoderLayers > 0)
+            {
+                throw new ArgumentException(
+                    $"TransformerArchitecture cannot accept both a custom 'layers:' list ({layers.Count} layers) " +
+                    $"and numEncoderLayers={numEncoderLayers}. Providing layers: REPLACES the auto-built encoder " +
+                    "block (numEncoderLayers × MultiHeadAttention + feed-forward + norm); the structural parameters " +
+                    "would be silently ignored otherwise, leaving the model with 0 trainable parameters and no " +
+                    "optimizer signal. Either (a) pass numEncoderLayers: 0 and include your own attention blocks " +
+                    "in the layers: list, or (b) omit layers: to get the default encoder. See #1382.",
+                    nameof(numEncoderLayers));
+            }
+            if (numDecoderLayers > 0)
+            {
+                throw new ArgumentException(
+                    $"TransformerArchitecture cannot accept both a custom 'layers:' list ({layers.Count} layers) " +
+                    $"and numDecoderLayers={numDecoderLayers}. Same reasoning as numEncoderLayers above — providing " +
+                    "layers: REPLACES the auto-built decoder block. Either (a) pass numDecoderLayers: 0 and include " +
+                    "your own decoder blocks in the layers: list, or (b) omit layers: to get the default decoder. " +
+                    "See #1382.",
+                    nameof(numDecoderLayers));
+            }
         }
 
         NumEncoderLayers = numEncoderLayers;

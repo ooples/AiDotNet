@@ -3,6 +3,9 @@ using AiDotNet.Data.Sampling;
 using AiDotNet.Engines;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.MixedPrecision;
+// Alias the namespace because `Regularization` is also a property name on the
+// base class, which would otherwise shadow the namespace at member-access sites.
+using RegularizationNs = AiDotNet.Regularization;
 // 0.68.0 of AiDotNet.Tensors introduced its own MixedPrecisionConfig under
 // Engines.Autodiff (the engine-side fp16/bf16 mixed-precision plumbing the
 // repo asked for in ooples/AiDotNet.Tensors#276). Alias the local one to a
@@ -1002,13 +1005,40 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // reconstructing the gradient from the prox transform
         // (review #1364 C4nKJ).
         var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
-        // `Regularize(gradient, coefficients)` returns gradient + ∂R/∂p
-        // already summed. Cast through TOutput because the interface is
-        // generic — for Vector<T> it round-trips trivially.
-        var regularizedGradient = Regularization.Regularize(
-            (TOutput)(object)gradient,
-            (TOutput)(object)parameters);
-        gradient = (Vector<T>)(object)regularizedGradient!;
+
+        // `gradient` and the model's flat `parameters` are both
+        // Vector<T> here. Route through the Vector-direct overload on
+        // RegularizationBase when available — bypasses the TOutput
+        // surface entirely and avoids the per-batch
+        // Tensor<T>.ToVector() copy the generic
+        // Regularize(TOutput, TOutput) round-trip would cost when
+        // TOutput is Tensor<T> (the canonical NN optimizer
+        // parameterization). The Vector-direct method is on the base
+        // CLASS — NOT the interface — so external IRegularization
+        // implementers stay binary-compatible. For non-base
+        // implementations we wrap via Tensor<T>.FromVector and call
+        // the TOutput overload (slower but correct).
+        //
+        // Pre-PR-#1381 this site called
+        // `(TOutput)(object)gradient` which threw InvalidCastException
+        // for TOutput = Tensor<T> (Vector<T> doesn't derive from
+        // Tensor<T>) — that exception was the root cause of #1380's
+        // "BuildAsync produces uniform output" symptom (model never
+        // got past its first batch step).
+        if (Regularization is RegularizationNs.RegularizationBase<T, TInput, TOutput> regBase)
+        {
+            gradient = regBase.Regularize(gradient, parameters);
+        }
+        else
+        {
+            // External IRegularization implementations: route through the
+            // shared Vector↔TOutput bridge so the wrap/unwrap logic stays
+            // in one place. RegularizationBase's Vector-direct fallback
+            // uses the same bridge — adding a new TOutput shape only
+            // requires updating RegularizationVectorBridge.
+            gradient = RegularizationNs.RegularizationVectorBridge<T, TInput, TOutput>
+                .Invoke(Regularization, gradient, parameters);
+        }
 
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
