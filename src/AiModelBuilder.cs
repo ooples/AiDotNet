@@ -2813,73 +2813,114 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
         {
             System.Diagnostics.Trace.TraceInformation("Applying LoRA adapters to neural network layers...");
 
-            // Warmup forward to materialise lazy-init layers BEFORE LoRA
-            // wrapping. LoRAAdapterBase.CreateLoRALayer needs the
-            // layer's input/output dimensions at adapter-construction
-            // time; lazy layers (LayerNorm gamma/beta, MultiHeadAttention
-            // lazy weight banks) report (0, …) until first Forward
-            // materialises the shape. Without the warmup, LoRALayer's
-            // ctor would throw ArgumentOutOfRangeException("Output size
-            // must be positive"). Best-effort: if the warmup throws
-            // (e.g. the user wired a forward path that requires training
-            // mode), the ApplyLoRA-side IsShapeResolved guard silently
-            // skips still-unresolved layers so the wrap loop succeeds on
-            // the materialised ones. Discovered by AiDotNet#1345 Bucket10
-            // ConfigureLoRA test.
-            try
+            // AiDotNet#1370 shape oracle: pre-loop asks every layer to declare its
+            // shape from constructor args alone (TryDeclareShape). Layers like
+            // MultiHeadAttentionLayer (knows embeddingDim from ctor) and any
+            // layer constructed with explicit shape (e.g. LayerNormalizationLayer
+            // with the featureSize ctor) return true without needing input.
+            // Lazy convs / inferred-shape layers still return false and trigger
+            // the existing warmup forward as a fallback.
+            int declaredCount = 0;
+            int needsWarmupCount = 0;
+            for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
             {
-                bool prevTrainingMode = neuralNetForLoRA.IsTrainingMode;
-                neuralNetForLoRA.SetTrainingMode(false);
+                if (neuralNetForLoRA.Layers[i] is NeuralNetworks.Layers.LayerBase<T> declarable)
+                {
+                    if (declarable.TryDeclareShape())
+                        declaredCount++;
+                    else
+                        needsWarmupCount++;
+                }
+                // Non-LayerBase<T> layers (rare, e.g. wrapper adapters from a
+                // prior pass) bypass the oracle entirely — the ApplyLoRA call
+                // handles its own shape probing.
+            }
+
+            // If every shape-aware layer declared successfully, skip the warmup
+            // forward entirely — this is the win that beats PyTorch / HuggingFace
+            // PEFT's construction-time shape requirement: we get the zero-warmup
+            // behavior when shapes are known, AND still support lazy layers via
+            // the warmup fallback below when needed.
+            bool skipWarmup = needsWarmupCount == 0;
+            if (skipWarmup)
+            {
+                System.Diagnostics.Trace.TraceInformation(
+                    $"LoRA warmup forward SKIPPED — all {declaredCount} shape-aware layer(s) " +
+                    "declared shape from constructor args (AiDotNet#1370 shape oracle).");
+            }
+            else
+            {
+                System.Diagnostics.Trace.TraceInformation(
+                    $"LoRA warmup forward required — {needsWarmupCount} layer(s) still need a forward " +
+                    $"pass to resolve shape ({declaredCount} declared from ctor).");
+
+                // Warmup forward to materialise lazy-init layers that didn't
+                // self-declare. LoRAAdapterBase.CreateLoRALayer needs the
+                // layer's input/output dimensions at adapter-construction
+                // time; lazy layers that fall through TryDeclareShape report
+                // (0, …) until first Forward materialises the shape.
+                // Without the warmup, LoRALayer's ctor would throw
+                // ArgumentOutOfRangeException("Output size must be positive").
+                // Best-effort: if the warmup throws (e.g. the user wired a
+                // forward path that requires training mode), the ApplyLoRA-side
+                // IsShapeResolved guard silently skips still-unresolved layers
+                // so the wrap loop succeeds on the materialised ones.
+                // Discovered by AiDotNet#1345 Bucket10 ConfigureLoRA test.
                 try
                 {
-                    // One sample is enough to resolve lazy-layer shapes;
-                    // a full-dataset forward would do O(N) work and
-                    // allocate a full pass of activation tensors just to
-                    // shape-resolve. Carve off a 1-row probe.
-                    var warmupProbe = TrySliceFirstSampleForLoRAWarmup(x);
-                    var warmupResult = _model.Predict(warmupProbe);
-                    System.GC.KeepAlive(warmupResult);
+                    bool prevTrainingMode = neuralNetForLoRA.IsTrainingMode;
+                    neuralNetForLoRA.SetTrainingMode(false);
+                    try
+                    {
+                        // One sample is enough to resolve lazy-layer shapes;
+                        // a full-dataset forward would do O(N) work and
+                        // allocate a full pass of activation tensors just to
+                        // shape-resolve. Carve off a 1-row probe.
+                        var warmupProbe = TrySliceFirstSampleForLoRAWarmup(x);
+                        var warmupResult = _model.Predict(warmupProbe);
+                        System.GC.KeepAlive(warmupResult);
+                    }
+                    finally
+                    {
+                        neuralNetForLoRA.SetTrainingMode(prevTrainingMode);
+                    }
                 }
-                finally
+                catch (OperationCanceledException)
                 {
-                    neuralNetForLoRA.SetTrainingMode(prevTrainingMode);
+                    // Cancellation propagates — caller wants out, not a swallowed warmup.
+                    throw;
                 }
-            }
-            catch (OperationCanceledException)
-            {
-                // Cancellation propagates — caller wants out, not a swallowed warmup.
-                throw;
-            }
-            catch (OutOfMemoryException)
-            {
-                // Critical: don't mask. The host may need to abort.
-                // StackOverflowException is intentionally NOT listed —
-                // modern .NET terminates the process on SOE rather than
-                // letting it propagate, so a catch clause for it is
-                // unreachable (review #1368 C7mpq).
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // Best-effort warmup: documented forward-mode requirements
-                // (e.g. layers that need IsTrainingMode=true) can throw here.
-                // The ApplyLoRA-side IsShapeResolved guard silently skips
-                // still-unresolved layers so the wrap loop succeeds on
-                // materialized ones (review #1368 C6WOG: narrowed to let
-                // OperationCanceledException + OutOfMemoryException +
-                // StackOverflowException propagate; everything else is
-                // genuine warmup variance and stays as a Trace warning).
-                // Include ex.ToString() so the trace carries the full
-                // stack trace + inner exceptions, not just the top-frame
-                // message. Trace.TraceWarning is the only signal an
-                // operator has when the warmup fails silently (this PR's
-                // review C88M6: ex.Message dropped the origin frame and
-                // any chained inner exception, leaving a downstream
-                // skipped-lazy-layer mystery if the warmup actually
-                // failed inside an unrelated subsystem).
-                System.Diagnostics.Trace.TraceWarning(
-                    $"LoRA warmup forward failed (proceeding — layers that materialised get wrapped; " +
-                    $"lazy ones skipped via IsShapeResolved guard): {ex}");
+                catch (OutOfMemoryException)
+                {
+                    // Critical: don't mask. The host may need to abort.
+                    // StackOverflowException is intentionally NOT listed —
+                    // modern .NET terminates the process on SOE rather than
+                    // letting it propagate, so a catch clause for it is
+                    // unreachable (review #1368 C7mpq).
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    // Best-effort warmup: documented forward-mode requirements
+                    // (e.g. layers that need IsTrainingMode=true) can throw here.
+                    // The ApplyLoRA-side IsShapeResolved guard silently skips
+                    // still-unresolved layers so the wrap loop succeeds on
+                    // materialized ones (review #1368 C6WOG: narrowed to let
+                    // OperationCanceledException + OutOfMemoryException +
+                    // StackOverflowException propagate; everything else is
+                    // genuine warmup variance and stays as a Trace warning).
+                    // Include ex.ToString() so the trace carries the full
+                    // stack trace + inner exceptions, not just the top-frame
+                    // message. Trace.TraceWarning is the only signal an
+                    // operator has when the warmup fails silently (this PR's
+                    // review C88M6: ex.Message dropped the origin frame and
+                    // any chained inner exception, leaving a downstream
+                    // skipped-lazy-layer mystery if the warmup actually
+                    // failed inside an unrelated subsystem).
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"LoRA warmup forward failed (proceeding — layers that materialised get wrapped; " +
+                        $"lazy ones skipped via IsShapeResolved guard): {ex}");
+                }
             }
 
             int adaptedCount = 0;
@@ -2888,8 +2929,12 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             {
                 var originalLayer = neuralNetForLoRA.Layers[i];
 
+                // AiDotNet#1370: gate on TryDeclareShape() rather than IsShapeResolved.
+                // Layers like MHA that allocate weights from ctor-known dims return true
+                // from TryDeclareShape even when InputShape still has a -1 seq placeholder
+                // — LoRA wraps weight matrices, the seq placeholder doesn't matter.
                 if (originalLayer is NeuralNetworks.Layers.LayerBase<T> lazyCheck
-                    && !lazyCheck.IsShapeResolved)
+                    && !lazyCheck.TryDeclareShape())
                 {
                     skippedLazyCount++;
                     continue;

@@ -453,6 +453,50 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
         InputShape is not null && !ShapeContainsSentinel(InputShape)
         && OutputShape is not null && !ShapeContainsSentinel(OutputShape);
 
+    /// <summary>
+    /// Proactively declares this layer's parameter shapes WITHOUT requiring a forward pass.
+    /// Returns <c>true</c> if the layer is in a state where shape-dependent post-processing
+    /// (LoRA wrapping, parameter introspection, ONNX export prep) can run successfully —
+    /// either because <see cref="IsShapeResolved"/> is already <c>true</c> OR because the
+    /// override has materialised enough internal state (e.g. allocated weight matrices from
+    /// constructor-known dims) for those downstream consumers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// AiDotNet#1370: lets <see cref="AiModelBuilder{T, TInput, TOutput}"/>'s LoRA wrap path
+    /// skip its warmup forward when every layer in the network can declare shape from ctor
+    /// args alone — matching PyTorch / HuggingFace PEFT's construction-time-shape model
+    /// without giving up the lazy-shape flexibility AiDotNet needs for PyTorch-style
+    /// <c>LazyConv2d</c> / <c>LazyLinear</c> analogs.
+    /// </para>
+    /// <para>
+    /// <b>Default implementation:</b> returns <see cref="IsShapeResolved"/>. Layers whose
+    /// constructor carries the full shape (e.g. <see cref="FullyConnectedLayer{T}"/>) already
+    /// satisfy <see cref="IsShapeResolved"/> at construction time and need no override.
+    /// </para>
+    /// <para>
+    /// <b>Layers that should override:</b> lazy-init layers whose constructor carries enough
+    /// info to allocate their weight matrices (e.g. <see cref="MultiHeadAttentionLayer{T}"/>
+    /// with <c>headCount × headDimension</c> known but sequence length unknown). The override
+    /// should allocate weights, optionally call <see cref="ResolveShapes"/> if a usable input
+    /// shape can be synthesised, and return <c>true</c>. Returning <c>true</c> while
+    /// <see cref="IsShapeResolved"/> remains <c>false</c> is acceptable when the caller
+    /// (LoRA wrap, etc.) needs weight shapes rather than full I/O shapes — document the
+    /// asymmetry on the override.
+    /// </para>
+    /// <para>
+    /// <b>Layers that CANNOT override to return true:</b> any layer whose output shape
+    /// depends on input tensor properties beyond what the constructor captures (e.g.
+    /// PyTorch-style <c>LazyConv2d</c> that infers <c>inChannels</c> from the first input).
+    /// Those should leave the default behavior — the warmup forward stays as the fallback.
+    /// </para>
+    /// </remarks>
+    /// <returns>
+    /// <c>true</c> if the layer is ready for shape-dependent post-processing;
+    /// <c>false</c> if a forward pass is still required to materialise shape.
+    /// </returns>
+    public virtual bool TryDeclareShape() => IsShapeResolved;
+
     private static bool ShapeContainsSentinel(int[] shape)
     {
         for (int i = 0; i < shape.Length; i++)

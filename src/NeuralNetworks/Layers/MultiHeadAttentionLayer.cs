@@ -499,7 +499,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     // _alibiLayer are sub-layers that need sub-layer registration. Our lazy-init
     // logic lives in this differently-named private helper and gets explicitly
     // called from Forward / GetParameters / SetParameters.
-    private void EnsureWeightsAllocated()
+    //
+    // Made internal (AiDotNet#1370) so TryDeclareShape can call it to allocate
+    // the Q/K/V/O matrices from constructor-known _embeddingDimension without
+    // requiring a forward pass — enabling AiModelBuilder's LoRA wrap path to
+    // skip its warmup forward when every layer can declare from ctor args.
+    internal void EnsureWeightsAllocated()
     {
         if (_isInitialized) return;
 
@@ -549,6 +554,34 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
             _isInitialized = true;
         }
+    }
+
+    /// <summary>
+    /// AiDotNet#1370 shape oracle override: MultiHeadAttentionLayer's constructor
+    /// takes <c>(headCount, headDimension)</c> from which the embedding dim
+    /// <c>= headCount * headDimension</c> is fully determined, and the four
+    /// projection weight matrices (Q / K / V / O) all have shape
+    /// <c>[embeddingDim, embeddingDim]</c> — known without any input tensor.
+    /// Only the input sequence length is genuinely dynamic.
+    /// <para>
+    /// This override allocates the Q/K/V/O weight matrices via
+    /// <see cref="EnsureWeightsAllocated"/> and returns <c>true</c> so that
+    /// downstream consumers (LoRA wrapping, parameter introspection) can size
+    /// themselves from the weight matrices without a warmup forward pass.
+    /// </para>
+    /// <para>
+    /// <b>Asymmetry with <see cref="LayerBase{T}.IsShapeResolved"/>:</b> this
+    /// method returns <c>true</c> even though <see cref="LayerBase{T}.InputShape"/>
+    /// still contains a <c>-1</c> placeholder for the sequence dim. LoRA wrapping
+    /// needs only the weight matrix shape (which is fully concrete); the seq
+    /// placeholder is resolved by the first real forward call.
+    /// </para>
+    /// </summary>
+    public override bool TryDeclareShape()
+    {
+        if (_isInitialized) return true;
+        EnsureWeightsAllocated();
+        return _isInitialized;
     }
 
     /// <summary>
