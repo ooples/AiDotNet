@@ -185,6 +185,47 @@ public abstract class RegularizationBase<T, TInput, TOutput> : IRegularization<T
     public abstract TOutput Regularize(TOutput gradient, TOutput coefficients);
 
     /// <summary>
+    /// Vector-direct gradient-aware regularization overload — same
+    /// semantics as <see cref="Regularize(TOutput, TOutput)"/> but
+    /// avoids the wrap/unwrap round-trip when both inputs are already
+    /// flat vectors (the typical case inside a gradient-based
+    /// optimizer's per-batch step).
+    /// </summary>
+    /// <param name="gradient">The original gradient vector.</param>
+    /// <param name="coefficients">The current parameter vector.</param>
+    /// <returns>
+    /// <paramref name="gradient"/> plus the regularization gradient
+    /// contribution ∂R/∂θ — i.e., for L2 it returns
+    /// <c>gradient + λ·coefficients</c>, for L1 it returns
+    /// <c>gradient + λ·sign(coefficients)</c>, etc.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// The default implementation here defers to the generic
+    /// <see cref="Regularize(TOutput, TOutput)"/> overload via a
+    /// boxing/unboxing round-trip — correct for any
+    /// <typeparamref name="TOutput"/> the regularizer supports, but the
+    /// Tensor branch (<see cref="LinearAlgebra.Tensor{T}.ToVector"/>
+    /// allocates an N-element copy on unwrap) costs an extra
+    /// per-parameter copy per call. Concrete regularizers that already
+    /// have Vector-typed math (L2 / L1 / Elastic / NoRegularization)
+    /// SHOULD override this to skip the round-trip — the optimizer's
+    /// hot loop invokes this on every batch step.
+    /// </para>
+    /// </remarks>
+    public virtual Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients)
+    {
+        var gradientOut = (TOutput)(object)gradient;
+        var coefficientsOut = (TOutput)(object)coefficients;
+        var result = Regularize(gradientOut, coefficientsOut);
+        if (result is Vector<T> vec) return vec;
+        if (result is Tensor<T> tensor) return tensor.ToVector();
+        throw new InvalidOperationException(
+            "Vector-direct Regularize fallback: TOutput-overload returned an unexpected " +
+            $"type ({result?.GetType().Name ?? "null"}); expected Vector<T> or Tensor<T>.");
+    }
+
+    /// <summary>
     /// Gets the configuration options for this regularization technique.
     /// </summary>
     /// <returns>The regularization options.</returns>

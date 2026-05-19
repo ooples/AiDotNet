@@ -80,6 +80,24 @@ public interface IRegularization<T, TInput, TOutput>
     TOutput Regularize(TOutput gradient, TOutput coefficients);
 
     /// <summary>
+    /// Vector-direct overload of <see cref="Regularize(TOutput, TOutput)"/> —
+    /// same semantics but bypasses the <typeparamref name="TOutput"/>
+    /// wrap/unwrap round-trip when both inputs are already flat vectors.
+    /// </summary>
+    /// <remarks>
+    /// <b>For Beginners:</b> Used by gradient-based optimizers on their hot path.
+    /// They keep the gradient and parameters as flat <see cref="Vector{T}"/>
+    /// internally, so calling the <typeparamref name="TOutput"/> overload would
+    /// have them wrap into a <c>Tensor&lt;T&gt;</c> and then unwrap on return —
+    /// which allocates an N-element copy per batch step when the regularizer's
+    /// Tensor branch calls <c>ToVector()</c>. This overload skips that.
+    /// </remarks>
+    /// <param name="gradient">The original gradient vector.</param>
+    /// <param name="coefficients">The current parameter vector.</param>
+    /// <returns>The regularized gradient vector.</returns>
+    Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients);
+
+    /// <summary>
     /// Retrieves the current regularization options.
     /// </summary>
     /// <remarks>

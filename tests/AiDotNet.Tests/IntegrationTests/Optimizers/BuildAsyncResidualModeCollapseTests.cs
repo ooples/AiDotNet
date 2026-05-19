@@ -606,15 +606,9 @@ public class BuildAsyncResidualModeCollapseTests
     /// against.
     /// </para>
     /// </remarks>
-    private static float ScalarLoss(Tensor<float> predictions, Tensor<float> targets, ILossFunction<float> loss)
+    private static float ScalarLoss(Tensor<float> predictions, Tensor<float> targets, LossFunctionBase<float> loss)
     {
-        var lossBase = loss as LossFunctionBase<float>
-            ?? throw new System.ArgumentException(
-                $"ScalarLoss requires a LossFunctionBase<float> so ComputeTapeLoss " +
-                $"can produce the same scalar as the analytic-gradient path. Got " +
-                $"{loss.GetType().Name}.");
-
-        var lossTensor = lossBase.ComputeTapeLoss(predictions, targets);
+        var lossTensor = loss.ComputeTapeLoss(predictions, targets);
         // ComputeTapeLoss returns a rank-0 scalar tensor wrapping one float.
         return lossTensor[0];
     }

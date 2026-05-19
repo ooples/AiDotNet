@@ -140,4 +140,13 @@ public class NoRegularization<T, TInput, TOutput> : RegularizationBase<T, TInput
     {
         return gradient;
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// No-regularization is a true identity on the gradient — returns
+    /// the input vector unchanged with zero allocation. Without this
+    /// override the base's wrap/unwrap fallback would still allocate
+    /// a per-batch Tensor wrapper even though the math is a no-op.
+    /// </remarks>
+    public override Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients) => gradient;
 }
