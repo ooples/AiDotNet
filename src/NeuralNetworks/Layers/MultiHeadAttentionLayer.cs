@@ -500,11 +500,15 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     // logic lives in this differently-named private helper and gets explicitly
     // called from Forward / GetParameters / SetParameters.
     //
-    // Made internal (AiDotNet#1370) so TryDeclareShape can call it to allocate
-    // the Q/K/V/O matrices from constructor-known _embeddingDimension without
-    // requiring a forward pass — enabling AiModelBuilder's LoRA wrap path to
-    // skip its warmup forward when every layer can declare from ctor args.
-    internal void EnsureWeightsAllocated()
+    // Called by TryDeclareShape() (AiDotNet#1370) to allocate the Q/K/V/O
+    // matrices from constructor-known _embeddingDimension without requiring
+    // a forward pass — enabling AiModelBuilder's LoRA wrap path to skip its
+    // warmup forward when every layer can declare from ctor args.
+    // Kept private because every caller is in this file (PR #1388 review
+    // C7e3Y — "Prefer private over internal when the member is only used
+    // within its own class"); TryDeclareShape lives in this same partial
+    // class so the visibility doesn't need to widen for that path.
+    private void EnsureWeightsAllocated()
     {
         if (_isInitialized) return;
 

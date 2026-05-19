@@ -2820,20 +2820,65 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             // with the featureSize ctor) return true without needing input.
             // Lazy convs / inferred-shape layers still return false and trigger
             // the existing warmup forward as a fallback.
+            // PR #1388 review C7iL5: TryDeclareShape() is a public virtual
+            // extension point — a custom layer override can throw arbitrary
+            // exceptions. Treat non-fatal failures as "shape not declared"
+            // (falls back to the warmup forward below), but let cancellation
+            // and OOM propagate so the host can still abort. Trace the
+            // failure with the layer type + full exception so the operator
+            // can diagnose silently-skipped declarations.
+            static bool TryDeclareShapeSafely(NeuralNetworks.Layers.LayerBase<T> layer)
+            {
+                try
+                {
+                    return layer.TryDeclareShape();
+                }
+                catch (Exception ex) when (
+                    ex is not OperationCanceledException
+                    && ex is not OutOfMemoryException
+                    && ex is not StackOverflowException)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"TryDeclareShape failed for {layer.GetType().FullName} — " +
+                        $"treating as 'needs warmup': {ex}");
+                    return false;
+                }
+            }
+
+            // PR #1388 review C8mvN: only let LoRA-targeted layers drive the
+            // warmup-skip decision. A non-target lazy layer (e.g. a lazy
+            // ActivationLayer or DropoutLayer) won't be wrapped by ApplyLoRA
+            // anyway — counting it as "needs warmup" forces the warmup
+            // forward needlessly on mixed networks. Use the configuration's
+            // own non-mutating eligibility predicate when available; for a
+            // custom ILoRAConfiguration implementation that doesn't expose
+            // one, fall back to "every LayerBase counts" (conservative —
+            // may force an unnecessary warmup, but never skips one
+            // incorrectly).
+            var loraTargetProbe = _loraConfiguration as LoRA.DefaultLoRAConfiguration<T>;
+
             int declaredCount = 0;
             int needsWarmupCount = 0;
             for (int i = 0; i < neuralNetForLoRA.Layers.Count; i++)
             {
-                if (neuralNetForLoRA.Layers[i] is NeuralNetworks.Layers.LayerBase<T> declarable)
+                var layer = neuralNetForLoRA.Layers[i];
+                if (layer is not NeuralNetworks.Layers.LayerBase<T> declarable)
                 {
-                    if (declarable.TryDeclareShape())
-                        declaredCount++;
-                    else
-                        needsWarmupCount++;
+                    // Non-LayerBase<T> layers (rare, e.g. wrapper adapters from a
+                    // prior pass) bypass the oracle entirely — the ApplyLoRA call
+                    // handles its own shape probing.
+                    continue;
                 }
-                // Non-LayerBase<T> layers (rare, e.g. wrapper adapters from a
-                // prior pass) bypass the oracle entirely — the ApplyLoRA call
-                // handles its own shape probing.
+                if (loraTargetProbe is not null && !loraTargetProbe.IsLoRATarget(declarable))
+                {
+                    // Not a LoRA target — its shape doesn't gate the warmup-skip
+                    // decision. Skip without bumping either counter.
+                    continue;
+                }
+                if (TryDeclareShapeSafely(declarable))
+                    declaredCount++;
+                else
+                    needsWarmupCount++;
             }
 
             // If every shape-aware layer declared successfully, skip the warmup
@@ -2934,7 +2979,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // from TryDeclareShape even when InputShape still has a -1 seq placeholder
                 // — LoRA wraps weight matrices, the seq placeholder doesn't matter.
                 if (originalLayer is NeuralNetworks.Layers.LayerBase<T> lazyCheck
-                    && !lazyCheck.TryDeclareShape())
+                    && !TryDeclareShapeSafely(lazyCheck))
                 {
                     skippedLazyCount++;
                     continue;
