@@ -833,7 +833,17 @@ public static class DeserializationHelper
             // "Expected N parameters, but got M".
             // Saved inputShape format: [batch, channels, height, width] (NCHW); some
             // legacy paths serialize without the batch dim, so accept rank 3 too.
-            if (instance is ConvolutionalLayer<T> conv && inputShape != null && inputShape.Length >= 3)
+            // Note: the rank-validation switch below now handles ALL ranks (not
+            // just >= 3) — rank-1 and rank-2 payloads fall through to the
+            // default branch and throw, instead of silently bypassing the
+            // ConvolutionalLayer pre-resolve when inputShape.Length < 3 left
+            // the layer in its lazy state (PR #1389 review C8oz1 — gate moved
+            // from inputShape.Length >= 3 to inputShape != null so malformed
+            // ranks fail fast). The previous `>= 3` guard was a relic from
+            // when the switch only had the rank-3/rank-4 cases and rank-1/2
+            // would have crashed on `inputShape[2]` — now they're explicitly
+            // rejected with a clear error.
+            if (instance is ConvolutionalLayer<T> conv && inputShape != null)
             {
                 // Saved-record axes: rank-4 = [batch, channels, H, W],
                 // rank-3 = [channels, H, W] (legacy unbatched). Any other
