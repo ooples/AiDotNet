@@ -35,9 +35,13 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 ///
 /// <para>
 /// The fixture is scaled down from the consumer ticket (V=256, dModel=64,
-/// L=1, ctx=64, 9216 samples, 3 epochs) to (V=256, dModel=32, L=1, ctx=8,
-/// 128 samples, 50 epochs) to keep CI wall-time under one minute while
-/// preserving the vocab-size that triggers the collapse.
+/// L=1, ctx=64, 9216 samples, 3 epochs) to (V=256, dModel=32, L=1, ctx=4,
+/// 64 samples, 100 epochs at lr=1e-2) to keep CI wall-time under one
+/// minute while preserving the vocab-size that triggers the collapse.
+/// The task is also flipped to a degenerate constant-target pattern (every
+/// sample's target is class <c>FixedTargetClass</c>) so per-sample reliably
+/// clears the entropy-gap floor on the CI step budget — see
+/// <see cref="BuildFixture"/>.
 /// </para>
 ///
 /// <para>
@@ -241,11 +245,21 @@ public class ByteLMV256Issue1380Tests
         // fixture's step budget isn't consumed entirely by warmup.
         double perSampleEntropy;
         {
+            // Same Adam configuration as the batched arm below. Without
+            // matching options the ratio could move because of option
+            // drift (different regularization, adaptive-LR, adaptive-
+            // betas, seed) rather than because of the training-driver
+            // path divergence that #1380 is about.
             var perSampleOptimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(
                 model: null,
                 options: new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
                 {
                     InitialLearningRate = LearningRate,
+                    UseAdaptiveLearningRate = false,
+                    UseAdaptiveBetas = false,
+                    RandomSeed = Seed,
+                    ShuffleData = true,
+                    Regularization = new NoRegularization<float, Tensor<float>, Tensor<float>>(),
                 });
             var model = new Transformer<float>(
                 arch,

@@ -215,8 +215,37 @@ public abstract class RegularizationBase<T, TInput, TOutput> : IRegularization<T
     /// </remarks>
     public virtual Vector<T> Regularize(Vector<T> gradient, Vector<T> coefficients)
     {
-        var gradientOut = (TOutput)(object)gradient;
-        var coefficientsOut = (TOutput)(object)coefficients;
+        // Type-aware bridge — NEVER cast Vector<T> directly to TOutput
+        // because Vector<T> and Tensor<T> are sibling LinearAlgebra
+        // types (neither derives from the other), so a blind
+        // `(TOutput)(object)Vector<T>` throws InvalidCastException
+        // exactly when TOutput is Tensor<T> — the same bug this PR's
+        // bridge fix was designed to eliminate. Wrap via
+        // Tensor<T>.FromVector when TOutput is Tensor<T>; pass through
+        // unchanged when TOutput is Vector<T>; for any other
+        // TOutput the regularizer is expected to override this
+        // method (the documentation above instructs concrete
+        // regularizers to override for perf parity anyway).
+        TOutput gradientOut, coefficientsOut;
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            gradientOut = (TOutput)(object)gradient;
+            coefficientsOut = (TOutput)(object)coefficients;
+        }
+        else if (typeof(TOutput) == typeof(Tensor<T>))
+        {
+            gradientOut = (TOutput)(object)Tensor<T>.FromVector(gradient);
+            coefficientsOut = (TOutput)(object)Tensor<T>.FromVector(coefficients);
+        }
+        else
+        {
+            throw new InvalidOperationException(
+                $"RegularizationBase<T, TInput, TOutput> default Vector-direct fallback does not " +
+                $"support TOutput = {typeof(TOutput).Name}. Override " +
+                $"Regularize(Vector<T>, Vector<T>) in {GetType().Name} to handle this case " +
+                "(the default implementation only knows how to bridge for Vector<T> and Tensor<T>).");
+        }
+
         var result = Regularize(gradientOut, coefficientsOut);
         if (result is Vector<T> vec) return vec;
         if (result is Tensor<T> tensor) return tensor.ToVector();

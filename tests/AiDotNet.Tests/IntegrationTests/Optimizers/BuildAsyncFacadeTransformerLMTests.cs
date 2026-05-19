@@ -36,20 +36,23 @@ namespace AiDotNet.Tests.IntegrationTests.Optimizers;
 /// the builder's compose-and-handoff path can't masquerade as "training
 /// works" while the facade silently routes data away from the optimizer.</para>
 ///
-/// <para><b>One test per bug</b>:
+/// <para><b>Test surface</b>:
 /// <list type="bullet">
 ///   <item><see cref="BuildAsync_V256_ByteLM_FacadeEntry_ProducesNonUniformOutput"/>
 ///   — #1380 at the consumer entry point. Cross-checks the existing
-///   V=256 reproducer's claim that the H7 Vector→Tensor bridge fix
-///   (PR #1381) reaches the BuildAsync path, not just the bare
+///   V=256 reproducer's claim that the Vector→Tensor bridge fix
+///   reaches the BuildAsync path, not just the bare
 ///   <c>optimizer.Optimize</c> call.</item>
-///   <item><see cref="BuildAsync_TransformerArchitecture_CustomLayers_RetainsTrainableMHA"/>
-///   — #1382 (HRE-facade trainable_params=0). Passes a 3-layer
-///   substrate-correct chain (Embed-like + PE-like + Readout-like)
-///   into <c>TransformerArchitecture.layers</c> while ALSO specifying
-///   <c>numEncoderLayers ≥ 1</c>, then asserts
-///   <c>TotalTrainableParameters &gt; 0</c> on the built model. Pre-fix
-///   signature: <c>params = 0</c> + uniform-or-worse logits.</item>
+///   <item><see cref="TransformerArchitecture_CustomLayers_WithEncoderLayers_FailsFast"/>
+///   — #1382 fail-fast contract: passing <c>layers:</c> together with
+///   <c>numEncoderLayers &gt; 0</c> throws at <c>TransformerArchitecture</c>
+///   construction time instead of silently dropping the auto-built
+///   encoder block and leaving the user with a zero-trainable-parameter
+///   model.</item>
+///   <item><see cref="TransformerArchitecture_CustomLayers_WithoutEncoderLayers_BuildsCleanly"/>
+///   — paired positive case: when the caller passes a custom
+///   <c>layers:</c> chain with <c>numEncoderLayers = 0</c>, construction
+///   succeeds and the consumer-owned forward graph is used as-is.</item>
 /// </list></para>
 /// </summary>
 [Collection("NonParallelIntegration")]

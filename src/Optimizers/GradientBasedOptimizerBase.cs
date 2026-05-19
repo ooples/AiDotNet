@@ -1004,16 +1004,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         var parameters = InterfaceGuard.Parameterizable(solution).GetParameters();
 
         // `gradient` and the model's flat `parameters` are both
-        // Vector<T> here, so route through the Vector-direct overload
-        // (added in this PR to RegularizationBase) — bypasses the
-        // TOutput surface entirely and avoids the per-batch
+        // Vector<T> here. Route through the Vector-direct overload on
+        // RegularizationBase when available — bypasses the TOutput
+        // surface entirely and avoids the per-batch
         // Tensor<T>.ToVector() copy the generic
         // Regularize(TOutput, TOutput) round-trip would cost when
         // TOutput is Tensor<T> (the canonical NN optimizer
-        // parameterization). The base virtual still provides a correct
-        // fallback for regularizers that don't override the Vector
-        // overload, so this stays decoupled from concrete container
-        // types at this call site.
+        // parameterization). The Vector-direct method is on the base
+        // CLASS — NOT the interface — so external IRegularization
+        // implementers stay binary-compatible. For non-base
+        // implementations we wrap via Tensor<T>.FromVector and call
+        // the TOutput overload (slower but correct).
         //
         // Pre-PR-#1381 this site called
         // `(TOutput)(object)gradient` which threw InvalidCastException
@@ -1021,7 +1022,44 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Tensor<T>) — that exception was the root cause of #1380's
         // "BuildAsync produces uniform output" symptom (model never
         // got past its first batch step).
-        gradient = Regularization.Regularize(gradient, parameters);
+        if (Regularization is Regularization.RegularizationBase<T, TInput, TOutput> regBase)
+        {
+            gradient = regBase.Regularize(gradient, parameters);
+        }
+        else
+        {
+            // External IRegularization implementations: bridge through
+            // TOutput. Same type-aware bridge as
+            // RegularizationBase.Regularize(Vector<T>, Vector<T>)'s
+            // default fallback — Vector→TOutput via FromVector for
+            // Tensor TOutput, identity for Vector TOutput; unwrap the
+            // same way on return.
+            TOutput gradientOut, paramsOut;
+            if (typeof(TOutput) == typeof(Vector<T>))
+            {
+                gradientOut = (TOutput)(object)gradient;
+                paramsOut = (TOutput)(object)parameters;
+            }
+            else if (typeof(TOutput) == typeof(Tensor<T>))
+            {
+                gradientOut = (TOutput)(object)Tensor<T>.FromVector(gradient);
+                paramsOut = (TOutput)(object)Tensor<T>.FromVector(parameters);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"External IRegularization<T, TInput, {typeof(TOutput).Name}> implementation " +
+                    $"({Regularization.GetType().Name}) — Vector→TOutput bridge supports only " +
+                    "Vector<T> and Tensor<T>. Either inherit RegularizationBase and override " +
+                    "Regularize(Vector<T>, Vector<T>) for direct Vector math, or contribute a " +
+                    "bridge for your TOutput type.");
+            }
+            var result = Regularization.Regularize(gradientOut, paramsOut);
+            if (result is Vector<T> vec) gradient = vec;
+            else if (result is Tensor<T> tensor) gradient = tensor.ToVector();
+            else throw new InvalidOperationException(
+                $"External IRegularization returned unexpected type {result?.GetType().Name ?? "null"}.");
+        }
 
         // Apply gradient clipping if enabled
         gradient = ApplyGradientClipping(gradient);
