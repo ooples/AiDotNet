@@ -2978,7 +2978,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
                 // Layers like MHA that allocate weights from ctor-known dims return true
                 // from TryDeclareShape even when InputShape still has a -1 seq placeholder
                 // — LoRA wraps weight matrices, the seq placeholder doesn't matter.
+                //
+                // PR #1388 follow-up review C9PtZ: only probe TryDeclareShape on
+                // layers that ApplyLoRA would actually wrap. A non-target lazy
+                // layer (e.g. a lazy ActivationLayer or DropoutLayer) would get
+                // its TryDeclareShape called, potentially allocating weights or
+                // emitting a Trace warning, only for ApplyLoRA below to return
+                // it unchanged. Gate on the same IsLoRATarget predicate the
+                // pre-scan loop uses so the side effects of TryDeclareShape
+                // only run for actual adaptation candidates.
                 if (originalLayer is NeuralNetworks.Layers.LayerBase<T> lazyCheck
+                    && (loraTargetProbe is null || loraTargetProbe.IsLoRATarget(lazyCheck))
                     && !TryDeclareShapeSafely(lazyCheck))
                 {
                     skippedLazyCount++;
