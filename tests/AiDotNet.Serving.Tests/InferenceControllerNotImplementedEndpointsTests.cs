@@ -16,18 +16,18 @@ using System.Threading.Tasks;
 namespace AiDotNet.Serving.Tests;
 
 [Collection("ServingIntegrationTests")]
-public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<WebApplicationFactory<Program>>, IAsyncLifetime
+public class InferenceControllerNotImplementedEndpointsTests : IClassFixture<ServingTestWebApplicationFactory>, IAsyncLifetime
 {
     private static readonly JsonSerializerSettings JsonSettings = new()
     {
         Converters = { new StringEnumConverter(new CamelCaseNamingStrategy(), allowIntegerValues: false) }
     };
 
-    private readonly WebApplicationFactory<Program> _factory;
+    private readonly ServingTestWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly List<string> _loadedModels = new();
 
-    public InferenceControllerNotImplementedEndpointsTests(WebApplicationFactory<Program> factory)
+    public InferenceControllerNotImplementedEndpointsTests(ServingTestWebApplicationFactory factory)
     {
         _factory = factory;
         _client = _factory.CreateClient();

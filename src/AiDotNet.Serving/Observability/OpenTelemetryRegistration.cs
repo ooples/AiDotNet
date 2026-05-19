@@ -66,11 +66,31 @@ public static class AiDotNetServingTelemetry
     public static readonly Meter Meter = new(MeterName);
 
     /// <summary>
-    /// Registers a small set of always-on instruments + a configuration
-    /// section binding for telemetry-related options. The actual
-    /// OpenTelemetry SDK registration (exporters, samplers, processors)
-    /// is the consumer's responsibility — see the class remarks.
+    /// Reserved opt-in registration point for AiDotNet.Serving's
+    /// OpenTelemetry-facing configuration. Currently a no-op — the
+    /// instruments consumers actually wire into their OpenTelemetry
+    /// pipeline are the static <see cref="ActivitySource"/> and
+    /// <see cref="Meter"/> fields above (referenced by name via
+    /// <see cref="ActivitySourceName"/> / <see cref="MeterName"/>).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method exists so consumers can call
+    /// <c>services.AddAiDotNetServingObservability(configuration)</c>
+    /// from their host setup TODAY and have that call automatically
+    /// pick up future wiring (TelemetryOptions binding, dependency-
+    /// injected redaction policies, sampling-override services) without
+    /// the consumer needing to add a second registration line then.
+    /// </para>
+    /// <para>
+    /// Until that wiring lands the method does NOT bind configuration,
+    /// register hosted services, add named-options, or register
+    /// instruments — it returns the supplied service collection
+    /// unchanged. The XML doc here matches that contract exactly so a
+    /// consumer reading IntelliSense isn't misled about what calling
+    /// the method does today.
+    /// </para>
+    /// </remarks>
     /// <param name="services">The serving host's service collection.</param>
     /// <param name="configuration">The serving host's configuration.</param>
     /// <returns>The same service collection for chaining.</returns>
@@ -78,12 +98,9 @@ public static class AiDotNetServingTelemetry
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        // Future: bind a TelemetryOptions section from configuration here
-        // (e.g., toggles for high-cardinality span attributes, redaction
-        // policies, sampling overrides). Intentionally minimal in this
-        // audit-hardening PR — the contract this method establishes is
-        // the names (ActivitySourceName / MeterName) consumers wire
-        // their OpenTelemetry pipeline to.
+        // No-op today; the method exists so consumers can register
+        // against a stable opt-in point now and pick up future wiring
+        // automatically. See the XML doc above for the contract.
         return services;
     }
 }

@@ -145,11 +145,24 @@ public class Program
             // this fallback, the AddAuthentication registration above
             // only takes effect on controllers/actions that carry an
             // [Authorize] attribute — leaving inference, embeddings,
-            // federated, models, license-validation, and program-synthesis
-            // controllers reachable without credentials. The
-            // /health endpoint and Swagger UI (development only) are
-            // tagged below with [AllowAnonymous] / MapGet so this
-            // fallback doesn't break readiness probes or doc browsing.
+            // federated, models, and program-synthesis controllers
+            // reachable without credentials.
+            //
+            // Endpoints that legitimately serve anonymous traffic:
+            //   - /health (minimal API below, tagged .AllowAnonymous())
+            //   - Stripe checkout-session creation + webhook
+            //     (StripeController, [AllowAnonymous] on those actions —
+            //     webhook authenticates via Stripe-Signature header,
+            //     checkout-session is intentionally public)
+            //   - License-key validation (LicenseValidationController,
+            //     [AllowAnonymous] on the class — the license key itself
+            //     IS the credential, so requiring an API key first would
+            //     be circular)
+            //
+            // Swagger UI is registered via UseSwagger/UseSwaggerUI
+            // middleware (NOT an MVC endpoint), so it bypasses the
+            // FallbackPolicy entirely — and Swagger is only mounted in
+            // Development environments anyway (see UseSwagger gate below).
             options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
                 .RequireAuthenticatedUser()
                 .Build();
@@ -240,6 +253,19 @@ public class Program
                 var allowedOrigins = builder.Configuration
                     .GetSection("Cors:AllowedOrigins")
                     .Get<string[]>() ?? System.Array.Empty<string>();
+                if (allowedOrigins.Length == 0)
+                {
+                    // Surface the fail-closed default so an operator who
+                    // deployed without configuring CORS sees a clear log
+                    // line instead of debugging "why does my cross-origin
+                    // request silently fail in production".
+                    System.Diagnostics.Trace.TraceWarning(
+                        "AiDotNet.Serving CORS: Cors:AllowedOrigins is empty in a non-Development " +
+                        "environment. Cross-origin requests will be REJECTED. Configure " +
+                        "Cors:AllowedOrigins (e.g. [\"https://app.example.com\"]) to enable CORS " +
+                        "from specific origins, or accept the fail-closed default for same-origin-only " +
+                        "deployments.");
+                }
                 options.AddDefaultPolicy(policy =>
                 {
                     if (allowedOrigins.Length > 0)
@@ -249,7 +275,7 @@ public class Program
                               .AllowAnyHeader();
                     }
                     // else: no CORS at all in production unless explicitly
-                    // configured — fail closed.
+                    // configured — fail closed (warning logged above).
                 });
             }
         });
