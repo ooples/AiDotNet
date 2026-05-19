@@ -139,6 +139,20 @@ public class Program
         {
             options.AddPolicy("AiDotNetAdmin", policy =>
                 policy.RequireClaim(ApiKeyClaimTypes.Scope, ApiKeyScopes.Admin.ToString()));
+
+            // Default authorization is REQUIRED for every endpoint that
+            // doesn't explicitly opt out with [AllowAnonymous]. Without
+            // this fallback, the AddAuthentication registration above
+            // only takes effect on controllers/actions that carry an
+            // [Authorize] attribute — leaving inference, embeddings,
+            // federated, models, license-validation, and program-synthesis
+            // controllers reachable without credentials. The
+            // /health endpoint and Swagger UI (development only) are
+            // tagged below with [AllowAnonymous] / MapGet so this
+            // fallback doesn't break readiness probes or doc browsing.
+            options.FallbackPolicy = new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build();
         });
 
         // Register services as singletons for thread-safe shared access
@@ -202,15 +216,42 @@ public class Program
             }
         });
 
-        // Configure CORS for development
+        // Configure CORS. Wide-open (AllowAnyOrigin/Method/Header) is
+        // appropriate for local development but a real attack surface
+        // in production — a misconfigured proxy + this policy is enough
+        // for cross-origin POST against unprotected serving endpoints.
+        // Production reads an allow-list from configuration
+        // ("Cors:AllowedOrigins": ["https://app.example.com", ...]) and
+        // applies it ONLY to that origin list. The dev fallback stays
+        // unchanged so local hacking experience is unaffected.
         builder.Services.AddCors(options =>
         {
-            options.AddDefaultPolicy(policy =>
+            if (builder.Environment.IsDevelopment())
             {
-                policy.AllowAnyOrigin()
-                      .AllowAnyMethod()
-                      .AllowAnyHeader();
-            });
+                options.AddDefaultPolicy(policy =>
+                {
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
+                });
+            }
+            else
+            {
+                var allowedOrigins = builder.Configuration
+                    .GetSection("Cors:AllowedOrigins")
+                    .Get<string[]>() ?? System.Array.Empty<string>();
+                options.AddDefaultPolicy(policy =>
+                {
+                    if (allowedOrigins.Length > 0)
+                    {
+                        policy.WithOrigins(allowedOrigins)
+                              .AllowAnyMethod()
+                              .AllowAnyHeader();
+                    }
+                    // else: no CORS at all in production unless explicitly
+                    // configured — fail closed.
+                });
+            }
         });
 
         var app = builder.Build();
@@ -240,8 +281,12 @@ public class Program
         app.UseAuthorization();
         app.MapControllers();
 
-        // Health check endpoint for Azure warmup probes
-        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+        // Health check endpoint for Azure warmup probes. AllowAnonymous
+        // so the FallbackPolicy (RequireAuthenticatedUser) doesn't block
+        // load-balancer / Azure App Service health probes that arrive
+        // without credentials.
+        app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
+            .AllowAnonymous();
 
         // Log startup information
         var logger = app.Services.GetRequiredService<ILogger<Program>>();

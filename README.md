@@ -1166,6 +1166,44 @@ Key namespaces:
 
 ---
 
+## Feature Maturity
+
+The repository ships a wide surface; not every subsystem is at the same
+maturity level. The labels below set expectations for enterprise
+consumers — `stable` features are appropriate for production use today;
+`beta` features are functional but may have visible rough edges or API
+churn; `experimental` features are exploratory and should not be relied
+on in production; `preview` indicates work-in-progress that may not yet
+be feature-complete; `stub` indicates an interface present for forward
+compatibility but without a substantial implementation.
+
+| Subsystem | Maturity | Notes |
+|-----------|----------|-------|
+| Classical ML (regression, classification, clustering, time series) | stable | Long-standing surface, extensive tests. |
+| Neural networks core (training, inference, autodiff tape) | stable | Active hardening; recent fixes for #1380 / #1382 mode-collapse + facade gradient bridge. |
+| Optimizers (Adam, AdamW, SGD, etc.) | stable | Per-tensor + flat-vector paths; gradient clipping and mixed precision supported. |
+| Layers + activations + losses | stable | Bottom-up invariant tests at 94% pass rate. |
+| Diffusion / image generation | beta | Implementation present; sample-quality benchmarks pending. |
+| Reinforcement learning agents | beta | API stable; broader benchmark suite in progress. |
+| Federated learning (DP-SGD, secure aggregation) | beta | Privacy primitives present; production deployments should validate threat model. |
+| RAG / retrieval | beta | Retriever + generator + chunking are functional; LangChain-style orchestration is lighter. |
+| LoRA fine-tuning | beta | Adapter wiring works; quantized LoRA path is newer. |
+| AiDotNet.Serving (REST API for inference) | beta | Default-allow-list auth and CORS hardened in this PR; observability + audit logging still developing. |
+| Program synthesis (sandboxed code generation) | experimental | High-risk surface — disable unless explicitly required and isolated. |
+| ONNX / external-model interop | beta | Import covered; export coverage is partial. |
+| Native acceleration (OpenBLAS, BLAS, fused kernels) | beta | CPU SIMD paths shipped; GPU determinism is being pinned (see GpuTransformerDeterminismTests). |
+| Telemetry (opt-in via `AIDOTNET_TELEMETRY=true`) | stable | No PII or model data collected; collects usage metrics only. |
+| Licensing (BSL 1.1 + commercial tiers) | stable | API-key hashing (PBKDF2-SHA256), AES-GCM-encrypted model artifacts on supported frameworks. |
+| OpenTelemetry integration (serving) | preview | Opt-in scaffold added in this audit-hardening PR; full meters/traces in progress. |
+| Speculative decoding REST endpoint | stub | Endpoint returns 501; implementation deferred. |
+| LoRA fine-tuning REST endpoint | stub | Endpoint returns 501; use the in-process API directly. |
+
+> The labels reflect a static review of the public repository. They are
+> informational only — production adopters should validate against
+> their own threat model and SLA requirements.
+
+---
+
 ## Platform Support
 
 | Platform | Status |
