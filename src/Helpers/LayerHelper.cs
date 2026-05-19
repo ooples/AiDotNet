@@ -1808,9 +1808,16 @@ public static class LayerHelper<T>
         }
 
         // Add dropout layer after embedding
+        // Closes #1383: Wire() the DropoutLayer so its RandomSeed is set
+        // from architecture.RandomSeed — DropoutLayer's Forward derives
+        // its per-call dropout-mask seed from RandomSeed + an internal
+        // counter, giving reproducible masks across consecutive trainings
+        // at the same architecture seed. Without Wire(), RandomSeed stays
+        // null and the dropout mask falls through to ThreadSafeRandom whose
+        // state advances cumulatively across trainings.
         if (dropoutRate > 0)
         {
-            yield return new DropoutLayer<T>(dropoutRate);
+            yield return Wire(new DropoutLayer<T>(dropoutRate));
         }
 
         // Add encoder layers
@@ -1823,10 +1830,10 @@ public static class LayerHelper<T>
             // Add normalization
             yield return Wire(new LayerNormalizationLayer<T>());
 
-            // Add dropout if specified
+            // Add dropout if specified (Wire'd — see #1383 comment above).
             if (dropoutRate > 0)
             {
-                yield return new DropoutLayer<T>(dropoutRate);
+                yield return Wire(new DropoutLayer<T>(dropoutRate));
             }
 
             // Feed-forward network
@@ -1836,10 +1843,10 @@ public static class LayerHelper<T>
             // Add normalization
             yield return Wire(new LayerNormalizationLayer<T>());
 
-            // Add dropout if specified
+            // Add dropout if specified (Wire'd — see #1383 comment above).
             if (dropoutRate > 0)
             {
-                yield return new DropoutLayer<T>(dropoutRate);
+                yield return Wire(new DropoutLayer<T>(dropoutRate));
             }
         }
 
@@ -1855,10 +1862,10 @@ public static class LayerHelper<T>
                 // Add normalization
                 yield return Wire(new LayerNormalizationLayer<T>());
 
-                // Add dropout if specified
+                // Add dropout if specified (Wire'd — see #1383 comment above).
                 if (dropoutRate > 0)
                 {
-                    yield return new DropoutLayer<T>(dropoutRate);
+                    yield return Wire(new DropoutLayer<T>(dropoutRate));
                 }
 
                 // Cross-attention block
@@ -1868,10 +1875,10 @@ public static class LayerHelper<T>
                 // Add normalization
                 yield return Wire(new LayerNormalizationLayer<T>());
 
-                // Add dropout if specified
+                // Add dropout if specified (Wire'd — see #1383 comment above).
                 if (dropoutRate > 0)
                 {
-                    yield return new DropoutLayer<T>(dropoutRate);
+                    yield return Wire(new DropoutLayer<T>(dropoutRate));
                 }
 
                 // Feed-forward network
@@ -1881,10 +1888,10 @@ public static class LayerHelper<T>
                 // Add normalization
                 yield return Wire(new LayerNormalizationLayer<T>());
 
-                // Add dropout if specified
+                // Add dropout if specified (Wire'd — see #1383 comment above).
                 if (dropoutRate > 0)
                 {
-                    yield return new DropoutLayer<T>(dropoutRate);
+                    yield return Wire(new DropoutLayer<T>(dropoutRate));
                 }
             }
         }

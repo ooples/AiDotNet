@@ -3983,9 +3983,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <param name="fanIn">Number of input units.</param>
     /// <param name="fanOut">Number of output units.</param>
     /// <param name="strategy">Optional strategy. If null, uses Xavier uniform (industry standard default).</param>
-    // Cached default strategy (Xavier/Glorot — industry standard for sigmoid/tanh)
+    // Cached default strategy ONLY for the non-reproducible path (no
+    // RandomSeed set). It backs onto RandomHelper.ThreadSafeRandom whose
+    // state advances cumulatively across calls — fine when the caller
+    // explicitly opted out of reproducibility by leaving RandomSeed null,
+    // BUT NOT FINE when RandomSeed is set (closes #1383: consecutive
+    // trainings at the same seed must produce bit-identical weights).
+    // The seeded path below builds a fresh EagerInitializationStrategy
+    // per call using a layer-RandomSeed-derived seeded Random, so each
+    // initialization is reproducible.
     private static readonly Lazy<IInitializationStrategy<T>> DefaultStrategy =
         new(() => new Initialization.EagerInitializationStrategy<T>());
+
+    // Per-layer counter so multiple InitializeLayerWeights calls on the
+    // same layer instance produce different (but still deterministic)
+    // weight tensors. Without this, e.g. the four Q/K/V/O weight matrices
+    // in an MHA layer would all be initialized from the same RNG draw and
+    // end up bit-identical to each other.
+    private int _initWeightsCallCounter;
 
     /// <summary>
     /// Initializes weights using this layer's <see cref="InitializationStrategy"/>,
@@ -3995,7 +4010,31 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </summary>
     protected void InitializeLayerWeights(Tensor<T> tensor, int fanIn, int fanOut)
     {
-        (InitializationStrategy ?? DefaultStrategy.Value).InitializeWeights(tensor, fanIn, fanOut);
+        if (InitializationStrategy is not null)
+        {
+            InitializationStrategy.InitializeWeights(tensor, fanIn, fanOut);
+            return;
+        }
+
+        // Closes #1383: when this layer has a RandomSeed pinned (set by
+        // LayerHelper from architecture.RandomSeed), build a FRESH seeded
+        // strategy per call rather than the process-shared
+        // DefaultStrategy singleton. The singleton wraps
+        // RandomHelper.ThreadSafeRandom whose per-thread Random state
+        // advances cumulatively across consecutive trainings — so two
+        // back-to-back trainings at the same architecture seed produce
+        // different initial weights without this branch.
+        if (RandomSeed.HasValue)
+        {
+            int derived = unchecked((int)(((uint)RandomSeed.Value * 2654435761u)
+                ^ (uint)System.Threading.Interlocked.Increment(ref _initWeightsCallCounter)));
+            var seeded = new Initialization.EagerInitializationStrategy<T>(
+                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(derived));
+            seeded.InitializeWeights(tensor, fanIn, fanOut);
+            return;
+        }
+
+        DefaultStrategy.Value.InitializeWeights(tensor, fanIn, fanOut);
     }
 
     /// <summary>

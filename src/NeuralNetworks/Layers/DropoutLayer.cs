@@ -267,9 +267,23 @@ public class DropoutLayer<T> : LayerBase<T>
         if (!IsTrainingMode)
             return input;
 
+        // Closes #1383: derive a deterministic seed from the layer's
+        // RandomSeed + a forward-call counter so consecutive trainings in
+        // the same process produce bit-identical dropout masks at the same
+        // seed. Without this, TensorDropoutMask falls through to
+        // RandomHelper.ThreadSafeRandom whose per-thread state advances
+        // cumulatively across trainings — the canonical "two trainings at
+        // the same seed give different weights" bug. When RandomSeed is
+        // null (user opted out of reproducibility) we leave seed=null and
+        // let the engine pick its default non-reproducible source.
+        int? perCallSeed = RandomSeed.HasValue
+            ? unchecked((int)(((uint)RandomSeed.Value * 2654435761u) ^ (uint)_seedCounter))
+            : (int?)null;
+        _seedCounter++;
+
         // === Vectorized: Use TensorDropoutMask for optimized dropout mask generation (Phase C: New IEngine methods) ===
         // TensorDropoutMask generates the mask with proper scaling in a single GPU/SIMD-accelerated call
-        _dropoutMask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale);
+        _dropoutMask = Engine.TensorDropoutMask<T>(input._shape, _dropoutRate, _scale, perCallSeed);
 
         // Apply mask using Engine for GPU/CPU accelerated element-wise multiplication
         return Engine.TensorMultiply(input, _dropoutMask);
@@ -410,7 +424,18 @@ public class DropoutLayer<T> : LayerBase<T>
 
         float rate = (float)NumOps.ToDouble(_dropoutRate);
         float scale = (float)NumOps.ToDouble(_scale);
-        ulong seed = _seedCounter++ ^ (uint)Environment.TickCount;
+        // Closes #1383: deterministic seed derivation matching the CPU
+        // Forward path above. Was XORing with Environment.TickCount which
+        // is process-uptime — different on every process invocation — so
+        // same-seed trainings produced different GPU dropout masks across
+        // runs. When RandomSeed is set we mix it with the per-forward
+        // counter via a Knuth-multiplicative hash; when null we fall back
+        // to TickCount for non-reproducible behavior (matches the CPU
+        // path's ThreadSafeRandom fallback).
+        ulong seed = RandomSeed.HasValue
+            ? unchecked(((ulong)(uint)RandomSeed.Value * 2654435761ul) ^ _seedCounter)
+            : _seedCounter ^ (uint)Environment.TickCount;
+        _seedCounter++;
 
         // Generate uniform random mask [0, 1) on GPU
         var randoms = gpuEngine.RandomUniformGpu<T>(input._shape, 0f, 1f, seed);
@@ -455,5 +480,13 @@ public class DropoutLayer<T> : LayerBase<T>
         // Clean up GPU resources
         _gpuDropoutMask?.Dispose();
         _gpuDropoutMask = null;
+
+        // Reset the dropout-mask seed counter. Closes #1383: ResetState
+        // is the canonical "fresh training session" boundary; without
+        // this, a second training on the same layer instance would
+        // resume the counter where the previous left off, producing
+        // different masks than a fresh layer instance at the same
+        // RandomSeed would.
+        _seedCounter = 0;
     }
 }

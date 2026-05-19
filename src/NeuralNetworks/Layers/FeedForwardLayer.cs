@@ -311,7 +311,15 @@ public partial class FeedForwardLayer<T> : LayerBase<T>
             // expansion). Routing through AllocateLazyWeight lets the
             // pool pre-evict before the new GC byte[] lands.
             _weights = AllocateLazyWeight([_inputSize, _outputSize]);
-            var rng = new SimdRandom();
+            // Closes #1383: honor the layer-level RandomSeed so consecutive
+            // FeedForwardLayer constructions at the same architecture seed
+            // produce bit-identical weight init. Previously this used the
+            // parameterless `new SimdRandom()` which consumes the
+            // process-static counter and gives a different seed on each
+            // construction within the same process.
+            var rng = RandomSeed.HasValue
+                ? new SimdRandom(RandomSeed.Value)
+                : new SimdRandom();
             var wSpan = _weights.Data.Span;
             int total = wSpan.Length;
 

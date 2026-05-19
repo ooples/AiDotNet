@@ -91,6 +91,53 @@ public class GpuTransformerDeterminismTests
 
         var (arch, xTrain, yTrain) = BuildFixture();
 
+        // Diagnostic: capture L2 at THREE stages to isolate where divergence enters.
+        //   ctorOnly: right after Transformer ctor — only non-lazy layer init has fired
+        //   postPredict: after a forward pass — lazy layers (MHA / FFN) have materialized
+        //   postTrain: after full training loop — accumulates all training-time RNG
+        double L2AtStage(int stage, out long paramCount)
+        {
+            var model = new Transformer<float>(
+                arch,
+                lossFunction: new CategoricalCrossEntropyLoss<float>());
+            if (stage >= 1)
+            {
+                var dummyX = new Tensor<float>([1, CtxLen]);
+                for (int s = 0; s < CtxLen; s++) dummyX[0, s] = xTrain[0, s];
+                _ = model.Predict(dummyX);
+            }
+            if (stage >= 2)
+            {
+                model.SetTrainingMode(true);
+                for (int epoch = 0; epoch < Epochs; epoch++)
+                {
+                    for (int i = 0; i < SampleCount; i++)
+                    {
+                        var sampleX = new Tensor<float>([1, CtxLen]);
+                        var sampleY = new Tensor<float>([1, VocabSize]);
+                        for (int s = 0; s < CtxLen; s++) sampleX[0, s] = xTrain[i, s];
+                        for (int c = 0; c < VocabSize; c++) sampleY[0, c] = yTrain[i, c];
+                        model.Train(sampleX, sampleY);
+                    }
+                }
+            }
+            double sumSq = 0;
+            paramCount = 0;
+            foreach (var p in model.GetParameters())
+            {
+                sumSq += (double)p * (double)p;
+                paramCount++;
+            }
+            return Math.Sqrt(sumSq);
+        }
+
+        var ctorA = L2AtStage(0, out long cntA0);
+        var ctorB = L2AtStage(0, out long cntB0);
+        var postPredictA = L2AtStage(1, out long cntA1);
+        var postPredictB = L2AtStage(1, out long cntB1);
+        _output.WriteLine($"Stage 0 (ctor only): A={ctorA:G17} (n={cntA0}) B={ctorB:G17} (n={cntB0}) diff={Math.Abs(ctorA - ctorB):G6}");
+        _output.WriteLine($"Stage 1 (post-Predict): A={postPredictA:G17} (n={cntA1}) B={postPredictB:G17} (n={cntB1}) diff={Math.Abs(postPredictA - postPredictB):G6}");
+
         double L2RunOnce()
         {
             var model = new Transformer<float>(
@@ -108,9 +155,6 @@ public class GpuTransformerDeterminismTests
                     model.Train(sampleX, sampleY);
                 }
             }
-            // Collapse the entire post-training parameter vector to a single
-            // float by L2 norm so the assertion is one-number. If the runs
-            // diverge anywhere, the norms differ.
             double sumSq = 0;
             foreach (var p in model.GetParameters())
             {
