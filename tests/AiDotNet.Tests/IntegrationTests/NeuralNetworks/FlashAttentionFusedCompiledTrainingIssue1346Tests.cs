@@ -34,6 +34,18 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// the consuming NuGet version bumps.</item>
 /// </list>
 /// </summary>
+/// <remarks>
+/// PR #1386 review (CodeRabbit C8Bm6 + Copilot Drjj5): both tests reset and
+/// read <see cref="AiDotNet.Training.CompiledTapeTrainingStep{T}"/>'s
+/// thread-static fused-step counter and cache. Default xUnit per-class
+/// parallelization would race those resets/reads against any other test
+/// touching the same global state (FusedOptimizerIntegrationTests etc.),
+/// producing flaky engaged-count assertions or cross-test counter leak.
+/// Join the existing "FusedOptimizerGlobalState" collection (defined in
+/// <see cref="FusedOptimizerCollection"/>) so xUnit serializes every test
+/// in this class with every other CompiledTapeTrainingStep-mutating test.
+/// </remarks>
+[Collection("FusedOptimizerGlobalState")]
 public class FlashAttentionFusedCompiledTrainingIssue1346Tests
 {
     private readonly ITestOutputHelper _output;
