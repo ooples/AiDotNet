@@ -6451,6 +6451,60 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Variant of <see cref="TrainWithCustomLoss"/> that runs backward+optim
+    /// on a loss tensor whose forward pass was already recorded on a
+    /// caller-owned <see cref="GradientTape{T}"/>. Use this when the caller
+    /// needs to share the forward output across multiple training paths so
+    /// the forward only runs once.
+    ///
+    /// <para>Issue #1390 driver: <c>GenerativeAdversarialNetwork.Train</c>
+    /// previously ran the generator forward twice per step — once detached
+    /// (<see cref="Predict"/> + <see cref="NoGradScope{T}"/>) to feed the
+    /// discriminator step, then a second time tape-tracked
+    /// (inside <see cref="TrainWithCustomLoss"/>) for the generator's
+    /// adversarial backward. With this entry point, the GAN's <c>Train</c>
+    /// can open its own gen tape, run the forward once, detach a
+    /// value-snapshot for the discriminator step, and feed the same
+    /// tape-tracked output into the generator loss — eliminating the
+    /// duplicate forward (~4% of step time on the DCGAN MoreData fixture
+    /// per the issue's substep profile).</para>
+    ///
+    /// <para>Contract: the caller MUST keep the tape alive (not dispose it)
+    /// from the time the forward runs until this method returns. The tape
+    /// is NOT disposed here — the caller owns its lifecycle.</para>
+    /// </summary>
+    /// <param name="tape">Open gradient tape on which the forward was recorded.</param>
+    /// <param name="lossTensor">Scalar loss tensor recorded on <paramref name="tape"/>.</param>
+    /// <param name="optimizer">Optimizer to drive; defaults to the base Adam.</param>
+    /// <returns>Scalar loss value (also stored in <see cref="LastLoss"/>).</returns>
+    public T BackwardAndStepOnPrecomputedLoss(
+        GradientTape<T> tape,
+        Tensor<T> lossTensor,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (tape is null) throw new ArgumentNullException(nameof(tape));
+        if (lossTensor is null) throw new ArgumentNullException(nameof(lossTensor));
+
+        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        var opt = optimizer ?? GetOrCreateBaseOptimizer();
+
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        LastLoss = lossValue;
+
+        var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+            trainableParams, grads, lossValue);
+
+        opt.Step(context);
+
+        // Mirror the OnBatchEnd advance from TrainWithCustomLoss / TrainWithTape
+        // so a precomputed-loss caller sees identical scheduler behaviour.
+        StepSchedulerIfSupported(opt);
+
+        return lossValue;
+    }
+
+    /// <summary>
     /// Gets or lazily creates the default optimizer for tape-based training.
     /// Used when a network doesn't provide its own optimizer.
     /// </summary>
