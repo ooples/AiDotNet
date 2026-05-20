@@ -1937,6 +1937,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel &&
+                 model.FullyQualifiedName.Contains("NeuralRadianceFields"))
+        {
+            // Neural Radiance Field models (Mildenhall et al. 2020 "NeRF",
+            // Müller et al. 2022 "Instant-NGP", Kerbl et al. 2023 "3D
+            // Gaussian Splatting") all take ray-level input — a tensor of
+            // shape [N, 6] where each row is (position_x, position_y,
+            // position_z, direction_x, direction_y, direction_z). The
+            // generic vision-model branch emits raw image input
+            // [3, 128, 128] which these models hard-reject with
+            // `Input must have shape [N, 6] (position + direction)`
+            // inside ForwardWithMemory. Emit the paper-correct ray batch
+            // shape so the gradient-flow / loss-reduction invariants
+            // run against the model's actual entry point.
+            //
+            // GaussianSplatting historically used `[1, 13]` (position +
+            // rotation + focal) for Train and `[N, 6]` for Predict; the
+            // model now accepts ray-mode training too (see
+            // GaussianSplatting.cs Train ray-mode branch), so the
+            // scaffold can use one shape for both calls.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 6 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 4 };");
+        }
+        else if (isVisionModel &&
                  (model.ClassName.StartsWith("UNITER", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("VisualBERT", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("Oscar", System.StringComparison.Ordinal)
