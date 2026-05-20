@@ -57,6 +57,11 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     private readonly int _contextDim;
     private readonly FluxPredictorVariant _variant;
 
+    /// <summary>FLUX patch size — every spatial 2×2 block becomes one token.
+    /// Class-level constant so InitializeLayers and PredictNoise can't drift
+    /// (per CodeRabbit PR #1396 review).</summary>
+    private const int PatchSize = 2;
+
     private DenseLayer<T> _patchEmbed;
     private DenseLayer<T>[] _doubleBlocks;
     private DenseLayer<T>[] _singleBlocks;
@@ -107,7 +112,7 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     [MemberNotNull(nameof(_patchEmbed), nameof(_doubleBlocks), nameof(_singleBlocks), nameof(_finalLayer))]
     private void InitializeLayers(int? seed)
     {
-        int patchDim = _inputChannels * 4; // 2x2 patches
+        int patchDim = _inputChannels * PatchSize * PatchSize;
         // LazyDense defers weight allocation to first Forward() call.
         _patchEmbed = LazyDense(patchDim, _hiddenSize, new GELUActivation<T>());
 
@@ -176,7 +181,6 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
         // holds but we guard explicitly so a misconfigured caller gets
         // a clear shape error instead of an obscure index OOB inside
         // Patchify.
-        const int PatchSize = 2;
         if (height % PatchSize != 0 || width % PatchSize != 0)
             throw new ArgumentException(
                 $"FluxDoubleStreamPredictor requires spatial dims divisible by patchSize ({PatchSize}); got {height}×{width}.",
