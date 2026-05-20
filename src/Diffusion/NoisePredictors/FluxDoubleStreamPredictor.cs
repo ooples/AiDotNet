@@ -186,12 +186,8 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
                 $"FluxDoubleStreamPredictor requires spatial dims divisible by patchSize ({PatchSize}); got {height}×{width}.",
                 nameof(noisySample));
 
-        int patchDim = channels * PatchSize * PatchSize;
-        int hPatches = height / PatchSize;
-        int wPatches = width / PatchSize;
-
         // Patchify: [B, C, H, W] → [B, numTokens, patchDim].
-        var tokens = Patchify(input4d, batch, channels, height, width, hPatches, wPatches, patchDim, PatchSize);
+        var tokens = Patchify(input4d, PatchSize);
 
         // Embed + propagate through joint (double) + single block stack.
         var x = _patchEmbed.Forward(tokens);
@@ -202,7 +198,7 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
         var projected = _finalLayer.Forward(x);  // [B, numTokens, patchDim]
 
         // Unpatchify back to [B, C, H, W].
-        var output = Unpatchify(projected, batch, channels, height, width, hPatches, wPatches, PatchSize);
+        var output = Unpatchify(projected, PatchSize, height, width);
 
         if (wasUnbatched)
             output = output.Reshape(new[] { channels, height, width });
@@ -214,9 +210,16 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// rearrange("b c (h p1) (w p2) → b (h w) (c p1 p2)") that the
     /// FLUX / MMDiT reference implementation uses.
     /// </summary>
-    private static Tensor<T> Patchify(Tensor<T> input, int batch, int channels, int height, int width,
-        int hPatches, int wPatches, int patchDim, int patchSize)
+    private static Tensor<T> Patchify(Tensor<T> input, int patchSize)
     {
+        int batch = input.Shape[0];
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        int hPatches = height / patchSize;
+        int wPatches = width / patchSize;
+        int patchDim = channels * patchSize * patchSize;
+
         var output = new Tensor<T>(new[] { batch, hPatches * wPatches, patchDim });
         for (int b = 0; b < batch; b++)
         {
@@ -248,9 +251,14 @@ public class FluxDoubleStreamPredictor<T> : NoisePredictorBase<T>
     /// [B, (H/P)·(W/P), C·P²] → [B, C, H, W] — inverse of
     /// <see cref="Patchify"/>.
     /// </summary>
-    private static Tensor<T> Unpatchify(Tensor<T> tokens, int batch, int channels, int height, int width,
-        int hPatches, int wPatches, int patchSize)
+    private static Tensor<T> Unpatchify(Tensor<T> tokens, int patchSize, int height, int width)
     {
+        int batch = tokens.Shape[0];
+        int patchDim = tokens.Shape[2];
+        int channels = patchDim / (patchSize * patchSize);
+        int hPatches = height / patchSize;
+        int wPatches = width / patchSize;
+
         var output = new Tensor<T>(new[] { batch, channels, height, width });
         for (int b = 0; b < batch; b++)
         {
