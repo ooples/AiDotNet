@@ -581,7 +581,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// placeholder is resolved by the first real forward call.
     /// </para>
     /// </summary>
-    public override bool TryDeclareShape()
+    internal override bool TryDeclareShape()
     {
         if (_isInitialized) return true;
         EnsureWeightsAllocated();

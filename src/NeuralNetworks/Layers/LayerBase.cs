@@ -495,7 +495,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// <c>true</c> if the layer is ready for shape-dependent post-processing;
     /// <c>false</c> if a forward pass is still required to materialise shape.
     /// </returns>
-    public virtual bool TryDeclareShape() => IsShapeResolved;
+    /// <remarks>
+    /// Visibility: <c>internal</c>. This is shape-oracle orchestration plumbing
+    /// for <see cref="AiModelBuilder"/> and other in-assembly callers (LoRA
+    /// warmup elimination per #1370); end users interact with the builder/result
+    /// API only and should not see this hook on the public layer surface.
+    /// Per PR #1388 review.
+    /// </remarks>
+    internal virtual bool TryDeclareShape() => IsShapeResolved;
 
     private static bool ShapeContainsSentinel(int[] shape)
     {

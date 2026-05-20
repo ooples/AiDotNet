@@ -488,7 +488,22 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// warmup-forward fallback in <see cref="AiModelBuilder{T, TInput, TOutput}"/>
     /// still runs for that path.
     /// </summary>
-    public override bool TryDeclareShape() => _isInitialized || IsShapeResolved;
+    internal override bool TryDeclareShape()
+    {
+        // Allocation state is the source of truth for "shape oracle ready".
+        // Previously this returned `_isInitialized || IsShapeResolved`, but
+        // IsShapeResolved can flip true (e.g. via a non-allocating shape
+        // declaration upstream) before sublayer weights exist — and LoRA
+        // wrapping needs the actual weight matrices, not just resolved
+        // dimensions. PR #1388 review.
+        if (_isInitialized) return true;
+        if (_embeddingSize > 0)
+        {
+            EnsureInitialized();
+            return _isInitialized;
+        }
+        return false;
+    }
 
     /// <summary>
     /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c> and propagates

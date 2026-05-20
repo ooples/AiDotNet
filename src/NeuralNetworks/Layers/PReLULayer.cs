@@ -115,7 +115,7 @@ public class PReLULayer<T> : LayerBase<T>
     /// until the first real forward resolves the input rank) — same pattern
     /// as <see cref="MultiHeadAttentionLayer{T}.TryDeclareShape"/>.
     /// </summary>
-    public override bool TryDeclareShape() => true;
+    internal override bool TryDeclareShape() => true;
 
     /// <summary>
     /// Resolves broadcast shape and validates channel-count compatibility on first forward.
