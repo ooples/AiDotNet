@@ -6262,20 +6262,39 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             //     plan (strict single-plan policy refused to configure it)
             //   - mutated optimizer hyperparameters between steps
             //     (attached LR scheduler, changed betas, etc.)
+            //   - a kernel-level exception caught and swallowed
+            //     (CompiledTrainingPlan.Step / ConfigureOptimizer threw)
             // Resolution: call ResetState() or InvalidateParameterCountCache()
             // to fully reset training state, then retrain with stable
             // shapes + fixed hyperparameters. Or disable compilation via
             // AllowNondeterminism / Configure(JitCompilationConfig.Disabled)
             // so training runs entirely on the eager path from the start.
+            //
+            // AiDotNet#1395: quote the swallowed exception (if any) inline so
+            // failing tests don't have to chase Trace output to learn the
+            // root cause (Parameter N non-contiguous CPU layout, shape mismatch
+            // in a backward kernel, NaN guard trip, etc.). The inner exception
+            // is also attached for catch (InvalidOperationException ex) callers
+            // that introspect ex.InnerException.
+            var fallbackEx = Training.CompiledTapeTrainingStep<T>.GetLastFallbackException();
+            var rootCauseSuffix = fallbackEx is not null
+                ? $" Root-cause exception (caught in CompiledTapeTrainingStep): " +
+                  $"{fallbackEx.GetType().FullName}: {fallbackEx.Message}"
+                : " (No exception was caught — fused path returned false from one of the explicit " +
+                  "refuse paths: plan reference changed, optimizer hyperparameters drifted, " +
+                  "TensorCodecOptions.EnableCompilation=false, or numeric/optimizer type unsupported.)";
             throw new InvalidOperationException(
                 "Fused compiled training has already run successfully, but the current step cannot " +
                 "engage the fused path. The plan-embedded Adam/AdamW/SGD state cannot be transferred " +
                 "to the eager optimizer, so falling back silently would produce a trajectory that " +
                 "diverges from the previous fused steps. Common causes: variable input/target shape " +
-                "(new compiled plan), LR scheduler or adaptive-rate changes, attached AMSGrad. " +
+                "(new compiled plan), LR scheduler or adaptive-rate changes, attached AMSGrad, or a " +
+                "kernel-level exception in plan.Step/ConfigureOptimizer that was caught and swallowed. " +
                 "Resolution: keep shapes and optimizer hyperparameters stable across steps, OR call " +
                 "ResetState() / InvalidateParameterCountCache() to explicitly reset training state, " +
-                "OR disable compilation (AiModelBuilder.ConfigureJitCompilation(JitCompilationConfig.Disabled)).");
+                "OR disable compilation (AiModelBuilder.ConfigureJitCompilation(JitCompilationConfig.Disabled))." +
+                rootCauseSuffix,
+                innerException: fallbackEx);
         }
         else
         {
