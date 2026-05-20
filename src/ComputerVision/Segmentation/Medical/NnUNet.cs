@@ -97,7 +97,7 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
     /// <param name="numClasses">Number of segmentation classes (default: 14).</param>
     /// <param name="modelSize">Model size variant (default: UNet2D).</param>
     /// <param name="dropRate">Dropout rate (default: 0).</param>

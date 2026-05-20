@@ -775,7 +775,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         else
         {
             System.Diagnostics.Debug.WriteLine(
-                $"Warning: Serialized loss function type '{lossFunctionTypeName}' could not be resolved. Falling back to CrossEntropyLoss.");
+                $"Warning: Serialized loss function type '{lossFunctionTypeName}' could not be resolved. Falling back to CrossEntropyWithLogitsLoss.");
             _lossFunction = new CrossEntropyWithLogitsLoss<T>();
         }
 

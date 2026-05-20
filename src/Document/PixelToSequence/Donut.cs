@@ -180,7 +180,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
     /// <param name="decoderHeads">Number of decoder attention heads (default: 16).</param>
     /// <param name="vocabSize">Vocabulary size (default: 57522).</param>
     /// <param name="optimizer">Optimizer for training (optional, Adam used if null).</param>
-    /// <param name="lossFunction">Loss function (optional, CrossEntropy used if null).</param>
+    /// <param name="lossFunction">Loss function (optional, CrossEntropyWithLogitsLoss is used if null).</param>
     /// <exception cref="ArgumentNullException">Thrown if paths or tokenizer is null.</exception>
     /// <exception cref="FileNotFoundException">Thrown if ONNX model files don't exist.</exception>
     public Donut(

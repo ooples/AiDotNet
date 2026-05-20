@@ -128,7 +128,9 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SAMModelSize modelSize = SAMModelSize.ViTHuge,
         double dropRate = 0.1,
         SAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, lossFunction ?? (numClasses == 1
+            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>()))
     {
         _options = options ?? new SAMOptions();
         Options = _options;
@@ -169,7 +171,9 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         int numClasses = 1,
         SAMModelSize modelSize = SAMModelSize.ViTHuge,
         SAMOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture, numClasses == 1
+            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SAMOptions();
         Options = _options;

@@ -282,8 +282,13 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Initialize supported languages
         SupportedLanguages = new[] { language ?? "en" };
 
-        // Default loss function (cross-entropy is standard for ASR)
-        _lossFunction = new CrossEntropyWithLogitsLoss<T>();
+        // Wav2Vec2 + CTC is the standard ASR training stack (Baevski et al.
+        // 2020 §3.2): CTC handles the variable-length output-vs-input
+        // alignment that plain cross-entropy cannot. CE-with-logits would
+        // be silently wrong here — it forces a fixed-length 1:1 alignment
+        // and the loss is computed per-frame, which is not the ASR
+        // objective. PR #1404 review (CodeRabbit).
+        _lossFunction = new CTCLoss<T>(numClasses: _vocabSize, blankIndex: 0);
 
         InitializeLayers();
     }
@@ -367,9 +372,11 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Initialize supported languages
         SupportedLanguages = new[] { language ?? "en" };
 
-        // Initialize training components
+        // Initialize training components — CTC for ASR (see ONNX ctor for
+        // rationale). Wav2Vec2's variable-length frame-vs-character alignment
+        // can't be expressed by plain cross-entropy.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
+        _lossFunction = lossFunction ?? new CTCLoss<T>(numClasses: _vocabSize, blankIndex: 0);
 
         InitializeNativeLayers();
     }

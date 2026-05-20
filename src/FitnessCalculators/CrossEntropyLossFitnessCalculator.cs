@@ -78,7 +78,15 @@ public class CrossEntropyLossFitnessCalculator<T, TInput, TOutput> : FitnessCalc
     /// </remarks>
     protected override T GetFitnessScore(DataSetStats<T, TInput, TOutput> dataSet)
     {
-        return new CrossEntropyWithLogitsLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
+        // PR #1404 review (CodeRabbit): the calculator is named
+        // CrossEntropy *Loss* FitnessCalculator and its xml docs describe
+        // the input as a probability distribution ("99% cat", "51% cat"
+        // examples above) — callers feed post-softmax predictions. Swapping
+        // to CrossEntropyWithLogitsLoss silently changed the input contract
+        // to raw logits, producing wrong fitness scores for every existing
+        // consumer that emits probabilities. Keep CrossEntropyLoss here so
+        // the documented behavior (input == probabilities) holds.
+        return new CrossEntropyLoss<T>().CalculateLoss(ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Predicted),
             ConversionsHelper.ConvertToVector<T, TOutput>(dataSet.Actual));
     }
 }
