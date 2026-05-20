@@ -109,7 +109,7 @@ public class PointTransformerV3<T> : NeuralNetworkBase<T>, ISemanticSegmentation
         ILossFunction<T>? lossFunction = null, int numClasses = 40,
         PointTransformerV3ModelSize modelSize = PointTransformerV3ModelSize.Base, double dropRate = 0.1,
         PointTransformerV3Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PointTransformerV3Options(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1;
@@ -141,7 +141,7 @@ public class PointTransformerV3<T> : NeuralNetworkBase<T>, ISemanticSegmentation
     public PointTransformerV3(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 40, PointTransformerV3ModelSize modelSize = PointTransformerV3ModelSize.Base,
         PointTransformerV3Options? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PointTransformerV3Options(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
