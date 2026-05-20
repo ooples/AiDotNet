@@ -107,7 +107,7 @@ public class DenseNetNetwork<T> : NeuralNetworkBase<T>
     /// </summary>
     /// <param name="architecture">The architecture defining the structure of the neural network.</param>
     /// <param name="configuration">The DenseNet-specific configuration.</param>
-    /// <param name="optimizer">Optional optimizer for training (default: Adam).</param>
+    /// <param name="optimizer">Optional optimizer for training (default: Adam with lr=1e-4 and AMSGrad enabled via <c>new AdamOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;(this, new AdamOptimizerOptions&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; { InitialLearningRate = 1e-4, UseAMSGrad = true })</c>).</param>
     /// <param name="lossFunction">Optional loss function (default: based on task type).</param>
     /// <param name="maxGradNorm">Maximum gradient norm for gradient clipping (default: 1.0).</param>
     public DenseNetNetwork(
