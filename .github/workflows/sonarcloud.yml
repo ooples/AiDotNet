@@ -483,7 +483,30 @@ jobs:
           Write-Host "Processors:"
           nproc
 
-          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-build --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results --blame-hang-timeout 5min --blame-hang-dump-type none
+          # Per-shard parallelism control. The streaming + Server GC
+          # changes earlier in this PR helped most shards stop cancelling,
+          # but the heaviest model-family shards (Diffusion A-I/J-R/S-Z,
+          # Generated Layers, ModelFamily-NeuralNetworks, NN-Remaining,
+          # Unit-03 Diffusion) still trip OOM with 4 parallel BERT-class
+          # model loads in flight on a 16 GB ubuntu-latest runner. Per-iter
+          # peak memory ≈ 880 MB weights + 1.76 GB Adam state per slot;
+          # 4 slots × 2.6 GB + dotnet/xUnit overhead overruns the envelope.
+          # For these specific shards we pass `xunit.MaxParallelThreads=1`
+          # so heavy models load serially — every other shard stays at
+          # the JSON default (= ProcessorCount = 4) and runs full-speed.
+          $heavyShards = @(
+            'ModelFamily - Diffusion A-I',
+            'ModelFamily - Diffusion J-R',
+            'ModelFamily - Diffusion S-Z',
+            'ModelFamily - Generated Layers',
+            'ModelFamily - NeuralNetworks',
+            'Unit - 08e NN-Remaining (catch-all)',
+            'Unit - 03 Diffusion/Encoding'
+          )
+          $shardArg = if ($heavyShards -contains $shardName) { '-- xunit.MaxParallelThreads=1' } else { '' }
+          Write-Host "Running shard '$shardName' with extra args: '$shardArg'"
+
+          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-build --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results --blame-hang-timeout 5min --blame-hang-dump-type none $shardArg
 
           # Post-test resource snapshot. If the runner survives this point,
           # the test step finished naturally and the snapshot tells us what
