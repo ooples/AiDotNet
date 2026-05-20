@@ -270,21 +270,64 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
     private Matrix<T> SelectCenters(Matrix<T> x)
     {
         int numCenters = Math.Min(_options.NumberOfCenters, x.Rows);
-        var random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
 
-        // Initialize centers randomly
+        // Deterministic k-means++ farthest-point seeding: centers are a pure
+        // function of X (no RNG). This is essential for invariants like
+        // scaling/translation-equivariance, where two model instances trained
+        // on the same X with differently-scaled y must produce predictions
+        // that scale linearly with y. Random init breaks that property
+        // because two separate models pick different starting centers and
+        // converge to different local minima, even though the math says
+        // weights = (XᵀX + λI)⁻¹ Xᵀy is linear in y for any *fixed* X-derived
+        // feature matrix.
+        //
+        // Algorithm: first center is x[0]; each subsequent center is the
+        // point with the largest min-distance to the centers selected so far
+        // (argmax of d²-min over current centers). This is the deterministic
+        // farthest-point variant of k-means++ initialization.
         var centers = new Matrix<T>(numCenters, x.Columns);
-        var selectedIndices = new HashSet<int>();
-        while (selectedIndices.Count < numCenters)
+        centers.SetRow(0, x.GetRow(0));
+
+        if (numCenters > 1)
         {
-            int index = random.Next(x.Rows);
-            if (selectedIndices.Add(index))
+            // minDistSq[i] = squared distance from x[i] to its closest current center.
+            var minDistSq = new double[x.Rows];
+            for (int i = 0; i < x.Rows; i++)
             {
-                centers.SetRow(selectedIndices.Count - 1, x.GetRow(index));
+                T d = VectorHelper.EuclideanDistance(x.GetRow(i), centers.GetRow(0));
+                double dd = NumOps.ToDouble(d);
+                minDistSq[i] = dd * dd;
+            }
+
+            for (int c = 1; c < numCenters; c++)
+            {
+                int farthest = 0;
+                double farthestDist = minDistSq[0];
+                for (int i = 1; i < x.Rows; i++)
+                {
+                    if (minDistSq[i] > farthestDist)
+                    {
+                        farthestDist = minDistSq[i];
+                        farthest = i;
+                    }
+                }
+                centers.SetRow(c, x.GetRow(farthest));
+
+                // Update minDistSq with the new center's contribution.
+                for (int i = 0; i < x.Rows; i++)
+                {
+                    T d = VectorHelper.EuclideanDistance(x.GetRow(i), centers.GetRow(c));
+                    double dd = NumOps.ToDouble(d);
+                    double dSq = dd * dd;
+                    if (dSq < minDistSq[i])
+                        minDistSq[i] = dSq;
+                }
             }
         }
 
-        // Perform K-means clustering
+        // Perform K-means clustering. With deterministic init above and
+        // deterministic empty-cluster fallback below, the entire SelectCenters
+        // path is now a pure function of X.
         const int maxIterations = 100;
         var assignments = new int[x.Rows];
         var newCenters = new Matrix<T>(numCenters, x.Columns);
@@ -343,9 +386,29 @@ public class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<T>
                 }
                 else
                 {
-                    // If a center has no assigned points, reinitialize it randomly
-                    int randomIndex = random.Next(x.Rows);
-                    newCenters.SetRow(i, x.GetRow(randomIndex));
+                    // Deterministic empty-cluster fallback: reseed with the
+                    // point farthest from any current non-empty center, which
+                    // mirrors the k-means++ seeding above and keeps training
+                    // a pure function of X.
+                    int farthest = 0;
+                    double farthestDist = -1;
+                    for (int rowIdx = 0; rowIdx < x.Rows; rowIdx++)
+                    {
+                        double minDistToCenter = double.MaxValue;
+                        for (int c = 0; c < numCenters; c++)
+                        {
+                            if (c == i || counts[c] == 0) continue;
+                            T d = VectorHelper.EuclideanDistance(x.GetRow(rowIdx), newCenters.GetRow(c));
+                            double dd = NumOps.ToDouble(d);
+                            if (dd < minDistToCenter) minDistToCenter = dd;
+                        }
+                        if (minDistToCenter > farthestDist)
+                        {
+                            farthestDist = minDistToCenter;
+                            farthest = rowIdx;
+                        }
+                    }
+                    newCenters.SetRow(i, x.GetRow(farthest));
                 }
             }
 
