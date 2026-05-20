@@ -98,7 +98,7 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="lossFunction">Loss function (default: <see cref="BinaryCrossEntropyWithLogitsLoss{T}"/> when <paramref name="numClasses"/> == 1; otherwise <see cref="CrossEntropyWithLogitsLoss{T}"/>).</param>
     /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="modelSize">Model size variant (default: Base).</param>
     /// <param name="dropRate">Dropout rate (default: 0).</param>

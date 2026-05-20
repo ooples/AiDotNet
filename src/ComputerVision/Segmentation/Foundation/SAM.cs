@@ -108,7 +108,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss; the paper uses focal + dice + IoU loss).</param>
+    /// <param name="lossFunction">Loss function (default: <see cref="BinaryCrossEntropyWithLogitsLoss{T}"/> when <paramref name="numClasses"/> == 1; otherwise <see cref="CrossEntropyWithLogitsLoss{T}"/>; the paper uses focal + dice + IoU loss).</param>
     /// <param name="numClasses">Number of output mask classes (default: 1 for binary segmentation).</param>
     /// <param name="modelSize">ViT backbone size (default: ViTHuge — the original SAM default).</param>
     /// <param name="dropRate">Dropout rate (default: 0.1).</param>
