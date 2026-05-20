@@ -102,6 +102,30 @@ public static class CompiledTapeTrainingStep<T>
     /// <summary>Resets the fused-step counter on the calling thread to zero.</summary>
     public static void ResetFusedStepCount() { _fusedStepCount = 0; }
 
+    /// <summary>
+    /// AiDotNet#1395: when <see cref="TryStepWithFusedOptimizer"/> falls back via
+    /// the catch path, the underlying exception is stored here so the caller
+    /// (NeuralNetworkBase) can surface it in the "fused has committed but step N
+    /// can't engage" InvalidOperationException. Previously the catch's exception
+    /// was logged to Trace only — users debugging from a failing test never saw
+    /// the actual root cause (e.g. "Parameter N non-contiguous CPU layout" from
+    /// <see cref="Tensors.Engines.Compilation.CompiledTrainingPlan{T}.ConfigureOptimizer"/>,
+    /// a shape mismatch from a backward kernel, a NaN guard trip). Now the
+    /// caller can quote the original exception's type + message + stack so the
+    /// error is self-diagnosing.
+    /// </summary>
+    [ThreadStatic]
+    private static System.Exception? _lastFallbackException;
+
+    /// <summary>
+    /// AiDotNet#1395: read the last exception that caused
+    /// <see cref="TryStepWithFusedOptimizer"/> to fall back, or <c>null</c> if
+    /// the most recent fallback was due to one of the explicit return-false
+    /// paths (plan switch, config drift, EnableCompilation=false, etc.) rather
+    /// than a swallowed exception.
+    /// </summary>
+    public static System.Exception? GetLastFallbackException() => _lastFallbackException;
+
     // Reflection-cached lookup of ICompiledTrainingPlan<T>.SetMaxGradNorm(double).
     // Populated lazily on first call per process and reused on every subsequent
     // step. Returns null when the underlying Tensors assembly pre-dates the
@@ -282,6 +306,11 @@ public static class CompiledTapeTrainingStep<T>
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
+        // AiDotNet#1395: clear the previous-call's exception buffer so the
+        // caller's GetLastFallbackException reflects only the outcome of THIS
+        // call. (Cleared on entry, not on success, so a successful step doesn't
+        // leak a stale exception from earlier.)
+        _lastFallbackException = null;
 
         if (!TensorCodecOptions.Current.EnableCompilation) return false;
         // Fused optimizer kernels support float and double on the Tensors
@@ -505,6 +534,13 @@ public static class CompiledTapeTrainingStep<T>
             // a fused-path regression from logs requires reproducing the
             // failure locally. Clear the single-slot config state so any
             // next attempt reconfigures fresh.
+            //
+            // AiDotNet#1395: also stash the exception so the caller's
+            // "fused has committed but step cannot engage" InvalidOperationException
+            // can quote the underlying cause (Parameter N non-contiguous CPU
+            // layout, shape mismatch, NaN guard, etc.). Trace alone wasn't
+            // enough — failing tests don't surface Trace output by default.
+            _lastFallbackException = ex;
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
                 $"{ex}");
