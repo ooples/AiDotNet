@@ -527,20 +527,32 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
             // TrainWithTape runs the full forward + backward + optimizer step.
             // The previous implementation followed this with
             // `UpdateParameters(CollectGradients())`, which applied a SECOND
-            // optimizer step (hardcoded SGD at LR=5e-5) on top of the
-            // primary update — both wrong and 2× the per-iter cost.
+            // optimizer step (hardcoded SGD at lr=5e-5 — see UpdateParameters
+            // below) on top of the primary update — both wrong (the user-
+            // configured optimizer should be the only one stepping) and 2× the
+            // per-iter cost. The duplicate call was a leftover from the
+            // pre-tape implementation; TrainWithTape supersedes it.
             //
             // Pass the model's own non-AMSGrad AdamOptimizer (set in the
-            // ctor) explicitly. Without it, TrainWithTape's optimizer-null
-            // branch falls back to GetOrCreateBaseOptimizer which
-            // constructs an AMSGrad Adam — and the fused-Adam fast path
-            // bails out when AMSGrad is on (TryMapToFusedOptimizerConfig
-            // rejects it because the fused kernel doesn't implement the
-            // max-of-second-moment update). Without the fused path, every
-            // Adam step on this BERT-base model (~110 M fp64 params)
-            // runs through the eager tape executor at ~5 s/iter on
-            // consumer CPU.
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            // ctor) explicitly via a typed cast + null-throw. Without the
+            // explicit pass, TrainWithTape's optimizer-null branch falls
+            // back to GetOrCreateBaseOptimizer which constructs an AMSGrad
+            // Adam — and the fused-Adam fast path bails out when AMSGrad is
+            // on (TryMapToFusedOptimizerConfig rejects it because the fused
+            // kernel doesn't implement the max-of-second-moment update).
+            // Without the fused path, every Adam step on this BERT-base
+            // model (~110 M fp64 params) runs through the eager tape
+            // executor at ~5 s/iter on consumer CPU.
+            //
+            // The cast goes through `as ... ?? throw` rather than a plain
+            // `as` so a user passing a non-gradient optimizer fails loudly
+            // instead of silently dropping into the default-optimizer
+            // fallback (would mask intent and produce mysteriously-different
+            // training trajectories). PR #1404 review (CodeRabbit).
+            var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+                ?? throw new InvalidOperationException(
+                    "LayoutLM training requires an optimizer implementing IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
         }
         finally
         {

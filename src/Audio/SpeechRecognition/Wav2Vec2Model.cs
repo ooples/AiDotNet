@@ -641,7 +641,16 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
             // every step on the BERT-base-scale wav2vec2 encoder running
             // through the eager tape executor at multi-second cost per
             // iteration.
-            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+            //
+            // The cast goes through `as ... ?? throw` rather than plain
+            // `as` so a user passing a non-gradient optimizer fails loudly
+            // instead of silently dropping into the default-optimizer
+            // fallback (would mask intent and produce mysteriously-different
+            // training trajectories). PR #1404 review (CodeRabbit).
+            var gradientOptimizer = _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>
+                ?? throw new InvalidOperationException(
+                    "Wav2Vec2Model training requires an optimizer implementing IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
         }
         finally
         {
