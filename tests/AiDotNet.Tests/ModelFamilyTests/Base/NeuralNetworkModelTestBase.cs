@@ -1205,7 +1205,24 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // already-converged loss (lossStep1 ≈ lossFinal ≈ 0).
         bool atFloor = MemorizationTaskAbsoluteLossFloor > 0
             && lossFinal <= MemorizationTaskAbsoluteLossFloor;
-        Assert.True(atFloor || lossFinal < lossStep1 * MemorizationTaskLossThreshold,
+
+        // One-shot trainers (ExtremeLearningMachine's least-squares
+        // solve, random-feature kernel models, closed-form linear
+        // regressors) converge in the FIRST Train call, leaving
+        // lossStep1 ≈ 0 with no room for a follow-on "strict decrease".
+        // Applying the relative threshold here forces `0 < 0 * 0.99`
+        // which is unsatisfiable — the model isn't broken, it's just
+        // already converged. Detect by floor-checking lossStep1
+        // against the same near-zero bar and pass when the model is
+        // already at the floor on iteration 1. Stays bounded to
+        // genuinely-zero losses (eps = 1e-9) so this can't paper over
+        // a real plateau bug.
+        const double OneShotConvergedFloor = 1e-9;
+        bool alreadyConverged = lossStep1 <= OneShotConvergedFloor
+            && lossFinal <= OneShotConvergedFloor;
+
+        Assert.True(atFloor || alreadyConverged
+                || lossFinal < lossStep1 * MemorizationTaskLossThreshold,
             $"Loss did NOT strictly decrease on memorization task: step 1={lossStep1:F6}, "
             + $"step {MemorizationTaskIterations}={lossFinal:F6}. "
             + "Diagnostic: optimizer is oscillating, gradient sign is wrong, or first-step blew the model "
