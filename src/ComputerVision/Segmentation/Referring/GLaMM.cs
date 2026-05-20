@@ -120,7 +120,9 @@ public class GLaMM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful LR: Rasheed et al. 2024 MBZUAI uses 5e-5 for GLaMM
+        // fine-tuning. Framework default LR=1e-3 diverges on this VLM stack.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
         _channelDims = [64, 128, 320, 768];
         _depths = [2, 2, 4, 12];
         _decoderDim = 256;
@@ -196,7 +198,7 @@ public class GLaMM<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

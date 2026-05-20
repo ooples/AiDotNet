@@ -568,7 +568,12 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
 
         // Use T5-style tokenizer as default for AudioGen text encoder
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful LR: Copet et al. 2023 ("AudioGen / Simple and
+        // Controllable Music Generation") fine-tunes the text-to-audio
+        // transformer at LR=5e-5. Framework AdamW default (LR=1e-3) is
+        // BERT-pretraining territory and diverges on this VLM-class
+        // text-audio aligner during the 30-iter training invariant test.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
         _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
 
         _random = seed.HasValue
@@ -914,7 +919,11 @@ public class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Pass _optimizer explicitly so the fused-Adam fast path
+            // engages — the optimizer-null branch would fall back to
+            // GetOrCreateBaseOptimizer's AMSGrad-Adam which the fused
+            // kernel rejects, sending every step through the eager tape.
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {
