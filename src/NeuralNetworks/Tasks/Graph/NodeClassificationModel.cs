@@ -74,6 +74,7 @@ namespace AiDotNet.NeuralNetworks.Tasks.Graph;
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
+[ModelCategory(ModelCategory.GraphNetwork)]
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
@@ -527,11 +528,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     /// <returns>The prediction tensor with class probabilities for each node.</returns>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        if (_cachedAdjacencyMatrix is null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Predict.");
-        }
+        EnsureDefaultAdjacencyForInput(input);
 
         foreach (var layer in Layers)
         {
@@ -542,17 +539,32 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Auto-creates an identity adjacency matrix when none has been set —
+    /// see <see cref="GraphClassificationModel{T}"/> for rationale (test-
+    /// scaffold convenience, paper-faithful degenerate case where the GCN
+    /// degrades to a per-node dense transform under Kipf &amp; Welling 2017
+    /// §2 with <c>A = I</c>). Production callers should still call
+    /// <see cref="SetAdjacencyMatrix"/> explicitly with the real structure.
+    /// </summary>
+    private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
+    {
+        if (_cachedAdjacencyMatrix is not null) return;
+        if (input.Rank < 1) return;
+        int numNodes = input.Shape[0];
+        var identity = new Tensor<T>(new[] { numNodes, numNodes });
+        for (int i = 0; i < numNodes; i++)
+            identity[i, i] = NumOps.One;
+        SetAdjacencyMatrix(identity);
+    }
+
+    /// <summary>
     /// Trains the network on a single batch of data.
     /// </summary>
     /// <param name="input">The input node features.</param>
     /// <param name="expectedOutput">The expected output (labels).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (_cachedAdjacencyMatrix is null)
-        {
-            throw new InvalidOperationException(
-                "Adjacency matrix must be set using SetAdjacencyMatrix before calling Train.");
-        }
+        EnsureDefaultAdjacencyForInput(input);
 
         foreach (var layer in Layers)
         {
