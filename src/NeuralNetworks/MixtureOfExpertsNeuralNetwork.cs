@@ -1,5 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -179,7 +181,35 @@ public class MixtureOfExpertsNeuralNetwork<T> : NeuralNetworkBase<T>
         Options = _options;
         _options.Validate();
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Issue #1405 (mirrors #1393 DenseNet fix): switched default optimizer
+        // from vanilla Adam(lr=1e-3) to AMSGrad-mode Adam(lr=1e-4) to stop the
+        // optimizer from drifting past the converged point on small /
+        // memorization fixtures (MoreData_ShouldNotDegrade was failing because
+        // lossLong > lossShort by enough to trip the 1e-4 MoreDataTolerance).
+        //
+        // Two compounding causes in the prior default:
+        //   1. lr=1e-3 is too aggressive for the MoE gating + expert
+        //      summed-gradient paths — every parameter sees gradient from
+        //      multiple expert chains weighted by the gate, amplifying the
+        //      effective per-step update vs a plain sequential MLP. 1e-4
+        //      shrinks per-step magnitude (Kingma & Ba 2014 §2.1 convention).
+        //   2. Vanilla Adam's per-parameter v̂ denominator can decay alongside
+        //      gradients near convergence so the effective step size doesn't
+        //      shrink in lockstep, leading to post-convergence drift. AMSGrad
+        //      (Reddi, Kale, Kumar 2018) maintains a running v̂_max — the
+        //      denominator can only grow, eliminating the drift.
+        //
+        // Same configuration NeuralNetworkBase.GetOrCreateBaseOptimizer hands
+        // out as the framework-wide tape default; made explicit on MoE so the
+        // public Train() path benefits without going through the tape-only
+        // path. Callers passing an explicit optimizer are unaffected.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 1e-4,
+                UseAMSGrad = true
+            });
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         InitializeLayers();
