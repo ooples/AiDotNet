@@ -375,7 +375,15 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         // Initialize training components — CTC for ASR (see ONNX ctor for
         // rationale). Wav2Vec2's variable-length frame-vs-character alignment
         // can't be expressed by plain cross-entropy.
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful LR per Baevski et al. 2020 NeurIPS §3.3 ("wav2vec 2.0"):
+        // Adam with peak LR=5e-4 for pretraining, 5e-5 for ASR fine-tuning.
+        // Framework default (LR=1e-3) is too aggressive for this BERT-base scale
+        // model at random init and causes Training_ShouldReduceLoss to diverge.
+        // Use the 5e-5 fine-tuning default since the test runs from random init
+        // and supervised CTC; pretraining-scale 5e-4 also works.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
         _lossFunction = lossFunction ?? new CTCLoss<T>(numClasses: _vocabSize, blankIndex: 0);
 
         InitializeNativeLayers();
@@ -626,7 +634,14 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Pass the model's own non-AMSGrad AdamOptimizer explicitly.
+            // The optimizer-null branch would otherwise fall back to
+            // GetOrCreateBaseOptimizer (which builds an AMSGrad Adam),
+            // and the fused-Adam fast path bails out on AMSGrad — leaving
+            // every step on the BERT-base-scale wav2vec2 encoder running
+            // through the eager tape executor at multi-second cost per
+            // iteration.
+            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
         }
         finally
         {

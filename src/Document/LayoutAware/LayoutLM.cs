@@ -162,7 +162,13 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _maxPosition2D = maxPosition2D;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful LR per Xu et al. 2020 KDD §4.1 ("LayoutLM"): AdamW with
+        // peak LR=5e-5, linear warmup, weight decay 0.01. The framework default
+        // (LR=1e-3) is BERT-pretraining-from-scratch territory and diverges
+        // immediately on fine-tuning-scale models with random init.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
 
         MaxSequenceLength = maxSequenceLength;
 
@@ -219,7 +225,13 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
         _numHeads = numHeads;
         _vocabSize = vocabSize;
         _maxPosition2D = maxPosition2D;
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful LR per Xu et al. 2020 KDD §4.1 ("LayoutLM"): AdamW with
+        // peak LR=5e-5, linear warmup, weight decay 0.01. The framework default
+        // (LR=1e-3) is BERT-pretraining-from-scratch territory and diverges
+        // immediately on fine-tuning-scale models with random init.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
 
         MaxSequenceLength = maxSequenceLength;
 
@@ -510,10 +522,30 @@ public class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput);
-
-        UpdateParameters(CollectGradients());
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape runs the full forward + backward + optimizer step.
+            // The previous implementation followed this with
+            // `UpdateParameters(CollectGradients())`, which applied a SECOND
+            // optimizer step (hardcoded SGD at LR=5e-5) on top of the
+            // primary update — both wrong and 2× the per-iter cost.
+            //
+            // Pass the model's own non-AMSGrad AdamOptimizer (set in the
+            // ctor) explicitly. Without it, TrainWithTape's optimizer-null
+            // branch falls back to GetOrCreateBaseOptimizer which
+            // constructs an AMSGrad Adam — and the fused-Adam fast path
+            // bails out when AMSGrad is on (TryMapToFusedOptimizerConfig
+            // rejects it because the fused kernel doesn't implement the
+            // max-of-second-moment update). Without the fused path, every
+            // Adam step on this BERT-base model (~110 M fp64 params)
+            // runs through the eager tape executor at ~5 s/iter on
+            // consumer CPU.
+            TrainWithTape(input, expectedOutput, _optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>
