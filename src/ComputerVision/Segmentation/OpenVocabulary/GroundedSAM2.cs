@@ -112,7 +112,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         GroundedSAM2Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GroundedSAM2Options(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -145,7 +145,7 @@ public class GroundedSAM2<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     public GroundedSAM2(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         GroundedSAM2Options? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GroundedSAM2Options(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

@@ -57,7 +57,7 @@ public abstract class EnsembleClassifierBase<T> : ProbabilisticClassifierBase<T>
     protected EnsembleClassifierBase(ClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null,
         ILossFunction<T>? lossFunction = null)
-        : base(options ?? new ClassifierOptions<T>(), regularization, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(options ?? new ClassifierOptions<T>(), regularization, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
     }
 

@@ -113,7 +113,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         EfficientTAMModelSize modelSize = EfficientTAMModelSize.Tiny, double dropRate = 0,
         EfficientTAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new EfficientTAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
@@ -145,7 +145,7 @@ public class EfficientTAM<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     public EfficientTAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, EfficientTAMModelSize modelSize = EfficientTAMModelSize.Tiny,
         EfficientTAMOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new EfficientTAMOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

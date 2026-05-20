@@ -109,7 +109,7 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         UniverSegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new UniverSegOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
@@ -142,7 +142,7 @@ public class UniverSeg<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public UniverSeg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         UniverSegOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new UniverSegOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

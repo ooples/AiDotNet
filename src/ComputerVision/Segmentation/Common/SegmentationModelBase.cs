@@ -118,7 +118,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         ILossFunction<T>? lossFunction,
         int numClasses)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
@@ -144,7 +144,7 @@ public abstract class SegmentationModelBase<T> : NeuralNetworkBase<T>, ISegmenta
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         int numClasses)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");

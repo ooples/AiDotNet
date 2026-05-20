@@ -112,7 +112,7 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 14,
         NnUNetModelSize modelSize = NnUNetModelSize.UNet2D, double dropRate = 0,
         NnUNetOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new NnUNetOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
@@ -144,7 +144,7 @@ public class NnUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public NnUNet(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 14, NnUNetModelSize modelSize = NnUNetModelSize.UNet2D,
         NnUNetOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new NnUNetOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

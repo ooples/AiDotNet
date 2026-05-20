@@ -42,7 +42,7 @@ public static class LossFunctionFactory<T>
             LossType.MeanAbsoluteError => new MeanAbsoluteErrorLoss<T>(),
             LossType.RootMeanSquaredError => new RootMeanSquaredErrorLoss<T>(),
             LossType.Huber => new HuberLoss<T>(GetDoubleParam(parameters, "delta", 1.0)),
-            LossType.CrossEntropy => new CrossEntropyLoss<T>(),
+            LossType.CrossEntropy => new CrossEntropyWithLogitsLoss<T>(),
             LossType.BinaryCrossEntropy => new BinaryCrossEntropyLoss<T>(),
             LossType.CategoricalCrossEntropy => new CategoricalCrossEntropyLoss<T>(),
             LossType.SparseCategoricalCrossEntropy => new SparseCategoricalCrossEntropyLoss<T>(),

@@ -109,7 +109,7 @@ public class DiffCutSegmentation<T> : NeuralNetworkBase<T>, ISemanticSegmentatio
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         DiffCutSegmentationOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DiffCutSegmentationOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
@@ -142,7 +142,7 @@ public class DiffCutSegmentation<T> : NeuralNetworkBase<T>, ISemanticSegmentatio
     public DiffCutSegmentation(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         DiffCutSegmentationOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DiffCutSegmentationOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

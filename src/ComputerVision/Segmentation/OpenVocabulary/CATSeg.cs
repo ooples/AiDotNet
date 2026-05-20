@@ -110,7 +110,7 @@ public class CATSeg<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 150,
         double dropRate = 0.1,
         CATSegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new CATSegOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
@@ -143,7 +143,7 @@ public class CATSeg<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     public CATSeg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 150,
         CATSegOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new CATSegOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

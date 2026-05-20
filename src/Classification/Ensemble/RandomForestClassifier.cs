@@ -110,7 +110,7 @@ public class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedCl
     /// <param name="regularization">Optional regularization strategy.</param>
     public RandomForestClassifier(RandomForestClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new RandomForestClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new RandomForestClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
     }
 

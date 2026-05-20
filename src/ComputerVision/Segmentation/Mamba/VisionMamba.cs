@@ -111,7 +111,7 @@ public class VisionMamba<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 150,
         VisionMambaModelSize modelSize = VisionMambaModelSize.Tiny, double dropRate = 0.1,
         VisionMambaOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VisionMambaOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
@@ -143,7 +143,7 @@ public class VisionMamba<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     public VisionMamba(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 150, VisionMambaModelSize modelSize = VisionMambaModelSize.Tiny,
         VisionMambaOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VisionMambaOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

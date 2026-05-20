@@ -84,7 +84,7 @@ public class ExtraTreesClassifier<T> : EnsembleClassifierBase<T>, ITreeBasedClas
     /// <param name="regularization">Optional regularization strategy.</param>
     public ExtraTreesClassifier(ExtraTreesClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new ExtraTreesClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new ExtraTreesClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
     }
 

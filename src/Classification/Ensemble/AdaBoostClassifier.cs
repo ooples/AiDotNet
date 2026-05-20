@@ -87,7 +87,7 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <param name="regularization">Optional regularization strategy.</param>
     public AdaBoostClassifier(AdaBoostClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new AdaBoostClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new AdaBoostClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
     }
 

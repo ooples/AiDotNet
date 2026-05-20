@@ -113,7 +113,7 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         MedSAMModelSize modelSize = MedSAMModelSize.ViTBase, double dropRate = 0,
         MedSAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MedSAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -145,7 +145,7 @@ public class MedSAM<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public MedSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, MedSAMModelSize modelSize = MedSAMModelSize.ViTBase,
         MedSAMOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MedSAMOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

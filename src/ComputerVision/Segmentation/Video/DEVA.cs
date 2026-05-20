@@ -113,7 +113,7 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         DEVAModelSize modelSize = DEVAModelSize.Base, double dropRate = 0,
         DEVAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DEVAOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
@@ -145,7 +145,7 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     public DEVA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, DEVAModelSize modelSize = DEVAModelSize.Base,
         DEVAOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DEVAOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

@@ -283,7 +283,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SupportedLanguages = new[] { language ?? "en" };
 
         // Default loss function (cross-entropy is standard for ASR)
-        _lossFunction = new CrossEntropyLoss<T>();
+        _lossFunction = new CrossEntropyWithLogitsLoss<T>();
 
         InitializeLayers();
     }
@@ -369,7 +369,7 @@ public class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         // Initialize training components
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         InitializeNativeLayers();
     }

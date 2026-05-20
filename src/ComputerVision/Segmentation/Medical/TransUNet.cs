@@ -113,7 +113,7 @@ public class TransUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 9,
         TransUNetModelSize modelSize = TransUNetModelSize.Base, double dropRate = 0.1,
         TransUNetOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new TransUNetOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
@@ -145,7 +145,7 @@ public class TransUNet<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public TransUNet(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 9, TransUNetModelSize modelSize = TransUNetModelSize.Base,
         TransUNetOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new TransUNetOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

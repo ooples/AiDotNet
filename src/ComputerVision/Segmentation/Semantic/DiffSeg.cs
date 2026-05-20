@@ -125,7 +125,7 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         double dropRate = 0.1,
         DiffSegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DiffSegOptions();
         Options = _options;
@@ -165,7 +165,7 @@ public class DiffSeg<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         string onnxModelPath,
         int numClasses = 150,
         DiffSegOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DiffSegOptions();
         Options = _options;

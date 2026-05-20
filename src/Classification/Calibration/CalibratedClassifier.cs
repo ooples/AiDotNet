@@ -118,7 +118,7 @@ public class CalibratedClassifier<T> : ProbabilisticClassifierBase<T>,
         IProbabilisticClassifier<T> baseClassifier,
         CalibratedClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ??= new CalibratedClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ??= new CalibratedClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
         _baseClassifier = baseClassifier;
         _options = options;

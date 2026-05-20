@@ -150,7 +150,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         OneFormerModelSize modelSize = OneFormerModelSize.SwinLarge,
         double dropRate = 0.1,
         OneFormerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new OneFormerOptions();
         Options = _options;
@@ -193,7 +193,7 @@ public class OneFormer<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 150,
         OneFormerModelSize modelSize = OneFormerModelSize.SwinLarge,
         OneFormerOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new OneFormerOptions();
         Options = _options;

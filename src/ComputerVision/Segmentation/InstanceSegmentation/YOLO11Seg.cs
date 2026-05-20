@@ -113,7 +113,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 80,
         YOLO11SegModelSize modelSize = YOLO11SegModelSize.N, double dropRate = 0,
         YOLO11SegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new YOLO11SegOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
@@ -145,7 +145,7 @@ public class YOLO11Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     public YOLO11Seg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 80, YOLO11SegModelSize modelSize = YOLO11SegModelSize.N,
         YOLO11SegOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new YOLO11SegOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

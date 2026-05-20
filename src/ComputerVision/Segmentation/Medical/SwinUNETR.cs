@@ -112,7 +112,7 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 14,
         SwinUNETRModelSize modelSize = SwinUNETRModelSize.Tiny, double dropRate = 0.1,
         SwinUNETROptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SwinUNETROptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 96;
@@ -144,7 +144,7 @@ public class SwinUNETR<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public SwinUNETR(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 14, SwinUNETRModelSize modelSize = SwinUNETRModelSize.Tiny,
         SwinUNETROptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SwinUNETROptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

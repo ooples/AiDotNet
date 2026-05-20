@@ -112,7 +112,7 @@ public class OMGLLaVA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         OMGLLaVAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new OMGLLaVAOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -145,7 +145,7 @@ public class OMGLLaVA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     public OMGLLaVA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         OMGLLaVAOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new OMGLLaVAOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

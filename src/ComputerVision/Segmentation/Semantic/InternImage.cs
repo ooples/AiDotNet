@@ -143,7 +143,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         InternImageModelSize modelSize = InternImageModelSize.Tiny,
         double dropRate = 0.1,
         InternImageOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new InternImageOptions();
         Options = _options;
@@ -185,7 +185,7 @@ public class InternImage<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         InternImageModelSize modelSize = InternImageModelSize.Tiny,
         InternImageOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new InternImageOptions();
         Options = _options;

@@ -156,7 +156,7 @@ public abstract class ClassifierBase<T> : IClassifier<T>, IConfigurableModel<T>,
         NumOps = MathHelper.GetNumericOperations<T>();
         Options = options ?? new ClassifierOptions<T>();
         TaskType = Options.TaskType;
-        _defaultLossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _defaultLossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
     }
 
     /// <summary>

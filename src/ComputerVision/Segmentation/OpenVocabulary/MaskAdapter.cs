@@ -109,7 +109,7 @@ public class MaskAdapter<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 150,
         double dropRate = 0.1,
         MaskAdapterOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MaskAdapterOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
@@ -142,7 +142,7 @@ public class MaskAdapter<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     public MaskAdapter(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 150,
         MaskAdapterOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MaskAdapterOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

@@ -205,7 +205,7 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
         FinBERTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
@@ -217,7 +217,7 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new FinBERTOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _maxSequenceLength = _options.MaxSequenceLength;
@@ -255,12 +255,12 @@ public class FinBERT<T> : FinancialNLPModelBase<T>
         FinBERTOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _useNativeMode = true;
         _options = options ?? new FinBERTOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _maxSequenceLength = _options.MaxSequenceLength;
