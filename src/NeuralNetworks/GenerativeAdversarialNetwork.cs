@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -901,11 +902,38 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
 
         // ------------ Train Discriminator ------------
 
-        // Generate fake images (detached from the generator's gradient path —
-        // Generator.Predict wraps in NoGradScope). The disc step below trains
-        // against these detached fakes; the separate generator-step backward
-        // re-runs the forward with tape to update generator weights.
-        var fakeImages = Generator.Predict(input);
+        // Issue #1390 perf fix: run the generator forward ONCE per Train()
+        // call instead of twice. Previously the disc step received a
+        // Generator.Predict(input) output (eval mode, NoGradScope) and the
+        // gen step ran ForwardForTraining(input) inside TrainWithCustomLoss
+        // — two full generator forwards per iteration (~19 ms wasted on the
+        // DCGAN MoreData fixture per the issue's substep profile).
+        //
+        // New flow:
+        //   1. Open the generator's gradient tape here.
+        //   2. Run ForwardForTraining ONCE on the tape -> fakeTapeTracked.
+        //   3. Take a value-copy detached snapshot for the disc step.
+        //   4. Disc step opens its own nested tape (independent of gen tape
+        //      because ThreadStatic _current save/restore in GradientTape).
+        //   5. Gen step reuses fakeTapeTracked (still attached to the open
+        //      gen tape) and calls BackwardAndStepOnPrecomputedLoss to drive
+        //      the optimizer without a second ForwardForTraining call.
+        //
+        // Behavior note: the disc now trains on train-mode generator output
+        // (uses batch BN stats, would apply Dropout if any) rather than the
+        // eval-mode Predict output. This matches the PyTorch DCGAN tutorial
+        // convention (`fake = G(z); fake_detached = fake.detach()`). DCGAN
+        // architecture has no Dropout; the BN distribution shift is the
+        // standard adversarial behavior, not a regression.
+        using var genTape = new GradientTape<T>();
+        var fakeTapeTracked = ((NeuralNetworkBase<T>)Generator).ForwardForTraining(input);
+
+        // Detached value-copy for the discriminator step. A fresh Tensor<T>
+        // with no GradNode chain — ops touching it record no parent link to
+        // the gen tape, so the disc step can't leak gradients into the
+        // generator's parameters.
+        var fakeImages = new Tensor<T>(fakeTapeTracked.Shape.ToArray());
+        fakeTapeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
 
         // Cache real / fake batches only when an auxiliary loss path needs
         // them. Previously this clone ran unconditionally for UseFeatureMatching;
@@ -1021,35 +1049,38 @@ public class GenerativeAdversarialNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryL
         T generatorLoss;
         try
         {
-            generatorLoss = trainableGen.TrainWithCustomLoss(input, genOutput =>
-            {
-                // genOutput = generated fake images from ForwardForTraining (tape-tracked).
-                // Run the discriminator layer-by-layer so each Forward call records
-                // on the same active GradientTape that the generator's
-                // TrainWithCustomLoss opened. This keeps the discriminator weights
-                // fixed (we only collect generator gradients) while letting the
-                // adversarial signal propagate through every BN / Conv / activation
-                // back to genOutput → Generator's weights.
-                var discScore = genOutput;
-                foreach (var layer in Discriminator.Layers)
-                    discScore = layer.Forward(discScore);
-                // Generator loss: non-saturating BCE-with-logits per Goodfellow
-                // 2014 §3, matching the BCE-with-logits criterion that this base
-                // class wires into the Discriminator (lines 405-419 above —
-                // GetDefaultLossFunction(BinaryClassification) = BCE-with-logits).
-                // The previous LSGAN-style MSE((discScore − 1)²) here was a
-                // different objective (Mao 2017 LSGAN) and silently changed
-                // training semantics for every derived GAN.
-                //
-                // -log σ(discScore) is the per-sample non-saturating generator
-                // term. Implemented via the numerically-stable LogSigmoid identity
-                // -log σ(x) = softplus(-x), where softplus is the tape-tracked
-                // Engine.Softplus op. ReduceMean over all axes gives the scalar
-                // loss the tape requires.
-                var allAxes = Enumerable.Range(0, discScore.Shape.Length).ToArray();
-                var negLogSigmoid = Engine.Softplus(Engine.TensorNegate(discScore));
-                return Engine.ReduceMean(negLogSigmoid, allAxes, keepDims: false);
-            });
+            // Issue #1390: reuse the tape-tracked generator output from the
+            // step start (line ~929) instead of re-running ForwardForTraining
+            // inside TrainWithCustomLoss. The gen tape opened earlier
+            // (genTape) is still active; the disc-layer Forward calls below
+            // continue to record on it, then BackwardAndStepOnPrecomputedLoss
+            // drives gradient compute + optimizer step on the shared tape.
+            //
+            // Walk the discriminator layer-by-layer in eval mode (but WITHOUT
+            // NoGradScope) so each Forward call records on genTape. This
+            // keeps disc weights fixed (only gen params are passed to
+            // ComputeGradients inside BackwardAndStepOnPrecomputedLoss) while
+            // letting the adversarial signal propagate through every BN /
+            // Conv / activation back to fakeTapeTracked → Generator's weights.
+            var discScore = fakeTapeTracked;
+            foreach (var layer in Discriminator.Layers)
+                discScore = layer.Forward(discScore);
+
+            // Generator loss: non-saturating BCE-with-logits per Goodfellow
+            // 2014 §3, matching the BCE-with-logits criterion that this base
+            // class wires into the Discriminator (GetDefaultLossFunction(
+            // BinaryClassification) = BCE-with-logits).
+            //
+            // -log σ(discScore) is the per-sample non-saturating generator
+            // term. Implemented via the numerically-stable LogSigmoid identity
+            // -log σ(x) = softplus(-x), where softplus is the tape-tracked
+            // Engine.Softplus op. ReduceMean over all axes gives the scalar
+            // loss the tape requires.
+            var allAxes = Enumerable.Range(0, discScore.Shape.Length).ToArray();
+            var negLogSigmoid = Engine.Softplus(Engine.TensorNegate(discScore));
+            var lossTensor = Engine.ReduceMean(negLogSigmoid, allAxes, keepDims: false);
+
+            generatorLoss = trainableGen.BackwardAndStepOnPrecomputedLoss(genTape, lossTensor);
         }
         finally
         {
