@@ -47,27 +47,17 @@ env:
   # Memory-management knobs for CI test execution
   # ---------------------------------------------------------------------------
   #
-  # Weight streaming auto-engages above NeuralNetworkBase.DefaultStreamingThresholdParams,
-  # which is 10 BILLION parameters by default — sized for genuine foundation
-  # models (LLaMA-7B+), NOT for the BERT-base-class models that dominate our
-  # test suite (~110 M params each). Without streaming, every model's weights
-  # land on the managed heap and stay until the next Gen-2 GC. With xUnit's
-  # parallel test collections at ProcessorCount (4 on ubuntu-latest), that's
-  # 4× 880 MB BERT-base weights plus 2× Adam m/v state per model — easily
-  # 10+ GB resident, on a 16 GB ubuntu-latest runner. The kernel OOM-killer
-  # then takes the runner agent down → `runner has received a shutdown
-  # signal`, which is what we've been seeing on the Diffusion / NN-Remaining /
-  # Generated Layers / NN-Classic shards.
+  # Streaming-pool threshold engagement (AIDOTNET_STREAMING_THRESHOLD_PARAMS=1M)
+  # was tried but rejected — it caused test-isolation regressions on
+  # ResNet/DenseNet/MobileNet: `WeightRegistry.Configure: existing streaming
+  # pool has N registered entries. Unregister all weights first.` because
+  # the global pool state leaks across tests when ProcessorCount-parallel
+  # collections each call Configure on shared state.
   #
-  # Override `AIDOTNET_STREAMING_THRESHOLD_PARAMS` to a CI-appropriate value
-  # so streaming engages on BERT-base-class models. The Tensors pool can
-  # release back to the OS between tests, which is exactly what we need for
-  # parallel test collections to fit in the 16 GB envelope.
-  #
-  # 1_000_000 ≈ 1M params — anything bigger (smallest ResNet, a Conv2D stack,
-  # a 2-layer transformer) routes through the pool. Smaller models stay on
-  # the GC heap where they're cheap and short-lived.
-  AIDOTNET_STREAMING_THRESHOLD_PARAMS: 1000000
+  # Memory pressure on heavy shards is handled instead by per-shard
+  # `xunit.MaxParallelThreads=1` (see the test step below), which
+  # serializes model loads on the heaviest shards without changing pool
+  # behavior. Other shards keep default parallelism.
 
   # GC tuning for tests: switch to Server GC (multi-threaded, larger heap
   # segments, batched Gen-2 collections) — Workstation GC's per-thread heap
