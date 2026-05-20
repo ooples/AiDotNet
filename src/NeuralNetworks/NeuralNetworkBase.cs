@@ -6477,7 +6477,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="lossTensor">Scalar loss tensor recorded on <paramref name="tape"/>.</param>
     /// <param name="optimizer">Optimizer to drive; defaults to the base Adam.</param>
     /// <returns>Scalar loss value (also stored in <see cref="LastLoss"/>).</returns>
-    public T BackwardAndStepOnPrecomputedLoss(
+    /// <remarks>
+    /// Visibility: <c>internal</c>. The codebase contract is "users should only
+    /// interact with <c>AiModelBuilder</c> / <c>AiModelResult</c>" — this helper
+    /// is training plumbing for in-assembly callers (currently
+    /// <see cref="GenerativeAdversarialNetwork{T,TI,TO}.Train"/>) and should not
+    /// appear on the public API surface. (PR #1389 CodeRabbit review.)
+    /// </remarks>
+    internal T BackwardAndStepOnPrecomputedLoss(
         GradientTape<T> tape,
         Tensor<T> lossTensor,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
@@ -6485,7 +6492,27 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (tape is null) throw new ArgumentNullException(nameof(tape));
         if (lossTensor is null) throw new ArgumentNullException(nameof(lossTensor));
 
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        // PR #1389 CodeRabbit fix: reentrancy guard so concurrent callers don't
+        // interleave optimizer/tape state. Mirrors TrainWithTape's sentinel
+        // discipline; without it, two threads calling this helper on the same
+        // model would race on LastLoss + optimizer-internal state.
+        using var __reentrancyGuard = AcquireTrainSentinel();
+
+        // PR #1389 CodeRabbit fix: include network-level trainable tensors
+        // (raw parameters owned by the model rather than a layer) in the
+        // gradient-and-step set. Without this, models that expose params via
+        // GetExtraTrainableTensors() would silently skip those updates here
+        // while TrainWithTape would still update them — divergent semantics
+        // between the two training entry points.
+        var layerParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        var extraTrainableTensors = new List<Tensor<T>>();
+        foreach (var t in GetExtraTrainableTensors())
+        {
+            if (t is not null && t.Length > 0) extraTrainableTensors.Add(t);
+        }
+        var trainableParams = extraTrainableTensors.Count == 0
+            ? layerParams
+            : layerParams.Concat(extraTrainableTensors).ToList();
         var opt = optimizer ?? GetOrCreateBaseOptimizer();
 
         var grads = tape.ComputeGradients(lossTensor, trainableParams);
