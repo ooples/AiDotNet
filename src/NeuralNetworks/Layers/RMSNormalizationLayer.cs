@@ -98,6 +98,35 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// AiDotNet#1370 eager-init constructor. Pass <paramref name="featureSize"/> at
+    /// construction to allocate γ immediately and resolve the layer's input + output
+    /// shapes — eliminating the need for a warmup forward pass before downstream
+    /// consumers (LoRA wrapping, parameter introspection, ONNX export) can read
+    /// shape-dependent state. Per Zhang &amp; Sennrich 2019, γ is initialised to 1
+    /// (the no-op identity).
+    /// </summary>
+    /// <param name="featureSize">The size of the last (feature) axis. Must be positive.</param>
+    /// <param name="epsilon">A small value added to the variance for numerical stability.</param>
+    /// <remarks>
+    /// After this constructor returns, <see cref="LayerBase{T}.IsShapeResolved"/> is
+    /// <c>true</c> and <see cref="LayerBase{T}.TryDeclareShape"/> returns <c>true</c>
+    /// via the default implementation — no override needed.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
+    public RMSNormalizationLayer(int featureSize, double epsilon = 1e-6)
+        : base(new[] { featureSize }, new[] { featureSize })
+    {
+        if (featureSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(featureSize),
+                $"featureSize must be positive, got {featureSize}.");
+
+        _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
+
+        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+    }
+
+    /// <summary>
     /// Resolves <c>featureSize</c> from <c>input.Shape[^1]</c> on the first forward call
     /// and allocates the γ tensor. Per Zhang &amp; Sennrich 2019, γ is initialised to 1
     /// (the no-op identity) so the layer behaves as a pass-through before training.

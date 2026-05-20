@@ -86,11 +86,15 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TransformerEncoderLayer_ParameterCount_ReturnsPositiveValue()
     {
-        // Arrange
+        await Task.Yield();
+        // Arrange — use the eager-dimension ctor (AiDotNet#1370 made it the
+        // shape-oracle-friendly path: passing embeddingSize constructs sublayers
+        // at ctor time so ParameterCount reflects allocated weights without a
+        // warmup forward).
         int embeddingSize = 64;
         int numHeads = 4;
         int feedForwardDim = 256;
-        var layer = new TransformerEncoderLayer<float>( numHeads, feedForwardDim);
+        var layer = new TransformerEncoderLayer<float>(numHeads, feedForwardDim, embeddingSize);
 
         // Act
         int paramCount = (int)layer.ParameterCount;
@@ -2147,9 +2151,11 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNormalizationLayer_ParameterCount_IsPositive()
     {
-        // Arrange
+        await Task.Yield();
+        // Arrange — AiDotNet#1370 eager ctor allocates gamma/beta immediately so
+        // ParameterCount reflects the materialised state without needing a forward.
         int numFeatures = 64;
-        var layer = new BatchNormalizationLayer<float>();
+        var layer = new BatchNormalizationLayer<float>(numFeatures);
 
         // Act
         int paramCount = (int)layer.ParameterCount;
@@ -2377,9 +2383,11 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LayerNormalizationLayer_ParameterCount_IsPositive()
     {
-        // Arrange
+        await Task.Yield();
+        // Arrange — AiDotNet#1370 eager ctor allocates gamma/beta immediately so
+        // ParameterCount reflects the materialised state without needing a forward.
         int featureSize = 64;
-        var layer = new LayerNormalizationLayer<float>();
+        var layer = new LayerNormalizationLayer<float>(featureSize);
 
         // Act
         int paramCount = (int)layer.ParameterCount;
