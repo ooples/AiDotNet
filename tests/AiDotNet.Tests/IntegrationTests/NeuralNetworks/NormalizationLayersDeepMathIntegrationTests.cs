@@ -442,7 +442,9 @@ public class NormalizationLayersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LayerNorm_ParameterCount_IsTwiceFeatureSize()
     {
-        var ln = new LayerNormalizationLayer<double>();
+        await Task.Yield();
+        // AiDotNet#1370 eager ctor — featureSize=7 → 2*7=14 (gamma + beta) at ctor time.
+        var ln = new LayerNormalizationLayer<double>(featureSize: 7);
         Assert.Equal(14, (int)ln.ParameterCount);
     }
 
