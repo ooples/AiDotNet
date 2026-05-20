@@ -787,14 +787,16 @@ public static class LayerHelper<T>
         // Dense layers for further processing. LayerNormalization (Ba 2016)
         // rather than BatchNormalization so the head still normalizes at any
         // batch size — memorization-style training runs at batch=1 and BN
-        // collapses (σ² = 0) under those conditions.
+        // collapses (σ² = 0) under those conditions. Dropout removed for
+        // the same reason as the non-temporal variant above (#1304
+        // cluster-6 follow-up) — per-step mask randomness exceeds the
+        // gradient signal on a 100-iter memorization task and stalls
+        // loss at the BCE-ln(2) baseline.
         yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(0.3f);
 
         yield return new DenseLayer<T>(32, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(0.2f);
 
         // Output layer
         yield return new DenseLayer<T>(architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
@@ -879,13 +881,30 @@ public static class LayerHelper<T>
         // memorization-style training. LayerNorm normalizes across the
         // feature axis within each sample and is the modern default for
         // small dense MLPs.
+        //
+        // Dropout removed (#1304 cluster-6 follow-up): the prior layout
+        // applied Dropout(0.3) + Dropout(0.2) on a tiny 3 → 64 → 32 → 16
+        // → 1 MLP (~2k params). On a memorization task that trains the
+        // same (x, target) pair for 100 iterations, every forward sees a
+        // DIFFERENT random sub-network (roughly 56% of hidden units
+        // active = 0.7 × 0.8) so the optimizer can never learn the pair
+        // — Dropout's per-step mask injects more variance than the
+        // gradient can subtract over 100 steps, leaving loss flat or
+        // slightly RISING at the BCE-ln(2) baseline. PR #1329 fixed the
+        // BN-at-batch-1 layer of this stack but the Dropout layer's
+        // memorization-blocking effect was left. At this network size
+        // Dropout adds no useful regularization (the model has fewer
+        // params than typical sensor batches have rows); callers who
+        // genuinely need regularization on a larger Occupancy MLP can
+        // pass an explicit architecture with their preferred Dropout
+        // rate. Closes the LossStrictlyDecreasesOnMemorizationTask
+        // signal that's been red on OccupancyNeuralNetworkTests since
+        // the cluster-6 sweep.
         yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(0.3f);
 
         yield return new DenseLayer<T>(32, new ReLUActivation<T>() as IActivationFunction<T>);
         yield return new LayerNormalizationLayer<T>();
-        yield return new DropoutLayer<T>(0.2f);
 
         yield return new DenseLayer<T>(16, new ReLUActivation<T>() as IActivationFunction<T>);
 
