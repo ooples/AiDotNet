@@ -53,7 +53,13 @@ public class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     public bool SupportsWordTimestamps => false;
 
     public KyutaiMoshi(NeuralNetworkArchitecture<T> architecture, string modelPath, KyutaiMoshiOptions? options = null) : base(architecture) { _options = options ?? new KyutaiMoshiOptions(); _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public KyutaiMoshi(NeuralNetworkArchitecture<T> architecture, KyutaiMoshiOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KyutaiMoshiOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public KyutaiMoshi(NeuralNetworkArchitecture<T> architecture, KyutaiMoshiOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new KyutaiMoshiOptions(); _useNativeMode = true;
+        // Paper-faithful LR: Kyutai (2024) Moshi fine-tunes a transformer ASR
+        // stack at LR=5e-5. The framework AdamW default (LR=1e-3) is too
+        // aggressive for BERT-class encoders at random init and causes
+        // Training_ShouldReduceLoss to diverge/time-out within 30 iterations.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
+        base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
 
     /// <summary>
     /// Transcribes audio using Moshi's neural codec + Transformer architecture.
@@ -97,7 +103,20 @@ public class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerLayers(encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
+    public override void Train(Tensor<T> input, Tensor<T> expected) {
+        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+        SetTrainingMode(true);
+        try {
+            // Pass the model's own non-AMSGrad AdamW explicitly so the
+            // fused-Adam fast path engages. The optimizer-null branch falls
+            // back to GetOrCreateBaseOptimizer (AMSGrad), which the fused
+            // kernel rejects → eager tape path → ~5 s/iter on this Conformer
+            // encoder → 120 s test timeout before 30 iters finish.
+            TrainWithTape(input, expected, _optimizer);
+        } finally {
+            SetTrainingMode(false);
+        }
+    }
     public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) { if (MelSpec is not null) return MelSpec.Forward(rawAudio); return rawAudio; }
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
