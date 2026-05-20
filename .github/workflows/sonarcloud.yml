@@ -43,6 +43,42 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
+  # ---------------------------------------------------------------------------
+  # Memory-management knobs for CI test execution
+  # ---------------------------------------------------------------------------
+  #
+  # Weight streaming auto-engages above NeuralNetworkBase.DefaultStreamingThresholdParams,
+  # which is 10 BILLION parameters by default — sized for genuine foundation
+  # models (LLaMA-7B+), NOT for the BERT-base-class models that dominate our
+  # test suite (~110 M params each). Without streaming, every model's weights
+  # land on the managed heap and stay until the next Gen-2 GC. With xUnit's
+  # parallel test collections at ProcessorCount (4 on ubuntu-latest), that's
+  # 4× 880 MB BERT-base weights plus 2× Adam m/v state per model — easily
+  # 10+ GB resident, on a 16 GB ubuntu-latest runner. The kernel OOM-killer
+  # then takes the runner agent down → `runner has received a shutdown
+  # signal`, which is what we've been seeing on the Diffusion / NN-Remaining /
+  # Generated Layers / NN-Classic shards.
+  #
+  # Override `AIDOTNET_STREAMING_THRESHOLD_PARAMS` to a CI-appropriate value
+  # so streaming engages on BERT-base-class models. The Tensors pool can
+  # release back to the OS between tests, which is exactly what we need for
+  # parallel test collections to fit in the 16 GB envelope.
+  #
+  # 1_000_000 ≈ 1M params — anything bigger (smallest ResNet, a Conv2D stack,
+  # a 2-layer transformer) routes through the pool. Smaller models stay on
+  # the GC heap where they're cheap and short-lived.
+  AIDOTNET_STREAMING_THRESHOLD_PARAMS: 1000000
+
+  # GC tuning for tests: switch to Server GC (multi-threaded, larger heap
+  # segments, batched Gen-2 collections) — Workstation GC's per-thread heap
+  # mode keeps Gen-2 retention pinned to the test thread for longer than we
+  # can afford under parallel test collections. ServerGC ALSO triggers
+  # background concurrent collection more aggressively, reducing the chance
+  # that one test's working set blocks another test from getting a fresh
+  # allocation context.
+  DOTNET_gcServer: 1
+  DOTNET_GCConserveMemory: 9
+
 jobs:
   # CodeQL runs on Ubuntu with net10.0 only - parallel with SonarCloud
   # Runs on PRs, pushes to master/main, and weekly schedule for security analysis
@@ -431,7 +467,34 @@ jobs:
           $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
           $results = Join-Path "TestResults" $sanitizedShardName
           New-Item -Path $results -ItemType Directory -Force | Out-Null
+
+          # Pre-test resource snapshot. Cancelled-runner shards (Diffusion S-Z,
+          # ModelFamily-NN, Generated Layers, NN-Remaining, Unit-03 Diffusion)
+          # die with `The runner has received a shutdown signal` 2-6 min into
+          # test execution. The dotnet test step exits before producing TRX
+          # output so we have no idea what was running at OOM time. Dump
+          # memory + disk + CPU info on entry so the next cancellation has
+          # forensic data.
+          Write-Host "=== Pre-test resource snapshot ==="
+          Write-Host "Memory:"
+          free -h
+          Write-Host "Disk:"
+          df -h /
+          Write-Host "Processors:"
+          nproc
+
           dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-build --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results --blame-hang-timeout 5min --blame-hang-dump-type none
+
+          # Post-test resource snapshot. If the runner survives this point,
+          # the test step finished naturally and the snapshot tells us what
+          # the high-water mark looked like.
+          $exitCode = $LASTEXITCODE
+          Write-Host "=== Post-test resource snapshot ==="
+          Write-Host "Memory:"
+          free -h
+          Write-Host "Disk:"
+          df -h /
+          exit $exitCode
 
       - name: Report slow tests
         if: always()
