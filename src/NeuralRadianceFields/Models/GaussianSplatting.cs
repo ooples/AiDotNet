@@ -543,6 +543,56 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         {
             InitializeFromPointCloud(initialPointCloud, initialColors);
         }
+        else
+        {
+            // No point cloud provided → seed a small uniform-cube cloud so the
+            // model is trainable out of the box. Without this, _gaussians is
+            // empty and every operation (Predict, Train, GetParameters) is a
+            // silent no-op — model-family invariant tests that check "training
+            // changed parameters" or "loss decreased" fail because there are
+            // literally zero parameters to change. The cloud is small (8
+            // Gaussians) so it adds negligible overhead but gives the model
+            // a non-trivial trainable surface from construction. Production
+            // callers should still pass a real point cloud (typically the
+            // COLMAP / SfM output the 3D Gaussian Splatting paper assumes).
+            SeedDefaultGaussianCloud();
+        }
+    }
+
+    /// <summary>
+    /// Seeds a small unit-cube Gaussian cloud (8 corners) so the parameterless
+    /// constructor produces a model with non-empty trainable state. Used only
+    /// when no <paramref name="initialPointCloud"/> is supplied to the main
+    /// constructor.
+    /// </summary>
+    private void SeedDefaultGaussianCloud()
+    {
+        const int seedCount = 8;
+        // Corners of a unit cube centred on the origin — gives a coarse but
+        // varied initial geometry that exercises position / colour / scale /
+        // opacity parameter updates symmetrically.
+        var corners = new double[seedCount, 3]
+        {
+            { -0.5, -0.5, -0.5 }, { -0.5, -0.5,  0.5 },
+            { -0.5,  0.5, -0.5 }, { -0.5,  0.5,  0.5 },
+            {  0.5, -0.5, -0.5 }, {  0.5, -0.5,  0.5 },
+            {  0.5,  0.5, -0.5 }, {  0.5,  0.5,  0.5 },
+        };
+        var pointCloudData = new T[seedCount * 3];
+        for (int i = 0; i < seedCount; i++)
+        {
+            pointCloudData[i * 3] = NumOps.FromDouble(corners[i, 0]);
+            pointCloudData[i * 3 + 1] = NumOps.FromDouble(corners[i, 1]);
+            pointCloudData[i * 3 + 2] = NumOps.FromDouble(corners[i, 2]);
+        }
+        var pointCloud = new Matrix<T>(seedCount, 3);
+        for (int i = 0; i < seedCount; i++)
+        {
+            pointCloud[i, 0] = pointCloudData[i * 3];
+            pointCloud[i, 1] = pointCloudData[i * 3 + 1];
+            pointCloud[i, 2] = pointCloudData[i * 3 + 2];
+        }
+        InitializeFromPointCloud(pointCloud, colors: null);
     }
 
     public bool EnableDensification { get; set; }
@@ -1908,6 +1958,60 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Flattens every Gaussian's trainable state (position, rotation, scale,
+    /// opacity, colour) into a single contiguous vector. Mirrors
+    /// <see cref="UpdateParameters"/>'s ordering exactly so a round-trip
+    /// <c>GetParameters → UpdateParameters</c> is a no-op.
+    /// </summary>
+    /// <remarks>
+    /// The base NeuralNetworkBase.GetParameters walks Layers, but
+    /// GaussianSplatting has no neural layers (InitializeLayers is a
+    /// no-op by design — Gaussians are an explicit, non-layered
+    /// representation). Override to expose the Gaussian collection's
+    /// flat state vector so model-family invariant tests
+    /// (Training_ShouldChangeParameters, GradientFlow_ShouldBeNonZero...,
+    /// Clone_ShouldProduceIdenticalOutput) can read and diff the model's
+    /// trained state.
+    /// </remarks>
+    public override Vector<T> GetParameters()
+    {
+        if (_gaussians.Count == 0) return new Vector<T>(0);
+
+        int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
+        int perGaussian = 3 + 4 + 3 + 1 + colorDim;
+        var flat = new T[perGaussian * _gaussians.Count];
+        int offset = 0;
+        foreach (var gaussian in _gaussians)
+        {
+            for (int i = 0; i < 3; i++) flat[offset++] = gaussian.Position[i];
+            for (int i = 0; i < 4; i++) flat[offset++] = gaussian.Rotation[i];
+            for (int i = 0; i < 3; i++) flat[offset++] = gaussian.Scale[i];
+            flat[offset++] = gaussian.Opacity;
+            for (int i = 0; i < colorDim; i++) flat[offset++] = gaussian.Color[i];
+        }
+        return new Vector<T>(flat);
+    }
+
+    /// <summary>
+    /// Yields the Gaussian state as a single chunk for parameter-diff
+    /// iteration. NeuralNetworkBase.GetParameterChunks walks <c>Layers</c>
+    /// which is empty for explicit-representation models like this one,
+    /// so model-family invariant tests
+    /// (<c>Training_ShouldChangeParameters</c>, <c>GradientFlow_…</c>)
+    /// see zero chunks and silently mis-validate. One chunk = the full
+    /// GetParameters vector gives the test base a reliable
+    /// content-hash key per training step.
+    /// </summary>
+    public override IEnumerable<Tensor<T>> GetParameterChunks()
+    {
+        var flat = GetParameters();
+        if (flat.Length == 0) yield break;
+        var arr = new T[flat.Length];
+        for (int i = 0; i < flat.Length; i++) arr[i] = flat[i];
+        yield return new Tensor<T>(arr, new[] { flat.Length });
     }
 
     public override void UpdateParameters(Vector<T> parameters)
