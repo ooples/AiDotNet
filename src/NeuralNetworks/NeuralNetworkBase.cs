@@ -2160,6 +2160,36 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
 
         int[] outputShape = layerOutputShape!;
 
+        // Partially-deferred shapes — e.g. a transposed-conv generator that
+        // emits [3, -1, -1] until first Forward resolves H/W from runtime
+        // input — can't be compared dimensionally against the architecture's
+        // flat OutputSize. Defer the check; the layer will fail at runtime
+        // with a precise shape error if the resolved output doesn't honour
+        // the contract. This guard was added by PR #1329 and inadvertently
+        // removed by the grafprint PR (c8cac237b) — restoring it closes the
+        // DCGAN cluster-1 false-rejection where the generator's last
+        // ConvTranspose2D layer reports [channels, -1, -1] before first
+        // Forward and is compared against OutputSize = channels * H * W
+        // (a single flat scalar that can't be element-wise-matched).
+        //
+        // Only -1 sentinels trigger the deferral. Zero-sized dimensions
+        // would ALSO escape the AreShapesCompatible check below — the
+        // ShapesMatchKnownDimensions wildcard rule treats any d <= 0
+        // as matching anything, so a stray d == 0 in either operand
+        // silently passes. That's the existing wildcard convention
+        // across this validator (matches lazy-layer rank-2 [-1, F] vs
+        // resolved rank-3 [B, S, F] etc); a layer that emits d == 0 in
+        // a resolved output shape is a bug a different validator should
+        // catch — not this one's job. Restricting deferral to d < 0
+        // keeps the surface narrow: any future "d > 0 but doesn't
+        // match" path still gets the clear "output shape ... must match
+        // architecture output size" error.
+        if (outputShape.Any(d => d < 0))
+        {
+            error = string.Empty;
+            return true;
+        }
+
         if (Architecture.OutputSize > 0 && !AreShapesCompatible([Architecture.OutputSize], outputShape))
         {
             error = $"The last layer's output shape [{string.Join(", ", outputShape)}] must match the architecture output size ({Architecture.OutputSize}).";
@@ -6418,6 +6448,87 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// Variant of <see cref="TrainWithCustomLoss"/> that runs backward+optim
+    /// on a loss tensor whose forward pass was already recorded on a
+    /// caller-owned <see cref="GradientTape{T}"/>. Use this when the caller
+    /// needs to share the forward output across multiple training paths so
+    /// the forward only runs once.
+    ///
+    /// <para>Issue #1390 driver: <c>GenerativeAdversarialNetwork.Train</c>
+    /// previously ran the generator forward twice per step — once detached
+    /// (<see cref="Predict"/> + <see cref="NoGradScope{T}"/>) to feed the
+    /// discriminator step, then a second time tape-tracked
+    /// (inside <see cref="TrainWithCustomLoss"/>) for the generator's
+    /// adversarial backward. With this entry point, the GAN's <c>Train</c>
+    /// can open its own gen tape, run the forward once, detach a
+    /// value-snapshot for the discriminator step, and feed the same
+    /// tape-tracked output into the generator loss — eliminating the
+    /// duplicate forward (~4% of step time on the DCGAN MoreData fixture
+    /// per the issue's substep profile).</para>
+    ///
+    /// <para>Contract: the caller MUST keep the tape alive (not dispose it)
+    /// from the time the forward runs until this method returns. The tape
+    /// is NOT disposed here — the caller owns its lifecycle.</para>
+    /// </summary>
+    /// <param name="tape">Open gradient tape on which the forward was recorded.</param>
+    /// <param name="lossTensor">Scalar loss tensor recorded on <paramref name="tape"/>.</param>
+    /// <param name="optimizer">Optimizer to drive; defaults to the base Adam.</param>
+    /// <returns>Scalar loss value (also stored in <see cref="LastLoss"/>).</returns>
+    /// <remarks>
+    /// Visibility: <c>internal</c>. The codebase contract is "users should only
+    /// interact with <c>AiModelBuilder</c> / <c>AiModelResult</c>" — this helper
+    /// is training plumbing for in-assembly callers (currently
+    /// <see cref="GenerativeAdversarialNetwork{T,TI,TO}.Train"/>) and should not
+    /// appear on the public API surface. (PR #1389 CodeRabbit review.)
+    /// </remarks>
+    internal T BackwardAndStepOnPrecomputedLoss(
+        GradientTape<T> tape,
+        Tensor<T> lossTensor,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (tape is null) throw new ArgumentNullException(nameof(tape));
+        if (lossTensor is null) throw new ArgumentNullException(nameof(lossTensor));
+
+        // PR #1389 CodeRabbit fix: reentrancy guard so concurrent callers don't
+        // interleave optimizer/tape state. Mirrors TrainWithTape's sentinel
+        // discipline; without it, two threads calling this helper on the same
+        // model would race on LastLoss + optimizer-internal state.
+        using var __reentrancyGuard = AcquireTrainSentinel();
+
+        // PR #1389 CodeRabbit fix: include network-level trainable tensors
+        // (raw parameters owned by the model rather than a layer) in the
+        // gradient-and-step set. Without this, models that expose params via
+        // GetExtraTrainableTensors() would silently skip those updates here
+        // while TrainWithTape would still update them — divergent semantics
+        // between the two training entry points.
+        var layerParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
+        var extraTrainableTensors = new List<Tensor<T>>();
+        foreach (var t in GetExtraTrainableTensors())
+        {
+            if (t is not null && t.Length > 0) extraTrainableTensors.Add(t);
+        }
+        var trainableParams = extraTrainableTensors.Count == 0
+            ? layerParams
+            : layerParams.Concat(extraTrainableTensors).ToList();
+        var opt = optimizer ?? GetOrCreateBaseOptimizer();
+
+        var grads = tape.ComputeGradients(lossTensor, trainableParams);
+        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        LastLoss = lossValue;
+
+        var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+            trainableParams, grads, lossValue);
+
+        opt.Step(context);
+
+        // Mirror the OnBatchEnd advance from TrainWithCustomLoss / TrainWithTape
+        // so a precomputed-loss caller sees identical scheduler behaviour.
+        StepSchedulerIfSupported(opt);
+
+        return lossValue;
     }
 
     /// <summary>

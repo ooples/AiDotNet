@@ -29,6 +29,73 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Picks a head-count + head-dim pair for a MultiHeadAttention layer such
+    /// that <c>heads × headDim == embedDim</c> exactly. The requested head
+    /// count is honoured when it divides <paramref name="embedDim"/> cleanly;
+    /// otherwise it's reduced to the largest divisor of
+    /// <paramref name="embedDim"/> that is ≤ <paramref name="requestedHeads"/>
+    /// (and ≤ <paramref name="maxHeads"/>, default 16, which preserves the
+    /// existing VLM cap most call sites use). Used to fix
+    /// <c>cluster-3 #1311</c> SmolVLM-style failures where, e.g.,
+    /// <c>visionDim=384 / numHeads=9 = 42</c> (integer division) and
+    /// <c>9 × 42 = 378 ≠ 384</c> — the MHA's QKV weight matrices end up sized
+    /// <c>[378, 378]</c> while the input it sees is <c>[..., 384]</c>, and
+    /// <c>MultiHeadAttentionLayer.ForwardInternal</c> throws
+    /// <c>"Input embedding dimension (384) does not match weight dimension (378)"</c>
+    /// the moment the test forwards the patch-embedded tokens.
+    ///
+    /// <para>
+    /// Snapping heads downward (vs upward / padding the embed dim) keeps every
+    /// other shape in the chain unchanged — FFN, LayerNorm, downstream
+    /// DenseLayer outputs all keep their <paramref name="embedDim"/>-wide
+    /// view. The trade-off is the attention pattern uses slightly fewer
+    /// heads than the upstream model card; that's strictly more local than
+    /// reshaping the entire residual stream. Paper-faithful head counts can
+    /// be re-introduced once the per-subsystem head-count knob exists on the
+    /// options class (NumVisionHeads vs NumDecoderHeads), filed separately.
+    /// </para>
+    /// </summary>
+    private static (int heads, int headDim) ChooseDivisibleHeadConfig(
+        int embedDim, int requestedHeads, int maxHeads = 16)
+    {
+        if (embedDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embedDim), embedDim, "embedDim must be positive.");
+        if (requestedHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(requestedHeads), requestedHeads, "requestedHeads must be positive.");
+        if (maxHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxHeads), maxHeads, "maxHeads must be positive.");
+
+        int heads = System.Math.Min(requestedHeads, maxHeads);
+        while (heads > 1 && embedDim % heads != 0) heads--;
+        // Last-ditch fallback: a 1-head attention always divides. Useful for
+        // pathological embed dims (primes > maxHeads or arbitrary user-set
+        // values) so the test doesn't crash before its assertion runs.
+        return (heads, embedDim / heads);
+    }
+
+    /// <summary>
+    /// Builds the vision-encoder <see cref="NeuralNetworks.Layers.MultiHeadAttentionLayer{T}"/>
+    /// for a VLM factory, with head count adjusted to divide
+    /// <paramref name="visionDim"/> exactly. See
+    /// <see cref="ChooseDivisibleHeadConfig"/> for the snap-to-divisor
+    /// rationale; this method is the call-site shim that replaces the
+    /// inline <c>new MultiHeadAttentionLayer&lt;T&gt;(numHeads &gt; 16 ? 16 : numHeads,
+    /// (visionDim) / (numHeads &gt; 16 ? 16 : numHeads))</c> pattern in 10+ VLM factories.
+    /// </summary>
+    private static NeuralNetworks.Layers.MultiHeadAttentionLayer<T> CreateVisionMha(
+        int visionDim,
+        int numHeads,
+        Initialization.IInitializationStrategy<T>? initializationStrategy = null)
+    {
+        var (heads, headDim) = ChooseDivisibleHeadConfig(visionDim, numHeads);
+        return new NeuralNetworks.Layers.MultiHeadAttentionLayer<T>(
+            heads,
+            headDim,
+            activationFunction: null,
+            initializationStrategy: initializationStrategy);
+    }
+
+    /// <summary>
     /// Creates the default layer configuration for a Deep Portfolio Management model.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -23623,7 +23690,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23680,7 +23747,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23742,7 +23809,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23857,7 +23924,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -23918,7 +23985,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24013,7 +24080,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads), initializationStrategy: lazy);
+            yield return CreateVisionMha(visionDim, numHeads, initializationStrategy: lazy);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation, lazy);
             yield return new DenseLayer<T>(visionDim, identityActivation, lazy);
@@ -24077,7 +24144,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24182,7 +24249,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24326,7 +24393,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
@@ -24391,7 +24458,7 @@ public static class LayerHelper<T>
 
         for (int i = 0; i < numVisionLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads > 16 ? 16 : numHeads, (visionDim) / (numHeads > 16 ? 16 : numHeads));
+            yield return CreateVisionMha(visionDim, numHeads);
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(visionFfnDim, geluActivation);
             yield return new DenseLayer<T>(visionDim, identityActivation);
