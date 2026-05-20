@@ -155,7 +155,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), maxGradNorm)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
     {
         InputFeatures = architecture.InputSize;
         NumClasses = architecture.OutputSize;
@@ -163,7 +163,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
         NumLayers = numLayers;
         DropoutRate = dropoutRate;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();

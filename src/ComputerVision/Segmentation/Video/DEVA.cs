@@ -98,7 +98,7 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="lossFunction">Loss function (default: <see cref="BinaryCrossEntropyWithLogitsLoss{T}"/> when <paramref name="numClasses"/> == 1; otherwise <see cref="CrossEntropyWithLogitsLoss{T}"/>).</param>
     /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="modelSize">Model size variant (default: Base).</param>
     /// <param name="dropRate">Dropout rate (default: 0).</param>
@@ -113,7 +113,9 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         DEVAModelSize modelSize = DEVAModelSize.Base, double dropRate = 0,
         DEVAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? (numClasses == 1
+            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>()))
     {
         _options = options ?? new DEVAOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
@@ -145,7 +147,9 @@ public class DEVA<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     public DEVA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, DEVAModelSize modelSize = DEVAModelSize.Base,
         DEVAOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, numClasses == 1
+            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new DEVAOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

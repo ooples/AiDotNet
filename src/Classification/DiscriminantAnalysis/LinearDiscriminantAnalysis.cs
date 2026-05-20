@@ -115,7 +115,7 @@ public class LinearDiscriminantAnalysis<T> : ProbabilisticClassifierBase<T>,
     /// <param name="regularization">Optional regularization strategy.</param>
     public LinearDiscriminantAnalysis(DiscriminantAnalysisOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new DiscriminantAnalysisOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new DiscriminantAnalysisOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
     }
 

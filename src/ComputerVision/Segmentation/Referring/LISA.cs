@@ -110,7 +110,7 @@ public class LISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         LISAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new LISAOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -143,7 +143,7 @@ public class LISA<T> : NeuralNetworkBase<T>, IReferringSegmentation<T>
     public LISA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         LISAOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new LISAOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

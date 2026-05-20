@@ -107,7 +107,7 @@ public class NeuralProgramSynthesizer<T> : NeuralNetworkBase<T>, IProgramSynthes
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         IProgramExecutionEngine? executionEngine = null,
         NeuralProgramSynthesizerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new NeuralProgramSynthesizerOptions();
         Options = _options;

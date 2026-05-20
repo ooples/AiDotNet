@@ -1118,9 +1118,24 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Cache attention weights for backward pass
         _lastAttentionScores = attentionWeights4D;
 
-        // 3. Cache Head Outputs — via Engine so the tape records the transpose.
-        var permutedForCache = Engine.TensorPermute(context_4D, new[] { 1, 0, 2, 3 }); // [H, B, S, D]
-        _lastHeadOutputs = new List<Tensor<T>> { permutedForCache }; // store stacked heads
+        // 3. Cache Head Outputs — only when the auxiliary loss path will
+        // read them. ComputeAuxiliaryLoss is the sole consumer of
+        // _lastHeadOutputs (head-diversity penalty), and it short-circuits
+        // when UseAuxiliaryLoss is false (default). Skipping the Permute
+        // + List<T> allocation here saves one engine op + one tape entry
+        // per MHA forward; on a 12-layer LayoutLM × 30 training iters
+        // that's 360 dead permute/tape entries per Train_ShouldReduceLoss
+        // run, each one tracked + walked by the gradient tape backward.
+        if (UseAuxiliaryLoss)
+        {
+            // via Engine so the tape records the transpose
+            var permutedForCache = Engine.TensorPermute(context_4D, new[] { 1, 0, 2, 3 }); // [H, B, S, D]
+            _lastHeadOutputs = new List<Tensor<T>> { permutedForCache }; // store stacked heads
+        }
+        else
+        {
+            _lastHeadOutputs = null;
+        }
 
         // 5. Concatenate and Project Output
         // [B, H, S, D] -> [B, S, H, D] -> [B, S, E] (Engine op keeps tape connected)

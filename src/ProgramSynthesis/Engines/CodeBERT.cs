@@ -88,7 +88,7 @@ public class CodeBERT<T> : CodeModelBase<T>
         ILossFunction<T>? lossFunction = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ITokenizer? tokenizer = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), tokenizer)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), tokenizer)
     {
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayersCore();

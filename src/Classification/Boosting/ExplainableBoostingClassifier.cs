@@ -141,7 +141,7 @@ public class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T>
     public ExplainableBoostingClassifier(
         ExplainableBoostingClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ??= new ExplainableBoostingClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ??= new ExplainableBoostingClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options;
         _shapeFunctions = [];

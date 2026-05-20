@@ -115,7 +115,7 @@ public class GradientBoostingClassifier<T> : EnsembleClassifierBase<T>, ITreeBas
     /// <param name="regularization">Optional regularization strategy.</param>
     public GradientBoostingClassifier(GradientBoostingClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new GradientBoostingClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new GradientBoostingClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
         _initPrediction = NumOps.Zero;
     }

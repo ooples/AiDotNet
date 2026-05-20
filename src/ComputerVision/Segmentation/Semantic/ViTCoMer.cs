@@ -140,7 +140,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         ViTCoMerModelSize modelSize = ViTCoMerModelSize.Small,
         double dropRate = 0.1,
         ViTCoMerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ViTCoMerOptions();
         Options = _options;
@@ -181,7 +181,7 @@ public class ViTCoMer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         ViTCoMerModelSize modelSize = ViTCoMerModelSize.Small,
         ViTCoMerOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ViTCoMerOptions();
         Options = _options;

@@ -1937,6 +1937,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel &&
+                 (model.ClassName.StartsWith("LayoutLM", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("LayoutXLM", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("LiLT", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("DocFormer", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("DocBank", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("DocGCN", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("PICK", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("TRIE", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("DocOwl", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("UDOP", System.StringComparison.Ordinal)
+                  || model.ClassName.StartsWith("InfographicVQA", System.StringComparison.Ordinal)))
+        {
+            // LayoutLM-family document models (Xu et al. 2020 KDD "LayoutLM",
+            // Xu et al. 2021 ACL "LayoutXLM", Wang et al. 2022 ACL "LiLT",
+            // Appalaraju et al. 2021 ICCV "DocFormer", etc.) carry the Vision
+            // domain tag because they understand 2D layout, but their actual
+            // model input is TOKEN IDs (rank-1 sequence of int32-shaped doubles),
+            // not raw RGB pixels. Feeding a [3, 128, 128] image tensor causes
+            // the first EmbeddingLayer to treat every float as a token ID:
+            // 49 152 lookups × 768 embedding dim × 12 transformer layers ×
+            // 30 Train iters times out every test that runs Forward. Emit
+            // a short token-ID sequence so the model's intended code path
+            // (token embedding → 2D position embeddings → BERT-style stack)
+            // runs at sensible cost.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (isVisionModel &&
                  (model.ClassName.StartsWith("UNITER", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("VisualBERT", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("Oscar", System.StringComparison.Ordinal)

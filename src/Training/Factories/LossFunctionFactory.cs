@@ -42,6 +42,15 @@ public static class LossFunctionFactory<T>
             LossType.MeanAbsoluteError => new MeanAbsoluteErrorLoss<T>(),
             LossType.RootMeanSquaredError => new RootMeanSquaredErrorLoss<T>(),
             LossType.Huber => new HuberLoss<T>(GetDoubleParam(parameters, "delta", 1.0)),
+            // PR #1404 review (CodeRabbit): silently swapping
+            // LossType.CrossEntropy to the *WithLogits variant changes the
+            // input contract (probabilities → raw logits) for every existing
+            // caller that selected this enum value, producing silent gradient
+            // miscompute on consumers that still feed post-softmax outputs.
+            // Keep the historical mapping to the probability-input variant
+            // here; callers that explicitly want the logits-stable form
+            // should select it directly (see e.g. SAM / DEVA model defaults
+            // which construct CrossEntropyWithLogitsLoss<T> explicitly).
             LossType.CrossEntropy => new CrossEntropyLoss<T>(),
             LossType.BinaryCrossEntropy => new BinaryCrossEntropyLoss<T>(),
             LossType.CategoricalCrossEntropy => new CategoricalCrossEntropyLoss<T>(),

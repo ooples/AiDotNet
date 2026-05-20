@@ -171,7 +171,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         int numFeatures = 768,
         double maskRatio = 0.9,
         VideoMAEOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VideoMAEOptions();
         Options = _options;
@@ -211,7 +211,7 @@ public class VideoMAE<T> : NeuralNetworkBase<T>
         int numClasses = 400,
         int numFrames = 16,
         VideoMAEOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VideoMAEOptions();
         Options = _options;
