@@ -117,6 +117,14 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
 
+        // Defensive lazy init: the base's EnsureArchitectureInitialized
+        // only fires from train / first-Predict in NeuralNetworkBase, but
+        // model-family invariant tests can hit Predict on a freshly-
+        // constructed model where Layers is still empty —
+        // `Layers[0].Forward(features)` then throws IndexOutOfRange and
+        // cascade-fails every test in AdversarialImageEvaluatorTests.
+        if (Layers.Count == 0) InitializeLayers();
+
         // Promote rank-3 single-sample to rank-4 batched, mirror the
         // MobileNetV3 / Mask2Former pattern.
         bool wasUnbatched = input.Rank == 3;
