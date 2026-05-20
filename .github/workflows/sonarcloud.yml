@@ -503,10 +503,33 @@ jobs:
             'Unit - 08e NN-Remaining (catch-all)',
             'Unit - 03 Diffusion/Encoding'
           )
-          $shardArg = if ($heavyShards -contains $shardName) { '-- xunit.MaxParallelThreads=1' } else { '' }
-          Write-Host "Running shard '$shardName' with extra args: '$shardArg'"
+          $serializeShard = $heavyShards -contains $shardName
+          Write-Host "Running shard '$shardName' (serialized: $serializeShard)"
 
-          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-build --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results --blame-hang-timeout 5min --blame-hang-dump-type none $shardArg
+          # Build the argument list as a PowerShell array so the `--`
+          # separator and the runner args reach `dotnet test` as distinct
+          # tokens. Earlier we joined them into one string and pwsh's
+          # token splitter parsed `--` as a standalone switch that MSBuild
+          # then rejected with `MSB1001: Unknown switch`.
+          $dotnetArgs = @(
+            'test', '${{ matrix.shard.project }}',
+            '-c', 'Release',
+            '--framework', '${{ matrix.shard.framework }}',
+            '--no-build', '--no-restore',
+            '--filter', '${{ matrix.shard.filter }}',
+            '--collect:XPlat Code Coverage',
+            '--settings', 'coverlet.runsettings',
+            '--logger', 'trx;LogFileName=test-results.trx',
+            '--logger', 'console;verbosity=normal',
+            '--results-directory', $results,
+            '--blame-hang-timeout', '5min',
+            '--blame-hang-dump-type', 'none'
+          )
+          if ($serializeShard) {
+            $dotnetArgs += '--'
+            $dotnetArgs += 'xunit.MaxParallelThreads=1'
+          }
+          & dotnet @dotnetArgs
 
           # Post-test resource snapshot. If the runner survives this point,
           # the test step finished naturally and the snapshot tells us what
