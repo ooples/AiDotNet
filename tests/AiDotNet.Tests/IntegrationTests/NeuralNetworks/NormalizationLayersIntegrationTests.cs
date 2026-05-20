@@ -116,9 +116,12 @@ public class NormalizationLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task BatchNormalizationLayer_ParameterCount_IncludesGammaAndBeta()
     {
-        // Arrange
+        await Task.Yield();
+        // Arrange — use the AiDotNet#1370 eager (numFeatures, ...) ctor so
+        // gamma/beta are allocated at construction time and ParameterCount
+        // returns the expected 2*numFeatures without needing a warmup forward.
         int numFeatures = 8;
-        var layer = new BatchNormalizationLayer<float>();
+        var layer = new BatchNormalizationLayer<float>(numFeatures);
 
         // Act
         int paramCount = (int)layer.ParameterCount;
@@ -190,9 +193,12 @@ public class NormalizationLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LayerNormalizationLayer_ParameterCount_IncludesGammaAndBeta()
     {
-        // Arrange
+        await Task.Yield();
+        // Arrange — use the AiDotNet#1370 eager featureSize ctor so gamma/beta
+        // are allocated at construction time and ParameterCount returns the
+        // expected 2*featureSize without needing a warmup forward.
         int featureSize = 16;
-        var layer = new LayerNormalizationLayer<float>();
+        var layer = new LayerNormalizationLayer<float>(featureSize);
 
         // Act
         int paramCount = (int)layer.ParameterCount;

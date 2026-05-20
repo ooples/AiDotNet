@@ -104,6 +104,20 @@ public class PReLULayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// AiDotNet#1370 shape oracle override: PReLU's α weight tensor is fully
+    /// determined by the constructor argument <c>numParameters</c> and is
+    /// allocated + registered as a trainable parameter at construction time
+    /// (line 98–103 above). The lazy bit is only the broadcast shape, which
+    /// is a forward-runtime concern, not a parameter-shape concern.
+    /// LoRA wrapping needs only the weight matrix shape, so this returns
+    /// <c>true</c> unconditionally. Asymmetric with
+    /// <see cref="LayerBase{T}.IsShapeResolved"/> (which stays <c>false</c>
+    /// until the first real forward resolves the input rank) — same pattern
+    /// as <see cref="MultiHeadAttentionLayer{T}.TryDeclareShape"/>.
+    /// </summary>
+    internal override bool TryDeclareShape() => true;
+
+    /// <summary>
     /// Resolves broadcast shape and validates channel-count compatibility on first forward.
     /// </summary>
     protected override void OnFirstForward(Tensor<T> input)

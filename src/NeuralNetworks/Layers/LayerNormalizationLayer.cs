@@ -231,6 +231,49 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// AiDotNet#1370 eager-init constructor. Pass <paramref name="featureSize"/> at
+    /// construction to allocate gamma/beta immediately and resolve the layer's input
+    /// and output shapes — eliminating the need for a warmup forward pass before
+    /// downstream consumers (LoRA wrapping, parameter introspection, ONNX export)
+    /// can read shape-dependent state.
+    /// </summary>
+    /// <param name="featureSize">
+    /// The number of features in the input data. Must be positive. Normalization
+    /// happens along this last axis per the LayerNorm contract (Ba et al. 2016).
+    /// </param>
+    /// <param name="epsilon">A small value added to the variance for numerical stability.</param>
+    /// <remarks>
+    /// <para>
+    /// After this constructor returns, <see cref="LayerBase{T}.IsShapeResolved"/> is
+    /// <c>true</c> and <see cref="LayerBase{T}.TryDeclareShape"/> returns <c>true</c>
+    /// via its default implementation — no override needed on this layer.
+    /// </para>
+    /// <para>
+    /// Use this overload in transformer architectures and similar models where the
+    /// feature dimension is fixed by the architecture config (e.g. <c>modelDimension</c>
+    /// on <see cref="TransformerArchitecture{T}"/>). Use the parameter-less constructor
+    /// only when the feature dim is genuinely unknown at construction time.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">When <paramref name="featureSize"/> is not positive.</exception>
+    public LayerNormalizationLayer(int featureSize, double epsilon = NumericalStabilityHelper.LargeEpsilon)
+        : base(new[] { featureSize }, new[] { featureSize })
+    {
+        if (featureSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(featureSize),
+                $"featureSize must be positive, got {featureSize}.");
+
+        _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
+
+        // Eager allocation — same code path as OnFirstForward but driven from ctor.
+        _gamma = Tensor<T>.CreateDefault([featureSize], NumOps.One);
+        _beta = Tensor<T>.CreateDefault([featureSize], NumOps.Zero);
+
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+    }
+
+    /// <summary>
     /// Resolves <c>featureSize</c> from <c>input.Shape[^1]</c> (last dim) on the first forward call,
     /// allocates gamma/beta tensors, and registers them as trainable parameters. Per the
     /// LayerNorm contract (Ba et al. 2016), normalization happens along the feature axis.

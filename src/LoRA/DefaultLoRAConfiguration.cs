@@ -276,70 +276,18 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
             return layer;
         }
 
-        // Check if this is a layer type that benefits from LoRA adaptation
-        // (layers with trainable weight matrices)
-
-        // Dense/Linear layers
-        if (layer is DenseLayer<T> || layer is FullyConnectedLayer<T> || layer is FeedForwardLayer<T>)
-        {
-            return CreateAdapter(layer);
-        }
-
-        // Convolutional layers
-        if (layer is ConvolutionalLayer<T> || layer is DeconvolutionalLayer<T> ||
-            layer is DepthwiseSeparableConvolutionalLayer<T> || layer is DilatedConvolutionalLayer<T> ||
-            layer is SeparableConvolutionalLayer<T> || layer is SubpixelConvolutionalLayer<T>)
-        {
-            return CreateAdapter(layer);
-        }
-
-        // Recurrent layers (LSTM, GRU, etc.)
-        if (layer is LSTMLayer<T> || layer is GRULayer<T> || layer is RecurrentLayer<T> ||
-            layer is ConvLSTMLayer<T> || layer is BidirectionalLayer<T>)
-        {
-            return CreateAdapter(layer);
-        }
-
-        // Attention layers
-        if (layer is AttentionLayer<T> || layer is MultiHeadAttentionLayer<T> || layer is SelfAttentionLayer<T>)
-        {
-            return CreateAdapter(layer);
-        }
-
-        // Transformer layers
-        if (layer is TransformerEncoderLayer<T> || layer is TransformerDecoderLayer<T>)
-        {
-            return CreateAdapter(layer);
-        }
-
-        // Embedding layers
-        if (layer is EmbeddingLayer<T> || layer is PatchEmbeddingLayer<T>)
-        {
-            return CreateAdapter(layer);
-        }
-
-        // Specialized layers with trainable weights
-        if (layer is LocallyConnectedLayer<T> || layer is HighwayLayer<T> ||
-            layer is GatedLinearUnitLayer<T> || layer is SqueezeAndExcitationLayer<T>)
-        {
-            return CreateAdapter(layer);
-        }
-
         // Graph convolutional layers - use specialized GraphConvolutionalLoRAAdapter
-        // which implements IGraphConvolutionLayer<T> and properly delegates graph methods
+        // which implements IGraphConvolutionLayer<T> and properly delegates graph methods.
+        // Kept separate from the IsLoRATargetType type-whitelist (which uses
+        // CreateAdapter for everything else) because the GraphConvolutionalLoRAAdapter
+        // ctor takes (layer, Rank, Alpha, FreezeBaseLayer) directly rather than going
+        // through the standard CreateAdapter dispatch.
         if (layer is IGraphConvolutionLayer<T>)
         {
             return new GraphConvolutionalLoRAAdapter<T>(layer, Rank, Alpha, FreezeBaseLayer);
         }
 
-        // Capsule layers
-        if (layer is CapsuleLayer<T> || layer is PrimaryCapsuleLayer<T> || layer is DigitCapsuleLayer<T>)
-        {
-            return CreateAdapter(layer);
-        }
-
-        // CRF and other advanced layers
-        if (layer is ConditionalRandomFieldLayer<T>)
+        if (IsLoRATargetType(layer))
         {
             return CreateAdapter(layer);
         }
@@ -347,6 +295,88 @@ public class DefaultLoRAConfiguration<T> : ILoRAConfiguration<T>
         // Return layers without trainable weights unchanged
         // (Activation, Pooling, Dropout, Flatten, Reshape, Normalization, etc.)
         return layer;
+    }
+
+    /// <summary>
+    /// Non-mutating predicate: returns <c>true</c> when this configuration would
+    /// wrap <paramref name="layer"/> with a LoRA adapter (modulo the
+    /// shape-resolved guard, which is independent of the layer type).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Shares the same layer-type whitelist as <see cref="ApplyLoRA"/> so a
+    /// caller (typically <see cref="AiModelBuilder{T,TInput,TOutput}"/>'s
+    /// pre-wrap warmup-skip decision) can probe which layers will actually
+    /// participate in the LoRA pass without paying for adapter construction.
+    /// Returns <c>true</c> for graph-convolutional layers too — they route
+    /// through <see cref="GraphConvolutionalLoRAAdapter{T}"/> in
+    /// <see cref="ApplyLoRA"/>, but the warmup-skip pre-scan only needs to
+    /// know "would I wrap this", not which adapter type.
+    /// </para>
+    /// <para>
+    /// AiDotNet#1370 PR #1388 review C7iL5 — the pre-scan that decides
+    /// <c>skipWarmup</c> was treating every <see cref="LayerBase{T}"/> as a
+    /// LoRA candidate, which forced the warmup forward whenever ANY lazy
+    /// layer (even a non-target like a lazy Activation) hadn't declared.
+    /// This predicate lets the pre-scan restrict its count to actual LoRA
+    /// targets so non-target lazy layers don't block the zero-warmup path.
+    /// </para>
+    /// </remarks>
+    public bool IsLoRATarget(ILayer<T> layer)
+    {
+        if (layer is null) return false;
+        return layer is IGraphConvolutionLayer<T> || IsLoRATargetType(layer);
+    }
+
+    /// <summary>
+    /// Whitelist of concrete layer types that <see cref="ApplyLoRA"/> wraps via
+    /// <see cref="CreateAdapter"/>. Kept as a single private method so the
+    /// public <see cref="IsLoRATarget"/> probe and <see cref="ApplyLoRA"/>'s
+    /// dispatch can't drift.
+    /// </summary>
+    private static bool IsLoRATargetType(ILayer<T> layer)
+    {
+        // Dense/Linear layers
+        if (layer is DenseLayer<T> || layer is FullyConnectedLayer<T> || layer is FeedForwardLayer<T>)
+            return true;
+
+        // Convolutional layers
+        if (layer is ConvolutionalLayer<T> || layer is DeconvolutionalLayer<T> ||
+            layer is DepthwiseSeparableConvolutionalLayer<T> || layer is DilatedConvolutionalLayer<T> ||
+            layer is SeparableConvolutionalLayer<T> || layer is SubpixelConvolutionalLayer<T>)
+            return true;
+
+        // Recurrent layers (LSTM, GRU, etc.)
+        if (layer is LSTMLayer<T> || layer is GRULayer<T> || layer is RecurrentLayer<T> ||
+            layer is ConvLSTMLayer<T> || layer is BidirectionalLayer<T>)
+            return true;
+
+        // Attention layers
+        if (layer is AttentionLayer<T> || layer is MultiHeadAttentionLayer<T> || layer is SelfAttentionLayer<T>)
+            return true;
+
+        // Transformer layers
+        if (layer is TransformerEncoderLayer<T> || layer is TransformerDecoderLayer<T>)
+            return true;
+
+        // Embedding layers
+        if (layer is EmbeddingLayer<T> || layer is PatchEmbeddingLayer<T>)
+            return true;
+
+        // Specialized layers with trainable weights
+        if (layer is LocallyConnectedLayer<T> || layer is HighwayLayer<T> ||
+            layer is GatedLinearUnitLayer<T> || layer is SqueezeAndExcitationLayer<T>)
+            return true;
+
+        // Capsule layers
+        if (layer is CapsuleLayer<T> || layer is PrimaryCapsuleLayer<T> || layer is DigitCapsuleLayer<T>)
+            return true;
+
+        // CRF and other advanced layers
+        if (layer is ConditionalRandomFieldLayer<T>)
+            return true;
+
+        return false;
     }
 
     /// <summary>

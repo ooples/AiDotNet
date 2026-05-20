@@ -375,6 +375,52 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     }
 
     /// <summary>
+    /// AiDotNet#1370 eager-init constructor. Pass <paramref name="numFeatures"/> at
+    /// construction (the channel count for image-like inputs OR the feature count
+    /// for MLP inputs) to allocate gamma/beta/running stats immediately and resolve
+    /// the layer's input + output shapes. Eliminates the need for a warmup forward
+    /// pass before downstream consumers (LoRA wrapping, parameter introspection,
+    /// ONNX export) can read shape-dependent state.
+    /// </summary>
+    /// <param name="numFeatures">
+    /// The channel count for image inputs (axis 1 of NCHW) or feature count for MLP
+    /// inputs (axis 1 of [B, F]). Must be positive. Per Ioffe &amp; Szegedy 2015 §3,
+    /// BatchNorm normalizes per-channel for images and per-feature for MLPs.
+    /// </param>
+    /// <param name="epsilon">A small value added to the variance for numerical stability.</param>
+    /// <param name="momentum">EMA momentum for running mean/variance updates.</param>
+    /// <remarks>
+    /// <para>
+    /// After this constructor returns, <see cref="LayerBase{T}.IsShapeResolved"/> is
+    /// <c>true</c> and <see cref="LayerBase{T}.TryDeclareShape"/> returns <c>true</c>
+    /// via the default implementation — no override needed on this layer.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">When <paramref name="numFeatures"/> is not positive.</exception>
+    public BatchNormalizationLayer(int numFeatures, double epsilon = NumericalStabilityHelper.LargeEpsilon, double momentum = 0.9)
+        : base(new[] { numFeatures }, new[] { numFeatures })
+    {
+        if (numFeatures <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures),
+                $"numFeatures must be positive, got {numFeatures}.");
+
+        _epsilon = NumericalStabilityHelper.GetEpsilon<T>(epsilon);
+        _momentum = NumOps.FromDouble(momentum);
+
+        // Eager allocation — same code path as OnFirstForward but driven from ctor.
+        // ZeroInitGamma deferral does not apply here (no first-forward to defer to).
+        _gamma = new Tensor<T>([numFeatures]);
+        _gamma.Fill(NumOps.One);
+        _beta = new Tensor<T>([numFeatures]);
+        _runningMean = new Tensor<T>([numFeatures]);
+        _runningVariance = new Tensor<T>([numFeatures]);
+        _runningVariance.Fill(NumOps.One);
+
+        RegisterTrainableParameter(_gamma, PersistentTensorRole.NormalizationParams);
+        RegisterTrainableParameter(_beta, PersistentTensorRole.NormalizationParams);
+    }
+
+    /// <summary>
     /// Resolves <c>numFeatures</c> on the first forward call by switching on
     /// the input rank, allocates gamma/beta + running mean/variance tensors,
     /// and registers gamma/beta as trainable parameters. Per the BatchNorm
