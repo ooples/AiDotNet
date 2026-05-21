@@ -157,6 +157,19 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // previous run's running maximum as a lower bound and suppress
         // early updates in the new run. (PR #1350 round-2 review.)
         _vMaxVector = null;
+        // Reset the NN tape-side state. The flat-vector path got reset
+        // above; the tape path uses parameter-tensor-keyed dictionaries
+        // (_tapeM, _tapeV, _tapeVMax) and a separate _tapeStep counter
+        // that PERSIST across Optimize calls on the same optimizer
+        // instance. Without this clear, a second Optimize call on the
+        // same optimizer would carry the prior run's first/second moments
+        // (and AMSGrad's running maximum) plus a pre-advanced bias-
+        // correction counter, biasing every per-parameter step from
+        // iteration 1.
+        _tapeM.Clear();
+        _tapeV.Clear();
+        _tapeVMax.Clear();
+        _tapeStep = 0;
 
         // Initialize parameters
         InitializeAdaptiveParameters();
@@ -314,7 +327,15 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     /// <summary>
-    /// Updates the current solution using the Adam update rule.
+    /// Updates the current solution using the Adam update rule. Kept for the
+    /// non-NN code path (regression, clustering, classical models where the
+    /// solution does NOT implement <see cref="AiDotNet.Interfaces.INeuralNetwork{T}"/>);
+    /// the base-class <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.UpdateSolution"/>
+    /// intercepts NN solutions and delegates to <see cref="Step(TapeStepContext{T})"/>
+    /// via <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}.SynthesizeTapeStepContext"/>,
+    /// so the legacy flat-vector path here only runs for non-NN models — eliminating
+    /// the historical two-Adam-implementations split (#1413). All NN training
+    /// goes through Step, which has the anomaly guard + gradient clipping safeguards.
     /// </summary>
     /// <param name="currentSolution">The current solution being optimized.</param>
     /// <param name="gradient">The calculated gradient for the current solution.</param>
@@ -324,75 +345,16 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// It uses the current gradient and past information to decide how to change each parameter.
     /// </para>
     /// </remarks>
-    protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
-    {
-        var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
-
-        // Right-size _m/_v to gradient on first call or after lazy-layer expansion.
-        if (_m.Length != gradient.Length)
-        {
-            var newM = new Vector<T>(gradient.Length);
-            var newV = new Vector<T>(gradient.Length);
-            int copyLen = Math.Min(_m.Length, gradient.Length);
-            for (int i = 0; i < copyLen; i++) { newM[i] = _m[i]; newV[i] = _v[i]; }
-            _m = newM;
-            _v = newV;
-        }
-
-        // === Vectorized Adam Update using IEngine ===
-        // Phase B: US-GPU-015 - GPU-accelerated gradient updates
-
-        T oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
-        T oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
-        T biasCorrection1 = NumOps.Subtract(NumOps.One, NumOps.Power(_currentBeta1, NumOps.FromDouble(_t)));
-        T biasCorrection2 = NumOps.Subtract(NumOps.One, NumOps.Power(_currentBeta2, NumOps.FromDouble(_t)));
-        T epsilon = NumOps.FromDouble(_options.Epsilon);
-
-        // Update biased first moment: m = beta1 * m + (1 - beta1) * gradient
-        var mScaled = (Vector<T>)Engine.Multiply(_m, _currentBeta1);
-        var gradScaled = (Vector<T>)Engine.Multiply(gradient, oneMinusBeta1);
-        _m = (Vector<T>)Engine.Add(mScaled, gradScaled);
-
-        // Update biased second moment: v = beta2 * v + (1 - beta2) * gradient^2
-        var gradSquared = (Vector<T>)Engine.Multiply(gradient, gradient);
-        var vScaled = (Vector<T>)Engine.Multiply(_v, _currentBeta2);
-        var gradSquaredScaled = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
-        _v = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
-
-        // Compute bias-corrected first moment: mHat = m / (1 - beta1^t)
-        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1);
-
-        // Compute bias-corrected second moment: vHat = v / (1 - beta2^t)
-        var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
-
-        // AMSGrad: when enabled, divide by sqrt(running max of v̂) instead
-        // of sqrt(v̂) — the same correction the vector UpdateParameters
-        // path applies. Without this branch the UpdateSolution path
-        // silently ran plain Adam even with UseAMSGrad=true, defeating
-        // the purpose of the AMSGrad option on the BuildAsync/Optimize
-        // call path. PR #1350 review.
-        var vHatForDenominator = vHat;
-        if (_options.UseAMSGrad)
-        {
-            if (_vMaxVector is null || _vMaxVector.Length != vHat.Length)
-                _vMaxVector = new Vector<T>(vHat.Length);
-            _vMaxVector = (Vector<T>)Engine.Max(_vMaxVector, vHat);
-            vHatForDenominator = _vMaxVector;
-        }
-
-        // Compute update: update = learningRate * mHat / (sqrt(vHat_used) + epsilon)
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(vHatForDenominator);
-        // Create epsilon vector for addition
-        var epsilonVec = Vector<T>.CreateDefault(vHatSqrt.Length, epsilon);
-        var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
-        var updateDiv = (Vector<T>)Engine.Divide(mHat, denominator);
-        var update = (Vector<T>)Engine.Multiply(updateDiv, CurrentLearningRate);
-
-        // Apply update: parameters = parameters - update
-        var updatedParams = (Vector<T>)Engine.Subtract(parameters, update);
-
-        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(updatedParams);
-    }
+    // #1413 ARCHITECTURAL CONSOLIDATION: AdamOptimizer's flat-vector
+    // UpdateSolution override is REMOVED. NN solutions go through the base
+    // class's UpdateSolution which synthesizes a TapeStepContext from the
+    // flat gradient and delegates to Step(TapeStepContext) — the SAME code
+    // path the per-sample nn.Train bypass uses, with the SAME anomaly
+    // guard, gradient clipping, AMSGrad, and float-loop fast path. Non-NN
+    // solutions fall through to the base's UpdateParameters dispatch which
+    // resolves to AdamOptimizer.UpdateParameters (still present below).
+    // This is the elimination of the two-Adam-implementations split that
+    // caused #1380.
 
     /// <summary>
     /// Updates a vector of parameters using the Adam optimization algorithm.
@@ -1446,6 +1408,22 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 double v = NumOps.ToDouble(span[i]);
                 if (double.IsNaN(v) || double.IsInfinity(v)) return true;
             }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Flat-vector overload of <see cref="AnyGradientIsAnomalous(TapeStepContext{T})"/>
+    /// for the Optimize / UpdateSolution path (#1380 part 2). Iterates the
+    /// gradient Vector directly since UpdateSolution doesn't have a
+    /// TapeStepContext to walk.
+    /// </summary>
+    private bool AnyGradientIsAnomalous(Vector<T> gradient)
+    {
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            double v = NumOps.ToDouble(gradient[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v)) return true;
         }
         return false;
     }

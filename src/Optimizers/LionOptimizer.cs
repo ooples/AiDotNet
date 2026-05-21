@@ -239,6 +239,15 @@ public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, gradient);
+        }
         // === Vectorized Lion Update using IEngine (Phase B: US-GPU-015) ===
         // c_t = beta1 * m_{t-1} + (1 - beta1) * g_t
         // theta_t = theta_{t-1} - lr * (sign(c_t) + lambda * theta_{t-1})

@@ -202,6 +202,17 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
 
         _m = new Vector<T>(parameters.Length);
         _u = new Vector<T>(parameters.Length);
+        // Reset the NN tape-side accumulators + bias-correction step count.
+        // The flat-vector path gets fresh Vectors above; the tape path
+        // uses parameter-tensor-keyed dictionaries (_tapeM/_tapeU) and a
+        // separate _tapeStep counter that PERSIST across Optimize calls
+        // on the same optimizer instance. Without this clear, a second
+        // Optimize call on the same optimizer would carry the prior run's
+        // first/inf moments AND a pre-advanced bias-correction counter,
+        // biasing every per-parameter step from iteration 1.
+        _tapeM.Clear();
+        _tapeU.Clear();
+        _tapeStep = 0;
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
@@ -269,6 +280,15 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, gradient);
+        }
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Initialize state vectors if needed

@@ -153,11 +153,26 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 // Calculate gradient on the batch
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
-                // Update velocity with momentum
-                _velocity = UpdateVelocity(gradient);
-
-                // Update solution
-                var newSolution = UpdateSolution(currentSolution, _velocity);
+                IFullModel<T, TInput, TOutput> newSolution;
+                if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+                {
+                    // #1413 CONSOLIDATION: NN solutions route through the
+                    // base tape path, which expects RAW gradients (Step
+                    // applies its own momentum bookkeeping per-parameter
+                    // via the SGD-with-momentum kernel). Forwarding the
+                    // already-momentum-accumulated _velocity would double-
+                    // apply momentum — the base path would treat velocity
+                    // AS the gradient and then accumulate again on top.
+                    newSolution = base.UpdateSolution(currentSolution, gradient);
+                }
+                else
+                {
+                    // Legacy non-NN path: accumulate momentum into
+                    // _velocity here and subtract from params in
+                    // UpdateSolution.
+                    _velocity = UpdateVelocity(gradient);
+                    newSolution = UpdateSolution(currentSolution, _velocity);
+                }
 
                 currentSolution = newSolution;
             }
@@ -235,6 +250,15 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// <returns>An updated symbolic model with improved coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, velocity);
+        }
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // === Vectorized Update using IEngine ===
