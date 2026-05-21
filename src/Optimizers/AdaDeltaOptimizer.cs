@@ -194,6 +194,16 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
         _accumulatedSquaredGradients = new Vector<T>(parameters.Length);
         _accumulatedSquaredUpdates = new Vector<T>(parameters.Length);
+        // Reset the NN tape-side accumulators too. The flat-vector path
+        // gets a fresh Vector<T> per Optimize call (lines above); the
+        // tape-tracked path uses parameter-tensor-keyed dictionaries
+        // (_tapeAccSqGrad / _tapeAccSqUpd) that PERSIST across Optimize
+        // calls on the same optimizer instance. Without this clear, a
+        // second Optimize call on the same optimizer would carry the
+        // prior run's AdaDelta history into the new model, biasing
+        // every per-parameter step size from iteration 1.
+        _tapeAccSqGrad.Clear();
+        _tapeAccSqUpd.Clear();
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)
@@ -260,6 +270,15 @@ public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, gradient);
+        }
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Initialize state vectors if needed

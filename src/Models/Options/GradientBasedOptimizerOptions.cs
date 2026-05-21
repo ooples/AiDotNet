@@ -193,7 +193,17 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// putting a speed limit on these updates to keep training stable.
     /// </para>
     /// </remarks>
-    public bool EnableGradientClipping { get; set; } = false;
+    // #1380 part 2: default ON. PyTorch's transformer training default is
+    // torch.nn.utils.clip_grad_norm_(params, max_norm=1.0) and this matches
+    // the canonical industry recipe. The previous default of `false`
+    // produced runaway parameter growth on the Optimize / BuildAsync code
+    // path when paired with the default DataSplitter.Split 70/15/15 small-
+    // validation sets, since the small-batch evaluation forward passes
+    // generate large gradient spikes that need clipping to stay stable.
+    // Callers who want the previous behavior can still opt out by setting
+    // this to false explicitly. See AiDotNet#1413 for the bisection
+    // evidence and AiDotNet#1380 for the headline issue.
+    public bool EnableGradientClipping { get; set; } = true;
 
     /// <summary>
     /// Gets or sets the gradient clipping method to use.

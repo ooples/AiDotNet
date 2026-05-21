@@ -425,7 +425,44 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return cachedStepData;
         }
 
-        var stepData = PrepareAndEvaluateSolution(solution, inputData);
+        // #1380 FIX: gradient-based optimizers (Adam et al.) set training
+        // mode TRUE for the whole Optimize loop at line 188 of
+        // AdamOptimizer.Optimize. Without temporarily flipping to eval
+        // mode for the validation/test forward passes inside
+        // PrepareAndEvaluateSolution → EvaluateModelDirectly, those
+        // forward passes update LayerNorm/BatchNorm running statistics
+        // with VALIDATION-SET batch statistics (typically a much smaller
+        // dataset than training). The corrupted running stats are then
+        // read on the next training forward pass, producing NaN
+        // gradients and NaN params.
+        // Reproducer: tests/Learning/Phase_PAPER_A_BuildAsyncDiagnostic_1380Bisect.cs
+        //   .Optimizer_Optimize_With_Split_Data_Should_Not_NaN (FAILS without this fix)
+        //   .Optimizer_Optimize_With_SmallTrain_FullVal_Should_Not_NaN (PASSES — full val = no corruption)
+        // Wrap the eval in a SetTrainingMode(false)/(true) try/finally;
+        // safe no-op for non-NN models. Solution is a fresh DeepCopy
+        // inside PrepareAndEvaluateSolution (line ~528), so flipping
+        // training mode on `solution` here propagates to the cached
+        // model returned via stepData.Solution.
+        // Capture a single NeuralNetworkBase<T> reference for BOTH read and
+        // write paths so the IsTrainingMode read and the SetTrainingMode
+        // write always target the same runtime type. Today
+        // NeuralNetworkBase<T> is the only concrete INeuralNetwork<T>
+        // implementer in the repo, so the prior split (cast to INeuralNetwork
+        // for write, cast to NeuralNetworkBase for read) hit the same
+        // instance — but the future-proof form keeps the read/write paths
+        // syntactically aligned regardless of what other implementers ship.
+        var nn = solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
+        bool wasTraining = nn?.IsTrainingMode ?? false;
+        nn?.SetTrainingMode(false);
+        OptimizationStepData<T, TInput, TOutput> stepData;
+        try
+        {
+            stepData = PrepareAndEvaluateSolution(solution, inputData);
+        }
+        finally
+        {
+            nn?.SetTrainingMode(wasTraining);
+        }
         ModelCache.CacheStepData(cacheKey, stepData);
 
         return stepData;
@@ -443,6 +480,36 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// trains and evaluates the model with the selected features.
     /// </remarks>
     protected OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolution(
+        IFullModel<T, TInput, TOutput> solution,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // #1380 FIX (part 2): EvaluateSolution wraps a SetTrainingMode(false)
+        // around its PrepareAndEvaluateSolution call to prevent LayerNorm/
+        // BatchNorm running-stats corruption from validation forward passes.
+        // But Adam.Optimize calls PrepareAndEvaluateSolution DIRECTLY at
+        // line 192 (pre-epoch baseline eval) without going through
+        // EvaluateSolution. That direct call also runs Predict on the val
+        // set and corrupts running stats. Wrap here as well; safe to nest
+        // since SetTrainingMode is idempotent and the EvaluateSolution
+        // wrapper restores correctly on the outer scope.
+        // Same single-cast pattern as EvaluateSolution above — read/write
+        // training mode through ONE NeuralNetworkBase<T> reference so the
+        // captured wasTraining bit and the restore call target identical
+        // runtime types regardless of future INeuralNetwork<T> implementers.
+        var nnGuard = solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
+        bool wasTrainingGuard = nnGuard?.IsTrainingMode ?? false;
+        nnGuard?.SetTrainingMode(false);
+        try
+        {
+            return PrepareAndEvaluateSolutionCore(solution, inputData);
+        }
+        finally
+        {
+            nnGuard?.SetTrainingMode(wasTrainingGuard);
+        }
+    }
+
+    private OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolutionCore(
         IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {

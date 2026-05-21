@@ -135,8 +135,20 @@ public class AdamOptimizerAnomalyGuardTests
     private static bool InvokeAnyGradientIsAnomalous(
         AdamOptimizer<double, Tensor<double>, Tensor<double>> opt, object context)
     {
+        // AdamOptimizer now has TWO AnyGradientIsAnomalous overloads on the
+        // #1413 consolidation branch — the original `TapeStepContext<T>`
+        // overload and a flat-vector `Vector<T>` overload. `GetMethod(name,
+        // BindingFlags)` without a type signature throws
+        // AmbiguousMatchException when multiple overloads share a name.
+        // Disambiguate by passing the exact parameter type tuple so we
+        // always pick the tape-context overload this suite targets.
         var method = typeof(AdamOptimizer<double, Tensor<double>, Tensor<double>>)
-            .GetMethod("AnyGradientIsAnomalous", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            .GetMethod(
+                "AnyGradientIsAnomalous",
+                BindingFlags.NonPublic | BindingFlags.Instance,
+                binder: null,
+                types: new[] { typeof(AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<double>) },
+                modifiers: null)!;
         return (bool)method.Invoke(opt, new[] { context })!;
     }
 

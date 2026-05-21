@@ -188,6 +188,15 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, gradient);
+        }
         // === Vectorized SGD Update using IEngine ===
         // Phase B: US-GPU-015 - GPU-accelerated gradient updates
         // params = params - learningRate * gradient

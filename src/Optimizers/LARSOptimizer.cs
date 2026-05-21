@@ -169,11 +169,15 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 // Calculate gradient on the batch
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
-                // Apply warmup learning rate
-                var effectiveLr = GetWarmupLearningRate();
-
-                // Update solution using LARS algorithm
-                var newSolution = UpdateSolutionWithLARS(currentSolution, gradient, effectiveLr);
+                // Route through UpdateSolution (NOT UpdateSolutionWithLARS
+                // directly) so the #1413 NN-branch in the UpdateSolution
+                // override actually engages — calling
+                // UpdateSolutionWithLARS here would skip the
+                // INeuralNetwork<T> dispatch and force every NN model
+                // through the legacy flat-vector path. UpdateSolution
+                // applies GetWarmupLearningRate() internally on the non-NN
+                // path so behaviour for non-NN solvers is unchanged.
+                var newSolution = UpdateSolution(currentSolution, gradient);
 
                 currentSolution = newSolution;
             }
@@ -347,6 +351,15 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, gradient);
+        }
         return UpdateSolutionWithLARS(currentSolution, gradient, GetWarmupLearningRate());
     }
 
