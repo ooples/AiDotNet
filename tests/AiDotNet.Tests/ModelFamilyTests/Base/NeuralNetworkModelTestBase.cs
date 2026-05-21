@@ -152,6 +152,18 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // trajectories than the same test run in isolation.
         AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
         AiDotNet.Training.CompiledTapeTrainingStep<float>.Invalidate();
+        // Reset the global WeightRegistry/StreamingPool state. Without
+        // this, a previous test in the same process that engaged weight
+        // streaming (BiomedCLIP / DFNCLIP / any future paper-scale model
+        // above the default 10B threshold OR via the
+        // AIDOTNET_STREAMING_THRESHOLD_PARAMS env override) leaves
+        // registered entries alive — the next test that calls
+        // TryAutoEnableWeightStreaming hits Configure's mid-flight guard
+        // ("existing streaming pool has N registered entries"), causing
+        // an InvalidOperationException that has nothing to do with the
+        // test's actual subject. Reset clears the registry + disposes
+        // the pool so each test starts from a clean global state.
+        AiDotNet.Tensors.LinearAlgebra.WeightRegistry.Reset();
         return Task.CompletedTask;
     }
 

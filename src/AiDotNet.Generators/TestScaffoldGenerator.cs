@@ -4157,19 +4157,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             "BiomedCLIP" => true,
             "DFNCLIP" => true,
-            // VLMs / multimodal LLMs that hard-time-out the 120s
-            // Training_ShouldReduceLoss budget at the paper-faithful
-            // BERT-base scale + 30 iters. These need the paper-scale
-            // iteration override (TrainingIterations=1) so the loss
-            // path still gets exercised but doesn't blow the per-test
-            // budget on consumer-CPU CI hardware.
-            "GLaMM" => true,        // Rasheed et al. 2024 MBZUAI grounding VLM
-            "SmolVLM" => true,      // Marafioti et al. 2024 compact VLM
-            "KyutaiMoshi" => true,  // Kyutai 2024 streaming ASR Conformer
-            "SeedVR" => true,       // Wang et al. 2024 video SR diffusion
-            "SegMamba" => true,     // Xing et al. 2024 MICCAI medical seg
-            "AudioGenModel" => true,// Copet et al. 2023 text-to-audio
-            "AudioGen" => true,
             _ => false,
         };
     }

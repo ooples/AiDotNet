@@ -5306,6 +5306,36 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             long totalParamCount = 0L;
             for (int i = 0; i < initialParams.Count; i++)
                 totalParamCount += (long)initialParams[i].Length;
+            // Lazy-init detection: layers like EmbeddingLayer / DenseLayer
+            // (constructed without an input size) hold `_weights = new
+            // Tensor<T>([0,0])` and DON'T call RegisterTrainableParameter
+            // until EnsureWeightsAllocated / EnsureEmbeddingInitialized
+            // fires on the first Forward call. Result: initialParams here
+            // doesn't include those layers' weights at all, so the buffer
+            // is sized for fewer parameters than the post-Forward state.
+            // After Forward materializes them the layer's registered
+            // parameter list grows beyond the buffer, and the next
+            // CopyFrom call slices past the buffer storage end, throwing
+            // `ArgumentOutOfRangeException` (we see this on MobileNet,
+            // EfficientNet, DenseNet121 which all use lazy DenseLayers).
+            //
+            // Detect by walking trainable layers and checking whether
+            // any one has no registered parameters yet — that's the lazy
+            // signal. Skip the buffer for THIS step only when present;
+            // the eager optimizer path iterates context.Parameters
+            // directly without buffer aliasing so correctness is preserved.
+            // On step 2+ the lazy layers will have materialized their
+            // weights and the buffer-aliased fast path engages.
+            bool hasLazyParam = false;
+            var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
+            for (int i = 0; i < trainableLayers.Length; i++)
+            {
+                if (trainableLayers[i].GetTrainableParameters().Count == 0)
+                {
+                    hasLazyParam = true;
+                    break;
+                }
+            }
             // ~125 M parameter cutoff: small enough that any model
             // passing this threshold is foundation-class (its weight-
             // mirror would consume ~1 GB at double precision and collide
@@ -5324,6 +5354,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // caching makes step 2..N effectively free.
                 _skipParameterBuffer = true;
                 _skipParameterBufferVersion = _layerStructureVersion;
+            }
+            else if (hasLazyParam)
+            {
+                // Skip the buffer for THIS step only — do NOT memoize.
+                // Forward will materialize the lazy weights, so on the
+                // next training step the lazy-detection scan will return
+                // false and the buffer-aliased fast path can engage.
+                paramBuffer = null;
             }
             else
             {
