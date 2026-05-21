@@ -2207,6 +2207,34 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("            \"BERT-class NER encoder produces identical output for distinct random \" +");
             sb.AppendLine("            \"inputs. Attention may be broken or all attention weights collapsed.\");");
             sb.AppendLine("    }");
+
+            // Override the NER base's `DifferentInputs_DifferentLabels` invariant
+            // with the same varied-input pattern. The NER base test uses the
+            // same `CreateConstantTensor(0.1)` vs `CreateConstantTensor(0.9)`
+            // contract that produces uniform attention output regardless of
+            // input value.
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+            sb.AppendLine("    public override async System.Threading.Tasks.Task DifferentInputs_DifferentLabels()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+            sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        var network = CreateNetwork();");
+            sb.AppendLine("        var rng1 = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+            sb.AppendLine("        var rng2 = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom(seed: 1729);");
+            sb.AppendLine("        var input1 = CreateRandomTensor(InputShape, rng1);");
+            sb.AppendLine("        var input2 = CreateRandomTensor(InputShape, rng2);");
+            sb.AppendLine("        var labels1 = network.Predict(input1);");
+            sb.AppendLine("        var labels2 = network.Predict(input2);");
+            sb.AppendLine("        bool anyDifferent = false;");
+            sb.AppendLine("        int minLen = System.Math.Min(labels1.Length, labels2.Length);");
+            sb.AppendLine("        for (int i = 0; i < minLen; i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (System.Math.Abs(labels1[i] - labels2[i]) > 1e-12) { anyDifferent = true; break; }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        Xunit.Assert.True(anyDifferent,");
+            sb.AppendLine("            \"NER model produces identical labels for distinct random inputs — model may be degenerate.\");");
+            sb.AppendLine("    }");
         }
         else if (family == TestFamily.SequenceLabelingNER)
         {

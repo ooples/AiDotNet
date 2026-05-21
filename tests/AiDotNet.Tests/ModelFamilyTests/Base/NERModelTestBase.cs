@@ -122,7 +122,7 @@ public abstract class NERModelTestBase : NeuralNetworkModelTestBase
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task DifferentInputs_DifferentLabels()
+    public virtual async Task DifferentInputs_DifferentLabels()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
