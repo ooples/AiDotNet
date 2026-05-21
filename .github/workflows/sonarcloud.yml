@@ -47,17 +47,28 @@ env:
   # Memory-management knobs for CI test execution
   # ---------------------------------------------------------------------------
   #
-  # Streaming-pool threshold engagement (AIDOTNET_STREAMING_THRESHOLD_PARAMS=1M)
-  # was tried but rejected — it caused test-isolation regressions on
-  # ResNet/DenseNet/MobileNet: `WeightRegistry.Configure: existing streaming
-  # pool has N registered entries. Unregister all weights first.` because
-  # the global pool state leaks across tests when ProcessorCount-parallel
-  # collections each call Configure on shared state.
+  # Streaming-pool threshold for paper-scale models. The compiled default
+  # (10 B parameters) is calibrated for production deployment — well above
+  # production-scale VLMs like GrokVision (~800 M params) and SmolVLM /
+  # KyutaiMoshi / GLaMM (~100 M – 1 B). Those models then OOM the CI runner
+  # because eager allocation of every weight tensor exceeds the 16 GB
+  # ubuntu-latest budget. Lowering the threshold to 100 M routes their
+  # weight allocations through the streaming pool's pre-evict-then-allocate
+  # path, keeping resident memory bounded.
   #
-  # Memory pressure on heavy shards is handled instead by per-shard
+  # Earlier attempts at 1 M (commit b43dd9323 + revert) failed because the
+  # WeightRegistry static singleton's pool state leaked between xUnit-
+  # parallel test collections, producing
+  # `WeightRegistry.Configure: existing streaming pool has N registered
+  # entries`. That's been fixed in `NeuralNetworkModelTestBase.InitializeAsync`
+  # via `WeightRegistry.Reset()` before each test (commit 8ab358d2b), so the
+  # pool now starts clean on every test entry and re-enabling the threshold
+  # at 100 M is safe.
+  #
+  # Memory pressure on heavy shards is ALSO handled by per-shard
   # `xunit.MaxParallelThreads=1` (see the test step below), which
-  # serializes model loads on the heaviest shards without changing pool
-  # behavior. Other shards keep default parallelism.
+  # serializes model loads on the heaviest shards.
+  AIDOTNET_STREAMING_THRESHOLD_PARAMS: "100000000"
 
   # GC tuning for tests: switch to Server GC (multi-threaded, larger heap
   # segments, batched Gen-2 collections) — Workstation GC's per-thread heap
