@@ -1504,22 +1504,31 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         }
         if (chunks.Count == 0) return null;
 
-        // Slice the flat gradient into per-chunk gradient tensors. Skip
-        // chunks past the gradient's length — happens if a layer was added
-        // after CalculateGradient ran (rare but defensible).
+        // Slice the flat gradient into per-chunk gradient tensors. Fail
+        // fast (return null) if the flat gradient is short of what the
+        // chunks need — silently breaking out of the loop would produce
+        // a TapeStepContext that covers only a prefix of parameters, and
+        // Step(...) would then mutate the prefix while leaving the rest
+        // un-updated. That partial step is worse than skipping the tape
+        // path entirely: the caller's fallback (legacy flat-vector
+        // UpdateSolution) updates everything, which is at least
+        // self-consistent. Likewise demand exact length at the end —
+        // any leftover bytes in flatGradient mean the chunk list is
+        // out of sync with what produced the gradient, so we'd be
+        // operating on a different model than the gradient describes.
         var gradients = new Dictionary<Tensor<T>, Tensor<T>>();
         int offset = 0;
         foreach (var p in chunks)
         {
             int len = p.Length;
-            if (offset + len > flatGradient.Length) break;
+            if (offset + len > flatGradient.Length) return null;
             var gradTensor = new Tensor<T>(p.Shape.ToArray());
             var gradSpan = gradTensor.AsWritableSpan();
             for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
             gradients[p] = gradTensor;
             offset += len;
         }
-        if (gradients.Count == 0) return null;
+        if (gradients.Count == 0 || offset != flatGradient.Length) return null;
         return new TapeStepContext<T>(chunks, gradients, NumOps.Zero);
     }
 

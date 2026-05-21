@@ -202,6 +202,17 @@ public class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T,
 
         _m = new Vector<T>(parameters.Length);
         _u = new Vector<T>(parameters.Length);
+        // Reset the NN tape-side accumulators + bias-correction step count.
+        // The flat-vector path gets fresh Vectors above; the tape path
+        // uses parameter-tensor-keyed dictionaries (_tapeM/_tapeU) and a
+        // separate _tapeStep counter that PERSIST across Optimize calls
+        // on the same optimizer instance. Without this clear, a second
+        // Optimize call on the same optimizer would carry the prior run's
+        // first/inf moments AND a pre-advanced bias-correction counter,
+        // biasing every per-parameter step from iteration 1.
+        _tapeM.Clear();
+        _tapeU.Clear();
+        _tapeStep = 0;
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)

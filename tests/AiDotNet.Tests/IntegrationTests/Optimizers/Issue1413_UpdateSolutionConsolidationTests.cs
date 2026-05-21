@@ -61,6 +61,14 @@ public class Issue1413_UpdateSolutionConsolidationTests
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
         var initParams = model.GetParameters();
+        // Snapshot the pre-step parameter values so we can assert that
+        // UpdateSolution actually changed at least one parameter. Without
+        // this, a UpdateSolution that's a silent no-op would still pass
+        // every assertion below (initL2 == finalL2 satisfies the
+        // "finite + ΔL2 < 10×initL2" bounds trivially), defeating the
+        // entire point of this consolidation-regression guard.
+        var initParamsSnapshot = new float[initParams.Length];
+        for (int i = 0; i < initParams.Length; i++) initParamsSnapshot[i] = initParams[i];
         double initL2 = ComputeL2(initParams);
         Assert.False(double.IsNaN(initL2), "Init L2 NaN");
         Assert.True(initL2 > 0, "Init L2 zero — model not initialized");
@@ -94,8 +102,25 @@ public class Issue1413_UpdateSolutionConsolidationTests
         var finalParams = model.GetParameters();
         double finalL2 = ComputeL2(finalParams);
         double deltaL2 = Math.Abs(finalL2 - initL2);
+        bool anyParamChanged = false;
+        for (int i = 0; i < finalParams.Length; i++)
+        {
+            if (finalParams[i] != initParamsSnapshot[i])
+            {
+                anyParamChanged = true;
+                break;
+            }
+        }
 
         _output.WriteLine($"{optimizerName}: init L2={initL2:F4}, final L2={finalL2:F4}, ΔL2={deltaL2:E3}");
+        // Real consolidation regression guard — UpdateSolution must
+        // actually mutate parameters when handed a non-zero gradient.
+        // A silent no-op (e.g. the NN-routing branch never engaging and
+        // a fall-through-to-empty stub) would pass every finite-value
+        // assertion below.
+        Assert.True(anyParamChanged,
+            $"{optimizerName}: UpdateSolution made no parameter change. The consolidation's NN " +
+            "routing isn't engaging — Step never ran, so initial params === final params.");
         Assert.False(double.IsNaN(finalL2),
             $"{optimizerName}: UpdateSolution produced NaN params. The consolidation should make UpdateSolution " +
             "delegate to Step for NN solutions, which has anomaly guard + gradient clipping safeguards.");

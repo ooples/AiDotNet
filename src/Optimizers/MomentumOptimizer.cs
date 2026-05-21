@@ -153,11 +153,26 @@ public class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 // Calculate gradient on the batch
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
-                // Update velocity with momentum
-                _velocity = UpdateVelocity(gradient);
-
-                // Update solution
-                var newSolution = UpdateSolution(currentSolution, _velocity);
+                IFullModel<T, TInput, TOutput> newSolution;
+                if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+                {
+                    // #1413 CONSOLIDATION: NN solutions route through the
+                    // base tape path, which expects RAW gradients (Step
+                    // applies its own momentum bookkeeping per-parameter
+                    // via the SGD-with-momentum kernel). Forwarding the
+                    // already-momentum-accumulated _velocity would double-
+                    // apply momentum — the base path would treat velocity
+                    // AS the gradient and then accumulate again on top.
+                    newSolution = base.UpdateSolution(currentSolution, gradient);
+                }
+                else
+                {
+                    // Legacy non-NN path: accumulate momentum into
+                    // _velocity here and subtract from params in
+                    // UpdateSolution.
+                    _velocity = UpdateVelocity(gradient);
+                    newSolution = UpdateSolution(currentSolution, _velocity);
+                }
 
                 currentSolution = newSolution;
             }

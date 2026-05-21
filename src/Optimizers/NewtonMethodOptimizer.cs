@@ -291,19 +291,23 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>A new ISymbolicModel with updated coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
     {
-        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
-        // which synthesizes a TapeStepContext and delegates to Step
-        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
-        // (regression, clustering, classical models) keep the legacy
-        // flat-vector path below for backward compatibility.
-        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
-        {
-            return base.UpdateSolution(currentSolution, direction);
-        }
-        // === Vectorized Solution Update using IEngine (Phase B: US-GPU-015) ===
-        // newCoefficients = parameters + learningRate * direction
-        // Note: direction is already negated (-H^{-1} * g), so adding moves downhill
-
+        // #1413 CONSOLIDATION CAVEAT: Newton's method does NOT route NN
+        // solutions through base.UpdateSolution. The base tape path's
+        // Step kernel treats its second argument as a GRADIENT (descent
+        // = params -= lr * gradient), but for Newton this argument is
+        // the Newton DIRECTION (already -H^{-1} * gradient — sign flipped
+        // and pre-multiplied by inverse Hessian curvature). Passing the
+        // direction as if it were a gradient would:
+        //   1. flip the sign back (Step does params -= lr*x, expecting x
+        //      to point uphill so subtraction descends);
+        //   2. lose the curvature scaling baked into the direction;
+        //   3. silently degrade Newton to plain SGD on the direction's
+        //      raw values, which is meaningless.
+        // So Newton uses the flat-vector update path for BOTH NN and
+        // non-NN solutions — the direction-based update is correct for
+        // both. Other first-order optimizers (Adam, SGD, etc.) route NN
+        // through base.UpdateSolution because their Step semantics
+        // match the base tape path's gradient-step contract.
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
         var scaledDirection = (Vector<T>)Engine.Multiply(direction, CurrentLearningRate);
         var newCoefficients = (Vector<T>)Engine.Add(parameters, scaledDirection);

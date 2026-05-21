@@ -191,11 +191,14 @@ public class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 // Calculate gradient on the batch
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
-                // Apply warmup learning rate
-                var effectiveLr = GetWarmupLearningRate();
-
-                // Update solution using LAMB algorithm
-                var newSolution = UpdateSolutionWithLAMB(currentSolution, gradient, effectiveLr);
+                // Route through UpdateSolution (NOT UpdateSolutionWithLAMB
+                // directly) so the #1413 NN-branch at line 394 actually
+                // engages — calling UpdateSolutionWithLAMB here would skip
+                // the INeuralNetwork<T> dispatch and force every NN model
+                // through the legacy flat-vector path. UpdateSolution
+                // applies GetWarmupLearningRate() internally on the non-NN
+                // path so behaviour for non-NN solvers is unchanged.
+                var newSolution = UpdateSolution(currentSolution, gradient);
 
                 currentSolution = newSolution;
             }

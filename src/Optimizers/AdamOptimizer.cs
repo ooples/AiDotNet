@@ -157,6 +157,19 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // previous run's running maximum as a lower bound and suppress
         // early updates in the new run. (PR #1350 round-2 review.)
         _vMaxVector = null;
+        // Reset the NN tape-side state. The flat-vector path got reset
+        // above; the tape path uses parameter-tensor-keyed dictionaries
+        // (_tapeM, _tapeV, _tapeVMax) and a separate _tapeStep counter
+        // that PERSIST across Optimize calls on the same optimizer
+        // instance. Without this clear, a second Optimize call on the
+        // same optimizer would carry the prior run's first/second moments
+        // (and AMSGrad's running maximum) plus a pre-advanced bias-
+        // correction counter, biasing every per-parameter step from
+        // iteration 1.
+        _tapeM.Clear();
+        _tapeV.Clear();
+        _tapeVMax.Clear();
+        _tapeStep = 0;
 
         // Initialize parameters
         InitializeAdaptiveParameters();

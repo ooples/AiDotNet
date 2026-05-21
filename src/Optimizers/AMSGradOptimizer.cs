@@ -116,6 +116,20 @@ public class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T
         _m = new Vector<T>(parameters.Length);
         _v = new Vector<T>(parameters.Length);
         _vHat = new Vector<T>(parameters.Length);
+        // Reset the NN tape-side state. The flat-vector path got fresh
+        // Vectors above; the tape path uses parameter-tensor-keyed
+        // dictionaries (_tapeM/_tapeV/_tapeVHat) plus a separate
+        // _tapeStep counter that PERSIST across Optimize calls on the
+        // same optimizer instance. Without this clear, a second Optimize
+        // call on the same optimizer would carry the prior run's first/
+        // second moments AND its v̂_max running maximum (the AMSGrad
+        // bound that defines this optimizer), plus a pre-advanced bias-
+        // correction counter — biasing every per-parameter step from
+        // iteration 1.
+        _tapeM.Clear();
+        _tapeV.Clear();
+        _tapeVHat.Clear();
+        _tapeStep = 0;
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)

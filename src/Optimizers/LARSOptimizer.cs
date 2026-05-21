@@ -169,11 +169,15 @@ public class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 // Calculate gradient on the batch
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
-                // Apply warmup learning rate
-                var effectiveLr = GetWarmupLearningRate();
-
-                // Update solution using LARS algorithm
-                var newSolution = UpdateSolutionWithLARS(currentSolution, gradient, effectiveLr);
+                // Route through UpdateSolution (NOT UpdateSolutionWithLARS
+                // directly) so the #1413 NN-branch in the UpdateSolution
+                // override actually engages — calling
+                // UpdateSolutionWithLARS here would skip the
+                // INeuralNetwork<T> dispatch and force every NN model
+                // through the legacy flat-vector path. UpdateSolution
+                // applies GetWarmupLearningRate() internally on the non-NN
+                // path so behaviour for non-NN solvers is unchanged.
+                var newSolution = UpdateSolution(currentSolution, gradient);
 
                 currentSolution = newSolution;
             }
