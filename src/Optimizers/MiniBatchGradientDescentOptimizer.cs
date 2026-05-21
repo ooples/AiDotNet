@@ -182,6 +182,15 @@ public class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : GradientBas
     /// <returns>An updated symbolic model with improved coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, gradient);
+        }
         // === Vectorized Mini-Batch GD Update using IEngine (Phase B: US-GPU-015) ===
         // params = params - learningRate * gradient
 

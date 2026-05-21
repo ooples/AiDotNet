@@ -291,6 +291,15 @@ public class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <returns>A new ISymbolicModel with updated coefficients.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, direction);
+        }
         // === Vectorized Solution Update using IEngine (Phase B: US-GPU-015) ===
         // newCoefficients = parameters + learningRate * direction
         // Note: direction is already negated (-H^{-1} * g), so adding moves downhill
