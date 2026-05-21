@@ -443,9 +443,17 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // inside PrepareAndEvaluateSolution (line ~528), so flipping
         // training mode on `solution` here propagates to the cached
         // model returned via stepData.Solution.
-        var trainable = solution as AiDotNet.Interfaces.INeuralNetwork<T>;
-        bool wasTraining = (solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)?.IsTrainingMode ?? false;
-        trainable?.SetTrainingMode(false);
+        // Capture a single NeuralNetworkBase<T> reference for BOTH read and
+        // write paths so the IsTrainingMode read and the SetTrainingMode
+        // write always target the same runtime type. Today
+        // NeuralNetworkBase<T> is the only concrete INeuralNetwork<T>
+        // implementer in the repo, so the prior split (cast to INeuralNetwork
+        // for write, cast to NeuralNetworkBase for read) hit the same
+        // instance — but the future-proof form keeps the read/write paths
+        // syntactically aligned regardless of what other implementers ship.
+        var nn = solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
+        bool wasTraining = nn?.IsTrainingMode ?? false;
+        nn?.SetTrainingMode(false);
         OptimizationStepData<T, TInput, TOutput> stepData;
         try
         {
@@ -453,7 +461,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
         finally
         {
-            if (wasTraining) trainable?.SetTrainingMode(true);
+            nn?.SetTrainingMode(wasTraining);
         }
         ModelCache.CacheStepData(cacheKey, stepData);
 
@@ -484,8 +492,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // set and corrupts running stats. Wrap here as well; safe to nest
         // since SetTrainingMode is idempotent and the EvaluateSolution
         // wrapper restores correctly on the outer scope.
-        var nnGuard = solution as AiDotNet.Interfaces.INeuralNetwork<T>;
-        bool wasTrainingGuard = (solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)?.IsTrainingMode ?? false;
+        // Same single-cast pattern as EvaluateSolution above — read/write
+        // training mode through ONE NeuralNetworkBase<T> reference so the
+        // captured wasTraining bit and the restore call target identical
+        // runtime types regardless of future INeuralNetwork<T> implementers.
+        var nnGuard = solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
+        bool wasTrainingGuard = nnGuard?.IsTrainingMode ?? false;
         nnGuard?.SetTrainingMode(false);
         try
         {
@@ -493,7 +505,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         }
         finally
         {
-            if (wasTrainingGuard) nnGuard?.SetTrainingMode(true);
+            nnGuard?.SetTrainingMode(wasTrainingGuard);
         }
     }
 
