@@ -425,7 +425,36 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             return cachedStepData;
         }
 
-        var stepData = PrepareAndEvaluateSolution(solution, inputData);
+        // #1380 FIX: gradient-based optimizers (Adam et al.) set training
+        // mode TRUE for the whole Optimize loop at line 188 of
+        // AdamOptimizer.Optimize. Without temporarily flipping to eval
+        // mode for the validation/test forward passes inside
+        // PrepareAndEvaluateSolution → EvaluateModelDirectly, those
+        // forward passes update LayerNorm/BatchNorm running statistics
+        // with VALIDATION-SET batch statistics (typically a much smaller
+        // dataset than training). The corrupted running stats are then
+        // read on the next training forward pass, producing NaN
+        // gradients and NaN params.
+        // Reproducer: tests/Learning/Phase_PAPER_A_BuildAsyncDiagnostic_1380Bisect.cs
+        //   .Optimizer_Optimize_With_Split_Data_Should_Not_NaN (FAILS without this fix)
+        //   .Optimizer_Optimize_With_SmallTrain_FullVal_Should_Not_NaN (PASSES — full val = no corruption)
+        // Wrap the eval in a SetTrainingMode(false)/(true) try/finally;
+        // safe no-op for non-NN models. Solution is a fresh DeepCopy
+        // inside PrepareAndEvaluateSolution (line ~528), so flipping
+        // training mode on `solution` here propagates to the cached
+        // model returned via stepData.Solution.
+        var trainable = solution as AiDotNet.Interfaces.INeuralNetwork<T>;
+        bool wasTraining = (solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)?.IsTrainingMode ?? false;
+        trainable?.SetTrainingMode(false);
+        OptimizationStepData<T, TInput, TOutput> stepData;
+        try
+        {
+            stepData = PrepareAndEvaluateSolution(solution, inputData);
+        }
+        finally
+        {
+            if (wasTraining) trainable?.SetTrainingMode(true);
+        }
         ModelCache.CacheStepData(cacheKey, stepData);
 
         return stepData;
@@ -443,6 +472,32 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// trains and evaluates the model with the selected features.
     /// </remarks>
     protected OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolution(
+        IFullModel<T, TInput, TOutput> solution,
+        OptimizationInputData<T, TInput, TOutput> inputData)
+    {
+        // #1380 FIX (part 2): EvaluateSolution wraps a SetTrainingMode(false)
+        // around its PrepareAndEvaluateSolution call to prevent LayerNorm/
+        // BatchNorm running-stats corruption from validation forward passes.
+        // But Adam.Optimize calls PrepareAndEvaluateSolution DIRECTLY at
+        // line 192 (pre-epoch baseline eval) without going through
+        // EvaluateSolution. That direct call also runs Predict on the val
+        // set and corrupts running stats. Wrap here as well; safe to nest
+        // since SetTrainingMode is idempotent and the EvaluateSolution
+        // wrapper restores correctly on the outer scope.
+        var nnGuard = solution as AiDotNet.Interfaces.INeuralNetwork<T>;
+        bool wasTrainingGuard = (solution as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)?.IsTrainingMode ?? false;
+        nnGuard?.SetTrainingMode(false);
+        try
+        {
+            return PrepareAndEvaluateSolutionCore(solution, inputData);
+        }
+        finally
+        {
+            if (wasTrainingGuard) nnGuard?.SetTrainingMode(true);
+        }
+    }
+
+    private OptimizationStepData<T, TInput, TOutput> PrepareAndEvaluateSolutionCore(
         IFullModel<T, TInput, TOutput> solution,
         OptimizationInputData<T, TInput, TOutput> inputData)
     {
