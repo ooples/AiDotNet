@@ -154,7 +154,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
         VoxLingua107Options? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -169,7 +169,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;
 
-        _lossFunction = new CrossEntropyLoss<T>();
+        _lossFunction = new CrossEntropyWithLogitsLoss<T>();
 
         // Initialize MFCC extractor
         _mfccExtractor = new MfccExtractor<T>(new MfccOptions
@@ -202,7 +202,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         VoxLingua107Options? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _numOps = MathHelper.GetNumericOperations<T>();
         _options = options ?? new VoxLingua107Options();
@@ -211,7 +211,7 @@ public class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIde
         SampleRate = _options.SampleRate;
         NumMels = _options.NumMels;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         // Initialize MFCC extractor

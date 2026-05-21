@@ -112,7 +112,7 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 133,
         ODISEModelSize modelSize = ODISEModelSize.Base, double dropRate = 0.1,
         ODISEOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ODISEOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
@@ -144,7 +144,7 @@ public class ODISE<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     public ODISE(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 133, ODISEModelSize modelSize = ODISEModelSize.Base,
         ODISEOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ODISEOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

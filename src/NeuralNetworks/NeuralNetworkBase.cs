@@ -5314,10 +5314,17 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             // doesn't include those layers' weights at all, so the buffer
             // is sized for fewer parameters than the post-Forward state.
             // After Forward materializes them the layer's registered
-            // parameter list grows beyond the buffer, and the next
-            // CopyFrom call slices past the buffer storage end, throwing
-            // `ArgumentOutOfRangeException` (we see this on MobileNet,
-            // EfficientNet, DenseNet121 which all use lazy DenseLayers).
+            // parameter list grows beyond the buffer. Two downstream
+            // failure modes result:
+            //   1. The next CopyFrom call slices past the buffer storage
+            //      end, throwing `ArgumentOutOfRangeException` (observed
+            //      on MobileNet, EfficientNet, DenseNet121 — all use
+            //      lazy DenseLayers).
+            //   2. Any later CollectParameters returns tensors that
+            //      aren't buffer views, and TapeStepContext.
+            //      ValidateBufferAlignment then throws
+            //      "Parameter N is not a view into the provided
+            //      ParameterBuffer."
             //
             // Detect by walking trainable layers and checking whether
             // any one has no registered parameters yet — that's the lazy
@@ -5348,10 +5355,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             if (totalParamCount > ParameterBufferSkipThresholdParams)
             {
                 paramBuffer = null;
-                // Memoize the skip decision so subsequent training steps
-                // don't repeat the CollectParameters + sum-Length scan.
-                // Sundial-Base (~300 M params) takes ~120ms per scan;
-                // caching makes step 2..N effectively free.
+                // Memoize the foundation-scale skip decision so subsequent
+                // training steps don't repeat the CollectParameters +
+                // sum-Length scan. Sundial-Base (~300 M params) takes
+                // ~120ms per scan; caching makes step 2..N effectively free.
                 _skipParameterBuffer = true;
                 _skipParameterBufferVersion = _layerStructureVersion;
             }
@@ -5361,6 +5368,10 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 // Forward will materialize the lazy weights, so on the
                 // next training step the lazy-detection scan will return
                 // false and the buffer-aliased fast path can engage.
+                // Permanently skipping would force the eager tape path
+                // forever and lose the fused-optimizer speedup on every
+                // model with at least one input-size-inferred DenseLayer
+                // / EmbeddingLayer (BERT-class architectures).
                 paramBuffer = null;
             }
             else

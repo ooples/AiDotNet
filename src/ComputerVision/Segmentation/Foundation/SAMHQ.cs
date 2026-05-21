@@ -142,7 +142,7 @@ public class SAMHQ<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SAMHQModelSize modelSize = SAMHQModelSize.ViTBase,
         double dropRate = 0.1,
         SAMHQOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SAMHQOptions();
         Options = _options;
@@ -183,7 +183,7 @@ public class SAMHQ<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         int numClasses = 1,
         SAMHQModelSize modelSize = SAMHQModelSize.ViTBase,
         SAMHQOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SAMHQOptions();
         Options = _options;

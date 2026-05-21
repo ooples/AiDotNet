@@ -156,7 +156,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         FlamingoOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new FlamingoOptions();
         Options = _options;
@@ -200,7 +200,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
             Guard.NotNull(tokenizer);
             _tokenizer = tokenizer;
             _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-            _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+            _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
             InitializeLayers();
         }
         catch
@@ -234,7 +234,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         FlamingoOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new FlamingoOptions();
         Options = _options;
@@ -257,7 +257,7 @@ public class FlamingoNeuralNetwork<T> : NeuralNetworkBase<T>, IFlamingoModel<T>
         // Use factory to create appropriate tokenizer for the backbone, or use provided tokenizer
         _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(languageModelBackbone);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         InitializeNativeLayers(channels);
     }

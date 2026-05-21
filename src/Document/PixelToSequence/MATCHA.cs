@@ -142,7 +142,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         MATCHAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new MATCHAOptions();
         Options = _options;
@@ -197,7 +197,7 @@ public class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, ITableExt
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         MATCHAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new MATCHAOptions();
         Options = _options;

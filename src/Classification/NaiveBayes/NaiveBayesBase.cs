@@ -54,7 +54,7 @@ public abstract class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>,
     /// <param name="regularization">Optional regularization strategy.</param>
     protected NaiveBayesBase(NaiveBayesOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new NaiveBayesOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new NaiveBayesOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
     }
 

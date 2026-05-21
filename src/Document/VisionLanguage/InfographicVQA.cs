@@ -141,7 +141,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         InfographicVQAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new InfographicVQAOptions();
         Options = _options;
@@ -196,7 +196,7 @@ public class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         InfographicVQAOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new InfographicVQAOptions();
         Options = _options;

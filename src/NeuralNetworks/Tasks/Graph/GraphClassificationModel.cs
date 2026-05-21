@@ -209,6 +209,16 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
+        // PR #1404 review (CodeRabbit): GraphClassificationModel.Train applies
+        // Softmax to the raw logits BEFORE handing them to the loss function
+        // (line ~635 below: `var probs = Softmax(predictions)`).
+        // CrossEntropyWithLogitsLoss internally applies LogSoftmax to its
+        // input expecting raw logits — feeding it already-softmaxed
+        // probabilities double-applies the activation and produces incorrect
+        // gradients. Keep CrossEntropyLoss (probability-input variant) here
+        // so the Train softmax-then-loss pipeline stays internally
+        // consistent. Callers wanting the numerically-stable logits variant
+        // should also remove the explicit Softmax from Train.
         : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), maxGradNorm)
     {
         InputFeatures = architecture.InputSize;

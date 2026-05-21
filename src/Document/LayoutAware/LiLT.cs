@@ -145,7 +145,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LiLTOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LiLTOptions();
         Options = _options;
@@ -199,7 +199,7 @@ public class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, IDocume
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LiLTOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LiLTOptions();
         Options = _options;

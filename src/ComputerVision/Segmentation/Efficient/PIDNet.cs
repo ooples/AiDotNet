@@ -113,7 +113,7 @@ public class PIDNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 19,
         PIDNetModelSize modelSize = PIDNetModelSize.Small, double dropRate = 0.1,
         PIDNetOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PIDNetOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -145,7 +145,7 @@ public class PIDNet<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     public PIDNet(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 19, PIDNetModelSize modelSize = PIDNetModelSize.Small,
         PIDNetOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new PIDNetOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

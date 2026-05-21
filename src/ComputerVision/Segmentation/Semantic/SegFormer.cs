@@ -175,7 +175,7 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SegFormerModelSize modelSize = SegFormerModelSize.B0,
         double dropRate = 0.1,
         SegFormerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegFormerOptions();
         Options = _options;
@@ -226,7 +226,7 @@ public class SegFormer<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         SegFormerModelSize modelSize = SegFormerModelSize.B0,
         SegFormerOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegFormerOptions();
         Options = _options;

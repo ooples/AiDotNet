@@ -358,7 +358,7 @@ public class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmotionRecogn
         }
         else
         {
-            LossFunction = new CrossEntropyLoss<T>();
+            LossFunction = new CrossEntropyWithLogitsLoss<T>();
         }
 
         // Create mel spectrogram extractor

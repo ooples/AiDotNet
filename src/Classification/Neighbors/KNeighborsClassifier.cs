@@ -75,7 +75,7 @@ public class KNeighborsClassifier<T> : ProbabilisticClassifierBase<T>
     /// <param name="regularization">Optional regularization strategy.</param>
     public KNeighborsClassifier(KNeighborsOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new KNeighborsOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new KNeighborsOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
     }
 

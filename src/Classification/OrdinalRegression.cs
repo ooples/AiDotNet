@@ -156,7 +156,7 @@ public class OrdinalRegression<T> : ClassifierBase<T>,
     /// </para>
     /// </remarks>
     public OrdinalRegression(OrdinalRegressionOptions<T>? options = null, IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options, regularization, new CrossEntropyLoss<T>())
+        : base(options, regularization, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new OrdinalRegressionOptions<T>();
         TaskType = ClassificationTaskType.Ordinal;

@@ -145,7 +145,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         XDecoderModelSize modelSize = XDecoderModelSize.Tiny,
         double dropRate = 0.1,
         XDecoderOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");
@@ -195,7 +195,7 @@ public class XDecoder<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 100,
         XDecoderModelSize modelSize = XDecoderModelSize.Tiny,
         XDecoderOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         if (numClasses <= 0)
             throw new ArgumentOutOfRangeException(nameof(numClasses), "numClasses must be > 0.");

@@ -129,7 +129,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutGraphOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutGraphOptions();
         Options = _options;
@@ -165,7 +165,7 @@ public class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         IOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         LayoutGraphOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutGraphOptions();
         Options = _options;

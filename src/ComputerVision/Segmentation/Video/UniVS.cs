@@ -113,7 +113,7 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 80,
         UniVSModelSize modelSize = UniVSModelSize.R50, double dropRate = 0.1,
         UniVSOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new UniVSOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
@@ -145,7 +145,7 @@ public class UniVS<T> : NeuralNetworkBase<T>, IVideoSegmentation<T>
     public UniVS(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 80, UniVSModelSize modelSize = UniVSModelSize.R50,
         UniVSOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new UniVSOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

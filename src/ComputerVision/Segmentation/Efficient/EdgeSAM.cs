@@ -108,7 +108,7 @@ public class EdgeSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         EdgeSAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new EdgeSAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -141,7 +141,7 @@ public class EdgeSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public EdgeSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         EdgeSAMOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new EdgeSAMOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

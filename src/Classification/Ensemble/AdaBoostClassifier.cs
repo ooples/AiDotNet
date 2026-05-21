@@ -87,6 +87,12 @@ public class AdaBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <param name="regularization">Optional regularization strategy.</param>
     public AdaBoostClassifier(AdaBoostClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
+        // PR #1404 review: AdaBoostClassifier outputs probabilities via
+        // PredictProbabilities() (weighted normalized votes). Pass the
+        // probability-input cross-entropy so any future code path that
+        // evaluates DefaultLossFunction against the classifier's outputs
+        // gets the right gradient. AdaBoost's own training doesn't consume
+        // this loss but design-time consistency matters.
         : base(options ?? new AdaBoostClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
     {
     }
