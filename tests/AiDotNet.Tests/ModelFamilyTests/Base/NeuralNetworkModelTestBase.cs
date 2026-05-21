@@ -650,7 +650,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Parameters_ShouldBeNonEmpty()
+    public virtual async Task Parameters_ShouldBeNonEmpty()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();

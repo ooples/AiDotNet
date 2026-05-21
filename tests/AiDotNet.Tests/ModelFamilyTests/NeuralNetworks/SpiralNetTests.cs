@@ -1,6 +1,10 @@
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using System.Threading.Tasks;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
@@ -26,4 +30,34 @@ public class SpiralNetTests : NeuralNetworkModelTestBase
 
     protected override INeuralNetworkModel<double> CreateNetwork()
         => new SpiralNet<double>();
+
+    /// <summary>
+    /// SpiralConvLayer is lazy — its weight tensor is constructed at [0, 0] in
+    /// the ctor and only resolves to its final [outputChannels, inputChannels ×
+    /// spiralLength] shape during the first Forward (OnFirstForward at
+    /// src/NeuralNetworks/Layers/SpiralConvLayer.cs:485 reads input.Shape to
+    /// determine InputChannels). The base
+    /// <c>NeuralNetworkBase.ParameterCount</c> calls
+    /// <c>ResolveLazyLayerShapes</c> which propagates the architecture's input
+    /// shape through generic Dense/Conv chains, but SpiralConv's
+    /// vertex-features input contract <c>[B, V, C]</c> doesn't fit that
+    /// propagation (the chain expects flat-feature layers), so the lazy
+    /// layers stay at length 0 pre-Forward and <c>ParameterCount</c>
+    /// returns 0. Override the test with an explicit warm-up Predict to
+    /// materialize the weights before the count is read, matching the
+    /// pattern used in <c>Training_ShouldChangeParameters</c>.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public override async Task Parameters_ShouldBeNonEmpty()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        using var network = CreateNetwork();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var input = CreateRandomTensor(InputShape, rng);
+        // Warm-up Predict materializes lazy SpiralConvLayer weights.
+        network.Predict(input);
+        Assert.True(network.ParameterCount > 0,
+            "Neural network should have learnable parameters after warm-up Predict.");
+    }
 }
