@@ -55,30 +55,20 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHARD_NAME: ${{ steps.extract.outputs.shard }}
         run: |
-          # Find the most recent COMPLETED Build & SonarCloud run on master.
-          # We deliberately skip cancelled runs (those don't tell us anything
-          # about shard health — they were superseded by a newer commit).
+          # Find the most recent COMPLETED Build & SonarCloud run on master,
+          # success or failure — whichever is newer. Picking "newest success
+          # first, fall back to failure" would let a newer red run be ignored
+          # whenever any older green run exists, so the tracking issue stays
+          # closed while the shard is currently red. We deliberately skip
+          # cancelled runs (those don't tell us anything about shard health —
+          # they were superseded by a newer commit).
           run_id=$(gh run list \
             --repo "${{ github.repository }}" \
             --workflow "Build & SonarCloud" \
             --branch master \
-            --status success \
-            --limit 1 \
-            --json databaseId \
-            -q '.[0].databaseId')
-
-          if [ -z "$run_id" ]; then
-            # Fall back to most recent failure if no recent success — better
-            # to check a real failure than skip the audit entirely.
-            run_id=$(gh run list \
-              --repo "${{ github.repository }}" \
-              --workflow "Build & SonarCloud" \
-              --branch master \
-              --status failure \
-              --limit 1 \
-              --json databaseId \
-              -q '.[0].databaseId')
-          fi
+            --limit 20 \
+            --json databaseId,status,conclusion,createdAt \
+            -q '[.[] | select(.status == "completed" and .conclusion != "cancelled")] | sort_by(.createdAt) | last | .databaseId')
 
           if [ -z "$run_id" ]; then
             echo "No recent completed master runs found — cannot verify shard state."
@@ -89,10 +79,15 @@ jobs:
           echo "Checking run $run_id for shard '$SHARD_NAME'"
           # Job names look like "Tests (net10.0) - ModelFamily - NeuralNetworks".
           # Match by suffix so the extracted shard name maps cleanly.
+          # Pass SHARD_NAME via jq --arg rather than string-interpolating into
+          # the filter — SHARD_NAME comes from issue titles (user-controlled),
+          # and a quote / backslash inside would break the jq program syntax,
+          # producing empty status and bypassing the audit.
           status=$(gh run view "$run_id" \
             --repo "${{ github.repository }}" \
             --json jobs \
-            -q ".jobs[] | select(.name | endswith(\"$SHARD_NAME\")) | .conclusion" \
+            | jq -r --arg shard "$SHARD_NAME" \
+                '.jobs[] | select(.name | endswith($shard)) | .conclusion' \
             | head -1)
 
           if [ -z "$status" ]; then

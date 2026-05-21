@@ -560,38 +560,56 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
     }
 
     /// <summary>
-    /// Seeds a small unit-cube Gaussian cloud (8 corners) so the parameterless
-    /// constructor produces a model with non-empty trainable state. Used only
-    /// when no <paramref name="initialPointCloud"/> is supplied to the main
-    /// constructor.
+    /// Seeds a small unit-cube Gaussian cloud (up to 8 corners) so the
+    /// parameterless constructor produces a model with non-empty trainable
+    /// state. Used only when no <paramref name="initialPointCloud"/> is
+    /// supplied to the main constructor. Respects <see cref="MaxGaussians"/>
+    /// — if the configured cap is below 8, the seed is truncated to that cap
+    /// so the constraint is honoured from construction.
     /// </summary>
     private void SeedDefaultGaussianCloud()
     {
-        const int seedCount = 8;
+        // Honor MaxGaussians: a configured cap of 0 means "explicit empty
+        // model" (the caller will populate Gaussians later). A cap between
+        // 1 and 7 truncates the unit-cube seed. The cap is validated at
+        // construction (must be >= 0) so we only need to clamp here.
+        int seedCap = MaxGaussians > 0 ? Math.Min(8, MaxGaussians) : 0;
+        if (seedCap == 0) return;
+
         // Corners of a unit cube centred on the origin — gives a coarse but
         // varied initial geometry that exercises position / colour / scale /
         // opacity parameter updates symmetrically.
-        var corners = new double[seedCount, 3]
+        var corners = new double[8, 3]
         {
             { -0.5, -0.5, -0.5 }, { -0.5, -0.5,  0.5 },
             { -0.5,  0.5, -0.5 }, { -0.5,  0.5,  0.5 },
             {  0.5, -0.5, -0.5 }, {  0.5, -0.5,  0.5 },
             {  0.5,  0.5, -0.5 }, {  0.5,  0.5,  0.5 },
         };
-        var pointCloudData = new T[seedCount * 3];
-        for (int i = 0; i < seedCount; i++)
+        var pointCloud = new Matrix<T>(seedCap, 3);
+        for (int i = 0; i < seedCap; i++)
         {
-            pointCloudData[i * 3] = NumOps.FromDouble(corners[i, 0]);
-            pointCloudData[i * 3 + 1] = NumOps.FromDouble(corners[i, 1]);
-            pointCloudData[i * 3 + 2] = NumOps.FromDouble(corners[i, 2]);
+            pointCloud[i, 0] = NumOps.FromDouble(corners[i, 0]);
+            pointCloud[i, 1] = NumOps.FromDouble(corners[i, 1]);
+            pointCloud[i, 2] = NumOps.FromDouble(corners[i, 2]);
         }
-        var pointCloud = new Matrix<T>(seedCount, 3);
-        for (int i = 0; i < seedCount; i++)
-        {
-            pointCloud[i, 0] = pointCloudData[i * 3];
-            pointCloud[i, 1] = pointCloudData[i * 3 + 1];
-            pointCloud[i, 2] = pointCloudData[i * 3 + 2];
-        }
+        InitializeFromPointCloud(pointCloud, colors: null);
+    }
+
+    /// <summary>
+    /// Seeds a Gaussian cloud with <paramref name="count"/> placeholder
+    /// points at the origin. Used by <see cref="CreateNewInstance"/> so a
+    /// cloned model starts with the SAME Gaussian count as the original;
+    /// the caller's subsequent <see cref="UpdateParameters"/> overwrites
+    /// every field with the snapshot values, so the placeholder coordinates
+    /// don't matter — only the count does. Without this, CreateNewInstance
+    /// would default-seed 8 Gaussians and UpdateParameters would reject
+    /// any model whose Gaussian count differs from 8.
+    /// </summary>
+    private void SeedPlaceholderGaussianCloud(int count)
+    {
+        if (count <= 0) return;
+        var pointCloud = new Matrix<T>(count, 3); // all zeros — UpdateParameters overwrites
         InitializeFromPointCloud(pointCloud, colors: null);
     }
 
@@ -1849,6 +1867,22 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
     /// training path remains the primary, paper-faithful entry; this is
     /// the compatible secondary contract.
     /// </summary>
+    /// <remarks>
+    /// <para><b>Densification / pruning is intentionally NOT run on this
+    /// path.</b> Kerbl et al. 2023 §5.2's adaptive density control is
+    /// driven by the projected-Gaussian gradient state that
+    /// <see cref="ApplyImageGradients"/> accumulates while splatting onto
+    /// the image plane (the per-Gaussian <c>GaussianGradient</c> list).
+    /// Ray-mode gradients are computed in colour-space across rays, not
+    /// in screen-space across pixels, so they don't carry the
+    /// projected-gradient magnitude signal the densification heuristic
+    /// keys off. Running DensifyAndPrune against a synthesised list
+    /// would either be a no-op (zero gradients) or actively wrong
+    /// (heuristics fire on the wrong signal). Callers who need
+    /// densification must use the image-supervised
+    /// <see cref="TrainOnImage"/> entry; this ray-mode path is a
+    /// scaffold/test-compat contract and is documented as such.</para>
+    /// </remarks>
     private void TrainOnRays(Tensor<T> rayInput, Tensor<T> expectedRayColors)
     {
         var prediction = ForwardWithMemory(rayInput);
@@ -1879,6 +1913,11 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
     /// </summary>
     private Tensor<T> AlignRayTargetToPrediction(Tensor<T> prediction, Tensor<T> target)
     {
+        // Direct _shape access is the in-repo idiom (InternalsVisibleTo is
+        // configured between AiDotNet and AiDotNet.Tensors so Tensor<T>'s
+        // private layout is reachable from this assembly). It avoids the
+        // ReadOnlySpan-builder allocation that the public .Shape property
+        // performs and matches the pattern used elsewhere in this file.
         if (prediction._shape.Length == target._shape.Length)
         {
             bool sameShape = true;
@@ -1893,26 +1932,38 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         // else is out of contract — let the loss validator throw the
         // original error so the caller gets a real shape-mismatch
         // diagnostic rather than a silently-broken broadcast.
-        if (prediction.Rank != 2 || target.Rank != 2) return target;
-        if (prediction.Shape[0] != target.Shape[0]) return target;
+        if (prediction._shape.Length != 2 || target._shape.Length != 2) return target;
+        if (prediction._shape[0] != target._shape[0]) return target;
 
-        int predN = prediction.Shape[0];
-        int predC = prediction.Shape[1];
-        int targC = target.Shape[1];
+        int predN = prediction._shape[0];
+        int predC = prediction._shape[1];
+        int targC = target._shape[1];
         if (predC == targC) return target;
 
         var aligned = new T[predN * predC];
         int copyC = Math.Min(predC, targC);
+        var predSpan = prediction.Data.Span;
+        var targSpan = target.Data.Span;
         for (int n = 0; n < predN; n++)
         {
+            int alignedBase = n * predC;
             for (int c = 0; c < copyC; c++)
             {
-                aligned[n * predC + c] = target.Data.Span[n * targC + c];
+                aligned[alignedBase + c] = targSpan[n * targC + c];
             }
-            // padded channels stay at default(T) = zero, which means
-            // "no penalty" for the unmatched channel — the per-channel
-            // loss term is (pred - 0)² = pred², which still produces a
-            // meaningful gradient signal on the model's emit channels.
+            // For prediction channels the target doesn't supply (typical
+            // case: target is RGB [N, 3] but prediction is RGBA [N, 4]
+            // with a density channel), set aligned = pred so the per-
+            // channel loss term (pred − pred)² = 0 — i.e. zero gradient
+            // on the unmatched channel. Padding with default(T) instead
+            // would silently regularise the density channel toward zero
+            // ((pred − 0)² = pred²), which is NOT a target the caller
+            // requested and would actively suppress opacity during ray-
+            // mode training.
+            for (int c = copyC; c < predC; c++)
+            {
+                aligned[alignedBase + c] = predSpan[alignedBase + c];
+            }
         }
         return new Tensor<T>(aligned, [predN, predC]);
     }
@@ -1933,17 +1984,32 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
         int numRays = rayInput.Shape[0];
         if (numRays == 0) return;
 
+        // Stride into lossGradient must match the prediction's per-ray
+        // channel count, not a hard-coded 3. ForwardWithMemory emits
+        // [N, 4] (RGB + density) when density is enabled, and the loss
+        // gradient inherits that shape — reading r * 3 + c would step
+        // across the wrong memory offsets and silently corrupt the
+        // colour-channel update.
+        int gradC = lossGradient._shape.Length >= 2 ? lossGradient._shape[1] : 1;
+
         // Average gradient per Gaussian — keeps this proportional to the
         // ray-batch size so a 10-ray batch and a 1000-ray batch produce
         // updates of comparable scale.
         T invRays = NumOps.FromDouble(1.0 / numRays);
-        var stepSize = NumOps.FromDouble(0.01);
+        // Use the configured colour learning rate rather than a magic
+        // constant — 3DGS uses different LRs per parameter family
+        // (Kerbl et al. 2023 §B), and the ray-mode path should honour
+        // the same configuration as the image-supervised path.
+        var stepSize = NumOps.FromDouble(ColorLearningRate);
 
         for (int g = 0; g < _gaussians.Count; g++)
         {
             var gauss = _gaussians[g];
             int colorLen = gauss.Color.Length;
-            int copyLen = Math.Min(colorLen, 3);
+            // Update at most the leading 3 colour channels (RGB / leading
+            // SH band) — bounded also by what the gradient tensor actually
+            // carries, so a [N, 1] gradient won't read off the end.
+            int copyLen = Math.Min(Math.Min(colorLen, 3), gradC);
 
             // Sum the per-ray RGB gradient and apply scaled to the
             // Gaussian's colour channels (first 3 entries — leading SH
@@ -1952,7 +2018,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
             {
                 for (int c = 0; c < copyLen; c++)
                 {
-                    var grad = lossGradient.Data.Span[r * 3 + c];
+                    var grad = lossGradient.Data.Span[r * gradC + c];
                     var delta = NumOps.Multiply(NumOps.Multiply(grad, invRays), stepSize);
                     gauss.Color[c] = NumOps.Subtract(gauss.Color[c], delta);
                 }
@@ -2220,6 +2286,24 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        // Pass a placeholder point cloud sized to the ORIGINAL model's
+        // Gaussian count so the clone starts with the right capacity.
+        // Without this, the constructor would auto-seed 8 default Gaussians
+        // and any subsequent UpdateParameters(originalState) would throw
+        // because the parameter vector length wouldn't match perGaussian *
+        // _gaussians.Count. Cloning a 32-Gaussian model would error; cloning
+        // a model trained past 8 Gaussians via densification would error;
+        // deserialization would error. The placeholder coordinates are all
+        // zeros — the caller's UpdateParameters overwrites every field, so
+        // only the count needs to be preserved here.
+        Matrix<T>? clonePointCloud = null;
+        if (_gaussians.Count > 0)
+        {
+            clonePointCloud = new Matrix<T>(_gaussians.Count, 3);
+            // Default-constructed Matrix<T> is all zeros; UpdateParameters
+            // restores positions during the snapshot replay.
+        }
+
         return new GaussianSplatting<T>(
             new GaussianSplattingOptions
             {
@@ -2247,7 +2331,7 @@ public class GaussianSplatting<T> : NeuralNetworkBase<T>, IRadianceField<T>
                 DefaultPointSpacing = DefaultPointSpacing,
                 MinScale = MinScale
             },
-            initialPointCloud: null,
+            initialPointCloud: clonePointCloud,
             initialColors: null,
             lossFunction: LossFunction);
     }

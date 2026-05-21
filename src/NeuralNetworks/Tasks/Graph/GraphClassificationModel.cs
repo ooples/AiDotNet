@@ -97,6 +97,12 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly GraphPooling _poolingType;
     private Tensor<T>? _cachedAdjacencyMatrix;
+    // Tracks whether _cachedAdjacencyMatrix came from EnsureDefaultAdjacencyForInput
+    // (auto-inferred identity) vs an explicit SetAdjacencyMatrix call. Explicit
+    // matrices are sticky — caller knows the graph; auto-inferred ones must be
+    // regenerated whenever the input node count changes so a later Predict /
+    // Train on a different-sized graph doesn't run against a stale identity.
+    private bool _usesFallbackAdjacency;
     private Tensor<T>? _nodeEmbeddings;
     private Tensor<T>? _graphEmbedding;
     private int[]? _maxPoolingIndices; // Cached indices for max pooling backward pass
@@ -245,6 +251,7 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
+        _usesFallbackAdjacency = false;
 
         foreach (var layer in Layers)
         {
@@ -630,13 +637,24 @@ public class GraphClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
     {
-        if (_cachedAdjacencyMatrix is not null) return;
         if (input.Rank < 1) return; // can't infer; let Forward throw with a clear shape error
         int numNodes = input.Shape[0];
+
+        // Explicit matrices (from SetAdjacencyMatrix / FitFromGraph) are sticky.
+        // Auto-inferred ones must be regenerated when the input node count changes
+        // — otherwise the first inferred identity becomes stuck model state and
+        // a later differently-sized input runs against the wrong graph structure.
+        if (_cachedAdjacencyMatrix is not null
+            && (!_usesFallbackAdjacency || _cachedAdjacencyMatrix.Shape[0] == numNodes))
+        {
+            return;
+        }
+
         var identity = new Tensor<T>(new[] { numNodes, numNodes });
         for (int i = 0; i < numNodes; i++)
             identity[i, i] = NumOps.One;
         SetAdjacencyMatrix(identity);
+        _usesFallbackAdjacency = true;
     }
 
     /// <summary>

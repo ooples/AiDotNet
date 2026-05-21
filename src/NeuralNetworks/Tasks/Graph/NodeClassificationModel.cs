@@ -87,6 +87,12 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private Tensor<T>? _cachedAdjacencyMatrix;
+    // Tracks whether _cachedAdjacencyMatrix came from EnsureDefaultAdjacencyForInput
+    // (auto-inferred identity) vs an explicit SetAdjacencyMatrix call. Explicit
+    // matrices are sticky — caller knows the graph; auto-inferred ones must be
+    // regenerated whenever the input node count changes so a later Predict /
+    // Train on a different-sized graph doesn't run against a stale identity.
+    private bool _usesFallbackAdjacency;
 
     /// <summary>
     /// Gets the number of input features per node.
@@ -201,6 +207,7 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
+        _usesFallbackAdjacency = false;
 
         foreach (var layer in Layers)
         {
@@ -548,13 +555,24 @@ public class NodeClassificationModel<T> : NeuralNetworkBase<T>
     /// </summary>
     private void EnsureDefaultAdjacencyForInput(Tensor<T> input)
     {
-        if (_cachedAdjacencyMatrix is not null) return;
         if (input.Rank < 1) return;
         int numNodes = input.Shape[0];
+
+        // Explicit matrices (from SetAdjacencyMatrix / FitFromGraph) are sticky.
+        // Auto-inferred ones must be regenerated when the input node count changes
+        // — otherwise the first inferred identity becomes stuck model state and
+        // a later differently-sized input runs against the wrong graph structure.
+        if (_cachedAdjacencyMatrix is not null
+            && (!_usesFallbackAdjacency || _cachedAdjacencyMatrix.Shape[0] == numNodes))
+        {
+            return;
+        }
+
         var identity = new Tensor<T>(new[] { numNodes, numNodes });
         for (int i = 0; i < numNodes; i++)
             identity[i, i] = NumOps.One;
         SetAdjacencyMatrix(identity);
+        _usesFallbackAdjacency = true;
     }
 
     /// <summary>
