@@ -326,6 +326,25 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     /// </remarks>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> gradient)
     {
+        // #1380 part 2 FIX: port the same safeguards Step(TapeStepContext)
+        // applies at the top of its body. UpdateSolution is the BuildAsync /
+        // Optimize-loop equivalent of Step but lacked: (a) anomaly guard for
+        // NaN/Inf gradients, and (b) the gradient-clipping check. Without
+        // these, a single anomalous gradient on a small-data split
+        // (DataSplitter.Split 70/15/15 default) poisons _m / _v permanently
+        // and either collapses params toward zero or explodes them past
+        // float32 range. See AiDotNet#1413 for the full empirical table.
+        if (ShouldRunAnomalyGuard() && AnyGradientIsAnomalous(gradient))
+        {
+            // Skip the whole step — leave params, _m, _v, _t unchanged.
+            // Matches Step's behavior at line 651-654.
+            return currentSolution;
+        }
+        // Apply global-norm gradient clipping if EnableGradientClipping is on.
+        // Defaults to false — opt-in for backward compatibility — but when
+        // enabled this matches Step's clipping at line 700-703.
+        gradient = ApplyGradientClipping(gradient);
+
         var parameters = InterfaceGuard.Parameterizable(currentSolution).GetParameters();
 
         // Right-size _m/_v to gradient on first call or after lazy-layer expansion.
@@ -1446,6 +1465,22 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
                 double v = NumOps.ToDouble(span[i]);
                 if (double.IsNaN(v) || double.IsInfinity(v)) return true;
             }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Flat-vector overload of <see cref="AnyGradientIsAnomalous(TapeStepContext{T})"/>
+    /// for the Optimize / UpdateSolution path (#1380 part 2). Iterates the
+    /// gradient Vector directly since UpdateSolution doesn't have a
+    /// TapeStepContext to walk.
+    /// </summary>
+    private bool AnyGradientIsAnomalous(Vector<T> gradient)
+    {
+        for (int i = 0; i < gradient.Length; i++)
+        {
+            double v = NumOps.ToDouble(gradient[i]);
+            if (double.IsNaN(v) || double.IsInfinity(v)) return true;
         }
         return false;
     }
