@@ -306,6 +306,16 @@ jobs:
       # adopted the Category=Smoke convention.
       - name: Smoke tests (release gate)
         if: steps.version.outputs.should_release == 'true'
+        env:
+          # ProgramSynthesisCoverageSmokeTests (CodeT5, GraphCodeBERT)
+          # invoke GetModelMetadata which serializes the model via
+          # ModelPersistenceGuard.EnforceBeforeSerialize. Without a
+          # license key in the environment, the guard throws
+          # LicenseRequiredException and the release-gate fails — the
+          # symptom that blocked every release since the smoke gate was
+          # added. The secret holds the project's CI license; pipe it
+          # through here so LicenseKeyResolver.Resolve finds it.
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
         run: |
           dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj \
             --no-build -c Release --framework net10.0 \
