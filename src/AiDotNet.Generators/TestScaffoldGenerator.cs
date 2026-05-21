@@ -2135,6 +2135,37 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // embedding size. Models with non-default hidden dimensions
             // (TinyBERT=312, etc.) need a manual test override.
             sb.AppendLine("    protected override int[] InputShape => new[] { 8, 768 };");
+
+            // Override the pre-training "different uniform inputs → different
+            // outputs" invariant. LayerNorm + self-attention on a uniform
+            // [8, 768] input produces a uniform attention pattern (Q, K, V
+            // all-uniform → uniform QK^T → uniform softmax → uniform output).
+            // That collapse is a mathematical artifact of the architecture,
+            // not a real model bug — feeding varied random inputs exercises
+            // the per-position routing that distinguishes BERT-class encoders.
+            sb.AppendLine();
+            sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+            sb.AppendLine("    public override async System.Threading.Tasks.Task DifferentInputs_ShouldProduceDifferentOutputs()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+            sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        using var network = CreateNetwork();");
+            sb.AppendLine("        var rng1 = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+            sb.AppendLine("        var rng2 = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom(seed: 1729);");
+            sb.AppendLine("        var input1 = CreateRandomTensor(InputShape, rng1);");
+            sb.AppendLine("        var input2 = CreateRandomTensor(InputShape, rng2);");
+            sb.AppendLine("        var output1 = network.Predict(input1);");
+            sb.AppendLine("        var output2 = network.Predict(input2);");
+            sb.AppendLine("        bool anyDifferent = false;");
+            sb.AppendLine("        int minLen = System.Math.Min(output1.Length, output2.Length);");
+            sb.AppendLine("        for (int i = 0; i < minLen; i++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (System.Math.Abs(output1[i] - output2[i]) > 1e-12) { anyDifferent = true; break; }");
+            sb.AppendLine("        }");
+            sb.AppendLine("        Xunit.Assert.True(anyDifferent,");
+            sb.AppendLine("            \"BERT-class NER encoder produces identical output for distinct random \" +");
+            sb.AppendLine("            \"inputs. Attention may be broken or all attention weights collapsed.\");");
+            sb.AppendLine("    }");
         }
         else if (family == TestFamily.SequenceLabelingNER)
         {
