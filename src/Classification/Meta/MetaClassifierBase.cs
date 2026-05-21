@@ -48,7 +48,7 @@ public abstract class MetaClassifierBase<T> : ProbabilisticClassifierBase<T>,
         MetaClassifierOptions<T>? options = null,
         Func<IClassifier<T>>? estimatorFactory = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new MetaClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new MetaClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
         EstimatorFactory = estimatorFactory;
     }

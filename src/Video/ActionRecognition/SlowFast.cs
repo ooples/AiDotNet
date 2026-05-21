@@ -185,7 +185,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         int fastChannels = 8,
         int alpha = 8,
         SlowFastOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SlowFastOptions();
         Options = _options;
@@ -226,7 +226,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         _alpha = alpha;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
         _customFastLayers = customFastLayers;
@@ -256,7 +256,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         int fastChannels = 8,
         int alpha = 8,
         SlowFastOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SlowFastOptions();
         Options = _options;
@@ -285,7 +285,7 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         _fastChannels = fastChannels;
         _alpha = alpha;
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
-        _lossFunction = new CrossEntropyLoss<T>();
+        _lossFunction = new CrossEntropyWithLogitsLoss<T>();
         _probabilityActivation = probabilityActivation ?? new SoftmaxActivation<T>();
 
         try
@@ -770,13 +770,13 @@ public class SlowFast<T> : NeuralNetworkBase<T>
         var lossFunctionType = Type.GetType(lossFunctionTypeName);
         if (lossFunctionType != null)
         {
-            _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType) ?? new CrossEntropyLoss<T>();
+            _lossFunction = (ILossFunction<T>?)Activator.CreateInstance(lossFunctionType) ?? new CrossEntropyWithLogitsLoss<T>();
         }
         else
         {
             System.Diagnostics.Debug.WriteLine(
-                $"Warning: Serialized loss function type '{lossFunctionTypeName}' could not be resolved. Falling back to CrossEntropyLoss.");
-            _lossFunction = new CrossEntropyLoss<T>();
+                $"Warning: Serialized loss function type '{lossFunctionTypeName}' could not be resolved. Falling back to CrossEntropyWithLogitsLoss.");
+            _lossFunction = new CrossEntropyWithLogitsLoss<T>();
         }
 
         // Recreate probability activation from type name

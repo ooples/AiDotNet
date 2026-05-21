@@ -110,7 +110,7 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 40,
         ConcertoModelSize modelSize = ConcertoModelSize.Base, double dropRate = 0.1,
         ConcertoOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ConcertoOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1;
@@ -142,7 +142,7 @@ public class Concerto<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
     public Concerto(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 40, ConcertoModelSize modelSize = ConcertoModelSize.Base,
         ConcertoOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ConcertoOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

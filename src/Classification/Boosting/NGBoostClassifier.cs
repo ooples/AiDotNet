@@ -109,7 +109,7 @@ public class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     /// <param name="regularization">Optional regularization strategy.</param>
     public NGBoostClassifier(NGBoostClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ??= new NGBoostClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ??= new NGBoostClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options;
         _trees = [];

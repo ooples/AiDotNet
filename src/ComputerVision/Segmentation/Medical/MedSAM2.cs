@@ -97,7 +97,7 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
     /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="modelSize">Model size variant (default: Tiny).</param>
     /// <param name="dropRate">Dropout rate (default: 0).</param>
@@ -112,7 +112,7 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         MedSAM2ModelSize modelSize = MedSAM2ModelSize.Tiny, double dropRate = 0,
         MedSAM2Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MedSAM2Options(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -144,7 +144,7 @@ public class MedSAM2<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public MedSAM2(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, MedSAM2ModelSize modelSize = MedSAM2ModelSize.Tiny,
         MedSAM2Options? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MedSAM2Options(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

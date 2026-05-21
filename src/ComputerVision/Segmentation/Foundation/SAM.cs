@@ -108,7 +108,7 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss; the paper uses focal + dice + IoU loss).</param>
+    /// <param name="lossFunction">Loss function (default: <see cref="BinaryCrossEntropyWithLogitsLoss{T}"/> when <paramref name="numClasses"/> == 1; otherwise <see cref="CrossEntropyWithLogitsLoss{T}"/>; the paper uses focal + dice + IoU loss).</param>
     /// <param name="numClasses">Number of output mask classes (default: 1 for binary segmentation).</param>
     /// <param name="modelSize">ViT backbone size (default: ViTHuge — the original SAM default).</param>
     /// <param name="dropRate">Dropout rate (default: 0.1).</param>
@@ -128,7 +128,9 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SAMModelSize modelSize = SAMModelSize.ViTHuge,
         double dropRate = 0.1,
         SAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? (numClasses == 1
+            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>()))
     {
         _options = options ?? new SAMOptions();
         Options = _options;
@@ -169,7 +171,9 @@ public class SAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         int numClasses = 1,
         SAMModelSize modelSize = SAMModelSize.ViTHuge,
         SAMOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, numClasses == 1
+            ? (ILossFunction<T>)new BinaryCrossEntropyWithLogitsLoss<T>()
+            : new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SAMOptions();
         Options = _options;

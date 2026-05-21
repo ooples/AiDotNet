@@ -181,7 +181,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         int patchSize = 16,
         AttentionType attentionType = AttentionType.DividedSpaceTime,
         TimeSformerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new TimeSformerOptions();
         Options = _options;
@@ -205,7 +205,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         _numClasses = numClasses;
         _attentionType = attentionType;
 
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
@@ -224,7 +224,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         int numClasses = 400,
         int embedDim = 768,
         TimeSformerOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new TimeSformerOptions();
         Options = _options;
@@ -244,7 +244,7 @@ public class TimeSformer<T> : NeuralNetworkBase<T>
         _imageSize = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _numClasses = numClasses;
         _attentionType = AttentionType.DividedSpaceTime;
-        _lossFunction = new CrossEntropyLoss<T>();
+        _lossFunction = new CrossEntropyWithLogitsLoss<T>();
 
         try
         {

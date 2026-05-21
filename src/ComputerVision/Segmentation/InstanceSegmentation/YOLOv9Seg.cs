@@ -118,7 +118,7 @@ public class YOLOv9Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 80,
         YOLOv9SegModelSize modelSize = YOLOv9SegModelSize.C, double dropRate = 0.0,
         YOLOv9SegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new YOLOv9SegOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
@@ -150,7 +150,7 @@ public class YOLOv9Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
     public YOLOv9Seg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 80, YOLOv9SegModelSize modelSize = YOLOv9SegModelSize.C,
         YOLOv9SegOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new YOLOv9SegOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

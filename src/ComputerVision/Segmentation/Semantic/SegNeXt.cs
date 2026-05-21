@@ -172,7 +172,7 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         SegNeXtModelSize modelSize = SegNeXtModelSize.Tiny,
         double dropRate = 0.1,
         SegNeXtOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegNeXtOptions();
         Options = _options;
@@ -222,7 +222,7 @@ public class SegNeXt<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         SegNeXtModelSize modelSize = SegNeXtModelSize.Tiny,
         SegNeXtOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegNeXtOptions();
         Options = _options;

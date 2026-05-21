@@ -111,7 +111,7 @@ public class KMaXDeepLab<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 133,
         KMaXDeepLabModelSize modelSize = KMaXDeepLabModelSize.R50, double dropRate = 0.1,
         KMaXDeepLabOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new KMaXDeepLabOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 640;
@@ -143,7 +143,7 @@ public class KMaXDeepLab<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
     public KMaXDeepLab(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 133, KMaXDeepLabModelSize modelSize = KMaXDeepLabModelSize.R50,
         KMaXDeepLabOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new KMaXDeepLabOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

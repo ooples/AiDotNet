@@ -110,7 +110,7 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         YOLOv8SegModelSize modelSize = YOLOv8SegModelSize.N,
         double dropRate = 0,
         YOLOv8SegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new YOLOv8SegOptions();
         Options = _options;
@@ -145,7 +145,7 @@ public class YOLOv8Seg<T> : NeuralNetworkBase<T>, IInstanceSegmentation<T>
         int numClasses = 80,
         YOLOv8SegModelSize modelSize = YOLOv8SegModelSize.N,
         YOLOv8SegOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new YOLOv8SegOptions();
         Options = _options;

@@ -143,7 +143,7 @@ public class MaskDINO<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         MaskDINOModelSize modelSize = MaskDINOModelSize.R50,
         double dropRate = 0.1,
         MaskDINOOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MaskDINOOptions();
         Options = _options;
@@ -186,7 +186,7 @@ public class MaskDINO<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 300,
         MaskDINOModelSize modelSize = MaskDINOModelSize.R50,
         MaskDINOOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MaskDINOOptions();
         Options = _options;

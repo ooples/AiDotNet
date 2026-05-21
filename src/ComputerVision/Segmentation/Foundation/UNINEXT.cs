@@ -143,7 +143,7 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         UNINEXTModelSize modelSize = UNINEXTModelSize.R50,
         double dropRate = 0.1,
         UNINEXTOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new UNINEXTOptions();
         Options = _options;
@@ -186,7 +186,7 @@ public class UNINEXT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 300,
         UNINEXTModelSize modelSize = UNINEXTModelSize.R50,
         UNINEXTOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new UNINEXTOptions();
         Options = _options;

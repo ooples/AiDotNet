@@ -183,7 +183,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         int maxImagesPerRequest = 10,
         ILossFunction<T>? lossFunction = null,
         Gpt4VisionOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new Gpt4VisionOptions();
         Options = _options;
@@ -240,7 +240,7 @@ public class Gpt4VisionNeuralNetwork<T> : NeuralNetworkBase<T>, IGpt4VisionModel
         int maxImagesPerRequest = 10,
         ILossFunction<T>? lossFunction = null,
         Gpt4VisionOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new Gpt4VisionOptions();
         Options = _options;

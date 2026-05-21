@@ -140,7 +140,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         EoMTModelSize modelSize = EoMTModelSize.Base,
         double dropRate = 0.1,
         EoMTOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new EoMTOptions();
         Options = _options;
@@ -183,7 +183,7 @@ public class EoMT<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 100,
         EoMTModelSize modelSize = EoMTModelSize.Base,
         EoMTOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new EoMTOptions();
         Options = _options;

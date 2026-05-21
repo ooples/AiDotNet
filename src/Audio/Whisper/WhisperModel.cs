@@ -363,7 +363,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
         SupportedLanguages = GetSupportedLanguages();
 
         // Default loss function (cross-entropy is standard for sequence-to-sequence ASR)
-        _lossFunction = new CrossEntropyLoss<T>();
+        _lossFunction = new CrossEntropyWithLogitsLoss<T>();
 
         InitializeLayers();
     }
@@ -470,7 +470,7 @@ public class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
         // Initialize training components
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? new CrossEntropyLoss<T>();
+        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
 
         InitializeLayers();
     }

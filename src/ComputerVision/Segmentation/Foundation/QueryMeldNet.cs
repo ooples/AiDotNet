@@ -140,7 +140,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         QueryMeldNetModelSize modelSize = QueryMeldNetModelSize.R50,
         double dropRate = 0.1,
         QueryMeldNetOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new QueryMeldNetOptions();
         Options = _options;
@@ -183,7 +183,7 @@ public class QueryMeldNet<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 200,
         QueryMeldNetModelSize modelSize = QueryMeldNetModelSize.R50,
         QueryMeldNetOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new QueryMeldNetOptions();
         Options = _options;
