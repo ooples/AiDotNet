@@ -47,28 +47,28 @@ env:
   # Memory-management knobs for CI test execution
   # ---------------------------------------------------------------------------
   #
-  # Streaming-pool threshold for paper-scale models. The compiled default
-  # (10 B parameters) is calibrated for production deployment — well above
-  # production-scale VLMs like GrokVision (~800 M params) and SmolVLM /
-  # KyutaiMoshi / GLaMM (~100 M – 1 B). Those models then OOM the CI runner
-  # because eager allocation of every weight tensor exceeds the 16 GB
-  # ubuntu-latest budget. Lowering the threshold to 100 M routes their
-  # weight allocations through the streaming pool's pre-evict-then-allocate
-  # path, keeping resident memory bounded.
+  # Streaming-pool threshold engagement (AIDOTNET_STREAMING_THRESHOLD_PARAMS
+  # below the compiled 10 B default) has been attempted twice in this PR:
+  #  1. b43dd9323: 1 M — produced
+  #     `WeightRegistry.Configure: existing streaming pool has N registered
+  #     entries` because the pool state leaked across xUnit-parallel
+  #     collections.
+  #  2. 81052b16f: 100 M — even with `WeightRegistry.Reset()` in
+  #     NeuralNetworkModelTestBase.InitializeAsync (commit 8ab358d2b), this
+  #     produced a new class of failures: `Streaming pool: handle N is
+  #     unknown` on SimCSE and other models. The pool was being reset, but
+  #     tensor instances from the prior test still hold stale streaming-pool
+  #     handle references that point at the cleared state; on materialize the
+  #     pool throws because the handle was just cleared.
   #
-  # Earlier attempts at 1 M (commit b43dd9323 + revert) failed because the
-  # WeightRegistry static singleton's pool state leaked between xUnit-
-  # parallel test collections, producing
-  # `WeightRegistry.Configure: existing streaming pool has N registered
-  # entries`. That's been fixed in `NeuralNetworkModelTestBase.InitializeAsync`
-  # via `WeightRegistry.Reset()` before each test (commit 8ab358d2b), so the
-  # pool now starts clean on every test entry and re-enabling the threshold
-  # at 100 M is safe.
+  # Fix is non-trivial (need per-tensor handle reset in
+  # WeightRegistry.Reset, or test-isolation strategy that doesn't reset the
+  # pool mid-run). Left at the compiled default until the underlying
+  # handle-leak is fixed properly.
   #
-  # Memory pressure on heavy shards is ALSO handled by per-shard
+  # Memory pressure on heavy shards is handled instead by per-shard
   # `xunit.MaxParallelThreads=1` (see the test step below), which
   # serializes model loads on the heaviest shards.
-  AIDOTNET_STREAMING_THRESHOLD_PARAMS: "100000000"
 
   # GC tuning for tests: switch to Server GC (multi-threaded, larger heap
   # segments, batched Gen-2 collections) — Workstation GC's per-thread heap
