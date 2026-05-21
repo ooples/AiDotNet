@@ -1937,6 +1937,49 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
         else if (isVisionModel &&
+                 model.FullyQualifiedName.Contains("VisionLanguage.Grounding"))
+        {
+            // Vision-Language grounding models (OWLViT — Minderer et al. 2022,
+            // OWLv2, GroundingDINO — Liu et al. 2023, GroundingDINO15, GLaMM,
+            // Ferret, FerretV2, Groma, GroundedSAM2, DINOX, Shikra) all
+            // extend VisionLanguageModelBase and start their layer chain with
+            // `LayerNormalizationLayer + Vision MultiHeadAttention(visionDim)`
+            // — they expect POST-PATCH-EMBEDDING token tensors of shape
+            // `[batch, num_tokens, vision_dim]`, NOT raw image pixels. The
+            // generic vision-model branch below emits `[3, spatial, spatial]`
+            // which these models hard-reject inside the first attention with
+            // `Input embedding dimension (X) does not match weight dimension (Y)`.
+            //
+            // VisionDim defaults vary per paper (see each model's *Options.cs):
+            //   - GroundingDINO / GroundingDINO15 / GroundedSAM2 / DINOX → 256
+            //     (Liu 2023 — DETR-style transformer decoder dim)
+            //   - OWLViT → 768 (Minderer 2022 — ViT-B/16 hidden dim)
+            //   - OWLv2 / Ferret / FerretV2 / GLaMM / Groma / Shikra → 1024
+            //     (ViT-L/14 hidden dim used by LLaVA-class adapters)
+            //
+            // num_tokens kept small (4) so attention intermediate tensors
+            // stay bounded; batch=1 since these are per-image detection models.
+            int groundingVisionDim;
+            switch (model.ClassName)
+            {
+                case "GroundingDINO":
+                case "GroundingDINO15":
+                case "GroundedSAM2":
+                case "DINOX":
+                    groundingVisionDim = 256;
+                    break;
+                case "OWLViT":
+                    groundingVisionDim = 768;
+                    break;
+                default:
+                    // OWLv2, Ferret, FerretV2, GLaMM, Groma, Shikra
+                    groundingVisionDim = 1024;
+                    break;
+            }
+            sb.AppendLine($"    protected override int[] InputShape => new[] {{ 1, 4, {groundingVisionDim} }};");
+            sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 1, 4, {groundingVisionDim} }};");
+        }
+        else if (isVisionModel &&
                  model.FullyQualifiedName.Contains("NeuralRadianceFields"))
         {
             // Neural Radiance Field models (Mildenhall et al. 2020 "NeRF",
