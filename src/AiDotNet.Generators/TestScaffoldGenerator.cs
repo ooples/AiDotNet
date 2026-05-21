@@ -2123,6 +2123,47 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             }
+
+            // Language models start with EmbeddingLayer which truncates its
+            // float-valued input to int for the token lookup. Base-class
+            // CreateConstantTensor(0.1) and CreateConstantTensor(0.9) both
+            // truncate to token id 0 — same input → same output → trips
+            // the "DifferentInputs_AfterTraining" invariant despite the
+            // model being correct. Override with VARIED integer-token
+            // inputs so the embedding lookup sees genuinely distinct
+            // token sequences (in the legal [0, 100) range, well below
+            // any standard vocab size).
+            if (isLang)
+            {
+                sb.AppendLine();
+                sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                sb.AppendLine("    public override async System.Threading.Tasks.Task DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs()");
+                sb.AppendLine("    {");
+                sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+                sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+                sb.AppendLine("        using var network = CreateNetwork();");
+                sb.AppendLine("        var trainInput = CreateRandomTensor(InputShape, rng);");
+                sb.AppendLine("        var trainTarget = CreateRandomTargetTensor(EffectiveOutputShape, rng);");
+                sb.AppendLine("        for (int i = 0; i < TrainingIterations; i++) network.Train(trainInput, trainTarget);");
+                sb.AppendLine("        // Build two DIFFERENT integer-token sequences so EmbeddingLayer's");
+                sb.AppendLine("        // int-truncation produces distinct lookups (constant float inputs all");
+                sb.AppendLine("        // collapse to token 0 under (int) truncation).");
+                sb.AppendLine("        var input1 = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        var input2 = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(InputShape);");
+                sb.AppendLine("        for (int i = 0; i < input1.Length; i++) input1[i] = (double)(i % 50);");
+                sb.AppendLine("        for (int i = 0; i < input2.Length; i++) input2[i] = (double)((i + 25) % 50);");
+                sb.AppendLine("        var output1 = network.Predict(input1);");
+                sb.AppendLine("        var output2 = network.Predict(input2);");
+                sb.AppendLine("        double sumSquared = 0; int minLen = System.Math.Min(output1.Length, output2.Length);");
+                sb.AppendLine("        for (int i = 0; i < minLen; i++) { double d = output1[i] - output2[i]; sumSquared += d * d; }");
+                sb.AppendLine("        double l2 = System.Math.Sqrt(sumSquared);");
+                sb.AppendLine("        Xunit.Assert.True(l2 > 1e-9,");
+                sb.AppendLine("            $\"Language model produces identical output for distinct integer-token \" +");
+                sb.AppendLine("            $\"sequences AFTER training: L2 distance = {l2:E3}. Embedding lookup \" +");
+                sb.AppendLine("            $\"or downstream attention/recurrence is broken.\");");
+                sb.AppendLine("    }");
+            }
         }
         else if (family == TestFamily.TransformerNER || family == TestFamily.SpanBasedNER)
         {
