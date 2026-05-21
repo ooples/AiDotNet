@@ -221,6 +221,77 @@ public class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImageSafetyMo
         Layers[0].UpdateParameters(parameters);
     }
 
+    /// <summary>
+    /// AIE's <see cref="Predict"/> doesn't feed the input image directly into
+    /// <c>Layers[0]</c> — it first extracts a 3-element feature vector
+    /// (<see cref="ComputeHighFrequencyAnomalyScore"/>,
+    /// <see cref="ComputeHistogramAnomalyScore"/>,
+    /// <see cref="ComputeFeatureSqueezingScore"/>) and only then runs the
+    /// Dense(3 → 1) head. The base
+    /// <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/> iterates
+    /// <c>Layers</c> and calls <c>Forward</c> with the raw image, which both
+    /// (a) bypasses the feature-extraction stage that defines AIE's design
+    /// and (b) would attempt <c>Dense.Forward([B, C, H, W])</c> — a shape
+    /// the lazy layer hasn't been sized for. Worse, on a freshly-constructed
+    /// network where the layers haven't been materialised yet (Layers.Count
+    /// is 0 pre-first-Predict) the base loop produces an empty dictionary,
+    /// trivially failing
+    /// <c>NeuralNetworkModelTestBase.NamedLayerActivations_ShouldBeNonEmpty</c>.
+    /// Override to run the actual Predict pipeline and expose the Dense
+    /// sigmoid output as the single named activation.
+    /// </summary>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (Layers.Count == 0) InitializeLayers();
+        var output = Predict(input);
+        return new Dictionary<string, Tensor<T>>
+        {
+            // Use the layer's runtime type name so the key shape matches the
+            // base's "Layer_0_DenseLayer"-style convention.
+            [$"Layer_0_{Layers[0].GetType().Name}"] = output.Clone()
+        };
+    }
+
+    /// <summary>
+    /// AIE's pipeline always emits a 3-element feature vector to a single
+    /// <c>DenseLayer(3 → 1)</c>: <c>3 × 1 = 3</c> weights + <c>1</c> bias = 4
+    /// learnable parameters. The base class's <c>ParameterCount</c> tries to
+    /// pre-resolve lazy layer shapes by propagating <c>Architecture.InputShape</c>
+    /// through the layer chain, but AIE's Dense doesn't see the architecture's
+    /// image shape <c>[C, H, W]</c> — it sees the C#-computed feature vector
+    /// <c>[B, 3]</c> instead (feature extraction happens in <see cref="Predict"/>,
+    /// outside the layer chain). The result: lazy Dense's <c>InputShape[0]</c>
+    /// stays at the <c>-1</c> sentinel and contributes <c>0</c> to the sum,
+    /// making the
+    /// <c>NeuralNetworkModelTestBase.Parameters_ShouldBeNonEmpty</c>
+    /// invariant trivially fail despite the model having a perfectly
+    /// well-defined parameter count.
+    /// </summary>
+    /// <remarks>
+    /// Custom <c>Architecture.Layers</c> from the caller are honoured (we
+    /// defer to the base sum in that case). The override only short-circuits
+    /// for the default Xu et al. 2018 Dense(3 → 1) topology.
+    /// </remarks>
+    public override long ParameterCount
+    {
+        get
+        {
+            // Caller-supplied custom Layers: base knows best — defer.
+            if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+                return base.ParameterCount;
+
+            // Default topology: AFTER a Forward has run, base.ParameterCount
+            // returns the correct 4 (lazy Dense is materialised). BEFORE the
+            // first Forward, base returns 0 because lazy Dense's
+            // InputShape[0] is still −1. Take base's value when it's already
+            // ≥ FeatureCount + 1 (post-Forward); otherwise emit the
+            // architecturally known count.
+            long baseCount = base.ParameterCount;
+            return baseCount >= FeatureCount + 1 ? baseCount : FeatureCount + 1;
+        }
+    }
+
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
