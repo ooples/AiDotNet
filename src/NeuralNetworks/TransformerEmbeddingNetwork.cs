@@ -203,7 +203,11 @@ namespace AiDotNet.NeuralNetworks
             _numHeads = numHeads;
             _feedForwardDim = feedForwardDim;
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            // Paper-faithful LR: SBERT (Reimers & Gurevych 2019) and SGPT
+            // (Muennighoff 2022) fine-tune sentence-embedding transformers at
+            // LR=2e-5 to 5e-5. Framework default LR=1e-3 is too aggressive
+            // for BERT-class encoders at random init.
+            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
 
             // Only build default TE encoder layers when this IS the TE class.
             // Subclasses (SGPT, BGE, ColBERT, InstructorEmbedding, SPLADE, SimCSE,

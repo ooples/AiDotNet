@@ -927,11 +927,50 @@ public class TableGANGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGener
     #region NeuralNetworkBase Required Overrides
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// Mirrors <see cref="GeneratorForward(Vector{T})"/>'s noise-skip pattern.
+    /// Per Park et al. 2018 §3.2 the TableGAN generator concatenates the
+    /// original noise back into each hidden layer's input (a residual-style
+    /// skip from <c>z</c>): layer 0 takes raw <c>z</c>, but layers 1..N-1
+    /// take <c>[h_{i-1}; z]</c>. The previous naïve <c>foreach</c>
+    /// implementation worked at construction time (when the layer chain
+    /// hadn't yet been re-sized by Fit) but broke after Fit, because Fit
+    /// re-creates the chain with the noise-concatenated input dims —
+    /// running raw <c>foreach</c> through it produces the shape mismatch
+    /// (<c>[1, 256] × [356, 256]</c>) seen on
+    /// <c>TableGANGeneratorTests.Fit_TinyDataset_MarksGeneratorAsFitted</c>.
+    /// </para>
+    /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
-        var current = input;
-        foreach (var layer in Layers) current = layer.Forward(current);
-        return current;
+        if (_usingCustomLayers)
+        {
+            // User-supplied architecture: no implicit noise-skip
+            // contract; respect the caller's chain verbatim.
+            var current = input;
+            foreach (var layer in Layers) current = layer.Forward(current);
+            return current;
+        }
+
+        // Default Park et al. 2018 architecture — noise concatenated
+        // into every hidden-layer input. Mirrors GeneratorForward.
+        var inputTensor = input;
+        var h = inputTensor;
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            if (i > 0) h = ConcatTensors(h, inputTensor);
+            h = Layers[i].Forward(h);
+            // Inference: BatchNorm in eval mode, ReLU activation. We don't
+            // mirror the _genPreActivations recording path because that's
+            // training-only state.
+            if (i < _genBNLayers.Count) h = _genBNLayers[i].Forward(h);
+            h = ApplyReLU(h);
+        }
+
+        h = ConcatTensors(h, inputTensor);
+        h = Layers[^1].Forward(h);
+        return h;
     }
 
     /// <inheritdoc />

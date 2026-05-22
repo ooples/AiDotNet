@@ -43,6 +43,43 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
 
+  # ---------------------------------------------------------------------------
+  # Memory-management knobs for CI test execution
+  # ---------------------------------------------------------------------------
+  #
+  # Streaming-pool threshold engagement (AIDOTNET_STREAMING_THRESHOLD_PARAMS
+  # below the compiled 10 B default) has been attempted twice in this PR:
+  #  1. b43dd9323: 1 M — produced
+  #     `WeightRegistry.Configure: existing streaming pool has N registered
+  #     entries` because the pool state leaked across xUnit-parallel
+  #     collections.
+  #  2. 81052b16f: 100 M — even with `WeightRegistry.Reset()` in
+  #     NeuralNetworkModelTestBase.InitializeAsync (commit 8ab358d2b), this
+  #     produced a new class of failures: `Streaming pool: handle N is
+  #     unknown` on SimCSE and other models. The pool was being reset, but
+  #     tensor instances from the prior test still hold stale streaming-pool
+  #     handle references that point at the cleared state; on materialize the
+  #     pool throws because the handle was just cleared.
+  #
+  # Fix is non-trivial (need per-tensor handle reset in
+  # WeightRegistry.Reset, or test-isolation strategy that doesn't reset the
+  # pool mid-run). Left at the compiled default until the underlying
+  # handle-leak is fixed properly.
+  #
+  # Memory pressure on heavy shards is handled instead by per-shard
+  # `xunit.MaxParallelThreads=1` (see the test step below), which
+  # serializes model loads on the heaviest shards.
+
+  # GC tuning for tests: switch to Server GC (multi-threaded, larger heap
+  # segments, batched Gen-2 collections) — Workstation GC's per-thread heap
+  # mode keeps Gen-2 retention pinned to the test thread for longer than we
+  # can afford under parallel test collections. ServerGC ALSO triggers
+  # background concurrent collection more aggressively, reducing the chance
+  # that one test's working set blocks another test from getting a fresh
+  # allocation context.
+  DOTNET_gcServer: 1
+  DOTNET_GCConserveMemory: 9
+
 jobs:
   # CodeQL runs on Ubuntu with net10.0 only - parallel with SonarCloud
   # Runs on PRs, pushes to master/main, and weekly schedule for security analysis
@@ -431,7 +468,80 @@ jobs:
           $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
           $results = Join-Path "TestResults" $sanitizedShardName
           New-Item -Path $results -ItemType Directory -Force | Out-Null
-          dotnet test ${{ matrix.shard.project }} -c Release --framework ${{ matrix.shard.framework }} --no-build --no-restore --filter "${{ matrix.shard.filter }}" --collect:"XPlat Code Coverage" --settings coverlet.runsettings --logger "trx;LogFileName=test-results.trx" --logger "console;verbosity=normal" --results-directory $results --blame-hang-timeout 5min --blame-hang-dump-type none
+
+          # Pre-test resource snapshot. Cancelled-runner shards (Diffusion S-Z,
+          # ModelFamily-NN, Generated Layers, NN-Remaining, Unit-03 Diffusion)
+          # die with `The runner has received a shutdown signal` 2-6 min into
+          # test execution. The dotnet test step exits before producing TRX
+          # output so we have no idea what was running at OOM time. Dump
+          # memory + disk + CPU info on entry so the next cancellation has
+          # forensic data.
+          Write-Host "=== Pre-test resource snapshot ==="
+          Write-Host "Memory:"
+          free -h
+          Write-Host "Disk:"
+          df -h /
+          Write-Host "Processors:"
+          nproc
+
+          # Per-shard parallelism control. The streaming + Server GC
+          # changes earlier in this PR helped most shards stop cancelling,
+          # but the heaviest model-family shards (Diffusion A-I/J-R/S-Z,
+          # Generated Layers, ModelFamily-NeuralNetworks, NN-Remaining,
+          # Unit-03 Diffusion) still trip OOM with 4 parallel BERT-class
+          # model loads in flight on a 16 GB ubuntu-latest runner. Per-iter
+          # peak memory ≈ 880 MB weights + 1.76 GB Adam state per slot;
+          # 4 slots × 2.6 GB + dotnet/xUnit overhead overruns the envelope.
+          # For these specific shards we pass `xunit.MaxParallelThreads=1`
+          # so heavy models load serially — every other shard stays at
+          # the JSON default (= ProcessorCount = 4) and runs full-speed.
+          $heavyShards = @(
+            'ModelFamily - Diffusion A-I',
+            'ModelFamily - Diffusion J-R',
+            'ModelFamily - Diffusion S-Z',
+            'ModelFamily - Generated Layers',
+            'ModelFamily - NeuralNetworks',
+            'Unit - 08e NN-Remaining (catch-all)',
+            'Unit - 03 Diffusion/Encoding'
+          )
+          $serializeShard = $heavyShards -contains $shardName
+          Write-Host "Running shard '$shardName' (serialized: $serializeShard)"
+
+          # Build the argument list as a PowerShell array so the `--`
+          # separator and the runner args reach `dotnet test` as distinct
+          # tokens. Earlier we joined them into one string and pwsh's
+          # token splitter parsed `--` as a standalone switch that MSBuild
+          # then rejected with `MSB1001: Unknown switch`.
+          $dotnetArgs = @(
+            'test', '${{ matrix.shard.project }}',
+            '-c', 'Release',
+            '--framework', '${{ matrix.shard.framework }}',
+            '--no-build', '--no-restore',
+            '--filter', '${{ matrix.shard.filter }}',
+            '--collect:XPlat Code Coverage',
+            '--settings', 'coverlet.runsettings',
+            '--logger', 'trx;LogFileName=test-results.trx',
+            '--logger', 'console;verbosity=normal',
+            '--results-directory', $results,
+            '--blame-hang-timeout', '5min',
+            '--blame-hang-dump-type', 'none'
+          )
+          if ($serializeShard) {
+            $dotnetArgs += '--'
+            $dotnetArgs += 'xunit.MaxParallelThreads=1'
+          }
+          & dotnet @dotnetArgs
+
+          # Post-test resource snapshot. If the runner survives this point,
+          # the test step finished naturally and the snapshot tells us what
+          # the high-water mark looked like.
+          $exitCode = $LASTEXITCODE
+          Write-Host "=== Post-test resource snapshot ==="
+          Write-Host "Memory:"
+          free -h
+          Write-Host "Disk:"
+          df -h /
+          exit $exitCode
 
       - name: Report slow tests
         if: always()
