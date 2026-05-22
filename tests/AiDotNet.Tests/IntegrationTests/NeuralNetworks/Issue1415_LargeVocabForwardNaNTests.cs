@@ -187,6 +187,9 @@ public class Issue1415_LargeVocabForwardNaNTests
         // The "finite logits" contract requires BOTH — NaN-only checks would let
         // saturated overflow-style failures (e.g. an exp() that diverges to +Inf
         // through the softmax/cross-entropy boundary) silently pass.
+        // (Use explicit IsNaN || IsInfinity instead of float.IsFinite — IsFinite
+        // is .NET Core 2.1+, but this test project multi-targets net471 which
+        // doesn't expose it.)
         int nonFiniteInputs = 0;
         for (int trial = 0; trial < 100; trial++)
         {
@@ -195,7 +198,8 @@ public class Issue1415_LargeVocabForwardNaNTests
             var pred = model.Predict(input);
             for (int v = 0; v < vocab; v++)
             {
-                if (!float.IsFinite(pred[0, v])) { nonFiniteInputs++; break; }
+                float lv = pred[0, v];
+                if (float.IsNaN(lv) || float.IsInfinity(lv)) { nonFiniteInputs++; break; }
             }
         }
 
