@@ -5,19 +5,21 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors needs a version bump after ooples/AiDotNet.Tensors#424
-         publishes a new NuGet. That PR replaces the silent `checked(int * int)`
-         dim-product overflow in TensorAllocator.Rent / RentPinned with a
-         `long` accumulator that names the requested shape when the element
-         count exceeds Array.MaxLength, plus an ArgumentOutOfRangeException
-         naming the index and value for negative dims (lazy-layer `-1`
-         sentinel propagation). Diagnoses the otherwise-opaque
-         `OverflowException` failures on TimeMachine / DQN / OWLViT /
-         DGCNN / TabTransformer / TabDPT / SlimSAM / TriaffineNER tests on
-         SonarCloud run 26241806890. (Previous PR ooples/AiDotNet.Tensors#359
-         — GraFPrint perf-overhaul + scheduler-fused + determinism — is
-         already in 0.81.3.) -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.81.3" />
+    <!-- AiDotNet.Tensors version bump for this branch:
+         This branch's LSTMLayer fast path calls
+         CpuEngine.LstmSequenceForward<T> (added in
+         ooples/AiDotNet.Tensors#437). That PR also adds
+         MultiHeadAttentionForward<T> and the OpenCL GPU-only init gate.
+         Placeholder version 0.83.0 below — release engineer should
+         replace with the actual NuGet version that ships #437 (likely
+         0.82.2 or 0.83.0) at merge time. Build will fail against any
+         version <= 0.82.1 because LstmSequenceForward doesn't exist
+         there yet. The "version bump after #424" rationale from prior
+         iterations is also superseded by this one.
+
+         Latest currently-published: 0.82.1 (so 0.82.0/0.82.1 includes
+         the #424 long-arithmetic dim-product fix). -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.83.0" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.3" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.81.3" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.3" />
