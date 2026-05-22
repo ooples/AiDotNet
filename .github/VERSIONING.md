@@ -51,7 +51,24 @@ Example: `0.0.5` → `0.1.0`
 
 ### PATCH Version Bump (x.y.Z)
 
-Currently **not implemented** per project requirements. All changes result in MINOR bumps minimum.
+Triggered by any of the following Conventional Commits prefixes when no `feat:` or breaking change is present in the release window:
+
+- `fix:` — Bug fix
+- `perf:` — Performance improvement
+- `refactor:` — Code restructuring without behavior change
+- `docs:` — Documentation only
+- `chore:` — Maintenance, dependency updates, tooling
+- `style:` — Formatting / whitespace
+- `test:` — Test additions or adjustments
+- `ci:` — CI/CD configuration
+- `build:` — Build system, packaging
+- `revert:` — Reverting a prior commit
+
+Example: `0.205.0` → `0.205.1`
+
+Fallback patterns (non-conventional capitalised PR titles): `Fix`, `Update`, `Improve`, `Enhance`, `Resolve`, `Patch`, `Correct`, `Repair` also map to PATCH.
+
+> **Versioning history note.** Releases prior to 0.205.0 mapped fix/refactor/perf/docs commits to MINOR bumps, which violated [semver.org](https://semver.org). Audit-2026-05 finding #18 fixed this. Pinning ranges (`>= 0.204.0, < 0.205.0`) against pre-0.205 releases is unsafe because those MINOR bumps may have contained only PATCH-class changes — consumers should pin to an exact version through 0.204.x.
 
 ### No Version Bump
 

@@ -1,4 +1,68 @@
 # CODEOWNERS enforces review from code owners on PRs touching matching paths.
-# Adjust as needed to match your GitHub users/teams.
+#
+# Maintainership status (2026-05): single primary maintainer (@ooples).
+# Subsystem ownership below is structured for future maintainer onboarding
+# (audit-2026-05 finding #16, phase 6). Once a second maintainer is added,
+# update individual subsystems to assign the appropriate co-owner.
+#
+# Escalation path for security or release-blocking issues without
+# acknowledgement: admin@aidotnet.dev (see SECURITY.md).
 
-* @ooples
+# Default — applies to anything not matched by a more specific rule.
+*                                       @ooples
+
+# ----------------------------------------------------------------------------
+# Subsystems (all currently @ooples; ready for co-owner assignment in phase 6).
+# ----------------------------------------------------------------------------
+
+# License / legal / governance / security policy.
+/LICENSE                                 @ooples
+/NOTICE                                  @ooples
+/SECURITY.md                             @ooples
+/CONTRIBUTING.md                         @ooples
+/CODE_OF_CONDUCT.md                      @ooples
+/docs/security/                          @ooples
+/docs/internal/                          @ooples
+/.github/CODEOWNERS                      @ooples
+
+# Release pipeline / CI / versioning.
+/.github/workflows/                      @ooples
+/.github/VERSIONING.md                   @ooples
+/.releaserc*                             @ooples
+/CHANGELOG.md                            @ooples
+
+# Telemetry / enterprise license gate (DOE-sensitive subsystem).
+/src/Helpers/BuildKeyProvider.cs         @ooples
+/src/Helpers/LicenseValidator.cs         @ooples
+/build/AiDotNet*Enterprise*.targets      @ooples
+
+# Numerical core lives in the AiDotNet.Tensors repo — owned by @ooples there.
+
+# High-level model families.
+/src/NeuralNetworks/                     @ooples
+/src/Diffusion/                          @ooples
+/src/VisionLanguage/                     @ooples
+/src/Audio/                              @ooples
+/src/LanguageModels/                     @ooples
+/src/PhysicsInformed/                    @ooples
+/src/TimeSeries/                         @ooples
+/src/Classification/                     @ooples
+/src/Clustering/                         @ooples
+/src/Regression/                         @ooples
+
+# Builder + DI surface (phase 2a will refactor this into per-domain builders).
+/src/AiModelBuilder*.cs                  @ooples
+
+# Generators (source-generation infrastructure).
+/src/AiDotNet.Generators/                @ooples
+
+# Serving / deployment / packaging.
+/src/AiDotNet.Serving/                   @ooples
+/src/Deployment/                         @ooples
+
+# Website (Astro project deployed to Vercel).
+/website/                                @ooples
+
+# Documentation site / docfx.
+/docfx*.json                             @ooples
+/docs/                                   @ooples

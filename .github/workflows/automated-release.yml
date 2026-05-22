@@ -125,22 +125,29 @@ jobs:
             echo "Found feat: commits - will bump MINOR version"
           fi
 
-          # Check for fixes/refactor/perf/docs (conventional format with colon)
-          if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ (fix|refactor|perf|docs)(\(.*\))?:" > /dev/null; then
-            BUMP_TYPE="minor"
-            echo "Found fix:/refactor:/perf:/docs: commits - will bump MINOR version"
+          # PATCH bumps: fix, perf, refactor, docs, chore, style, test, ci, build, revert
+          # Per Conventional Commits + semver.org: these are non-feature, non-breaking
+          # changes that must not bump MINOR. Implements audit-2026-05 finding #18
+          # (replaces the prior "Currently not implemented per project requirements"
+          # behaviour in .github/VERSIONING.md, which was a semver contract violation).
+          if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ (fix|perf|refactor|docs|chore|style|test|ci|build|revert)(\(.*\))?:" > /dev/null; then
+            BUMP_TYPE="patch"
+            echo "Found fix/perf/refactor/docs/chore/style/test/ci/build/revert: commits - will bump PATCH version"
           fi
 
-          # FALLBACK: Check for common non-conventional patterns (without colon)
-          # This handles PR titles like "Fix issue #123" or "Add feature X"
+          # FALLBACK: non-conventional capitalised prefixes (no colon).
+          # Conservative: map "Add/Implement/Create/New" (additive) to MINOR;
+          # map "Fix/Update/Improve/Enhance/Resolve/Patch/Correct/Repair" to PATCH.
+          # Pre-audit behaviour mapped both to MINOR — the latter is a semver
+          # violation because a patch-class change should never bump MINOR.
           if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ (add|implement|create|new) " > /dev/null; then
             BUMP_TYPE="minor"
             echo "Found Add/Implement/Create commits - will bump MINOR version"
           fi
 
           if [ "$BUMP_TYPE" = "none" ] && echo "$COMMITS" | grep -iE "^[a-f0-9]+ (fix|update|improve|enhance|resolve|patch|correct|repair) " > /dev/null; then
-            BUMP_TYPE="minor"
-            echo "Found Fix/Update/Improve commits - will bump MINOR version"
+            BUMP_TYPE="patch"
+            echo "Found Fix/Update/Improve commits - will bump PATCH version"
           fi
 
           case $BUMP_TYPE in
@@ -154,6 +161,10 @@ jobs:
               MINOR=$((MINOR + 1))
               PATCH=0
               echo "Bumping MINOR: $CURRENT_VERSION -> $MAJOR.$MINOR.$PATCH"
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              echo "Bumping PATCH: $CURRENT_VERSION -> $MAJOR.$MINOR.$PATCH"
               ;;
             none)
               echo "No conventional commits found, no version bump"

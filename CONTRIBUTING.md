@@ -1,7 +1,10 @@
 # Contributing
 
 ## Base Branch
-- Use `merge-dev2-to-master` as the working base for CI and PRs.
+- Use **`master`** as the base for all PRs (trunk-based development).
+- Create short-lived feature branches from `master` (`feat/...`, `fix/...`, `docs/...`, `chore/...`, `perf/...`, `refactor/...`, `test/...`, `ci/...`, `build/...`, `audit/...`).
+- Keep PRs small and focused. The semantic-release pipeline assigns the version bump from your Conventional Commits subject (see below).
+- Legacy note: an older `merge-dev2-to-master` integration branch existed prior to v0.205.0; it has been retired and is not used.
 
 ## Conventional Commits (Auto-Fixed)
 All PR titles are automatically converted to follow [Conventional Commits](https://www.conventionalcommits.org/) specification for automated releases.
