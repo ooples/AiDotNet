@@ -37,7 +37,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Positional)]
 [LayerTask(LayerTask.PositionalEncoding)]
-[LayerProperty(IsTrainable = false, TestInputShape = "2, 4, 4", TestConstructorArgs = "2, 4")]
+[LayerProperty(IsTrainable = false, TestInputShape = "2, 4, 4", TestConstructorArgs = "2, 4", ProducesNonFiniteOutput = true)]
 internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
 {
     private readonly int _numHeads;
@@ -127,7 +127,18 @@ internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         }
 
         var bias = new Tensor<T>([_numHeads, queryLen, keyLen]);
-        T negInf = NumOps.MinValue;
+        // Use true -Infinity (not MinValue) so the downstream softmax sees
+        // exp(-inf) = 0 EXACTLY on masked positions. NumOps.MinValue is a
+        // large finite value (~-3.4e38 for float) — exp of that underflows
+        // to 0 in normal cases but can leave tiny non-zero attention weight
+        // on masked positions under FP intermediate ordering, and any code
+        // path that ADDS bias values without going through softmax (e.g.
+        // residual-summing masked rows) accumulates a real finite penalty
+        // instead of cleanly masking. FromDouble preserves ±∞ for float /
+        // double specializations; the [LayerProperty(ProducesNonFiniteOutput
+        // = true)] annotation tells the test scaffold generator to skip
+        // the Forward_ShouldProduceFiniteOutput invariant for this layer.
+        T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
         for (int h = 0; h < _numHeads; h++)
         {

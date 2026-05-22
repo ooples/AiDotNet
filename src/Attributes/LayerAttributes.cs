@@ -75,6 +75,17 @@ public sealed class LayerPropertyAttribute : Attribute
     /// The generator emits these as integer literal arguments: new LayerType&lt;double&gt;(4, 8).
     /// </summary>
     public string TestConstructorArgs { get; set; } = "";
+
+    /// <summary>
+    /// Whether the layer legitimately produces ±Infinity values in its Forward output,
+    /// by design rather than by numerical instability. Set true for attention masking
+    /// layers (ALiBi, causal masks) that emit -Infinity at future positions so the
+    /// downstream softmax assigns exactly zero weight to those positions. The test
+    /// scaffold generator translates this to an override of <c>ExpectsFiniteOutput</c>
+    /// on the generated layer test so the Forward_ShouldProduceFiniteOutput invariant
+    /// skips checking IsInfinity for these layers. Default: false.
+    /// </summary>
+    public bool ProducesNonFiniteOutput { get; set; }
 }
 
 /// <summary>

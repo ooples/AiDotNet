@@ -3050,6 +3050,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         bool isTrainable = true, hasTrainingMode = false, changesShape = false, isStateful = false;
         bool supportsBackprop = true, normalizesInput = false, usesSurrogateGradient = false;
+        bool producesNonFiniteOutput = false;
         int apiShape = LayerApiShapeSingleTensor;
         string testInputShape = "";
         string testConstructorArgs = "";
@@ -3098,6 +3099,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     case "UsesSurrogateGradient":
                         usesSurrogateGradient = (bool)(named.Value.Value ?? false);
                         break;
+                    case "ProducesNonFiniteOutput":
+                        producesNonFiniteOutput = (bool)(named.Value.Value ?? false);
+                        break;
                 }
             }
         }
@@ -3120,7 +3124,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestConstructorArgs = testConstructorArgs,
             TestSetupCode = testSetupCode,
             NormalizesInput = normalizesInput,
-            UsesSurrogateGradient = usesSurrogateGradient
+            UsesSurrogateGradient = usesSurrogateGradient,
+            ProducesNonFiniteOutput = producesNonFiniteOutput
         };
     }
 
@@ -3234,6 +3239,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Override ExpectsDifferentOutputForConstantInputs for normalizing layers
         if (layer.NormalizesInput)
             sb.AppendLine("    protected override bool ExpectsDifferentOutputForConstantInputs => false;");
+
+        // Override ExpectsFiniteOutput for masking layers that legitimately emit ±Infinity
+        // (ALiBi, causal masks, etc.) so the Forward_ShouldProduceFiniteOutput invariant
+        // skips the IsInfinity check. Per Gu & Dao 2023 + Press et al. 2022, -∞ at masked
+        // positions is the standard signal for the downstream softmax to assign exact zero.
+        if (layer.ProducesNonFiniteOutput)
+            sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
 
         sb.AppendLine("}");
 
@@ -3417,6 +3429,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public string TestSetupCode { get; set; } = "";
         public bool NormalizesInput { get; set; }
         public bool UsesSurrogateGradient { get; set; }
+        public bool ProducesNonFiniteOutput { get; set; }
     }
 
     /// <summary>

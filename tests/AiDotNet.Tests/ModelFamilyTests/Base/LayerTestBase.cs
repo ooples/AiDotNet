@@ -95,6 +95,16 @@ public abstract class LayerTestBase
     protected virtual bool ExpectsDifferentOutputForConstantInputs => true;
 
     /// <summary>
+    /// Whether the layer's Forward output is expected to consist entirely of finite
+    /// values. False for masking layers (ALiBi, causal attention masks) that emit
+    /// ±Infinity at masked positions by design — the downstream softmax converts
+    /// those to exact zero attention weight. The Forward_ShouldProduceFiniteOutput
+    /// invariant skips the IsInfinity check when this is false. The TestScaffold
+    /// generator emits an override of this from <c>[LayerProperty(ProducesNonFiniteOutput = true)]</c>.
+    /// </summary>
+    protected virtual bool ExpectsFiniteOutput => true;
+
+    /// <summary>
     /// Whether this layer supports testing with different activation functions.
     /// Override to true and implement CreateLayerWithActivation() for layers that
     /// accept activation function parameters in their options/constructor.
@@ -310,12 +320,16 @@ public abstract class LayerTestBase
         var output = layer.Forward(input);
 
         Assert.True(output.Length > 0, "Layer output should not be empty.");
+        bool checkFinite = ExpectsFiniteOutput;
         for (int i = 0; i < output.Length; i++)
         {
             Assert.False(double.IsNaN(output[i]),
                 $"Output[{i}] is NaN — numerical instability in Forward.");
-            Assert.False(double.IsInfinity(output[i]),
-                $"Output[{i}] is Infinity — overflow in Forward.");
+            if (checkFinite)
+            {
+                Assert.False(double.IsInfinity(output[i]),
+                    $"Output[{i}] is Infinity — overflow in Forward.");
+            }
         }
     }
 
@@ -571,6 +585,16 @@ public abstract class LayerTestBase
         Assert.Equal(originalOutput.Length, deserializedOutput.Length);
         for (int i = 0; i < originalOutput.Length; i++)
         {
+            // Direct equality check covers ±Infinity (where Math.Abs(inf - inf) = NaN
+            // would make the tolerance check spuriously fail for layers like ALiBi that
+            // legitimately emit -∞ at masked positions). For ordinary finite outputs the
+            // direct comparison still requires bit-exact roundtrip because serialization
+            // is lossless — fall back to the 1e-12 tolerance check only if they aren't
+            // bit-equal so legacy near-equal serialization formats remain accepted.
+            if (originalOutput[i] == deserializedOutput[i])
+            {
+                continue;
+            }
             Assert.True(Math.Abs(originalOutput[i] - deserializedOutput[i]) < 1e-12,
                 $"Output[{i}] differs after serialization roundtrip: " +
                 $"original={originalOutput[i]:G17}, deserialized={deserializedOutput[i]:G17}");
