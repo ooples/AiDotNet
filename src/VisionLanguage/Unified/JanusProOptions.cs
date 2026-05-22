@@ -39,6 +39,9 @@ public class JanusProOptions : UnifiedVisionOptions
         OutputImageSize = other.OutputImageSize;
         NumVisualTokens = other.NumVisualTokens;
         EnableDecoupledEncoding = other.EnableDecoupledEncoding;
+        NumGenerationTokens = other.NumGenerationTokens;
+        CodebookEmbeddingDim = other.CodebookEmbeddingDim;
+        CfgScale = other.CfgScale;
     }
 
     public JanusProOptions()
@@ -54,5 +57,21 @@ public class JanusProOptions : UnifiedVisionOptions
         NumVisualTokens = 16384;
     }
 
+    /// <summary>Whether to keep understanding and generation vision paths fully decoupled (Janus paper §3.1).</summary>
     public bool EnableDecoupledEncoding { get; set; } = true;
+
+    /// <summary>
+    /// Number of VQ tokens emitted by the generation path. Janus-Pro uses 576 (a 24×24 grid) for the
+    /// default 384×384 output (paper §3.3 — patch size 16, output 384 → 24×24).
+    /// </summary>
+    public int NumGenerationTokens { get; set; } = 576;
+
+    /// <summary>Dimensionality of each VQ codebook entry's continuous embedding. Janus-Pro paper Table 1: 8.</summary>
+    public int CodebookEmbeddingDim { get; set; } = 8;
+
+    /// <summary>
+    /// Classifier-free guidance scale used during generation (Ho &amp; Salimans 2022). Janus-Pro paper uses
+    /// 5–7 depending on prompt; 7.0 is the default for high-fidelity outputs.
+    /// </summary>
+    public double CfgScale { get; set; } = 7.0;
 }
