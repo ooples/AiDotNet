@@ -242,7 +242,26 @@ public class VisionMambaModel<T> : NeuralNetworkBase<T>
     public override Tensor<T> Predict(Tensor<T> input)
     {
         SetTrainingMode(false);
+        return RunForward(input);
+    }
 
+    /// <summary>
+    /// ForwardForTraining MUST execute the same pipeline as Predict (patch
+    /// embed → positional → scan pattern → Mamba blocks → pool → norm →
+    /// classifier). The base implementation walks <c>Layers</c> directly,
+    /// but VisionMamba's Layers list only contains the MambaBlock stack —
+    /// patch embedding lives in this class's custom forward code. Without
+    /// the override, Train() feeds the raw [B,C,H,W] image straight into
+    /// MambaBlock[0] and crashes on the [16,16] x [32,128] matmul mismatch.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        SetTrainingMode(true);
+        return RunForward(input);
+    }
+
+    private Tensor<T> RunForward(Tensor<T> input)
+    {
         int rank = input.Shape.Length;
         int batchSize;
         Tensor<T> input4D;
