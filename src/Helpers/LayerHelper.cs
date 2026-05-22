@@ -22424,37 +22424,20 @@ public static class LayerHelper<T>
         }
         yield return new LayerNormalizationLayer<T>();
 
-        // CIF (Continuous Integrate-and-Fire) alignment module —
-        // Gao et al. 2022 "Paraformer" §3.2. The full paper-faithful CIF
-        // is a *side branch* that predicts per-timestep fire weights
-        // ([B, S, 1] via Dense(1, sigmoid)) and then accumulates the
-        // encoder hidden states along the time axis according to those
-        // weights, producing a fixed-length acoustic embedding sequence
-        // [B, N, encoderDim] (N = number of fired tokens). That dual-
-        // output structure cannot be represented inside a FLAT
-        // List<ILayer<T>>: there's no slot for a layer whose output is
-        // computed from two parents.
+        // CIF (Continuous Integrate-and-Fire) alignment per Gao et al.
+        // 2022 "Paraformer" §3.2 / Algorithm 1. Predicts per-timestep
+        // fire weights α_t via a learnable Dense+Sigmoid branch and
+        // accumulates encoder hidden states until cumulative α crosses
+        // a unit-mass threshold (1.0), emitting one aligned acoustic
+        // embedding per crossing. See CifAlignmentLayer<T> for the full
+        // integrate-and-fire algorithm + tail-emission handling.
         //
-        // The previous flat-list approximation was `Dense(1, identity)`,
-        // which projected the encoder output from [B, S, encoderDim]
-        // down to [B, S, 1] — losing the feature axis entirely and
-        // making every downstream MHA throw "Input embedding dimension
-        // (1) does not match weight dimension (512)" (surfaced in
-        // PR #1408 Generated Layers shard as 5 SenseVoiceTests
-        // failures, run 26254401589 job 77275610156).
-        //
-        // Until the dual-branch CIF is implemented (likely as a
-        // dedicated CifAlignmentLayer<T> with its own ForwardInternal
-        // that maintains the side-branch state), we PASS THROUGH the
-        // encoder output to the decoder directly. The decoder still
-        // sees [B, S, encoderDim] — same time-axis length as the
-        // encoder — instead of the [B, N, encoderDim] CIF would
-        // produce. Non-autoregressive decoder MHA + cross-attention
-        // still operates correctly on this shape; the only paper-
-        // deviation is the lack of acoustic-to-token alignment, which
-        // is an inference-quality concern (not a runnability one) and
-        // doesn't affect any of the forward-finiteness / parameter-
-        // count / training-step invariants the test suite asserts.
+        // Output is the same time-axis length as the input: each α_t ∈
+        // [0, 1] gives at most one fire per step, so S is a safe upper
+        // bound on N (the predicted token count). Unused trailing
+        // slots are zero-padded — downstream MHA / cross-attention
+        // ignores them through standard padding-mask handling.
+        yield return new CifAlignmentLayer<T>(encoderDim);
 
         // Paraformer decoder (non-autoregressive)
         if (encoderDim != decoderDim)
