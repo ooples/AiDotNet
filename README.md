@@ -10,7 +10,7 @@
 [![CodeQL](https://github.com/ooples/AiDotNet/security/code-scanning/badge.svg)](https://github.com/ooples/AiDotNet/security/code-scanning)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/59242b2fb53c4ffc871212d346de752f)](https://app.codacy.com/gh/ooples/AiDotNet/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![NuGet](https://img.shields.io/nuget/v/AiDotNet.svg)](https://www.nuget.org/packages/AiDotNet/)
-[![License](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](https://ooples.github.io/AiDotNet/license/)
+[![License](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](https://aidotnet.dev/license)
 
 ![Neural Networks](https://img.shields.io/badge/Neural_Networks-160+-blue)
 ![Classical ML](https://img.shields.io/badge/Classical_ML-155+-green)
@@ -26,7 +26,7 @@
 
 [Getting Started](#installation) •
 [Samples](https://github.com/ooples/AiDotNet/tree/master/samples) •
-[Documentation](https://ooples.github.io/AiDotNet/) •
+[Documentation](https://aidotnet.dev/docs) •
 [API Reference](https://ooples.github.io/AiDotNet/api/) •
 [Contributing](#contributing)
 
@@ -89,17 +89,24 @@ dotnet add package AiDotNet
 
 ```csharp
 using AiDotNet;
+using AiDotNet.Enums;
+using AiDotNet.LinearAlgebra;
+using AiDotNet.NeuralNetworks;
 
-// Build and train a model in one fluent chain
-var result = await new AiModelBuilder<double, double[], double>()
-    .ConfigureModel(new NeuralNetwork<double>(inputSize: 4, hiddenSize: 16, outputSize: 3))
-    .ConfigureOptimizer(new AdamOptimizer<double>())
-    .ConfigurePreprocessing()  // Auto-applies StandardScaler + Imputer
+// features: [N, 4] tensor of Iris measurements
+// labels:   [N, 3] one-hot tensor of species
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputFeatures: 4, numClasses: 3, complexity: NetworkComplexity.Simple);
+
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureModel(new NeuralNetwork<double>(architecture))
     .BuildAsync(features, labels);
 
-// Make predictions using the facade pattern
-var prediction = result.Predict(newSample);
+var predictions = result.Predict(testFeatures);
 ```
+
+Full runnable version (inline Iris dataset, train/test split, accuracy report):
+[`samples/getting-started/HelloWorld/Program.cs`](samples/getting-started/HelloWorld/Program.cs)
 
 ---
 
@@ -1145,7 +1152,8 @@ See the [samples/](samples/) directory for complete, runnable examples:
 
 ## API Reference
 
-Full API documentation is available at [ooples.github.io/AiDotNet](https://ooples.github.io/AiDotNet/).
+Full API documentation: docfx-generated reference at [ooples.github.io/AiDotNet/api/](https://ooples.github.io/AiDotNet/api/);
+narrative docs and guides at [aidotnet.dev/docs](https://aidotnet.dev/docs).
 
 Key namespaces:
 - `AiDotNet` - Core builder and result types
@@ -1270,9 +1278,9 @@ Areas where we especially welcome help:
 | **Professional** | $29/mo per seat | Commercial use, individual developers and small teams |
 | **Enterprise** | $99/mo per seat | Large organizations, dedicated support, custom SLAs |
 
-See the [pricing page](https://ooples.github.io/AiDotNet/pricing/) for details and to register for a free community license.
+See the [pricing page](https://aidotnet.dev/pricing) for details and to register for a free community license.
 
-Each version automatically converts to **Apache License 2.0** three years after release.
+Each version automatically converts to **Apache License 2.0** four years after release (per the BSL Change Date / fourth-anniversary clause in the LICENSE file).
 
 ---
 

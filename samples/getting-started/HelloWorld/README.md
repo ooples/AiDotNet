@@ -1,59 +1,55 @@
-# Hello World - Your First AiDotNet Model
+# Hello World — Iris classifier
 
-This sample demonstrates the simplest possible AiDotNet model: a neural network that learns the XOR function.
-
-## What You'll Learn
-
-- How to create a `AiModelBuilder`
-- How to configure a basic neural network
-- How to train and make predictions
-
-## The XOR Problem
-
-XOR (exclusive or) is a classic machine learning problem:
-
-| Input A | Input B | Output |
-|---------|---------|--------|
-| 0 | 0 | 0 |
-| 0 | 1 | 1 |
-| 1 | 0 | 1 |
-| 1 | 1 | 0 |
-
-This is not linearly separable, so it requires a neural network with at least one hidden layer.
-
-## Running the Sample
+The classic starting-line for any ML library: a 3-class classifier on
+Fisher's 1936 Iris dataset (150 flowers × 4 measurements × 3 species).
+End-to-end in ~50 lines including the inlined dataset:
 
 ```bash
 dotnet run
 ```
 
-## Expected Output
-
 ```
-Training neural network on XOR problem...
-Epoch 0: Loss = 0.2500
-Epoch 200: Loss = 0.1234
-Epoch 400: Loss = 0.0567
-...
-Training complete!
+=== AiDotNet Hello World: Iris classifier ===
 
-Predictions:
-[0, 0] => 0.02 (expected: 0)
-[0, 1] => 0.97 (expected: 1)
-[1, 0] => 0.98 (expected: 1)
-[1, 1] => 0.03 (expected: 0)
+Test accuracy: 29/30 = 96.7%
+Final loss:    0.0421
 ```
 
-## Code Walkthrough
+## What this sample shows
 
-The key parts of this sample:
+1. **Data → tensors.** Iris is small enough to inline (150 rows × 5 cols).
+   We pack features into a `[N, 4]` `Tensor<double>` and labels into a
+   `[N, 3]` one-hot tensor for the 3-class softmax target.
+2. **80/20 train/test split.** Seeded shuffle for reproducibility.
+3. **Build + train via the fluent `AiModelBuilder`.** Three lines:
+   ```csharp
+   var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+       .ConfigureModel(new NeuralNetwork<double>(architecture))
+       .BuildAsync(trainX, trainY);
+   ```
+4. **Evaluate.** Argmax the prediction logits, compare against the held-out
+   labels, report accuracy.
 
-1. **Create training data** - Define inputs and expected outputs
-2. **Build the model** - Use `AiModelBuilder` with fluent API
-3. **Train** - Call `BuildAsync()` with the training data
-4. **Predict** - Use the trained model to make predictions
+The neural network uses the `NetworkComplexity.Simple` default
+architecture, which is a sensible 1-hidden-layer feedforward classifier.
+For something more elaborate, see [BasicClassification](../BasicClassification/)
+which walks through layer-by-layer architecture configuration.
 
-## Next Steps
+## Why Iris and not XOR
 
-- [BasicClassification](../BasicClassification/) - Learn multi-class classification
-- [BasicRegression](../BasicRegression/) - Learn regression for continuous values
+XOR is the textbook example for "non-linearly separable" but it doesn't
+exercise much of the library. Iris exercises:
+
+- Real-world feature scales (sepal length ~5cm vs petal width ~0.2cm)
+- 3-way classification (XOR is binary)
+- Train/test split discipline
+- The realistic 90-95%+ accuracy range that production classifiers hit
+
+The prior XOR sample is preserved in version control for reference;
+see `git log` if you want to compare.
+
+## Next steps
+
+- [BasicClassification](../BasicClassification/) — Layer-by-layer architecture configuration
+- [BasicRegression](../BasicRegression/) — Continuous-valued outputs
+- [aidotnet.dev/docs](https://aidotnet.dev/docs) — Full documentation

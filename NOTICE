@@ -17,8 +17,9 @@ Summary:
     $1M revenue with fewer than 5 developers)
   - Commercial production use by larger organizations requires a Professional
     or Enterprise license — see https://aidotnet.dev/pricing
-  - Each release automatically converts to Apache License 2.0 three years
-    after its first publicly available distribution under this License
+  - Each release automatically converts to Apache License 2.0 four years
+    after its first publicly available distribution under this License (per
+    the BSL "Change Date" / fourth-anniversary clause; see LICENSE)
 
 Pre-trained models and platform services distributed separately may have
 different licenses:
