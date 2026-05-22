@@ -852,59 +852,58 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// during the evolutionary process.
     /// </para>
     /// </remarks>
-    private Dictionary<int, T> ActivateGenome(Genome<T> genome, Vector<T> input)
+    private T[] ActivateGenome(Genome<T> genome, Vector<T> input)
     {
-        // Initialize all nodes with zero activation
-        var activations = new Dictionary<int, T>();
+        // Issue #1392 perf: switched from Dictionary<int, T> to flat T[] indexed
+        // by node id. NEAT node ids are dense small integers (inputs 0..InputSize-1,
+        // outputs InputSize..InputSize+OutputSize-1, bias = InputSize+OutputSize,
+        // hidden > biasNodeId). The Dictionary form added 2-3 heap allocations per
+        // call (Dictionary instance + internal buckets[] + entries[]) plus hash-
+        // compute + bucket-walk on every node access. With a flat array each
+        // activation is a single contiguous-memory store/load.
+        //
+        // Buffer size = max(node id observed in genome's connections, biasNodeId) + 1.
+        // Indices not referenced by any connection stay at default(T) and are
+        // never queried by callers, so over-provisioning is benign.
+
+        int inputSize = Architecture.InputSize;
+        int outputSize = Architecture.OutputSize;
+        int biasNodeId = inputSize + outputSize;
+
+        // Sort connections topologically for proper feed-forward activation.
+        // Cached on the genome — weight-only mutations (the dominant case across
+        // the 50 internal generations per Train call) keep the topology
+        // signature unchanged, so the cache hits and skips the O(E²) sort.
+        var sortedConnections = GetOrBuildSortedConnections(genome);
+
+        int maxNodeId = GetOrBuildMaxNodeId(genome, biasNodeId);
+        var activations = new T[maxNodeId + 1];
 
         // Set input nodes
-        for (int i = 0; i < Architecture.InputSize; i++)
+        for (int i = 0; i < inputSize; i++)
         {
             activations[i] = input[i];
         }
 
-        // Set bias node if needed
-        activations[Architecture.InputSize + Architecture.OutputSize] = NumOps.One;
+        // Set bias node
+        activations[biasNodeId] = NumOps.One;
 
-        // Initialize output nodes
-        for (int i = 0; i < Architecture.OutputSize; i++)
-        {
-            activations[Architecture.InputSize + i] = NumOps.Zero;
-        }
+        // Output nodes + every other slot are pre-zeroed by `new T[]`
+        // (default(T) = NumOps.Zero for built-in numeric types) — no
+        // explicit init loop needed, no per-connection ContainsKey gymnastics
+        // since every FromNode/ToNode id is in range by construction of maxNodeId.
 
-        // Sort connections topologically for proper feed-forward activation.
-        // Issue #1392 perf: cache the sort on the genome — weight-only mutations
-        // (the dominant case across the 50 internal generations per Train call)
-        // keep the topology signature unchanged, so the cache hits and skips
-        // the O(E²) sort.
-        var sortedConnections = GetOrBuildSortedConnections(genome);
-
-        // Process connections
+        // Process connections in topological order.
         foreach (var connection in sortedConnections)
         {
             if (!connection.IsEnabled) continue;
-
-            // Ensure nodes exist in activations
-            if (!activations.ContainsKey(connection.FromNode))
-            {
-                activations[connection.FromNode] = NumOps.Zero;
-            }
-            if (!activations.ContainsKey(connection.ToNode))
-            {
-                activations[connection.ToNode] = NumOps.Zero;
-            }
-
-            // Calculate weighted input and add to target node
             T weightedInput = NumOps.Multiply(activations[connection.FromNode], connection.Weight);
             activations[connection.ToNode] = NumOps.Add(activations[connection.ToNode], weightedInput);
         }
 
-        // Apply activation function to all non-input nodes. Issue #1392 perf:
-        // pulled out the LINQ Where(...).ToList() that allocated a fresh list
-        // on every call — the keys-with-`>= InputSize` are deterministic
-        // given the genome's topology, so we cache them on the same Genome
-        // signature as the sorted-connections cache below.
-        var nonInputNodes = GetOrBuildNonInputNodeIds(genome, activations);
+        // Apply activation function to all non-input nodes the genome actually
+        // references (cached on the genome alongside the sort + max-node-id).
+        var nonInputNodes = GetOrBuildReferencedNonInputNodeIds(genome, inputSize);
         foreach (var nodeId in nonInputNodes)
         {
             activations[nodeId] = ApplySigmoid(activations[nodeId]);
@@ -932,29 +931,78 @@ public class NEAT<T> : NeuralNetworkBase<T>
         genome.CachedSortedConnections = sorted;
         genome.CachedTopologySignatureCount = count;
         genome.CachedTopologySignatureMask = mask;
-        // Invalidate the dependent non-input-node cache — its node set depends
-        // on the connection set, so a topology change forces a rebuild on the
-        // next call.
+        // Invalidate the dependent caches — their content depends on the
+        // connection set, so a topology change forces a rebuild on the next
+        // call.
         genome.CachedNonInputNodeIds = null;
+        genome.CachedMaxNodeId = -1;
         return sorted;
     }
 
     /// <summary>
-    /// Issue #1392 perf helper: caches the list of node IDs &gt;= InputSize that
-    /// the sigmoid sweep walks. Built on demand using the same topology
-    /// signature as the sort cache and invalidated alongside it.
+    /// Issue #1392 perf helper: returns max(FromNode, ToNode, biasNodeId)
+    /// across the genome's enabled connections. Cached on the genome so the
+    /// per-call O(E) scan only runs after topology mutations. Used to size
+    /// <see cref="ActivateGenome"/>'s flat activation buffer.
     /// </summary>
-    private List<int> GetOrBuildNonInputNodeIds(Genome<T> genome, Dictionary<int, T> activations)
+    private static int GetOrBuildMaxNodeId(Genome<T> genome, int biasNodeId)
+    {
+        if (genome.CachedMaxNodeId >= 0)
+        {
+            return genome.CachedMaxNodeId;
+        }
+        int max = biasNodeId;
+        var conns = genome.Connections;
+        for (int i = 0; i < conns.Count; i++)
+        {
+            var c = conns[i];
+            if (c.FromNode > max) max = c.FromNode;
+            if (c.ToNode > max) max = c.ToNode;
+        }
+        genome.CachedMaxNodeId = max;
+        return max;
+    }
+
+    /// <summary>
+    /// Issue #1392 perf helper: caches the list of node IDs &gt;= InputSize that
+    /// the sigmoid sweep should touch. Built directly from the connection list
+    /// (any FromNode/ToNode &gt;= InputSize that the genome references) so we
+    /// don't need to materialize a Dictionary first. Invalidated alongside
+    /// <see cref="GetOrBuildSortedConnections"/>.
+    /// </summary>
+    private List<int> GetOrBuildReferencedNonInputNodeIds(Genome<T> genome, int inputSize)
     {
         if (genome.CachedNonInputNodeIds != null)
         {
             return genome.CachedNonInputNodeIds;
         }
-        var list = new List<int>(activations.Count);
-        foreach (var k in activations.Keys)
+        var seen = new HashSet<int>();
+        var list = new List<int>();
+        foreach (var c in genome.Connections)
         {
-            if (k >= Architecture.InputSize) list.Add(k);
+            if (!c.IsEnabled) continue;
+            if (c.FromNode >= inputSize && seen.Add(c.FromNode)) list.Add(c.FromNode);
+            if (c.ToNode >= inputSize && seen.Add(c.ToNode)) list.Add(c.ToNode);
         }
+        // Also include output nodes (always activated even if no connection
+        // wrote to them, because ActivateGenome zero-initializes the slot
+        // and the sigmoid should still run on the zero value for caller
+        // consistency with the pre-refactor Dictionary behavior).
+        int outputSize = Architecture.OutputSize;
+        for (int i = 0; i < outputSize; i++)
+        {
+            int outNode = inputSize + i;
+            if (seen.Add(outNode)) list.Add(outNode);
+        }
+        // Bias node: the pre-refactor Dictionary implementation set
+        // activations[InputSize+OutputSize] = NumOps.One BEFORE the sigmoid
+        // sweep and then iterated `activations.Keys.Where(k >= InputSize)`,
+        // so the bias slot was overwritten with Sigmoid(1) = ~0.731 by the
+        // end. Preserve that exact behavior here so callers that read the
+        // bias slot from the returned array see the same value they saw
+        // before this refactor.
+        int biasNodeId = inputSize + outputSize;
+        if (seen.Add(biasNodeId)) list.Add(biasNodeId);
         genome.CachedNonInputNodeIds = list;
         return list;
     }
@@ -1238,7 +1286,10 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 for (int i = 0; i < Architecture.OutputSize; i++)
                 {
                     int outputNodeId = Architecture.InputSize + i;
-                    pred[i] = act.ContainsKey(outputNodeId) ? act[outputNodeId] : NumOps.Zero;
+                    // ActivateGenome's flat array is sized to max(node id,
+                    // biasNodeId); output node ids are guaranteed in range
+                    // since biasNodeId = InputSize + OutputSize > any output id.
+                    pred[i] = act[outputNodeId];
                 }
                 totalErr = NumOps.Add(totalErr, LossFunction.CalculateLoss(pred, sampleExpected));
             }
@@ -1415,27 +1466,40 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
         var result = new Dictionary<string, Tensor<T>>();
 
-        var inputActivation = new Tensor<T>(new int[] { Architecture.InputSize });
-        for (int i = 0; i < Architecture.InputSize; i++)
+        int inputSize = Architecture.InputSize;
+        int outputSize = Architecture.OutputSize;
+        int biasNodeId = inputSize + outputSize;
+
+        // Issue #1392 perf: ActivateGenome now returns a flat T[] sized to
+        // max(referenced node id, biasNodeId) + 1, so input + output + bias
+        // slots are guaranteed in range. The ContainsKey gymnastics from the
+        // Dictionary era are unnecessary — read straight by index.
+
+        var inputActivation = new Tensor<T>(new int[] { inputSize });
+        for (int i = 0; i < inputSize; i++)
         {
-            inputActivation[i] = activations.ContainsKey(i) ? activations[i] : NumOps.Zero;
+            inputActivation[i] = activations[i];
         }
         result["InputNodes"] = inputActivation;
 
-        var outputActivation = new Tensor<T>(new int[] { Architecture.OutputSize });
-        for (int i = 0; i < Architecture.OutputSize; i++)
+        var outputActivation = new Tensor<T>(new int[] { outputSize });
+        for (int i = 0; i < outputSize; i++)
         {
-            int nodeId = Architecture.InputSize + i;
-            outputActivation[i] = activations.ContainsKey(nodeId) ? activations[nodeId] : NumOps.Zero;
+            outputActivation[i] = activations[inputSize + i];
         }
         result["OutputNodes"] = outputActivation;
 
-        // Exclude the reserved bias node (ID = InputSize + OutputSize) from hidden nodes
-        int biasNodeId = Architecture.InputSize + Architecture.OutputSize;
-        var hiddenNodes = activations.Keys
-            .Where(k => k > biasNodeId)
-            .OrderBy(k => k)
-            .ToList();
+        // Hidden nodes: walk the genome's cached non-input-node-id list and
+        // pick out the entries beyond the bias slot. Sorted ascending by id
+        // for stable result ordering, matching what the prior OrderBy(k => k)
+        // chain produced.
+        var nonInputNodeIds = GetOrBuildReferencedNonInputNodeIds(bestGenome, inputSize);
+        var hiddenNodes = new List<int>();
+        foreach (var nodeId in nonInputNodeIds)
+        {
+            if (nodeId > biasNodeId) hiddenNodes.Add(nodeId);
+        }
+        hiddenNodes.Sort();
 
         if (hiddenNodes.Count > 0)
         {

@@ -200,6 +200,15 @@ public class Genome<T>
     internal List<int>? CachedNonInputNodeIds;
 
     /// <summary>
+    /// Issue #1392 perf: max node id referenced by any (FromNode, ToNode) in
+    /// <see cref="Connections"/> plus the bias-node id, cached alongside the
+    /// topology signature so <see cref="NEAT{T}.ActivateGenome"/> can size its
+    /// flat-array activations buffer in one shot instead of growing a
+    /// Dictionary&lt;int, T&gt; one entry at a time. -1 means uninitialized.
+    /// </summary>
+    internal int CachedMaxNodeId = -1;
+
+    /// <summary>
     /// Adds a new connection to this genome.
     /// </summary>
     /// <param name="fromNode">The identifier of the source node.</param>
@@ -437,10 +446,24 @@ public class Genome<T>
     /// </remarks>
     public Genome<T> Clone()
     {
+        // Issue #1392 perf: under EvolvePopulation we Clone() the parent for
+        // every child every generation (150 pop x 50 gen per Train call x
+        // dozens of test calls). The previous foreach + AddConnection path
+        // drove List<Connection<T>>'s internal array through the 0->4->8->16
+        // capacity grow chain, copying the buffer at every doubling. Pre-size
+        // the list to the exact final capacity so the alloc is one-shot.
+        int count = Connections.Count;
         var clone = new Genome<T>(InputSize, OutputSize);
-        foreach (var conn in Connections)
+        if (count > 0)
         {
-            clone.AddConnection(conn.FromNode, conn.ToNode, conn.Weight, conn.IsEnabled, conn.Innovation);
+            clone.Connections.Capacity = count;
+            var src = Connections;
+            var dst = clone.Connections;
+            for (int i = 0; i < count; i++)
+            {
+                var c = src[i];
+                dst.Add(new Connection<T>(c.FromNode, c.ToNode, c.Weight, c.IsEnabled, c.Innovation));
+            }
         }
 
         return clone;
