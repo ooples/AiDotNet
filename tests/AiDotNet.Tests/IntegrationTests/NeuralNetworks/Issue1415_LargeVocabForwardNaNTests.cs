@@ -262,11 +262,19 @@ public class Issue1415_LargeVocabForwardNaNTests
                 model.Train(trainXs[i], trainYs[i]);
 
         // Drop training tensors and force aggressive Gen2 collection — exact
-        // pattern the consumer reported reproducing the bug.
+        // pattern the consumer reported reproducing the bug. GCCollectionMode.Aggressive
+        // is .NET 6+; fall back to Forced on net471 (both target Gen2 with
+        // blocking:true, which is the property the consumer's claim depends on).
         for (int i = 0; i < nTrain; i++) { trainXs[i] = null!; trainYs[i] = null!; }
+#if NET6_0_OR_GREATER
         System.GC.Collect(2, System.GCCollectionMode.Aggressive, blocking: true);
         System.GC.WaitForPendingFinalizers();
         System.GC.Collect(2, System.GCCollectionMode.Aggressive, blocking: true);
+#else
+        System.GC.Collect(2, System.GCCollectionMode.Forced, blocking: true);
+        System.GC.WaitForPendingFinalizers();
+        System.GC.Collect(2, System.GCCollectionMode.Forced, blocking: true);
+#endif
 
         int nonFiniteInputs = 0;
         for (int trial = 0; trial < 100; trial++)
