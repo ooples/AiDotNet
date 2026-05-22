@@ -1,0 +1,31 @@
+PLACEHOLDER — PGP public key for admin@aidotnet.dev
+
+This file will hold the ASCII-armored PGP public key for the AiDotNet security
+contact (admin@aidotnet.dev) once the key has been generated.
+
+Manual setup steps (tracked in docs/internal/phase0-manual-steps.md):
+
+  1. Generate a new PGP key pair for admin@aidotnet.dev:
+        gpg --full-generate-key
+        # Key type: RSA 4096 or ed25519
+        # Expiry: 2 years (renewable)
+        # Real name: AiDotNet Security
+        # Email: admin@aidotnet.dev
+
+  2. Export the public key in ASCII-armored format:
+        gpg --armor --export admin@aidotnet.dev > pgp.txt
+
+  3. Replace this file's contents with the exported key, commit, and push.
+
+  4. Publish the same key to a public keyserver:
+        gpg --send-keys --keyserver hkps://keys.openpgp.org <KEY-ID>
+
+  5. Mirror the published key at https://aidotnet.dev/security so reporters
+     can verify the key fingerprint matches both the repo and the website.
+
+  6. Store the private key in the Ooples password manager / hardware token.
+     Never commit the private key.
+
+Until this is done, reporters who cannot use GitHub Security Advisories
+should send unencrypted email to admin@aidotnet.dev and accept the
+transport-layer-only confidentiality.
