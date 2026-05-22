@@ -188,6 +188,13 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int _innovationNumber;
 
+    // Issue #1392 perf: scratch HashSet reused across Crossover calls so we
+    // don't allocate a fresh one for every offspring. EvolvePopulation is
+    // single-threaded, so a per-instance buffer is safe; the .Clear() at the
+    // top of Crossover resets it without releasing the underlying entries
+    // table.
+    private readonly HashSet<int> _crossoverSeen = new HashSet<int>();
+
     private const int DefaultInputSize = 10;
     private const int DefaultOutputSize = 1;
     private const int DefaultPopulationSize = 150;
@@ -414,8 +421,11 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 return 0;
             });
 
-            // Create new population
-            var newPopulation = new List<Genome<T>>();
+            // Create new population — issue #1392 perf: pre-size to the final
+            // capacity so the underlying array doesn't walk the 0→4→8→…
+            // capacity-doubling chain and memcpy on every grow. Population
+            // size is fixed for the lifetime of a NEAT instance.
+            var newPopulation = new List<Genome<T>>(_populationSize);
 
             // Elitism: Keep the best individual
             newPopulation.Add(_population[0]);
@@ -473,15 +483,27 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Genome<T> SelectParent()
     {
-        // Tournament selection
-        int tournamentSize = 3;
-        var tournament = new List<Genome<T>>();
-        for (int i = 0; i < tournamentSize; i++)
+        // Tournament selection. Issue #1392 perf: the prior implementation
+        // allocated a fresh List<Genome<T>> and an OrderByDescending LINQ
+        // enumerator on every call. Across a Train run that's ~447 k allocs
+        // (149 children × 50 generations × ~30 Train calls × 2 parents per
+        // crossover). Tournament is fixed-size 3 — pick three random genomes
+        // and keep the running argmax inline. No allocations, no LINQ.
+        const int tournamentSize = 3;
+        int n = _population.Count;
+        var best = _population[Random.Next(n)];
+        var bestFitness = best.Fitness;
+        for (int i = 1; i < tournamentSize; i++)
         {
-            tournament.Add(_population[Random.Next(_population.Count)]);
+            var candidate = _population[Random.Next(n)];
+            if (NumOps.GreaterThan(candidate.Fitness, bestFitness))
+            {
+                best = candidate;
+                bestFitness = candidate.Fitness;
+            }
         }
 
-        return tournament.OrderByDescending(g => g.Fitness).First();
+        return best;
     }
 
     /// <summary>
@@ -515,13 +537,41 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Genome<T> Crossover(Genome<T> parent1, Genome<T> parent2)
     {
+        // Issue #1392 perf: prior implementation used Enumerable.Concat (one
+        // enumerator alloc) and a fresh HashSet per call (rehash table alloc).
+        // Reuse the per-instance _crossoverSeen HashSet and walk both parent
+        // connection lists by index so the JIT can elide bounds checks. Child
+        // connection list is pre-sized to the upper bound (parent1.Count +
+        // parent2.Count) to skip the List capacity-doubling chain in the
+        // common case where most innovations are unique.
+        var p1 = parent1.Connections;
+        var p2 = parent2.Connections;
+        int p1Count = p1.Count;
+        int p2Count = p2.Count;
         var child = new Genome<T>(Architecture.InputSize, Architecture.OutputSize);
-        var seenInnovations = new HashSet<int>();
-        foreach (var conn in parent1.Connections.Concat(parent2.Connections))
+        int upperBound = p1Count + p2Count;
+        if (upperBound > 0)
         {
-            if (seenInnovations.Add(conn.Innovation))
+            child.Connections.Capacity = upperBound;
+        }
+
+        var seen = _crossoverSeen;
+        seen.Clear();
+        var childConnections = child.Connections;
+        for (int i = 0; i < p1Count; i++)
+        {
+            var c = p1[i];
+            if (seen.Add(c.Innovation))
             {
-                child.AddConnection(conn.FromNode, conn.ToNode, conn.Weight, conn.IsEnabled, conn.Innovation);
+                childConnections.Add(new Connection<T>(c.FromNode, c.ToNode, c.Weight, c.IsEnabled, c.Innovation));
+            }
+        }
+        for (int i = 0; i < p2Count; i++)
+        {
+            var c = p2[i];
+            if (seen.Add(c.Innovation))
+            {
+                childConnections.Add(new Connection<T>(c.FromNode, c.ToNode, c.Weight, c.IsEnabled, c.Innovation));
             }
         }
 
@@ -564,14 +614,36 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void Mutate(Genome<T> genome)
     {
-        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
+        // Issue #1392 perf: prior implementation used LINQ Max+Any on every
+        // call, allocating a Func delegate + an enumerator each time. Walk
+        // Connections by index. Add-node case derives the new node id from
+        // an inline scan over (FromNode, ToNode) since the existing
+        // CachedMaxNodeId on Genome covers max(referenced node id,
+        // biasNodeId), which already gives us "first free node id - 1".
+        var connections = genome.Connections;
+        int count = connections.Count;
+
+        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate) && count > 0)
         {
             // Add new node
-            var connection = genome.Connections[Random.Next(genome.Connections.Count)];
-            int newNodeId = genome.Connections.Max(c => Math.Max(c.FromNode, c.ToNode)) + 1;
+            var connection = connections[Random.Next(count)];
+
+            int maxNodeId = 0;
+            for (int i = 0; i < count; i++)
+            {
+                var c = connections[i];
+                int hi = c.FromNode > c.ToNode ? c.FromNode : c.ToNode;
+                if (hi > maxNodeId) maxNodeId = hi;
+            }
+            int newNodeId = maxNodeId + 1;
+
             genome.DisableConnection(connection.Innovation);
             genome.AddConnection(connection.FromNode, newNodeId, NumOps.One, true, _innovationNumber++);
             genome.AddConnection(newNodeId, connection.ToNode, connection.Weight, true, _innovationNumber++);
+
+            // List grew under us; reload local references for downstream loops
+            connections = genome.Connections;
+            count = connections.Count;
         }
 
         if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
@@ -579,17 +651,31 @@ public class NEAT<T> : NeuralNetworkBase<T>
             // Add new connection
             int fromNode = Random.Next(Architecture.InputSize + Architecture.OutputSize);
             int toNode = Random.Next(Architecture.InputSize, Architecture.InputSize + Architecture.OutputSize);
-            if (!genome.Connections.Any(c => c.FromNode == fromNode && c.ToNode == toNode))
+            bool exists = false;
+            for (int i = 0; i < count; i++)
+            {
+                var c = connections[i];
+                if (c.FromNode == fromNode && c.ToNode == toNode)
+                {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists)
             {
                 genome.AddConnection(fromNode, toNode, RandomWeight(), true, _innovationNumber++);
+                connections = genome.Connections;
+                count = connections.Count;
             }
         }
 
-        // Mutate weights
-        foreach (var conn in genome.Connections)
+        // Mutate weights — index loop so JIT can elide the List<T>.Enumerator
+        // bounds check overhead the foreach pays per step.
+        for (int i = 0; i < count; i++)
         {
             if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
             {
+                var conn = connections[i];
                 conn.Weight = NumOps.Add(conn.Weight, RandomWeight());
             }
         }
