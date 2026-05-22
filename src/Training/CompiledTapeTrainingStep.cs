@@ -35,6 +35,27 @@ public static class CompiledTapeTrainingStep<T>
     private static Tensor<T>[]? _cachedParameters;
 
     /// <summary>
+    /// AiDotNet#1406: identity of the trainable-layer set that produced
+    /// <see cref="_cachedParameters"/> and the cached compiled plan. The
+    /// per-thread cache above keys plans by tensor shape only, so two
+    /// distinct models with the same input/target shapes — created in
+    /// sequence on the same test thread, for example — would otherwise
+    /// share a single compiled plan. The plan's tensor leaves capture the
+    /// FIRST model's parameter refs, and a replay then "trains" model A's
+    /// (potentially garbage-collected) tensors while model B's params sit
+    /// untouched. Surfaced as
+    /// <c>ScientificMLTests.{Hamiltonian,Lagrangian}NeuralNetwork_TrainUpdatesParameters</c>
+    /// failing only when run after
+    /// <c>UniversalDifferentialEquation_TrainUpdatesParameters</c>.
+    /// We track the layer-set identity (element-wise <see cref="object.ReferenceEquals"/>)
+    /// and force <see cref="Invalidate"/> when it diverges from the cached
+    /// one. Per-instance optimizer state is reset as part of Invalidate, so
+    /// the next model gets a clean compile.
+    /// </summary>
+    [ThreadStatic]
+    private static object?[]? _cachedLayerSetIdentities;
+
+    /// <summary>
     /// AiDotNet#1331: persistent input tensor reused across <see cref="TryStepWithFusedOptimizer"/>
     /// calls. The compiled plan captures whatever tensor ref the trace lambda saw — if every call
     /// allocated a fresh <c>Tensor&lt;T&gt;</c> for <c>input</c> (the canonical PyTorch-style
@@ -170,6 +191,17 @@ public static class CompiledTapeTrainingStep<T>
 
         try
         {
+            // AiDotNet#1406: drop the cached compiled plan + parameter array
+            // when the caller has switched to a different layer set. Without
+            // this the next non-matching model on the same thread would
+            // replay the previous model's plan against its own (uninvolved)
+            // tensors — the plan was compiled with the FIRST model's leaf
+            // refs and the optimizer step would update those tensors, not
+            // the caller's.
+            if (InvalidateIfLayerSetChanged(layers))
+            {
+                // Caches cleared; cache field rebound below.
+            }
             var cache = _cache ??= new CompiledModelCache<T>();
 
             // Force layer initialization before collecting parameters.
@@ -183,7 +215,9 @@ public static class CompiledTapeTrainingStep<T>
             // TryStepWithFusedOptimizer. Shared/tied weights would otherwise
             // appear twice in the array — wrong for both eager-SGD here AND
             // wrong for the fused kernel's m/v buffers downstream.
+            bool firstCollectThisLifecycle = _cachedParameters is null;
             var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
+            if (firstCollectThisLifecycle) RememberLayerSet(layers);
 
             // Zero gradients before forward pass
             foreach (var layer in layers)
@@ -236,10 +270,52 @@ public static class CompiledTapeTrainingStep<T>
     /// <summary>
     /// Invalidates the compiled plan cache. Call when model structure changes.
     /// </summary>
+    /// <summary>
+    /// AiDotNet#1406: invalidates the per-thread compiled-plan cache when the
+    /// supplied trainable-layer set is not the same one that produced the
+    /// currently-cached parameters (compared element-wise by reference
+    /// identity). Returns <c>true</c> if an invalidation occurred. Cheap on
+    /// the steady state (single ref-compare per layer when the set matches);
+    /// only allocates on a model switch.
+    /// </summary>
+    private static bool InvalidateIfLayerSetChanged<TLayer>(IReadOnlyList<TLayer> layers) where TLayer : class
+    {
+        var cached = _cachedLayerSetIdentities;
+        if (cached is null) return false;
+
+        if (cached.Length != layers.Count)
+        {
+            Invalidate();
+            return true;
+        }
+        for (int i = 0; i < cached.Length; i++)
+        {
+            if (!ReferenceEquals(cached[i], layers[i]))
+            {
+                Invalidate();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Captures the current trainable-layer set's reference identities so a
+    /// subsequent call can detect a model switch. Called immediately after
+    /// the cache is populated for the first time in a given lifecycle.
+    /// </summary>
+    private static void RememberLayerSet<TLayer>(IReadOnlyList<TLayer> layers) where TLayer : class
+    {
+        var ids = new object?[layers.Count];
+        for (int i = 0; i < layers.Count; i++) ids[i] = layers[i];
+        _cachedLayerSetIdentities = ids;
+    }
+
     public static void Invalidate()
     {
         _cache?.Invalidate();
         _cachedParameters = null;
+        _cachedLayerSetIdentities = null;
         _configuredPlan = null;
         _configuredOptimizerConfig = null;
         // AiDotNet#1331: drop the persistent input/target tensors so the next
@@ -326,6 +402,16 @@ public static class CompiledTapeTrainingStep<T>
 
         try
         {
+            // AiDotNet#1406: drop the cached compiled plan + parameter array
+            // when the caller has switched to a different layer set. The
+            // per-thread cache keys plans by shape only, so two distinct
+            // models with the same (input, target) shapes — chained on the
+            // same test thread, for example — would otherwise replay the
+            // FIRST model's compiled plan against tensors that no longer
+            // exist on the live model. Symptom: post-Train params identical
+            // to pre-Train, even though LastLoss reports a non-zero loss
+            // (the plan ran on the previous model's now-stale tensors).
+            InvalidateIfLayerSetChanged(layers);
             var cache = _cache ??= new CompiledModelCache<T>();
 
             // AiDotNet#1331: ensure the persistent input/target tensors exist
@@ -406,7 +492,9 @@ public static class CompiledTapeTrainingStep<T>
             // weights (same Tensor<T> instance referenced by multiple layers)
             // would otherwise drive the fused kernel's m/v buffers to update
             // the same parameter twice per step, breaking Adam's moment math.
+            bool firstCollectThisLifecycle = _cachedParameters is null;
             var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
+            if (firstCollectThisLifecycle) RememberLayerSet(layers);
 
             foreach (var layer in layers)
                 layer.ZeroGrad();

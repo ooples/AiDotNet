@@ -95,7 +95,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
     /// <param name="numClasses">Number of segmentation classes (default: 14).</param>
     /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
@@ -109,7 +109,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 14,
         double dropRate = 0,
         SegMambaOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegMambaOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
@@ -117,7 +117,12 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
         _numClasses = numClasses; _dropRate = dropRate;
         _useNativeMode = true; _onnxModelPath = null;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful LR: SegMamba (Xing et al. 2024 MICCAI) uses LR=5e-5
+        // with cosine warmup for 3D medical segmentation fine-tuning. The
+        // framework AdamW default (LR=1e-3) is too aggressive for the
+        // hybrid Mamba-Conv encoder and causes Training_ShouldReduceLoss
+        // to diverge before 30 iterations finish.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
         _channelDims = [48, 96, 192, 384];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
@@ -142,7 +147,7 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
     public SegMamba(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 14,
         SegMambaOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegMambaOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))
@@ -194,7 +199,9 @@ public class SegMamba<T> : NeuralNetworkBase<T>, IMedicalSegmentation<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput);
+            // Pass model's non-AMSGrad optimizer so fused-Adam fast path
+            // engages.
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
         finally
         {

@@ -141,7 +141,7 @@ public abstract class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), maxGradNorm)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
     {
     }
 

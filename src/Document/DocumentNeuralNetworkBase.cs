@@ -139,7 +139,7 @@ public abstract class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         ILossFunction<T>? lossFunction = null,
         double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>(), maxGradNorm)
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), maxGradNorm)
     {
         Options = new DocumentNeuralNetworkOptions();
     }

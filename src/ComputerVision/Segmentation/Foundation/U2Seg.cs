@@ -134,7 +134,7 @@ public class U2Seg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numClasses = 150,
         double dropRate = 0.1,
         U2SegOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new U2SegOptions();
         Options = _options;
@@ -174,7 +174,7 @@ public class U2Seg<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         string onnxModelPath,
         int numClasses = 150,
         U2SegOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new U2SegOptions();
         Options = _options;

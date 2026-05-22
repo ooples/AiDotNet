@@ -432,6 +432,25 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
             int inputSize = InputShape[0];
             int outputSize = OutputShape[0];
 
+            // Lazy InputShape carries the -1 sentinel until either
+            // OnFirstForward resolves it from a real input tensor, or the
+            // parent network's ResolveLazyLayerShapes propagates the
+            // architecture's input shape down the chain. Callers that hit
+            // EnsureInitialized BEFORE either of those runs (the
+            // Serialize → EnsureInitialized → Rent path on a freshly-
+            // constructed DQN's target network is the canonical example —
+            // it has never been forwarded so InputShape[0] is still -1)
+            // would otherwise try to allocate a `[-1, outputSize]` weight
+            // tensor and trigger `OverflowException: Arithmetic operation
+            // resulted in an overflow` from inside the checked(int * int)
+            // dim-product loop in TensorAllocator.Rent. Defer allocation
+            // until the input shape is actually known — Serialize and
+            // Clone safely write zero-length placeholder weights for the
+            // unresolved case, and the first real Forward will retry
+            // EnsureInitialized with a resolved InputShape.
+            if (inputSize < 0)
+                return;
+
             // Streaming-aware allocation: when the parent network has
             // engaged streaming, route through WeightRegistry.AllocateStreaming
             // so the pool can pre-evict competing weights to disk before

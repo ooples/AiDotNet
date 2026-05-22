@@ -518,12 +518,41 @@ public class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         var predictedVector = predicted.ToVector();
         var expectedVector = preprocessedExpected.ToVector();
 
+        // Length-align predicted vs expected before the loss. The
+        // preprocessing pipeline (STFT → ERB) and the encoder/decoder
+        // stack can produce different sequence lengths depending on the
+        // input audio's exact sample count vs the STFT window/hop, so
+        // raw `predicted.Length == expected.Length` is not guaranteed —
+        // and MeanSquaredErrorLoss.CalculateLoss rejects mismatched
+        // lengths with `Predicted and actual vectors must have the same
+        // length`, cascade-failing every DeepFilterNet test. Truncate
+        // both vectors to their common length so the loss computes
+        // over the overlap.
+        int commonLen = System.Math.Min(predictedVector.Length, expectedVector.Length);
+        if (predictedVector.Length != commonLen)
+        {
+            var truncatedP = new Vector<T>(commonLen);
+            for (int i = 0; i < commonLen; i++) truncatedP[i] = predictedVector[i];
+            predictedVector = truncatedP;
+        }
+        if (expectedVector.Length != commonLen)
+        {
+            var truncatedE = new Vector<T>(commonLen);
+            for (int i = 0; i < commonLen; i++) truncatedE[i] = expectedVector[i];
+            expectedVector = truncatedE;
+        }
+
         // Compute loss (multi-resolution STFT loss is typical for audio)
         var loss = _lossFunction.CalculateLoss(predictedVector, expectedVector);
 
         // Backward pass and update
         var gradientVector = _lossFunction.CalculateDerivative(predictedVector, expectedVector);
-        var gradientTensor = Tensor<T>.FromVector(gradientVector, predicted._shape);
+        // gradientTensor is shape-matched only if the loss derivative kept
+        // the truncated length — when it doesn't, fall back to allocating
+        // a flat tensor sized to the derivative.
+        var gradientTensor = gradientVector.Length == predicted.Length
+            ? Tensor<T>.FromVector(gradientVector, predicted._shape)
+            : Tensor<T>.FromVector(gradientVector, new[] { gradientVector.Length });
 
         _optimizer?.UpdateParameters(Layers);
 

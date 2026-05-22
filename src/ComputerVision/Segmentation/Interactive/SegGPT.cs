@@ -112,7 +112,7 @@ public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         SegGPTModelSize modelSize = SegGPTModelSize.ViTLarge, double dropRate = 0.1,
         SegGPTOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegGPTOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 448;
@@ -144,7 +144,7 @@ public class SegGPT<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public SegGPT(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1, SegGPTModelSize modelSize = SegGPTModelSize.ViTLarge,
         SegGPTOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SegGPTOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

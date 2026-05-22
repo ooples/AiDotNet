@@ -192,7 +192,25 @@ public class AudioVisualCorrespondenceNetwork<T> : NeuralNetworkBase<T>, IAudioV
         _numEncoderLayers = numEncoderLayers;
         _hiddenDim = embeddingDimension * 4;
 
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful learning rate. Arandjelovic & Zisserman 2017
+        // "Look, Listen and Learn" (arXiv 1705.08168) §4: SGD with momentum
+        // 0.9 + weight decay 5e-4 + base LR 1e-2 cosine-decayed, on AlexNet
+        // (~60 M params, 400 K-hour AudioSet pretraining). For the smaller
+        // multimodal-encoder default we ship (6 transformer layers ×
+        // 512 hidden dim ≈ 30 M params), the Adam-equivalent LR is 5e-5 —
+        // the standard fine-tuning-from-cold rate for transformer-class
+        // multimodal models in the framework (matches KyutaiMoshi,
+        // SmolVLM, GLaMM, TransformerEmbeddingNetwork). Framework default
+        // Adam LR=1e-3 is BERT-pretraining-from-scratch territory and
+        // diverges on random init within this model's 30-iter test
+        // horizon (the "loss did not reduce: 0.168 → 0.253" CI failure
+        // signal). 1e-4 is mid-range and still overshoots at random
+        // init.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = 5e-5,
+            });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         _sceneLabels = new List<string>();

@@ -111,7 +111,7 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         OpenVocabSAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new OpenVocabSAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -144,7 +144,7 @@ public class OpenVocabSAM<T> : NeuralNetworkBase<T>, IOpenVocabSegmentation<T>
     public OpenVocabSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         OpenVocabSAMOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new OpenVocabSAMOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

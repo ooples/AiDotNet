@@ -150,7 +150,7 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         Mask2FormerModelSize modelSize = Mask2FormerModelSize.SwinTiny,
         double dropRate = 0.1,
         Mask2FormerOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new Mask2FormerOptions();
         Options = _options;
@@ -193,7 +193,7 @@ public class Mask2Former<T> : NeuralNetworkBase<T>, IPanopticSegmentation<T>
         int numQueries = 100,
         Mask2FormerModelSize modelSize = Mask2FormerModelSize.SwinTiny,
         Mask2FormerOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new Mask2FormerOptions();
         Options = _options;

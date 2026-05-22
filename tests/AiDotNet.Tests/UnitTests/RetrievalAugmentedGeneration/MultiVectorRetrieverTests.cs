@@ -93,6 +93,24 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         }
 
         /// <summary>
+        /// Stub query embedder that returns a deterministic zero vector. The
+        /// MockDocumentStore's <see cref="MockDocumentStore.GetSimilar"/> path
+        /// ranks documents by pre-set <c>RelevanceScore</c>, ignoring the
+        /// query vector — so the embedder's content doesn't matter for these
+        /// tests, only that one exists. MultiVectorRetriever requires a
+        /// non-null <see cref="IQueryEmbedder{T}"/> at construction time
+        /// (see MultiVectorRetriever.cs ~170: "no defensible fallback that
+        /// would give query-aware multi-vector retrieval without a real
+        /// query embedding").
+        /// </summary>
+        private sealed class StubQueryEmbedder : AiDotNet.RetrievalAugmentedGeneration.Retrievers.IQueryEmbedder<double>
+        {
+            private readonly int _dim;
+            public StubQueryEmbedder(int dim = 128) => _dim = dim;
+            public Vector<double> EmbedQuery(string query) => new Vector<double>(_dim);
+        }
+
+        /// <summary>
         /// Creates a store with documents that have multiple vector representations.
         /// Each document gets vectorsPerDocument entries with IDs like "docId_vector_0", "docId_vector_1", etc.
         /// </summary>
@@ -152,7 +170,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = new MockDocumentStore();
 
             // Act
-            var retriever = new MultiVectorRetriever<double>(store, vectorsPerDocument: 3, aggregationMethod: "max");
+            var retriever = new MultiVectorRetriever<double>(store, vectorsPerDocument: 3, aggregationMethod: "max", queryEmbedder: new StubQueryEmbedder());
 
             // Assert
             Assert.NotNull(retriever);
@@ -221,7 +239,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("test query").ToList();
@@ -236,7 +254,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateMultiVectorStore(3,
                 ("doc1", "test content", new[] { 0.9, 0.7, 0.5 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("test").ToList();
@@ -254,7 +272,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateMultiVectorStore(3,
                 ("doc1", "first document", new[] { 0.9, 0.8, 0.7 }),
                 ("doc2", "second document", new[] { 0.6, 0.5, 0.4 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("document").ToList();
@@ -273,7 +291,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 ("doc3", "content 3", new[] { 0.8, 0.7, 0.6 }),
                 ("doc4", "content 4", new[] { 0.75, 0.65, 0.55 }),
                 ("doc5", "content 5", new[] { 0.7, 0.6, 0.5 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content", topK: 3).ToList();
@@ -287,7 +305,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -299,7 +317,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -311,7 +329,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act & Assert
             Assert.Throws<ArgumentException>(() =>
@@ -328,7 +346,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange - Document with vectors scoring 0.9, 0.5, 0.3
             var store = CreateMultiVectorStore(3,
                 ("doc1", "test content", new[] { 0.9, 0.5, 0.3 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("test").ToList();
@@ -345,7 +363,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateMultiVectorStore(3,
                 ("doc1", "content 1", new[] { 0.5, 0.9, 0.3 }),  // Max = 0.9
                 ("doc2", "content 2", new[] { 0.95, 0.4, 0.3 })); // Max = 0.95
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -365,7 +383,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange - Document with vectors scoring 0.9, 0.6, 0.3 -> mean = 0.6
             var store = CreateMultiVectorStore(3,
                 ("doc1", "test content", new[] { 0.9, 0.6, 0.3 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "mean");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "mean", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("test").ToList();
@@ -381,7 +399,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateMultiVectorStore(3,
                 ("doc1", "test content", new[] { 0.9, 0.6, 0.3 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "average");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "average", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("test").ToList();
@@ -398,7 +416,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateMultiVectorStore(3,
                 ("doc1", "content 1", new[] { 0.9, 0.9, 0.3 }),  // Mean = 0.7
                 ("doc2", "content 2", new[] { 0.8, 0.8, 0.8 })); // Mean = 0.8
-            var retriever = new MultiVectorRetriever<double>(store, 3, "mean");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "mean", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -421,7 +439,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             //       = (0.9 + 0.3 + 0.1) / 1.833 = 1.3 / 1.833 ≈ 0.709
             var store = CreateMultiVectorStore(3,
                 ("doc1", "test content", new[] { 0.9, 0.6, 0.3 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "weighted");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "weighted", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("test").ToList();
@@ -439,7 +457,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateMultiVectorStore(3,
                 ("doc1", "content 1", new[] { 0.9, 0.3, 0.3 }),  // High first, low rest
                 ("doc2", "content 2", new[] { 0.3, 0.3, 0.9 })); // Low first, high last
-            var retriever = new MultiVectorRetriever<double>(store, 3, "weighted");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "weighted", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -460,7 +478,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateMultiVectorStore(3,
                 ("doc1", "test content", new[] { 0.9, 0.5, 0.3 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "unknown_method");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "unknown_method", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("test").ToList();
@@ -483,7 +501,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                     new Dictionary<string, object> { { "category", "nature" } }),
                 ("doc2", "urban content", new[] { 0.85, 0.75, 0.65 },
                     new Dictionary<string, object> { { "category", "urban" } }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content", topK: 5,
@@ -501,7 +519,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateMultiVectorStoreWithMetadata(3,
                 ("doc1", "content", new[] { 0.9, 0.8, 0.7 },
                     new Dictionary<string, object> { { "category", "nature" } }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content", topK: 5,
@@ -518,7 +536,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateMultiVectorStore(3,
                 ("doc1", "content 1", new[] { 0.9, 0.8, 0.7 }),
                 ("doc2", "content 2", new[] { 0.85, 0.75, 0.65 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content", topK: 5,
@@ -541,7 +559,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             store.AddDocument(new Document<double>("doc1_vector_1", "content") { RelevanceScore = 0.8, HasRelevanceScore = true });
             store.AddDocument(new Document<double>("doc1_vector_2", "content") { RelevanceScore = 0.7, HasRelevanceScore = true });
 
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -557,7 +575,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = new MockDocumentStore();
             store.AddDocument(new Document<double>("regular_doc", "content") { RelevanceScore = 0.9, HasRelevanceScore = true });
 
-            var retriever = new MultiVectorRetriever<double>(store, 1, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 1, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -578,7 +596,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateMultiVectorStore(1,
                 ("doc1", "content 1", new[] { 0.9 }),
                 ("doc2", "content 2", new[] { 0.8 }));
-            var retriever = new MultiVectorRetriever<double>(store, 1, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 1, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -595,7 +613,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateMultiVectorStore(10,
                 ("doc1", "content", new[] { 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05 }));
-            var retriever = new MultiVectorRetriever<double>(store, 10, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 10, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -610,7 +628,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -622,7 +640,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         {
             // Arrange
             var store = new MockDocumentStore();
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act & Assert
             Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -636,7 +654,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             var store = CreateMultiVectorStore(3,
                 ("doc1", "content 1", new[] { 0.9, 0.8, 0.7 }),
                 ("doc2", "content 2", new[] { 0.85, 0.75, 0.65 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content", topK: 100).ToList();
@@ -653,9 +671,9 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 ("doc1", "test content", new[] { 0.9, 0.6, 0.3 }));
 
             // Act & Assert - All case variations should work
-            var retrieverLower = new MultiVectorRetriever<double>(store, 3, "max");
-            var retrieverUpper = new MultiVectorRetriever<double>(store, 3, "MAX");
-            var retrieverMixed = new MultiVectorRetriever<double>(store, 3, "Max");
+            var retrieverLower = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
+            var retrieverUpper = new MultiVectorRetriever<double>(store, 3, "MAX", new StubQueryEmbedder());
+            var retrieverMixed = new MultiVectorRetriever<double>(store, 3, "Max", new StubQueryEmbedder());
 
             Assert.Single(retrieverLower.Retrieve("test").ToList());
             Assert.Single(retrieverUpper.Retrieve("test").ToList());
@@ -668,7 +686,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Arrange
             var store = CreateMultiVectorStore(3,
                 ("doc1", "content", new[] { 0.9, 0.8, 0.7 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -685,7 +703,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 ("doc1", "content 1", new[] { 0.5, 0.5, 0.5 }),  // Max = 0.5
                 ("doc2", "content 2", new[] { 0.9, 0.1, 0.1 }),  // Max = 0.9
                 ("doc3", "content 3", new[] { 0.7, 0.7, 0.7 })); // Max = 0.7
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content").ToList();
@@ -713,7 +731,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
                 ("doc3", "content 3", new[] { 0.8, 0.7, 0.6 }),
                 ("doc4", "content 4", new[] { 0.75, 0.65, 0.55 }),
                 ("doc5", "content 5", new[] { 0.7, 0.6, 0.5 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, "max");
+            var retriever = new MultiVectorRetriever<double>(store, 3, "max", new StubQueryEmbedder());
 
             // Act
             var results = retriever.Retrieve("content", topK: 2).ToList();

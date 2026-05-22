@@ -105,7 +105,7 @@ public class MobileSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 1,
         double dropRate = 0,
         MobileSAMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MobileSAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
@@ -138,7 +138,7 @@ public class MobileSAM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public MobileSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 1,
         MobileSAMOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new MobileSAMOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

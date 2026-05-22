@@ -1440,6 +1440,29 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
     {
+        // #1380 / #1413 CONSOLIDATION: when the solution is an
+        // INeuralNetwork<T>, synthesize a TapeStepContext from the flat
+        // gradient and delegate to Step(TapeStepContext). This collapses the
+        // historical two-Adam-implementations split (Step vs UpdateSolution)
+        // that caused BuildAsync's batched Optimize loop to diverge while the
+        // per-sample nn.Train bypass converged on identical hyperparameters.
+        // ONE update implementation per optimizer (matches PyTorch /
+        // TensorFlow / JAX-Optax single-method optimizer contract).
+        // Subclasses that need different flat-path semantics can still
+        // override; default path is now safe-by-construction.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T> nn)
+        {
+            var ctx = SynthesizeTapeStepContext(nn, gradient);
+            if (ctx is not null)
+            {
+                Step(ctx);
+                // Step mutates the parameter tensors in place via tape semantics;
+                // since we passed the live parameter-chunk refs, the model is
+                // already updated. No SetParameters call needed.
+                return currentSolution;
+            }
+            // Fall through to legacy path if synthesis declined (e.g. no chunks).
+        }
         var parameterizable = InterfaceGuard.Parameterizable(currentSolution);
         var parameters = parameterizable.GetParameters();
         var newParameters = UpdateParameters(parameters, gradient);
@@ -1450,6 +1473,63 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // doing a full serialization roundtrip — the dominant training bottleneck.
         parameterizable.SetParameters(newParameters);
         return currentSolution;
+    }
+
+    /// <summary>
+    /// #1413 helper: build a <see cref="TapeStepContext{T}"/> from a model's
+    /// live parameter chunks plus a flat gradient vector. Each parameter
+    /// chunk's gradient is sliced from the flat vector at the corresponding
+    /// offset, matching the alignment that <c>GetParameters</c> +
+    /// <c>GetParameterChunks</c> guarantee.
+    /// </summary>
+    /// <param name="nn">The neural-network solution to bind context to.</param>
+    /// <param name="flatGradient">Concatenated parameter gradients from CalculateGradient.</param>
+    /// <returns>A synthesized first-order TapeStepContext, or <c>null</c> if no
+    /// trainable parameters are present (caller falls back to legacy path).</returns>
+    protected virtual TapeStepContext<T>? SynthesizeTapeStepContext(
+        AiDotNet.Interfaces.INeuralNetwork<T> nn,
+        Vector<T> flatGradient)
+    {
+        // Collect live parameter-chunk references. These ARE the model's
+        // backing storage — mutating them via Step's Adam math updates the
+        // model in place. GetParameterChunks is on NeuralNetworkBase; cast
+        // to access it, return null if the model isn't a NeuralNetworkBase
+        // subclass (caller takes the legacy path).
+        if (nn is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) return null;
+        var chunks = new List<Tensor<T>>();
+        foreach (var c in nnBase.GetParameterChunks())
+        {
+            if (c is null || c.Length == 0) continue;
+            chunks.Add(c);
+        }
+        if (chunks.Count == 0) return null;
+
+        // Slice the flat gradient into per-chunk gradient tensors. Fail
+        // fast (return null) if the flat gradient is short of what the
+        // chunks need — silently breaking out of the loop would produce
+        // a TapeStepContext that covers only a prefix of parameters, and
+        // Step(...) would then mutate the prefix while leaving the rest
+        // un-updated. That partial step is worse than skipping the tape
+        // path entirely: the caller's fallback (legacy flat-vector
+        // UpdateSolution) updates everything, which is at least
+        // self-consistent. Likewise demand exact length at the end —
+        // any leftover bytes in flatGradient mean the chunk list is
+        // out of sync with what produced the gradient, so we'd be
+        // operating on a different model than the gradient describes.
+        var gradients = new Dictionary<Tensor<T>, Tensor<T>>();
+        int offset = 0;
+        foreach (var p in chunks)
+        {
+            int len = p.Length;
+            if (offset + len > flatGradient.Length) return null;
+            var gradTensor = new Tensor<T>(p.Shape.ToArray());
+            var gradSpan = gradTensor.AsWritableSpan();
+            for (int i = 0; i < len; i++) gradSpan[i] = flatGradient[offset + i];
+            gradients[p] = gradTensor;
+            offset += len;
+        }
+        if (gradients.Count == 0 || offset != flatGradient.Length) return null;
+        return new TapeStepContext<T>(chunks, gradients, NumOps.Zero);
     }
 
     /// <summary>

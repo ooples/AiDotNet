@@ -89,7 +89,12 @@ public class SeedVR<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new SeedVROptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Paper-faithful LR: SeedVR (Wang et al. 2024) trains the video
+        // super-resolution diffusion stack at LR=5e-5 (Sec. 4.1). The
+        // framework AdamW default (LR=1e-3) is two orders of magnitude
+        // too aggressive for this transformer-conv hybrid and diverges
+        // / times out the Training_ShouldReduceLoss invariant.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-5 });
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
@@ -144,7 +149,10 @@ public class SeedVR<T> : VideoSuperResolutionBase<T>
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected);
+            // Pass model's non-AMSGrad optimizer so fused-Adam fast path
+            // engages; the optimizer-null branch falls back to AMSGrad
+            // which the fused kernel rejects → eager tape path → timeout.
+            TrainWithTape(input, expected, _optimizer);
         }
         finally
         {

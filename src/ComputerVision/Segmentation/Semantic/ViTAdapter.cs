@@ -142,7 +142,7 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         ViTAdapterModelSize modelSize = ViTAdapterModelSize.Base,
         double dropRate = 0.1,
         ViTAdapterOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ViTAdapterOptions();
         Options = _options;
@@ -184,7 +184,7 @@ public class ViTAdapter<T> : NeuralNetworkBase<T>, ISemanticSegmentation<T>
         int numClasses = 150,
         ViTAdapterModelSize modelSize = ViTAdapterModelSize.Base,
         ViTAdapterOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new ViTAdapterOptions();
         Options = _options;

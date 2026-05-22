@@ -113,7 +113,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         ILossFunction<T>? lossFunction = null, int numClasses = 150,
         SEEMModelSize modelSize = SEEMModelSize.Tiny, double dropRate = 0.1,
         SEEMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SEEMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 512;
@@ -145,7 +145,7 @@ public class SEEM<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
     public SEEM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
         int numClasses = 150, SEEMModelSize modelSize = SEEMModelSize.Tiny,
         SEEMOptions? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SEEMOptions(); Options = _options;
         if (string.IsNullOrWhiteSpace(onnxModelPath))

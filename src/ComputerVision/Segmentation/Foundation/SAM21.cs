@@ -133,7 +133,7 @@ public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         SAM21ModelSize modelSize = SAM21ModelSize.Large,
         double dropRate = 0.1,
         SAM21Options? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyLoss<T>())
+        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SAM21Options();
         Options = _options;
@@ -170,7 +170,7 @@ public class SAM21<T> : NeuralNetworkBase<T>, IPromptableSegmentation<T>
         int numClasses = 1,
         SAM21ModelSize modelSize = SAM21ModelSize.Large,
         SAM21Options? options = null)
-        : base(architecture, new CrossEntropyLoss<T>())
+        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new SAM21Options();
         Options = _options;

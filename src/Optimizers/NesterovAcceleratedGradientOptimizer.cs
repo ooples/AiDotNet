@@ -133,8 +133,28 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
             {
                 var lookaheadSolution = GetLookaheadSolution(currentSolution);
                 var gradient = CalculateGradient(lookaheadSolution, xBatch, yBatch);
-                _velocity = UpdateVelocity(gradient);
-                var newSolution = UpdateSolution(currentSolution, _velocity);
+
+                IFullModel<T, TInput, TOutput> newSolution;
+                if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+                {
+                    // #1413 CONSOLIDATION: NN solutions route through the
+                    // base tape path, which expects the RAW (lookahead)
+                    // gradient — Step's SGD-with-momentum kernel applies
+                    // momentum bookkeeping per-parameter. Forwarding the
+                    // already-momentum-accumulated _velocity would double-
+                    // apply momentum (the base path would treat velocity
+                    // AS the gradient and then accumulate again on top),
+                    // breaking NAG dynamics for neural-net training.
+                    newSolution = base.UpdateSolution(currentSolution, gradient);
+                }
+                else
+                {
+                    // Legacy non-NN path: accumulate momentum into
+                    // _velocity here and subtract from params in
+                    // UpdateSolution.
+                    _velocity = UpdateVelocity(gradient);
+                    newSolution = UpdateSolution(currentSolution, _velocity);
+                }
                 currentSolution = newSolution;
             }
 
@@ -232,6 +252,15 @@ public class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : Gradient
     /// <returns>The updated solution.</returns>
     protected override IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> velocity)
     {
+        // #1413 CONSOLIDATION: NN solutions go through base.UpdateSolution
+        // which synthesizes a TapeStepContext and delegates to Step
+        // (one source of truth, matches PyTorch/TF/JAX). Non-NN solutions
+        // (regression, clustering, classical models) keep the legacy
+        // flat-vector path below for backward compatibility.
+        if (currentSolution is AiDotNet.Interfaces.INeuralNetwork<T>)
+        {
+            return base.UpdateSolution(currentSolution, velocity);
+        }
         // === Vectorized NAG Update using IEngine (Phase B: US-GPU-015) ===
         // params = params - velocity
 

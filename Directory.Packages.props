@@ -5,10 +5,18 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.81.0 is the projected version for PR ooples/AiDotNet.Tensors#359
-         (paired with this PR's GraFPrint perf-overhaul + scheduler-fused + determinism work).
-         CI will fail to restore until that Tensors PR merges and the new NuGet publishes;
-         after release, bump the literal here. -->
+    <!-- AiDotNet.Tensors needs a version bump after ooples/AiDotNet.Tensors#424
+         publishes a new NuGet. That PR replaces the silent `checked(int * int)`
+         dim-product overflow in TensorAllocator.Rent / RentPinned with a
+         `long` accumulator that names the requested shape when the element
+         count exceeds Array.MaxLength, plus an ArgumentOutOfRangeException
+         naming the index and value for negative dims (lazy-layer `-1`
+         sentinel propagation). Diagnoses the otherwise-opaque
+         `OverflowException` failures on TimeMachine / DQN / OWLViT /
+         DGCNN / TabTransformer / TabDPT / SlimSAM / TriaffineNER tests on
+         SonarCloud run 26241806890. (Previous PR ooples/AiDotNet.Tensors#359
+         — GraFPrint perf-overhaul + scheduler-fused + determinism — is
+         already in 0.81.3.) -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.81.3" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.3" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.81.3" />

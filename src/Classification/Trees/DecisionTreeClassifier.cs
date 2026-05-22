@@ -83,7 +83,7 @@ public class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>, ITreeBa
     /// <param name="regularization">Optional regularization strategy.</param>
     public DecisionTreeClassifier(DecisionTreeClassifierOptions<T>? options = null,
         IRegularization<T, Matrix<T>, Vector<T>>? regularization = null)
-        : base(options ?? new DecisionTreeClassifierOptions<T>(), regularization, new CrossEntropyLoss<T>())
+        : base(options ?? new DecisionTreeClassifierOptions<T>(), regularization, new CrossEntropyWithLogitsLoss<T>())
     {
     }
 
