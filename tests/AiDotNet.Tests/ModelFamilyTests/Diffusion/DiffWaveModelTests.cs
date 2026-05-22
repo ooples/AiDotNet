@@ -6,8 +6,15 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 public class DiffWaveModelTests : DiffusionModelTestBase
 {
-    protected override int[] InputShape => [1, 4, 64, 64];
-    protected override int[] OutputShape => [1, 4, 64, 64];
+    // DiffWave operates on raw 1D audio waveforms — Kong et al. 2020 §3 /
+    // Figure 1 — NOT on image-like 4D latents. The previous [1, 4, 64, 64]
+    // scaffold default tripped the [B, C, T] + [B, C] broadcast-add in
+    // DiffWaveResidualBlock (PR #1408 Diffusion S-Z shard:
+    // "Tensor shapes must match. Got [1, 4, 64, 64] and [1, 64]").
+    // [B=1, C=1 (mono), T=256] is a small but paper-faithful test shape that
+    // keeps invariants meaningful while staying fast.
+    protected override int[] InputShape => [1, 1, 256];
+    protected override int[] OutputShape => [1, 1, 256];
 
     protected override IDiffusionModel<double> CreateModel()
         => new DiffWaveModel<double>(seed: 42);

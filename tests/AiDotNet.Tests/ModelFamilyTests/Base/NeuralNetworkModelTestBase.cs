@@ -1051,6 +1051,31 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     // catastrophic for convergence.
     // =====================================================
 
+    /// <summary>
+    /// Lower bound (relative to pre-train L2) for the post-train parameter
+    /// L2 in <see cref="OptimizerStep_ParamL2_DoesNotExplode"/>. Default
+    /// 0.5 — appropriate for standard gradient-descent / Adam trainers.
+    /// Models whose training step is a one-shot closed-form solve
+    /// (Jaeger-style ESN ridge regression, RBM contrastive divergence,
+    /// k-means lloyd updates, etc.) jump discretely from random init to
+    /// the solver's output and legitimately produce a smaller L2 than the
+    /// random initialization — override to 0.0 there with a comment
+    /// pointing at the paper-prescribed training paradigm, so the
+    /// invariant still catches Adam-style explosion (the original goal)
+    /// without false-positive-failing on closed-form solvers.
+    /// </summary>
+    protected virtual double OptimizerStepL2LowerBound => 0.5;
+
+    /// <summary>
+    /// Upper bound (relative to pre-train L2) for the post-train parameter
+    /// L2 in <see cref="OptimizerStep_ParamL2_DoesNotExplode"/>. Default
+    /// 2.0 — see <see cref="OptimizerStepL2LowerBound"/> for the lower
+    /// bound's rationale. Closed-form solvers can also produce a LARGER
+    /// L2 than random init when targets demand it; widen here when
+    /// appropriate.
+    /// </summary>
+    protected virtual double OptimizerStepL2UpperBound => 2.0;
+
     [Fact(Timeout = 120000)]
     public async Task OptimizerStep_ParamL2_DoesNotExplode()
     {
@@ -1111,12 +1136,14 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // indicates either explosion (Adam first-step bug, missing
         // bias correction, no gradient clipping) or collapse
         // (over-shrinking weight decay).
-        Assert.True(l2After >= 0.5 * l2Before,
+        double lowerBound = OptimizerStepL2LowerBound;
+        double upperBound = OptimizerStepL2UpperBound;
+        Assert.True(l2After >= lowerBound * l2Before,
             $"Param L2 collapsed after one training step: {l2Before:F4} → {l2After:F4} "
-            + "(post < 0.5× pre). Likely cause: weight decay too aggressive, or update applied with wrong sign.");
-        Assert.True(l2After <= 2.0 * l2Before,
+            + $"(post < {lowerBound:F2}× pre). Likely cause: weight decay too aggressive, or update applied with wrong sign.");
+        Assert.True(l2After <= upperBound * l2Before,
             $"Param L2 exploded after one training step: {l2Before:F4} → {l2After:F4} "
-            + $"(post > 2× pre). Likely cause: Adam first-step bias correction without warmup, "
+            + $"(post > {upperBound:F2}× pre). Likely cause: Adam first-step bias correction without warmup, "
             + "double-applied gradient update, or LR too high for d_model.");
     }
 

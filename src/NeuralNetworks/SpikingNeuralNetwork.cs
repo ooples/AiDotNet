@@ -181,6 +181,20 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private List<Vector<T>> _firingThresholds;
 
+    // Adam optimizer state per Zenke 2018 §3.2 — supervised SNN training
+    // with surrogate gradient uses Adam (Kingma & Ba 2014) not vanilla
+    // SGD, because the rate-coded delta rule overshoots at fixed LR once
+    // post-synaptic rates approach saturation (after which the gradient
+    // direction stops being informative). Per-layer first / second
+    // moment vectors keyed by layer index; step counter shared so bias
+    // correction is consistent across layers.
+    private Dictionary<int, Vector<T>> _adamM = new Dictionary<int, Vector<T>>();
+    private Dictionary<int, Vector<T>> _adamV = new Dictionary<int, Vector<T>>();
+    private int _adamStep = 0;
+    private const double AdamBeta1 = 0.9;
+    private const double AdamBeta2 = 0.999;
+    private const double AdamEpsilon = 1e-8;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SpikingNeuralNetwork{T}"/> class with the specified architecture and a vector activation function.
     /// </summary>
@@ -659,63 +673,155 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void ApplySTDPLearning(List<List<Vector<T>>> layerSpikeHistory, Vector<T> outputError)
     {
-        // Learning rate and STDP window from configurable options
+        // Two-track learning per Frémaux & Gerstner 2016 three-factor
+        // framework: the OUTPUT layer is trained by a supervised
+        // rate-coded surrogate-gradient delta rule (Zenke 2018
+        // "SuperSpike" §3 / Neftci 2019 surrogate-gradient SNN review),
+        // and the HIDDEN layers are trained by classic
+        // pair-based STDP (Gerstner & Kistler 2002).
+        //
+        // Why surrogate gradient on the output layer: STDP is a local
+        // Hebbian rule and doesn't have a tractable gradient on a
+        // supervised MSE loss — the previous "STDP × outputError"
+        // modulation didn't actually drive ∂L/∂W to zero, so
+        // Training_ShouldReduceLoss + MoreData_ShouldNotDegrade both
+        // failed (loss grew with iterations). Zenke 2018's fast-sigmoid
+        // surrogate gradient maps the non-differentiable spike function
+        // S(u)=Θ(u−θ) to a smooth backward derivative S'(u)≈α/(1+α|u−θ|)²
+        // so the standard rate-coded delta rule applies end-to-end.
         T learningRate = NumOps.FromDouble(_options.ReadoutLearningRate);
         int stdpWindow = _options.StdpWindow;
+        int outputLayerIndex = Layers.Count - 1;
+        T simStepsT = NumOps.FromDouble(_simulationSteps);
 
-        // Process layers in reverse order (output to input)
-        for (int layerIndex = Layers.Count - 1; layerIndex > 0; layerIndex--)
+        // Bump Adam step BEFORE the per-layer loop so bias correction is
+        // consistent if the output layer's Adam update happens.
+        _adamStep++;
+        double beta1Power = Math.Pow(AdamBeta1, _adamStep);
+        double beta2Power = Math.Pow(AdamBeta2, _adamStep);
+        double biasCorrection1 = 1.0 - beta1Power;
+        double biasCorrection2 = 1.0 - beta2Power;
+
+        for (int layerIndex = outputLayerIndex; layerIndex > 0; layerIndex--)
         {
             var layer = Layers[layerIndex];
-
-            // Skip layers that don't support training
             if (!layer.SupportsTraining)
                 continue;
 
-            // Get spike history for this layer and the previous layer
             var postSynapticSpikes = layerSpikeHistory[layerIndex];
             var preSynapticSpikes = layerSpikeHistory[layerIndex - 1];
 
-            // Calculate weight updates based on STDP
             int postSize = postSynapticSpikes[0].Length;
             int preSize = preSynapticSpikes[0].Length;
 
-            // Get layer parameters (weights)
             Vector<T> parameters = layer.GetParameters();
             Vector<T> parameterUpdates = new Vector<T>(parameters.Length);
 
-            // Simplified version - assumes weights are organized as [postNeuron][preNeuron]
-            for (int post = 0; post < postSize; post++)
+            if (layerIndex == outputLayerIndex)
             {
+                // ─── Output layer: rate-coded surrogate-gradient delta
+                // rule with Adam (Zenke 2018 §3.2 supervised SNN training
+                // uses Adam, Kingma & Ba 2014). Per-iteration gradient
+                // ∂L/∂W[post,pre] = -(target − actual) × rate_pre. Adam
+                // tracks the first/second moments of this gradient
+                // across iterations, which provides:
+                //   1. Implicit LR scaling per parameter (large
+                //      gradients get smaller effective steps,
+                //      preventing the rate-saturation overshoot vanilla
+                //      SGD suffered from at fixed LR).
+                //   2. Bias correction in the first few iterations so
+                //      the early-training step size matches the
+                //      asymptotic step size.
+                //   3. Momentum-style smoothing that prevents
+                //      oscillation when the noisy spike-rate
+                //      approximation of the gradient flips sign between
+                //      consecutive Train calls.
+                // The combination is what stabilizes
+                // Training_ShouldReduceLoss (loss must DECREASE over ~30
+                // iters) and MoreData_ShouldNotDegrade (loss must NOT
+                // EXPLODE over 200 iters) at the same fixed
+                // ReadoutLearningRate hyperparameter.
+                if (!_adamM.TryGetValue(layerIndex, out var mVec) || mVec.Length != parameters.Length)
+                {
+                    mVec = new Vector<T>(parameters.Length);
+                    _adamM[layerIndex] = mVec;
+                }
+                if (!_adamV.TryGetValue(layerIndex, out var vVec) || vVec.Length != parameters.Length)
+                {
+                    vVec = new Vector<T>(parameters.Length);
+                    _adamV[layerIndex] = vVec;
+                }
+                double lrD = _options.ReadoutLearningRate;
+
                 for (int pre = 0; pre < preSize; pre++)
                 {
-                    // Calculate STDP weight change
-                    T weightChange = CalculateSTDPWeightChange(
-                        preSynapticSpikes,
-                        postSynapticSpikes,
-                        pre,
-                        post,
-                        stdpWindow);
-
-                    // For output layer, modulate weight change by output error
-                    if (layerIndex == Layers.Count - 1 && post < outputError.Length)
+                    T preCount = NumOps.Zero;
+                    for (int t = 0; t < preSynapticSpikes.Count; t++)
                     {
-                        weightChange = NumOps.Multiply(weightChange, outputError[post]);
+                        preCount = NumOps.Add(preCount, preSynapticSpikes[t][pre]);
                     }
+                    T preRate = NumOps.Divide(preCount, simStepsT);
+                    double preRateD = Convert.ToDouble(preRate);
 
-                    // Apply learning rate
-                    weightChange = NumOps.Multiply(weightChange, learningRate);
-
-                    // Store weight update
-                    int paramIndex = post * preSize + pre;
-                    if (paramIndex < parameterUpdates.Length)
+                    for (int post = 0; post < postSize; post++)
                     {
-                        parameterUpdates[paramIndex] = weightChange;
+                        if (post >= outputError.Length) continue;
+                        // Gradient is ∂L/∂W = -(target − actual) × pre_rate
+                        // for L = (actual − target)². The Adam update
+                        // formula uses this NEGATIVE gradient direction;
+                        // we feed the negative into the moment update so
+                        // that W -= lr · m̂ / (√v̂ + ε) descends.
+                        double errD = Convert.ToDouble(outputError[post]);
+                        double grad = -errD * preRateD;
+
+                        int paramIndex = post * preSize + pre;
+                        if (paramIndex >= parameterUpdates.Length) continue;
+
+                        double m = Convert.ToDouble(mVec[paramIndex]);
+                        double v = Convert.ToDouble(vVec[paramIndex]);
+                        m = AdamBeta1 * m + (1 - AdamBeta1) * grad;
+                        v = AdamBeta2 * v + (1 - AdamBeta2) * grad * grad;
+                        mVec[paramIndex] = NumOps.FromDouble(m);
+                        vVec[paramIndex] = NumOps.FromDouble(v);
+
+                        double mHat = m / biasCorrection1;
+                        double vHat = v / biasCorrection2;
+                        // Descent step (SUBTRACT in update loop because
+                        // grad already carries the - of dL/dW).
+                        double step = -lrD * mHat / (Math.Sqrt(vHat) + AdamEpsilon);
+                        parameterUpdates[paramIndex] = NumOps.FromDouble(step);
+                    }
+                }
+            }
+            else
+            {
+                // ─── Hidden layers: standard pair-based STDP. No
+                // supervised signal here — credit assignment to hidden
+                // layers via backprop through the surrogate would
+                // require BPTT (Zenke 2018 §3.2), which is out of scope
+                // for this paper-faithful pass. STDP still produces
+                // useful feature learning even without supervised
+                // backprop in the SNN literature (Diehl & Cook 2015).
+                for (int post = 0; post < postSize; post++)
+                {
+                    for (int pre = 0; pre < preSize; pre++)
+                    {
+                        T weightChange = CalculateSTDPWeightChange(
+                            preSynapticSpikes,
+                            postSynapticSpikes,
+                            pre,
+                            post,
+                            stdpWindow);
+                        weightChange = NumOps.Multiply(weightChange, learningRate);
+                        int paramIndex = post * preSize + pre;
+                        if (paramIndex < parameterUpdates.Length)
+                        {
+                            parameterUpdates[paramIndex] = weightChange;
+                        }
                     }
                 }
             }
 
-            // Apply weight updates
             Vector<T> updatedParameters = new Vector<T>(parameters.Length);
             for (int i = 0; i < parameters.Length; i++)
             {
@@ -728,8 +834,6 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                     updatedParameters[i] = parameters[i];
                 }
             }
-
-            // Update layer parameters
             layer.SetParameters(updatedParameters);
         }
     }
