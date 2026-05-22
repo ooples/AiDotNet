@@ -120,10 +120,11 @@ public class Issue1415_LargeVocabForwardNaNTests
     /// <summary>
     /// Full-stack repro — reproduces the bug consumer-side. Builds a
     /// 2-layer Transformer at V=50,257 with realistic training (140
-    /// samples × 1 epoch, matching the consumer-side WT2 9000-token /
-    /// stride-64 setup), then asserts that Transformer.Predict produces
-    /// finite logits across 100 random input contexts. Consumer-side
-    /// data showed ~25% of inputs produce all-NaN logits.
+    /// samples × 2 epochs via <c>AdamOptimizerOptions.MaxIterations = 2</c>,
+    /// matching the consumer-side WT2 9000-token / stride-64 setup), then
+    /// asserts that Transformer.Predict produces finite logits across 100
+    /// random input contexts. Consumer-side data showed ~25% of inputs
+    /// produce all-NaN logits.
     /// </summary>
     [Fact]
     public void Transformer_V50257_Predict_ProducesFiniteLogits_OnRandomContexts()
