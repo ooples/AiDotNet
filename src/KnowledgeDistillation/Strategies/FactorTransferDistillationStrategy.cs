@@ -234,7 +234,7 @@ public class FactorTransferDistillationStrategy<T> : DistillationStrategyBase<T>
             FactorMode.LowRankApproximation => ComputeLowRankLoss(studentFeatures, teacherFeatures),
             FactorMode.NuclearNormMatching => ComputeNuclearNormLoss(studentFeatures, teacherFeatures),
             FactorMode.FactorMatching => ComputeFactorMatchingLoss(studentFeatures, teacherFeatures),
-            _ => throw new NotImplementedException($"Mode {_mode} not implemented")
+            _ => throw new ArgumentOutOfRangeException(nameof(_mode), _mode, $"Unrecognised FactorMode '{_mode}'. Valid modes: LowRankApproximation, NuclearNormMatching, FactorMatching.")
         };
 
         return NumOps.Multiply(loss, NumOps.FromDouble(_factorWeight));

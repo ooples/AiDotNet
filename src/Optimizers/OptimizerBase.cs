@@ -1728,10 +1728,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual void Step()
     {
-        throw new NotImplementedException(
-            "Step() method is not implemented for this optimizer type. " +
-            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
-            "or the derived class needs to implement the Step() method.");
+        throw new NotSupportedException(
+            $"Step() is not supported by {GetType().Name}. " +
+            "This optimizer is a non-gradient-based optimizer (e.g. evolutionary / black-box / Bayesian search) — " +
+            "use the Optimize() method instead. Gradient-based optimizers (Adam, SGD, AdamW, etc.) override Step() in the derived class.");
     }
 
     /// <summary>
@@ -1741,10 +1741,10 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <returns>The calculated parameter updates as a dictionary mapping parameter names to their update vectors.</returns>
     public virtual Dictionary<string, Vector<T>> CalculateUpdate(Dictionary<string, Vector<T>> gradients)
     {
-        throw new NotImplementedException(
-            "CalculateUpdate() method is not implemented for this optimizer type. " +
-            "This optimizer may be a non-gradient-based optimizer that uses the Optimize() method instead, " +
-            "or the derived class needs to implement the CalculateUpdate() method.");
+        throw new NotSupportedException(
+            $"CalculateUpdate() is not supported by {GetType().Name}. " +
+            "This optimizer is a non-gradient-based optimizer (e.g. evolutionary / black-box / Bayesian search) — " +
+            "use the Optimize() method instead. Gradient-based optimizers (Adam, SGD, AdamW, etc.) override CalculateUpdate() in the derived class.");
     }
 
     /// <summary>

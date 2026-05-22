@@ -157,9 +157,13 @@ namespace AiDotNet.PhysicsInformed.PDEs
             Tensor<T> coordinates,
             AiDotNet.Tensors.Engines.IEngine engine)
         {
-            throw new NotImplementedException(
+            throw new NotSupportedException(
                 $"PDE '{Name}' does not implement tape-differentiable residual. " +
-                "Override ComputeTapeResidual using engine ops for autodiff support.");
+                "This is a deliberate non-override: subclasses that want autodiff support must " +
+                "override ComputeTapeResidual using engine ops (rather than scalar math) so that " +
+                "the residual graph composes with the outer training tape. PDEs that only need " +
+                "evaluation (no training) can leave this unoverridden and use the non-tape " +
+                "ComputeResidual variant from their PINN solver.");
         }
     }
 }

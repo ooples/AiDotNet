@@ -424,7 +424,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
                 return ComputeCosineLoss(studentAttention, teacherAttention);
 
             default:
-                throw new NotImplementedException($"Matching mode {_matchingMode} not implemented");
+                throw new ArgumentOutOfRangeException(nameof(_matchingMode), _matchingMode, $"Unrecognised AttentionMatchingMode '{_matchingMode}'. Valid modes: MSE, KL, Cosine.");
         }
     }
 
@@ -620,7 +620,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
                 break;
 
             default:
-                throw new NotImplementedException($"Gradient for matching mode {_matchingMode} not implemented");
+                throw new ArgumentOutOfRangeException(nameof(_matchingMode), _matchingMode, $"Gradient is not defined for AttentionMatchingMode '{_matchingMode}'. Valid modes: MSE, KL, Cosine.");
         }
 
         return gradient;
