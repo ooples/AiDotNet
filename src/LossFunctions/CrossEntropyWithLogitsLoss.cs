@@ -125,6 +125,29 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         int lastAxis = predicted.Shape.Length - 1;
         var logSoftmax = Engine.TensorLogSoftmax(predicted, axis: lastAxis);
 
+        // PyTorch's nn.CrossEntropyLoss accepts BOTH target formats and the
+        // PR #1404 blanket CE→CEWithLogits swap brought models that pass
+        // EITHER form into this code path:
+        //   (a) soft / one-hot targets: target.Shape == predicted.Shape
+        //       (e.g. predicted=[N,C], target=[N,C] one-hot or distribution)
+        //   (b) class-index targets:    target.Shape == predicted.Shape[:-1]
+        //       (e.g. predicted=[N,C], target=[N] integer class indices —
+        //       this is what TinyBERTNER and similar NER / classification
+        //       heads emit when they treat their gold labels as ID arrays
+        //       rather than one-hot encodings).
+        // The original implementation only handled (a). For (b) the broadcast
+        // multiply on the next line throws ArgumentException because target's
+        // shape doesn't broadcast onto logSoftmax's shape. Detect form (b)
+        // by rank comparison and one-hot encode target along the class axis
+        // before the multiply. The one-hot conversion is a non-tape op —
+        // target is supervision, no gradient flows through it — so building
+        // a fresh tensor here doesn't break gradient flow back through
+        // predicted → logSoftmax → product.
+        if (target.Shape.Length == predicted.Shape.Length - 1)
+        {
+            target = ClassIndicesToOneHot(target, predicted.Shape[lastAxis]);
+        }
+
         // CE per-sample = -Σ_class target_i * log_softmax_i  (sum over class axis only).
         // Match PyTorch's nn.CrossEntropyLoss(reduction='mean') and the scalar CalculateLoss
         // path above — those return the per-sample sum across classes, NOT a mean across
@@ -142,5 +165,40 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         var batchAxes = Enumerable.Range(0, perSample.Shape.Length).ToArray();
         var mean = Engine.ReduceMean(perSample, batchAxes, keepDims: false);
         return Engine.TensorNegate(mean);
+    }
+
+    /// <summary>
+    /// Converts a class-index tensor of shape <c>S</c> into a one-hot tensor
+    /// of shape <c>[S ; numClasses]</c> by appending a class axis of length
+    /// <paramref name="numClasses"/> and setting one entry per slot to
+    /// <c>1</c>. Out-of-range indices (negative or ≥ numClasses) are
+    /// silently dropped (their one-hot slot stays zero) so an ignore-index
+    /// sentinel like -1 contributes zero gradient — same convention as
+    /// PyTorch's <c>ignore_index</c> default. The result is NOT registered
+    /// with the autodiff tape; the loss treats target as a constant
+    /// supervision signal, so a fresh tensor here doesn't disturb gradient
+    /// flow through the logits side of the multiply.
+    /// </summary>
+    private Tensor<T> ClassIndicesToOneHot(Tensor<T> indices, int numClasses)
+    {
+        var indicesShape = indices.Shape;
+        var oneHotShape = new int[indicesShape.Length + 1];
+        for (int i = 0; i < indicesShape.Length; i++) oneHotShape[i] = indicesShape[i];
+        oneHotShape[indicesShape.Length] = numClasses;
+
+        var oneHot = new Tensor<T>(oneHotShape);
+        var indicesSpan = indices.Data.Span;
+        var oneHotSpan = oneHot.Data.Span;
+        // oneHot is initialized to zero on construction; we only need to
+        // set the active class index per row.
+        for (int i = 0; i < indicesSpan.Length; i++)
+        {
+            int classIdx = (int)Math.Round(NumOps.ToDouble(indicesSpan[i]));
+            if (classIdx >= 0 && classIdx < numClasses)
+            {
+                oneHotSpan[i * numClasses + classIdx] = NumOps.One;
+            }
+        }
+        return oneHot;
     }
 }

@@ -368,14 +368,19 @@ namespace AiDotNet.NeuralNetworks
             var w = Layers[0].Forward(input);
             var wTilde = Layers[1].Forward(input);
             var sumW = Engine.TensorAdd(w, wTilde);
-            // b and b̃ are 1-D bias-style "layers" — Forward(input) returns a
-            // broadcast that adds the bias along the embedding axis. Adding
-            // both to the W + W̃ sum makes them gradient-receivers in the
-            // training step.
+            // b and b̃ are 1-D bias-style "layers": their Forward(input)
+            // returns a per-token scalar of shape [seqLen, 1] (a literal
+            // bias term per word, per Pennington et al. 2014). To add them
+            // to the [seqLen, embeddingDim] sumW we need broadcasting
+            // along the embedding axis — strict TensorAdd requires identical
+            // shapes and throws "Tensor shapes must match. Got [4, 100] and
+            // [4, 1]", which was cascade-failing 11 GloVeTests. Use
+            // TensorBroadcastAdd: it's tape-tracked (same as TensorAdd) and
+            // expands the [seqLen, 1] bias across the embedding dim.
             var b = Layers[2].Forward(input);
             var bTilde = Layers[3].Forward(input);
-            var withBias = Engine.TensorAdd(sumW, b);
-            return Engine.TensorAdd(withBias, bTilde);
+            var withBias = Engine.TensorBroadcastAdd(sumW, b);
+            return Engine.TensorBroadcastAdd(withBias, bTilde);
         }
 
         /// <summary>
