@@ -17,10 +17,18 @@ public class TransformerCustomLayerValidationIssue1317Tests
             new ShapeCompatibleCustomLayer([1, 16], [1, 256])
         };
 
+        // numEncoderLayers and numDecoderLayers must both be 0 when a custom
+        // `layers:` list is provided — the custom list REPLACES the auto-built
+        // encoder/decoder blocks, so passing non-zero counts here would
+        // silently ignore those structural params and produce a model with
+        // no attention/feed-forward path (vacuous 0-trainable-param training).
+        // The #1382 fail-fast throw enforces this. This test asserts the
+        // narrower #1317 claim: a shape-compatible custom layer is accepted
+        // without requiring built-in boundary layer types in the list.
         var architecture = new TransformerArchitecture<float>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
-            numEncoderLayers: 1,
+            numEncoderLayers: 0,
             numDecoderLayers: 0,
             numHeads: 2,
             modelDimension: 16,
