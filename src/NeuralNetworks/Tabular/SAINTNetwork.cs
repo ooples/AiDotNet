@@ -273,19 +273,21 @@ public class SAINTNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass to get prediction
-        Tensor<T> prediction = Predict(input);
-
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate error gradient
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-
-        // Backpropagate error through network
-
-        // Update network parameters
-        UpdateNetworkParameters();
+        // Tape-based training. The previous body computed `error` but never
+        // backpropagated, then called _optimizer.UpdateParameters(Layers)
+        // which dispatches to each DenseLayer.UpdateParameters(learningRate)
+        // and throws "Backward pass must be called before updating
+        // parameters" when no gradients exist. Same cascade pattern as
+        // TabTransformerNetwork / GANDALFNetwork / TabFlowGenerator.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

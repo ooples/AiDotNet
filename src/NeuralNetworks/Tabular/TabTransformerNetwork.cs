@@ -257,19 +257,23 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass to get prediction
-        Tensor<T> prediction = Predict(input);
-
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate error gradient
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-
-        // Backpropagate error through network
-
-        // Update network parameters
-        UpdateNetworkParameters();
+        // Tape-based training (matches the path every other NN model in the
+        // codebase uses post-#1209). The previous body computed `error` but
+        // dropped it without backpropagating, then called
+        // _optimizer.UpdateParameters(Layers) — which dispatches to each
+        // DenseLayer.UpdateParameters(learningRate), and that overload
+        // throws "Backward pass must be called before updating parameters"
+        // when no gradients exist. Surfaced as 13 TabTransformerNetworkTests
+        // failures on PR #1408's Generated Layers shard.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

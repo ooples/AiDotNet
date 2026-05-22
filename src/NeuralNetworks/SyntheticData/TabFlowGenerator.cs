@@ -279,19 +279,20 @@ public class TabFlowGenerator<T> : NeuralNetworkBase<T>, ISyntheticTabularGenera
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass to get prediction
-        Tensor<T> prediction = Predict(input);
-
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate error gradient
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-
-        // Backpropagate error through network
-
-        // Update network parameters
-        UpdateNetworkParameters();
+        // Tape-based training. Same cascade pattern as TabTransformerNetwork /
+        // SAINTNetwork / GANDALFNetwork — the previous body computed `error`
+        // but never backpropagated, then called the layer-style
+        // _optimizer.UpdateParameters(Layers) which throws "Backward pass must
+        // be called before updating parameters" when no gradients exist.
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>
