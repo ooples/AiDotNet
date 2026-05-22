@@ -872,8 +872,12 @@ public class NEAT<T> : NeuralNetworkBase<T>
             activations[Architecture.InputSize + i] = NumOps.Zero;
         }
 
-        // Sort connections topologically for proper feed-forward activation
-        var sortedConnections = SortConnectionsTopologically(genome);
+        // Sort connections topologically for proper feed-forward activation.
+        // Issue #1392 perf: cache the sort on the genome — weight-only mutations
+        // (the dominant case across the 50 internal generations per Train call)
+        // keep the topology signature unchanged, so the cache hits and skips
+        // the O(E²) sort.
+        var sortedConnections = GetOrBuildSortedConnections(genome);
 
         // Process connections
         foreach (var connection in sortedConnections)
@@ -895,14 +899,85 @@ public class NEAT<T> : NeuralNetworkBase<T>
             activations[connection.ToNode] = NumOps.Add(activations[connection.ToNode], weightedInput);
         }
 
-        // Apply activation function to all non-input nodes
-        var nonInputNodes = activations.Keys.Where(k => k >= Architecture.InputSize).ToList();
+        // Apply activation function to all non-input nodes. Issue #1392 perf:
+        // pulled out the LINQ Where(...).ToList() that allocated a fresh list
+        // on every call — the keys-with-`>= InputSize` are deterministic
+        // given the genome's topology, so we cache them on the same Genome
+        // signature as the sorted-connections cache below.
+        var nonInputNodes = GetOrBuildNonInputNodeIds(genome, activations);
         foreach (var nodeId in nonInputNodes)
         {
             activations[nodeId] = ApplySigmoid(activations[nodeId]);
         }
 
         return activations;
+    }
+
+    /// <summary>
+    /// Issue #1392 perf helper: returns the cached topologically-sorted
+    /// connection list for <paramref name="genome"/>, rebuilding only when
+    /// the topology signature changed since the last call.
+    /// </summary>
+    private List<Connection<T>> GetOrBuildSortedConnections(Genome<T> genome)
+    {
+        int count = genome.Connections.Count;
+        ulong mask = ComputeEnabledBitmask(genome.Connections);
+        if (genome.CachedSortedConnections != null
+            && genome.CachedTopologySignatureCount == count
+            && genome.CachedTopologySignatureMask == mask)
+        {
+            return genome.CachedSortedConnections;
+        }
+        var sorted = SortConnectionsTopologically(genome);
+        genome.CachedSortedConnections = sorted;
+        genome.CachedTopologySignatureCount = count;
+        genome.CachedTopologySignatureMask = mask;
+        // Invalidate the dependent non-input-node cache — its node set depends
+        // on the connection set, so a topology change forces a rebuild on the
+        // next call.
+        genome.CachedNonInputNodeIds = null;
+        return sorted;
+    }
+
+    /// <summary>
+    /// Issue #1392 perf helper: caches the list of node IDs &gt;= InputSize that
+    /// the sigmoid sweep walks. Built on demand using the same topology
+    /// signature as the sort cache and invalidated alongside it.
+    /// </summary>
+    private List<int> GetOrBuildNonInputNodeIds(Genome<T> genome, Dictionary<int, T> activations)
+    {
+        if (genome.CachedNonInputNodeIds != null)
+        {
+            return genome.CachedNonInputNodeIds;
+        }
+        var list = new List<int>(activations.Count);
+        foreach (var k in activations.Keys)
+        {
+            if (k >= Architecture.InputSize) list.Add(k);
+        }
+        genome.CachedNonInputNodeIds = list;
+        return list;
+    }
+
+    /// <summary>
+    /// Cheap O(N) packed bitmask of <c>IsEnabled</c> across the genome's
+    /// connection list. Used as the second half of the topology cache key
+    /// alongside <c>Connections.Count</c>. Wraps via XOR for &gt;64 connections
+    /// — large NEAT populations are rare in practice but the wrap preserves
+    /// the change-detection invariant (any single bit flip changes the mask).
+    /// </summary>
+    private static ulong ComputeEnabledBitmask(List<Connection<T>> connections)
+    {
+        ulong mask = 0;
+        int n = connections.Count;
+        for (int i = 0; i < n; i++)
+        {
+            if (connections[i].IsEnabled)
+            {
+                mask ^= 1UL << (i & 63);
+            }
+        }
+        return mask;
     }
 
     /// <summary>
@@ -1109,11 +1184,27 @@ public class NEAT<T> : NeuralNetworkBase<T>
             // Calculate average loss across all samples
             T averageLoss = NumOps.Divide(totalError, NumOps.FromDouble(batchSize));
 
-            // Store the loss value for the best genome after evaluation
-            if (genome == _population.OrderByDescending(g => g.Fitness).FirstOrDefault())
-            {
-                LastLoss = averageLoss;
-            }
+            // Issue #1392 perf fix: removed the inline LastLoss assignment that
+            // previously fired here gated on `genome == _population.OrderByDescending
+            // (g => g.Fitness).FirstOrDefault()`. That branch had two problems:
+            //
+            // 1. Perf: it ran `OrderByDescending` on the entire population for
+            //    EVERY genome's fitness eval, giving O(N²) work per generation
+            //    (N=150 default → 22,500 fitness-compare + allocations per
+            //    generation × 50 generations × 30 Train calls = ~34M ops just
+            //    for picking the best, before any actual genome activation).
+            //    On a tiny tabular input this dominated the per-Train wall time
+            //    and pushed Training_ShouldReduceLoss past the 120 s CI budget.
+            //
+            // 2. Correctness: the reference-equality probe `genome == best`
+            //    matched the PRE-EVALUATION best (Fitness values from the
+            //    previous generation) which is essentially random for the
+            //    current generation. The post-evolution recompute below
+            //    (lines 1130+) does the work properly by re-evaluating the
+            //    actual post-generation best genome, so the inline
+            //    LastLoss assignment was already dead code.
+            //
+            // Net: deleting the branch is pure speedup with no behavior change.
 
             // Convert loss to fitness (higher is better, so invert loss)
             // Add small constant to avoid division by zero

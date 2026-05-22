@@ -178,6 +178,28 @@ public class Genome<T>
     }
 
     /// <summary>
+    /// Issue #1392 perf: per-genome cache for <c>NEAT.SortConnectionsTopologically</c> +
+    /// the "non-input node" set <c>NEAT.ActivateGenome</c> walks for activation. The
+    /// sort is O(E²) on the genome's enabled connections and was being rebuilt on
+    /// every <c>NEAT.ActivateGenome</c> call (population × generations × Train calls
+    /// = ~225 k calls for a Training_ShouldReduceLoss run). Caching pays back on
+    /// every call where the topology hasn't mutated since the prior activation.
+    ///
+    /// <para>Invalidation key is the cheap-to-compute <c>(Connections.Count, IsEnabled
+    /// bitmask)</c> snapshot taken at the start of activation. NEAT's mutation paths
+    /// either (a) append to <c>Connections</c> via <see cref="AddConnection"/> (Count
+    /// changes) or (b) flip <c>IsEnabled</c> via <see cref="DisableConnection"/> /
+    /// crossover (mask changes). Weight-only mutations don't change topology and
+    /// keep the cache valid — which is the dominant case across the 50 generations
+    /// per Train call. Snapshot computation is O(N) and reads cleanly off
+    /// <c>Connections</c>; cheap relative to the O(E²) sort it bypasses.</para>
+    /// </summary>
+    internal int CachedTopologySignatureCount;
+    internal ulong CachedTopologySignatureMask;
+    internal List<Connection<T>>? CachedSortedConnections;
+    internal List<int>? CachedNonInputNodeIds;
+
+    /// <summary>
     /// Adds a new connection to this genome.
     /// </summary>
     /// <param name="fromNode">The identifier of the source node.</param>
