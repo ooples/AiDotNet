@@ -207,4 +207,144 @@ public class Issue1415_LargeVocabForwardNaNTests
         // Strict assertion — any NaN or +/-Infinity logit is a forward-pass bug.
         Assert.Equal(0, nonFiniteInputs);
     }
+
+    /// <summary>
+    /// Direct-train repro WITH aggressive Gen2 GC.Collect between Train and
+    /// Predict — the consumer's #1415 comment 2 identified this as the
+    /// root-cause trigger ("AiDotNet's internal tensor state being corrupted
+    /// by user-level GC.Collect(2, GCCollectionMode.Aggressive, blocking:
+    /// true) between model.Train and model.Predict at V=50,257"). This test
+    /// asserts the contract holds AND aggressive Gen2 GC between Train and
+    /// Predict doesn't reclaim any tensor state the predict path still
+    /// depends on. ~2.5 min wall time on CPU.
+    /// </summary>
+    [Fact]
+    public void Transformer_V50257_DirectTrain_AggressiveGC_PredictProducesFiniteLogits()
+    {
+        // Consumer comment 2 on issue #1415 claims the bug surfaces ONLY when
+        // an aggressive Gen2 GC.Collect runs between Train and Predict at
+        // V=50,257. Same setup as DirectTrain test above, plus the
+        // GC.Collect call the consumer reported as the actual trigger.
+        // Expected to fail on the pre-fix code path; expected to pass after
+        // the upstream allocator/state-tracking fix lands.
+        AiDotNetEngine.ResetToCpu();
+        const int vocab = 50257;
+
+        var arch = new TransformerArchitecture<float>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 2, numDecoderLayers: 0, numHeads: 2,
+            modelDimension: 128, feedForwardDimension: 256,
+            inputSize: 64, outputSize: vocab,
+            maxSequenceLength: 64,
+            vocabularySize: vocab,
+            randomSeed: 0);
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+
+        const int nTrain = 140;
+        const int epochs = 2;
+        var rng = RandomHelper.CreateSeededRandom(42);
+
+        var trainXs = new Tensor<float>[nTrain];
+        var trainYs = new Tensor<float>[nTrain];
+        for (int i = 0; i < nTrain; i++)
+        {
+            var x = new Tensor<float>([1, 64]);
+            for (int s = 0; s < 64; s++) x[0, s] = rng.Next(0, vocab);
+            var y = new Tensor<float>([1, vocab]);
+            y[0, rng.Next(0, vocab)] = 1.0f;
+            trainXs[i] = x;
+            trainYs[i] = y;
+        }
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+            for (int i = 0; i < nTrain; i++)
+                model.Train(trainXs[i], trainYs[i]);
+
+        // Drop training tensors and force aggressive Gen2 collection — exact
+        // pattern the consumer reported reproducing the bug.
+        for (int i = 0; i < nTrain; i++) { trainXs[i] = null!; trainYs[i] = null!; }
+        System.GC.Collect(2, System.GCCollectionMode.Aggressive, blocking: true);
+        System.GC.WaitForPendingFinalizers();
+        System.GC.Collect(2, System.GCCollectionMode.Aggressive, blocking: true);
+
+        int nonFiniteInputs = 0;
+        for (int trial = 0; trial < 100; trial++)
+        {
+            var input = new Tensor<float>([1, 64]);
+            for (int s = 0; s < 64; s++) input[0, s] = rng.Next(0, vocab);
+            var pred = model.Predict(input);
+            for (int v = 0; v < vocab; v++)
+            {
+                float lv = pred[0, v];
+                if (float.IsNaN(lv) || float.IsInfinity(lv)) { nonFiniteInputs++; break; }
+            }
+        }
+
+        _output.WriteLine($"Non-finite-producing input contexts (direct-train + Aggressive GC): {nonFiniteInputs}/100");
+        Assert.Equal(0, nonFiniteInputs);
+    }
+
+    /// <summary>
+    /// Direct-train repro WITHOUT the BuildAsync facade — calls model.Train
+    /// per-sample for two explicit epochs (effective 280 steps), matching
+    /// the consumer's reported training schedule. Verifies the contract
+    /// holds whether the model is trained via AiModelBuilder.BuildAsync
+    /// (above) or via direct model.Train calls. ~2.5 min wall time on CPU.
+    /// </summary>
+    [Fact]
+    public void Transformer_V50257_DirectTrain_PredictProducesFiniteLogits()
+    {
+        AiDotNetEngine.ResetToCpu();
+        const int vocab = 50257;
+
+        var arch = new TransformerArchitecture<float>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 2, numDecoderLayers: 0, numHeads: 2,
+            modelDimension: 128, feedForwardDimension: 256,
+            inputSize: 64, outputSize: vocab,
+            maxSequenceLength: 64,
+            vocabularySize: vocab,
+            randomSeed: 0);
+        var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
+
+        const int nTrain = 140;
+        const int epochs = 2;
+        var rng = RandomHelper.CreateSeededRandom(42);
+
+        // Per-sample tensors so we drive model.Train(x, y) directly — same
+        // path the consumer reported reproducing on.
+        var trainXs = new Tensor<float>[nTrain];
+        var trainYs = new Tensor<float>[nTrain];
+        for (int i = 0; i < nTrain; i++)
+        {
+            var x = new Tensor<float>([1, 64]);
+            for (int s = 0; s < 64; s++) x[0, s] = rng.Next(0, vocab);
+            var y = new Tensor<float>([1, vocab]);
+            y[0, rng.Next(0, vocab)] = 1.0f;
+            trainXs[i] = x;
+            trainYs[i] = y;
+        }
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+            for (int i = 0; i < nTrain; i++)
+                model.Train(trainXs[i], trainYs[i]);
+
+        int nonFiniteInputs = 0;
+        for (int trial = 0; trial < 100; trial++)
+        {
+            var input = new Tensor<float>([1, 64]);
+            for (int s = 0; s < 64; s++) input[0, s] = rng.Next(0, vocab);
+            var pred = model.Predict(input);
+            for (int v = 0; v < vocab; v++)
+            {
+                float lv = pred[0, v];
+                if (float.IsNaN(lv) || float.IsInfinity(lv)) { nonFiniteInputs++; break; }
+            }
+        }
+
+        _output.WriteLine($"Non-finite-producing input contexts (direct-train): {nonFiniteInputs}/100");
+        Assert.Equal(0, nonFiniteInputs);
+    }
 }
