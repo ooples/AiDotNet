@@ -119,11 +119,11 @@ public class Issue1415_LargeVocabForwardNaNTests
 
     /// <summary>
     /// Full-stack repro — reproduces the bug consumer-side. Builds a
-    /// 2-layer Transformer at V=50,257 with brief training (10 samples
-    /// to avoid the multi-minute build), then asserts that
-    /// Transformer.Predict produces finite logits across 100 random
-    /// input contexts. Consumer-side data showed ~25% of inputs produce
-    /// all-NaN logits.
+    /// 2-layer Transformer at V=50,257 with realistic training (140
+    /// samples × 1 epoch, matching the consumer-side WT2 9000-token /
+    /// stride-64 setup), then asserts that Transformer.Predict produces
+    /// finite logits across 100 random input contexts. Consumer-side
+    /// data showed ~25% of inputs produce all-NaN logits.
     /// </summary>
     [Fact]
     public void Transformer_V50257_Predict_ProducesFiniteLogits_OnRandomContexts()
@@ -182,8 +182,11 @@ public class Issue1415_LargeVocabForwardNaNTests
             model.Train(xTrain, yTrain);
         }
 
-        // Scan 100 random input contexts for NaN output.
-        int nanInputs = 0;
+        // Scan 100 random input contexts for non-finite output (NaN or +/-Infinity).
+        // The "finite logits" contract requires BOTH — NaN-only checks would let
+        // saturated overflow-style failures (e.g. an exp() that diverges to +Inf
+        // through the softmax/cross-entropy boundary) silently pass.
+        int nonFiniteInputs = 0;
         for (int trial = 0; trial < 100; trial++)
         {
             var input = new Tensor<float>([1, 64]);
@@ -191,12 +194,12 @@ public class Issue1415_LargeVocabForwardNaNTests
             var pred = model.Predict(input);
             for (int v = 0; v < vocab; v++)
             {
-                if (float.IsNaN(pred[0, v])) { nanInputs++; break; }
+                if (!float.IsFinite(pred[0, v])) { nonFiniteInputs++; break; }
             }
         }
 
-        _output.WriteLine($"NaN-producing input contexts: {nanInputs}/100");
-        // Strict assertion — any NaN logit is a forward-pass bug.
-        Assert.Equal(0, nanInputs);
+        _output.WriteLine($"Non-finite-producing input contexts: {nonFiniteInputs}/100");
+        // Strict assertion — any NaN or +/-Infinity logit is a forward-pass bug.
+        Assert.Equal(0, nonFiniteInputs);
     }
 }
