@@ -22384,14 +22384,31 @@ public static class LayerHelper<T>
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
 
-        // Conv subsampling
+        // Subsampling: paper-faithful Conformer (Gulati et al. 2020 §2.1)
+        // and Paraformer (Gao et al. 2022 §3.1) use Conv2D subsampling +
+        // LayerNorm. Approximating Conv2D with Dense pairs is a separate
+        // simplification; the normalization MUST stay LayerNorm because
+        // BatchNormalizationLayer<T>'s rank-3 path interprets [B, S, F] as
+        // channels-first [C, H, W] (see BatchNormalizationLayer.OnFirstForward
+        // line 476-482 — rank=3 picks input.Shape[0] which is the batch dim
+        // here, not the feature axis), collapsing featureSize to the batch
+        // size and breaking every downstream MHA contract.
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Conformer encoder
+        // Conformer encoder. Pre-norm design with LayerNorm everywhere
+        // (Gulati et al. 2020 §2.1, equation 5). The conv module's
+        // channel-axis BatchNorm — the ONE place in Conformer where BN is
+        // paper-faithful — does not apply here because the helper
+        // approximates the conv module with Dense layers (input is
+        // [B, S, F], not the channels-first [B, C, T] the conv-module
+        // BN would normalize). Sequence-layout BatchNorm on rank-3 input
+        // hits the same OnFirstForward mis-routing as the subsampling
+        // block above. Replace with LayerNorm to match the rest of the
+        // pre-norm chain.
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
@@ -22401,15 +22418,43 @@ public static class LayerHelper<T>
             yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>();
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
         }
         yield return new LayerNormalizationLayer<T>();
 
-        // CIF (Continuous Integrate-and-Fire) alignment module
-        yield return new DenseLayer<T>(1, identityActivation);
-        yield return new LayerNormalizationLayer<T>();
+        // CIF (Continuous Integrate-and-Fire) alignment module —
+        // Gao et al. 2022 "Paraformer" §3.2. The full paper-faithful CIF
+        // is a *side branch* that predicts per-timestep fire weights
+        // ([B, S, 1] via Dense(1, sigmoid)) and then accumulates the
+        // encoder hidden states along the time axis according to those
+        // weights, producing a fixed-length acoustic embedding sequence
+        // [B, N, encoderDim] (N = number of fired tokens). That dual-
+        // output structure cannot be represented inside a FLAT
+        // List<ILayer<T>>: there's no slot for a layer whose output is
+        // computed from two parents.
+        //
+        // The previous flat-list approximation was `Dense(1, identity)`,
+        // which projected the encoder output from [B, S, encoderDim]
+        // down to [B, S, 1] — losing the feature axis entirely and
+        // making every downstream MHA throw "Input embedding dimension
+        // (1) does not match weight dimension (512)" (surfaced in
+        // PR #1408 Generated Layers shard as 5 SenseVoiceTests
+        // failures, run 26254401589 job 77275610156).
+        //
+        // Until the dual-branch CIF is implemented (likely as a
+        // dedicated CifAlignmentLayer<T> with its own ForwardInternal
+        // that maintains the side-branch state), we PASS THROUGH the
+        // encoder output to the decoder directly. The decoder still
+        // sees [B, S, encoderDim] — same time-axis length as the
+        // encoder — instead of the [B, N, encoderDim] CIF would
+        // produce. Non-autoregressive decoder MHA + cross-attention
+        // still operates correctly on this shape; the only paper-
+        // deviation is the lack of acoustic-to-token alignment, which
+        // is an inference-quality concern (not a runnability one) and
+        // doesn't affect any of the forward-finiteness / parameter-
+        // count / training-step invariants the test suite asserts.
 
         // Paraformer decoder (non-autoregressive)
         if (encoderDim != decoderDim)
