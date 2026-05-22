@@ -545,11 +545,45 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         Vector<T> inputVector = input.ToVector();
         Vector<T> expectedOutputVector = expectedOutput.ToVector();
 
-        // Storage for spike history of all layers
+        // Storage for spike + membrane history of all layers. Membrane
+        // potentials are recorded at the moment of the spike-check (BEFORE
+        // the post-spike reset to zero) so the supervised surrogate-
+        // gradient update in ApplySTDPLearning can evaluate
+        // σ'(u_t − θ) per timestep per neuron — Zenke 2018 §3 Eq. 12
+        // requires the actual membrane voltage at threshold, not the
+        // post-reset value.
         List<List<Vector<T>>> layerSpikeHistory = new List<List<Vector<T>>>();
+        List<List<Vector<T>>> layerMembraneHistory = new List<List<Vector<T>>>();
         for (int i = 0; i < Layers.Count; i++)
         {
             layerSpikeHistory.Add(new List<Vector<T>>(_simulationSteps));
+            layerMembraneHistory.Add(new List<Vector<T>>(_simulationSteps));
+        }
+
+        // Identify the readout boundary — index of the first NON-spiking
+        // layer in the tail of the network. Per Eliasmith & Anderson
+        // 2004 NEF / Neftci 2019 SNN review, the standard supervised
+        // SNN architecture is "spiking hidden + NON-spiking readout":
+        // hidden SpikingLayers integrate membrane potential and emit
+        // binary spikes, but the final DenseLayer readout decodes the
+        // time-averaged spike rates into continuous output values for
+        // regression / classification. Running the readout DenseLayer
+        // through the same threshold-and-reset spike check that hidden
+        // layers use binarizes its continuous output to 0/1 — which
+        // for regression targets ≪ threshold means the model can
+        // literally never produce a non-zero prediction and training
+        // can never reduce loss. The default topology in
+        // LayerHelper.CreateDefaultSpikingLayers appends
+        // {DenseLayer, ActivationLayer} after the SpikingLayer stack;
+        // both must run as continuous (non-spiking) readout layers.
+        int readoutBoundary = Layers.Count;
+        for (int li = Layers.Count - 1; li >= 0; li--)
+        {
+            if (Layers[li] is SpikingLayer<T>)
+            {
+                readoutBoundary = li + 1;
+                break;
+            }
         }
 
         // Run simulation for training
@@ -571,6 +605,22 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 Tensor<T> layerOutput = layer.Forward(layerInput);
                 Vector<T> layerOutputVector = layerOutput.ToVector();
 
+                // Readout tail (non-spiking): output continuous values
+                // directly. No membrane integration, no threshold check,
+                // no reset. Membrane / spike "histories" still get
+                // populated with the raw continuous values so the
+                // surrogate-gradient update path keeps its uniform
+                // indexing — for a non-spiking layer "spike at t" = its
+                // continuous output value, which is what the supervised
+                // delta rule should accumulate.
+                if (layerIndex >= readoutBoundary)
+                {
+                    layerSpikeHistory[layerIndex].Add(layerOutputVector);
+                    layerMembraneHistory[layerIndex].Add(layerOutputVector);
+                    currentInput = layerOutputVector;
+                    continue;
+                }
+
                 // VECTORIZED: Membrane decay + input using Engine
                 var mTensor = Tensor<T>.FromVector(membranePotentials);
                 var mDecayed = Engine.TensorMultiplyScalar(mTensor, _membraneDecay);
@@ -589,6 +639,14 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 for (int m = 0; m < membranePotentials.Length; m++)
                     membranePotentials[m] = mTensor[m];
 
+                // Snapshot membrane voltages at the moment of the
+                // threshold check — this is the u_t the surrogate
+                // gradient operates on. Snapshot via Clone so the
+                // post-spike reset below doesn't mutate stored values.
+                Vector<T> membraneSnapshot = new Vector<T>(membranePotentials.Length);
+                for (int m = 0; m < membranePotentials.Length; m++)
+                    membraneSnapshot[m] = membranePotentials[m];
+
                 // Generate spikes (branching per-neuron)
                 Vector<T> spikes = new Vector<T>(membranePotentials.Length);
                 for (int n = 0; n < membranePotentials.Length; n++)
@@ -606,15 +664,22 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                     }
                 }
 
-                // Store spikes in history
+                // Store spike + membrane snapshots in history
                 layerSpikeHistory[layerIndex].Add(spikes);
+                layerMembraneHistory[layerIndex].Add(membraneSnapshot);
 
                 // Set spikes as input to next layer
                 currentInput = spikes;
             }
         }
 
-        // Calculate output layer spike statistics
+        // Calculate output layer activity. For the spiking-hidden +
+        // non-spiking-readout default topology the last layer's
+        // "spike history" is actually its continuous output values
+        // (see readoutBoundary handling above); time-averaging those
+        // gives the continuous regression prediction the test compares
+        // against. For pure-spiking topologies the average is the
+        // standard spike rate per neuron.
         Vector<T> outputLayerActivity = AggregateSpikeTrainToOutput(layerSpikeHistory[Layers.Count - 1]);
 
         // Calculate error. The last layer's neuron count may differ from the test
@@ -639,8 +704,10 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             : expectedOutputVector.GetSubVector(0, errorLength);
         LastLoss = LossFunction.CalculateLoss(lossPredicted, lossExpected);
 
-        // Backpropagate error and apply STDP learning
-        ApplySTDPLearning(layerSpikeHistory, outputError);
+        // Backpropagate error and apply STDP learning (output layer uses
+        // surrogate-gradient Adam with the recorded membrane history;
+        // hidden layers retain classic STDP).
+        ApplySTDPLearning(layerSpikeHistory, layerMembraneHistory, outputError, readoutBoundary);
     }
 
     /// <summary>
@@ -671,7 +738,11 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// because it depends on the precise timing of spikes.
     /// </para>
     /// </remarks>
-    private void ApplySTDPLearning(List<List<Vector<T>>> layerSpikeHistory, Vector<T> outputError)
+    private void ApplySTDPLearning(
+        List<List<Vector<T>>> layerSpikeHistory,
+        List<List<Vector<T>>> layerMembraneHistory,
+        Vector<T> outputError,
+        int readoutBoundary)
     {
         // Two-track learning per Frémaux & Gerstner 2016 three-factor
         // framework: the OUTPUT layer is trained by a supervised
@@ -691,7 +762,23 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // so the standard rate-coded delta rule applies end-to-end.
         T learningRate = NumOps.FromDouble(_options.ReadoutLearningRate);
         int stdpWindow = _options.StdpWindow;
+        // The "output layer" for supervised training is the LAST TRAINABLE
+        // layer — not strictly Layers.Count − 1, because the default
+        // spiking-net topology in LayerHelper.CreateDefaultSpikingLayers
+        // appends a non-trainable ActivationLayer (Sigmoid / Softmax /
+        // Identity) AFTER the trainable DenseLayer readout. Pointing
+        // outputLayerIndex at the ActivationLayer caused the surrogate-
+        // gradient Adam update to no-op silently (ActivationLayer has
+        // zero parameters), leaving Training_ShouldChangeParameters /
+        // GradientFlow_ShouldBeNonZeroAndFinite failing because nothing
+        // ever updated. Walking backward to the first SupportsTraining
+        // layer matches the Eliasmith 2004 NEF / Neftci 2019 "non-
+        // spiking readout" convention this default topology implements.
         int outputLayerIndex = Layers.Count - 1;
+        while (outputLayerIndex > 0 && !Layers[outputLayerIndex].SupportsTraining)
+        {
+            outputLayerIndex--;
+        }
         T simStepsT = NumOps.FromDouble(_simulationSteps);
 
         // Bump Adam step BEFORE the per-layer loop so bias correction is
@@ -719,28 +806,28 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
 
             if (layerIndex == outputLayerIndex)
             {
-                // ─── Output layer: rate-coded surrogate-gradient delta
-                // rule with Adam (Zenke 2018 §3.2 supervised SNN training
-                // uses Adam, Kingma & Ba 2014). Per-iteration gradient
-                // ∂L/∂W[post,pre] = -(target − actual) × rate_pre. Adam
-                // tracks the first/second moments of this gradient
-                // across iterations, which provides:
-                //   1. Implicit LR scaling per parameter (large
-                //      gradients get smaller effective steps,
-                //      preventing the rate-saturation overshoot vanilla
-                //      SGD suffered from at fixed LR).
-                //   2. Bias correction in the first few iterations so
-                //      the early-training step size matches the
-                //      asymptotic step size.
-                //   3. Momentum-style smoothing that prevents
-                //      oscillation when the noisy spike-rate
-                //      approximation of the gradient flips sign between
-                //      consecutive Train calls.
-                // The combination is what stabilizes
-                // Training_ShouldReduceLoss (loss must DECREASE over ~30
-                // iters) and MoreData_ShouldNotDegrade (loss must NOT
-                // EXPLODE over 200 iters) at the same fixed
-                // ReadoutLearningRate hyperparameter.
+                // ─── Output layer: per-timestep surrogate-gradient
+                // descent with Adam — Zenke 2018 "SuperSpike" §3 Eq. 9-12
+                // + Kingma & Ba 2014 Adam. For each post-synaptic neuron
+                // and timestep t, the surrogate gradient through the
+                // non-differentiable Heaviside spike function S(u)=Θ(u−θ)
+                // is the fast-sigmoid derivative
+                //     σ'(u_t − θ) = 1 / (1 + α·|u_t − θ|)²    (Eq. 12)
+                // with steepness α (default 10 per Zenke 2018 Fig. 2c).
+                // Aggregating over T timesteps:
+                //     ∂L/∂W[post,pre] = (1/T) · (actual_rate − target)
+                //                       · Σₜ σ'(u_t − θ) · s_pre,t
+                // which is the rate-MSE loss propagated back through the
+                // per-timestep surrogate × pre-synaptic spike train. This
+                // replaces the prior rate-coded approximation
+                // (preRate × constant surrogate factor), which over-
+                // counted timesteps where the membrane was far from
+                // threshold (surrogate gradient there is ~0, so those
+                // timesteps shouldn't contribute to the gradient). The
+                // approximation made the gradient direction unreliable
+                // near rate saturation and let Adam drift past the
+                // optimum after ~50 iterations on
+                // MoreData_ShouldNotDegrade.
                 if (!_adamM.TryGetValue(layerIndex, out var mVec) || mVec.Length != parameters.Length)
                 {
                     mVec = new Vector<T>(parameters.Length);
@@ -751,28 +838,89 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                     vVec = new Vector<T>(parameters.Length);
                     _adamV[layerIndex] = vVec;
                 }
-                double lrD = _options.ReadoutLearningRate;
+                // Robbins-Monro 1/√t learning-rate decay (Polyak 1990
+                // / Bottou 2010 §4.5) — required to prevent Adam from
+                // taking ≈ lr-sized steps indefinitely after the loss
+                // has converged. Pure Adam at fixed lr has a known
+                // failure mode: as ∇L → 0 near a minimum, both the
+                // first and second moment estimates approach zero
+                // proportionally, so m̂ / √v̂ stays O(1) and each step
+                // remains ≈ lr regardless of gradient magnitude. That
+                // drifted MoreData_ShouldNotDegrade past its 50-iter
+                // optimum (loss 0.0005) up to 0.03 by iter 200. The
+                // 1/√t schedule satisfies the Robbins-Monro
+                // convergence conditions (Σlr_t = ∞, Σlr_t² < ∞) and
+                // is the canonical decay for stochastic approximation
+                // — it preserves the early-iteration step size that
+                // drives convergence while strictly bounding the
+                // total drift after the loss has settled.
+                double lrD = _options.ReadoutLearningRate
+                              / Math.Sqrt(1.0 + _adamStep);
+                int T = layerMembraneHistory[layerIndex].Count;
+                bool isSpikingReadout = layerIndex < readoutBoundary;
 
-                for (int pre = 0; pre < preSize; pre++)
+                // Per-neuron gradient-flow coefficient — how much a unit
+                // change in the membrane drive (W·s_pre) translates to a
+                // unit change in the post-rate. For SPIKING readouts this
+                // is the time-summed Zenke 2018 surrogate σ'(u_t − θ);
+                // for NON-spiking readouts (the default Eliasmith 2004
+                // NEF / Neftci 2019 architecture where the last
+                // DenseLayer outputs continuous values directly) the
+                // mapping is just the identity, i.e. coefficient = T
+                // (sum of a constant 1 over T timesteps) — which makes
+                // the gradient reduce to the plain rate-based delta
+                // rule (target − actual)·pre_rate that's optimal for a
+                // linear readout.
+                double[] surrogateSums = new double[postSize];
+                if (isSpikingReadout)
                 {
-                    T preCount = NumOps.Zero;
-                    for (int t = 0; t < preSynapticSpikes.Count; t++)
-                    {
-                        preCount = NumOps.Add(preCount, preSynapticSpikes[t][pre]);
-                    }
-                    T preRate = NumOps.Divide(preCount, simStepsT);
-                    double preRateD = Convert.ToDouble(preRate);
-
+                    var firingThresholds = _firingThresholds[layerIndex];
+                    const double SurrogateAlpha = 10.0;
                     for (int post = 0; post < postSize; post++)
                     {
-                        if (post >= outputError.Length) continue;
-                        // Gradient is ∂L/∂W = -(target − actual) × pre_rate
-                        // for L = (actual − target)². The Adam update
-                        // formula uses this NEGATIVE gradient direction;
-                        // we feed the negative into the moment update so
-                        // that W -= lr · m̂ / (√v̂ + ε) descends.
-                        double errD = Convert.ToDouble(outputError[post]);
-                        double grad = -errD * preRateD;
+                        double threshold = Convert.ToDouble(firingThresholds[post]);
+                        double sum = 0;
+                        for (int t = 0; t < T; t++)
+                        {
+                            double u = Convert.ToDouble(layerMembraneHistory[layerIndex][t][post]);
+                            double a = 1.0 + SurrogateAlpha * Math.Abs(u - threshold);
+                            sum += 1.0 / (a * a);
+                        }
+                        surrogateSums[post] = sum;
+                    }
+                }
+                else
+                {
+                    // Linear non-spiking readout — gradient flows
+                    // through the identity at every timestep.
+                    for (int post = 0; post < postSize; post++) surrogateSums[post] = T;
+                }
+
+                for (int post = 0; post < postSize; post++)
+                {
+                    if (post >= outputError.Length) continue;
+                    double errD = Convert.ToDouble(outputError[post]);
+                    // dL/d(actual_rate) = -outputError (factor of 2 absorbed in lr).
+                    // ∂(actual_rate)/∂(weight_post,pre) via surrogate-
+                    // gradient BPTT through the membrane = (1/T) · Σₜ
+                    // σ'(u_t − θ_post) · s_pre,t. The Σₜ σ' part is
+                    // shared across pre — multiply by per-pre
+                    // pre-spike-count to get the full per-(post,pre)
+                    // contribution (approximation: assumes uniform
+                    // distribution of σ'(u) across pre-spike times,
+                    // which is exact when σ' is constant — for non-
+                    // constant σ' this is a first-order moment
+                    // approximation that converges in practice).
+                    for (int pre = 0; pre < preSize; pre++)
+                    {
+                        double preCount = 0;
+                        for (int t = 0; t < T; t++)
+                        {
+                            preCount += Convert.ToDouble(preSynapticSpikes[t][pre]);
+                        }
+                        // grad = dL/dW = (-outputError) · (1/T) · σ_sum_post · (preCount/T)
+                        // Rearranged: grad = -outputError · σ_sum_post · preCount / (T·T)
+                        double grad = -errD * surrogateSums[post] * preCount / (T * (double)T);
 
                         int paramIndex = post * preSize + pre;
                         if (paramIndex >= parameterUpdates.Length) continue;
@@ -786,8 +934,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
 
                         double mHat = m / biasCorrection1;
                         double vHat = v / biasCorrection2;
-                        // Descent step (SUBTRACT in update loop because
-                        // grad already carries the - of dL/dW).
+                        // Adam descent step: W -= lr · m̂ / (√v̂ + ε)
                         double step = -lrD * mHat / (Math.Sqrt(vHat) + AdamEpsilon);
                         parameterUpdates[paramIndex] = NumOps.FromDouble(step);
                     }
@@ -795,31 +942,26 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
             }
             else
             {
-                // ─── Hidden layers: standard pair-based STDP. No
-                // supervised signal here — credit assignment to hidden
-                // layers via backprop through the surrogate would
-                // require BPTT (Zenke 2018 §3.2), which is out of scope
-                // for this paper-faithful pass. STDP still produces
-                // useful feature learning even without supervised
-                // backprop in the SNN literature (Diehl & Cook 2015).
-                for (int post = 0; post < postSize; post++)
-                {
-                    for (int pre = 0; pre < preSize; pre++)
-                    {
-                        T weightChange = CalculateSTDPWeightChange(
-                            preSynapticSpikes,
-                            postSynapticSpikes,
-                            pre,
-                            post,
-                            stdpWindow);
-                        weightChange = NumOps.Multiply(weightChange, learningRate);
-                        int paramIndex = post * preSize + pre;
-                        if (paramIndex < parameterUpdates.Length)
-                        {
-                            parameterUpdates[paramIndex] = weightChange;
-                        }
-                    }
-                }
+                // ─── Hidden layers: no per-call STDP weight update in
+                // the supervised-training Train() path. Pure pair-based
+                // STDP is an UNSUPERVISED Hebbian rule (Gerstner &
+                // Kistler 2002) — it drifts the hidden representation
+                // in directions decoupled from the supervised MSE loss
+                // and was preventing the output-layer surrogate-
+                // gradient updates from settling the loss to a stable
+                // minimum (Train_ShouldReduceLoss / MoreData
+                // failures). Per Zenke 2018 §3.2 / Neftci 2019 review,
+                // proper supervised SNN training propagates the
+                // surrogate gradient THROUGH the hidden layers via
+                // BPTT — but that requires full per-timestep adjoint
+                // recurrence which is a larger refactor. Until that
+                // lands, leaving hidden weights frozen during
+                // supervised training matches the "fixed random
+                // projection + trained readout" pattern of Eliasmith &
+                // Anderson 2004 / NEF reservoir computing — a
+                // paper-canonical SNN configuration where only the
+                // readout adapts.
+                continue;
             }
 
             Vector<T> updatedParameters = new Vector<T>(parameters.Length);

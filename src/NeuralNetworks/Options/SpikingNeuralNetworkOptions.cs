@@ -22,7 +22,7 @@ public class SpikingNeuralNetworkOptions : NeuralNetworkOptions
     // layers also benefit from the smaller step (sparse Hebbian updates
     // accumulate over many iterations and can drift the hidden
     // representation at lr=5e-3).
-    private double _readoutLearningRate = 1e-3;
+    private double _readoutLearningRate = 5e-4;
     private int _stdpWindow = 20;
 
     /// <summary>
