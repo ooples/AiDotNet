@@ -1006,17 +1006,17 @@ public class NEAT<T> : NeuralNetworkBase<T>
     private List<Connection<T>> GetOrBuildSortedConnections(Genome<T> genome)
     {
         int count = genome.Connections.Count;
-        ulong mask = ComputeEnabledBitmask(genome.Connections);
+        ulong signature = ComputeTopologySignature(genome.Connections);
         if (genome.CachedSortedConnections != null
             && genome.CachedTopologySignatureCount == count
-            && genome.CachedTopologySignatureMask == mask)
+            && genome.CachedTopologySignatureMask == signature)
         {
             return genome.CachedSortedConnections;
         }
         var sorted = SortConnectionsTopologically(genome);
         genome.CachedSortedConnections = sorted;
         genome.CachedTopologySignatureCount = count;
-        genome.CachedTopologySignatureMask = mask;
+        genome.CachedTopologySignatureMask = signature;
         // Invalidate the dependent caches — their content depends on the
         // connection set, so a topology change forces a rebuild on the next
         // call.
@@ -1094,24 +1094,59 @@ public class NEAT<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Cheap O(N) packed bitmask of <c>IsEnabled</c> across the genome's
-    /// connection list. Used as the second half of the topology cache key
-    /// alongside <c>Connections.Count</c>. Wraps via XOR for &gt;64 connections
-    /// — large NEAT populations are rare in practice but the wrap preserves
-    /// the change-detection invariant (any single bit flip changes the mask).
+    /// O(N) FNV-1a hash over every connection slot's <c>(FromNode,
+    /// ToNode, IsEnabled)</c> tuple in iteration order. Used together
+    /// with <c>Connections.Count</c> as the cache key for the
+    /// topologically-sorted connection list on <see cref="Genome{T}"/>.
     /// </summary>
-    private static ulong ComputeEnabledBitmask(List<Connection<T>> connections)
+    /// <remarks>
+    /// Replaces an earlier bitmask-of-enabled-flags signature that
+    /// missed two real edit patterns and let stale cached sorts /
+    /// non-input-node sets / max-node-id leak back to callers:
+    /// <list type="bullet">
+    /// <item>Same-count rewires — swapping a connection's <c>FromNode</c>
+    /// or <c>ToNode</c> for a different node without flipping any
+    /// <c>IsEnabled</c> bit preserved both <c>Count</c> and the bitmask
+    /// → cache hit on the WRONG topology.</item>
+    /// <item>&gt;64-connection aliasing — the bitmask's <c>(i &amp; 63)</c>
+    /// wrap collapsed slots 0/64/128/… onto the same bit, so a flip at
+    /// slot 64 could XOR-cancel an earlier flip at slot 0 and leave the
+    /// mask unchanged.</item>
+    /// </list>
+    /// Weight is deliberately excluded from the signature — weight-only
+    /// mutations are the dominant case across the 50 internal
+    /// generations per public <c>Train</c> call, and we WANT the cached
+    /// topological sort to survive them.
+    /// </remarks>
+    private static ulong ComputeTopologySignature(List<Connection<T>> connections)
     {
-        ulong mask = 0;
+        // FNV-1a 64-bit hash of every connection slot's
+        // (FromNode, ToNode, IsEnabled) tuple in iteration order. The
+        // earlier ComputeEnabledBitmask only hashed the enabled flags and
+        // would alias same-count rewires/replacements (e.g. swapping a
+        // connection's FromNode preserved both count and enabled-bitmask
+        // → stale cache → wrong activation). Hashing the full tuple
+        // also avoids the >64-connection aliasing the bitmask suffered
+        // once the wrap-around in `(i & 63)` started folding bits.
+        // Connection.Weight is intentionally excluded — weight-only
+        // mutations are the dominant case across the 50 internal
+        // generations per Train call and we WANT the cached topological
+        // sort to survive them.
+        const ulong FnvOffsetBasis = 14695981039346656037UL;
+        const ulong FnvPrime = 1099511628211UL;
+        ulong hash = FnvOffsetBasis;
         int n = connections.Count;
         for (int i = 0; i < n; i++)
         {
-            if (connections[i].IsEnabled)
-            {
-                mask ^= 1UL << (i & 63);
-            }
+            var c = connections[i];
+            hash ^= (ulong)(uint)c.FromNode;
+            hash *= FnvPrime;
+            hash ^= (ulong)(uint)c.ToNode;
+            hash *= FnvPrime;
+            hash ^= c.IsEnabled ? 1UL : 0UL;
+            hash *= FnvPrime;
         }
-        return mask;
+        return hash;
     }
 
     /// <summary>
