@@ -66,6 +66,14 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
+    // Adam optimizer hyperparameters — paper-faithful defaults pinned as
+    // named constants instead of inline literals so the rationale lives
+    // next to the value and consumers wanting to override see the
+    // intent. See the constructor comment block for the full citations
+    // (Hwang 2024 §4.1 for the LR, Vaswani 2017 §5.4 for the epsilon).
+    private const double DefaultHopeAdamEpsilon = 1e-6;
+    private const double DefaultHopeAdamInitialLearningRate = 1e-4;
+
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -117,8 +125,8 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                Epsilon = 1e-6,
-                InitialLearningRate = 1e-4,
+                Epsilon = DefaultHopeAdamEpsilon,
+                InitialLearningRate = DefaultHopeAdamInitialLearningRate,
             });
         _options = options ?? new HopeNetworkOptions();
         Options = _options;
