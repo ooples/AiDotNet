@@ -263,7 +263,9 @@ public class EnsembleTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                 break;
 
             default:
-                throw new ArgumentOutOfRangeException(nameof(_aggregationMode), _aggregationMode, $"Unrecognised aggregation mode '{_aggregationMode}'. Valid modes: Mean, WeightedAverage, Median.");
+                throw new ArgumentOutOfRangeException(nameof(_aggregationMode), _aggregationMode,
+                    $"Unrecognised aggregation mode '{_aggregationMode}'. Valid modes: "
+                    + "WeightedAverage, GeometricMean, Maximum, Median.");
         }
 
         return result;
