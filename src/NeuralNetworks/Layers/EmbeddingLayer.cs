@@ -391,9 +391,23 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </summary>
     private void InitializeProjectionWeights(Tensor<T> projectionWeights, int inputFeatures, int embeddingDim)
     {
+        // Projection weights are LAZILY allocated on first Forward — by then
+        // GetParameters() may already have run and returned a parameter vector
+        // that does NOT contain the projection (because it wasn't allocated
+        // yet). A subsequent SetParameters(thatVector) on a sibling layer will
+        // also see no projection slice and leave _projectionWeights = null on
+        // the receiving side, so the receiver's first Forward then allocates
+        // its OWN projection with independent randomness — breaking the
+        // determinism contract `model2.SetParameters(model1.GetParameters());
+        // model2.Predict(x) == model1.Predict(x)` that callers rely on (e.g.
+        // RWKV7/Mamba LM tests). Deriving the default seed from the projection
+        // SHAPE makes the lazy init shape-deterministic across sibling layers
+        // when no explicit RandomSeed is provided, restoring the contract
+        // without forcing eager allocation. Explicit RandomSeed still wins.
+        int defaultSeed = HashCode.Combine(inputFeatures, embeddingDim, _vocabularySize);
         Random random = RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
-            : RandomHelper.CreateSecureRandom();
+            : RandomHelper.CreateSeededRandom(defaultSeed);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / (inputFeatures + embeddingDim)));
         for (int i = 0; i < projectionWeights.Length; i++)
         {
@@ -825,6 +839,19 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
     private bool IsContinuousInput(Tensor<T> input, int vocabularySize)
     {
+        // Shape-based detection: when the last axis equals the vocabulary size,
+        // the input is one-hot / probability distribution / continuous features
+        // along that axis (the standard LM input shape [B, T, V]). Treating
+        // those V values as token indices instead would mis-rank the output
+        // ([B, T, V, D] vs the correct [B, T, D]) and gather V embedding rows
+        // per (B, T) position. PyTorch's nn.Linear vs nn.Embedding split is
+        // shape-driven for the same reason — index inputs are shape [B, T],
+        // continuous inputs are shape [..., features].
+        if (input.Rank >= 2 && input.Shape[input.Rank - 1] == vocabularySize)
+        {
+            return true;
+        }
+
         for (int i = 0; i < input.Length; i++)
         {
             double val = NumOps.ToDouble(input.Data.Span[i]);

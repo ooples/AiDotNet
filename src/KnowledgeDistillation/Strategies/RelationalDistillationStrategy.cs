@@ -489,7 +489,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
                 break;
 
             default:
-                throw new NotImplementedException($"Gradient for distance metric {_distanceMetric} not implemented");
+                throw new ArgumentOutOfRangeException(nameof(_distanceMetric), _distanceMetric, $"Gradient is not defined for distance metric '{_distanceMetric}'. Valid metrics: Euclidean, Cosine, Manhattan.");
         }
 
         return gradient;
@@ -908,7 +908,7 @@ public class RelationalDistillationStrategy<T> : DistillationStrategyBase<T>
                 return ComputeManhattanDistance(v1, v2);
 
             default:
-                throw new NotImplementedException($"Distance metric {_distanceMetric} not implemented");
+                throw new ArgumentOutOfRangeException(nameof(_distanceMetric), _distanceMetric, $"Unrecognised RelationalDistanceMetric '{_distanceMetric}'. Valid metrics: Euclidean, Cosine, Manhattan.");
         }
     }
 

@@ -193,7 +193,7 @@ public class VariationalDistillationStrategy<T> : DistillationStrategyBase<T>
             VariationalMode.ELBO => ComputeELBOLoss(studentMean, studentLogVar, teacherMean, teacherLogVar),
             VariationalMode.InformationBottleneck => ComputeVIBLoss(studentMean, studentLogVar, teacherMean, teacherLogVar),
             VariationalMode.LatentSpaceKL => ComputeLatentKLLoss(studentMean, studentLogVar, teacherMean, teacherLogVar),
-            _ => throw new NotImplementedException($"Mode {_mode} not implemented")
+            _ => throw new ArgumentOutOfRangeException(nameof(_mode), _mode, $"Unrecognised VariationalMode '{_mode}'. Valid modes: ELBO, InformationBottleneck, LatentSpaceKL.")
         };
 
         return NumOps.Multiply(loss, NumOps.FromDouble(_variationalWeight));

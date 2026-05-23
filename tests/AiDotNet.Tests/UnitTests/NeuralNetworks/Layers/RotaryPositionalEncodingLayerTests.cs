@@ -16,7 +16,11 @@ public class RotaryPositionalEncodingLayerTests
         var layer = new RotaryPositionalEncodingLayer<float>(128, 64);
 
         Assert.NotNull(layer);
-        Assert.True(layer.SupportsTraining);
+        // RoPE (Su et al. 2021) is a parameter-free rotation — ILayer
+        // contract says SupportsTraining is false when ParameterCount=0,
+        // matching PyTorch's `any(p.requires_grad …)` on an empty module.
+        Assert.False(layer.SupportsTraining);
+        Assert.Equal(0L, layer.ParameterCount);
     }
 
     [Theory]

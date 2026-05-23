@@ -194,10 +194,12 @@ public class PipelineParallelModel<T, TInput, TOutput> : ShardedModelBase<T, TIn
         if (_checkpointConfig.Enabled &&
             _checkpointConfig.RecomputeStrategy != RecomputeStrategy.None)
         {
-            throw new NotImplementedException(
+            throw new NotSupportedException(
                 $"Activation checkpointing with RecomputeStrategy.{_checkpointConfig.RecomputeStrategy} " +
-                "is not yet implemented. Use RecomputeStrategy.None to enable checkpoint storage " +
-                "without recomputation, or disable checkpointing entirely.");
+                "is not currently supported on PipelineParallelModel. The Selective and Full recompute " +
+                "strategies require layer-level forward-pass decomposition that hasn't shipped yet. " +
+                "Use RecomputeStrategy.None to enable checkpoint storage without recomputation, or " +
+                "disable checkpointing entirely. (Tracked for follow-up in audit-2026-05 phase 2 work.)");
         }
     }
 

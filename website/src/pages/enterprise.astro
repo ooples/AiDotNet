@@ -1,0 +1,108 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Enterprise - AiDotNet"
+  description="AiDotNet Enterprise tier: custom builds with telemetry disabled, offline license validation, air-gapped deployment, FIPS 140-3 cryptography, NIST SSDF compliance, dedicated support."
+>
+  <div class="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+      <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-2">Enterprise Tier</h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-8">For organizations with strict security, compliance, or deployment requirements.</p>
+
+      <div class="prose prose-slate dark:prose-invert max-w-none space-y-8">
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">What's included</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            The Enterprise tier extends the Professional tier with deployment, compliance,
+            and support capabilities that regulated industries and large organizations need.
+            Everything below is in addition to the
+            <a href="/pricing" class="text-blue-600 dark:text-blue-400 hover:underline">Professional tier</a> baseline.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Custom builds</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Standard NuGet packages include optional telemetry and license-validation code paths
+            that, while disabled by default, exist in the binary. For deployments where any
+            outbound HTTP capability is a procurement concern (DOE labs, FISMA-moderate systems,
+            air-gapped networks), we ship custom NuGet packages built with the following MSBuild
+            constants set:
+          </p>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li><code>DISABLE_TELEMETRY</code> — entire <code>AiDotNet.Tensors.Engines.DirectGpu.Telemetry</code> namespace compiled out</li>
+            <li><code>DISABLE_LICENSE_GUARD</code> — <code>BuildKeyProvider</code> and <code>LicenseValidator</code> compiled out; license validation handled by offline file</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            These flags are <strong>cryptographically gated</strong>: the open-source build refuses
+            to honor them without a valid Ooples-issued enterprise license. This protects the BSL
+            commercial terms while letting legitimate enterprise customers deploy clean binaries.
+            See <a href="https://github.com/ooples/AiDotNet/blob/master/build/AiDotNet.Tensors.Enterprise.targets" class="text-blue-600 dark:text-blue-400 hover:underline">build/AiDotNet.Tensors.Enterprise.targets</a>
+            for the gate implementation.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Offline / air-gapped license validation</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Enterprise customers receive a signed license file (JSON document with ed25519 signature
+            over license metadata). License validation runs entirely offline — no network callout to
+            an Ooples license server is required at any point during build, install, or runtime.
+            License files expire annually per BSL terms and can be renewed by contacting
+            <a href="mailto:admin@aidotnet.dev" class="text-blue-600 dark:text-blue-400 hover:underline">admin@aidotnet.dev</a>.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">FIPS 140-3 compatible cryptography</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Enterprise builds use the FIPS 140-3 validated cryptographic provider via .NET 8+ on
+            Linux (OpenSSL FIPS provider). All HMAC, AES-GCM, SHA-256 operations route through the
+            validated module. Compliance documentation includes the relevant CMVP certificate
+            number and a deployment guide for ensuring the FIPS provider is selected at runtime.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">NIST SP 800-218 SSDF compliance</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Each Enterprise release ships with:
+          </p>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li>SBOM (Software Bill of Materials) in CycloneDX 1.5 format</li>
+            <li>SLSA Level 3 build provenance attestation</li>
+            <li>Signed NuGet packages (Authenticode + nupkg signature)</li>
+            <li>Cryptographic dependency lock file with all transitive package hashes</li>
+            <li>Reproducible-build instructions (deterministic compile flags, locked SDK version)</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Support</h2>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li>Named support contact with response SLA negotiated per contract (typically: 4 business hours for SEV-1)</li>
+            <li>Direct issue escalation channel (private GitHub repo or Slack)</li>
+            <li>Quarterly architecture review</li>
+            <li>Early access to security advisories</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Contact</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Email <a href="mailto:admin@aidotnet.dev" class="text-blue-600 dark:text-blue-400 hover:underline">admin@aidotnet.dev</a>
+            with your organization, deployment scope, and any specific compliance requirements.
+            We'll schedule a discovery call and quote based on your environment.
+          </p>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            U.S. federal customers (DOE, DOD, civilian agencies, national labs): see also
+            <a href="/federal-use" class="text-blue-600 dark:text-blue-400 hover:underline">/federal-use</a>
+            for the federal-specific terms.
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

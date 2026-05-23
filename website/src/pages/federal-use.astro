@@ -1,0 +1,122 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Federal Use - AiDotNet"
+  description="AiDotNet for U.S. government, military, national laboratories (including Department of Energy facilities), and other federal customers. Air-gapped deployment, FIPS 140-3, NIST SP 800-218 SSDF, FedRAMP-aligned controls, BSL 1.1 with Federal Use Grant."
+>
+  <div class="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+      <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-2">Federal Use</h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-8">For U.S. government agencies, military commands, national laboratories, and federal contractors.</p>
+
+      <div class="prose prose-slate dark:prose-invert max-w-none space-y-8">
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Who this is for</h2>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li>U.S. Department of Energy national laboratories (LANL, LLNL, ORNL, ANL, PNNL, SLAC, BNL, NREL, INL, SNL, FNAL, Berkeley Lab, et al.)</li>
+            <li>U.S. Department of Defense (active duty, reserve, DoD civilian, contractor)</li>
+            <li>Federal civilian agencies (NIH, NASA, NOAA, DHS, DOC, et al.)</li>
+            <li>FFRDCs and federally-funded contractors with prime/sub contracts</li>
+            <li>State and local government (separately quoted)</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Compliance posture</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            AiDotNet Enterprise builds for federal customers address the following frameworks:
+          </p>
+          <table class="min-w-full border-collapse mt-2">
+            <thead>
+              <tr class="border-b border-slate-300 dark:border-slate-700">
+                <th class="text-left py-2 px-3 text-slate-700 dark:text-slate-200">Framework</th>
+                <th class="text-left py-2 px-3 text-slate-700 dark:text-slate-200">Coverage</th>
+              </tr>
+            </thead>
+            <tbody class="text-slate-600 dark:text-slate-300">
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">NIST SP 800-218 SSDF</td><td class="py-2 px-3">SBOM, signed packages, provenance attestations, dependency-lock workflow</td></tr>
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">NIST AI RMF</td><td class="py-2 px-3">Model cards, risk registers, evaluation harness, intended-use docs (per model)</td></tr>
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">FIPS 140-3</td><td class="py-2 px-3">All cryptographic operations route through the validated OpenSSL FIPS provider on .NET 8+ Linux</td></tr>
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">FedRAMP-aligned controls</td><td class="py-2 px-3">Audit logs, access controls, data residency (when deployed within agency boundary)</td></tr>
+              <tr class="border-b border-slate-200 dark:border-slate-800"><td class="py-2 px-3">CMMC 2.0 Level 2</td><td class="py-2 px-3">Identification, authentication, audit, configuration management evidence</td></tr>
+              <tr><td class="py-2 px-3">CUI handling</td><td class="py-2 px-3">No data leaves the customer environment; no telemetry; no license server callout</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Air-gapped deployment</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            Federal customers regularly deploy in air-gapped environments where any outbound HTTP
+            capability is a procurement-blocking concern. AiDotNet Enterprise custom builds address this:
+          </p>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li><strong>Telemetry compiled out.</strong> Standard NuGet packages default telemetry to OFF
+              but the code still exists in the binary. Enterprise custom builds set <code>DISABLE_TELEMETRY</code>
+              so the entire telemetry namespace is physically absent — verifiable by binary inspection.</li>
+            <li><strong>License validation is offline.</strong> Signed license file (ed25519) validated
+              entirely in-process. No license server, no online activation, no phone-home.</li>
+            <li><strong>Native dependencies are bundled and offline-installable.</strong>
+              OpenBLAS / MKL native binaries ship within the NuGet package; no runtime download.</li>
+            <li><strong>Model weights stay in customer environment.</strong> Pre-trained models are
+              loaded from local files; AiDotNet does not callout to model registries unless explicitly configured.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Licensing</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            AiDotNet is licensed under the
+            <a href="/license" class="text-blue-600 dark:text-blue-400 hover:underline">Business Source License 1.1</a>.
+            Federal customers require an Enterprise license for production use. The Enterprise tier
+            includes the custom-build capabilities, FIPS-compatible crypto, NIST SSDF artifacts,
+            and dedicated support described above.
+          </p>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            For procurement, AiDotNet supports the following purchase mechanisms:
+          </p>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li>GSA Schedule (via reseller — contact us for current schedule holders)</li>
+            <li>SBIR / STTR Phase III</li>
+            <li>OTAs (Other Transaction Authority)</li>
+            <li>Direct purchase via contract vehicle of your choice</li>
+          </ul>
+          <p class="text-slate-600 dark:text-slate-300 mt-2">
+            Ooples is a small-business contractor (single-person LLC). We're set up for direct
+            engagement with agency contracting officers; we do not currently have a CAGE code or
+            DUNS but are working through registration on request.
+          </p>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Audit trail</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            For agencies performing third-party software security assessments, the following
+            artifacts are available on request:
+          </p>
+          <ul class="list-disc list-inside text-slate-600 dark:text-slate-300 mt-2 space-y-1">
+            <li>Full source code (BSL terms apply for redistribution)</li>
+            <li>SBOM (CycloneDX 1.5) and CycloneDX VEX</li>
+            <li>Static analysis reports (CodeQL, Sonar, Codacy)</li>
+            <li>Dependency vulnerability scan history (Dependabot, Trivy)</li>
+            <li>SLSA Level 3 build provenance attestations</li>
+            <li>External evaluation reports (most recent: 2026-05 static audit, available under NDA)</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Contact</h2>
+          <p class="text-slate-600 dark:text-slate-300">
+            For federal procurement inquiries, contact
+            <a href="mailto:admin@aidotnet.dev" class="text-blue-600 dark:text-blue-400 hover:underline">admin@aidotnet.dev</a>
+            with subject <code>[FEDERAL] &lt;agency / lab name&gt;</code> and a brief description of
+            the intended use case, deployment environment (cloud / on-prem / air-gapped),
+            classification level, and target compliance frameworks.
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</BaseLayout>
