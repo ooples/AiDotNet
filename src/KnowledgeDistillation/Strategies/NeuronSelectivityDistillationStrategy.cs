@@ -291,7 +291,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
                 SelectivityMetric.Variance => ComputeVariance(neuronActivations),
                 SelectivityMetric.Sparsity => ComputeSparsity(neuronActivations),
                 SelectivityMetric.PeakToAverage => ComputePeakToAverage(neuronActivations),
-                _ => throw new NotImplementedException($"Metric {_metric} not implemented")
+                _ => throw new ArgumentOutOfRangeException(nameof(_metric), _metric, $"Unrecognised SelectivityMetric '{_metric}'. Valid metrics: Variance, Sparsity, PeakToAverage.")
             };
         }
 
@@ -454,7 +454,7 @@ public class NeuronSelectivityDistillationStrategy<T> : DistillationStrategyBase
                 break;
 
             default:
-                throw new NotImplementedException($"Gradient for metric {_metric} not implemented");
+                throw new ArgumentOutOfRangeException(nameof(_metric), _metric, $"Gradient is not defined for SelectivityMetric '{_metric}'. Valid metrics: Variance, Sparsity, PeakToAverage.");
         }
 
         // Scale by selectivity weight

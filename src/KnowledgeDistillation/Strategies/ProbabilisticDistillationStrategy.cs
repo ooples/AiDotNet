@@ -224,7 +224,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             ProbabilisticMode.MomentMatching => ComputeMomentMatchingLoss(studentPredictions, teacherPredictions),
             ProbabilisticMode.MaximumMeanDiscrepancy => ComputeMMDLoss(studentPredictions, teacherPredictions),
             ProbabilisticMode.EntropyTransfer => ComputeEntropyLoss(studentPredictions, teacherPredictions),
-            _ => throw new NotImplementedException($"Mode {_mode} not implemented")
+            _ => throw new ArgumentOutOfRangeException(nameof(_mode), _mode, $"Unrecognised ProbabilisticMode '{_mode}'. Valid modes: MomentMatching, MaximumMeanDiscrepancy, EntropyTransfer.")
         };
 
         return NumOps.Multiply(loss, NumOps.FromDouble(_distributionWeight));
@@ -412,7 +412,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             ProbabilisticMode.MomentMatching => ComputeMomentMatchingGradient(studentSoft, teacherSoft),
             ProbabilisticMode.MaximumMeanDiscrepancy => ComputeMMDGradient(studentSoft, teacherSoft),
             ProbabilisticMode.EntropyTransfer => ComputeEntropyGradient(studentSoft, teacherSoft),
-            _ => throw new NotImplementedException($"Mode {_mode} not implemented")
+            _ => throw new ArgumentOutOfRangeException(nameof(_mode), _mode, $"Unrecognised ProbabilisticMode '{_mode}'. Valid modes: MomentMatching, MaximumMeanDiscrepancy, EntropyTransfer.")
         };
     }
 

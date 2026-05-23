@@ -681,7 +681,12 @@ public class DistributedTrainingValidationTests
             RecomputeStrategy = RecomputeStrategy.Selective
         };
 
-        Assert.Throws<NotImplementedException>(() =>
+        // PipelineParallelModel's constructor was converted from
+        // NotImplementedException to NotSupportedException in
+        // audit-2026-05 finding #10 (the "Selective / Full recompute
+        // strategies aren't shipped yet" branch is a not-currently-
+        // supported configuration, not a missing-method gap).
+        Assert.Throws<NotSupportedException>(() =>
             new PipelineParallelModel<double, Matrix<double>, Vector<double>>(
                 model, config, checkpointConfig: checkpointConfig));
 

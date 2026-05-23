@@ -8308,7 +8308,7 @@ public static class TensorOperations<T>
             return nodeInterleaved;
         }
 
-        throw new NotImplementedException($"Complex matrix multiplication format '{format}' not implemented. Supported formats: 'split', 'interleaved'.");
+        throw new ArgumentException($"Complex matrix multiplication format '{format}' is not recognised. Supported formats: 'split' (separate real/imag tensors), 'interleaved' (real/imag pairs in trailing axis).", nameof(format));
     }
 
     /// <summary>

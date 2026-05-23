@@ -424,3 +424,45 @@ traces/
 /.tools/
 /tools/_profiles
 /.ci-failures
+
+# ----------------------------------------------------------------------------
+# Repo hygiene — prevent the audit-2026-05 cluster from recurring.
+# These patterns block scratch files, profiler traces, agentic-tool
+# scratchpads, and internal planning artifacts from ending up at the repo
+# root again. Move legitimate plans to docs/internal/ instead.
+# ----------------------------------------------------------------------------
+
+# Agentic-tool scratchpads (Claude / Copilot / etc.) frequently encoded with
+# C:UsersXyz... or full Windows temp paths in the filename.
+[Cc][Uu]sers*
+*scratchpad*
+threads*.json
+
+# Profiler trace artifacts (multi-MB; should never be committed). Already
+# matched by /tools/_profiles for the official harness but contributors
+# sometimes drop standalone traces at the repo root.
+*.speedscope.json
+*.nettrace
+
+# Internal planning, post-mortem, and analysis documents. Move them to
+# docs/internal/ if they need to be tracked; otherwise keep them out of git.
+IMPLEMENTATION_PLAN_*.md
+SPRINT_PLAN_*.md
+EXECUTIVE_SUMMARY*.txt
+EXECUTIVE_SUMMARY*.md
+*_ANALYSIS.md
+*-FINDINGS.md
+*-INVESTIGATION.md
+failed_tests_report.md
+*-REPORT.md
+*_REPORT.md
+*-SUMMARY.md
+*_SUMMARY.md
+AGENT_*.md
+
+# One-off / temp scripts at the repo root.
+fix-*.ps1
+debug-*.ps1
+temp-*.*
+*.tmp
+

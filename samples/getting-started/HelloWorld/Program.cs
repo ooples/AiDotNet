@@ -1,91 +1,100 @@
+// AiDotNet — Hello World
+//
+// A 3-class classifier for the classic Iris dataset (Fisher 1936, 150
+// flowers, 4 measurements each, 3 species). End-to-end in ~50 lines:
+// data → tensors → model → fit → predict → accuracy.
+
 using AiDotNet;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 
-Console.WriteLine("=== AiDotNet Hello World ===");
-Console.WriteLine("Training a neural network to learn the XOR function\n");
+Console.WriteLine("=== AiDotNet Hello World: Iris classifier ===\n");
 
-// XOR training data
-// XOR truth table: 0^0=0, 0^1=1, 1^0=1, 1^1=0
-var inputs = new double[,]
+// ── 1. Iris dataset, embedded ──────────────────────────────────────────────
+//   Columns: sepal length, sepal width, petal length, petal width, species
+//   Species: 0 = setosa, 1 = versicolor, 2 = virginica
+double[][] iris =
+[
+    [5.1,3.5,1.4,0.2,0],[4.9,3.0,1.4,0.2,0],[4.7,3.2,1.3,0.2,0],[4.6,3.1,1.5,0.2,0],[5.0,3.6,1.4,0.2,0],
+    [5.4,3.9,1.7,0.4,0],[4.6,3.4,1.4,0.3,0],[5.0,3.4,1.5,0.2,0],[4.4,2.9,1.4,0.2,0],[4.9,3.1,1.5,0.1,0],
+    [5.4,3.7,1.5,0.2,0],[4.8,3.4,1.6,0.2,0],[4.8,3.0,1.4,0.1,0],[4.3,3.0,1.1,0.1,0],[5.8,4.0,1.2,0.2,0],
+    [5.7,4.4,1.5,0.4,0],[5.4,3.9,1.3,0.4,0],[5.1,3.5,1.4,0.3,0],[5.7,3.8,1.7,0.3,0],[5.1,3.8,1.5,0.3,0],
+    [5.4,3.4,1.7,0.2,0],[5.1,3.7,1.5,0.4,0],[4.6,3.6,1.0,0.2,0],[5.1,3.3,1.7,0.5,0],[4.8,3.4,1.9,0.2,0],
+    [5.0,3.0,1.6,0.2,0],[5.0,3.4,1.6,0.4,0],[5.2,3.5,1.5,0.2,0],[5.2,3.4,1.4,0.2,0],[4.7,3.2,1.6,0.2,0],
+    [4.8,3.1,1.6,0.2,0],[5.4,3.4,1.5,0.4,0],[5.2,4.1,1.5,0.1,0],[5.5,4.2,1.4,0.2,0],[4.9,3.1,1.5,0.2,0],
+    [5.0,3.2,1.2,0.2,0],[5.5,3.5,1.3,0.2,0],[4.9,3.6,1.4,0.1,0],[4.4,3.0,1.3,0.2,0],[5.1,3.4,1.5,0.2,0],
+    [5.0,3.5,1.3,0.3,0],[4.5,2.3,1.3,0.3,0],[4.4,3.2,1.3,0.2,0],[5.0,3.5,1.6,0.6,0],[5.1,3.8,1.9,0.4,0],
+    [4.8,3.0,1.4,0.3,0],[5.1,3.8,1.6,0.2,0],[4.6,3.2,1.4,0.2,0],[5.3,3.7,1.5,0.2,0],[5.0,3.3,1.4,0.2,0],
+    [7.0,3.2,4.7,1.4,1],[6.4,3.2,4.5,1.5,1],[6.9,3.1,4.9,1.5,1],[5.5,2.3,4.0,1.3,1],[6.5,2.8,4.6,1.5,1],
+    [5.7,2.8,4.5,1.3,1],[6.3,3.3,4.7,1.6,1],[4.9,2.4,3.3,1.0,1],[6.6,2.9,4.6,1.3,1],[5.2,2.7,3.9,1.4,1],
+    [5.0,2.0,3.5,1.0,1],[5.9,3.0,4.2,1.5,1],[6.0,2.2,4.0,1.0,1],[6.1,2.9,4.7,1.4,1],[5.6,2.9,3.6,1.3,1],
+    [6.7,3.1,4.4,1.4,1],[5.6,3.0,4.5,1.5,1],[5.8,2.7,4.1,1.0,1],[6.2,2.2,4.5,1.5,1],[5.6,2.5,3.9,1.1,1],
+    [5.9,3.2,4.8,1.8,1],[6.1,2.8,4.0,1.3,1],[6.3,2.5,4.9,1.5,1],[6.1,2.8,4.7,1.2,1],[6.4,2.9,4.3,1.3,1],
+    [6.6,3.0,4.4,1.4,1],[6.8,2.8,4.8,1.4,1],[6.7,3.0,5.0,1.7,1],[6.0,2.9,4.5,1.5,1],[5.7,2.6,3.5,1.0,1],
+    [5.5,2.4,3.8,1.1,1],[5.5,2.4,3.7,1.0,1],[5.8,2.7,3.9,1.2,1],[6.0,2.7,5.1,1.6,1],[5.4,3.0,4.5,1.5,1],
+    [6.0,3.4,4.5,1.6,1],[6.7,3.1,4.7,1.5,1],[6.3,2.3,4.4,1.3,1],[5.6,3.0,4.1,1.3,1],[5.5,2.5,4.0,1.3,1],
+    [5.5,2.6,4.4,1.2,1],[6.1,3.0,4.6,1.4,1],[5.8,2.6,4.0,1.2,1],[5.0,2.3,3.3,1.0,1],[5.6,2.7,4.2,1.3,1],
+    [5.7,3.0,4.2,1.2,1],[5.7,2.9,4.2,1.3,1],[6.2,2.9,4.3,1.3,1],[5.1,2.5,3.0,1.1,1],[5.7,2.8,4.1,1.3,1],
+    [6.3,3.3,6.0,2.5,2],[5.8,2.7,5.1,1.9,2],[7.1,3.0,5.9,2.1,2],[6.3,2.9,5.6,1.8,2],[6.5,3.0,5.8,2.2,2],
+    [7.6,3.0,6.6,2.1,2],[4.9,2.5,4.5,1.7,2],[7.3,2.9,6.3,1.8,2],[6.7,2.5,5.8,1.8,2],[7.2,3.6,6.1,2.5,2],
+    [6.5,3.2,5.1,2.0,2],[6.4,2.7,5.3,1.9,2],[6.8,3.0,5.5,2.1,2],[5.7,2.5,5.0,2.0,2],[5.8,2.8,5.1,2.4,2],
+    [6.4,3.2,5.3,2.3,2],[6.5,3.0,5.5,1.8,2],[7.7,3.8,6.7,2.2,2],[7.7,2.6,6.9,2.3,2],[6.0,2.2,5.0,1.5,2],
+    [6.9,3.2,5.7,2.3,2],[5.6,2.8,4.9,2.0,2],[7.7,2.8,6.7,2.0,2],[6.3,2.7,4.9,1.8,2],[6.7,3.3,5.7,2.1,2],
+    [7.2,3.2,6.0,1.8,2],[6.2,2.8,4.8,1.8,2],[6.1,3.0,4.9,1.8,2],[6.4,2.8,5.6,2.1,2],[7.2,3.0,5.8,1.6,2],
+    [7.4,2.8,6.1,1.9,2],[7.9,3.8,6.4,2.0,2],[6.4,2.8,5.6,2.2,2],[6.3,2.8,5.1,1.5,2],[6.1,2.6,5.6,1.4,2],
+    [7.7,3.0,6.1,2.3,2],[6.3,3.4,5.6,2.4,2],[6.4,3.1,5.5,1.8,2],[6.0,3.0,4.8,1.8,2],[6.9,3.1,5.4,2.1,2],
+    [6.7,3.1,5.6,2.4,2],[6.9,3.1,5.1,2.3,2],[5.8,2.7,5.1,1.9,2],[6.8,3.2,5.9,2.3,2],[6.7,3.3,5.7,2.5,2],
+    [6.7,3.0,5.2,2.3,2],[6.3,2.5,5.0,1.9,2],[6.5,3.0,5.2,2.0,2],[6.2,3.4,5.4,2.3,2],[5.9,3.0,5.1,1.8,2],
+];
+
+// ── 2. Shuffle + 80/20 train/test split ────────────────────────────────────
+var rng = new Random(seed: 42);
+iris = iris.OrderBy(_ => rng.Next()).ToArray();
+int trainSize = (int)(iris.Length * 0.8);
+
+// ── 3. Pack into tensors (one-hot labels for 3-class softmax target). ─────
+Tensor<double> Pack(double[][] rows, bool features)
 {
-    { 0, 0 },
-    { 0, 1 },
-    { 1, 0 },
-    { 1, 1 }
-};
-
-var outputs = new double[,]
-{
-    { 0 },
-    { 1 },
-    { 1 },
-    { 0 }
-};
-
-// Convert to tensors
-var features = new Tensor<double>(new int[] { 4, 2 });
-var labels = new Tensor<double>(new int[] { 4, 1 });
-
-for (int i = 0; i < 4; i++)
-{
-    for (int j = 0; j < 2; j++)
-        features[new int[] { i, j }] = inputs[i, j];
-    labels[new int[] { i, 0 }] = outputs[i, 0];
-}
-
-// Build and train the model using the facade pattern
-Console.WriteLine("Building neural network using AiModelBuilder...");
-Console.WriteLine("  Architecture: 2 inputs -> 8 hidden (ReLU) -> 1 output (Sigmoid)\n");
-
-try
-{
-    // Create the neural network architecture
-    var architecture = new NeuralNetworkArchitecture<double>(
-        inputFeatures: 2,
-        numClasses: 1,
-        complexity: NetworkComplexity.Simple
-    );
-
-    var neuralNetwork = new NeuralNetwork<double>(architecture);
-
-    // Use the AiModelBuilder facade to build and train the model
-    var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
-        .ConfigureModel(neuralNetwork);
-
-    Console.WriteLine("Training...");
-    var result = await builder.BuildAsync(features, labels);
-
-    // Make predictions using the result object (facade pattern)
-    Console.WriteLine("\nPredictions:");
-    Console.WriteLine("─────────────────────────────────────");
-
-    var predictions = result.Predict(features);
-
-    string[] inputLabels = { "[0, 0]", "[0, 1]", "[1, 0]", "[1, 1]" };
-    double[] expected = { 0, 1, 1, 0 };
-
-    for (int i = 0; i < 4; i++)
+    int n = rows.Length, d = features ? 4 : 3;
+    var t = new Tensor<double>(new[] { n, d });
+    for (int i = 0; i < n; i++)
     {
-        double prediction = predictions[new int[] { i, 0 }];
-        double exp = expected[i];
-        string status = Math.Abs(prediction - exp) < 0.5 ? "✓" : "✗";
-
-        Console.WriteLine($"  {inputLabels[i]} => {prediction:F2} (expected: {exp}) {status}");
+        if (features)
+            for (int j = 0; j < 4; j++) t[new[] { i, j }] = rows[i][j];
+        else
+            t[new[] { i, (int)rows[i][4] }] = 1.0;   // one-hot label
     }
-
-    // Display metrics through the result object
-    if (result.OptimizationResult != null)
-    {
-        Console.WriteLine($"\nFinal Loss: {result.OptimizationResult.BestFitness:F4}");
-    }
+    return t;
 }
-catch (Exception ex)
+
+var trainX = Pack(iris[..trainSize], features: true);
+var trainY = Pack(iris[..trainSize], features: false);
+var testX  = Pack(iris[trainSize..], features: true);
+var testY  = Pack(iris[trainSize..], features: false);
+
+// ── 4. Build + train. ──────────────────────────────────────────────────────
+var architecture = new NeuralNetworkArchitecture<double>(
+    inputFeatures: 4, numClasses: 3, complexity: NetworkComplexity.Simple);
+
+var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
+    .ConfigureModel(new NeuralNetwork<double>(architecture))
+    .BuildAsync(trainX, trainY);
+
+// ── 5. Evaluate test accuracy. ─────────────────────────────────────────────
+var predictions = result.Predict(testX);
+int correct = 0, n = iris.Length - trainSize;
+for (int i = 0; i < n; i++)
 {
-    Console.WriteLine($"Note: Full training requires complete model implementation.");
-    Console.WriteLine($"This sample demonstrates the facade pattern API for neural networks.");
-    Console.WriteLine($"\nError details: {ex.Message}");
+    int predicted = 0; double best = predictions[new[] { i, 0 }];
+    for (int c = 1; c < 3; c++)
+    {
+        double p = predictions[new[] { i, c }];
+        if (p > best) { best = p; predicted = c; }
+    }
+    int actual = (int)iris[trainSize + i][4];
+    if (predicted == actual) correct++;
 }
 
-Console.WriteLine("\n=== Sample Complete ===");
+Console.WriteLine($"Test accuracy: {correct}/{n} = {100.0 * correct / n:F1}%");
+Console.WriteLine($"Final loss:    {result.OptimizationResult?.BestFitness:F4}");

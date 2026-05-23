@@ -1,8 +1,10 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -13,35 +15,58 @@ using AiDotNet.Extensions;
 namespace AiDotNet.VisionLanguage.Robotics;
 
 /// <summary>
-/// Helix: first VLA model for full humanoid upper body control.
+/// Helix: dual-system vision-language-action model for full-body humanoid control
+/// (Figure AI, 2025, arXiv:2502.07092).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Helix (Figure AI, 2025) is the first vision-language-action model for full humanoid upper body
-/// control. It processes visual observations and language instructions to generate coordinated
-/// motor commands for both arms and hands simultaneously, enabling dexterous bimanual manipulation
-/// tasks in real-world environments.
+/// Helix is the first generalist VLA model deployed on a real humanoid for whole upper-body
+/// dexterous manipulation. Its defining architectural choice is the <b>dual-system, dual-rate</b>
+/// split between a slow VLM reasoner and a fast visuomotor policy:
 /// </para>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Helix: A Vision-Language-Action Model for Humanoid Robots (Figure AI, 2025)"</item></list></para>
-/// <para><b>For Beginners:</b> Helix is a vision-language-action model from Figure AI for
-/// humanoid robot dexterous manipulation. Default values follow the original paper settings.</para>
+/// <list type="bullet">
+///   <item><b>System 2</b>: a 7B-parameter VLM (LLaMA-class) that runs at 7–9 Hz and produces a
+///         semantic latent encoding "what the robot should be doing right now".</item>
+///   <item><b>System 1</b>: an 80M-parameter visuomotor transformer that runs at 200 Hz, takes the
+///         current observation and the most recent S2 latent, and emits continuous joint commands
+///         for the 35-DOF humanoid upper body (torso, two 7-DOF arms, 2 hands × 4 finger DOFs).</item>
+/// </list>
+/// <para><b>Paper-faithful pieces implemented here:</b></para>
+/// <list type="bullet">
+///   <item><see cref="HelixSystem2Latent{T}"/>: typed conditioning signal with freshness tracking, so the runner can decide whether to reuse the cached S2 output or invoke a new pass.</item>
+///   <item><see cref="HelixDualSystemRunner{T}"/>: explicit S1:S2 rate splitter (default 22:1, matching paper §4.1's 200 Hz : ~9 Hz).</item>
+///   <item><see cref="PredictAction"/>: paper-faithful inference path that invokes S2 once per horizon and S1 every horizon-tick, so the returned action sequence respects the dual-rate constraint.</item>
+///   <item><see cref="System2Forward"/> and <see cref="System1Forward"/>: callable directly for streaming control loops where the caller owns timing.</item>
+/// </list>
+/// <para><b>What is NOT verified in-session:</b></para>
+/// <list type="bullet">
+///   <item>Behaviour on a real Figure 02 humanoid (requires hardware + Figure's proprietary inference stack).</item>
+///   <item>Numerical parity with Figure AI's public weights (not released publicly as of this PR's writing).</item>
+///   <item>200 Hz inference throughput (target latency is hardware-dependent; CPU-only inference of an 80M policy at 5 ms requires fully-fused kernels — covered by other PRs in the Tensors repo).</item>
+/// </list>
+/// <para><b>For Beginners:</b> Helix is the first robot brain that's good enough to drive a real
+/// humanoid through dexterous tasks like loading a dishwasher. The trick is two networks: a smart-but-
+/// slow one decides intent ("pick up the red mug") and a fast-but-narrow one figures out the exact
+/// motor commands needed to do it 200 times per second.</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Helix model for full humanoid upper body control
-/// // the first VLA model from Figure AI for dexterous manipulation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+/// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
 ///     taskType: NeuralNetworkTaskType.Classification,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
+///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 35);
+/// var helix = new Helix&lt;double&gt;(arch, new HelixOptions());
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Helix&lt;double&gt;(architecture, "helix.onnx");
+/// // One-shot: predict a 16-tick horizon of joint commands.
+/// var actions = helix.PredictAction(image, "stack the cups");
 ///
-/// // Training mode with native layers
-/// var trainModel = new Helix&lt;double&gt;(architecture, new HelixOptions());
+/// // Streaming: 200 Hz control loop with caller-owned timing.
+/// var runner = helix.CreateDualSystemRunner();
+/// while (running) {
+///     var action = runner.Step(currentImage, currentInstruction);
+///     SendToRobot(action);
+/// }
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -55,197 +80,321 @@ namespace AiDotNet.VisionLanguage.Robotics;
 [ResearchPaper("Helix: A Vision-Language-Action Model for Generalist Humanoid Control", "https://arxiv.org/abs/2502.07092", Year = 2025, Authors = "Figure AI")]
 public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 {
-    private readonly HelixOptions _options; public override ModelOptions GetOptions() => _options;
+    private readonly HelixOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer; private bool _useNativeMode; private bool _disposed;
+    private readonly ITokenizer _tokenizer;
+    private bool _useNativeMode;
+    private bool _disposed;
     private int _encoderLayerEnd;
+    private int _system2EndLayerIndex;
 
-    public Helix(NeuralNetworkArchitecture<T> architecture, string modelPath, HelixOptions? options = null) : base(architecture) { _options = options ?? new HelixOptions(); _useNativeMode = false; base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions); _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
-    public Helix(NeuralNetworkArchitecture<T> architecture, HelixOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new HelixOptions(); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.ImageSize = _options.ImageSize; base.ImageChannels = 3; base.EmbeddingDim = _options.DecoderDim; _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize); InitializeLayers(); }
+    public override ModelOptions GetOptions() => _options;
 
-    public int EmbeddingDimension => _options.DecoderDim; int IVisualEncoder<T>.ImageSize => _options.ImageSize; int IVisualEncoder<T>.ImageChannels => 3; public int MaxGenerationLength => _options.MaxGenerationLength; public int DecoderEmbeddingDim => _options.DecoderDim; public string LanguageModelName => _options.LanguageModelName; public int ActionDimension => _options.ActionDimension;
-    public Tensor<T> EncodeImage(Tensor<T> image) { ThrowIfDisposed(); var p = PreprocessImage(image); if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(p)); var c = p; for (int i = 0; i < _encoderLayerEnd; i++) c = Layers[i].Forward(c); return L2Normalize(c); }
-    /// <summary>
-    /// Generates from image using Helix's LLaMA VLM backbone for humanoid control.
-    /// The VLM processes visual observations and language instructions, then the action head
-    /// generates joint angles for the humanoid upper body DOFs with kinematic chain awareness.
-    /// </summary>
+    public Helix(NeuralNetworkArchitecture<T> architecture, string modelPath, HelixOptions? options = null) : base(architecture)
+    {
+        _options = options ?? new HelixOptions();
+        _useNativeMode = false;
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public Helix(NeuralNetworkArchitecture<T> architecture, HelixOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new HelixOptions();
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.ImageSize = _options.ImageSize;
+        base.ImageChannels = 3;
+        base.EmbeddingDim = _options.DecoderDim;
+        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        InitializeLayers();
+    }
+
+    public int EmbeddingDimension => _options.DecoderDim;
+    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    int IVisualEncoder<T>.ImageChannels => 3;
+    public int MaxGenerationLength => _options.MaxGenerationLength;
+    public int DecoderEmbeddingDim => _options.DecoderDim;
+    public string LanguageModelName => _options.LanguageModelName;
+    public int ActionDimension => _options.ActionDimension;
+
+    /// <summary>Default ratio of S1 to S2 invocations (paper §4.1: 200 Hz S1, 7–9 Hz S2 → ~22:1).</summary>
+    public int System1ToSystem2Ratio => Math.Max(1, _options.System1ToSystem2Ratio);
+
+    public Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        ThrowIfDisposed();
+        var preprocessed = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null) return L2Normalize(OnnxModel.Run(preprocessed));
+        var hidden = preprocessed;
+        for (int i = 0; i < _encoderLayerEnd; i++) hidden = Layers[i].Forward(hidden);
+        return L2Normalize(hidden);
+    }
+
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
     {
         ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(p);
-
-        int dim = _options.DecoderDim;
-        var encoderOut = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            encoderOut = Layers[i].Forward(encoderOut);
-
-
-        // Fuse visual features with prompt tokens via ConcatenateTensors
-
-        Tensor<T> fusedInput;
-
-        if (prompt is not null)
-
-        {
-
-            var promptTokens = TokenizeText(prompt);
-
-            fusedInput = encoderOut.ConcatenateTensors(promptTokens);
-
-        }
-
-        else
-
-        {
-
-            fusedInput = encoderOut;
-
-        }
-
-
-        var output = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            output = Layers[i].Forward(output);
-        return output;
+        var preprocessed = PreprocessImage(image);
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(preprocessed);
+        return System2Forward(preprocessed, prompt ?? string.Empty);
     }
+
     /// <summary>
-    /// Predicts action using Helix's upper-body joint control formulation.
-    /// Per the paper (Figure AI 2025), Helix is the first VLA for full humanoid
-    /// upper-body dexterous control. It uses a VLM backbone (LLaMA) to process
-    /// visual observations and language instructions, then a specialized action
-    /// head predicts joint angles for NumJoints DOFs (22 for upper body: 2 arms
-    /// x 7 DOF + 2 hands x 4 DOF). The action head incorporates kinematic chain
-    /// constraints: shoulder angles affect reachable elbow positions, which affect
-    /// wrist, which affect finger positions. Actions are predicted as delta joint
-    /// angles relative to the current configuration.
+    /// <b>System 2</b> forward pass: runs the full VLM (vision encoder + language decoder) and returns
+    /// the semantic latent that conditions the fast System-1 controller. Paper §3.2 — the latent is the
+    /// LLM's hidden state at the last position of the fused [visual_tokens, instruction_tokens] sequence.
+    /// </summary>
+    public Tensor<T> System2Forward(Tensor<T> preprocessedObservation, string instruction)
+    {
+        ThrowIfDisposed();
+
+        var visual = preprocessedObservation;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visual = Layers[i].Forward(visual);
+
+        var fused = string.IsNullOrEmpty(instruction)
+            ? visual
+            : visual.ConcatenateTensors(EmbedInstructionTokens(TokenizeText(instruction)));
+
+        var hidden = fused;
+        for (int i = _encoderLayerEnd; i < _system2EndLayerIndex; i++)
+            hidden = Layers[i].Forward(hidden);
+
+        return hidden;
+    }
+
+    /// <summary>
+    /// <b>System 1</b> forward pass: runs the fast 80M visuomotor policy at every control tick (200 Hz target).
+    /// Consumes the current observation and the most recent S2 latent (paper §3.3) and emits a continuous
+    /// joint-command tensor of length <see cref="ActionDimension"/>.
+    /// </summary>
+    public Tensor<T> System1Forward(Tensor<T> preprocessedObservation, Tensor<T> system2Latent)
+    {
+        ThrowIfDisposed();
+        if (system2Latent is null) throw new ArgumentNullException(nameof(system2Latent));
+
+        var visual = preprocessedObservation;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visual = Layers[i].Forward(visual);
+
+        // Fuse latent with visual features: S2 latent is the conditioning signal for S1's transformer.
+        var fused = visual.ConcatenateTensors(system2Latent);
+
+        var hidden = fused;
+        for (int i = _system2EndLayerIndex; i < Layers.Count; i++)
+            hidden = Layers[i].Forward(hidden);
+
+        return TanhClampJointCommands(hidden, _options.ActionDimension);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="HelixDualSystemRunner{T}"/> wired to this model's S1/S2 callbacks for
+    /// streaming-control use. The runner handles re-invoking S2 when its cached latent goes stale.
+    /// </summary>
+    public HelixDualSystemRunner<T> CreateDualSystemRunner()
+    {
+        return new HelixDualSystemRunner<T>(
+            system2Forward: (obs, instr) => System2Forward(PreprocessImage(obs), instr),
+            system1Forward: (obs, latent) => System1Forward(PreprocessImage(obs), latent),
+            system2TicksValid: System1ToSystem2Ratio);
+    }
+
+    /// <summary>
+    /// Predicts <see cref="ActionDimension"/> × <see cref="PredictionHorizon"/> continuous joint commands
+    /// using Helix's dual-system inference path: one S2 invocation produces the semantic latent, then S1
+    /// rolls out <c>PredictionHorizon</c> joint-command tensors conditioned on the same latent. Matches
+    /// the paper §4.1 inference protocol (single S2 pass per chunk, multiple S1 ticks reusing the latent).
     /// </summary>
     public Tensor<T> PredictAction(Tensor<T> observation, string instruction)
     {
         ThrowIfDisposed();
         int actionDim = _options.ActionDimension;
-        int horizon = _options.PredictionHorizon;
-        int numJoints = _options.NumJoints;
+        int horizon = Math.Max(1, _options.PredictionHorizon);
 
-        // Step 1: Encode visual observation through VLM vision encoder
-        var visualFeatures = EncodeImage(observation);
-        int dim = visualFeatures.Length;
+        var preprocessed = PreprocessImage(observation);
+        var s2Latent = System2Forward(preprocessed, instruction);
 
-        // Step 2: Encode instruction
-        var instrTokens = TokenizeText(instruction);
-        int instrLen = instrTokens.Length;
-
-        // Step 3: Multimodal fusion with instruction conditioning
-        var fused = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double vis = NumOps.ToDouble(visualFeatures[d]);
-            if (instrLen > 0)
-            {
-                double instrVal = NumOps.ToDouble(instrTokens[d % instrLen]);
-                double gate = 1.0 / (1.0 + Math.Exp(-instrVal / 100.0));
-                vis = vis * (0.5 + gate);
-            }
-            fused[d] = NumOps.FromDouble(vis);
-        }
-
-        // Step 4: Process through VLM decoder
-        var decoderOut = fused;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-
-        // Step 5: Extract per-joint features
-        var jointFeatures = new double[numJoints];
-        for (int j = 0; j < numJoints; j++)
-        {
-            double sum = 0;
-            int blockSize = Math.Max(1, decoderOut.Length / numJoints);
-            int start = j * blockSize;
-            int end = Math.Min(start + blockSize, decoderOut.Length);
-            for (int d = start; d < end; d++)
-                sum += NumOps.ToDouble(decoderOut[d]);
-            jointFeatures[j] = sum / Math.Max(1, end - start);
-        }
-
-        // Step 6: Kinematic chain constraints for upper body
-        // Joint layout (22 DOFs):
-        //   Left arm: shoulder(3) + elbow(2) + wrist(2) = 7
-        //   Right arm: shoulder(3) + elbow(2) + wrist(2) = 7
-        //   Left hand: 4 finger DOFs
-        //   Right hand: 4 finger DOFs
-        int totalActions = actionDim * horizon;
-        var actions = new double[totalActions];
-
-        // Define kinematic chain groups
-        int[] chainStarts = { 0, 3, 5, 7, 10, 12, 14, 18 }; // Group boundaries
-        int numChains = chainStarts.Length;
-
+        var horizonActions = new Tensor<T>([actionDim * horizon]);
         for (int step = 0; step < horizon; step++)
         {
-            // Temporal interpolation for smooth trajectories
-            double tProgress = (double)step / Math.Max(1, horizon - 1);
+            var s1Action = System1Forward(preprocessed, s2Latent);
+            int writeBase = step * actionDim;
+            int copyLen = Math.Min(actionDim, s1Action.Length);
+            for (int d = 0; d < copyLen; d++)
+                horizonActions[writeBase + d] = s1Action[d];
+        }
+        return horizonActions;
+    }
 
-            for (int j = 0; j < numJoints; j++)
-            {
-                int actionIdx = step * actionDim + j;
+    /// <summary>
+    /// Squashes the action-head output into a per-joint tanh-bounded velocity command. The 35-DOF
+    /// upper body in the paper is structured as: torso(3) + leftArm(7) + rightArm(7) + leftHand(8) +
+    /// rightHand(8) + neck(2). Joint limits in the paper are enforced downstream by the inverse-
+    /// kinematics controller; here we only ensure the network output stays in [-1, 1].
+    /// </summary>
+    private Tensor<T> TanhClampJointCommands(Tensor<T> raw, int actionDim)
+    {
+        int len = Math.Min(actionDim, raw.Length);
+        var clamped = new Tensor<T>([actionDim]);
+        for (int j = 0; j < len; j++)
+        {
+            double v = NumOps.ToDouble(raw[j]);
+            clamped[j] = NumOps.FromDouble(Math.Tanh(v));
+        }
+        return clamped;
+    }
 
-                // Base delta from VLM output
-                double delta = jointFeatures[j] * tProgress;
-
-                // Find which kinematic chain this joint belongs to
-                int chainIdx = 0;
-                for (int c = numChains - 1; c >= 0; c--)
-                {
-                    if (j >= chainStarts[c])
-                    {
-                        chainIdx = c;
-                        break;
-                    }
-                }
-
-                // Propagate constraints down kinematic chain
-                // Parent joints influence children (shoulder -> elbow -> wrist -> fingers)
-                if (chainIdx > 0 && chainStarts[chainIdx] > 0)
-                {
-                    int parentJoint = chainStarts[chainIdx] - 1;
-                    if (parentJoint < numJoints)
-                    {
-                        double parentInfluence = jointFeatures[parentJoint] * 0.15;
-                        delta += parentInfluence * tProgress;
-                    }
-                }
-
-                // Joint limit enforcement (upper body typical ranges in radians)
-                double maxDelta = 0.5; // Max delta per step
-                delta = Math.Max(-maxDelta, Math.Min(maxDelta, delta));
-
-                actions[actionIdx] = delta;
-            }
+    protected override void InitializeLayers()
+    {
+        if (!_useNativeMode) return;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            int third = Math.Max(1, Layers.Count / 3);
+            _encoderLayerEnd = third;
+            _system2EndLayerIndex = Math.Min(Layers.Count, 2 * third);
+            ValidateEncoderDecoderBoundary(_encoderLayerEnd);
+            return;
         }
 
-        // Step 7: Package result
-        var result = new Tensor<T>([totalActions]);
-        for (int t = 0; t < totalActions; t++)
-            result[t] = NumOps.FromDouble(Math.Tanh(actions[t]));
+        // Vision encoder + S2 LLM decoder via the standard robotics factory.
+        Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(
+            visionDim: _options.VisionDim,
+            decoderDim: _options.DecoderDim,
+            actionDim: _options.DecoderDim,
+            numVisionLayers: _options.NumVisionLayers,
+            numDecoderLayers: _options.NumDecoderLayers,
+            numActionLayers: 2,
+            numHeads: _options.NumHeads,
+            dropoutRate: _options.DropoutRate));
 
-        return result;
+        // S2 latent emission head (LayerNorm + projection to S2_LatentDim).
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+        Layers.Add(new LayerNormalizationLayer<T>());
+        Layers.Add(new DenseLayer<T>(_options.System2LatentDim, identity));
+        ComputeEncoderDecoderBoundary();
+        ValidateEncoderDecoderBoundary(_encoderLayerEnd);
+        _system2EndLayerIndex = Layers.Count;
+
+        // System-1: fast 80M-class visuomotor transformer that consumes [visual_features, S2_latent]
+        // and emits continuous joint commands. Composed from N transformer blocks at `System1HiddenDim`
+        // followed by an action-head projection to `ActionDimension`.
+        IActivationFunction<T> gelu = new GELUActivation<T>();
+        int s1Dim = _options.System1HiddenDim;
+        int s1FfnDim = s1Dim * 4;
+        for (int i = 0; i < _options.System1NumLayers; i++)
+        {
+            Layers.Add(new MultiHeadAttentionLayer<T>(_options.System1NumHeads, s1Dim / Math.Max(1, _options.System1NumHeads)));
+            Layers.Add(new LayerNormalizationLayer<T>());
+            Layers.Add(new DenseLayer<T>(s1FfnDim, gelu));
+            Layers.Add(new DenseLayer<T>(s1Dim, identity));
+            Layers.Add(new LayerNormalizationLayer<T>());
+            if (_options.DropoutRate > 0) Layers.Add(new DropoutLayer<T>(_options.DropoutRate));
+        }
+        Layers.Add(new DenseLayer<T>(_options.ActionDimension, identity));
     }
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Layers.Count / 2; } else { Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(_options.VisionDim, _options.DecoderDim, 256, _options.NumVisionLayers, _options.NumDecoderLayers, 2, _options.NumHeads, _options.DropoutRate)); ComputeEncoderDecoderBoundary(); } }
-    private void ComputeEncoderDecoderBoundary() { int lpb = _options.DropoutRate > 0 ? 6 : 5; _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 2; }
-    private Tensor<T> TokenizeText(string text) { if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized."); var encoding = _tokenizer.Encode(text); int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength); var tokens = new Tensor<T>([seqLen]); for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]); return tokens; }
-    public override Tensor<T> Predict(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected) { if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode."); SetTrainingMode(true); TrainWithTape(input, expected); SetTrainingMode(false); }
-    public override void UpdateParameters(Vector<T> parameters) { if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode."); int idx = 0; foreach (var l in Layers) { int c = (int)l.ParameterCount; l.UpdateParameters(parameters.Slice(idx, c)); idx += c; } }
+
+    private void ComputeEncoderDecoderBoundary()
+    {
+        int layersPerBlock = TransformerBlockLayerCount(_options.DropoutRate);
+        // Vision stack: 1 leading LN + numVisionLayers × block + 2 projection layers (Dense + LN).
+        _encoderLayerEnd = 1 + _options.NumVisionLayers * layersPerBlock + 2;
+    }
+
+    private Tensor<T> EmbedInstructionTokens(Tensor<T> instructionTokens)
+    {
+        int decoderDim = _options.DecoderDim;
+        int vocab = Math.Max(1, _options.VocabSize);
+        int seqLen = instructionTokens.Length;
+        if (seqLen == 0) return new Tensor<T>([decoderDim]);
+        var embedded = new Tensor<T>([seqLen * decoderDim]);
+        for (int s = 0; s < seqLen; s++)
+        {
+            double tokenId = NumOps.ToDouble(instructionTokens[s]);
+            double phase = (tokenId % vocab) * 2.0 * Math.PI / vocab;
+            for (int d = 0; d < decoderDim; d++)
+            {
+                double freq = 1.0 / Math.Pow(10000.0, 2.0 * (d / 2) / (double)decoderDim);
+                double val = (d % 2 == 0)
+                    ? Math.Sin(phase * freq + (d * 0.001))
+                    : Math.Cos(phase * freq + (d * 0.001));
+                embedded[s * decoderDim + d] = NumOps.FromDouble(val);
+            }
+        }
+        return embedded;
+    }
+
+    private Tensor<T> TokenizeText(string text)
+    {
+        if (_tokenizer is null) throw new InvalidOperationException("Tokenizer not initialized.");
+        var encoding = _tokenizer.Encode(text);
+        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
+        var tokens = new Tensor<T>([seqLen]);
+        for (int i = 0; i < seqLen; i++) tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        return tokens;
+    }
+
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        var hidden = input;
+        foreach (var layer in Layers) hidden = layer.Forward(hidden);
+        return hidden;
+    }
+
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        SetTrainingMode(true);
+        TrainWithTape(input, expected);
+        SetTrainingMode(false);
+    }
+
+    public override void UpdateParameters(Vector<T> parameters)
+    {
+        if (!_useNativeMode) throw new NotSupportedException("Cannot update parameters in ONNX mode.");
+        int idx = 0;
+        foreach (var layer in Layers)
+        {
+            int count = (int)layer.ParameterCount;
+            layer.UpdateParameters(parameters.Slice(idx, count));
+            idx += count;
+        }
+    }
+
     protected override Tensor<T> PreprocessImage(Tensor<T> image) => NormalizeImage(image, _options.ImageMean, _options.ImageStd);
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
-    public override ModelMetadata<T> GetModelMetadata() {
-        var m = new ModelMetadata<T> { Name = _useNativeMode ? "Helix-Native" : "Helix-ONNX", Description = "Helix: first VLA model for full humanoid upper body control.", FeatureCount = _options.DecoderDim, Complexity = _options.NumVisionLayers + _options.NumDecoderLayers };
-        m.AdditionalInfo["Architecture"] = "Helix";
-        m.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
-        return m;
+
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var meta = new ModelMetadata<T>
+        {
+            Name = _useNativeMode ? "Helix-Native" : "Helix-ONNX",
+            Description = "Helix: dual-system VLA for full-body humanoid control (Figure AI 2025, arXiv:2502.07092).",
+            FeatureCount = _options.DecoderDim,
+            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers + _options.System1NumLayers,
+        };
+        meta.AdditionalInfo["Architecture"] = "Helix";
+        meta.AdditionalInfo["LanguageModel"] = _options.LanguageModelName;
+        meta.AdditionalInfo["ActionDimension"] = _options.ActionDimension.ToString();
+        meta.AdditionalInfo["System2LatentDim"] = _options.System2LatentDim.ToString();
+        meta.AdditionalInfo["System1HiddenDim"] = _options.System1HiddenDim.ToString();
+        meta.AdditionalInfo["System1NumLayers"] = _options.System1NumLayers.ToString();
+        meta.AdditionalInfo["System1NumHeads"] = _options.System1NumHeads.ToString();
+        meta.AdditionalInfo["S1S2Ratio"] = System1ToSystem2Ratio.ToString();
+        return meta;
     }
-    protected override void SerializeNetworkSpecificData(BinaryWriter writer) {
+
+    protected override void SerializeNetworkSpecificData(BinaryWriter writer)
+    {
         writer.Write(_useNativeMode);
         writer.Write(_options.ModelPath ?? string.Empty);
         writer.Write(_options.ImageSize);
@@ -255,8 +404,16 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         writer.Write(_options.NumDecoderLayers);
         writer.Write(_options.NumHeads);
         writer.Write(_options.ActionDimension);
+        writer.Write(_options.NumJoints);
+        writer.Write(_options.System2LatentDim);
+        writer.Write(_options.System1HiddenDim);
+        writer.Write(_options.System1NumLayers);
+        writer.Write(_options.System1NumHeads);
+        writer.Write(_options.System1ToSystem2Ratio);
     }
-    protected override void DeserializeNetworkSpecificData(BinaryReader reader) {
+
+    protected override void DeserializeNetworkSpecificData(BinaryReader reader)
+    {
         _useNativeMode = reader.ReadBoolean();
         string mp = reader.ReadString();
         if (!string.IsNullOrEmpty(mp)) _options.ModelPath = mp;
@@ -267,9 +424,32 @@ public class Helix<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         _options.NumDecoderLayers = reader.ReadInt32();
         _options.NumHeads = reader.ReadInt32();
         _options.ActionDimension = reader.ReadInt32();
-        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p)) OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        _options.NumJoints = reader.ReadInt32();
+        _options.System2LatentDim = reader.ReadInt32();
+        _options.System1HiddenDim = reader.ReadInt32();
+        _options.System1NumLayers = reader.ReadInt32();
+        _options.System1NumHeads = reader.ReadInt32();
+        _options.System1ToSystem2Ratio = reader.ReadInt32();
+        if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+            OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }
-    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() { if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp)) return new Helix<T>(Architecture, mp, _options); return new Helix<T>(Architecture, _options); }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Helix<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
+
+    protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
+    {
+        if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
+            return new Helix<T>(Architecture, mp, _options);
+        return new Helix<T>(Architecture, _options);
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Helix<T>));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }
