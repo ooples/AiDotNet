@@ -84,24 +84,26 @@
 
 	<ItemGroup>
 	  <PackageReference Include="Azure.Search.Documents" />
-	  <!-- Elastic.Clients.Elasticsearch is used by exactly one file in core
-	       (src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs).
-	       audit-2026-05 phase 2b scheduled metapackage extraction: move that file
-	       to a new AiDotNet.Storage.Elasticsearch package (interface IDocumentStore
-	       stays in core; concrete impl moves out). Tracked for follow-up commit
-	       on the same audit branch. Reference kept here until the move happens
-	       so existing builds don't break. -->
-	  <PackageReference Include="Elastic.Clients.Elasticsearch" />
+	  <!-- audit-2026-05 phase 2b: Elasticsearch backend extracted to
+	       src/AiDotNet.Storage.Elasticsearch (consumers add a project /
+	       package reference to AiDotNet.Storage.Elasticsearch to opt in).
+	       Elastic.Clients.Elasticsearch is no longer a transitive dep
+	       of the core package. -->
+	  <!-- <PackageReference Include="Elastic.Clients.Elasticsearch" /> -->
+
 	  <PackageReference Include="Google.Protobuf" />
 	  <PackageReference Include="Microsoft.CSharp" />
 	  <PackageReference Include="Microsoft.Data.Sqlite" />
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime" />
-	  <!-- Microsoft.Research.SEALNet (homomorphic encryption) is used by exactly
-	       one file in core (src/FederatedLearning/Cryptography/SealHomomorphicEncryptionProvider.cs).
-	       audit-2026-05 phase 2b scheduled metapackage extraction: move that file
-	       to a new AiDotNet.Privacy.HE package; core keeps the IHomomorphicEncryption
-	       Provider interface so federated-learning callers can opt in. Tracked
-	       for follow-up commit on the same audit branch. -->
+	  <!-- Microsoft.Research.SEALNet (homomorphic encryption). Used by exactly
+	       one file (src/FederatedLearning/Cryptography/SealHomomorphicEncryptionProvider.cs),
+	       BUT InMemoryFederatedTrainer.cs:183 hard-codes `new SealHomomorphicEncryptionProvider<T>()`
+	       as the default provider when useHomomorphicEncryption=true. Extracting SEAL to its own
+	       package would create a circular project reference unless we also refactor
+	       InMemoryFederatedTrainer to take an IHomomorphicEncryptionProvider factory at
+	       construction time (or fail loudly when useHomomorphicEncryption=true without a factory).
+	       That refactor is a contract change for federated-training callers and is tracked as a
+	       Phase 2b sub-follow-up. SEAL remains a direct dep of core until then. -->
 	  <PackageReference Include="Microsoft.Research.SEALNet" />
 	  <PackageReference Include="Newtonsoft.Json" />
 	  <!-- MatFileHandler — read .mat split/annotation files (SVHN, Stanford Cars, Flowers-102) -->
@@ -160,6 +162,13 @@
 	  <Compile Remove="AiDotNet.Dashboard\**\*.cs" />
 	  <EmbeddedResource Remove="AiDotNet.Dashboard\**\*" />
 	  <None Remove="AiDotNet.Dashboard\**\*" />
+	</ItemGroup>
+
+	<!-- Exclude the AiDotNet.Storage.Elasticsearch metapackage (audit-2026-05 phase 2b extraction). -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Storage.Elasticsearch\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Storage.Elasticsearch\**\*" />
+	  <None Remove="AiDotNet.Storage.Elasticsearch\**\*" />
 	</ItemGroup>
 
 	<!-- Exclude the AiDotNet.Playground project files from this project -->
