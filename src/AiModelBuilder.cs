@@ -156,6 +156,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private readonly AiDotNet.Configuration.IAiModelTrainingCore<T, TInput, TOutput> _trainingCore
         = new AiDotNet.Configuration.AiModelTrainingCore<T, TInput, TOutput>();
 
+    // audit-2026-05 phase 2a slice 3 — cross-validation concern.
+    private readonly AiDotNet.Configuration.IAiModelCrossValidation<T, TInput, TOutput> _crossValidation
+        = new AiDotNet.Configuration.AiModelCrossValidation<T, TInput, TOutput>();
+
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
@@ -5575,7 +5579,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
-        _crossValidator = crossValidator;
+        _crossValidation.ConfigureCrossValidation(crossValidator);
+        _crossValidator = _crossValidation.CrossValidator;
         return this;
     }
 
