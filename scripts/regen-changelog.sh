@@ -67,11 +67,17 @@ gh release list --limit "$LIMIT" --repo "$REPO" \
 RELEASE_COUNT=$(python3 -c "import json; print(len(json.load(open('$TMPJSON'))))")
 echo "Fetched $RELEASE_COUNT releases from $REPO." >&2
 
-python3 - "$TMPJSON" <<'PY' >> CHANGELOG.md
+python3 - "$TMPJSON" "$REPO" <<'PY' >> CHANGELOG.md
 import json, sys
 
 with open(sys.argv[1]) as f:
     releases = json.load(f)
+
+# Use the same repo slug the gh CLI was called with so links route
+# correctly when GITHUB_REPOSITORY / REPO is overridden (forks,
+# downstream mirrors). Previously hardcoded "ooples/AiDotNet" produced
+# broken release links any time the workflow ran outside that repo.
+repo = sys.argv[2]
 
 # Sort newest-first by publishedAt (gh already does this but make it explicit)
 releases.sort(key=lambda r: r.get("publishedAt") or "", reverse=True)
@@ -92,7 +98,7 @@ for r in releases:
         # summary; per-commit detail lives on the GitHub release page.
         print(f"_{title}_")
         print()
-    print(f"See https://github.com/ooples/AiDotNet/releases/tag/{tag}")
+    print(f"See https://github.com/{repo}/releases/tag/{tag}")
     print()
 PY
 
