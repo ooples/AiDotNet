@@ -160,6 +160,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private readonly AiDotNet.Configuration.IAiModelCrossValidation<T, TInput, TOutput> _crossValidation
         = new AiDotNet.Configuration.AiModelCrossValidation<T, TInput, TOutput>();
 
+    // audit-2026-05 phase 2a slice 4 — compliance concern (bias, fairness, interpretability,
+    // adversarial robustness, safety filtering).
+    private readonly AiDotNet.Configuration.IAiModelCompliance<T, TInput, TOutput> _compliance
+        = new AiDotNet.Configuration.AiModelCompliance<T, TInput, TOutput>();
+
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
@@ -5141,7 +5146,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector)
     {
-        _biasDetector = detector;
+        _compliance.ConfigureBiasDetector(detector);
+        _biasDetector = _compliance.BiasDetector;
         return this;
     }
 
@@ -5158,7 +5164,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
     {
-        _fairnessEvaluator = evaluator;
+        _compliance.ConfigureFairnessEvaluator(evaluator);
+        _fairnessEvaluator = _compliance.FairnessEvaluator;
         return this;
     }
 
@@ -5202,7 +5209,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureInterpretability(InterpretabilityOptions? options = null)
     {
-        _interpretabilityOptions = options ?? new InterpretabilityOptions();
+        _compliance.ConfigureInterpretability(options);
+        _interpretabilityOptions = _compliance.InterpretabilityOptions;
         return this;
     }
 
@@ -5259,7 +5267,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
         AdversarialRobustnessConfiguration<T, TInput, TOutput>? configuration = null)
     {
-        _adversarialRobustnessConfiguration = configuration ?? new AdversarialRobustnessConfiguration<T, TInput, TOutput>();
+        _compliance.ConfigureAdversarialRobustness(configuration);
+        _adversarialRobustnessConfiguration = _compliance.AdversarialRobustnessConfiguration;
         return this;
     }
 
@@ -6582,8 +6591,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSafety(Action<AiDotNet.Safety.SafetyConfig>? configure = null)
     {
-        _safetyPipelineConfig = new AiDotNet.Safety.SafetyConfig();
-        configure?.Invoke(_safetyPipelineConfig);
+        _compliance.ConfigureSafety(configure);
+        _safetyPipelineConfig = _compliance.SafetyPipelineConfig;
         return this;
     }
 
