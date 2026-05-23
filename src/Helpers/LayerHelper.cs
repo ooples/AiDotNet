@@ -22384,14 +22384,31 @@ public static class LayerHelper<T>
         var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
         var reluActivation = (IActivationFunction<T>)new ReLUActivation<T>();
 
-        // Conv subsampling
+        // Subsampling: paper-faithful Conformer (Gulati et al. 2020 §2.1)
+        // and Paraformer (Gao et al. 2022 §3.1) use Conv2D subsampling +
+        // LayerNorm. Approximating Conv2D with Dense pairs is a separate
+        // simplification; the normalization MUST stay LayerNorm because
+        // BatchNormalizationLayer<T>'s rank-3 path interprets [B, S, F] as
+        // channels-first [C, H, W] (see BatchNormalizationLayer.OnFirstForward
+        // line 476-482 — rank=3 picks input.Shape[0] which is the batch dim
+        // here, not the feature axis), collapsing featureSize to the batch
+        // size and breaking every downstream MHA contract.
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         yield return new DenseLayer<T>(encoderDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        yield return new LayerNormalizationLayer<T>();
         if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
 
-        // Conformer encoder
+        // Conformer encoder. Pre-norm design with LayerNorm everywhere
+        // (Gulati et al. 2020 §2.1, equation 5). The conv module's
+        // channel-axis BatchNorm — the ONE place in Conformer where BN is
+        // paper-faithful — does not apply here because the helper
+        // approximates the conv module with Dense layers (input is
+        // [B, S, F], not the channels-first [B, C, T] the conv-module
+        // BN would normalize). Sequence-layout BatchNorm on rank-3 input
+        // hits the same OnFirstForward mis-routing as the subsampling
+        // block above. Replace with LayerNorm to match the rest of the
+        // pre-norm chain.
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new DenseLayer<T>(feedForwardDim, geluActivation);
@@ -22401,15 +22418,26 @@ public static class LayerHelper<T>
             yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (encoderDim) / (numAttentionHeads));
             yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim * 2, geluActivation);
-            yield return new BatchNormalizationLayer<T>();
+            yield return new LayerNormalizationLayer<T>();
             yield return new DenseLayer<T>(encoderDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
         }
         yield return new LayerNormalizationLayer<T>();
 
-        // CIF (Continuous Integrate-and-Fire) alignment module
-        yield return new DenseLayer<T>(1, identityActivation);
-        yield return new LayerNormalizationLayer<T>();
+        // CIF (Continuous Integrate-and-Fire) alignment per Gao et al.
+        // 2022 "Paraformer" §3.2 / Algorithm 1. Predicts per-timestep
+        // fire weights α_t via a learnable Dense+Sigmoid branch and
+        // accumulates encoder hidden states until cumulative α crosses
+        // a unit-mass threshold (1.0), emitting one aligned acoustic
+        // embedding per crossing. See CifAlignmentLayer<T> for the full
+        // integrate-and-fire algorithm + tail-emission handling.
+        //
+        // Output is the same time-axis length as the input: each α_t ∈
+        // [0, 1] gives at most one fire per step, so S is a safe upper
+        // bound on N (the predicted token count). Unused trailing
+        // slots are zero-padded — downstream MHA / cross-attention
+        // ignores them through standard padding-mask handling.
+        yield return new CifAlignmentLayer<T>(encoderDim);
 
         // Paraformer decoder (non-autoregressive)
         if (encoderDim != decoderDim)
