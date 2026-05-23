@@ -186,7 +186,9 @@ public class OnlineTeacherModel<T> : TeacherModelBase<Vector<T>, Vector<T>, T>
                 break;
 
             default:
-                throw new ArgumentOutOfRangeException(nameof(_updateMode), _updateMode, $"Unrecognised OnlineUpdateMode '{_updateMode}'. Valid modes: ExponentialMovingAverage, GradientBased, MomentumBased.");
+                throw new ArgumentOutOfRangeException(nameof(_updateMode), _updateMode,
+                    $"Unrecognised OnlineUpdateMode '{_updateMode}'. Valid modes: "
+                    + "EMA, GradientBased, MomentumBased.");
         }
     }
 
