@@ -149,7 +149,7 @@ public class SenseVoiceTrainStepProfile
             $"SenseVoice ForwardForTraining took {forwardTrainingAvgMs:F0} ms — over the "
             + $"{ForwardForTrainingBudgetMs:F0} ms budget. The tape-recording forward path is regressing; "
             + "check whether a layer's training-mode forward is doing extra work that the inference-mode "
-            + "forward (~{forwardAvgMs:F0} ms above) avoids.");
+            + $"forward (~{forwardAvgMs:F0} ms above) avoids.");
 
         // Derived metric: backward + optimizer = train_step − forward.
         // Replaces the previous hardcoded 4500 ms estimate — now we use
