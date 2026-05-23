@@ -85,7 +85,21 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         : base(new[] { -1, -1, encoderDim }, new[] { -1, -1, encoderDim })
     {
         if (encoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(encoderDim));
-        if (threshold <= 0) throw new ArgumentOutOfRangeException(nameof(threshold));
+        // Reject threshold < 1.0 — the single-fire-per-timestep
+        // assumption baked into the fixed [B, S, D] output shape only
+        // holds when α_t ∈ [0, 1] cannot cross the threshold more
+        // than once. For threshold < 1.0 a single α_t could cross
+        // multiple times; the loop would emit only one token per step
+        // (under-emitting) AND would carry an already-over-threshold
+        // remainder into the next step (further corrupting the
+        // accumulation invariant). The paper's stated value is 1.0;
+        // future support for multi-fire would need either a dynamic
+        // output shape or an inner "drain the remainder" loop.
+        if (threshold < 1.0)
+            throw new ArgumentOutOfRangeException(nameof(threshold), threshold,
+                "threshold must be >= 1.0 — values below 1.0 admit multi-fire-per-timestep " +
+                "which the single-fire output-shape assumption (S as upper bound on N) does not support. " +
+                "Gao 2022 §3.2 prescribes 1.0.");
         if (tailThreshold < 0 || tailThreshold > threshold)
             throw new ArgumentOutOfRangeException(nameof(tailThreshold),
                 $"tailThreshold must be in [0, threshold={threshold}].");
