@@ -13,9 +13,12 @@ This is the fastest path and gives us a structured audit trail.
 ### Alternative: Email
 
 If you cannot use GitHub Security Advisories, email **admin@aidotnet.dev**.
-For sensitive disclosures we strongly recommend encrypting your report with
-our PGP key (see `docs/security/pgp.txt` in this repository, or fetch from
-https://aidotnet.dev/security).
+
+For sensitive disclosures, GitHub Security Advisories above is the
+encrypted path. Direct email currently has transport-layer confidentiality
+only — a dedicated AiDotNet PGP key will be published at
+https://aidotnet.dev/security once generated, and this section will be
+updated with the published key fingerprint at that time.
 
 Please do **not** report security vulnerabilities through public GitHub
 issues, discussions, or any other public forum.
