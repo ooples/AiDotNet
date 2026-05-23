@@ -79,7 +79,12 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     private readonly JanusProOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
-    private readonly JanusVQCodebook<T> _vqCodebook;
+    // Non-readonly so DeserializeNetworkSpecificData can rebuild it
+    // after NumVisualTokens / CodebookEmbeddingDim are overwritten —
+    // otherwise the codebook stays at the constructor-time
+    // dimensions and a deserialised model has shape mismatches every
+    // time GenerateImage tries to look up an embedding.
+    private JanusVQCodebook<T> _vqCodebook;
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
@@ -92,8 +97,10 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     /// <summary>Classifier-free guidance scale used during autoregressive image generation. Paper default 7.0 with light annealing.</summary>
     public double CfgScale => _options.CfgScale;
 
-    /// <summary>VQ codebook used by the generation path.</summary>
-    public JanusVQCodebook<T> VQCodebook => _vqCodebook;
+    /// <summary>VQ codebook used by the generation path. Internal —
+    /// it's a plumbing/helper type, not part of the public facade.
+    /// Test code accesses it via InternalsVisibleTo.</summary>
+    internal JanusVQCodebook<T> VQCodebook => _vqCodebook;
 
     public JanusPro(NeuralNetworkArchitecture<T> architecture, string modelPath, JanusProOptions? options = null) : base(architecture)
     {
@@ -176,6 +183,26 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     public Tensor<T> GenerateImage(string textDescription)
     {
         ThrowIfDisposed();
+        if (string.IsNullOrWhiteSpace(textDescription))
+            throw new ArgumentException(
+                "Text description cannot be null, empty, or whitespace. " +
+                "Janus-Pro generation requires a non-empty prompt to condition on.",
+                nameof(textDescription));
+        // Generation path requires real codebook + projection +
+        // detokenizer weights — the current native code path uses
+        // deterministic placeholders for ProjectCodebookEmbeddingToDecoderDim
+        // and DetokenizeVQTokens, and VQCodebook.Lookup throws unless
+        // loaded. Fail fast in native mode until a real Janus-Pro
+        // checkpoint is loaded; ONNX mode below uses the bundled
+        // ONNX graph and is fine.
+        if (!IsOnnxMode && !_vqCodebook.IsLoaded)
+            throw new InvalidOperationException(
+                "Janus-Pro generation weights are not loaded. The current native " +
+                "code path needs a trained checkpoint (VQ codebook + decoder + " +
+                "projection / detokenizer weights) before GenerateImage will " +
+                "produce paper-faithful output. Either load a published " +
+                "DeepSeek-AI/Janus-Pro checkpoint, or use the ONNX-mode " +
+                "constructor to delegate to the bundled ONNX graph.");
         var conditionalTokens = TokenizeText(textDescription);
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(conditionalTokens);
 
@@ -496,6 +523,16 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
         _options.NumGenerationTokens = reader.ReadInt32();
         _options.CodebookEmbeddingDim = reader.ReadInt32();
         _options.CfgScale = reader.ReadDouble();
+        // Rebuild _vqCodebook against the just-deserialized dimensions —
+        // otherwise the constructor-time instance keeps its original
+        // codebookSize/embeddingDim and every subsequent Lookup throws
+        // (or worse, silently mis-indexes if the dims overlap). Codebook
+        // entries themselves are NOT serialized here, so consumers
+        // needing a fully usable model must follow this with a
+        // checkpoint load via VQCodebook.LoadCodebook(...).
+        _vqCodebook = new JanusVQCodebook<T>(
+            codebookSize: _options.NumVisualTokens,
+            embeddingDim: _options.CodebookEmbeddingDim);
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
     }

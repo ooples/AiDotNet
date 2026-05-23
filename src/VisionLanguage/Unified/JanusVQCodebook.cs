@@ -32,10 +32,11 @@ namespace AiDotNet.VisionLanguage.Unified;
 ///   <item>Chen et al., "Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling", DeepSeek 2025, arXiv:2501.17811 — 16384-entry codebook variant used by Janus-Pro.</item>
 /// </list>
 /// </remarks>
-public sealed class JanusVQCodebook<T>
+internal sealed class JanusVQCodebook<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly double[,] _codebook;
+    private bool _isLoaded;
 
     /// <summary>Number of entries in the codebook (Janus-Pro: 16384; Janus: 8192).</summary>
     public int CodebookSize { get; }
@@ -43,8 +44,17 @@ public sealed class JanusVQCodebook<T>
     /// <summary>Dimensionality of each codebook entry's embedding (Janus-Pro: 8).</summary>
     public int EmbeddingDim { get; }
 
+    /// <summary>True once <see cref="LoadCodebook"/> has populated this
+    /// instance from a checkpoint. <see cref="Lookup"/>, <see cref="LookupGrid"/>,
+    /// and <see cref="Quantize"/> all throw until this is true so a caller
+    /// can't accidentally use the zero-initialised placeholder codebook
+    /// (which would silently produce non-paper-faithful image
+    /// generation).</summary>
+    public bool IsLoaded => _isLoaded;
+
     /// <summary>
-    /// Initialises a deterministic, structured codebook.
+    /// Allocates the codebook tensor at the right size, zero-initialised
+    /// until a real checkpoint is loaded via <see cref="LoadCodebook"/>.
     /// </summary>
     /// <param name="codebookSize">Number of discrete code entries. Default 16384 (Janus-Pro).</param>
     /// <param name="embeddingDim">Per-code embedding dimensionality. Default 8 (Janus-Pro).</param>
@@ -56,19 +66,41 @@ public sealed class JanusVQCodebook<T>
         CodebookSize = codebookSize;
         EmbeddingDim = embeddingDim;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _codebook = InitialiseDeterministic(codebookSize, embeddingDim);
+        // Allocate the storage but leave it zero-initialised. The previous
+        // deterministic spectral spread was a non-paper-faithful
+        // placeholder that produced structured-but-meaningless output;
+        // we now fail fast on lookup if a real codebook hasn't been
+        // loaded via LoadCodebook() (e.g. from a deserialized
+        // Janus-Pro checkpoint).
+        _codebook = new double[codebookSize, embeddingDim];
+        _isLoaded = false;
     }
 
     /// <summary>
     /// Returns the codebook entry for a token ID as a tensor. Token IDs outside the codebook are clamped.
+    /// Throws if the codebook hasn't been loaded from a checkpoint.
     /// </summary>
     public Tensor<T> Lookup(int tokenId)
     {
+        EnsureLoaded();
         int safeId = Math.Max(0, Math.Min(CodebookSize - 1, tokenId));
         var embed = new Tensor<T>([EmbeddingDim]);
         for (int d = 0; d < EmbeddingDim; d++)
             embed[d] = _numOps.FromDouble(_codebook[safeId, d]);
         return embed;
+    }
+
+    private void EnsureLoaded()
+    {
+        if (!_isLoaded)
+        {
+            throw new InvalidOperationException(
+                "JanusVQCodebook has not been loaded with a trained checkpoint. " +
+                "Call LoadCodebook with the codebook weights from a published " +
+                "Janus-Pro checkpoint before invoking Lookup / LookupGrid / Quantize. " +
+                "The zero-initialised placeholder is not paper-faithful and would " +
+                "produce structured-but-meaningless image generation.");
+        }
     }
 
     /// <summary>
@@ -77,6 +109,7 @@ public sealed class JanusVQCodebook<T>
     /// </summary>
     public int Quantize(Tensor<T> continuousEmbedding)
     {
+        EnsureLoaded();
         if (continuousEmbedding is null) throw new ArgumentNullException(nameof(continuousEmbedding));
         if (continuousEmbedding.Length < EmbeddingDim)
             throw new ArgumentException($"continuousEmbedding has length {continuousEmbedding.Length} but codebook expects {EmbeddingDim}.", nameof(continuousEmbedding));
@@ -106,6 +139,7 @@ public sealed class JanusVQCodebook<T>
     /// <returns>Tensor of shape <c>[gridHeight, gridWidth, EmbeddingDim]</c> flattened as <c>[gridHeight * gridWidth * EmbeddingDim]</c>.</returns>
     public Tensor<T> LookupGrid(int[] tokenIds, int gridHeight, int gridWidth)
     {
+        EnsureLoaded();
         if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
         if (gridHeight <= 0) throw new ArgumentOutOfRangeException(nameof(gridHeight));
         if (gridWidth <= 0) throw new ArgumentOutOfRangeException(nameof(gridWidth));
@@ -139,21 +173,6 @@ public sealed class JanusVQCodebook<T>
         for (int i = 0; i < CodebookSize; i++)
             for (int d = 0; d < EmbeddingDim; d++)
                 _codebook[i, d] = codebook[i, d];
-    }
-
-    private static double[,] InitialiseDeterministic(int codebookSize, int embeddingDim)
-    {
-        var book = new double[codebookSize, embeddingDim];
-        double inv = 1.0 / Math.Sqrt(embeddingDim);
-        for (int id = 0; id < codebookSize; id++)
-        {
-            for (int d = 0; d < embeddingDim; d++)
-            {
-                // Quasi-random low-discrepancy spread so nearby IDs have nearby embeddings.
-                double angle = (id + 1) * Math.PI * (d + 1) * 0.0001;
-                book[id, d] = inv * (Math.Sin(angle) + 0.5 * Math.Cos(angle * 2.7183));
-            }
-        }
-        return book;
+        _isLoaded = true;
     }
 }

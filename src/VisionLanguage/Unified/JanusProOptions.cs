@@ -60,18 +60,54 @@ public class JanusProOptions : UnifiedVisionOptions
     /// <summary>Whether to keep understanding and generation vision paths fully decoupled (Janus paper §3.1).</summary>
     public bool EnableDecoupledEncoding { get; set; } = true;
 
+    // Settable properties below validate at the API boundary per the
+    // audit-2026-05 review — invalid values (zero, negative, NaN,
+    // Infinity) would otherwise propagate into generation paths and
+    // crash or produce undefined-behaviour outputs deeper in the
+    // pipeline where the diagnostic is much harder to pin to a
+    // misconfigured option. Backing-field pattern matches the rest
+    // of the codebase (see SpikingNeuralNetworkOptions / ESN
+    // options for the same pattern).
+
+    private int _numGenerationTokens = 576;
     /// <summary>
     /// Number of VQ tokens emitted by the generation path. Janus-Pro uses 576 (a 24×24 grid) for the
-    /// default 384×384 output (paper §3.3 — patch size 16, output 384 → 24×24).
+    /// default 384×384 output (paper §3.3 — patch size 16, output 384 → 24×24). Must be positive.
     /// </summary>
-    public int NumGenerationTokens { get; set; } = 576;
+    public int NumGenerationTokens
+    {
+        get => _numGenerationTokens;
+        set => _numGenerationTokens = value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(NumGenerationTokens), value, "Must be > 0.");
+    }
 
-    /// <summary>Dimensionality of each VQ codebook entry's continuous embedding. Janus-Pro paper Table 1: 8.</summary>
-    public int CodebookEmbeddingDim { get; set; } = 8;
+    private int _codebookEmbeddingDim = 8;
+    /// <summary>Dimensionality of each VQ codebook entry's continuous embedding. Janus-Pro paper Table 1: 8. Must be positive.</summary>
+    public int CodebookEmbeddingDim
+    {
+        get => _codebookEmbeddingDim;
+        set => _codebookEmbeddingDim = value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(CodebookEmbeddingDim), value, "Must be > 0.");
+    }
 
+    private double _cfgScale = 7.0;
     /// <summary>
     /// Classifier-free guidance scale used during generation (Ho &amp; Salimans 2022). Janus-Pro paper uses
-    /// 5–7 depending on prompt; 7.0 is the default for high-fidelity outputs.
+    /// 5–7 depending on prompt; 7.0 is the default for high-fidelity outputs. Must be finite and positive
+    /// (negative or zero CFG inverts the guidance direction; NaN/Inf would propagate to weighted-sum
+    /// formulas downstream).
     /// </summary>
-    public double CfgScale { get; set; } = 7.0;
+    public double CfgScale
+    {
+        get => _cfgScale;
+        set
+        {
+            if (double.IsNaN(value) || double.IsInfinity(value) || value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(CfgScale), value,
+                    "Must be a finite positive number. Paper uses 5-7.");
+            _cfgScale = value;
+        }
+    }
 }
