@@ -170,6 +170,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // the validator any time the key changes.
     private AiDotNet.Configuration.IAiModelLicensing? _licensing;
 
+    // audit-2026-05 phase 2a slice 9 — storage / artifact-management concern.
+    private readonly AiDotNet.Configuration.IAiModelStorage<T, TInput, TOutput> _storage
+        = new AiDotNet.Configuration.AiModelStorage<T, TInput, TOutput>();
+
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
@@ -6226,19 +6230,22 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null)
     {
-        _cacheConfig = config;
+        _storage.ConfigureCaching(config);
+        _cacheConfig = _storage.CacheConfig;
         return this;
     }
 
     public IAiModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null)
     {
-        _versioningConfig = config;
+        _storage.ConfigureVersioning(config);
+        _versioningConfig = _storage.VersioningConfig;
         return this;
     }
 
     public IAiModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null)
     {
-        _abTestingConfig = config;
+        _storage.ConfigureABTesting(config);
+        _abTestingConfig = _storage.ABTestingConfig;
         return this;
     }
 
@@ -6633,7 +6640,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker)
     {
-        _experimentTracker = tracker;
+        _storage.ConfigureExperimentTracker(tracker);
+        _experimentTracker = _storage.ExperimentTracker;
         return this;
     }
 
@@ -6734,7 +6742,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry)
     {
-        _modelRegistry = registry;
+        _storage.ConfigureModelRegistry(registry);
+        _modelRegistry = _storage.ModelRegistry;
         return this;
     }
 
@@ -6749,7 +6758,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl)
     {
-        _dataVersionControl = dataVersionControl;
+        _storage.ConfigureDataVersionControl(dataVersionControl);
+        _dataVersionControl = _storage.DataVersionControl;
         return this;
     }
 
