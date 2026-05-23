@@ -5,22 +5,17 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors needs a version bump after ooples/AiDotNet.Tensors#424
-         publishes a new NuGet. That PR replaces the silent `checked(int * int)`
-         dim-product overflow in TensorAllocator.Rent / RentPinned with a
-         `long` accumulator that names the requested shape when the element
-         count exceeds Array.MaxLength, plus an ArgumentOutOfRangeException
-         naming the index and value for negative dims (lazy-layer `-1`
-         sentinel propagation). Diagnoses the otherwise-opaque
-         `OverflowException` failures on TimeMachine / DQN / OWLViT /
-         DGCNN / TabTransformer / TabDPT / SlimSAM / TriaffineNER tests on
-         SonarCloud run 26241806890. (Previous PR ooples/AiDotNet.Tensors#359
-         — GraFPrint perf-overhaul + scheduler-fused + determinism — is
-         already in 0.81.3.) -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.81.3" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.3" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.81.3" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.3" />
+    <!-- AiDotNet.Tensors 0.81.9 brings in six fixes accumulated since 0.81.3:
+         - 0.81.4 #367  GraphMode recording on 5 ops with silent gradient-drop bugs (closes #365)
+         - 0.81.5 #410  three FP64 SD UNet cliffs + compile-mode forward 2× faster than eager (#1305)
+         - 0.81.6 #412  shape catalog + DCGAN step probe + alloc profile (#403)
+         - 0.81.7 #416  drop IsDeterministicMode from CompiledModelCache shape-key (closes AiDotNet#1395 root cause — VGG fused-compiled training now engages on step 2)
+         - 0.81.8 #418  serialise clCreateCommandQueue across threads (dodges AMD driver race, #414)
+         - 0.81.9 #424  long-arithmetic dim-product in TensorAllocator (replaces silent `checked(int * int)` overflow — unblocks TimeMachine / DQN / OWLViT / DGCNN / TabTransformer / TabDPT / SlimSAM / TriaffineNER on SonarCloud run 26241806890) -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.81.9" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.9" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.81.9" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.9" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />

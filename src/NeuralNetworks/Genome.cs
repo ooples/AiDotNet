@@ -178,6 +178,37 @@ public class Genome<T>
     }
 
     /// <summary>
+    /// Issue #1392 perf: per-genome cache for <c>NEAT.SortConnectionsTopologically</c> +
+    /// the "non-input node" set <c>NEAT.ActivateGenome</c> walks for activation. The
+    /// sort is O(E²) on the genome's enabled connections and was being rebuilt on
+    /// every <c>NEAT.ActivateGenome</c> call (population × generations × Train calls
+    /// = ~225 k calls for a Training_ShouldReduceLoss run). Caching pays back on
+    /// every call where the topology hasn't mutated since the prior activation.
+    ///
+    /// <para>Invalidation key is the cheap-to-compute <c>(Connections.Count, IsEnabled
+    /// bitmask)</c> snapshot taken at the start of activation. NEAT's mutation paths
+    /// either (a) append to <c>Connections</c> via <see cref="AddConnection"/> (Count
+    /// changes) or (b) flip <c>IsEnabled</c> via <see cref="DisableConnection"/> /
+    /// crossover (mask changes). Weight-only mutations don't change topology and
+    /// keep the cache valid — which is the dominant case across the 50 generations
+    /// per Train call. Snapshot computation is O(N) and reads cleanly off
+    /// <c>Connections</c>; cheap relative to the O(E²) sort it bypasses.</para>
+    /// </summary>
+    internal int CachedTopologySignatureCount;
+    internal ulong CachedTopologySignatureMask;
+    internal List<Connection<T>>? CachedSortedConnections;
+    internal List<int>? CachedNonInputNodeIds;
+
+    /// <summary>
+    /// Issue #1392 perf: max node id referenced by any (FromNode, ToNode) in
+    /// <see cref="Connections"/> plus the bias-node id, cached alongside the
+    /// topology signature so <see cref="NEAT{T}.ActivateGenome"/> can size its
+    /// flat-array activations buffer in one shot instead of growing a
+    /// Dictionary&lt;int, T&gt; one entry at a time. -1 means uninitialized.
+    /// </summary>
+    internal int CachedMaxNodeId = -1;
+
+    /// <summary>
     /// Adds a new connection to this genome.
     /// </summary>
     /// <param name="fromNode">The identifier of the source node.</param>
@@ -415,10 +446,24 @@ public class Genome<T>
     /// </remarks>
     public Genome<T> Clone()
     {
+        // Issue #1392 perf: under EvolvePopulation we Clone() the parent for
+        // every child every generation (150 pop x 50 gen per Train call x
+        // dozens of test calls). The previous foreach + AddConnection path
+        // drove List<Connection<T>>'s internal array through the 0->4->8->16
+        // capacity grow chain, copying the buffer at every doubling. Pre-size
+        // the list to the exact final capacity so the alloc is one-shot.
+        int count = Connections.Count;
         var clone = new Genome<T>(InputSize, OutputSize);
-        foreach (var conn in Connections)
+        if (count > 0)
         {
-            clone.AddConnection(conn.FromNode, conn.ToNode, conn.Weight, conn.IsEnabled, conn.Innovation);
+            clone.Connections.Capacity = count;
+            var src = Connections;
+            var dst = clone.Connections;
+            for (int i = 0; i < count; i++)
+            {
+                var c = src[i];
+                dst.Add(new Connection<T>(c.FromNode, c.ToNode, c.Weight, c.IsEnabled, c.Innovation));
+            }
         }
 
         return clone;

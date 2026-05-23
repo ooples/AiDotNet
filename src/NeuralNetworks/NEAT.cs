@@ -188,6 +188,13 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private int _innovationNumber;
 
+    // Issue #1392 perf: scratch HashSet reused across Crossover calls so we
+    // don't allocate a fresh one for every offspring. EvolvePopulation is
+    // single-threaded, so a per-instance buffer is safe; the .Clear() at the
+    // top of Crossover resets it without releasing the underlying entries
+    // table.
+    private readonly HashSet<int> _crossoverSeen = new HashSet<int>();
+
     private const int DefaultInputSize = 10;
     private const int DefaultOutputSize = 1;
     private const int DefaultPopulationSize = 150;
@@ -414,8 +421,11 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 return 0;
             });
 
-            // Create new population
-            var newPopulation = new List<Genome<T>>();
+            // Create new population — issue #1392 perf: pre-size to the final
+            // capacity so the underlying array doesn't walk the 0→4→8→…
+            // capacity-doubling chain and memcpy on every grow. Population
+            // size is fixed for the lifetime of a NEAT instance.
+            var newPopulation = new List<Genome<T>>(_populationSize);
 
             // Elitism: Keep the best individual
             newPopulation.Add(_population[0]);
@@ -473,15 +483,27 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Genome<T> SelectParent()
     {
-        // Tournament selection
-        int tournamentSize = 3;
-        var tournament = new List<Genome<T>>();
-        for (int i = 0; i < tournamentSize; i++)
+        // Tournament selection. Issue #1392 perf: the prior implementation
+        // allocated a fresh List<Genome<T>> and an OrderByDescending LINQ
+        // enumerator on every call. Across a Train run that's ~447 k allocs
+        // (149 children × 50 generations × ~30 Train calls × 2 parents per
+        // crossover). Tournament is fixed-size 3 — pick three random genomes
+        // and keep the running argmax inline. No allocations, no LINQ.
+        const int tournamentSize = 3;
+        int n = _population.Count;
+        var best = _population[Random.Next(n)];
+        var bestFitness = best.Fitness;
+        for (int i = 1; i < tournamentSize; i++)
         {
-            tournament.Add(_population[Random.Next(_population.Count)]);
+            var candidate = _population[Random.Next(n)];
+            if (NumOps.GreaterThan(candidate.Fitness, bestFitness))
+            {
+                best = candidate;
+                bestFitness = candidate.Fitness;
+            }
         }
 
-        return tournament.OrderByDescending(g => g.Fitness).First();
+        return best;
     }
 
     /// <summary>
@@ -515,13 +537,41 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private Genome<T> Crossover(Genome<T> parent1, Genome<T> parent2)
     {
+        // Issue #1392 perf: prior implementation used Enumerable.Concat (one
+        // enumerator alloc) and a fresh HashSet per call (rehash table alloc).
+        // Reuse the per-instance _crossoverSeen HashSet and walk both parent
+        // connection lists by index so the JIT can elide bounds checks. Child
+        // connection list is pre-sized to the upper bound (parent1.Count +
+        // parent2.Count) to skip the List capacity-doubling chain in the
+        // common case where most innovations are unique.
+        var p1 = parent1.Connections;
+        var p2 = parent2.Connections;
+        int p1Count = p1.Count;
+        int p2Count = p2.Count;
         var child = new Genome<T>(Architecture.InputSize, Architecture.OutputSize);
-        var seenInnovations = new HashSet<int>();
-        foreach (var conn in parent1.Connections.Concat(parent2.Connections))
+        int upperBound = p1Count + p2Count;
+        if (upperBound > 0)
         {
-            if (seenInnovations.Add(conn.Innovation))
+            child.Connections.Capacity = upperBound;
+        }
+
+        var seen = _crossoverSeen;
+        seen.Clear();
+        var childConnections = child.Connections;
+        for (int i = 0; i < p1Count; i++)
+        {
+            var c = p1[i];
+            if (seen.Add(c.Innovation))
             {
-                child.AddConnection(conn.FromNode, conn.ToNode, conn.Weight, conn.IsEnabled, conn.Innovation);
+                childConnections.Add(new Connection<T>(c.FromNode, c.ToNode, c.Weight, c.IsEnabled, c.Innovation));
+            }
+        }
+        for (int i = 0; i < p2Count; i++)
+        {
+            var c = p2[i];
+            if (seen.Add(c.Innovation))
+            {
+                childConnections.Add(new Connection<T>(c.FromNode, c.ToNode, c.Weight, c.IsEnabled, c.Innovation));
             }
         }
 
@@ -564,14 +614,47 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// </remarks>
     private void Mutate(Genome<T> genome)
     {
-        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
+        // Issue #1392 perf: prior implementation used LINQ Max+Any on every
+        // call, allocating a Func delegate + an enumerator each time. Walk
+        // Connections by index. Add-node case derives the new node id from
+        // an inline scan over (FromNode, ToNode) since the existing
+        // CachedMaxNodeId on Genome covers max(referenced node id,
+        // biasNodeId), which already gives us "first free node id - 1".
+        var connections = genome.Connections;
+        int count = connections.Count;
+
+        if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate) && count > 0)
         {
             // Add new node
-            var connection = genome.Connections[Random.Next(genome.Connections.Count)];
-            int newNodeId = genome.Connections.Max(c => Math.Max(c.FromNode, c.ToNode)) + 1;
+            var connection = connections[Random.Next(count)];
+
+            // First-free-node-id scan including the bias node — without the
+            // explicit biasNodeId floor below, the first add-node mutation
+            // on an initial genome (where max(FromNode, ToNode) =
+            // InputSize + OutputSize − 1) would produce newNodeId =
+            // InputSize + OutputSize, which collides with biasNodeId.
+            // ActivateGenome writes activations[biasNodeId] = NumOps.One
+            // BEFORE the connection sweep, so any connection accumulating
+            // into this hidden slot would corrupt the bias value — and
+            // every connection targeting it would also read a polluted
+            // pre-activation from the same slot.
+            int biasNodeId = Architecture.InputSize + Architecture.OutputSize;
+            int maxNodeId = biasNodeId;
+            for (int i = 0; i < count; i++)
+            {
+                var c = connections[i];
+                int hi = c.FromNode > c.ToNode ? c.FromNode : c.ToNode;
+                if (hi > maxNodeId) maxNodeId = hi;
+            }
+            int newNodeId = maxNodeId + 1;
+
             genome.DisableConnection(connection.Innovation);
             genome.AddConnection(connection.FromNode, newNodeId, NumOps.One, true, _innovationNumber++);
             genome.AddConnection(newNodeId, connection.ToNode, connection.Weight, true, _innovationNumber++);
+
+            // List grew under us; reload local references for downstream loops
+            connections = genome.Connections;
+            count = connections.Count;
         }
 
         if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
@@ -579,17 +662,31 @@ public class NEAT<T> : NeuralNetworkBase<T>
             // Add new connection
             int fromNode = Random.Next(Architecture.InputSize + Architecture.OutputSize);
             int toNode = Random.Next(Architecture.InputSize, Architecture.InputSize + Architecture.OutputSize);
-            if (!genome.Connections.Any(c => c.FromNode == fromNode && c.ToNode == toNode))
+            bool exists = false;
+            for (int i = 0; i < count; i++)
+            {
+                var c = connections[i];
+                if (c.FromNode == fromNode && c.ToNode == toNode)
+                {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists)
             {
                 genome.AddConnection(fromNode, toNode, RandomWeight(), true, _innovationNumber++);
+                connections = genome.Connections;
+                count = connections.Count;
             }
         }
 
-        // Mutate weights
-        foreach (var conn in genome.Connections)
+        // Mutate weights — index loop so JIT can elide the List<T>.Enumerator
+        // bounds check overhead the foreach pays per step.
+        for (int i = 0; i < count; i++)
         {
             if (NumOps.LessThan(NumOps.FromDouble(Random.NextDouble()), _mutationRate))
             {
+                var conn = connections[i];
                 conn.Weight = NumOps.Add(conn.Weight, RandomWeight());
             }
         }
@@ -852,57 +949,215 @@ public class NEAT<T> : NeuralNetworkBase<T>
     /// during the evolutionary process.
     /// </para>
     /// </remarks>
-    private Dictionary<int, T> ActivateGenome(Genome<T> genome, Vector<T> input)
+    private T[] ActivateGenome(Genome<T> genome, Vector<T> input)
     {
-        // Initialize all nodes with zero activation
-        var activations = new Dictionary<int, T>();
+        // Issue #1392 perf: switched from Dictionary<int, T> to flat T[] indexed
+        // by node id. NEAT node ids are dense small integers (inputs 0..InputSize-1,
+        // outputs InputSize..InputSize+OutputSize-1, bias = InputSize+OutputSize,
+        // hidden > biasNodeId). The Dictionary form added 2-3 heap allocations per
+        // call (Dictionary instance + internal buckets[] + entries[]) plus hash-
+        // compute + bucket-walk on every node access. With a flat array each
+        // activation is a single contiguous-memory store/load.
+        //
+        // Buffer size = max(node id observed in genome's connections, biasNodeId) + 1.
+        // Indices not referenced by any connection stay at default(T) and are
+        // never queried by callers, so over-provisioning is benign.
+
+        int inputSize = Architecture.InputSize;
+        int outputSize = Architecture.OutputSize;
+        int biasNodeId = inputSize + outputSize;
+
+        // Sort connections topologically for proper feed-forward activation.
+        // Cached on the genome — weight-only mutations (the dominant case across
+        // the 50 internal generations per Train call) keep the topology
+        // signature unchanged, so the cache hits and skips the O(E²) sort.
+        var sortedConnections = GetOrBuildSortedConnections(genome);
+
+        int maxNodeId = GetOrBuildMaxNodeId(genome, biasNodeId);
+        var activations = new T[maxNodeId + 1];
 
         // Set input nodes
-        for (int i = 0; i < Architecture.InputSize; i++)
+        for (int i = 0; i < inputSize; i++)
         {
             activations[i] = input[i];
         }
 
-        // Set bias node if needed
-        activations[Architecture.InputSize + Architecture.OutputSize] = NumOps.One;
+        // Set bias node
+        activations[biasNodeId] = NumOps.One;
 
-        // Initialize output nodes
-        for (int i = 0; i < Architecture.OutputSize; i++)
-        {
-            activations[Architecture.InputSize + i] = NumOps.Zero;
-        }
+        // Output nodes + every other slot are pre-zeroed by `new T[]`
+        // (default(T) = NumOps.Zero for built-in numeric types) — no
+        // explicit init loop needed, no per-connection ContainsKey gymnastics
+        // since every FromNode/ToNode id is in range by construction of maxNodeId.
 
-        // Sort connections topologically for proper feed-forward activation
-        var sortedConnections = SortConnectionsTopologically(genome);
-
-        // Process connections
+        // Process connections in topological order.
         foreach (var connection in sortedConnections)
         {
             if (!connection.IsEnabled) continue;
-
-            // Ensure nodes exist in activations
-            if (!activations.ContainsKey(connection.FromNode))
-            {
-                activations[connection.FromNode] = NumOps.Zero;
-            }
-            if (!activations.ContainsKey(connection.ToNode))
-            {
-                activations[connection.ToNode] = NumOps.Zero;
-            }
-
-            // Calculate weighted input and add to target node
             T weightedInput = NumOps.Multiply(activations[connection.FromNode], connection.Weight);
             activations[connection.ToNode] = NumOps.Add(activations[connection.ToNode], weightedInput);
         }
 
-        // Apply activation function to all non-input nodes
-        var nonInputNodes = activations.Keys.Where(k => k >= Architecture.InputSize).ToList();
+        // Apply activation function to all non-input nodes the genome actually
+        // references (cached on the genome alongside the sort + max-node-id).
+        var nonInputNodes = GetOrBuildReferencedNonInputNodeIds(genome, inputSize);
         foreach (var nodeId in nonInputNodes)
         {
             activations[nodeId] = ApplySigmoid(activations[nodeId]);
         }
 
         return activations;
+    }
+
+    /// <summary>
+    /// Issue #1392 perf helper: returns the cached topologically-sorted
+    /// connection list for <paramref name="genome"/>, rebuilding only when
+    /// the topology signature changed since the last call.
+    /// </summary>
+    private List<Connection<T>> GetOrBuildSortedConnections(Genome<T> genome)
+    {
+        int count = genome.Connections.Count;
+        ulong signature = ComputeTopologySignature(genome.Connections);
+        if (genome.CachedSortedConnections != null
+            && genome.CachedTopologySignatureCount == count
+            && genome.CachedTopologySignatureMask == signature)
+        {
+            return genome.CachedSortedConnections;
+        }
+        var sorted = SortConnectionsTopologically(genome);
+        genome.CachedSortedConnections = sorted;
+        genome.CachedTopologySignatureCount = count;
+        genome.CachedTopologySignatureMask = signature;
+        // Invalidate the dependent caches — their content depends on the
+        // connection set, so a topology change forces a rebuild on the next
+        // call.
+        genome.CachedNonInputNodeIds = null;
+        genome.CachedMaxNodeId = -1;
+        return sorted;
+    }
+
+    /// <summary>
+    /// Issue #1392 perf helper: returns max(FromNode, ToNode, biasNodeId)
+    /// across the genome's enabled connections. Cached on the genome so the
+    /// per-call O(E) scan only runs after topology mutations. Used to size
+    /// <see cref="ActivateGenome"/>'s flat activation buffer.
+    /// </summary>
+    private static int GetOrBuildMaxNodeId(Genome<T> genome, int biasNodeId)
+    {
+        if (genome.CachedMaxNodeId >= 0)
+        {
+            return genome.CachedMaxNodeId;
+        }
+        int max = biasNodeId;
+        var conns = genome.Connections;
+        for (int i = 0; i < conns.Count; i++)
+        {
+            var c = conns[i];
+            if (c.FromNode > max) max = c.FromNode;
+            if (c.ToNode > max) max = c.ToNode;
+        }
+        genome.CachedMaxNodeId = max;
+        return max;
+    }
+
+    /// <summary>
+    /// Issue #1392 perf helper: caches the list of node IDs &gt;= InputSize that
+    /// the sigmoid sweep should touch. Built directly from the connection list
+    /// (any FromNode/ToNode &gt;= InputSize that the genome references) so we
+    /// don't need to materialize a Dictionary first. Invalidated alongside
+    /// <see cref="GetOrBuildSortedConnections"/>.
+    /// </summary>
+    private List<int> GetOrBuildReferencedNonInputNodeIds(Genome<T> genome, int inputSize)
+    {
+        if (genome.CachedNonInputNodeIds != null)
+        {
+            return genome.CachedNonInputNodeIds;
+        }
+        var seen = new HashSet<int>();
+        var list = new List<int>();
+        foreach (var c in genome.Connections)
+        {
+            if (!c.IsEnabled) continue;
+            if (c.FromNode >= inputSize && seen.Add(c.FromNode)) list.Add(c.FromNode);
+            if (c.ToNode >= inputSize && seen.Add(c.ToNode)) list.Add(c.ToNode);
+        }
+        // Also include output nodes (always activated even if no connection
+        // wrote to them, because ActivateGenome zero-initializes the slot
+        // and the sigmoid should still run on the zero value for caller
+        // consistency with the pre-refactor Dictionary behavior).
+        int outputSize = Architecture.OutputSize;
+        for (int i = 0; i < outputSize; i++)
+        {
+            int outNode = inputSize + i;
+            if (seen.Add(outNode)) list.Add(outNode);
+        }
+        // Bias node: the pre-refactor Dictionary implementation set
+        // activations[InputSize+OutputSize] = NumOps.One BEFORE the sigmoid
+        // sweep and then iterated `activations.Keys.Where(k >= InputSize)`,
+        // so the bias slot was overwritten with Sigmoid(1) = ~0.731 by the
+        // end. Preserve that exact behavior here so callers that read the
+        // bias slot from the returned array see the same value they saw
+        // before this refactor.
+        int biasNodeId = inputSize + outputSize;
+        if (seen.Add(biasNodeId)) list.Add(biasNodeId);
+        genome.CachedNonInputNodeIds = list;
+        return list;
+    }
+
+    /// <summary>
+    /// O(N) FNV-1a hash over every connection slot's <c>(FromNode,
+    /// ToNode, IsEnabled)</c> tuple in iteration order. Used together
+    /// with <c>Connections.Count</c> as the cache key for the
+    /// topologically-sorted connection list on <see cref="Genome{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// Replaces an earlier bitmask-of-enabled-flags signature that
+    /// missed two real edit patterns and let stale cached sorts /
+    /// non-input-node sets / max-node-id leak back to callers:
+    /// <list type="bullet">
+    /// <item>Same-count rewires — swapping a connection's <c>FromNode</c>
+    /// or <c>ToNode</c> for a different node without flipping any
+    /// <c>IsEnabled</c> bit preserved both <c>Count</c> and the bitmask
+    /// → cache hit on the WRONG topology.</item>
+    /// <item>&gt;64-connection aliasing — the bitmask's <c>(i &amp; 63)</c>
+    /// wrap collapsed slots 0/64/128/… onto the same bit, so a flip at
+    /// slot 64 could XOR-cancel an earlier flip at slot 0 and leave the
+    /// mask unchanged.</item>
+    /// </list>
+    /// Weight is deliberately excluded from the signature — weight-only
+    /// mutations are the dominant case across the 50 internal
+    /// generations per public <c>Train</c> call, and we WANT the cached
+    /// topological sort to survive them.
+    /// </remarks>
+    private static ulong ComputeTopologySignature(List<Connection<T>> connections)
+    {
+        // FNV-1a 64-bit hash of every connection slot's
+        // (FromNode, ToNode, IsEnabled) tuple in iteration order. The
+        // earlier ComputeEnabledBitmask only hashed the enabled flags and
+        // would alias same-count rewires/replacements (e.g. swapping a
+        // connection's FromNode preserved both count and enabled-bitmask
+        // → stale cache → wrong activation). Hashing the full tuple
+        // also avoids the >64-connection aliasing the bitmask suffered
+        // once the wrap-around in `(i & 63)` started folding bits.
+        // Connection.Weight is intentionally excluded — weight-only
+        // mutations are the dominant case across the 50 internal
+        // generations per Train call and we WANT the cached topological
+        // sort to survive them.
+        const ulong FnvOffsetBasis = 14695981039346656037UL;
+        const ulong FnvPrime = 1099511628211UL;
+        ulong hash = FnvOffsetBasis;
+        int n = connections.Count;
+        for (int i = 0; i < n; i++)
+        {
+            var c = connections[i];
+            hash ^= (ulong)(uint)c.FromNode;
+            hash *= FnvPrime;
+            hash ^= (ulong)(uint)c.ToNode;
+            hash *= FnvPrime;
+            hash ^= c.IsEnabled ? 1UL : 0UL;
+            hash *= FnvPrime;
+        }
+        return hash;
     }
 
     /// <summary>
@@ -1109,11 +1364,27 @@ public class NEAT<T> : NeuralNetworkBase<T>
             // Calculate average loss across all samples
             T averageLoss = NumOps.Divide(totalError, NumOps.FromDouble(batchSize));
 
-            // Store the loss value for the best genome after evaluation
-            if (genome == _population.OrderByDescending(g => g.Fitness).FirstOrDefault())
-            {
-                LastLoss = averageLoss;
-            }
+            // Issue #1392 perf fix: removed the inline LastLoss assignment that
+            // previously fired here gated on `genome == _population.OrderByDescending
+            // (g => g.Fitness).FirstOrDefault()`. That branch had two problems:
+            //
+            // 1. Perf: it ran `OrderByDescending` on the entire population for
+            //    EVERY genome's fitness eval, giving O(N²) work per generation
+            //    (N=150 default → 22,500 fitness-compare + allocations per
+            //    generation × 50 generations × 30 Train calls = ~34M ops just
+            //    for picking the best, before any actual genome activation).
+            //    On a tiny tabular input this dominated the per-Train wall time
+            //    and pushed Training_ShouldReduceLoss past the 120 s CI budget.
+            //
+            // 2. Correctness: the reference-equality probe `genome == best`
+            //    matched the PRE-EVALUATION best (Fitness values from the
+            //    previous generation) which is essentially random for the
+            //    current generation. The post-evolution recompute below
+            //    (lines 1130+) does the work properly by re-evaluating the
+            //    actual post-generation best genome, so the inline
+            //    LastLoss assignment was already dead code.
+            //
+            // Net: deleting the branch is pure speedup with no behavior change.
 
             // Convert loss to fitness (higher is better, so invert loss)
             // Add small constant to avoid division by zero
@@ -1147,7 +1418,10 @@ public class NEAT<T> : NeuralNetworkBase<T>
                 for (int i = 0; i < Architecture.OutputSize; i++)
                 {
                     int outputNodeId = Architecture.InputSize + i;
-                    pred[i] = act.ContainsKey(outputNodeId) ? act[outputNodeId] : NumOps.Zero;
+                    // ActivateGenome's flat array is sized to max(node id,
+                    // biasNodeId); output node ids are guaranteed in range
+                    // since biasNodeId = InputSize + OutputSize > any output id.
+                    pred[i] = act[outputNodeId];
                 }
                 totalErr = NumOps.Add(totalErr, LossFunction.CalculateLoss(pred, sampleExpected));
             }
@@ -1324,27 +1598,40 @@ public class NEAT<T> : NeuralNetworkBase<T>
 
         var result = new Dictionary<string, Tensor<T>>();
 
-        var inputActivation = new Tensor<T>(new int[] { Architecture.InputSize });
-        for (int i = 0; i < Architecture.InputSize; i++)
+        int inputSize = Architecture.InputSize;
+        int outputSize = Architecture.OutputSize;
+        int biasNodeId = inputSize + outputSize;
+
+        // Issue #1392 perf: ActivateGenome now returns a flat T[] sized to
+        // max(referenced node id, biasNodeId) + 1, so input + output + bias
+        // slots are guaranteed in range. The ContainsKey gymnastics from the
+        // Dictionary era are unnecessary — read straight by index.
+
+        var inputActivation = new Tensor<T>(new int[] { inputSize });
+        for (int i = 0; i < inputSize; i++)
         {
-            inputActivation[i] = activations.ContainsKey(i) ? activations[i] : NumOps.Zero;
+            inputActivation[i] = activations[i];
         }
         result["InputNodes"] = inputActivation;
 
-        var outputActivation = new Tensor<T>(new int[] { Architecture.OutputSize });
-        for (int i = 0; i < Architecture.OutputSize; i++)
+        var outputActivation = new Tensor<T>(new int[] { outputSize });
+        for (int i = 0; i < outputSize; i++)
         {
-            int nodeId = Architecture.InputSize + i;
-            outputActivation[i] = activations.ContainsKey(nodeId) ? activations[nodeId] : NumOps.Zero;
+            outputActivation[i] = activations[inputSize + i];
         }
         result["OutputNodes"] = outputActivation;
 
-        // Exclude the reserved bias node (ID = InputSize + OutputSize) from hidden nodes
-        int biasNodeId = Architecture.InputSize + Architecture.OutputSize;
-        var hiddenNodes = activations.Keys
-            .Where(k => k > biasNodeId)
-            .OrderBy(k => k)
-            .ToList();
+        // Hidden nodes: walk the genome's cached non-input-node-id list and
+        // pick out the entries beyond the bias slot. Sorted ascending by id
+        // for stable result ordering, matching what the prior OrderBy(k => k)
+        // chain produced.
+        var nonInputNodeIds = GetOrBuildReferencedNonInputNodeIds(bestGenome, inputSize);
+        var hiddenNodes = new List<int>();
+        foreach (var nodeId in nonInputNodeIds)
+        {
+            if (nodeId > biasNodeId) hiddenNodes.Add(nodeId);
+        }
+        hiddenNodes.Sort();
 
         if (hiddenNodes.Count > 0)
         {
