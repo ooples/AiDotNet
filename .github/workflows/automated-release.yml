@@ -5,11 +5,16 @@ on:
     branches:
       - main
       - master
+    # NOTE: do NOT add **.md / docs/** to paths-ignore here. Audit
+    # finding #18 makes `docs:` commits map to PATCH bumps in this
+    # workflow's analyze-and-bump step (line ~133 below); filtering
+    # docs-only pushes at the trigger level would make that rule
+    # unreachable and silently re-create the policy/workflow drift
+    # we just fixed. Only filter paths that the workflow itself
+    # legitimately doesn't need to react to (issue templates,
+    # repo-hygiene files that don't drive a release).
     paths-ignore:
-      - '**.md'
-      - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
-      - 'LICENSE'
       - '.gitignore'
       - '.editorconfig'
 

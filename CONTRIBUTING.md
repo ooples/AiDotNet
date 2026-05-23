@@ -24,15 +24,25 @@ When you create or update a PR, a GitHub workflow automatically:
 ```
 
 ### Valid Types and Version Impact
+Per audit-2026-05 finding #18, only `feat:` and breaking changes bump
+MINOR/MAJOR respectively; everything else is PATCH. The earlier
+"fix/refactor/perf/docs → MINOR + test/chore/ci/style → None" mapping
+was a semver.org violation (a bug fix should never bump MINOR, and a
+test or CI change is still a real change that the release pipeline
+should record). See `.github/VERSIONING.md` for the authoritative
+rules — the table here mirrors them.
+
 - `feat:` - New feature (triggers MINOR version bump, e.g., 0.1.0 → 0.2.0)
-- `fix:` - Bug fix (triggers MINOR version bump)
-- `docs:` - Documentation changes (triggers MINOR version bump)
-- `refactor:` - Code refactoring (triggers MINOR version bump)
-- `perf:` - Performance improvement (triggers MINOR version bump)
-- `test:` - Test additions/changes (no release)
-- `chore:` - Build/tooling changes (no release)
-- `ci:` - CI/CD changes (no release)
-- `style:` - Code formatting (no release)
+- `fix:` - Bug fix (triggers PATCH version bump)
+- `docs:` - Documentation changes (triggers PATCH version bump)
+- `refactor:` - Code refactoring (triggers PATCH version bump)
+- `perf:` - Performance improvement (triggers PATCH version bump)
+- `test:` - Test additions/changes (triggers PATCH version bump)
+- `chore:` - Build/tooling changes (triggers PATCH version bump)
+- `ci:` - CI/CD changes (triggers PATCH version bump)
+- `style:` - Code formatting (triggers PATCH version bump)
+- `build:` - Build/packaging changes (triggers PATCH version bump)
+- `revert:` - Reverts a prior commit (triggers PATCH version bump)
 
 ### Breaking Changes
 Add `!` after type or `BREAKING CHANGE:` in commit body to trigger MAJOR version bump (e.g., 0.1.0 → 1.0.0):

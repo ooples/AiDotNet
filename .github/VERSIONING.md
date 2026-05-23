@@ -31,20 +31,14 @@ Example: `0.0.5` → `1.0.0`
 
 ### MINOR Version Bump (x.Y.0)
 
-Triggered by any of these commit types:
-- `feat:` - New features
-- `fix:` - Bug fixes
-- `refactor:` - Code refactoring
-- `perf:` - Performance improvements
-- `docs:` - Documentation updates
+Triggered by:
+- `feat:` - New features (the only commit type that bumps MINOR per
+  semver.org §7. Bug fixes, refactors, perf, docs, etc. are now PATCH
+  — see the PATCH section below).
 
-Examples:
+Example:
 ```
 feat: Add neural network support
-fix: Correct matrix multiplication
-refactor: Simplify vector operations
-perf: Optimize batch processing
-docs: Update API documentation
 ```
 
 Example: `0.0.5` → `0.1.0`
@@ -95,14 +89,16 @@ Use the [Conventional Commits](https://www.conventionalcommits.org/) specificati
 | Type | Description | Version Bump |
 |------|-------------|--------------|
 | `feat` | New feature | MINOR |
-| `fix` | Bug fix | MINOR |
-| `refactor` | Code refactoring | MINOR |
-| `perf` | Performance improvement | MINOR |
-| `docs` | Documentation changes | MINOR |
-| `test` | Test updates | None |
-| `chore` | Build/tooling changes | None |
-| `style` | Code style changes | None |
-| `ci` | CI/CD changes | None |
+| `fix` | Bug fix | PATCH |
+| `refactor` | Code refactoring | PATCH |
+| `perf` | Performance improvement | PATCH |
+| `docs` | Documentation changes | PATCH |
+| `test` | Test updates | PATCH |
+| `chore` | Build/tooling changes | PATCH |
+| `style` | Code style changes | PATCH |
+| `ci` | CI/CD changes | PATCH |
+| `build` | Build/packaging changes | PATCH |
+| `revert` | Reverts a prior commit | PATCH |
 
 ### Optional Scope
 
