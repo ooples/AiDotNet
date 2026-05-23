@@ -181,13 +181,32 @@ public class DiffusionResBlock<T> : LayerBase<T>
     }
 
     /// <summary>
-    /// Declares named input ports. When <c>timeEmbedDim &gt; 0</c> this block
-    /// accepts a second <c>time_embed</c> input alongside the feature-map
-    /// <c>input</c>. The two inputs are SEMANTICALLY distinct (feature map vs
-    /// conditioning vector) so they get descriptive names rather than the
-    /// generic <c>input_0</c>/<c>input_1</c> used by symmetric n-ary layers
-    /// like AddLayer/ConcatenateLayer.
+    /// Declares named input ports. When <c>timeEmbedDim &gt; 0</c> this
+    /// block accepts a second <c>time_embed</c> input alongside the
+    /// feature-map <c>input</c>.
     /// </summary>
+    /// <remarks>
+    /// <para><b>Port naming convention across the codebase.</b> Two
+    /// conventions coexist:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Semantic names</b> (this block:
+    /// <c>"input"</c>, <c>"time_embed"</c>) — used when inputs are
+    /// SEMANTICALLY distinct (feature map vs conditioning vector vs
+    /// attention mask, etc.). The name carries meaning that the caller
+    /// needs to wire correctly.</description></item>
+    /// <item><description><b>Indexed names</b> (<c>"input_0"</c>,
+    /// <c>"input_1"</c>, …) — used by symmetric n-ary layers like
+    /// <see cref="AiDotNet.NeuralNetworks.Layers.AddLayer{T}"/>,
+    /// <see cref="AiDotNet.NeuralNetworks.Layers.ConcatenateLayer{T}"/>,
+    /// <see cref="AiDotNet.NeuralNetworks.Layers.MultiplyLayer{T}"/>,
+    /// where the inputs are interchangeable.</description></item>
+    /// </list>
+    /// <para>Callers can discover the port names at runtime by reading
+    /// <c>layer.InputPorts</c> — each entry has a <c>Name</c> string
+    /// and a <c>Shape</c>. Pass tensors to
+    /// <see cref="Forward(IReadOnlyDictionary{string, Tensor{T}})"/>
+    /// keyed by those same names.</para>
+    /// </remarks>
     private IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerPort>? _inputPortsCache;
     public override IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerPort> InputPorts =>
         _inputPortsCache ??= _timeEmbedDim > 0
