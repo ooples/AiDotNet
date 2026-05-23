@@ -16,21 +16,9 @@ public class RotaryPositionalEncodingLayerTests
         var layer = new RotaryPositionalEncodingLayer<float>(128, 64);
 
         Assert.NotNull(layer);
-        // RoPE (Su et al. 2021, RoFormer) is a deterministic rotation
-        // of query/key vectors using precomputed cosine/sine frequency
-        // caches — it has ZERO trainable parameters by construction. The
-        // ILayer.SupportsTraining contract (see Interfaces/ILayer.cs:273-283:
-        // "return false because they don't have parameters that need
-        // training") therefore requires `false` here, matching the
-        // PyTorch industry analog `any(p.requires_grad for p in
-        // module.parameters())` which is False for a parameter-free
-        // module (`any` of empty is False). The combined-usage pattern
-        // `Layers.Where(l => l.SupportsTraining && l.ParameterCount > 0)`
-        // used throughout NeuralNetworkBase confirms the property is
-        // load-bearing only when ParameterCount > 0, which RoPE never is.
-        // The previous `Assert.True` was inconsistent with both the
-        // documented contract and PyTorch semantics; fixed per the global
-        // rule's step 6 (test had a contract error) with justification.
+        // RoPE (Su et al. 2021) is a parameter-free rotation — ILayer
+        // contract says SupportsTraining is false when ParameterCount=0,
+        // matching PyTorch's `any(p.requires_grad …)` on an empty module.
         Assert.False(layer.SupportsTraining);
         Assert.Equal(0L, layer.ParameterCount);
     }
