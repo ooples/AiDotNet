@@ -8,8 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > **Versioning note.** Releases prior to 0.205.0 mapped fix/perf/refactor/docs
 > commits to MINOR bumps instead of PATCH (a semver.org violation tracked as
 > audit-2026-05 finding #18). Starting at 0.205.0 the bump rules follow
-> Conventional Commits properly — see . Consumers
-> pinning ranges across pre-0.205 releases should pin to exact versions.
+> Conventional Commits properly — see [.github/VERSIONING.md](.github/VERSIONING.md).
+> Consumers pinning ranges across pre-0.205 releases should pin to exact versions.
 
 > **History backfill.** Entries below were regenerated from `gh release list`
 > by `scripts/regen-changelog.sh` for audit-2026-05 finding #15. Per-release
