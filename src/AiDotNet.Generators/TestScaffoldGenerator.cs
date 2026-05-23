@@ -3304,6 +3304,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (layer.NormalizesInput)
             sb.AppendLine("    protected override bool ExpectsDifferentOutputForDifferentInputs => false;");
 
+        // Mirror EmitLayerTestClass — masking layers that legitimately emit
+        // ±Infinity (ALiBi, causal masks) need the finite-output invariant
+        // off on the dual-input scaffold too. The previous version only
+        // wired the override on the single-input emitter, so any
+        // ±Infinity-emitting layer that ended up with two inputs (e.g. a
+        // mask layer fed feature + position) silently re-enabled the
+        // IsInfinity check and the auto-generated test asserted contrary
+        // to the layer's documented contract.
+        if (layer.ProducesNonFiniteOutput)
+            sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
+
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
@@ -3345,6 +3356,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {layer.TestInputShape} }};");
         if (!layer.IsTrainable)
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
+
+        // Mirror EmitLayerTestClass — masking layers that legitimately
+        // emit ±Infinity (ALiBi, causal masks) need the finite-output
+        // invariant off on the multi-input scaffold too. See the
+        // EmitDualInputLayerTestClass note above for the full rationale.
+        if (layer.ProducesNonFiniteOutput)
+            sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
 
         sb.AppendLine("}");
 
@@ -3402,6 +3420,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {layer.TestInputShape} }};");
         if (!layer.IsTrainable)
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
+
+        // Mirror EmitLayerTestClass — masking layers that legitimately
+        // emit ±Infinity (ALiBi, causal masks) need the finite-output
+        // invariant off on the graph-layer scaffold too. See the
+        // EmitDualInputLayerTestClass note above for the full rationale.
+        if (layer.ProducesNonFiniteOutput)
+            sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
 
         sb.AppendLine("}");
 
