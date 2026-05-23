@@ -40,6 +40,14 @@ public sealed class RT2ActionTokenizer<T>
     /// <summary>One past the last action-bin token ID.</summary>
     public int TokenIdEndExclusive => TokenIdOffset + NumBins;
 
+    /// <summary>Total vocabulary size — equals
+    /// <see cref="TokenIdEndExclusive"/> because the action bins live
+    /// in the LAST <see cref="NumBins"/> token IDs of the vocab per
+    /// paper §3.2. Exposed so callers (e.g. <c>GreedyActionToken</c>)
+    /// can validate they're passing single-position logit vectors of
+    /// the right size.</summary>
+    public int VocabSize => TokenIdEndExclusive;
+
     /// <summary>
     /// Initialises the tokenizer.
     /// </summary>
@@ -86,8 +94,13 @@ public sealed class RT2ActionTokenizer<T>
     public int[] EncodeAction(Tensor<T> continuousAction)
     {
         if (continuousAction is null) throw new ArgumentNullException(nameof(continuousAction));
-        if (continuousAction.Length < ActionDim)
-            throw new ArgumentException($"continuousAction has length {continuousAction.Length} but tokenizer expects {ActionDim}.", nameof(continuousAction));
+        // Exact-length check: silently truncating extra dimensions
+        // makes a misaligned caller (wrong ActionDim, accidentally
+        // flattened multi-step tensor, etc.) look like a valid
+        // single-step encode and hides the shape bug. ActionDim is
+        // the documented contract; reject anything else.
+        if (continuousAction.Length != ActionDim)
+            throw new ArgumentException($"continuousAction has length {continuousAction.Length} but tokenizer expects exactly {ActionDim}.", nameof(continuousAction));
 
         var tokens = new int[ActionDim];
         for (int d = 0; d < ActionDim; d++)
@@ -104,8 +117,8 @@ public sealed class RT2ActionTokenizer<T>
     public int[] EncodeAction(Vector<T> continuousAction)
     {
         if (continuousAction is null) throw new ArgumentNullException(nameof(continuousAction));
-        if (continuousAction.Length < ActionDim)
-            throw new ArgumentException($"continuousAction has length {continuousAction.Length} but tokenizer expects {ActionDim}.", nameof(continuousAction));
+        if (continuousAction.Length != ActionDim)
+            throw new ArgumentException($"continuousAction has length {continuousAction.Length} but tokenizer expects exactly {ActionDim}.", nameof(continuousAction));
 
         var tokens = new int[ActionDim];
         for (int d = 0; d < ActionDim; d++)
@@ -125,8 +138,8 @@ public sealed class RT2ActionTokenizer<T>
         if (horizonAction is null) throw new ArgumentNullException(nameof(horizonAction));
         if (horizon <= 0) throw new ArgumentOutOfRangeException(nameof(horizon), horizon, "horizon must be positive.");
         int expected = horizon * ActionDim;
-        if (horizonAction.Length < expected)
-            throw new ArgumentException($"horizonAction has length {horizonAction.Length} but tokenizer expects {expected} (horizon {horizon} × ActionDim {ActionDim}).", nameof(horizonAction));
+        if (horizonAction.Length != expected)
+            throw new ArgumentException($"horizonAction has length {horizonAction.Length} but tokenizer expects exactly {expected} (horizon {horizon} × ActionDim {ActionDim}).", nameof(horizonAction));
 
         var tokens = new int[expected];
         for (int t = 0; t < horizon; t++)
@@ -147,8 +160,8 @@ public sealed class RT2ActionTokenizer<T>
     public Tensor<T> DecodeAction(int[] tokenIds)
     {
         if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
-        if (tokenIds.Length < ActionDim)
-            throw new ArgumentException($"tokenIds has length {tokenIds.Length} but tokenizer expects {ActionDim}.", nameof(tokenIds));
+        if (tokenIds.Length != ActionDim)
+            throw new ArgumentException($"tokenIds has length {tokenIds.Length} but tokenizer expects exactly {ActionDim}.", nameof(tokenIds));
 
         var action = new Tensor<T>([ActionDim]);
         for (int d = 0; d < ActionDim; d++)
@@ -167,8 +180,8 @@ public sealed class RT2ActionTokenizer<T>
         if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
         if (horizon <= 0) throw new ArgumentOutOfRangeException(nameof(horizon), horizon, "horizon must be positive.");
         int expected = horizon * ActionDim;
-        if (tokenIds.Length < expected)
-            throw new ArgumentException($"tokenIds has length {tokenIds.Length} but tokenizer expects {expected} (horizon {horizon} × ActionDim {ActionDim}).", nameof(tokenIds));
+        if (tokenIds.Length != expected)
+            throw new ArgumentException($"tokenIds has length {tokenIds.Length} but tokenizer expects exactly {expected} (horizon {horizon} × ActionDim {ActionDim}).", nameof(tokenIds));
 
         var action = new Tensor<T>([horizon, ActionDim]);
         for (int t = 0; t < horizon; t++)
@@ -192,14 +205,27 @@ public sealed class RT2ActionTokenizer<T>
     public int ActionDimOfPosition(int positionInStream) => positionInStream % ActionDim;
 
     /// <summary>
-    /// Selects the action-bin token with the highest logit (greedy argmax over the tokenizer's vocabulary slice).
+    /// Selects the action-bin token with the highest logit (greedy
+    /// argmax over the tokenizer's vocabulary slice). Expects
+    /// <paramref name="logits"/> to be EXACTLY the vocab logit vector
+    /// for a single decode position (length == VocabSize).
     /// </summary>
-    /// <param name="logits">Length-<c>vocabSize</c> logit vector (or longer; only the action-bin window is read).</param>
+    /// <param name="logits">Length-<c>VocabSize</c> logit vector for one decode position.</param>
     public int GreedyActionToken(Tensor<T> logits)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
-        if (logits.Length < TokenIdEndExclusive)
-            throw new ArgumentException($"logits length ({logits.Length}) is shorter than the action-bin vocabulary window end ({TokenIdEndExclusive}).", nameof(logits));
+        // Exact-length match against VocabSize: previously the check
+        // was "logits.Length >= TokenIdEndExclusive", which silently
+        // accepted a flattened multi-position decoder output
+        // (vocab × seqLen) as if it were a single-position logit
+        // vector — argmax would then run over the FIRST position's
+        // action-window slice and discard everything else without
+        // any indication of the misuse. Demand the exact shape so
+        // callers stuck on flatten-vs-position errors get a clear
+        // diagnostic.
+        if (logits.Length != VocabSize)
+            throw new ArgumentException($"logits length ({logits.Length}) must equal VocabSize ({VocabSize}) for a single decode position. " +
+                "If you're passing the flattened decoder output for multiple positions, slice it to the last-position logits first.", nameof(logits));
 
         int bestToken = TokenIdOffset;
         double bestLogit = _numOps.ToDouble(logits[TokenIdOffset]);

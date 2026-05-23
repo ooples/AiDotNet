@@ -78,6 +78,18 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer _tokenizer;
     private readonly RT2ActionTokenizer<T> _actionTokenizer;
+    // Learned token embedding table — replaces the previous deterministic
+    // sinusoidal placeholder in EmbedInstructionTokens /
+    // AppendActionTokenEmbedding. Per Brohan et al. 2023 §3.1 RT-2's
+    // text + action tokens flow through the same learned PaLI/PaLM-X
+    // embedding table; the synthetic sin/cos vectors weren't model-
+    // faithful and decoupled from the vocab head's training signal.
+    // Sized for VocabSize (covers both natural language and the
+    // action-bin tokens which live in a reserved window of the same
+    // vocab — paper §3.2). Embedding dim = decoder dim so the
+    // embedding table can be tied with the LM head's pre-projection
+    // weights in a future weight-tying pass.
+    private readonly EmbeddingLayer<T> _tokenEmbedding;
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
@@ -97,6 +109,7 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         _actionTokenizer = CreateActionTokenizer(_options);
+        _tokenEmbedding = new EmbeddingLayer<T>(_options.VocabSize, _options.DecoderDim);
         InitializeLayers();
     }
 
@@ -110,6 +123,7 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         base.EmbeddingDim = _options.DecoderDim;
         _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         _actionTokenizer = CreateActionTokenizer(_options);
+        _tokenEmbedding = new EmbeddingLayer<T>(_options.VocabSize, _options.DecoderDim);
         InitializeLayers();
     }
 
@@ -121,8 +135,14 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     public string LanguageModelName => _options.LanguageModelName;
     public int ActionDimension => _options.ActionDimension;
 
-    /// <summary>Exposes the action tokenizer used during decode. Useful for training-data preparation (encode demo actions to tokens for cross-entropy loss).</summary>
-    public RT2ActionTokenizer<T> ActionTokenizer => _actionTokenizer;
+    /// <summary>Action tokenizer used during decode. Internal because
+    /// it's a plumbing/helper type — the facade API
+    /// (<see cref="PredictAction"/>, <see cref="GenerateFromImage"/>)
+    /// is the supported way to interact with RT-2. Test/training-data
+    /// preparation that needs to encode demo actions for cross-entropy
+    /// loss can access this via InternalsVisibleTo from the test
+    /// assembly.</summary>
+    internal RT2ActionTokenizer<T> ActionTokenizer => _actionTokenizer;
 
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
@@ -143,7 +163,28 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(preprocessed);
+        if (IsOnnxMode && OnnxModel is not null)
+        {
+            // Fail fast for prompted ONNX generation rather than silently
+            // dropping the prompt and producing an image-only response.
+            // RT-2's ONNX export currently bundles the vision encoder only;
+            // language-conditioned decoding requires the full multimodal
+            // graph (PaLI-X / PaLM-E decoder) which isn't represented in
+            // the single-input ONNX path. Wiring it would require either
+            // (a) exporting the decoder as a separate ONNX model and
+            // running a two-stage pipeline, or (b) bundling both into one
+            // multimodal ONNX graph — either path is significant work
+            // tracked alongside the parallel ONNX-multimodal feature.
+            if (!string.IsNullOrWhiteSpace(prompt))
+            {
+                throw new NotSupportedException(
+                    "Prompted generation is not implemented for ONNX mode. " +
+                    "Use the native (non-ONNX) constructor for RT-2 if you need " +
+                    "language-conditioned action prediction, or call this method " +
+                    "without a prompt to run vision-only ONNX inference.");
+            }
+            return OnnxModel.Run(preprocessed);
+        }
 
         var encoderHidden = preprocessed;
         for (int i = 0; i < _encoderLayerEnd; i++)
@@ -169,6 +210,20 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     public Tensor<T> PredictAction(Tensor<T> observation, string instruction)
     {
         ThrowIfDisposed();
+        // ONNX-mode action prediction requires the full vision+language+
+        // decoder pipeline (paper §3.1) which the current single-input
+        // ONNX export doesn't represent. Fail fast rather than running
+        // the native decode path while pretending the user-loaded ONNX
+        // weights matter — that would silently bypass the loaded
+        // checkpoint and produce actions from randomly-initialized
+        // native layers instead.
+        if (IsOnnxMode)
+        {
+            throw new NotSupportedException(
+                "PredictAction is not implemented for ONNX mode — the loaded " +
+                "ONNX graph is vision-only. Use the native (non-ONNX) " +
+                "constructor to enable action prediction.");
+        }
         int actionDim = _options.ActionDimension;
         int horizon = Math.Max(1, _options.PredictionHorizon);
 
@@ -209,12 +264,27 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(Architecture.Layers);
-            // User-supplied architectures use a half-and-half encoder/decoder split because we
-            // cannot reliably introspect their block structure.
-            _encoderLayerEnd = Layers.Count / 2;
-            ValidateEncoderDecoderBoundary(_encoderLayerEnd);
-            return;
+            // Custom architectures need an EXPLICIT encoder/decoder
+            // boundary. The previous "Layers.Count / 2" heuristic
+            // silently routed half the layers into the encoder stack
+            // and half into the decoder, which only happened to be
+            // correct for the default RT-2 topology. A user-supplied
+            // architecture with, say, 3 vision layers + 6 decoder
+            // layers would put one decoder layer into the encoder
+            // stack and one vision layer into the decoder stack —
+            // producing valid-looking shapes but completely wrong
+            // semantics. Fail fast and require the metadata until
+            // RT2Options exposes an explicit EncoderLayerCount /
+            // DecoderLayerCount pair for custom architectures.
+            throw new NotSupportedException(
+                "Custom RT2 architectures (Architecture.Layers populated) " +
+                "must declare an explicit encoder/decoder boundary. The " +
+                "previous 'half-and-half' split was a heuristic that " +
+                "silently misrouted layers when vision/decoder counts " +
+                "weren't equal. Either use the default-topology " +
+                "constructor (Architecture.Layers null), or extend " +
+                "RT2Options with an EncoderLayerCount property and pin " +
+                "_encoderLayerEnd to that value here.");
         }
 
         Layers.AddRange(LayerHelper<T>.CreateDefaultRoboticsActionLayers(
@@ -259,63 +329,45 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
 
     /// <summary>
     /// Concatenates visual encoder output with instruction-token embeddings along the sequence
-    /// dimension to form the PaLI-style joint context vector. The text-token embedding here is
-    /// a deterministic sinusoidal projection from token IDs into the decoder embedding space.
-    /// A fully trained model would use a learned embedding table instead; the architectural
-    /// shape (visual tokens followed by text tokens in one sequence) is identical.
+    /// dimension to form the PaLI-style joint context vector per Brohan et al. 2023 §3.1.
+    /// Text-token embedding goes through the learned <see cref="_tokenEmbedding"/> table so
+    /// it shares the same representation the LM head is trained against.
     /// </summary>
     private Tensor<T> FuseVisualAndTextEmbeddings(Tensor<T> visualFeatures, Tensor<T> instructionTokens)
     {
         if (instructionTokens.Length == 0) return visualFeatures;
-        var textEmbed = EmbedInstructionTokens(instructionTokens);
+        var textEmbed = EmbedTokenIds(instructionTokens);
         return visualFeatures.ConcatenateTensors(textEmbed);
     }
 
-    private Tensor<T> EmbedInstructionTokens(Tensor<T> instructionTokens)
+    /// <summary>
+    /// Looks up token embeddings through the shared trainable
+    /// <see cref="_tokenEmbedding"/> layer. Replaces the previous
+    /// deterministic sinusoidal placeholder that fabricated sin/cos
+    /// vectors from token IDs — those weren't model-faithful and
+    /// decoupled the encoder/decoder input representation from the
+    /// vocab-head training signal. Per Brohan et al. 2023 §3.1, text
+    /// tokens AND action-bin tokens use the same learned embedding
+    /// table; this method is the shared lookup path.
+    /// </summary>
+    private Tensor<T> EmbedTokenIds(Tensor<T> tokenIds)
     {
-        int decoderDim = _options.DecoderDim;
-        int vocabSize = _options.VocabSize;
-        int seqLen = instructionTokens.Length;
-        var embedded = new Tensor<T>([seqLen * decoderDim]);
-        for (int s = 0; s < seqLen; s++)
-        {
-            double tokenId = NumOps.ToDouble(instructionTokens[s]);
-            double phase = (tokenId % vocabSize) * 2.0 * Math.PI / vocabSize;
-            for (int d = 0; d < decoderDim; d++)
-            {
-                double freq = 1.0 / Math.Pow(10000.0, 2.0 * (d / 2) / (double)decoderDim);
-                double val = (d % 2 == 0)
-                    ? Math.Sin(phase * freq + (d * 0.001))
-                    : Math.Cos(phase * freq + (d * 0.001));
-                embedded[s * decoderDim + d] = NumOps.FromDouble(val);
-            }
-        }
-        return embedded;
+        return _tokenEmbedding.Forward(tokenIds);
     }
 
     /// <summary>
-    /// Appends a deterministic embedding of the most recently generated action-bin token to the
-    /// running decoder context. This emulates the autoregressive decoder pattern: previous output
-    /// becomes the next input position. In a fully trained model the LM head's pre-projection
-    /// embedding table would be used instead, but the architectural shape (context grows by one
-    /// token per step) is identical.
+    /// Appends the learned embedding of the most-recently-generated
+    /// action-bin token to the running decoder context. Goes through
+    /// the same <see cref="_tokenEmbedding"/> table as text tokens
+    /// (action bins live in a reserved window of the vocab per paper
+    /// §3.2), so autoregressive decoding stays consistent with the
+    /// representation the LM head was trained against.
     /// </summary>
     private Tensor<T> AppendActionTokenEmbedding(Tensor<T> decoderState, int tokenId)
     {
-        int decoderDim = _options.DecoderDim;
-        var tokenEmbed = new Tensor<T>([decoderDim]);
-        int binIndex = tokenId - _actionTokenizer.TokenIdOffset;
-        if (binIndex < 0) binIndex = 0;
-        if (binIndex >= _actionTokenizer.NumBins) binIndex = _actionTokenizer.NumBins - 1;
-        double phase = (binIndex + 0.5) / _actionTokenizer.NumBins * 2.0 * Math.PI;
-        for (int d = 0; d < decoderDim; d++)
-        {
-            double freq = 1.0 / Math.Pow(10000.0, 2.0 * (d / 2) / (double)decoderDim);
-            double val = (d % 2 == 0)
-                ? Math.Sin(phase * freq)
-                : Math.Cos(phase * freq);
-            tokenEmbed[d] = NumOps.FromDouble(val);
-        }
+        var singleTokenInput = new Tensor<T>([1]);
+        singleTokenInput[0] = NumOps.FromDouble(tokenId);
+        var tokenEmbed = _tokenEmbedding.Forward(singleTokenInput);
         return decoderState.ConcatenateTensors(tokenEmbed);
     }
 
@@ -340,8 +392,19 @@ public class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<T>
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
-        TrainWithTape(input, expected);
-        SetTrainingMode(false);
+        try
+        {
+            TrainWithTape(input, expected);
+        }
+        finally
+        {
+            // If TrainWithTape throws (NaN gradient, optimizer state
+            // corruption, layer-side numerical issue, etc.) we still
+            // need to flip training mode back off — otherwise the next
+            // Predict() on this instance would run dropout / batchnorm
+            // in training mode and produce silently-incorrect outputs.
+            SetTrainingMode(false);
+        }
     }
 
     public override void UpdateParameters(Vector<T> parameters)
