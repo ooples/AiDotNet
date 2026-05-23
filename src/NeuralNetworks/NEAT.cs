@@ -628,7 +628,18 @@ public class NEAT<T> : NeuralNetworkBase<T>
             // Add new node
             var connection = connections[Random.Next(count)];
 
-            int maxNodeId = 0;
+            // First-free-node-id scan including the bias node — without the
+            // explicit biasNodeId floor below, the first add-node mutation
+            // on an initial genome (where max(FromNode, ToNode) =
+            // InputSize + OutputSize − 1) would produce newNodeId =
+            // InputSize + OutputSize, which collides with biasNodeId.
+            // ActivateGenome writes activations[biasNodeId] = NumOps.One
+            // BEFORE the connection sweep, so any connection accumulating
+            // into this hidden slot would corrupt the bias value — and
+            // every connection targeting it would also read a polluted
+            // pre-activation from the same slot.
+            int biasNodeId = Architecture.InputSize + Architecture.OutputSize;
+            int maxNodeId = biasNodeId;
             for (int i = 0; i < count; i++)
             {
                 var c = connections[i];
