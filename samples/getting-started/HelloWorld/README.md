@@ -8,7 +8,7 @@ End-to-end in ~50 lines including the inlined dataset:
 dotnet run
 ```
 
-```
+```text
 === AiDotNet Hello World: Iris classifier ===
 
 Test accuracy: 29/30 = 96.7%
@@ -22,11 +22,13 @@ Final loss:    0.0421
    `[N, 3]` one-hot tensor for the 3-class softmax target.
 2. **80/20 train/test split.** Seeded shuffle for reproducibility.
 3. **Build + train via the fluent `AiModelBuilder`.** Three lines:
+
    ```csharp
    var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()
        .ConfigureModel(new NeuralNetwork<double>(architecture))
        .BuildAsync(trainX, trainY);
    ```
+
 4. **Evaluate.** Argmax the prediction logits, compare against the held-out
    labels, report accuracy.
 
