@@ -56,8 +56,8 @@ public class LayerPortTests
     {
         var layer = new AddLayer<double>(new int[][] { new[] { 4 }, new[] { 4 } }, (IActivationFunction<double>?)null);
         Assert.Equal(2, layer.InputPorts.Count);
-        Assert.Equal("input_a", layer.InputPorts[0].Name);
-        Assert.Equal("input_b", layer.InputPorts[1].Name);
+        Assert.Equal("input_0", layer.InputPorts[0].Name);
+        Assert.Equal("input_1", layer.InputPorts[1].Name);
     }
 
     [Fact(Timeout = 120000)]
@@ -69,8 +69,8 @@ public class LayerPortTests
 
         var result = layer.Forward(new Dictionary<string, Tensor<double>>
         {
-            ["input_a"] = a,
-            ["input_b"] = b
+            ["input_0"] = a,
+            ["input_1"] = b
         });
 
         Assert.Equal(5.0, result[0], 10);

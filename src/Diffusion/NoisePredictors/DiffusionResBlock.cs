@@ -148,6 +148,92 @@ public class DiffusionResBlock<T> : LayerBase<T>
                 activationFunction: new IdentityActivation<T>(),
                 initializationStrategy: InitializationStrategies<T>.Lazy);
         }
+
+        // Eagerly materialize all sublayer lazy weights so they participate
+        // in GetParameters / SetParameters. With pure-lazy init, two freshly-
+        // constructed blocks have all sublayer `_weights` as [0,0] placeholders;
+        // GetParameters on block1 returns a vector that excludes those zero-shape
+        // weights, SetParameters on block2 leaves them at [0,0], then both
+        // blocks lazy-init at first Forward with INDEPENDENT random weights
+        // and produce divergent outputs — breaking the
+        // `block2.SetParameters(block1.GetParameters()) ⇒ block2(x) == block1(x)`
+        // determinism contract relied on by tests and checkpoint reload.
+        //
+        // We trigger materialization by running one probe forward through the
+        // whole block (with NoGradScope so the tape stays clean), then reset
+        // per-step state. Memory cost: one [1, C, S, S] tensor's worth of
+        // intermediate activations per block at construction time, returned
+        // to the pool by ResetState. Cheap relative to one training step.
+        {
+            using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var probeInput = new Tensor<T>([1, inChannels, spatialSize, spatialSize]);
+            if (timeEmbedDim > 0)
+            {
+                var probeTime = new Tensor<T>([1, timeEmbedDim]);
+                Forward(probeInput, probeTime);
+            }
+            else
+            {
+                Forward(probeInput);
+            }
+            ResetState();
+        }
+    }
+
+    /// <summary>
+    /// Declares named input ports. When <c>timeEmbedDim &gt; 0</c> this
+    /// block accepts a second <c>time_embed</c> input alongside the
+    /// feature-map <c>input</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Port naming convention across the codebase.</b> Two
+    /// conventions coexist:</para>
+    /// <list type="bullet">
+    /// <item><description><b>Semantic names</b> (this block:
+    /// <c>"input"</c>, <c>"time_embed"</c>) — used when inputs are
+    /// SEMANTICALLY distinct (feature map vs conditioning vector vs
+    /// attention mask, etc.). The name carries meaning that the caller
+    /// needs to wire correctly.</description></item>
+    /// <item><description><b>Indexed names</b> (<c>"input_0"</c>,
+    /// <c>"input_1"</c>, …) — used by symmetric n-ary layers like
+    /// <see cref="AiDotNet.NeuralNetworks.Layers.AddLayer{T}"/>,
+    /// <see cref="AiDotNet.NeuralNetworks.Layers.ConcatenateLayer{T}"/>,
+    /// <see cref="AiDotNet.NeuralNetworks.Layers.MultiplyLayer{T}"/>,
+    /// where the inputs are interchangeable.</description></item>
+    /// </list>
+    /// <para>Callers can discover the port names at runtime by reading
+    /// <c>layer.InputPorts</c> — each entry has a <c>Name</c> string
+    /// and a <c>Shape</c>. Pass tensors to
+    /// <see cref="Forward(IReadOnlyDictionary{string, Tensor{T}})"/>
+    /// keyed by those same names.</para>
+    /// </remarks>
+    private IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerPort>? _inputPortsCache;
+    public override IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerPort> InputPorts =>
+        _inputPortsCache ??= _timeEmbedDim > 0
+            ?
+            [
+                new AiDotNet.NeuralNetworks.Layers.LayerPort("input", GetInputShape()),
+                new AiDotNet.NeuralNetworks.Layers.LayerPort("time_embed", new[] { _timeEmbedDim })
+            ]
+            :
+            [
+                new AiDotNet.NeuralNetworks.Layers.LayerPort("input", GetInputShape())
+            ];
+
+    /// <summary>
+    /// Named multi-input forward pass. Routes the dict-keyed inputs to the
+    /// existing positional <c>Forward(input, timeEmbed)</c> implementation.
+    /// </summary>
+    public override Tensor<T> Forward(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+        if (!inputs.TryGetValue("input", out var input) || input is null)
+            throw new ArgumentException("DiffusionResBlock requires an 'input' tensor.", nameof(inputs));
+        if (_timeEmbedDim > 0 && inputs.TryGetValue("time_embed", out var timeEmbed) && timeEmbed is not null)
+        {
+            return Forward(input, timeEmbed);
+        }
+        return Forward(input);
     }
 
     /// <summary>

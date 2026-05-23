@@ -3060,6 +3060,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         bool isTrainable = true, hasTrainingMode = false, changesShape = false, isStateful = false;
         bool supportsBackprop = true, normalizesInput = false, usesSurrogateGradient = false;
+        bool producesNonFiniteOutput = false;
         int apiShape = LayerApiShapeSingleTensor;
         string testInputShape = "";
         string testConstructorArgs = "";
@@ -3108,6 +3109,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     case "UsesSurrogateGradient":
                         usesSurrogateGradient = (bool)(named.Value.Value ?? false);
                         break;
+                    case "ProducesNonFiniteOutput":
+                        producesNonFiniteOutput = (bool)(named.Value.Value ?? false);
+                        break;
                 }
             }
         }
@@ -3130,7 +3134,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestConstructorArgs = testConstructorArgs,
             TestSetupCode = testSetupCode,
             NormalizesInput = normalizesInput,
-            UsesSurrogateGradient = usesSurrogateGradient
+            UsesSurrogateGradient = usesSurrogateGradient,
+            ProducesNonFiniteOutput = producesNonFiniteOutput
         };
     }
 
@@ -3245,6 +3250,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (layer.NormalizesInput)
             sb.AppendLine("    protected override bool ExpectsDifferentOutputForConstantInputs => false;");
 
+        // Override ExpectsFiniteOutput for masking layers that legitimately emit ±Infinity
+        // (ALiBi, causal masks, etc.) so the Forward_ShouldProduceFiniteOutput invariant
+        // skips the IsInfinity check. Per Gu & Dao 2023 + Press et al. 2022, -∞ at masked
+        // positions is the standard signal for the downstream softmax to assign exact zero.
+        if (layer.ProducesNonFiniteOutput)
+            sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
+
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
@@ -3302,6 +3314,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (layer.NormalizesInput)
             sb.AppendLine("    protected override bool ExpectsDifferentOutputForDifferentInputs => false;");
 
+        // Mirror EmitLayerTestClass — masking layers that legitimately emit
+        // ±Infinity (ALiBi, causal masks) need the finite-output invariant
+        // off on the dual-input scaffold too. The previous version only
+        // wired the override on the single-input emitter, so any
+        // ±Infinity-emitting layer that ended up with two inputs (e.g. a
+        // mask layer fed feature + position) silently re-enabled the
+        // IsInfinity check and the auto-generated test asserted contrary
+        // to the layer's documented contract.
+        if (layer.ProducesNonFiniteOutput)
+            sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
+
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
@@ -3343,6 +3366,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine($"    protected override int[] InputShape => new[] {{ {layer.TestInputShape} }};");
         if (!layer.IsTrainable)
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
+
+        // Mirror EmitLayerTestClass — masking layers that legitimately
+        // emit ±Infinity (ALiBi, causal masks) need the finite-output
+        // invariant off on the multi-input scaffold too. See the
+        // EmitDualInputLayerTestClass note above for the full rationale.
+        if (layer.ProducesNonFiniteOutput)
+            sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
 
         sb.AppendLine("}");
 
@@ -3401,6 +3431,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (!layer.IsTrainable)
             sb.AppendLine("    protected override bool ExpectsTrainableParameters => false;");
 
+        // Mirror EmitLayerTestClass — masking layers that legitimately
+        // emit ±Infinity (ALiBi, causal masks) need the finite-output
+        // invariant off on the graph-layer scaffold too. See the
+        // EmitDualInputLayerTestClass note above for the full rationale.
+        if (layer.ProducesNonFiniteOutput)
+            sb.AppendLine("    protected override bool ExpectsFiniteOutput => false;");
+
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(layer.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
@@ -3427,6 +3464,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public string TestSetupCode { get; set; } = "";
         public bool NormalizesInput { get; set; }
         public bool UsesSurrogateGradient { get; set; }
+        public bool ProducesNonFiniteOutput { get; set; }
     }
 
     /// <summary>
