@@ -10,6 +10,29 @@ namespace AiDotNet.Models.Options;
 public class HomomorphicEncryptionOptions : ModelOptions
 {
     /// <summary>
+    /// Static factory that instantiates a default <c>IHomomorphicEncryptionProvider&lt;T&gt;</c> for a given <c>T</c>
+    /// when the federated trainer needs one and the caller did not supply one explicitly.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Set this once at startup to provide a fallback provider. The audit-2026-05 phase 2b extraction
+    /// moved the SEAL implementation out of the core <c>AiDotNet</c> package into
+    /// <c>AiDotNet.Privacy.HE</c>; that package registers itself here via a <c>[ModuleInitializer]</c>
+    /// the moment its assembly loads, so applications that simply add the package reference will
+    /// continue to work with no startup code changes.
+    /// </para>
+    /// <para>
+    /// Applications that do <i>not</i> reference an HE provider package and <i>do</i> enable HE
+    /// (<see cref="Enabled"/> = true) and <i>do not</i> supply an explicit provider on the trainer
+    /// constructor will hit a clear <see cref="System.InvalidOperationException"/> at training time
+    /// telling them which NuGet to install. This intentional contract change replaces the previous
+    /// hard-coded SEAL fallback that pinned <c>Microsoft.Research.SEALNet</c> as a transitive
+    /// dependency of every core consumer.
+    /// </para>
+    /// </remarks>
+    public static System.Func<System.Type, object>? DefaultProviderFactory { get; set; }
+
+    /// <summary>
     /// Gets or sets whether homomorphic encryption is enabled.
     /// </summary>
     public bool Enabled { get; set; } = false;

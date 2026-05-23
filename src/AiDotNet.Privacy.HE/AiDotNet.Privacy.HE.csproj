@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net471</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Version>0.204.0</Version>
+    <Title>AiDotNet.Privacy.HE</Title>
+    <Description>Homomorphic-encryption (HE) provider for AiDotNet federated learning. Wraps Microsoft.Research.SEALNet (CKKS / BFV) and registers itself as the default HE provider via a ModuleInitializer so applications just need to add the package reference. Licensed under BSL 1.1 — see https://aidotnet.dev/license.</Description>
+    <Company>Ooples Finance</Company>
+    <Authors>ooples</Authors>
+    <Copyright>Ooples Finance LLC 2023</Copyright>
+    <PackageProjectUrl>https://github.com/ooples/AiDotNet</PackageProjectUrl>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/ooples/AiDotNet</RepositoryUrl>
+    <PackageTags>ai; aidotnet; federated-learning; homomorphic-encryption; seal; ckks; bfv; privacy</PackageTags>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AiDotNet.FederatedLearning.Cryptography</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Research.SEALNet" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AiDotNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\LICENSE" Pack="True" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

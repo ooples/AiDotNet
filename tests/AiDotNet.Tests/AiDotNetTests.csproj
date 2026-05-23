@@ -34,6 +34,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+    <!-- audit-2026-05 phase 2b: SEAL extracted to AiDotNet.Privacy.HE. Test project references
+         the new package directly so (a) SealHomomorphicEncryptionProvider remains type-accessible
+         to SealHomomorphicEncryptionProviderTests, and (b) the module initializer fires on
+         test-assembly load, restoring the implicit SEAL default for the FederatedLearning HE
+         integration tests with no test-code changes. -->
+    <ProjectReference Include="..\..\src\AiDotNet.Privacy.HE\AiDotNet.Privacy.HE.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.Storage.Elasticsearch\AiDotNet.Storage.Elasticsearch.csproj" />
   </ItemGroup>
 
   <!-- Source generator for auto-generating test scaffolds for untested models -->

@@ -180,7 +180,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         var effectiveHeOptions = useHomomorphicEncryption ? heOptions : null;
         HomomorphicEncryptionScheme heScheme = effectiveHeOptions?.Scheme ?? HomomorphicEncryptionScheme.Ckks;
         HomomorphicEncryptionMode heMode = effectiveHeOptions?.Mode ?? HomomorphicEncryptionMode.HeOnly;
-        var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? new SealHomomorphicEncryptionProvider<T>()) : null;
+        var heProvider = useHomomorphicEncryption ? (_homomorphicEncryptionProviderOverride ?? ResolveDefaultHomomorphicEncryptionProvider()) : null;
         var encryptedIndices = useHomomorphicEncryption && effectiveHeOptions != null
             ? ResolveEncryptedIndices(effectiveHeOptions, (int)InterfaceGuard.Parameterizable(GetGlobalModel()).ParameterCount, heMode)
             : Array.Empty<int>();
@@ -949,6 +949,37 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         }
 
         return value;
+    }
+
+    /// <summary>
+    /// Resolves an <see cref="IHomomorphicEncryptionProvider{T}"/> from
+    /// <see cref="HomomorphicEncryptionOptions.DefaultProviderFactory"/> (set automatically when
+    /// AiDotNet.Privacy.HE is referenced) or throws a clear NuGet-installation error if no factory
+    /// is registered. Replaces the audit-2026-05-pre hard-coded <c>new SealHomomorphicEncryptionProvider</c>
+    /// fallback that pinned <c>Microsoft.Research.SEALNet</c> as a transitive dependency of every
+    /// core consumer.
+    /// </summary>
+    private static IHomomorphicEncryptionProvider<T> ResolveDefaultHomomorphicEncryptionProvider()
+    {
+        var factory = HomomorphicEncryptionOptions.DefaultProviderFactory;
+        if (factory is null)
+        {
+            throw new InvalidOperationException(
+                "Homomorphic encryption is enabled but no provider was supplied and no default " +
+                "provider factory is registered. Either pass an IHomomorphicEncryptionProvider<T> " +
+                "to the InMemoryFederatedTrainer constructor, or install the AiDotNet.Privacy.HE " +
+                "NuGet package (which registers SEAL as the default provider via a ModuleInitializer " +
+                "the moment its assembly is loaded). See audit-2026-05 phase 2b finding #14.");
+        }
+
+        var instance = factory(typeof(T));
+        if (instance is not IHomomorphicEncryptionProvider<T> typed)
+        {
+            throw new InvalidOperationException(
+                $"HomomorphicEncryptionOptions.DefaultProviderFactory returned {instance?.GetType().FullName ?? "null"} " +
+                $"which does not implement IHomomorphicEncryptionProvider<{typeof(T).FullName}>.");
+        }
+        return typed;
     }
 
     private static string GetHomomorphicEncryptionSchemeName(HomomorphicEncryptionScheme scheme)

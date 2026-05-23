@@ -95,16 +95,15 @@
 	  <PackageReference Include="Microsoft.CSharp" />
 	  <PackageReference Include="Microsoft.Data.Sqlite" />
 	  <PackageReference Include="Microsoft.ML.OnnxRuntime" />
-	  <!-- Microsoft.Research.SEALNet (homomorphic encryption). Used by exactly
-	       one file (src/FederatedLearning/Cryptography/SealHomomorphicEncryptionProvider.cs),
-	       BUT InMemoryFederatedTrainer.cs:183 hard-codes `new SealHomomorphicEncryptionProvider<T>()`
-	       as the default provider when useHomomorphicEncryption=true. Extracting SEAL to its own
-	       package would create a circular project reference unless we also refactor
-	       InMemoryFederatedTrainer to take an IHomomorphicEncryptionProvider factory at
-	       construction time (or fail loudly when useHomomorphicEncryption=true without a factory).
-	       That refactor is a contract change for federated-training callers and is tracked as a
-	       Phase 2b sub-follow-up. SEAL remains a direct dep of core until then. -->
-	  <PackageReference Include="Microsoft.Research.SEALNet" />
+	  <!-- audit-2026-05 phase 2b: Microsoft.Research.SEALNet extracted to
+	       src/AiDotNet.Privacy.HE. Core's InMemoryFederatedTrainer now resolves the
+	       default provider via HomomorphicEncryptionOptions.DefaultProviderFactory,
+	       which AiDotNet.Privacy.HE populates via a [ModuleInitializer] when its
+	       assembly loads. Consumers who reference AiDotNet.Privacy.HE get SEAL
+	       transparently; consumers who don't and try to enable HE get a clear
+	       NuGet-installation error from the trainer. -->
+	  <!-- <PackageReference Include="Microsoft.Research.SEALNet" /> -->
+
 	  <PackageReference Include="Newtonsoft.Json" />
 	  <!-- MatFileHandler — read .mat split/annotation files (SVHN, Stanford Cars, Flowers-102) -->
 	  <PackageReference Include="MatFileHandler" />
@@ -169,6 +168,13 @@
 	  <Compile Remove="AiDotNet.Storage.Elasticsearch\**\*.cs" />
 	  <EmbeddedResource Remove="AiDotNet.Storage.Elasticsearch\**\*" />
 	  <None Remove="AiDotNet.Storage.Elasticsearch\**\*" />
+	</ItemGroup>
+
+	<!-- Exclude the AiDotNet.Privacy.HE metapackage (audit-2026-05 phase 2b extraction). -->
+	<ItemGroup>
+	  <Compile Remove="AiDotNet.Privacy.HE\**\*.cs" />
+	  <EmbeddedResource Remove="AiDotNet.Privacy.HE\**\*" />
+	  <None Remove="AiDotNet.Privacy.HE\**\*" />
 	</ItemGroup>
 
 	<!-- Exclude the AiDotNet.Playground project files from this project -->
