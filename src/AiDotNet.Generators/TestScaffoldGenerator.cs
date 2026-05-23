@@ -1239,6 +1239,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "Cambrian", "Dragonfly", "Eagle", "Mantis", "Maya", "MiniCPM",
         "Molmo", "Monkey", "Moondream", "NVLM", "Ovis", "VILA",
         "PathVLM", "RadFM", "QVQ", "SkyworkR1V", "GeoChat", "RSGPT", "SkyEyeGPT",
+        // InstructionTuned VLMs that also resolve a 14-patch SigLIP / ViT-L
+        // encoder via ComputeVisualPatchSize (Gemma3: 896/sqrt(4096)=14,
+        // DeepSeekVL/2: ViT-L/14, InternVL family: ViT-L/14, Llama32Vision:
+        // ViT-L/14, Phi3Vision/Phi4Multimodal: CLIP ViT-L/14). PatchEmbedding
+        // throws "Image H/W (128/128) must be divisible by patchSize (14)"
+        // when the scaffold's default 128 isn't divisible by 14 — surfaced
+        // in PR #1408 Generated Layers shard run 26254401589 as 23 Gemma3
+        // tests all failing at the same Forward boundary.
+        "Gemma", "DeepSeekVL", "InternVL", "Llama32Vision",
+        "Phi3Vision", "Phi4Multimodal",
     };
 
     /// <summary>
@@ -4350,6 +4360,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             "BiomedCLIP" => true,
             "DFNCLIP" => true,
+            // Gemma3 (Google 2025): VisionDim=1152, DecoderDim=3584, 27 vision
+            // layers, 36 decoder layers, ImageSize=896 SigLIP-SO. Default Adam
+            // step OOMs the test runner before even completing the warm-up
+            // Predict — surfaced in PR #1408 Generated Layers shard as 23
+            // Gemma3 tests all failing.
+            "Gemma3" => true,
             _ => false,
         };
     }
