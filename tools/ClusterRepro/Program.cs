@@ -52,7 +52,14 @@ System.Console.WriteLine($"Original vs Clone1 maxDiff: {maxOC1:E3}");
 
 System.Console.WriteLine($"Original layer count: {network.Layers.Count}");
 System.Console.WriteLine($"Cloned layer count:   {cloned.Layers.Count}");
-for (int i = 0; i < network.Layers.Count; i++)
+// Iterate up to the minimum layer count so a clone with FEWER layers
+// (the exact failure mode this repro tool exists to diagnose) doesn't
+// throw IndexOutOfRangeException at line 58 and lose the per-layer
+// diagnostics that come after. Surface any count mismatch as its own
+// labelled log line for the missing range so we can still see WHICH
+// layers got dropped on the clone side.
+int sharedLayerCount = System.Math.Min(network.Layers.Count, cloned.Layers.Count);
+for (int i = 0; i < sharedLayerCount; i++)
 {
     var origParams = network.Layers[i].GetParameters();
     var clonedParams = cloned.Layers[i].GetParameters();
@@ -67,6 +74,17 @@ for (int i = 0; i < network.Layers.Count; i++)
     }
     var status = origLen == clonedLen ? "OK" : "LEN-MISMATCH";
     System.Console.WriteLine($"Layer {i} {network.Layers[i].GetType().Name}: orig={origLen} cloned={clonedLen} maxDelta={maxDelta:E3} {status}");
+}
+// Report the layers that exist on only ONE side so the repro output
+// shows exactly which layers got dropped (vs the prior throw that hid
+// the entire diagnostic).
+for (int i = sharedLayerCount; i < network.Layers.Count; i++)
+{
+    System.Console.WriteLine($"Layer {i} {network.Layers[i].GetType().Name}: orig=present cloned=MISSING (clone has only {cloned.Layers.Count} layers)");
+}
+for (int i = sharedLayerCount; i < cloned.Layers.Count; i++)
+{
+    System.Console.WriteLine($"Layer {i} {cloned.Layers[i].GetType().Name}: orig=MISSING cloned=present (orig has only {network.Layers.Count} layers)");
 }
 
 System.Console.WriteLine();
