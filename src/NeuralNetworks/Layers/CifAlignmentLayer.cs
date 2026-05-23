@@ -64,8 +64,33 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     private readonly T _tailThreshold;
     private readonly DenseLayer<T> _alphaPredictor;
 
-    /// <inheritdoc/>
-    public override bool SupportsTraining => true;
+    /// <summary>
+    /// Currently <c>false</c>: this layer's <see cref="Forward"/>
+    /// materializes α and the integrated hidden states into scalar T
+    /// values via per-element <see cref="Tensor{T}"/> indexers and
+    /// scalar <c>NumOps</c> arithmetic, which the tape autodiff
+    /// path cannot record. Returning <c>true</c> while no gradient
+    /// actually reaches <see cref="_alphaPredictor"/> would advertise
+    /// a learnable alignment head that's secretly frozen — that's
+    /// worse than a forward-only contract because callers would
+    /// expect the alpha predictor to converge but it never would.
+    /// </summary>
+    /// <remarks>
+    /// Fixing this to <c>true</c> requires one of:
+    /// <list type="bullet">
+    /// <item>A custom <c>Backward</c> implementation that walks
+    /// recorded CIF split decisions in reverse and accumulates
+    /// gradients for the alpha predictor (analytic derivatives of
+    /// the integrate-and-fire dynamics).</item>
+    /// <item>A soft / differentiable CIF re-formulation (e.g.
+    /// Zhao &amp; Gao 2024 "Distill the soft CIF") that replaces the
+    /// hard threshold-crossing with a continuous accumulation matrix
+    /// the tape can record through standard <c>Engine</c> ops.</item>
+    /// </list>
+    /// Tracked as the dedicated CIF-training follow-up — out of
+    /// scope for the current Paraformer-shape-fix PR.
+    /// </remarks>
+    public override bool SupportsTraining => false;
 
     /// <inheritdoc/>
     public override long ParameterCount => _alphaPredictor.ParameterCount;
