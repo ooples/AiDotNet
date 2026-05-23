@@ -105,6 +105,20 @@ internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
     /// <param name="keyLen">Number of key positions.</param>
     /// <param name="useCausalMask">Whether to apply causal masking (future positions get -inf). Default: true.</param>
     /// <returns>Bias tensor of shape [numHeads, queryLen, keyLen].</returns>
+    /// <remarks>
+    /// Masked positions are filled with <see cref="double.NegativeInfinity"/>
+    /// (via <c>NumOps.FromDouble(double.NegativeInfinity)</c>), NOT
+    /// <c>NumOps.MinValue</c>. A literal −∞ guarantees the downstream softmax
+    /// sees <c>exp(−∞) = 0</c> exactly on masked positions; <c>MinValue</c>
+    /// is a large finite value (~−3.4e38 for float) whose exp underflows to
+    /// 0 most of the time but can leak tiny non-zero attention weight under
+    /// FP intermediate ordering, and any code path that ADDS the bias
+    /// without going through softmax (e.g. residual-summing) would
+    /// accumulate a real finite penalty instead of cleanly masking. The
+    /// <c>[LayerProperty(ProducesNonFiniteOutput = true)]</c> annotation
+    /// on this class tells the test scaffold generator to skip the
+    /// <c>Forward_ShouldProduceFiniteOutput</c> invariant.
+    /// </remarks>
     public Tensor<T> ComputeBias(int queryLen, int keyLen, bool useCausalMask = true)
     {
         if (useCausalMask && queryLen > keyLen)
@@ -127,17 +141,9 @@ internal partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>
         }
 
         var bias = new Tensor<T>([_numHeads, queryLen, keyLen]);
-        // Use true -Infinity (not MinValue) so the downstream softmax sees
-        // exp(-inf) = 0 EXACTLY on masked positions. NumOps.MinValue is a
-        // large finite value (~-3.4e38 for float) — exp of that underflows
-        // to 0 in normal cases but can leave tiny non-zero attention weight
-        // on masked positions under FP intermediate ordering, and any code
-        // path that ADDS bias values without going through softmax (e.g.
-        // residual-summing masked rows) accumulates a real finite penalty
-        // instead of cleanly masking. FromDouble preserves ±∞ for float /
-        // double specializations; the [LayerProperty(ProducesNonFiniteOutput
-        // = true)] annotation tells the test scaffold generator to skip
-        // the Forward_ShouldProduceFiniteOutput invariant for this layer.
+        // True −Infinity for masked positions — see ComputeBias remarks
+        // for the full rationale (softmax exactness vs MinValue, the
+        // ProducesNonFiniteOutput annotation contract).
         T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
         for (int h = 0; h < _numHeads; h++)
