@@ -16885,6 +16885,26 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Selects the final-layer activation for a tabular prediction head from the
+    /// task type. A hardcoded Softmax (the previous default across the tabular
+    /// model family) is only valid for multi-class classification: Softmax over a
+    /// single logit is identically 1.0, which collapses every input to the same
+    /// output, zeros the output Jacobian, and freezes training. Models in this
+    /// family that default to regression (OutputSize=1) hit exactly that
+    /// degeneracy. Returns linear (null) for regression and other non-classification
+    /// task types, matching the codebase-wide output-activation convention.
+    /// </summary>
+    private static IActivationFunction<T>? GetTabularOutputActivation(NeuralNetworkArchitecture<T> architecture)
+        => architecture.TaskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
+            _ => null
+        };
+
+    /// <summary>
     /// Creates default layers for a TabNet model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTabNetLayers(
@@ -16908,7 +16928,7 @@ public static class LayerHelper<T>
         }
 
         // Output layer
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -16942,7 +16962,7 @@ public static class LayerHelper<T>
 
         // Classification head
         yield return new DenseLayer<T>(hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -16977,7 +16997,11 @@ public static class LayerHelper<T>
         // MLP head
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+
+        // Final projection activation is task-dependent — see
+        // GetTabularOutputActivation. A hardcoded Softmax (the prior default)
+        // collapses the regression head (OutputSize=1) to a constant 1.0.
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17171,7 +17195,7 @@ public static class LayerHelper<T>
         // MLP head for final prediction
         yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DenseLayer<T>(32, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17220,7 +17244,7 @@ public static class LayerHelper<T>
         // MLP head
         yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DenseLayer<T>(32, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17261,7 +17285,7 @@ public static class LayerHelper<T>
 
         // Output head
         yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17305,7 +17329,7 @@ public static class LayerHelper<T>
 
         // Output head
         yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17341,7 +17365,7 @@ public static class LayerHelper<T>
         }
 
         // Output layer
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17383,7 +17407,7 @@ public static class LayerHelper<T>
 
         // CLS token aggregation and classification head
         yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17425,7 +17449,7 @@ public static class LayerHelper<T>
 
         // Classification head
         yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
