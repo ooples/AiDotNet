@@ -231,6 +231,26 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[0]);
         }
+        else if (genericDef == typeof(FeatureTokenizerLayer<>))
+        {
+            // FeatureTokenizerLayer(int numFeatures, int embeddingDim) — both
+            // constructor dims are recoverable from the output shape, which is
+            // [numFeatures, embeddingDim].
+            if (outputShape.Length < 2)
+            {
+                throw new MissingLayerCtorException(
+                    "FeatureTokenizerLayer requires a rank-2 output shape [numFeatures, embeddingDim]; got ["
+                    + string.Join(",", outputShape) + "].");
+            }
+
+            var ctor = type.GetConstructor(new[] { typeof(int), typeof(int) });
+            if (ctor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find FeatureTokenizerLayer(int, int) constructor.");
+            }
+
+            instance = ctor.Invoke(new object[] { outputShape[0], outputShape[1] });
+        }
         else if (genericDef == typeof(TransposeLayer<>))
         {
             // TransposeLayer(int[] inputShape, int[] permutation)

@@ -16978,29 +16978,32 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Column embedding
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization. Turn the flat [features] vector into a real
+        // [features, embedding] token sequence so self-attention operates ACROSS
+        // features — the defining idea of TabTransformer (Huang et al. 2020) /
+        // FT-Transformer (Gorishniy et al. 2021). The previous design projected
+        // [features] -> [hidden] (a SINGLE vector), so self-attention ran over a
+        // length-1 sequence (no real attention) through a stack with no residual
+        // path, and the network froze on the memorization task. Per-feature
+        // embeddings (each feature its own direction) also avoid the collinear-
+        // token collapse a shared projection suffers when LayerNorm strips the
+        // per-feature scale.
+        yield return new FeatureTokenizerLayer<T>(numFeatures, hiddenDimension);
 
-        // Transformer encoder for categorical columns
+        // Transformer encoder blocks over the F feature-tokens. TransformerEncoderLayer
+        // carries the residual connections + layer norm that keep deep attention
+        // stacks trainable — the same encoder block ViT / BERT are built from.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
         }
 
-        // MLP head
+        // MLP head over the encoded feature-token representations (ViT-style
+        // Dense -> Dense head). The final projection activation is task-dependent
+        // (see GetTabularOutputActivation) — a hardcoded Softmax collapses a
+        // single-output regression head to a constant 1.0.
         yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-
-        // Final projection activation is task-dependent — see
-        // GetTabularOutputActivation. A hardcoded Softmax (the prior default)
-        // collapses the regression head (OutputSize=1) to a constant 1.0.
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
