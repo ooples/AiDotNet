@@ -129,8 +129,14 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// </code>
     /// </para>
     /// </remarks>
+    // The transformer encoder produces one contextual embedding per feature token and the head runs
+    // per token (tape-safe sequence pooling is unavailable, so flatten/mean reductions break gradient
+    // flow). With a single output, the per-token logits are all trained toward the one regression
+    // target and collapse to a constant, input-independent value. Default to a multi-output head
+    // (10), matching the sibling tabular transformers (FT-Transformer / AutoInt / TabDPT / SAINT),
+    // which keeps the per-token projection input-sensitive.
     public TabTransformerNetwork()
-        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 1))
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 10))
     {
     }
 
