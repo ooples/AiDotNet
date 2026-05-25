@@ -26,45 +26,70 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// separate positional embedding is needed.
 /// </para>
 /// <para>
-/// Rank-robust: <c>[F] → [F, embedding]</c> (unbatched) and <c>[batch, F] → [batch, F, embedding]</c>
-/// (batched). Forward is expressed with broadcast Engine ops on the registered weight/bias tensors
-/// so the tape computes their gradients automatically.
+/// The feature count is resolved lazily from the first forward input (like <see cref="DenseLayer{T}"/>),
+/// so the layer adapts to the actual fed input width even when a model's declared input size differs.
+/// Output is always a batched <c>[batch, features, embedding]</c> tensor (batch=1 for an unbatched
+/// <c>[features]</c> input) so the downstream encoder and head treat the feature axis unambiguously.
+/// Forward is expressed with broadcast Engine ops on the registered weight/bias tensors so the tape
+/// computes their gradients automatically.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class FeatureTokenizerLayer<T> : LayerBase<T>
 {
-    private readonly int _numFeatures;
+    private int _numFeatures;
     private readonly int _embeddingDim;
-    private Tensor<T> _weights; // [numFeatures, embeddingDim]
-    private Tensor<T> _biases;  // [numFeatures, embeddingDim]
+    private Tensor<T> _weights = new Tensor<T>(new[] { 0, 0 }); // [numFeatures, embeddingDim]
+    private Tensor<T> _biases = new Tensor<T>(new[] { 0, 0 });  // [numFeatures, embeddingDim]
+    private bool _initialized;
 
     /// <summary>
-    /// Initializes a new <see cref="FeatureTokenizerLayer{T}"/>.
+    /// Initializes a tokenizer whose feature count is resolved lazily on the first forward pass.
     /// </summary>
-    /// <param name="numFeatures">Number of input features (sequence length of the produced tokens).</param>
+    /// <param name="embeddingDim">Embedding dimension per feature token.</param>
+    public FeatureTokenizerLayer(int embeddingDim)
+        : base(new[] { -1 }, new[] { -1, embeddingDim })
+    {
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
+        _embeddingDim = embeddingDim;
+        _numFeatures = -1;
+    }
+
+    /// <summary>
+    /// Initializes a tokenizer with an explicit feature count. The count is still re-resolved from
+    /// the first forward input if it differs (the input is authoritative).
+    /// </summary>
+    /// <param name="numFeatures">Expected number of input features.</param>
     /// <param name="embeddingDim">Embedding dimension per feature token.</param>
     public FeatureTokenizerLayer(int numFeatures, int embeddingDim)
-        : base(new[] { numFeatures }, new[] { numFeatures, embeddingDim })
+        : this(embeddingDim)
     {
-        if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));
-        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
-
-        _numFeatures = numFeatures;
-        _embeddingDim = embeddingDim;
-        _weights = new Tensor<T>(new[] { numFeatures, embeddingDim });
-        _biases = new Tensor<T>(new[] { numFeatures, embeddingDim });
-        InitializeParameters();
-
-        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        if (numFeatures > 0)
+        {
+            _numFeatures = numFeatures;
+            EnsureTokenizerInitialized();
+        }
     }
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
-    public override long ParameterCount => 2L * _numFeatures * _embeddingDim;
+    public override long ParameterCount => _initialized ? 2L * _numFeatures * _embeddingDim : 0L;
+
+    private void EnsureTokenizerInitialized()
+    {
+        if (_initialized || _numFeatures <= 0) return;
+
+        _weights = new Tensor<T>(new[] { _numFeatures, _embeddingDim });
+        _biases = new Tensor<T>(new[] { _numFeatures, _embeddingDim });
+        InitializeParameters();
+
+        RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        _initialized = true;
+        ResolveShapes(new[] { _numFeatures }, new[] { _numFeatures, _embeddingDim });
+    }
 
     private void InitializeParameters()
     {
@@ -72,12 +97,11 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
             ? RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Uniform(-1/sqrt(E), 1/sqrt(E)) for BOTH weights and biases, per
-        // FT-Transformer's tokenizer init. The bias must be non-zero: with a zero
-        // bias each token is x_f * W[f] — a pure scalar multiple of W[f] — and the
-        // encoder's LayerNorm strips that scale, collapsing constant inputs of
-        // different magnitude (e.g. all-0.1 vs all-0.9) to identical tokens. A
-        // learnable non-zero bias breaks that scale-invariance.
+        // Uniform(-1/sqrt(E), 1/sqrt(E)) for BOTH weights and biases, per FT-Transformer's
+        // tokenizer init. The bias must be non-zero: with a zero bias each token is x_f * W[f] —
+        // a pure scalar multiple of W[f] — and the encoder's LayerNorm strips that scale,
+        // collapsing constant inputs of different magnitude (all-0.1 vs all-0.9) to identical
+        // tokens. A learnable non-zero bias breaks that scale-invariance.
         double scale = 1.0 / Math.Sqrt(_embeddingDim);
         for (int f = 0; f < _numFeatures; f++)
         {
@@ -92,22 +116,22 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        int rank = input.Rank;
+        int features = input.Shape[input.Rank - 1];
+        if (!_initialized || _numFeatures != features)
+        {
+            // The fed input width is authoritative — (re)size to it.
+            _initialized = false;
+            _numFeatures = features;
+            EnsureTokenizerInitialized();
+        }
 
-        // Expand to [..., F, 1] so the trailing singleton broadcasts to the embedding dim.
-        var expShape = new int[rank + 1];
-        for (int i = 0; i < rank; i++) expShape[i] = input.Shape[i];
-        expShape[rank] = 1;
-        var expanded = Engine.Reshape(input, expShape);
+        // Always emit a batched rank-3 token sequence [batch, F, E] (batch=1 for an
+        // unbatched [F] input) so downstream layers treat the feature axis (1) uniformly.
+        int batch = input.Rank == 1 ? 1 : input.Shape[0];
 
-        // Reshape the [F, E] parameters to rank+1 with leading singletons so the
-        // broadcast aligns with batched ([batch, F, 1]) and unbatched ([F, 1]) inputs.
-        var paramShape = new int[rank + 1];
-        for (int i = 0; i < rank - 1; i++) paramShape[i] = 1;
-        paramShape[rank - 1] = _numFeatures;
-        paramShape[rank] = _embeddingDim;
-        var wB = Engine.Reshape(_weights, paramShape);
-        var bB = Engine.Reshape(_biases, paramShape);
+        var expanded = Engine.Reshape(input, new[] { batch, _numFeatures, 1 });
+        var wB = Engine.Reshape(_weights, new[] { 1, _numFeatures, _embeddingDim });
+        var bB = Engine.Reshape(_biases, new[] { 1, _numFeatures, _embeddingDim });
 
         var scaled = Engine.TensorBroadcastMultiply(expanded, wB);
         return Engine.TensorBroadcastAdd(scaled, bB);
@@ -122,13 +146,29 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
 
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
-        => Vector<T>.Concatenate(
+    {
+        if (!_initialized) return new Vector<T>(0);
+        return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weights.Data),
             Vector<T>.FromMemory(_biases.Data));
+    }
 
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
+        if (!_initialized)
+        {
+            // Resolve the feature count from the parameter vector: length = 2 * F * E.
+            if (parameters.Length == 0) return;
+            int inferred = parameters.Length / (2 * _embeddingDim);
+            if (inferred <= 0 || inferred * 2 * _embeddingDim != parameters.Length)
+                throw new ArgumentException(
+                    $"Cannot infer feature count from {parameters.Length} parameters with embeddingDim {_embeddingDim}.",
+                    nameof(parameters));
+            _numFeatures = inferred;
+            EnsureTokenizerInitialized();
+        }
+
         int wCount = _numFeatures * _embeddingDim;
         if (parameters.Length != 2 * wCount)
             throw new ArgumentException(

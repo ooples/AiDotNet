@@ -17393,25 +17393,23 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Feature tokenization (embedding each feature)
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its OWN learnable vector,
+        // producing a real [features, embedding] token sequence (FT-Transformer,
+        // Gorishniy et al. 2021). Replaces the prior single-Dense projection that
+        // collapsed all features to one vector (length-1 attention, no real
+        // tokenization).
+        yield return new FeatureTokenizerLayer<T>(numFeatures, embeddingDimension);
 
-        // Transformer encoder layers
+        // Transformer encoder blocks over the feature tokens (residual + layer norm
+        // built in — the ViT/BERT encoder block).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            // ReGLU-style feed-forward (using GELU approximation)
-            yield return new DenseLayer<T>(embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, embeddingDimension * 4);
         }
 
-        // CLS token aggregation and classification head
-        yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        // GELU readout head (ViT/BERT-style; a ReLU + dropout head drives the output
+        // projection dead during training). Final activation is task-dependent.
+        yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
