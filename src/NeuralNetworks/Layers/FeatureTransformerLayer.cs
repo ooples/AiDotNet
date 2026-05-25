@@ -214,24 +214,22 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyGLU(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
         int fullDim = input.Shape[1];
         int halfDim = fullDim / 2;
 
-        // Split input into value (first half) and gate (second half)
-        var values = TensorAllocator.Rent<T>([batchSize, halfDim]);
-        var gates = TensorAllocator.Rent<T>([batchSize, halfDim]);
+        // Tape-safe column split via a constant 0/1 selection-matrix matmul:
+        // values = input[:, :halfDim], gates = input[:, halfDim:]. The previous
+        // manual element-copy split created fresh tensors disconnected from the
+        // autodiff tape, so gradients could not flow back to the upstream FC layers.
+        var valueSelector = new Tensor<T>(new[] { fullDim, halfDim });
+        for (int i = 0; i < halfDim; i++) valueSelector[i, i] = NumOps.One;
+        var gateSelector = new Tensor<T>(new[] { fullDim, halfDim });
+        for (int j = 0; j < halfDim; j++) gateSelector[halfDim + j, j] = NumOps.One;
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < halfDim; d++)
-            {
-                values[b * halfDim + d] = input[b * fullDim + d];
-                gates[b * halfDim + d] = input[b * fullDim + halfDim + d];
-            }
-        }
+        var values = Engine.TensorMatMul(input, valueSelector);
+        var gates = Engine.TensorMatMul(input, gateSelector);
 
-        // Apply sigmoid to gates and multiply with values
+        // Apply sigmoid to gates and multiply with values (GLU).
         var sigmoidGates = Engine.Sigmoid(gates);
         return Engine.TensorMultiply(values, sigmoidGates);
     }
@@ -477,5 +475,9 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
     {
         foreach (var fc in _sharedFCLayers) fc.SetTrainingMode(isTraining);
         foreach (var fc in _stepFCLayers) fc.SetTrainingMode(isTraining);
+        // GhostBatchNormalization is not an ILayer<T>, so propagate mode explicitly so
+        // it uses running stats at inference (and for under-sized batches in training).
+        foreach (var bn in _sharedBNLayers) bn.SetTrainingMode(isTraining);
+        foreach (var bn in _stepBNLayers) bn.SetTrainingMode(isTraining);
     }
 }

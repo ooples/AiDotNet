@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -57,9 +58,17 @@ public class GhostBatchNormalization<T>
     // Cache for backward pass
     private Tensor<T>? _inputCache;
     private Tensor<T>? _normalizedCache;
-    private Vector<T>[]? _batchMeans;
-    private Vector<T>[]? _batchVars;
-    private int _numVirtualBatches;
+
+    // Training vs inference mode. Propagated by the owning composite layer
+    // (FeatureTransformerLayer / AttentiveTransformerLayer) so eval uses running stats.
+    private bool _isTraining = true;
+
+    /// <summary>
+    /// Sets training vs inference mode. In inference (and for under-sized batches in training)
+    /// the layer normalizes with the running statistics so the output stays input-dependent and
+    /// deterministic.
+    /// </summary>
+    public void SetTrainingMode(bool isTraining) => _isTraining = isTraining;
 
     /// <summary>
     /// Gets the name of this layer.
@@ -143,87 +152,60 @@ public class GhostBatchNormalization<T>
             throw new ArgumentException($"Expected {_numFeatures} features, got {features}", nameof(input));
         }
 
-        var output = new Tensor<T>(input._shape);
-
-        // Determine number of virtual batches
-        _numVirtualBatches = Math.Max(1, (batchSize + _virtualBatchSize - 1) / _virtualBatchSize);
-        int actualVirtualSize = (batchSize + _numVirtualBatches - 1) / _numVirtualBatches;
-
+        var engine = AiDotNetEngine.Current;
         _inputCache = input;
-        _normalizedCache = new Tensor<T>(input._shape);
-        _batchMeans = new Vector<T>[_numVirtualBatches];
-        _batchVars = new Vector<T>[_numVirtualBatches];
 
-        // Process each virtual batch
-        for (int vb = 0; vb < _numVirtualBatches; vb++)
+        // Choose normalization statistics. Batch statistics need >= 2 samples to be
+        // meaningful; with a single sample (common at inference and in the invariant
+        // tests, which feed one example) the batch mean equals the sample, so the
+        // centered value is identically 0 — the output would not depend on the input
+        // and the gradient to upstream layers would vanish. In that case — and always
+        // in inference mode — normalize with the running statistics, which are
+        // input-INDEPENDENT constants, so the output (and gradient) still varies with x.
+        bool useBatchStats = _isTraining && batchSize >= 2;
+
+        Tensor<T> meanRow; // [1, features]
+        Tensor<T> varRow;  // [1, features]
+        if (useBatchStats)
         {
-            int startIdx = vb * actualVirtualSize;
-            int endIdx = Math.Min(startIdx + actualVirtualSize, batchSize);
-            int virtualSize = endIdx - startIdx;
-
-            if (virtualSize <= 0) continue;
-
-            // Compute mean for this virtual batch
-            var mean = new Vector<T>(_numFeatures);
-            for (int f = 0; f < features; f++)
-            {
-                var sum = _numOps.Zero;
-                for (int b = startIdx; b < endIdx; b++)
-                {
-                    sum = _numOps.Add(sum, input[b * features + f]);
-                }
-                mean[f] = _numOps.Divide(sum, _numOps.FromDouble(virtualSize));
-            }
-
-            // Compute variance for this virtual batch
-            var variance = new Vector<T>(_numFeatures);
-            for (int f = 0; f < features; f++)
-            {
-                var sumSq = _numOps.Zero;
-                for (int b = startIdx; b < endIdx; b++)
-                {
-                    var diff = _numOps.Subtract(input[b * features + f], mean[f]);
-                    sumSq = _numOps.Add(sumSq, _numOps.Multiply(diff, diff));
-                }
-                variance[f] = _numOps.Divide(sumSq, _numOps.FromDouble(virtualSize));
-            }
-
-            _batchMeans[vb] = mean;
-            _batchVars[vb] = variance;
-
-            // Normalize and apply scale/shift for this virtual batch
-            for (int b = startIdx; b < endIdx; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    // Normalize: (x - mean) / sqrt(var + eps)
-                    var normalized = _numOps.Divide(
-                        _numOps.Subtract(input[b * features + f], mean[f]),
-                        _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(variance[f]) + _epsilon)));
-
-                    _normalizedCache[b * features + f] = normalized;
-
-                    // Scale and shift: gamma * normalized + beta
-                    output[b * features + f] = _numOps.Add(
-                        _numOps.Multiply(_gamma[f], normalized),
-                        _beta[f]);
-                }
-            }
-
-            // Update running statistics
-            for (int f = 0; f < features; f++)
-            {
-                _runningMean[f] = _numOps.Add(
-                    _numOps.Multiply(_numOps.FromDouble(1 - _momentum), _runningMean[f]),
-                    _numOps.Multiply(_numOps.FromDouble(_momentum), mean[f]));
-
-                _runningVar[f] = _numOps.Add(
-                    _numOps.Multiply(_numOps.FromDouble(1 - _momentum), _runningVar[f]),
-                    _numOps.Multiply(_numOps.FromDouble(_momentum), variance[f]));
-            }
+            meanRow = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
+            var negMean0 = engine.TensorMultiplyScalar(meanRow, _numOps.FromDouble(-1.0));
+            var centered0 = engine.TensorBroadcastAdd(input, negMean0);
+            varRow = engine.ReduceMean(engine.TensorMultiply(centered0, centered0), new[] { 0 }, keepDims: true);
+            UpdateRunningStatistics(meanRow, varRow);
+        }
+        else
+        {
+            meanRow = Tensor<T>.FromVector(_runningMean).Reshape(new[] { 1, _numFeatures });
+            varRow = Tensor<T>.FromVector(_runningVar).Reshape(new[] { 1, _numFeatures });
         }
 
-        return output;
+        // normalized = (x - mean) / sqrt(var + eps), then scale/shift by gamma/beta.
+        // All Engine ops, so the autodiff tape records the computation and gradients
+        // flow through to the upstream layers (the previous manual-loop implementation
+        // was a tape dead-end, so nothing upstream of a GhostBatchNorm could train).
+        var negMean = engine.TensorMultiplyScalar(meanRow, _numOps.FromDouble(-1.0));
+        var centered = engine.TensorBroadcastAdd(input, negMean);
+        var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, _numOps.FromDouble(_epsilon)));
+        var normalized = engine.TensorBroadcastDivide(centered, std);
+        _normalizedCache = normalized;
+
+        var gammaRow = Tensor<T>.FromVector(_gamma).Reshape(new[] { 1, _numFeatures });
+        var betaRow = Tensor<T>.FromVector(_beta).Reshape(new[] { 1, _numFeatures });
+        var scaled = engine.TensorBroadcastMultiply(normalized, gammaRow);
+        return engine.TensorBroadcastAdd(scaled, betaRow);
+    }
+
+    private void UpdateRunningStatistics(Tensor<T> meanRow, Tensor<T> varRow)
+    {
+        // Running stats are a non-tape side-effect; read the computed batch stats by value.
+        var oneMinus = _numOps.FromDouble(1 - _momentum);
+        var m = _numOps.FromDouble(_momentum);
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            _runningMean[f] = _numOps.Add(_numOps.Multiply(oneMinus, _runningMean[f]), _numOps.Multiply(m, meanRow[f]));
+            _runningVar[f] = _numOps.Add(_numOps.Multiply(oneMinus, _runningVar[f]), _numOps.Multiply(m, varRow[f]));
+        }
     }
 
     /// <summary>

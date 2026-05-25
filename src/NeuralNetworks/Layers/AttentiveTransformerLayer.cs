@@ -397,6 +397,8 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
     public override void SetTrainingMode(bool isTraining)
     {
         _fcLayer.SetTrainingMode(isTraining);
-        // GhostBatchNormalization uses Forward (training) vs ForwardInference (eval) internally
+        // GhostBatchNormalization is not an ILayer<T>; propagate mode explicitly so it
+        // normalizes with running stats at inference (and for under-sized batches).
+        _bnLayer.SetTrainingMode(isTraining);
     }
 }

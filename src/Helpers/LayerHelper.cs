@@ -16922,6 +16922,7 @@ public static class LayerHelper<T>
         // [batch, decisionDim] representation; a linear head maps it to the output.
         // decisionDim = attentionDim = hiddenDimension (n_d = n_a).
         yield return new TabNetEncoderLayer<T>(
+            numFeatures: numFeatures,
             decisionDim: hiddenDimension,
             attentionDim: hiddenDimension,
             numSteps: numSteps,

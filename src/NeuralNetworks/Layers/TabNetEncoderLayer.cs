@@ -57,9 +57,11 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
     private Tensor<T>? _attentionSelector;
 
     /// <summary>
-    /// Initializes a new <see cref="TabNetEncoderLayer{T}"/>. The input feature count is resolved
-    /// lazily from the first forward pass.
+    /// Initializes a new <see cref="TabNetEncoderLayer{T}"/>. Sub-layers are built eagerly for the
+    /// given feature count so the optimizer collects their parameters on the first training step;
+    /// if a later forward sees a different input width the components are rebuilt to match.
     /// </summary>
+    /// <param name="numFeatures">Number of input features (mask dimension).</param>
     /// <param name="decisionDim">Decision (output) dimension n_d.</param>
     /// <param name="attentionDim">Attention dimension n_a fed to the attentive transformer.</param>
     /// <param name="numSteps">Number of sequential decision steps.</param>
@@ -70,6 +72,7 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
     /// <param name="momentum">Batch-norm momentum.</param>
     /// <param name="epsilon">Batch-norm epsilon.</param>
     public TabNetEncoderLayer(
+        int numFeatures,
         int decisionDim,
         int attentionDim,
         int numSteps,
@@ -79,8 +82,9 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
         int virtualBatchSize = 128,
         double momentum = 0.02,
         double epsilon = 1e-5)
-        : base(new[] { -1 }, new[] { decisionDim })
+        : base(new[] { numFeatures }, new[] { decisionDim })
     {
+        if (numFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(numFeatures));
         if (decisionDim <= 0) throw new ArgumentOutOfRangeException(nameof(decisionDim));
         if (attentionDim <= 0) throw new ArgumentOutOfRangeException(nameof(attentionDim));
         if (numSteps <= 0) throw new ArgumentOutOfRangeException(nameof(numSteps));
@@ -94,6 +98,8 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
         _virtualBatchSize = virtualBatchSize;
         _momentum = momentum;
         _epsilon = epsilon;
+
+        BuildComponents(numFeatures);
     }
 
     /// <inheritdoc/>

@@ -91,7 +91,7 @@ public class TabNetNetwork<T> : NeuralNetworkBase<T>
         : this(new NeuralNetworkArchitecture<T>(
             inputType: Enums.InputType.OneDimensional,
             taskType: Enums.NeuralNetworkTaskType.Regression,
-            inputSize: 10,
+            inputSize: 16,
             outputSize: 10))
     {
     }
