@@ -16998,12 +16998,14 @@ public static class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
         }
 
-        // MLP head over the encoded feature-token representations (ViT-style
-        // Dense -> Dense head). The final projection activation is task-dependent
+        // MLP head, matching the ViT/BERT readout (GELU projection -> output, no
+        // dropout). A ReLU projection + dropout here drove the output layer into a
+        // dead/bias-only state during training (distinct inputs collapsed to the same
+        // post-training prediction); the smooth GELU keeps the head's units alive so
+        // the projection stays input-sensitive. The final activation is task-dependent
         // (see GetTabularOutputActivation) — a hardcoded Softmax collapses a
         // single-output regression head to a constant 1.0.
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
+        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
