@@ -603,6 +603,23 @@ public static class DeserializationHelper
                 layerBase.ResolveFromShape(resolvedShape);
             }
         }
+        else if (genericDef == typeof(IntersampleAttentionLayer<>))
+        {
+            // IntersampleAttentionLayer(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1).
+            // The embedding dim is the trailing axis of the saved shape; the four FC projections are
+            // resolved eagerly in the ctor (probe forward), so the constructed instance already has
+            // the right ParameterCount for SetParameters — no post-hoc ResolveFromShape needed.
+            int embDim = outputShape.Length > 0 ? outputShape[^1] : inputShape[^1];
+            int isaHeads = TryGetInt(additionalParams, "NumHeads") ?? ResolveDefaultHeadCount(embDim);
+            double isaDropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.1;
+
+            var isaCtor = type.GetConstructor(new[] { typeof(int), typeof(int), typeof(double) });
+            if (isaCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find IntersampleAttentionLayer(int, int, double) constructor.");
+            }
+            instance = isaCtor.Invoke(new object[] { embDim, isaHeads, isaDropout });
+        }
         else if (genericDef == typeof(TransformerDecoderLayer<>))
         {
             // TransformerDecoderLayer(int numHeads, int feedForwardDim,

@@ -16945,24 +16945,28 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Input embedding
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its OWN learnable token, producing a real
+        // [features, embedding] sequence. SAINT (Somepalli et al. 2021, "SAINT: Improved Neural
+        // Networks for Tabular Data via Row Attention and Contrastive Pre-Training") operates on
+        // per-feature tokens — the prior single-Dense projection collapsed all features into one
+        // vector (length-1 self-attention, no real column attention) and trained unstably
+        // (MoreData_ShouldNotDegrade diverged with more iterations).
+        yield return new FeatureTokenizerLayer<T>(numFeatures, hiddenDimension);
 
-        // Transformer layers with inter-sample attention
+        // SAINT alternates two attention types per stage:
+        //   1. Self-attention ACROSS features within each sample (column attention) — the standard
+        //      transformer encoder block (residual + layer norm built in).
+        //   2. Intersample attention ACROSS samples for each feature (row attention) — SAINT's
+        //      defining contribution, letting a sample attend to other rows in the batch.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
+            yield return new IntersampleAttentionLayer<T>(hiddenDimension, numHeads, dropoutRate);
         }
 
-        // Classification head
-        yield return new DenseLayer<T>(hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
+        // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
+        // training). Final activation is task-dependent (GetTabularOutputActivation).
+        yield return new DenseLayer<T>(hiddenDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -17272,24 +17276,26 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Input projection
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its OWN learnable vector, producing a
+        // real [features, embedding] token sequence. TabDPT (Ma et al. 2024, "TabDPT: Scaling
+        // Tabular Foundation Models") is a transformer over tokenized table cells — the prior
+        // single-Dense projection collapsed all features into one vector (length-1 attention,
+        // no feature interaction) and drove the output projection to an input-independent state
+        // during training (DifferentInputs_AfterTraining collapse). Per-feature embeddings give
+        // real self-attention across features, the encoder backbone TabDPT's retrieval-based
+        // in-context learning is built on (see InContextLearning<T>).
+        yield return new FeatureTokenizerLayer<T>(numFeatures, embeddingDimension);
 
-        // Transformer encoder layers
+        // Transformer encoder blocks over the feature tokens (residual + layer norm built in —
+        // the ViT/BERT encoder block that keeps deep attention stacks trainable).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, embeddingDimension * 4);
         }
 
-        // Output head
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
+        // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
+        // training). Final activation is task-dependent (GetTabularOutputActivation).
+        yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
