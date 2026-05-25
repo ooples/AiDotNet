@@ -13,7 +13,7 @@
          - 0.81.8 #418  serialise clCreateCommandQueue across threads (dodges AMD driver race, #414)
          - 0.81.9 #424  long-arithmetic dim-product in TensorAllocator (replaces silent `checked(int * int)` overflow — unblocks TimeMachine / DQN / OWLViT / DGCNN / TabTransformer / TabDPT / SlimSAM / TriaffineNER on SonarCloud run 26241806890) -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.81.9" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.9" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.82.5" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.81.9" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.9" />
     <!-- Microsoft / .NET -->
