@@ -320,6 +320,24 @@ public static class DeserializationHelper
             }
             instance = gfCtor.Invoke(new object[] { gfFeatures, gfStages });
         }
+        else if (genericDef == typeof(NodeEnsembleLayer<>))
+        {
+            // NodeEnsembleLayer(int numFeatures, int numTrees, int treeDepth, int treeOutputDim).
+            // numFeatures is the input width; the rest come from metadata. Output is
+            // [numTrees * treeOutputDim], so derive numFeatures from the SAVED input shape.
+            int neFeatures = inputShape.Length > 0 ? inputShape[^1]
+                : TryGetInt(additionalParams, "NumFeatures") ?? 1;
+            int neTrees = TryGetInt(additionalParams, "NumTrees") ?? 20;
+            int neDepth = TryGetInt(additionalParams, "TreeDepth") ?? 6;
+            int neOutDim = TryGetInt(additionalParams, "TreeOutputDim") ?? 3;
+            if (neFeatures <= 0) neFeatures = TryGetInt(additionalParams, "NumFeatures") ?? 1;
+            var neCtor = type.GetConstructor(new[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) });
+            if (neCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find NodeEnsembleLayer(int, int, int, int, double) constructor.");
+            }
+            instance = neCtor.Invoke(new object[] { neFeatures, neTrees, neDepth, neOutDim, 0.01 });
+        }
         else if (genericDef == typeof(TransposeLayer<>))
         {
             // TransposeLayer(int[] inputShape, int[] permutation)

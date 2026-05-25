@@ -17108,34 +17108,16 @@ public static class LayerHelper<T>
         bool useBatchNorm = true,
         double dropoutRate = 0.0)
     {
-        // Optional input batch normalization
-        if (useBatchNorm)
-        {
-            yield return new BatchNormalizationLayer<T>();
-        }
+        // NODE (Popov et al. 2019) is a PARALLEL ensemble of differentiable oblivious decision
+        // trees: every tree sees the full feature vector and their outputs are concatenated, then a
+        // linear head maps to the prediction. NodeEnsembleLayer encapsulates the parallel ensemble.
+        // (The previous design stacked SoftTreeLayers SEQUENTIALLY — each tree consumed the prior
+        // tree's [treeOutputDim] output as its input, a feature-dimension mismatch and not an
+        // ensemble at all.)
+        yield return new NodeEnsembleLayer<T>(numFeatures, numTrees, treeDepth, treeOutputDim);
 
-        // Feature preprocessing layer
-        yield return new DenseLayer<T>(numFeatures * 2, (IActivationFunction<T>)new ReLUActivation<T>());
-
-        if (useBatchNorm)
-        {
-            yield return new BatchNormalizationLayer<T>();
-        }
-
-        // Soft tree ensemble (using SoftTreeLayer)
-        for (int t = 0; t < numTrees; t++)
-        {
-            yield return new SoftTreeLayer<T>(
-                inputDim: numFeatures * 2,
-                depth: treeDepth,
-                outputDim: treeOutputDim,
-                temperature: 1.0,
-                initScale: 0.01);
-        }
-
-        // Aggregate tree outputs
-        int totalTreeOutput = numTrees * treeOutputDim;
-        yield return new DenseLayer<T>(outputSize, (IActivationFunction<T>?)null);
+        // Linear prediction head (task-dependent output activation; linear for regression).
+        yield return new DenseLayer<T>(outputSize, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
