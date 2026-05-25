@@ -17227,32 +17227,28 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Feature embedding
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its OWN learnable token, producing a
+        // [features, embedding] sequence that the Mamba blocks scan. Mambular (Thielmann et al.
+        // 2024, "Mambular: A Sequential Model for Tabular Deep Learning") treats the features as
+        // the sequence dimension of a Mamba model.
+        yield return new FeatureTokenizerLayer<T>(numFeatures, embeddingDimension);
 
-        // Mamba-style layers (approximated with dense + gating)
+        // Real Mamba blocks (selective SSM): input projection + depthwise Conv1D + selective scan
+        // (S6) + output gating, each with a residual connection. Replaces the previous
+        // dense+gating "approximation" (which was not a state-space model and trained unstably —
+        // MoreData_ShouldNotDegrade diverged). The features are the sequence (length = numFeatures).
         for (int i = 0; i < numLayers; i++)
         {
-            // Expand dimension
-            yield return new DenseLayer<T>(embeddingDimension * 2, (IActivationFunction<T>)new SiLUActivation<T>());
-
-            // State space processing (simplified)
-            yield return new DenseLayer<T>(embeddingDimension * 2, (IActivationFunction<T>?)null);
-
-            // Contract back
-            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
+            yield return new MambaBlock<T>(
+                sequenceLength: numFeatures,
+                modelDimension: embeddingDimension,
+                stateDimension: stateDimension);
         }
 
-        // MLP head
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(32, (IActivationFunction<T>)new ReLUActivation<T>());
+        // Per-token MLP head (GELU readout; tape-safe sequence pooling is unavailable so the head
+        // runs per feature-token, matching the sibling tabular models). Final activation is
+        // task-dependent (GetTabularOutputActivation).
+        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
