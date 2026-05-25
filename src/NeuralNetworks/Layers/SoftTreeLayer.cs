@@ -149,13 +149,21 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// <returns>Tree output [batchSize, outputDim].</returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
-        _lastInput = input;
-        int batchSize = input.Shape[0];
+        // The split-logit and leaf-value steps are matmuls and require a rank-2 [batch, features]
+        // input. Flatten a rank-1 ([features]) or higher-rank input to 2D so an unbatched single
+        // sample doesn't fault the matmul (TensorMatMul requires rank >= 2); restore the caller's
+        // rank-1 shape on the way out. The reshape is tape-recorded, so gradients still flow back
+        // to the original input.
+        int features = input.Shape[input.Rank - 1];
+        bool wasRank1 = input.Rank == 1;
+        var x = input.Rank == 2 ? input : Engine.Reshape(input, new[] { input.Length / features, features });
+        _lastInput = x;
+        int batchSize = x.Shape[0];
 
         // Compute split logits: input @ splitWeights^T + splitBiases
         // Shape: [batchSize, numInternalNodes]
         var splitWeightsT = Engine.TensorTranspose(_splitWeights);
-        var splitLogits = Engine.TensorMatMul(input, splitWeightsT);
+        var splitLogits = Engine.TensorMatMul(x, splitWeightsT);
 
         // Add biases (broadcast)
         var biasesBroadcast = new Tensor<T>([1, _numInternalNodes]);
@@ -182,6 +190,7 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
         // Weighted sum of leaf values: pathProbs @ leafValues
         // pathProbs: [batchSize, numLeaves], leafValues: [numLeaves, outputDim]
         var output = Engine.TensorMatMul(_pathProbabilities, _leafValues);
+        if (wasRank1) output = Engine.Reshape(output, new[] { _leafValues.Shape[1] });
 
         return output;
     }

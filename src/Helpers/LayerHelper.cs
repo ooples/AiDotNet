@@ -17068,56 +17068,22 @@ public static class LayerHelper<T>
         bool useBatchNorm = true,
         double dropoutRate = 0.1)
     {
-        // ============================================
-        // 1. GATING NETWORK - learns feature importance
-        // ============================================
-        int prevDim = numFeatures;
+        // GANDALF (Joseph & Raj 2022) is a stack of Gated Feature Learning Units (GFLUs) — NOT a
+        // soft-decision-tree ensemble (that is NODE). Each GFLU does learnable softmax feature
+        // selection + a GLU-gated transformation + a gated residual update of the running
+        // representation, so later stages build hierarchically on earlier feature selections.
+        // GandalfGFLULayer encapsulates the whole stack and emits a [batch, numFeatures]
+        // representation; a linear head maps it to the prediction. (The earlier design — a sigmoid
+        // gating MLP feeding a stack of SoftTreeLayers — was a NODE-style tree ensemble mislabeled
+        // as GANDALF, and the trees crashed on unbatched input.)
+        //
+        // treeDepth doubles as the GFLU stage count (its default of 6 matches GANDALF's default
+        // n_stages); the tree-specific parameters are not used by the GFLU backbone.
+        int numStages = Math.Max(2, treeDepth);
+        yield return new GandalfGFLULayer<T>(numFeatures, numStages);
 
-        // Gating hidden layers with ReLU activation
-        for (int i = 0; i < numGatingLayers; i++)
-        {
-            yield return new DenseLayer<T>(gatingHiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
-
-            if (useBatchNorm)
-            {
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
-
-            prevDim = gatingHiddenDim;
-        }
-
-        // Gating output layer - sigmoid produces [0,1] feature importance weights
-        yield return new DenseLayer<T>(numFeatures, (IActivationFunction<T>)new SigmoidActivation<T>());
-
-        // ============================================
-        // 2. SOFT DECISION TREE ENSEMBLE
-        // ============================================
-        // Each tree processes the gated features independently
-        for (int t = 0; t < numTrees; t++)
-        {
-            yield return new SoftTreeLayer<T>(
-                inputDim: numFeatures,
-                depth: treeDepth,
-                outputDim: leafDimension,
-                temperature: temperature,
-                initScale: initScale);
-        }
-
-        // ============================================
-        // 3. OUTPUT PROJECTION
-        // ============================================
-        // Aggregate tree outputs to final prediction dimension
-        int treeTotalOutputDim = numTrees * leafDimension;
-
-        if (treeTotalOutputDim != outputSize)
-        {
-            yield return new DenseLayer<T>(outputSize, (IActivationFunction<T>?)null);
-        }
+        // Linear prediction head (task-dependent output activation; linear for regression).
+        yield return new DenseLayer<T>(outputSize, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>

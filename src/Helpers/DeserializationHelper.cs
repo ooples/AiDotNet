@@ -306,6 +306,20 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[] { outputShape[^2], outputShape[^1] });
         }
+        else if (genericDef == typeof(GandalfGFLULayer<>))
+        {
+            // GandalfGFLULayer(int numFeatures, int numStages). numFeatures is the trailing output
+            // dim; numStages comes from metadata. The ctor eagerly resolves its sub-layers (probe
+            // forward), so the constructed instance already has the right ParameterCount.
+            int gfFeatures = outputShape.Length > 0 ? outputShape[^1] : inputShape[^1];
+            int gfStages = TryGetInt(additionalParams, "NumStages") ?? 6;
+            var gfCtor = type.GetConstructor(new[] { typeof(int), typeof(int) });
+            if (gfCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find GandalfGFLULayer(int, int) constructor.");
+            }
+            instance = gfCtor.Invoke(new object[] { gfFeatures, gfStages });
+        }
         else if (genericDef == typeof(TransposeLayer<>))
         {
             // TransposeLayer(int[] inputShape, int[] permutation)
