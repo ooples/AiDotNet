@@ -17431,26 +17431,28 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        int prevDim = numFeatures;
-
-        // Feature encoder MLP
+        // Encoder E + Predictor P: a feed-forward MLP that embeds the whole feature vector into a
+        // d-dim representation and projects to the output. TabR (Gorishniy et al. 2023, "TabR:
+        // Tabular Deep Learning Meets Nearest Neighbors") embeds each object to one vector (not a
+        // per-feature token sequence), then a retrieval module enriches it with similar objects
+        // from the candidate pool; with the single-sample training/inference path that module
+        // reduces to this encoder + predictor backbone (see RetrievalModule<T> / ContextEncoder<T>
+        // for the retrieval components used when a candidate pool is supplied).
+        //
+        // No LayerNorm and no dropout in the backbone:
+        //   * Stacked LayerNorm strips the per-sample magnitude, so constant inputs differing only
+        //     in scale (all-0.1 vs all-0.9) collapse to identical outputs (the previous design
+        //     only passed ScaledInput / DifferentInputs by accident, via training-mode dropout
+        //     noise). Plain Dense layers preserve the input differences.
+        //   * Per-layer dropout makes optimization stochastic, so the longer training run lands at
+        //     a worse loss than the shorter one (MoreData_ShouldNotDegrade diverged). A
+        //     deterministic feed-forward stack trains monotonically.
         for (int i = 0; i < numLayers; i++)
         {
-            int nextDim = i == 0 ? embeddingDimension : embeddingDimension;
-            yield return new DenseLayer<T>(nextDim, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
-            prevDim = nextDim;
+            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         }
 
-        // Context encoding (simplified - full implementation would include retrieval)
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
-
-        // Classification head
+        // Predictor P.
         yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
