@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
+[LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
 public class CifAlignmentLayer<T> : LayerBase<T>
 {
     private readonly int _encoderDim;
@@ -87,8 +87,8 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     /// hard threshold-crossing with a continuous accumulation matrix
     /// the tape can record through standard <c>Engine</c> ops.</item>
     /// </list>
-    /// Tracked as the dedicated CIF-training follow-up — out of
-    /// scope for the current Paraformer-shape-fix PR.
+    /// Tracked as a dedicated CIF-training follow-up; until then this
+    /// layer is inference-only (<see cref="SupportsTraining"/> is false).
     /// </remarks>
     public override bool SupportsTraining => false;
 
@@ -110,6 +110,13 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         : base(new[] { -1, -1, encoderDim }, new[] { -1, -1, encoderDim })
     {
         if (encoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(encoderDim));
+        // Reject non-finite thresholds first: NaN slips past every relational guard below
+        // (NaN < 1.0, NaN > threshold are both false), and ±Inf would corrupt the cumulative
+        // integrate-and-fire comparisons once converted to T.
+        if (double.IsNaN(threshold) || double.IsInfinity(threshold))
+            throw new ArgumentOutOfRangeException(nameof(threshold), threshold, "threshold must be a finite number.");
+        if (double.IsNaN(tailThreshold) || double.IsInfinity(tailThreshold))
+            throw new ArgumentOutOfRangeException(nameof(tailThreshold), tailThreshold, "tailThreshold must be a finite number.");
         // Reject threshold < 1.0 — the single-fire-per-timestep
         // assumption baked into the fixed [B, S, D] output shape only
         // holds when α_t ∈ [0, 1] cannot cross the threshold more

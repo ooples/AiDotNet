@@ -16894,14 +16894,20 @@ public static class LayerHelper<T>
     /// degeneracy. Returns linear (null) for regression and other non-classification
     /// task types, matching the codebase-wide output-activation convention.
     /// </summary>
-    private static IActivationFunction<T>? GetTabularOutputActivation(NeuralNetworkArchitecture<T> architecture)
+    // Returns the task-appropriate output-head activation. The linear cases return an explicit
+    // IdentityActivation rather than null: DenseLayer(outputSize, null) falls back to ReLU (see its
+    // ctor), so returning null would silently clip a regression head to non-negative outputs. A
+    // regression/unknown head must be linear, so we return IdentityActivation. (Classification heads
+    // get Sigmoid/Softmax matched to the loss.) Never returns null.
+    private static IActivationFunction<T> GetTabularOutputActivation(NeuralNetworkArchitecture<T> architecture)
         => architecture.TaskType switch
         {
             NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
             NeuralNetworkTaskType.MultiClassClassification => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
             NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
-            _ => null
+            NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
+            _ => new IdentityActivation<T>()
         };
 
     /// <summary>
@@ -17364,10 +17370,10 @@ public static class LayerHelper<T>
         // TabM, and its single-member MLP had no ensembling).
         yield return new TabMEnsembleLayer<T>(numFeatures, hiddenDimensions, numClasses);
 
-        // The ensemble emits raw averaged logits; apply the task-dependent output activation
-        // (linear for regression -> no extra layer).
+        // The ensemble emits raw averaged logits; apply the task-dependent output activation.
+        // A linear (Identity) head needs no layer — skip it so regression stays a pure pass-through.
         var outputActivation = GetTabularOutputActivation(architecture);
-        if (outputActivation is not null)
+        if (outputActivation is not IdentityActivation<T>)
         {
             yield return new ActivationLayer<T>(outputActivation);
         }

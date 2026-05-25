@@ -176,6 +176,12 @@ public class FTTransformerNetwork<T> : NeuralNetworkBase<T>
         // body computed the loss gradient, dropped it without backpropagating, then
         // called _optimizer.UpdateParameters(Layers) — which throws "Backward pass must
         // be called before updating parameters" because no gradients exist.
+        // Honor the base Train contract: auto-promote an unbatched single sample
+        // ([features] / [seq, features]) to a leading unit batch dim before the tape
+        // forward, exactly as NeuralNetworkBase.Train does. Without this, callers
+        // passing single-sample tensors would bypass the canonical [B, …] promotion.
+        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+
         SetTrainingMode(true);
         try
         {

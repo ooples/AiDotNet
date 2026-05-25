@@ -287,14 +287,15 @@ public static class DeserializationHelper
         }
         else if (genericDef == typeof(FeatureTokenizerLayer<>))
         {
-            // FeatureTokenizerLayer(int numFeatures, int embeddingDim) — both
-            // constructor dims are recoverable from the output shape, which is
-            // [numFeatures, embeddingDim].
+            // FeatureTokenizerLayer(int numFeatures, int embeddingDim) — both constructor dims are
+            // the TRAILING two axes of the output shape: [..., numFeatures, embeddingDim]. Reading
+            // the trailing axes (not [0],[1]) handles a saved batched shape [batch, F, E] correctly
+            // — using the leading axes there would mistake `batch` for `numFeatures`.
             if (outputShape.Length < 2)
             {
                 throw new MissingLayerCtorException(
-                    "FeatureTokenizerLayer requires a rank-2 output shape [numFeatures, embeddingDim]; got ["
-                    + string.Join(",", outputShape) + "].");
+                    "FeatureTokenizerLayer requires an output shape of rank >= 2 ending in "
+                    + "[numFeatures, embeddingDim]; got [" + string.Join(",", outputShape) + "].");
             }
 
             var ctor = type.GetConstructor(new[] { typeof(int), typeof(int) });
@@ -303,7 +304,7 @@ public static class DeserializationHelper
                 throw new MissingLayerCtorException("Cannot find FeatureTokenizerLayer(int, int) constructor.");
             }
 
-            instance = ctor.Invoke(new object[] { outputShape[0], outputShape[1] });
+            instance = ctor.Invoke(new object[] { outputShape[^2], outputShape[^1] });
         }
         else if (genericDef == typeof(TransposeLayer<>))
         {

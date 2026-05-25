@@ -60,6 +60,15 @@ public class TabMEnsembleLayer<T> : LayerBase<T>
 
     private void BuildComponents(int numFeatures)
     {
+        // On a rebuild (the fed input width differs from the eager ctor build), unregister the
+        // previous BatchEnsemble sub-layers before creating new ones. RegisterSubLayer only
+        // appends, so without this a width change would leave stale children in the registry —
+        // inflating ParameterCount / GetParameters ordering and the optimizer's update walk.
+        if (_built && _ensembleLayers is not null)
+        {
+            foreach (var l in _ensembleLayers) UnregisterSubLayer(l);
+        }
+
         _numFeatures = numFeatures;
 
         // Layer widths: [numFeatures, hidden..., outputDim].
@@ -123,7 +132,7 @@ public class TabMEnsembleLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var sub in GetSubLayers())
         {
-            int count = checked((int)sub.ParameterCount);
+            int count = AiDotNet.Helpers.ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
             if (count == 0) continue;
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++) p[i] = parameters[offset + i];

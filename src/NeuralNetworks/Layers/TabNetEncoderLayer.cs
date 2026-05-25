@@ -113,6 +113,19 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
 
     private void BuildComponents(int numFeatures)
     {
+        // On a rebuild (the fed input width differs from the eager ctor build), unregister the
+        // previous sub-layers before creating new ones. RegisterSubLayer only appends, so without
+        // this a width change would leave stale children in the registry — inflating ParameterCount
+        // / GetParameters and making the optimizer step dead layers.
+        if (_built)
+        {
+            if (_initialFeatureTransformer is not null) UnregisterSubLayer(_initialFeatureTransformer);
+            if (_attentiveTransformers is not null)
+                foreach (var l in _attentiveTransformers) UnregisterSubLayer(l);
+            if (_stepFeatureTransformers is not null)
+                foreach (var l in _stepFeatureTransformers) UnregisterSubLayer(l);
+        }
+
         _numFeatures = numFeatures;
         int ftOut = _decisionDim + _attentionDim;
 
@@ -223,7 +236,7 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
         int offset = 0;
         foreach (var sub in GetSubLayers())
         {
-            int count = checked((int)sub.ParameterCount);
+            int count = AiDotNet.Helpers.ParameterCountHelper.ToFlatVectorSize(sub.ParameterCount);
             if (count == 0) continue;
             var p = new Vector<T>(count);
             for (int i = 0; i < count; i++) p[i] = parameters[offset + i];

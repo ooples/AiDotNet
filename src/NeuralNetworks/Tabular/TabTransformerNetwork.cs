@@ -272,6 +272,12 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
         // throws "Backward pass must be called before updating parameters"
         // when no gradients exist. Surfaced as 13 TabTransformerNetworkTests
         // failures on PR #1408's Generated Layers shard.
+        // Honor the base Train contract: auto-promote an unbatched single sample
+        // ([features] / [seq, features]) to a leading unit batch dim before the tape
+        // forward, exactly as NeuralNetworkBase.Train does. Without this, callers
+        // passing single-sample tensors would bypass the canonical [B, …] promotion.
+        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+
         SetTrainingMode(true);
         try
         {

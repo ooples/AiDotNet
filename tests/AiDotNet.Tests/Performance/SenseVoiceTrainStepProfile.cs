@@ -160,13 +160,16 @@ public class SenseVoiceTrainStepProfile
                           + $"− ForwardForTraining ({forwardTrainingAvgMs:F0} ms) "
                           + $"= {backwardPlusOptMs:F0} ms");
 
-        // Sanity: Train must dominate forward; if not, the tape isn't
-        // engaging (e.g. ForwardForTraining is falling through to
-        // inference path, or Train is silently no-op'ing).
-        Assert.True(medianTrainMs > forwardTrainingAvgMs * 0.9,
-            $"SenseVoice Train ({medianTrainMs:F0} ms) is unexpectedly close to or below ForwardForTraining "
-            + $"({forwardTrainingAvgMs:F0} ms) — the backward + optimizer portion of Train is missing. "
-            + "Likely a regression where Train silently became inference-mode no-op (e.g. tape registry "
-            + "leaked from a prior test, or training-mode flag not propagating).");
+        // Sanity: a real training step (forward + backward + optimizer) must cost MORE than the
+        // forward alone. A `> forward * 0.9` bound was too weak — it passed even when Train ≈
+        // forward (i.e. the backward/optimizer work was missing). Require Train to exceed forward
+        // by a clear margin so a regression where Train silently degrades to a forward-only no-op
+        // (tape not engaging, training-mode flag not propagating, leaked tape registry) is caught.
+        Assert.True(medianTrainMs > forwardTrainingAvgMs * 1.05,
+            $"SenseVoice Train ({medianTrainMs:F0} ms) is not meaningfully above ForwardForTraining "
+            + $"({forwardTrainingAvgMs:F0} ms) — backward + optimizer ≈ {backwardPlusOptMs:F0} ms, which is "
+            + "too small. The backward/optimizer portion of Train appears to be missing (Train silently "
+            + "became a forward-only no-op: tape not engaging, training-mode flag not propagating, or a "
+            + "leaked tape registry).");
     }
 }

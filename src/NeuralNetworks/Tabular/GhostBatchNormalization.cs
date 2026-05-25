@@ -162,34 +162,67 @@ public class GhostBatchNormalization<T>
         // and the gradient to upstream layers would vanish. In that case — and always
         // in inference mode — normalize with the running statistics, which are
         // input-INDEPENDENT constants, so the output (and gradient) still varies with x.
+        // Batch statistics need >= 2 samples to be meaningful; with a single sample (common at
+        // inference and in the invariant tests, which feed one example) the batch mean equals the
+        // sample, so the centered value is identically 0 — the output would not depend on the
+        // input and the gradient to upstream layers would vanish. In that case — and always in
+        // inference mode — normalize with the running statistics, which are input-INDEPENDENT
+        // constants, so the output (and gradient) still varies with x. All Engine ops, so the
+        // autodiff tape records the computation (the previous manual-loop implementation was a tape
+        // dead-end, so nothing upstream of a GhostBatchNorm could train).
         bool useBatchStats = _isTraining && batchSize >= 2;
+        var minusOne = _numOps.FromDouble(-1.0);
+        var eps = _numOps.FromDouble(_epsilon);
+        Tensor<T> normalized;
 
-        Tensor<T> meanRow; // [1, features]
-        Tensor<T> varRow;  // [1, features]
-        if (useBatchStats)
+        if (useBatchStats && _virtualBatchSize >= 2 && batchSize > _virtualBatchSize
+            && batchSize % _virtualBatchSize == 0)
         {
-            meanRow = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
-            var negMean0 = engine.TensorMultiplyScalar(meanRow, _numOps.FromDouble(-1.0));
-            var centered0 = engine.TensorBroadcastAdd(input, negMean0);
-            varRow = engine.ReduceMean(engine.TensorMultiply(centered0, centered0), new[] { 0 }, keepDims: true);
+            // Ghost Batch Normalization (Hoffer et al. 2017; the GBN TabNet uses for
+            // regularization, Arik & Pfister 2019 §3.3): split the batch into virtual batches of
+            // _virtualBatchSize samples and normalize EACH independently — the "ghost" semantics.
+            // Reshape [B, F] -> [numGhosts, vbs, F], take per-ghost mean/var over the sample axis,
+            // normalize within each ghost, reshape back. Tape-safe (Engine ops).
+            int numGhosts = batchSize / _virtualBatchSize;
+            var grouped = engine.Reshape(input, new[] { numGhosts, _virtualBatchSize, _numFeatures });
+            var gMean = engine.ReduceMean(grouped, new[] { 1 }, keepDims: true);                 // [numGhosts,1,F]
+            var gCentered = engine.TensorBroadcastAdd(grouped, engine.TensorMultiplyScalar(gMean, minusOne));
+            var gVar = engine.ReduceMean(engine.TensorMultiply(gCentered, gCentered), new[] { 1 }, keepDims: true);
+            var gStd = engine.TensorSqrt(engine.TensorAddScalar(gVar, eps));
+            var gNorm = engine.TensorBroadcastDivide(gCentered, gStd);                            // [numGhosts,vbs,F]
+            normalized = engine.Reshape(gNorm, new[] { batchSize, _numFeatures });
+
+            // Running statistics track the FULL-batch mean/var (used at inference, which sees no
+            // virtual-batch structure).
+            var bMean = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
+            var bCentered = engine.TensorBroadcastAdd(input, engine.TensorMultiplyScalar(bMean, minusOne));
+            var bVar = engine.ReduceMean(engine.TensorMultiply(bCentered, bCentered), new[] { 0 }, keepDims: true);
+            UpdateRunningStatistics(bMean, bVar);
+        }
+        else if (useBatchStats)
+        {
+            // Single virtual batch (batch <= virtualBatchSize, or not an exact multiple): normalize
+            // over the whole batch — one ghost.
+            var meanRow = engine.ReduceMean(input, new[] { 0 }, keepDims: true);
+            var centered = engine.TensorBroadcastAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
+            var varRow = engine.ReduceMean(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true);
             UpdateRunningStatistics(meanRow, varRow);
+            var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, eps));
+            normalized = engine.TensorBroadcastDivide(centered, std);
         }
         else
         {
-            meanRow = Tensor<T>.FromVector(_runningMean).Reshape(new[] { 1, _numFeatures });
-            varRow = Tensor<T>.FromVector(_runningVar).Reshape(new[] { 1, _numFeatures });
+            // Inference / single-sample: input-independent running statistics.
+            var meanRow = Tensor<T>.FromVector(_runningMean).Reshape(new[] { 1, _numFeatures });
+            var varRow = Tensor<T>.FromVector(_runningVar).Reshape(new[] { 1, _numFeatures });
+            var centered = engine.TensorBroadcastAdd(input, engine.TensorMultiplyScalar(meanRow, minusOne));
+            var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, eps));
+            normalized = engine.TensorBroadcastDivide(centered, std);
         }
 
-        // normalized = (x - mean) / sqrt(var + eps), then scale/shift by gamma/beta.
-        // All Engine ops, so the autodiff tape records the computation and gradients
-        // flow through to the upstream layers (the previous manual-loop implementation
-        // was a tape dead-end, so nothing upstream of a GhostBatchNorm could train).
-        var negMean = engine.TensorMultiplyScalar(meanRow, _numOps.FromDouble(-1.0));
-        var centered = engine.TensorBroadcastAdd(input, negMean);
-        var std = engine.TensorSqrt(engine.TensorAddScalar(varRow, _numOps.FromDouble(_epsilon)));
-        var normalized = engine.TensorBroadcastDivide(centered, std);
         _normalizedCache = normalized;
 
+        // Scale/shift by the learnable gamma/beta.
         var gammaRow = Tensor<T>.FromVector(_gamma).Reshape(new[] { 1, _numFeatures });
         var betaRow = Tensor<T>.FromVector(_beta).Reshape(new[] { 1, _numFeatures });
         var scaled = engine.TensorBroadcastMultiply(normalized, gammaRow);

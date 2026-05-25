@@ -270,6 +270,14 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
     public Tensor<T> ForwardExpanded(Tensor<T> expandedInput)
     {
         int expandedBatchSize = expandedInput.Shape[0];
+        if (expandedBatchSize % _numMembers != 0)
+        {
+            throw new ArgumentException(
+                $"ForwardExpanded requires the leading dimension ({expandedBatchSize}) to be an exact " +
+                $"multiple of the member count ({_numMembers}); got a remainder. The input must already " +
+                "be member-expanded to [batchSize * numMembers, inputDim].",
+                nameof(expandedInput));
+        }
         int batchSize = expandedBatchSize / _numMembers;
 
         var rVecs3D = Engine.Reshape(_rVectors, [1, _numMembers, _inputDim]);

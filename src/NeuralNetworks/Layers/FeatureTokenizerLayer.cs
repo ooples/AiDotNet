@@ -81,6 +81,13 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
     {
         if (_initialized || _numFeatures <= 0) return;
 
+        // If a prior feature count was registered, unregister those tensors before replacing them.
+        // RegisterTrainableParameter only swaps 0-length placeholders, so without this an input-width
+        // change (lazy re-resolve in Forward) would leave the old [F,E] tensors in the persistent
+        // registry, double-counting ParameterCount and updating stale tensors during training.
+        if (_weights.Length > 0) UnregisterTrainableParameter(_weights);
+        if (_biases.Length > 0) UnregisterTrainableParameter(_biases);
+
         _weights = new Tensor<T>(new[] { _numFeatures, _embeddingDim });
         _biases = new Tensor<T>(new[] { _numFeatures, _embeddingDim });
         InitializeParameters();
@@ -125,9 +132,11 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
             EnsureTokenizerInitialized();
         }
 
-        // Always emit a batched rank-3 token sequence [batch, F, E] (batch=1 for an
-        // unbatched [F] input) so downstream layers treat the feature axis (1) uniformly.
-        int batch = input.Rank == 1 ? 1 : input.Shape[0];
+        // Always emit a batched rank-3 token sequence [batch, F, E]. Flatten ALL leading dims into
+        // the batch axis (batch = total / F) so the tokenizer handles [F] (batch=1), [B,F], and
+        // higher-rank [*, F] inputs uniformly — deriving batch from input.Shape[0] alone would
+        // mis-size the reshape (and throw) for rank>2 inputs whose element count is B*S*F, not B*F.
+        int batch = features > 0 ? input.Length / features : 1;
 
         var expanded = Engine.Reshape(input, new[] { batch, _numFeatures, 1 });
         var wB = Engine.Reshape(_weights, new[] { 1, _numFeatures, _embeddingDim });
@@ -140,8 +149,12 @@ public class FeatureTokenizerLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        // Trainable parameters are updated in-place by the tape optimizer via the
-        // registered weight/bias tensors; no eager SGD step is needed here.
+        // This is a tape-trained layer: its weight/bias tensors are registered via
+        // RegisterTrainableParameter and updated in place by the gradient-tape optimizer
+        // (TrainWithTape), which is the path every model using this layer takes. There is no
+        // per-layer gradient state to drive an eager SGD step from here, so this override is
+        // intentionally empty rather than throwing — a generic optimizer walk that reaches it
+        // must not fault. (DenseLayer-style eager SGD is not applicable to tape-only layers.)
     }
 
     /// <inheritdoc/>

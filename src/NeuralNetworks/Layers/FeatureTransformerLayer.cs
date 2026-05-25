@@ -56,6 +56,13 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
     private Tensor<T>? _inputCache;
     private readonly List<Tensor<T>> _intermediateOutputs = [];
 
+    // Cached constant 0/1 selection matrices for the GLU column split (see ApplyGLU). They depend
+    // only on the input width, so they're built once and reused across forward passes instead of
+    // being reallocated + refilled (O(dim^2)) every call.
+    private Tensor<T>? _gluValueSelector;
+    private Tensor<T>? _gluGateSelector;
+    private int _gluCachedFullDim = -1;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
@@ -221,13 +228,22 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         // values = input[:, :halfDim], gates = input[:, halfDim:]. The previous
         // manual element-copy split created fresh tensors disconnected from the
         // autodiff tape, so gradients could not flow back to the upstream FC layers.
-        var valueSelector = new Tensor<T>(new[] { fullDim, halfDim });
-        for (int i = 0; i < halfDim; i++) valueSelector[i, i] = NumOps.One;
-        var gateSelector = new Tensor<T>(new[] { fullDim, halfDim });
-        for (int j = 0; j < halfDim; j++) gateSelector[halfDim + j, j] = NumOps.One;
+        // The selectors are constant for a given fullDim, so build them once and cache —
+        // GLU runs many times per training step and reallocating/refilling these every call
+        // is avoidable O(dim^2) work (and extra GPU transfers).
+        if (_gluCachedFullDim != fullDim || _gluValueSelector is null || _gluGateSelector is null)
+        {
+            var vSel = new Tensor<T>(new[] { fullDim, halfDim });
+            for (int i = 0; i < halfDim; i++) vSel[i, i] = NumOps.One;
+            var gSel = new Tensor<T>(new[] { fullDim, halfDim });
+            for (int j = 0; j < halfDim; j++) gSel[halfDim + j, j] = NumOps.One;
+            _gluValueSelector = vSel;
+            _gluGateSelector = gSel;
+            _gluCachedFullDim = fullDim;
+        }
 
-        var values = Engine.TensorMatMul(input, valueSelector);
-        var gates = Engine.TensorMatMul(input, gateSelector);
+        var values = Engine.TensorMatMul(input, _gluValueSelector);
+        var gates = Engine.TensorMatMul(input, _gluGateSelector);
 
         // Apply sigmoid to gates and multiply with values (GLU).
         var sigmoidGates = Engine.Sigmoid(gates);
