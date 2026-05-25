@@ -105,22 +105,38 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         _epsilon = epsilon;
 
         // Initialize or reuse shared layers
+        bool ownsSharedLayers;
         if (sharedLayers != null && sharedBNLayers != null)
         {
             _sharedFCLayers = sharedLayers;
             _sharedBNLayers = sharedBNLayers;
+            ownsSharedLayers = false;
         }
         else
         {
             _sharedFCLayers = [];
             _sharedBNLayers = [];
             InitializeSharedLayers();
+            ownsSharedLayers = true;
         }
 
         // Initialize step-specific layers
         _stepFCLayers = [];
         _stepBNLayers = [];
         InitializeStepSpecificLayers();
+
+        // Register the FC sub-layers so the trainable-parameter walk
+        // (CollectTrainableLayers -> GetSubLayers) reaches their weights and the
+        // optimizer updates them. Register shared layers only when THIS instance
+        // created them (ownsSharedLayers) so that, when shared across decision
+        // steps, exactly one owner registers them — avoiding double-counting.
+        // (GhostBatchNormalization is not an ILayer<T>, so its gamma/beta are not
+        // collected here; the FC weights are the load-bearing learnable parameters.)
+        if (ownsSharedLayers)
+        {
+            foreach (var fc in _sharedFCLayers) RegisterSubLayer(fc);
+        }
+        foreach (var fc in _stepFCLayers) RegisterSubLayer(fc);
     }
 
     /// <summary>

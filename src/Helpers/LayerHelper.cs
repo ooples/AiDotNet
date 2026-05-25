@@ -16915,19 +16915,19 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Feature transformer (shared)
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>();
+        // TabNet (Arik & Pfister 2019) is a sequential sparse-attention encoder, not a
+        // plain MLP. The decision-step loop (attentive transformer -> sparsemax mask ->
+        // masked feature transformer -> ReLU decision accumulation -> prior relaxation)
+        // is encapsulated in TabNetEncoderLayer, which emits the aggregated
+        // [batch, decisionDim] representation; a linear head maps it to the output.
+        // decisionDim = attentionDim = hiddenDimension (n_d = n_a).
+        yield return new TabNetEncoderLayer<T>(
+            decisionDim: hiddenDimension,
+            attentionDim: hiddenDimension,
+            numSteps: numSteps,
+            relaxationFactor: 1.5);
 
-        // Decision steps
-        for (int i = 0; i < numSteps; i++)
-        {
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-        }
-
-        // Output layer
+        // Linear prediction head (activation is task-dependent — see GetTabularOutputActivation).
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 

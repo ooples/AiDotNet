@@ -104,6 +104,14 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
 
         // Sparsemax for sparse attention
         _sparsemax = new Sparsemax<T>();
+
+        // Register the FC sub-layer so the trainable-parameter walk
+        // (CollectTrainableLayers -> GetSubLayers) reaches its weights and the
+        // optimizer actually updates them. Without this the attentive transformer's
+        // weights never train. (GhostBatchNormalization is not an ILayer<T>, so its
+        // gamma/beta are not collected here; the FC weights are the load-bearing
+        // learnable parameters.)
+        RegisterSubLayer(_fcLayer);
     }
 
     /// <summary>
