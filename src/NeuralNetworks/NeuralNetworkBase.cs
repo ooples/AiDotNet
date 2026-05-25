@@ -3326,8 +3326,56 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="input">The input tensor.</param>
     /// <returns>The network output.</returns>
     /// <inheritdoc />
+    private bool _layerRandomSeedsWired;
+
+    /// <summary>
+    /// Propagates <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> to every layer (and nested
+    /// sub-layer) so seed-respecting stochastic layers — chiefly <see cref="Layers.DropoutLayer{T}"/>,
+    /// whose mask derives from <see cref="Layers.LayerBase{T}.RandomSeed"/> plus a per-forward
+    /// counter — produce a reproducible stream. No-op when no seed is set (production default), so
+    /// it never changes entropy-seeded behavior; only the test harness's
+    /// <see cref="NeuralNetworkArchitecture{T}.DefaultRandomSeedOverride"/> (or an explicit seed)
+    /// engages it. Each layer gets a distinct derived seed so their RNG streams don't collide.
+    /// </summary>
+    private void WireLayerRandomSeeds()
+    {
+        if (Architecture?.RandomSeed is not int seed) return;
+        var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        foreach (var layer in Layers)
+        {
+            WireLayerRandomSeedRecursive(layer, seedRng);
+        }
+    }
+
+    private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng)
+    {
+        if (layer is Layers.LayerBase<T> baseLayer)
+        {
+            baseLayer.RandomSeed = seedRng.Next();
+            foreach (var sub in baseLayer.GetSubLayers())
+            {
+                WireLayerRandomSeedRecursive(sub, seedRng);
+            }
+        }
+    }
+
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
+        // Propagate the architecture's RandomSeed to every layer once, before the first training
+        // forward, so stochastic layers (notably DropoutLayer, whose mask derives from
+        // RandomSeed + a per-forward counter) produce a REPRODUCIBLE sequence. Without this a
+        // model whose CreateDefault layer chain wasn't seed-wired trains with fresh random dropout
+        // masks each run, making training-trajectory invariants (e.g. MoreData_ShouldNotDegrade)
+        // flake run-to-run. Only runs when a seed is actually set (explicit per-architecture seed,
+        // or the test harness's process-wide DefaultRandomSeedOverride); production with no seed is
+        // unaffected. Eager-init layers already chose their weights, but the loss-comparison tests
+        // clone a single network so init is shared — the dropout stream is the run-to-run variable.
+        if (!_layerRandomSeedsWired)
+        {
+            _layerRandomSeedsWired = true;
+            WireLayerRandomSeeds();
+        }
+
         // Gradient checkpointing opt-in path. Unify on a single source of
         // truth by consulting BOTH:
         //   (a) the builder-set GradientCheckpointingSegmentSize (populated by
