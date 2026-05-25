@@ -231,6 +231,41 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[0]);
         }
+        else if (genericDef == typeof(TabNetEncoderLayer<>))
+        {
+            // TabNetEncoderLayer(numFeatures, decisionDim, attentionDim, numSteps,
+            // numSharedLayers, numStepSpecificLayers, relaxationFactor, virtualBatchSize,
+            // momentum, epsilon). numFeatures comes from the input shape; the rest are
+            // persisted by the layer's GetMetadata.
+            int tnNumFeatures = inputShape.Length > 0 ? inputShape[inputShape.Length - 1]
+                : (TryGetInt(additionalParams, "NumFeatures") ?? 16);
+            int tnDecisionDim = TryGetInt(additionalParams, "DecisionDim")
+                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] : 64);
+            int tnAttentionDim = TryGetInt(additionalParams, "AttentionDim") ?? tnDecisionDim;
+            int tnNumSteps = TryGetInt(additionalParams, "NumSteps") ?? 3;
+            int tnNumShared = TryGetInt(additionalParams, "NumSharedLayers") ?? 2;
+            int tnNumStep = TryGetInt(additionalParams, "NumStepSpecificLayers") ?? 2;
+            double tnRelax = TryGetDouble(additionalParams, "RelaxationFactor") ?? 1.5;
+            int tnVbs = TryGetInt(additionalParams, "VirtualBatchSize") ?? 128;
+            double tnMomentum = TryGetDouble(additionalParams, "Momentum") ?? 0.02;
+            double tnEpsilon = TryGetDouble(additionalParams, "Epsilon") ?? 1e-5;
+
+            var tnCtor = type.GetConstructor(new[]
+            {
+                typeof(int), typeof(int), typeof(int), typeof(int), typeof(int),
+                typeof(int), typeof(double), typeof(int), typeof(double), typeof(double)
+            });
+            if (tnCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find TabNetEncoderLayer 10-arg constructor.");
+            }
+
+            instance = tnCtor.Invoke(new object[]
+            {
+                tnNumFeatures, tnDecisionDim, tnAttentionDim, tnNumSteps, tnNumShared,
+                tnNumStep, tnRelax, tnVbs, tnMomentum, tnEpsilon
+            });
+        }
         else if (genericDef == typeof(FeatureTokenizerLayer<>))
         {
             // FeatureTokenizerLayer(int numFeatures, int embeddingDim) — both

@@ -1,5 +1,6 @@
 using System;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Tabular;
 using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.NeuralNetworks.Layers;
@@ -49,7 +50,12 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
     private int _numFeatures = -1;
     private bool _built;
 
-    private BatchNormalizationLayer<T>? _inputBatchNorm;
+    // Input normalization uses GhostBatchNormalization (tape-safe + running-stats fallback
+    // for batch < 2) rather than BatchNormalizationLayer, whose batch-statistics path zeros
+    // the signal on a single-sample batch (variance 0 -> output 0), which would make the whole
+    // encoder input-independent and block gradients. It is not an ILayer<T>, so it is driven
+    // directly (mode propagated in SetTrainingMode) rather than registered as a sub-layer.
+    private GhostBatchNormalization<T>? _inputBatchNorm;
     private FeatureTransformerLayer<T>? _initialFeatureTransformer;
     private AttentiveTransformerLayer<T>[]? _attentiveTransformers;
     private FeatureTransformerLayer<T>[]? _stepFeatureTransformers;
@@ -110,7 +116,7 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
         _numFeatures = numFeatures;
         int ftOut = _decisionDim + _attentionDim;
 
-        _inputBatchNorm = new BatchNormalizationLayer<T>();
+        _inputBatchNorm = new GhostBatchNormalization<T>(numFeatures, _virtualBatchSize, _momentum, _epsilon);
         _initialFeatureTransformer = new FeatureTransformerLayer<T>(
             numFeatures, ftOut, null, null, _numSharedLayers, _numStepSpecificLayers,
             _virtualBatchSize, _momentum, _epsilon);
@@ -126,7 +132,6 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
                 _virtualBatchSize, _momentum, _epsilon);
         }
 
-        RegisterSubLayer(_inputBatchNorm);
         RegisterSubLayer(_initialFeatureTransformer);
         for (int i = 0; i < _numSteps; i++)
         {
@@ -145,6 +150,23 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
 
         ResolveShapes(new[] { numFeatures }, new[] { _decisionDim });
         _built = true;
+
+        // Probe forward to materialize the lazy sub-layer shapes (the FeatureTransformers'
+        // FullyConnectedLayers resolve their input size on first forward). Without this,
+        // GetParameters/SetParameters and the serialize/deserialize (Clone) round-trip run
+        // before any forward and the FC parameter buffers are unsized. Runs in eval mode on
+        // a single dummy sample; the output is discarded.
+        bool prevTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            Forward(new Tensor<T>(new[] { 1, numFeatures }));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            // Shape probe is best-effort; a real forward will resolve shapes if this is skipped.
+        }
+        SetTrainingMode(prevTraining);
     }
 
     /// <inheritdoc/>
@@ -220,5 +242,33 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
     public override void ResetState()
     {
         foreach (var sub in GetSubLayers()) sub.ResetState();
+    }
+
+    /// <inheritdoc/>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        // Base propagates to registered sub-layers; the input GhostBatchNormalization is
+        // not an ILayer<T> (driven directly), so propagate to it explicitly.
+        base.SetTrainingMode(isTraining);
+        _inputBatchNorm?.SetTrainingMode(isTraining);
+    }
+
+    /// <inheritdoc/>
+    internal override System.Collections.Generic.Dictionary<string, string> GetMetadata()
+    {
+        // Persist the constructor configuration so DeserializationHelper can rebuild this
+        // layer exactly (numFeatures comes from the persisted InputShape).
+        var m = base.GetMetadata();
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        m["DecisionDim"] = _decisionDim.ToString(inv);
+        m["AttentionDim"] = _attentionDim.ToString(inv);
+        m["NumSteps"] = _numSteps.ToString(inv);
+        m["NumSharedLayers"] = _numSharedLayers.ToString(inv);
+        m["NumStepSpecificLayers"] = _numStepSpecificLayers.ToString(inv);
+        m["RelaxationFactor"] = _relaxationFactor.ToString(inv);
+        m["VirtualBatchSize"] = _virtualBatchSize.ToString(inv);
+        m["Momentum"] = _momentum.ToString(inv);
+        m["Epsilon"] = _epsilon.ToString(inv);
+        return m;
     }
 }
