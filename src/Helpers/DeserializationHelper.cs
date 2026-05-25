@@ -266,6 +266,25 @@ public static class DeserializationHelper
                 tnNumStep, tnRelax, tnVbs, tnMomentum, tnEpsilon
             });
         }
+        else if (genericDef == typeof(TabMEnsembleLayer<>))
+        {
+            // TabMEnsembleLayer(numFeatures, int[] hiddenDimensions, outputDim, numMembers).
+            // numFeatures from input shape; the rest from the layer's GetMetadata.
+            int tmNumFeatures = inputShape.Length > 0 ? inputShape[inputShape.Length - 1]
+                : (TryGetInt(additionalParams, "NumFeatures") ?? 16);
+            int tmOutputDim = TryGetInt(additionalParams, "OutputDim")
+                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] : 1);
+            int tmNumMembers = TryGetInt(additionalParams, "NumMembers") ?? 8;
+            int[] tmHidden = TryGetIntArray(additionalParams, "HiddenDimensions") ?? new[] { 256, 256 };
+
+            var tmCtor = type.GetConstructor(new[] { typeof(int), typeof(int[]), typeof(int), typeof(int) });
+            if (tmCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find TabMEnsembleLayer(int, int[], int, int) constructor.");
+            }
+
+            instance = tmCtor.Invoke(new object[] { tmNumFeatures, tmHidden, tmOutputDim, tmNumMembers });
+        }
         else if (genericDef == typeof(FeatureTokenizerLayer<>))
         {
             // FeatureTokenizerLayer(int numFeatures, int embeddingDim) — both

@@ -17355,22 +17355,20 @@ public static class LayerHelper<T>
     {
         hiddenDimensions ??= [256, 256];
 
-        int prevDim = numFeatures;
+        // TabM (Gorishniy et al. 2024) is a BatchEnsemble MLP: k members share each linear
+        // layer's weight matrix via per-member rank-1 adapters, run in parallel on a tiled
+        // batch, and their predictions are averaged — parameter-efficient deep ensembling.
+        // Encapsulated in TabMEnsembleLayer (the previous plain Dense+LayerNorm MLP was not
+        // TabM, and its single-member MLP had no ensembling).
+        yield return new TabMEnsembleLayer<T>(numFeatures, hiddenDimensions, numClasses);
 
-        // Hidden layers
-        foreach (int hiddenDim in hiddenDimensions)
+        // The ensemble emits raw averaged logits; apply the task-dependent output activation
+        // (linear for regression -> no extra layer).
+        var outputActivation = GetTabularOutputActivation(architecture);
+        if (outputActivation is not null)
         {
-            yield return new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
-            prevDim = hiddenDim;
+            yield return new ActivationLayer<T>(outputActivation);
         }
-
-        // Output layer
-        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>

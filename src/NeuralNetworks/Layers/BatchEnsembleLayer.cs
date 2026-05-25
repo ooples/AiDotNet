@@ -256,6 +256,48 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Forward pass for input that is ALREADY expanded along the member axis
+    /// (<c>[batchSize * numMembers, inputDim]</c>, members in consecutive rows).
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="Forward"/>, this does not tile the input — it lets a stack of
+    /// BatchEnsemble layers run member-aware without re-expanding the batch at every layer.
+    /// The per-member r/s vectors are still tiled to match. All Engine ops, so the autodiff
+    /// tape records the computation.
+    /// </remarks>
+    /// <param name="expandedInput">Input of shape [batchSize * numMembers, inputDim].</param>
+    /// <returns>Output of shape [batchSize * numMembers, outputDim].</returns>
+    public Tensor<T> ForwardExpanded(Tensor<T> expandedInput)
+    {
+        int expandedBatchSize = expandedInput.Shape[0];
+        int batchSize = expandedBatchSize / _numMembers;
+
+        var rVecs3D = Engine.Reshape(_rVectors, [1, _numMembers, _inputDim]);
+        var rVecsTiled = Engine.TensorTile(rVecs3D, [batchSize, 1, 1]);
+        var rVecsFlat = Engine.Reshape(rVecsTiled, [expandedBatchSize, _inputDim]);
+        var scaledInput = Engine.TensorMultiply(expandedInput, rVecsFlat);
+
+        _inputCache = expandedInput;
+        _scaledInputCache = scaledInput;
+
+        var weights2D = Engine.Reshape(_weights, [_inputDim, _outputDim]);
+        var matmul = Engine.TensorMatMul(scaledInput, weights2D);
+
+        var sVecs3D = Engine.Reshape(_sVectors, [1, _numMembers, _outputDim]);
+        var sVecsTiled = Engine.TensorTile(sVecs3D, [batchSize, 1, 1]);
+        var sVecsFlat = Engine.Reshape(sVecsTiled, [expandedBatchSize, _outputDim]);
+        var output = Engine.TensorMultiply(matmul, sVecsFlat);
+
+        if (_bias != null)
+        {
+            var biasBcast = Engine.Reshape(_bias, [1, _outputDim]);
+            output = Engine.TensorBroadcastAdd(output, biasBcast);
+        }
+
+        return output;
+    }
+
+    /// <summary>
     /// Averages the outputs across ensemble members.
     /// </summary>
     /// <param name="output">Output tensor [batchSize * numMembers, outputDim].</param>
