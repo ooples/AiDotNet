@@ -160,25 +160,19 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Always use layer-by-layer forward pass during training to ensure
-        // each layer's forward cache is populated for Backward().
-        // Do NOT call Predict() here as it may take a GPU-optimized path
-        // that skips per-layer cache population.
-        Tensor<T> currentOutput = input;
-        foreach (var layer in Layers)
+        // Tape-based training (the path every NN model uses post-#1209). The previous
+        // body computed the loss gradient, dropped it without backpropagating, then
+        // called _optimizer.UpdateParameters(Layers) — which throws "Backward pass must
+        // be called before updating parameters" because no gradients exist.
+        SetTrainingMode(true);
+        try
         {
-            currentOutput = layer.Forward(currentOutput);
+            TrainWithTape(input, expectedOutput, _optimizer);
         }
-
-        LastLoss = _lossFunction.CalculateLoss(currentOutput.ToVector(), expectedOutput.ToVector());
-        Vector<T> lossGrad = _lossFunction.CalculateDerivative(currentOutput.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = Tensor<T>.FromVector(lossGrad, currentOutput._shape);
-        UpdateNetworkParameters();
-    }
-
-    private void UpdateNetworkParameters()
-    {
-        _optimizer.UpdateParameters(Layers);
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <inheritdoc/>

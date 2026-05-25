@@ -17181,25 +17181,24 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.0)
     {
-        // Feature embedding layer
-        yield return new DenseLayer<T>(numFeatures * embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its own learnable vector,
+        // producing a real [features, embedding] token sequence. AutoInt (Song et al.
+        // 2019) models feature interactions with multi-head self-attention over these
+        // per-feature embeddings — the prior single-Dense projection collapsed all
+        // features into one vector (length-1 attention, no interactions).
+        yield return new FeatureTokenizerLayer<T>(numFeatures, embeddingDimension);
 
-        // Multi-head self-attention layers for feature interactions
+        // Multi-head self-attention layers for feature interactions (residual + LN
+        // built in — keeps the attention stack trainable).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
+            yield return new TransformerEncoderLayer<T>(numHeads, embeddingDimension * 4);
         }
 
-        // MLP head for final prediction
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(32, (IActivationFunction<T>)new ReLUActivation<T>());
+        // MLP head (GELU readout; a ReLU head drives the output projection dead
+        // during training). Final activation is task-dependent.
+        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(32, (IActivationFunction<T>)new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
