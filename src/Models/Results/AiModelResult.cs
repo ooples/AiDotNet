@@ -2271,6 +2271,23 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return output;
         }
 
+        // Vectorized fast path for the default safety filter — mirrors the input
+        // ValidateAndSanitizeMatrix fast path (issue #1447 / safety-filter
+        // generalization). SafetyFilter<T>.FilterOutput's only check is
+        // IdentifyHarmfulContent, which stringifies the row (ConvertToText) and
+        // regex-matches harmful-content patterns. That is text-output moderation —
+        // meaningless on a numeric prediction matrix, yet it allocates a result +
+        // builds a string + runs regex PER ROW, the same O(rows) tax the input
+        // path had. For a numeric matrix output the default filter has nothing to
+        // do, so return it unchanged. (A false-positive harmful-content match on
+        // stringified numbers would have been a spurious block; skipping it is
+        // also the correct outcome.) Custom ISafetyFilter implementations keep the
+        // per-row path below.
+        if (SafetyFilter is SafetyFilter<T>)
+        {
+            return output;
+        }
+
         var result = new Matrix<T>(output.Rows, output.Columns);
         for (int i = 0; i < output.Rows; i++)
         {
