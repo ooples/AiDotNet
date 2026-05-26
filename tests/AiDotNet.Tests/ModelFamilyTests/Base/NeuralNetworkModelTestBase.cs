@@ -1257,7 +1257,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     // Convert T-typed loss to double for finite-numeric-bounds assertions.
     // The T type parameter on test bases is the model's numeric type;
     // converting to double here keeps the invariant logic generic.
-    private static double ConvertToDouble<TVal>(TVal value)
+    protected static double ConvertToDouble<TVal>(TVal value)
     {
         if (value is double d) return d;
         if (value is float f) return f;
