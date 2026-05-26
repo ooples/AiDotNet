@@ -162,14 +162,9 @@ public class GhostBatchNormalization<T>
         // and the gradient to upstream layers would vanish. In that case — and always
         // in inference mode — normalize with the running statistics, which are
         // input-INDEPENDENT constants, so the output (and gradient) still varies with x.
-        // Batch statistics need >= 2 samples to be meaningful; with a single sample (common at
-        // inference and in the invariant tests, which feed one example) the batch mean equals the
-        // sample, so the centered value is identically 0 — the output would not depend on the
-        // input and the gradient to upstream layers would vanish. In that case — and always in
-        // inference mode — normalize with the running statistics, which are input-INDEPENDENT
-        // constants, so the output (and gradient) still varies with x. All Engine ops, so the
-        // autodiff tape records the computation (the previous manual-loop implementation was a tape
-        // dead-end, so nothing upstream of a GhostBatchNorm could train).
+        // All Engine ops, so the autodiff tape records the computation (the previous
+        // manual-loop implementation was a tape dead-end, so nothing upstream of a
+        // GhostBatchNorm could train).
         bool useBatchStats = _isTraining && batchSize >= 2;
         var minusOne = _numOps.FromDouble(-1.0);
         var eps = _numOps.FromDouble(_epsilon);
