@@ -44,7 +44,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.TemporalProcessing)]
 [LayerProperty(IsTrainable = true, IsStateful = false, ChangesShape = true, UsesSurrogateGradient = true, ExpectedInputRank = 2, TestInputShape = "1, 8", TestConstructorArgs = "8, 4, 6")]
-public class SpikingNetworkCore<T> : LayerBase<T>
+internal class SpikingNetworkCore<T> : LayerBase<T>
 {
     private readonly int _inputSize;
     private readonly int[] _hiddenSizes;

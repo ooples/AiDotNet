@@ -449,13 +449,14 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _occupancyOptimizer;
 
     /// <summary>
-    /// Uses an Adam (AMSGrad) optimizer at learning rate 0.01 rather than the
-    /// framework default of 0.001. The Conditional-LayerNorm ResNet decoder
-    /// normalizes the pre-output activation, which damps how fast the occupancy
-    /// head's bias moves; at the default rate a short single-pair memorization
-    /// run only shifts the output a few percent. The higher rate lets the
-    /// decoder fit a queried point within a typical training budget while
-    /// staying well inside the single-step parameter-L2 stability bound.
+    /// Uses an Adam (AMSGrad) optimizer whose learning rate comes from
+    /// <see cref="OccupancyNeuralNetworkOptions.BaseOptimizerInitialLearningRate"/>
+    /// (default 0.01, vs the framework default of 0.001). The
+    /// Conditional-LayerNorm ResNet decoder normalizes the pre-output
+    /// activation, which damps how fast the occupancy head's bias moves; at the
+    /// default rate a short single-pair memorization run only shifts the output
+    /// a few percent. Surfacing the rate through options keeps this
+    /// model-specific training knob tunable by callers.
     /// </summary>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _occupancyOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
@@ -463,7 +464,7 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
             new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 UseAMSGrad = true,
-                InitialLearningRate = 0.01
+                InitialLearningRate = _options.BaseOptimizerInitialLearningRate
             });
 
     /// <summary>

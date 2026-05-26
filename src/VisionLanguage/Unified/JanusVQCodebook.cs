@@ -44,12 +44,15 @@ internal sealed class JanusVQCodebook<T>
     /// <summary>Dimensionality of each codebook entry's embedding (Janus-Pro: 8).</summary>
     public int EmbeddingDim { get; }
 
-    /// <summary>True once <see cref="LoadCodebook"/> has populated this
-    /// instance from a checkpoint. <see cref="Lookup"/>, <see cref="LookupGrid"/>,
-    /// and <see cref="Quantize"/> all throw until this is true so a caller
-    /// can't accidentally use the zero-initialised placeholder codebook
-    /// (which would silently produce non-paper-faithful image
-    /// generation).</summary>
+    /// <summary>
+    /// True once <see cref="LoadCodebook"/> has overwritten this instance with
+    /// trained weights from a checkpoint. This flag is purely informational:
+    /// the constructor random-initialises the codebook (per the VQ-VAE learnable
+    /// codebook contract), so <see cref="Lookup"/>, <see cref="LookupGrid"/>, and
+    /// <see cref="Quantize"/> are usable immediately and never throw on account
+    /// of this flag — it only reports whether the entries are trained
+    /// (<c>true</c>) or still at their random initialisation (<c>false</c>).
+    /// </summary>
     public bool IsLoaded => _isLoaded;
 
     /// <summary>
@@ -103,7 +106,7 @@ internal sealed class JanusVQCodebook<T>
     /// </summary>
     public int Quantize(Tensor<T> continuousEmbedding)
     {        if (continuousEmbedding is null) throw new ArgumentNullException(nameof(continuousEmbedding));
-        if (continuousEmbedding.Length < EmbeddingDim)
+        if (continuousEmbedding.Length != EmbeddingDim)
             throw new ArgumentException($"continuousEmbedding has length {continuousEmbedding.Length} but codebook expects {EmbeddingDim}.", nameof(continuousEmbedding));
 
         int bestId = 0;
@@ -134,7 +137,7 @@ internal sealed class JanusVQCodebook<T>
         if (gridHeight <= 0) throw new ArgumentOutOfRangeException(nameof(gridHeight));
         if (gridWidth <= 0) throw new ArgumentOutOfRangeException(nameof(gridWidth));
         int expected = gridHeight * gridWidth;
-        if (tokenIds.Length < expected)
+        if (tokenIds.Length != expected)
             throw new ArgumentException($"tokenIds has length {tokenIds.Length} but grid expects {expected}.", nameof(tokenIds));
 
         var grid = new Tensor<T>([gridHeight * gridWidth * EmbeddingDim]);

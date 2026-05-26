@@ -67,7 +67,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.Projection)]
 [LayerProperty(IsTrainable = true, ChangesShape = true, ExpectedInputRank = 2, Cost = ComputeCost.Medium, TestInputShape = "1, 3", TestConstructorArgs = "3, 16, 8, 2")]
-public class OccupancyNetworkDecoder<T> : LayerBase<T>
+internal class OccupancyNetworkDecoder<T> : LayerBase<T>
 {
     private readonly int _pointDim;
     private readonly int _hidden;
@@ -295,13 +295,18 @@ public class OccupancyNetworkDecoder<T> : LayerBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, got {parameters.Length}.",
+                nameof(parameters));
+
         int idx = 0;
         foreach (var layer in SubLayers())
         {
             int count = checked((int)layer.ParameterCount);
             if (count == 0) continue;
             var sub = new Vector<T>(count);
-            for (int i = 0; i < count && idx < parameters.Length; i++)
+            for (int i = 0; i < count; i++)
                 sub[i] = parameters[idx++];
             layer.SetParameters(sub);
         }

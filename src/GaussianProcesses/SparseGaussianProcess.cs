@@ -222,6 +222,15 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
         traceScale = _numOps.Divide(traceScale, _numOps.FromDouble(Ky.Rows));
 
         var rhs = DKuf.Multiply(y);
+
+        // Snapshot the (symmetrized) Ky before the iterative jitter schedule
+        // mutates its diagonal. The SVD pseudoinverse below is robust to rank
+        // deficiency on its own (it truncates small singular values), so it
+        // should run on this least-jittered baseline rather than the
+        // cumulatively-jittered Ky — feeding it the heavily-jittered diagonal
+        // would bias the fallback solution toward the regularizer.
+        var KyBaseline = Ky.Clone();
+
         Vector<T>? alpha = null;
         double[] jitterSchedule = { 1e-6, 1e-4, 1e-2, 1e-1 };
         foreach (var scale in jitterSchedule)
@@ -253,8 +262,11 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
                 continue;
             }
         }
-        if (alpha is null || !IsAllFinite(alpha))
-            alpha = SolveViaPseudoInverse(Ky, rhs);
+        // alpha is only ever assigned from an IsAllFinite(candidate) result, so
+        // a non-null alpha is already finite — the null check alone covers the
+        // "no Cholesky attempt produced a finite solution" case.
+        if (alpha is null)
+            alpha = SolveViaPseudoInverse(KyBaseline, rhs);
 
         // Store necessary components for prediction
         _Kuu = Kuu;
