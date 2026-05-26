@@ -145,17 +145,27 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
     /// <summary>
     /// Forward pass through the soft tree.
     /// </summary>
-    /// <param name="input">Input tensor [batchSize, inputDim].</param>
-    /// <returns>Tree output [batchSize, outputDim].</returns>
+    /// <param name="input">
+    /// Input tensor whose last dimension is the feature dimension. A rank-2
+    /// <c>[batchSize, inputDim]</c> tensor is the canonical shape; a rank-1 <c>[inputDim]</c>
+    /// sample and higher-rank <c>[d0, ..., inputDim]</c> tensors are also accepted — the leading
+    /// dimensions are flattened into the batch for the internal matmuls and restored on the output.
+    /// </param>
+    /// <returns>
+    /// Tree output with the input's leading dimensions preserved and the last dimension replaced by
+    /// <c>outputDim</c>: <c>[outputDim]</c> for rank-1 input, <c>[batchSize, outputDim]</c> for
+    /// rank-2, and <c>[d0, ..., outputDim]</c> for higher rank.
+    /// </returns>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         // The split-logit and leaf-value steps are matmuls and require a rank-2 [batch, features]
         // input. Flatten a rank-1 ([features]) or higher-rank input to 2D so an unbatched single
         // sample doesn't fault the matmul (TensorMatMul requires rank >= 2); restore the caller's
-        // rank-1 shape on the way out. The reshape is tape-recorded, so gradients still flow back
-        // to the original input.
+        // original leading dimensions on the way out. The reshape is tape-recorded, so gradients
+        // still flow back to the original input.
         int features = input.Shape[input.Rank - 1];
         bool wasRank1 = input.Rank == 1;
+        bool wasHigherRank = input.Rank > 2;
         var x = input.Rank == 2 ? input : Engine.Reshape(input, new[] { input.Length / features, features });
         _lastInput = x;
         int batchSize = x.Shape[0];
@@ -190,7 +200,20 @@ public partial class SoftTreeLayer<T> : LayerBase<T>
         // Weighted sum of leaf values: pathProbs @ leafValues
         // pathProbs: [batchSize, numLeaves], leafValues: [numLeaves, outputDim]
         var output = Engine.TensorMatMul(_pathProbabilities, _leafValues);
-        if (wasRank1) output = Engine.Reshape(output, new[] { _leafValues.Shape[1] });
+        int outputDim = _leafValues.Shape[1];
+        if (wasRank1)
+        {
+            // Restore the caller's unbatched rank-1 shape: [outputDim].
+            output = Engine.Reshape(output, new[] { outputDim });
+        }
+        else if (wasHigherRank)
+        {
+            // Restore the caller's leading dimensions: [d0, ..., d_{k-2}, outputDim].
+            var outShape = new int[input.Rank];
+            for (int i = 0; i < input.Rank - 1; i++) outShape[i] = input.Shape[i];
+            outShape[input.Rank - 1] = outputDim;
+            output = Engine.Reshape(output, outShape);
+        }
 
         return output;
     }
