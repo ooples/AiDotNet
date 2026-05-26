@@ -7,6 +7,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization;
+using AiDotNet.VisionLanguage.InstructionTuned;
 
 namespace AiDotNet.Tools.ResNetPerfHarness;
 
@@ -17,13 +19,14 @@ internal static class Program
     // pre-dispatch validation in Main() will reject it before ever calling
     // RunFloat(), which is exactly what we want for unsupported names.
     private static readonly HashSet<string> SupportedFloatModels =
-        new(StringComparer.Ordinal) { "resnet50", "vgg11", "vgg16bn" };
+        new(StringComparer.Ordinal) { "resnet50", "vgg11", "vgg16bn", "phi3vision" };
 
     private const string UsageText =
-        "Usage: ResNetPerfHarness [--warmup N] [--iters N] [--model NAME] [--dtype double|float]\n" +
+        "Usage: ResNetPerfHarness [--warmup N] [--iters N] [--model NAME] [--dtype double|float] [--forward-only]\n" +
         "  --warmup N   Number of warm-up training iterations (default: 1).\n" +
         "  --iters  N   Number of measured training iterations (default: 3).\n" +
-        "  --model NAME One of: resnet50, vgg11, vgg16bn, hope, sgpt, siglip2-ctor, sd15-ctor, t5xxl-ctor (default: resnet50).\n" +
+        "  --forward-only  Measure Predict() only (no training); for profiling the forward path.\n" +
+        "  --model NAME One of: resnet50, vgg11, vgg16bn, phi3vision, hope, sgpt, siglip2-ctor, sd15-ctor, t5xxl-ctor (default: resnet50).\n" +
         "  --dtype TYPE One of: double, float (default: double). Models that support float run via the fused-compiled\n" +
         "               training path which is typically 5-10× faster than the eager autograd tape on CNNs.\n" +
         "  --help, -h   Show this message and exit.";
@@ -34,6 +37,8 @@ internal static class Program
         int iters = 3;
         string model = "resnet50";
         string dtype = "double";
+        bool forwardOnly = false;
+        bool forceCpu = false;
         for (int i = 0; i < args.Length; i++)
         {
             string flag = args[i];
@@ -44,6 +49,12 @@ internal static class Program
                 case "/?":
                     Console.WriteLine(UsageText);
                     return 0;
+                case "--forward-only":
+                    forwardOnly = true;
+                    break;
+                case "--cpu":
+                    forceCpu = true;
+                    break;
                 case "--warmup":
                     if (!TryTakeIntArg(args, ref i, flag, out warmup, minInclusive: 0)) return 2;
                     break;
@@ -81,7 +92,7 @@ internal static class Program
                 Console.Error.WriteLine(UsageText);
                 return 2;
             }
-            return RunFloat(model, warmup, iters);
+            return RunFloat(model, warmup, iters, forwardOnly, forceCpu);
         }
 
         Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters} dtype={dtype}");
@@ -160,9 +171,16 @@ internal static class Program
         return 0;
     }
 
-    private static int RunFloat(string model, int warmup, int iters)
+    private static int RunFloat(string model, int warmup, int iters, bool forwardOnly = false, bool forceCpu = false)
     {
-        Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters} dtype=float");
+        if (forceCpu)
+        {
+            // Match the model-family test environment: force the CPU engine
+            // (the harness would otherwise auto-select the OpenCL GPU engine).
+            // This is the path the 120s-timeout tests run on, so profile it.
+            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+        }
+        Console.WriteLine($"[harness] model={model} warmup={warmup} iters={iters} dtype=float forwardOnly={forwardOnly} forceCpu={forceCpu}");
         Console.WriteLine(
             $"[harness] TensorCodecOptions.EnableCompilation = " +
             $"{AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation}");
@@ -171,6 +189,39 @@ internal static class Program
         using var arena = TensorArena.Create();
         var (net, input, target) = BuildFloat(model);
         Console.WriteLine($"[harness] ParameterCount={net.ParameterCount}, Layers={net.Layers.Count}");
+
+        // Forward-only mode: profile the prediction path in isolation (no
+        // param snapshot / loss / NaN scan, which at >1B params would
+        // dominate and pollute the forward profile). Used to find forward
+        // bottlenecks (allocation churn, per-op dispatch, GEMM) under a
+        // profiler for the giant float-only model-family tests.
+        if (forwardOnly)
+        {
+            net.SetTrainingMode(false);
+            for (int w = 0; w < warmup; w++)
+            {
+                var sww = Stopwatch.StartNew();
+                var ow = net.Predict(input);
+                sww.Stop();
+                Console.WriteLine($"[harness] warmup#{w + 1} forward: {sww.ElapsedMilliseconds} ms  outLen={ow.Length}");
+            }
+            long ftotal = 0;
+            for (int i = 0; i < iters; i++)
+            {
+                long allocBefore = GC.GetTotalAllocatedBytes();
+                int g0 = GC.CollectionCount(0), g1 = GC.CollectionCount(1), g2 = GC.CollectionCount(2);
+                var swf = Stopwatch.StartNew();
+                var of = net.Predict(input);
+                swf.Stop();
+                ftotal += swf.ElapsedMilliseconds;
+                double allocMB = (GC.GetTotalAllocatedBytes() - allocBefore) / (1024.0 * 1024.0);
+                Console.WriteLine(
+                    $"[harness] iter#{i + 1} forward: {swf.ElapsedMilliseconds,6} ms  outLen={of.Length}  " +
+                    $"alloc={allocMB:F1} MB  GC(g0/g1/g2)=+{GC.CollectionCount(0) - g0}/+{GC.CollectionCount(1) - g1}/+{GC.CollectionCount(2) - g2}");
+            }
+            Console.WriteLine($"[harness] avg forward over {iters} iters: {(double)ftotal / iters:F1} ms");
+            return 0;
+        }
 
         double L2() { double s = 0; foreach (var c in net.GetParameterChunks()) for (int i = 0; i < c.Length; i++) s += (double)c[i] * c[i]; return Math.Sqrt(s); }
         double LossNow()
@@ -231,7 +282,7 @@ internal static class Program
             case "siglip2-ctor":
             {
                 var sw = Stopwatch.StartNew();
-                _ = new AiDotNet.Diffusion.Conditioning.SigLIP2TextConditioner<double>();
+                _ = new AiDotNet.Diffusion.Conditioning.SigLIP2TextConditioner<double>(ClipTokenizerFactory.CreateSimple());
                 sw.Stop();
                 Console.WriteLine($"[harness] SigLIP2TextConditioner ctor: {sw.ElapsedMilliseconds} ms");
                 return true;
@@ -247,7 +298,7 @@ internal static class Program
             case "t5xxl-ctor":
             {
                 var sw = Stopwatch.StartNew();
-                _ = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>("T5-XXL");
+                _ = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>(ClipTokenizerFactory.CreateSimple(), AiDotNet.Enums.T5Variant.XXL);
                 sw.Stop();
                 Console.WriteLine($"[harness] T5TextConditioner(T5-XXL) ctor: {sw.ElapsedMilliseconds} ms");
                 return true;
@@ -292,6 +343,22 @@ internal static class Program
                 var input = new Tensor<float>(new[] { 1, 3, 224, 224 });
                 for (int i = 0; i < input.Length; i++) input[i] = (float)rng.NextDouble();
                 var target = new Tensor<float>(new[] { 1000 });
+                for (int i = 0; i < target.Length; i++) target[i] = (float)rng.NextDouble();
+                return (net, input, target);
+            }
+            case "phi3vision":
+            {
+                // Mirrors Phi3VisionTests: paper-scale ~3.9B-param config (defaults),
+                // 336×336×3 image, 512-way head. Used to profile the float forward.
+                var arch = new NeuralNetworkArchitecture<float>(
+                    inputType: InputType.ThreeDimensional,
+                    taskType: NeuralNetworkTaskType.ImageClassification,
+                    inputHeight: 336, inputWidth: 336, inputDepth: 3,
+                    outputSize: 512);
+                var net = new Phi3Vision<float>(arch, new Phi3VisionOptions());
+                var input = new Tensor<float>(new[] { 1, 3, 336, 336 });
+                for (int i = 0; i < input.Length; i++) input[i] = (float)rng.NextDouble();
+                var target = new Tensor<float>(new[] { 512 });
                 for (int i = 0; i < target.Length; i++) target[i] = (float)rng.NextDouble();
                 return (net, input, target);
             }
