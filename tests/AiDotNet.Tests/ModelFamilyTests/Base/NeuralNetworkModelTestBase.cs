@@ -142,6 +142,14 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         // available, but OpenCL kernels have intra-workgroup reduction-
         // order non-determinism we can't pin from here.
         AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
+        // Deterministic weight init. Default-constructed models seed their layers from
+        // RandomHelper.CreateSecureRandom (entropy, non-reproducible), so init-sensitive invariants
+        // — notably MoreData_ShouldNotDegrade's loss(longTrain) <= loss(shortTrain) comparison —
+        // pass or fail depending on the random draw, flaking even in isolation. Pinning a process-
+        // wide seed fallback makes every test-built architecture's init reproducible run-to-run.
+        // Production is unaffected (the override is null there).
+        AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = 1234;
+        AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
         if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
             AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
         // Invalidate the fused-training plan cache between tests. The plan
