@@ -179,7 +179,12 @@ public class TabNetEncoderLayer<T> : LayerBase<T>
         {
             // Shape probe is best-effort; a real forward will resolve shapes if this is skipped.
         }
-        SetTrainingMode(prevTraining);
+        finally
+        {
+            // Always restore the prior training mode, even if the probe throws an
+            // unexpected exception type — otherwise the layer is left in eval mode.
+            SetTrainingMode(prevTraining);
+        }
     }
 
     /// <inheritdoc/>
