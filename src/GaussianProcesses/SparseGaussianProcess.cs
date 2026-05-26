@@ -221,6 +221,7 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
             traceScale = _numOps.Add(traceScale, Ky[i, i]);
         traceScale = _numOps.Divide(traceScale, _numOps.FromDouble(Ky.Rows));
 
+        var rhs = DKuf.Multiply(y);
         Vector<T>? alpha = null;
         double[] jitterSchedule = { 1e-6, 1e-4, 1e-2, 1e-1 };
         foreach (var scale in jitterSchedule)
@@ -231,15 +232,29 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
             try
             {
                 var choleskyKy = new CholeskyDecomposition<T>(Ky);
-                alpha = choleskyKy.Solve(DKuf.Multiply(y));
-                break;
+                var candidate = choleskyKy.Solve(rhs);
+
+                // Cholesky only throws when a pivot is <= 0. A *tiny positive*
+                // pivot (a near-singular Ky) passes the check, then the divide
+                // by that almost-zero L diagonal blows the solution up to
+                // Inf/NaN without any exception — and NaN <= 0 is false, so an
+                // upstream NaN never trips the guard either. Accept the solve
+                // only when it is finite; otherwise keep escalating jitter and
+                // ultimately fall through to the SVD pseudoinverse, whose
+                // result is always finite here because Ky has finite entries.
+                if (IsAllFinite(candidate))
+                {
+                    alpha = candidate;
+                    break;
+                }
             }
             catch (ArgumentException)
             {
                 continue;
             }
         }
-        alpha ??= SolveViaPseudoInverse(Ky, DKuf.Multiply(y));
+        if (alpha is null || !IsAllFinite(alpha))
+            alpha = SolveViaPseudoInverse(Ky, rhs);
 
         // Store necessary components for prediction
         _Kuu = Kuu;
@@ -257,6 +272,23 @@ public class SparseGaussianProcess<T> : GaussianProcessBase<T>
     private T Reciprocal(T value)
     {
         return _numOps.Divide(_numOps.One, value);
+    }
+
+    /// <summary>
+    /// Returns true only if every element of <paramref name="v"/> is a finite
+    /// number (no NaN, no infinity). Used to reject a Cholesky solve that
+    /// silently produced a non-finite solution from a near-singular system so
+    /// the caller can fall back to the robust pseudoinverse path.
+    /// </summary>
+    private bool IsAllFinite(Vector<T> v)
+    {
+        for (int i = 0; i < v.Length; i++)
+        {
+            double d = _numOps.ToDouble(v[i]);
+            if (double.IsNaN(d) || double.IsInfinity(d))
+                return false;
+        }
+        return true;
     }
 
     /// <summary>
