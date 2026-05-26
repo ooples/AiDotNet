@@ -128,6 +128,22 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     private Matrix<T> _LK;
 
     /// <summary>
+    /// The well-conditioned system (K + σ²I) from the closed-form Gaussian
+    /// likelihood fit. Stored so that prediction can evaluate the GP posterior
+    /// through this matrix (whose eigenvalues are bounded below by σ²) instead
+    /// of through the bare, near-singular kernel Gram K. Null until a Gaussian
+    /// fit has run.
+    /// </summary>
+    private Matrix<T>? _KPlusNoise;
+
+    /// <summary>
+    /// Posterior weights α = (K + σ²I)⁻¹·y from the closed-form Gaussian
+    /// likelihood fit, used for the stable predictive mean k*ᵀα. Null until a
+    /// Gaussian fit has run.
+    /// </summary>
+    private Vector<T>? _alpha;
+
+    /// <summary>
     /// Initializes a new instance of the VariationalGaussianProcess class.
     /// </summary>
     /// <param name="kernel">The kernel function to use.</param>
@@ -273,6 +289,12 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
 
         // Solve (K + σ²I) * alpha = y
         var alpha = MatrixSolutionHelper.SolveLinearSystem(KPlusNoise, _y, _decompositionType);
+
+        // Cache the well-conditioned system and posterior weights so prediction
+        // can use the numerically stable GP-regression closed form rather than
+        // evaluating through the near-singular bare kernel Gram K.
+        _KPlusNoise = KPlusNoise;
+        _alpha = alpha;
 
         // Variational mean = K * alpha
         _variationalMean = _K.Multiply(alpha);
@@ -544,6 +566,33 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
 
         // Compute kernel vector between test point and training points
         var kStar = CalculateKernelVector(_X, x);
+        T kStarStar = _kernel.Calculate(x, x);
+
+        // For a Gaussian likelihood the variational posterior is exactly the GP
+        // posterior, so use the numerically stable standard GP-regression form:
+        //   mean = k*ᵀ (K+σ²I)⁻¹ y = k*ᵀ α
+        //   var  = k** - k*ᵀ (K+σ²I)⁻¹ k*
+        // (K+σ²I) has eigenvalues bounded below by σ², so the solve is stable.
+        // The general formulation below routes through the bare kernel Gram K,
+        // which is near-singular for clustered points; the resulting
+        // catastrophic cancellation made the predictive variance *grow* with
+        // more data instead of shrinking.
+        if (_likelihood == VGPLikelihood.Gaussian && _KPlusNoise is not null && _alpha is not null)
+        {
+            T gMean = _numOps.Zero;
+            for (int i = 0; i < _alpha.Length; i++)
+                gMean = _numOps.Add(gMean, _numOps.Multiply(kStar[i], _alpha[i]));
+
+            var KnInvKStar = MatrixSolutionHelper.SolveLinearSystem(_KPlusNoise, kStar, _decompositionType);
+            T gVariance = kStarStar;
+            for (int i = 0; i < kStar.Length; i++)
+                gVariance = _numOps.Subtract(gVariance, _numOps.Multiply(kStar[i], KnInvKStar[i]));
+
+            if (_numOps.ToDouble(gVariance) < 0)
+                gVariance = _numOps.FromDouble(1e-10);
+
+            return (gMean, gVariance);
+        }
 
         // Solve K^(-1) * k*
         var KInvKStar = MatrixSolutionHelper.SolveLinearSystem(_K, kStar, _decompositionType);
@@ -557,8 +606,6 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         }
 
         // Predictive variance: k** - k*^T * K^(-1) * k* + k*^T * K^(-1) * S * K^(-1) * k*
-        T kStarStar = _kernel.Calculate(x, x);
-
         // Prior variance reduction
         T variance = kStarStar;
         for (int i = 0; i < kStar.Length; i++)
