@@ -28,6 +28,10 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 3*4*3 + 3*3*3 + 3*3 = 36 + 27 + 9 = 72
         var gru = new GRULayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
+        // GRULayer is lazy-input (PyTorch-style): weights materialize on the first
+        // forward, which resolves inputSize from the input's last axis. Warm up
+        // with a [seq, 4] input to resolve inputSize = 4 before the formula check.
+        gru.Forward(new Tensor<double>(new[] { 2, 4 }));
         Assert.Equal(72, (int)gru.ParameterCount);
     }
 
@@ -37,6 +41,8 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 8*10*3 + 8*8*3 + 8*3 = 240 + 192 + 24 = 456
         var gru = new GRULayer<double>( hiddenSize: 8,
             activation: (IActivationFunction<double>?)null);
+        // Lazy-input: warm up with a [seq, 10] input to resolve inputSize = 10.
+        gru.Forward(new Tensor<double>(new[] { 2, 10 }));
         Assert.Equal(456, (int)gru.ParameterCount);
     }
 
@@ -46,6 +52,8 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 1*1*3 + 1*1*3 + 1*3 = 3 + 3 + 3 = 9
         var gru = new GRULayer<double>( hiddenSize: 1,
             activation: (IActivationFunction<double>?)null);
+        // Lazy-input: warm up with a [seq, 1] input to resolve inputSize = 1.
+        gru.Forward(new Tensor<double>(new[] { 2, 1 }));
         Assert.Equal(9, (int)gru.ParameterCount);
     }
 
@@ -207,6 +215,11 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 4*3*4 + 4*3*3 + 4*3 = 48 + 36 + 12 = 96
         var lstm = new LSTMLayer<double>( hiddenSize: 3,
             activation: (IActivationFunction<double>?)null);
+        // LSTMLayer is lazy-input (PyTorch nn.LazyLSTM-style): its weights are not
+        // allocated until the first forward resolves the input feature count from
+        // the input's last axis, so ParameterCount is 0 until then. Warm up with a
+        // [seq, 4] input to resolve inputSize = 4, then assert the formula.
+        lstm.Forward(new Tensor<double>(new[] { 2, 4 }));
         Assert.Equal(96, (int)lstm.ParameterCount);
     }
 
@@ -216,6 +229,8 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
         // = 4*8*10 + 4*8*8 + 4*8 = 320 + 256 + 32 = 608
         var lstm = new LSTMLayer<double>( hiddenSize: 8,
             activation: (IActivationFunction<double>?)null);
+        // Lazy-input: warm up with a [seq, 10] input to resolve inputSize = 10.
+        lstm.Forward(new Tensor<double>(new[] { 2, 10 }));
         Assert.Equal(608, (int)lstm.ParameterCount);
     }
 
@@ -228,6 +243,10 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             activation: (IActivationFunction<double>?)null);
         var lstm = new LSTMLayer<double>( hiddenSize,
             activation: (IActivationFunction<double>?)null);
+        // Both layers are lazy-input; materialize their weights with a matching
+        // [seq, inputSize] warm-up forward before comparing parameter counts.
+        gru.Forward(new Tensor<double>(new[] { 2, inputSize }));
+        lstm.Forward(new Tensor<double>(new[] { 2, inputSize }));
         Assert.True(lstm.ParameterCount > gru.ParameterCount,
             $"LSTM params ({lstm.ParameterCount}) should exceed GRU params ({gru.ParameterCount})");
     }
@@ -242,6 +261,9 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             activation: (IActivationFunction<double>?)null);
         var lstm = new LSTMLayer<double>( hiddenSize,
             activation: (IActivationFunction<double>?)null);
+        // Lazy-input: materialize both before reading parameter counts.
+        gru.Forward(new Tensor<double>(new[] { 2, inputSize }));
+        lstm.Forward(new Tensor<double>(new[] { 2, inputSize }));
 
         double ratio = (double)lstm.ParameterCount / gru.ParameterCount;
         Assert.Equal(4.0 / 3.0, ratio, Tol);
@@ -443,6 +465,11 @@ public class RecurrentAndUtilityLayersDeepMathIntegrationTests
             activation: (IActivationFunction<double>?)null);
         var lstm = new LSTMLayer<double>( hiddenSize,
             activation: (IActivationFunction<double>?)null);
+
+        // Lazy-input: materialize both layers' weights with a matching
+        // [seq, inputSize] warm-up forward before reading parameter counts.
+        gru.Forward(new Tensor<double>(new[] { 2, inputSize }));
+        lstm.Forward(new Tensor<double>(new[] { 2, inputSize }));
 
         int expectedGRU = 3 * (hiddenSize * inputSize + hiddenSize * hiddenSize + hiddenSize);
         int expectedLSTM = 4 * (hiddenSize * inputSize + hiddenSize * hiddenSize + hiddenSize);

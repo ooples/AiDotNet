@@ -1242,7 +1242,10 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
     private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly NTMOptions<T, TInput, TOutput> _options;
-    private readonly int _inputSize;
+    // Not readonly: the true controller input width (external input + read
+    // vectors) is only known at the first forward, so _inputSize and the
+    // input-gate weights are resolved/resized there (see Forward).
+    private int _inputSize;
     private readonly int _hiddenSize;
     private readonly int _memoryWidth;
     private readonly int _numReadHeads;
@@ -1251,7 +1254,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 
     // LSTM gate weights: input, forget, cell, output gates
     // Input weights: [4 * hiddenSize, inputSize]
-    private readonly Tensor<T> _weightsInput;
+    private Tensor<T> _weightsInput;
     // Hidden weights: [4 * hiddenSize, hiddenSize]
     private readonly Tensor<T> _weightsHidden;
     // Biases: [4 * hiddenSize]
@@ -1358,14 +1361,27 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
         var fullInput = input;
         int inputLength = GetTensorLength(fullInput);
 
+        // Lazy input resolution: the constructor can only estimate the controller
+        // input width; the real width (external input + read vectors, however the
+        // caller assembles it) is known only here. Size the input-gate weights to
+        // the actual width the first time we see it (and on the rare event the
+        // width changes), so the gate matmul dimensions always line up. The
+        // earlier Math.Min clamp masked the estimate being wrong but still fed a
+        // mismatched [4H, estimate] x [actual, 1] product to the matmul.
+        if (_weightsInput.Shape[1] != inputLength)
+        {
+            double resolvedScale = Math.Sqrt(2.0 / (inputLength + _hiddenSize));
+            _weightsInput = InitializeTensor(new int[] { 4 * _hiddenSize, inputLength }, resolvedScale);
+            _inputSize = inputLength;
+        }
+
         // LSTM forward pass: compute all four gates
         // gates = W_input * x + W_hidden * h + b
         var gates = new Tensor<T>(new int[] { 4 * _hiddenSize });
 
         // gates = W_input @ fullInput + W_hidden @ hiddenState + bias — vectorized
         int gateSize = 4 * _hiddenSize;
-        int validInputSize = Math.Min(inputLength, _weightsInput.Shape[1]);
-        var inputCol = fullInput.Reshape(validInputSize, 1);
+        var inputCol = fullInput.Reshape(inputLength, 1);
         var inputContrib = Engine.TensorMatMul(_weightsInput, inputCol).Reshape(gateSize);
         var hiddenCol = _hiddenState.Reshape(_hiddenSize, 1);
         var hiddenContrib = Engine.TensorMatMul(_weightsHidden, hiddenCol).Reshape(gateSize);
