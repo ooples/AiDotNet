@@ -937,46 +937,31 @@ public static class LayerHelper<T>
         ValidateLayerParameters(1, 32, architecture.OutputSize);
 
         var inputShape = architecture.GetInputShape();
-        int inputFeatures = inputShape[0];
+        int pointDim = inputShape[0];
 
-        // Dense layers for processing input features.
-        // LayerNormalization (Ba et al. 2016) — not BatchNormalization — to
-        // keep the per-sample normalization mathematically well-defined at
-        // any batch size. Occupancy detection is a small-MLP regime where
-        // BN at batch=1 collapses to y = β (μ_B = x, σ²_B = 0), zeroing the
-        // gradient signal through the normalization layer and stalling
-        // memorization-style training. LayerNorm normalizes across the
-        // feature axis within each sample and is the modern default for
-        // small dense MLPs.
+        // Occupancy Network decoder (Mescheder et al., CVPR 2019, arXiv:1812.03828):
+        // a conditional-normalization fully-connected ResNet that maps a queried
+        // point p ∈ ℝ^pointDim to an occupancy probability, conditioned on a latent
+        // shape code. The single composite layer carries the linear point
+        // embedding, the pre-activation Conditional-ResNet blocks, and the final
+        // conditional-norm → ReLU → sigmoid occupancy head; see
+        // OccupancyNetworkDecoder<T> for the full equations and the
+        // Conditional-Layer- vs Conditional-Batch-Normalization rationale (the
+        // model evaluates one point at a time, where batch statistics are
+        // undefined). The latent code is a learnable auto-decoder vector
+        // (DeepSDF-style, Park et al. 2019) since this model has no
+        // encoder/observation to condition on.
         //
-        // Dropout removed (#1304 cluster-6 follow-up): the prior layout
-        // applied Dropout(0.3) + Dropout(0.2) on a tiny 3 → 64 → 32 → 16
-        // → 1 MLP (~2k params). On a memorization task that trains the
-        // same (x, target) pair for 100 iterations, every forward sees a
-        // DIFFERENT random sub-network (roughly 56% of hidden units
-        // active = 0.7 × 0.8) so the optimizer can never learn the pair
-        // — Dropout's per-step mask injects more variance than the
-        // gradient can subtract over 100 steps, leaving loss flat or
-        // slightly RISING at the BCE-ln(2) baseline. PR #1329 fixed the
-        // BN-at-batch-1 layer of this stack but the Dropout layer's
-        // memorization-blocking effect was left. At this network size
-        // Dropout adds no useful regularization (the model has fewer
-        // params than typical sensor batches have rows); callers who
-        // genuinely need regularization on a larger Occupancy MLP can
-        // pass an explicit architecture with their preferred Dropout
-        // rate. Closes the LossStrictlyDecreasesOnMemorizationTask
-        // signal that's been red on OccupancyNeuralNetworkTests since
-        // the cluster-6 sweep.
-        yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new LayerNormalizationLayer<T>();
-
-        yield return new DenseLayer<T>(32, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new LayerNormalizationLayer<T>();
-
-        yield return new DenseLayer<T>(16, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        // Output layer
-        yield return new DenseLayer<T>(architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+        // The paper's full decoder is hidden 256 / c_dim 128 / 5 blocks (sized for
+        // encoder-conditioned 3D shape reconstruction). This encoderless default
+        // single-field decoder uses a lighter 128 / 128 / 3 trunk, which is
+        // well-conditioned for the single-point regime this model is exercised in;
+        // callers reconstructing full shapes can pass a larger explicit decoder.
+        yield return new OccupancyNetworkDecoder<T>(
+            pointDim: pointDim,
+            hidden: 128,
+            latentDim: 128,
+            numBlocks: 3);
     }
 
     /// <summary>
