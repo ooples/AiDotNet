@@ -69,8 +69,13 @@ public class RecurrentLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GRULayer_GetParameters_ReturnsParameters()
     {
+        int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var layer = new GRULayer<double>( 8, false, tanh);
+        // GRULayer is lazy-only (eager ctors removed in #1212): its own ParameterCount
+        // doc says "call ResolveFromShape first". Resolve the input width so weights
+        // allocate and GetParameters returns the real parameter vector before Forward.
+        layer.ResolveFromShape(inputShape);
         var parameters = layer.GetParameters();
         Assert.NotNull(parameters);
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
@@ -123,6 +128,12 @@ public class RecurrentLayersIntegrationTests
         int[] inputShape = [1, 5, 10];
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var layer = new LSTMLayer<double>( 8, tanh);
+        // LSTMLayer is lazy-only (eager ctors removed in #1212): input feature
+        // width is unknown from hiddenSize alone, so weights stay [0,0] until the
+        // shape is resolved. ResolveFromShape is the documented bridge that lets
+        // GetParameters / ParameterCount work on a freshly-constructed layer before
+        // any Forward — exactly what a parent network does during ResolveLazyLayerShapes.
+        layer.ResolveFromShape(inputShape);
         var parameters = layer.GetParameters();
         Assert.NotNull(parameters);
         Assert.True(parameters.Length > 0, "Parameters should not be empty");
