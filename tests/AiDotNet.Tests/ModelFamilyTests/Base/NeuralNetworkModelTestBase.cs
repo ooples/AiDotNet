@@ -12,9 +12,12 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// Tests mathematical invariants: training loss decrease, gradient flow,
 /// parameter sensitivity, output stability, and architecture consistency.
 /// </summary>
-public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
+public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 {
-    protected abstract INeuralNetworkModel<double> CreateNetwork();
+    /// <summary>Numeric operations for the model's element type <typeparamref name="T"/>.</summary>
+    protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    protected abstract INeuralNetworkModel<T> CreateNetwork();
 
     protected virtual int[] InputShape => [1, 4];
 
@@ -201,11 +204,11 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// models (e.g. GloVe, Word2Vec) override this to emit integer token indices
     /// for input-shape tensors so the model's index-lookup path is exercised.
     /// </summary>
-    protected virtual Tensor<double> CreateRandomTensor(int[] shape, Random rng)
+    protected virtual Tensor<T> CreateRandomTensor(int[] shape, Random rng)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<T>(shape);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = rng.NextDouble();
+            tensor[i] = NumOps.FromDouble(rng.NextDouble());
         return tensor;
     }
 
@@ -218,7 +221,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// <see cref="CreateRandomTensor"/> for compatibility with regression
     /// / continuous-target families.
     /// </summary>
-    protected virtual Tensor<double> CreateRandomTargetTensor(int[] shape, Random rng)
+    protected virtual Tensor<T> CreateRandomTargetTensor(int[] shape, Random rng)
         => CreateRandomTensor(shape, rng);
 
     /// <summary>
@@ -227,11 +230,12 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// floats — the latter would collapse to index 0 under <c>(int)</c> truncation
     /// and defeat invariants like <c>DifferentInputs_ShouldProduceDifferentOutputs</c>.
     /// </summary>
-    protected virtual Tensor<double> CreateConstantTensor(int[] shape, double value)
+    protected virtual Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
-        var tensor = new Tensor<double>(shape);
+        var tensor = new Tensor<T>(shape);
+        var v = NumOps.FromDouble(value);
         for (int i = 0; i < tensor.Length; i++)
-            tensor[i] = value;
+            tensor[i] = v;
         return tensor;
     }
 
@@ -387,7 +391,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// FNV-1a-style mix over the raw IEEE-754 bit pattern of each value so
     /// a NaN→NaN no-change doesn't collide with a real param update.
     /// </summary>
-    private static System.Collections.Generic.List<long> ComputeChunkHashes(INeuralNetworkModel<double> network)
+    private static System.Collections.Generic.List<long> ComputeChunkHashes(INeuralNetworkModel<T> network)
     {
         var hashes = new System.Collections.Generic.List<long>();
         foreach (var chunk in EnumerateParameterChunks(network))
@@ -395,7 +399,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
             long h = unchecked((long)0xcbf29ce484222325UL);
             for (int j = 0; j < chunk.Length; j++)
             {
-                long bits = System.BitConverter.DoubleToInt64Bits(chunk[j]);
+                long bits = System.BitConverter.DoubleToInt64Bits(ConvertToDouble(chunk[j]));
                 h = unchecked((h ^ bits) * (long)0x100000001b3UL);
             }
             hashes.Add(h);
@@ -428,7 +432,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-12)
+            if (Math.Abs(ConvertToDouble(output1[i]) - ConvertToDouble(output2[i])) > 1e-12)
             {
                 anyDifferent = true;
                 break;
@@ -512,7 +516,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            double d = output1[i] - output2[i];
+            double d = ConvertToDouble(output1[i]) - ConvertToDouble(output2[i]);
             sumSquared += d * d;
         }
         double l2Distance = Math.Sqrt(sumSquared);
@@ -552,8 +556,8 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]), $"Output[{i}] is NaN — numerical instability.");
-            Assert.False(double.IsInfinity(output[i]), $"Output[{i}] is Infinity — overflow.");
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])), $"Output[{i}] is NaN — numerical instability.");
+            Assert.False(double.IsInfinity(ConvertToDouble(output[i])), $"Output[{i}] is Infinity — overflow.");
         }
     }
 
@@ -578,9 +582,9 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(output[i]),
+            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
                 $"Output[{i}] is NaN after {TrainingIterations} training iterations.");
-            Assert.False(double.IsInfinity(output[i]),
+            Assert.False(double.IsInfinity(ConvertToDouble(output[i])),
                 $"Output[{i}] is Infinity after training — potential gradient explosion.");
         }
     }
@@ -599,9 +603,9 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         using var network = CreateNetwork();
 
         var input = CreateRandomTensor(InputShape, rng);
-        var scaledInput = new Tensor<double>(InputShape);
+        var scaledInput = new Tensor<T>(InputShape);
         for (int i = 0; i < input.Length; i++)
-            scaledInput[i] = input[i] * 10.0;
+            scaledInput[i] = NumOps.FromDouble(ConvertToDouble(input[i]) * 10.0);
 
         var output1 = network.Predict(input);
         var output2 = network.Predict(scaledInput);
@@ -610,7 +614,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         int minLen = Math.Min(output1.Length, output2.Length);
         for (int i = 0; i < minLen; i++)
         {
-            if (Math.Abs(output1[i] - output2[i]) > 1e-10)
+            if (Math.Abs(ConvertToDouble(output1[i]) - ConvertToDouble(output2[i])) > 1e-10)
             {
                 anyDifferent = true;
                 break;
@@ -634,7 +638,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// </summary>
     private static void SetEvalMode(object? network)
     {
-        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nnBase)
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase)
             nnBase.SetTrainingMode(false);
     }
 
@@ -653,7 +657,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         Assert.Equal(out1.Length, out2.Length);
         for (int i = 0; i < out1.Length; i++)
-            Assert.True(Math.Abs(out1[i] - out2[i]) < 1e-12,
+            Assert.True(Math.Abs(ConvertToDouble(out1[i]) - ConvertToDouble(out2[i])) < 1e-12,
                 $"Output[{i}] differs between runs: {out1[i]} vs {out2[i]}. Network may be non-deterministic.");
     }
 
@@ -692,7 +696,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         Assert.Equal(original.Length, clonedOutput.Length);
         for (int i = 0; i < original.Length; i++)
-            Assert.True(Math.Abs(original[i] - clonedOutput[i]) < 1e-10,
+            Assert.True(Math.Abs(ConvertToDouble(original[i]) - ConvertToDouble(clonedOutput[i])) < 1e-10,
                 $"Clone output[{i}] differs: original={original[i]}, cloned={clonedOutput[i]}");
     }
 
@@ -739,8 +743,8 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         SetEvalMode(network);
 
         // Capture predictions on diverse inputs.
-        var probeInputs = new Tensor<double>[3];
-        var trainedOutputs = new Tensor<double>[3];
+        var probeInputs = new Tensor<T>[3];
+        var trainedOutputs = new Tensor<T>[3];
         for (int k = 0; k < 3; k++)
         {
             probeInputs[k] = CreateRandomTensor(InputShape, rng);
@@ -761,9 +765,10 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
             double sumSq = 0, magSq = 0;
             for (int i = 0; i < trainedOutputs[k].Length; i++)
             {
-                double d = trainedOutputs[k][i] - clonedOutput[i];
+                double tv = ConvertToDouble(trainedOutputs[k][i]);
+                double d = tv - ConvertToDouble(clonedOutput[i]);
                 sumSq += d * d;
-                magSq += trainedOutputs[k][i] * trainedOutputs[k][i];
+                magSq += tv * tv;
             }
             double diffL2 = Math.Sqrt(sumSq);
             double mag = Math.Sqrt(magSq);
@@ -867,11 +872,11 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         try { network1.Predict(input); }
         catch (System.InvalidOperationException) { /* layer requires training mode for first forward */ }
 
-        INeuralNetworkModel<double> network2;
-        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nn1)
-            network2 = (INeuralNetworkModel<double>)nn1.Clone();
+        INeuralNetworkModel<T> network2;
+        if (network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn1)
+            network2 = (INeuralNetworkModel<T>)nn1.Clone();
         else
-            network2 = (INeuralNetworkModel<double>)network1.Clone();
+            network2 = (INeuralNetworkModel<T>)network1.Clone();
 
         // Train network1 for the "short" iteration count (default 50)
         int shortIters = MoreDataShortIterations;
@@ -1037,7 +1042,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         {
             for (int j = 0; j < chunk.Length; j++, globalIdx++)
             {
-                double after = chunk[j];
+                double after = ConvertToDouble(chunk[j]);
                 Assert.False(double.IsNaN(after),
                     $"Parameter[{globalIdx}] is NaN after training — gradient computation is broken.");
                 Assert.False(double.IsInfinity(after),
@@ -1293,7 +1298,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         Assert.Equal(singleOutput.Length, batchOutput.Length);
         for (int i = 0; i < singleOutput.Length; i++)
         {
-            Assert.True(Math.Abs(singleOutput[i] - batchOutput[i]) < 1e-12,
+            Assert.True(Math.Abs(ConvertToDouble(singleOutput[i]) - ConvertToDouble(batchOutput[i])) < 1e-12,
                 $"Output[{i}] differs: single={singleOutput[i]}, batch={batchOutput[i]}");
         }
     }
@@ -1321,14 +1326,14 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
         Assert.Equal(expectedLength, output.Length);
     }
 
-    protected double ComputeMSE(Tensor<double> output, Tensor<double> target)
+    protected double ComputeMSE(Tensor<T> output, Tensor<T> target)
     {
         double mse = 0;
         int len = Math.Min(output.Length, target.Length);
         if (len == 0) return double.NaN;
         for (int i = 0; i < len; i++)
         {
-            double diff = output[i] - target[i];
+            double diff = ConvertToDouble(output[i]) - ConvertToDouble(target[i]);
             mse += diff * diff;
         }
         return mse / len;
@@ -1343,7 +1348,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// contiguous) don't OOM in <c>Vector&lt;T&gt;</c>'s ctor before the
     /// invariant check ever runs.
     /// </summary>
-    private static double SumSquaredChunks(INeuralNetworkModel<double> network)
+    private static double SumSquaredChunks(INeuralNetworkModel<T> network)
     {
         double sumSq = 0;
         foreach (var chunk in EnumerateParameterChunks(network))
@@ -1351,7 +1356,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
             int n = chunk.Length;
             for (int i = 0; i < n; i++)
             {
-                double v = chunk[i];
+                double v = ConvertToDouble(chunk[i]);
                 sumSq += v * v;
             }
         }
@@ -1371,7 +1376,7 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// the fallback so the test base stays safe if one is added later
     /// without a concrete chunk override.
     /// </summary>
-    protected static System.Collections.Generic.IEnumerable<Tensor<double>> EnumerateParameterChunks(INeuralNetworkModel<double> network)
+    protected static System.Collections.Generic.IEnumerable<Tensor<T>> EnumerateParameterChunks(INeuralNetworkModel<T> network)
     {
 #if !NETFRAMEWORK
         foreach (var chunk in network.GetParameterChunks())
@@ -1395,17 +1400,17 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
     /// Materializing once at the iteration boundary keeps the invariants
     /// dense-only without forcing every test author to remember the cast.
     /// </summary>
-    private static Tensor<double> MaterializeIfSparse(Tensor<double> chunk)
+    private static Tensor<T> MaterializeIfSparse(Tensor<T> chunk)
     {
-        if (chunk.IsSparse && chunk is SparseTensor<double> sparse)
+        if (chunk.IsSparse && chunk is SparseTensor<T> sparse)
             return sparse.ToDense();
         return chunk;
     }
 
 #if NETFRAMEWORK
-    private static System.Collections.Generic.IEnumerable<Tensor<double>> EnumerateParameterChunksLegacy(INeuralNetworkModel<double> network)
+    private static System.Collections.Generic.IEnumerable<Tensor<T>> EnumerateParameterChunksLegacy(INeuralNetworkModel<T> network)
     {
-        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<double> nnBase)
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase)
         {
             foreach (var chunk in nnBase.GetParameterChunks())
                 yield return chunk;
@@ -1414,9 +1419,18 @@ public abstract class NeuralNetworkModelTestBase : IAsyncLifetime
 
         var flat = network.GetParameters();
         if (flat.Length == 0) yield break;
-        var single = new Tensor<double>(new[] { flat.Length });
+        var single = new Tensor<T>(new[] { flat.Length });
         for (int i = 0; i < flat.Length; i++) single[i] = flat[i];
         yield return single;
     }
 #endif
 }
+
+/// <summary>
+/// Double-precision binding of <see cref="NeuralNetworkModelTestBase{T}"/>. The vast
+/// majority of model-family test classes extend this non-generic name and therefore run
+/// in <see cref="double"/> exactly as before. Large / perf-sensitive models opt into
+/// <see cref="float"/> by extending the generic base (directly or via a generic
+/// intermediate base such as <c>VisionLanguageTestBase&lt;float&gt;</c>).
+/// </summary>
+public abstract class NeuralNetworkModelTestBase : NeuralNetworkModelTestBase<double> { }
