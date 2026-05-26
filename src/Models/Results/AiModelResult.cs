@@ -2176,6 +2176,50 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             return input;
         }
 
+        // Vectorized fast path for the default numeric safety filter. The per-row
+        // ValidateInput below runs text-based jailbreak/pattern detection
+        // (ConvertToText stringifies every element, then DetectJailbreak regex-
+        // matches the result) plus a SafetyValidationResult + List allocation PER
+        // ROW. That machinery is meaningless on a numeric feature matrix yet costs
+        // O(rows × cols) string building + regex per row — ~4.4 s on the AIsEval
+        // 48k×10 LargeSet, the dominant term in AiModelBuilder<MultipleRegression>
+        // Predict (issue #1447 P2; PyTorch's equivalent predict is ~0.4 s with no
+        // such scan). For SafetyFilter<T> the only verdicts that apply to numeric
+        // input are input-length and finiteness, so check those in a single pass:
+        // if every row is within MaxInputLength and all elements are finite, the
+        // per-row path would return the input unchanged — so return it directly.
+        // Any violation falls through to the detailed per-row path, preserving the
+        // exact row-level diagnostic and sanitization for genuinely bad data.
+        if (SafetyFilter is SafetyFilter<T> defaultFilter)
+        {
+            var opts = defaultFilter.GetOptions();
+            if (!opts.EnableInputValidation)
+            {
+                return input;
+            }
+            if (input.Columns <= opts.MaxInputLength)
+            {
+                var numOps = MathHelper.GetNumericOperations<T>();
+                bool allFinite = true;
+                for (int i = 0; i < input.Rows && allFinite; i++)
+                {
+                    for (int j = 0; j < input.Columns; j++)
+                    {
+                        double d = numOps.ToDouble(input[i, j]);
+                        if (double.IsNaN(d) || double.IsInfinity(d))
+                        {
+                            allFinite = false;
+                            break;
+                        }
+                    }
+                }
+                if (allFinite)
+                {
+                    return input;
+                }
+            }
+        }
+
         bool anySanitized = false;
         var sanitizedRows = new Vector<T>?[input.Rows];
 
