@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
+using AiDotNet.Helpers;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -211,10 +212,10 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>
     /// <inheritdoc/>
     public override void SetParameters(Vector<T> parameters)
     {
-        int qCount = checked((int)_queryProjection.ParameterCount);
-        int kCount = checked((int)_keyProjection.ParameterCount);
-        int vCount = checked((int)_valueProjection.ParameterCount);
-        int oCount = checked((int)_outputProjection.ParameterCount);
+        int qCount = ParameterCountHelper.ToFlatVectorSize(_queryProjection.ParameterCount);
+        int kCount = ParameterCountHelper.ToFlatVectorSize(_keyProjection.ParameterCount);
+        int vCount = ParameterCountHelper.ToFlatVectorSize(_valueProjection.ParameterCount);
+        int oCount = ParameterCountHelper.ToFlatVectorSize(_outputProjection.ParameterCount);
         int expected = qCount + kCount + vCount + oCount + _embeddingDim * 2;
         if (parameters.Length != expected)
         {
