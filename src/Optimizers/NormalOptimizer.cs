@@ -94,12 +94,43 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         };
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
+        // When the feature bounds collapse to "always use every feature"
+        // (MinimumFeatures == MaximumFeatures == totalFeatures — the default for
+        // a plain regression with no feature-selection search configured), every
+        // SpawnIndividual produces the SAME full-feature configuration. For a
+        // deterministic model (closed-form regressions, etc.) each iteration then
+        // fits an identical solution with bit-identical fitness, so iterating to
+        // the early-stopping patience (10) just refits the same normal equations
+        // 10× on the full training set — the dominant cost in
+        // AiModelBuilder<MultipleRegression> at scale (issue #1447 P2). Detect a
+        // bit-identical fitness plateau and stop: two identical best scores in a
+        // row prove the search has converged on a deterministic optimum. Stochastic
+        // models (whose fitness varies run-to-run) never hit the plateau, so their
+        // behavior is unchanged.
+        int totalFeatureCount = totalFeatures;
+        bool degenerateFeatureSearch =
+            Options.MaximumFeatures >= totalFeatureCount && Options.MinimumFeatures >= totalFeatureCount;
+        T lastBestFitness = bestStepData.FitnessScore;
+        bool haveLastBest = false;
+
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
             var currentSolution = SpawnIndividual(inputData.XTrain);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
             UpdateBestSolution(currentStepData, ref bestStepData);
+
+            // Converged-plateau short-circuit for the degenerate (no-search) case.
+            T currentBest = bestStepData.FitnessScore;
+            bool identicalToLast = haveLastBest
+                && !NumOps.GreaterThan(currentBest, lastBestFitness)
+                && !NumOps.LessThan(currentBest, lastBestFitness);
+            if (degenerateFeatureSearch && identicalToLast)
+            {
+                break;
+            }
+            lastBestFitness = currentBest;
+            haveLastBest = true;
 
             // Update adaptive parameters
             UpdateAdaptiveParameters(currentStepData, previousStepData);
