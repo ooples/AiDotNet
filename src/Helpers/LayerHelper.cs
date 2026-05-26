@@ -1297,17 +1297,21 @@ public static class LayerHelper<T>
 
         yield return new PositionalEncodingLayer<T>(sequenceLength, embeddingSize);
 
-        // Multiple transformer blocks
+        // Transformer encoder blocks WITH residual connections. The prior layout
+        // (MHA → LayerNorm → FFN → LayerNorm) had NO residual paths, so the
+        // 3-block stack was ill-conditioned: activations and gradients
+        // accumulated through the depth without the identity shortcut, and under
+        // the small perturbations of parallel-reduction non-determinism the loss
+        // diverged to NaN (the MoreData_ShouldNotDegrade failure). Each
+        // TransformerEncoderLayer implements the paper's sub-layer residuals
+        // (Vaswani et al. 2017, "Attention Is All You Need", §3.1):
+        // LayerNorm(x + SelfAttention(x)) then LayerNorm(h + FFN(h)). The
+        // identity shortcuts keep deep-stack training stable, and the block is a
+        // self-contained, serializable composite (so clone/round-trip works).
+        // FFN inner dim is 4× the model dim, per the paper.
         for (int i = 0; i < 3; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingSize) / (headCount), new GELUActivation<T>() as IActivationFunction<T>);
-
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(embeddingSize * 4, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(embeddingSize, new ReLUActivation<T>() as IActivationFunction<T>);
-
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(headCount, embeddingSize * 4, embeddingSize);
         }
 
         yield return new DenseLayer<T>(architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
