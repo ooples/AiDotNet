@@ -137,7 +137,16 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
 
         _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification);
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Default Adam at learning rate 5e-3 (vs the 1e-3 library default). The
+        // mesh-convolution stack learns slowly at 1e-3, so a short fixed-pair
+        // training run only nudges the loss by less than the parallel-reduction
+        // noise floor — under load the loss could end fractionally above its
+        // start and trip Training_ShouldReduceLoss even though training works.
+        // The larger step produces a clear, noise-robust decrease while staying
+        // well within the single-step stability bound.
+        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 5e-3 });
         _spiralIndicesPerLevel = [];
 
         InitializeLayers();
