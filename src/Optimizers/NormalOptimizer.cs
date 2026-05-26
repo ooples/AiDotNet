@@ -107,9 +107,8 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         // row prove the search has converged on a deterministic optimum. Stochastic
         // models (whose fitness varies run-to-run) never hit the plateau, so their
         // behavior is unchanged.
-        int totalFeatureCount = totalFeatures;
         bool degenerateFeatureSearch =
-            Options.MaximumFeatures >= totalFeatureCount && Options.MinimumFeatures >= totalFeatureCount;
+            Options.MaximumFeatures >= totalFeatures && Options.MinimumFeatures >= totalFeatures;
         T lastBestFitness = bestStepData.FitnessScore;
         bool haveLastBest = false;
 
@@ -123,8 +122,7 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
             // Converged-plateau short-circuit for the degenerate (no-search) case.
             T currentBest = bestStepData.FitnessScore;
             bool identicalToLast = haveLastBest
-                && !NumOps.GreaterThan(currentBest, lastBestFitness)
-                && !NumOps.LessThan(currentBest, lastBestFitness);
+                && NumOps.Equals(currentBest, lastBestFitness);
             if (degenerateFeatureSearch && identicalToLast)
             {
                 break;

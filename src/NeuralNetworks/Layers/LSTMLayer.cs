@@ -1121,7 +1121,11 @@ public partial class LSTMLayer<T> : LayerBase<T>
         //   - GraphMode.IsActive == false. The primitive explicitly throws
         //     under an active autograd tape (no fused backward yet).
         // If any condition fails the existing per-step loop below runs unchanged.
-        if (!IsTrainingMode
+        // timeSteps > 0 guards the empty-sequence boundary: the per-step loop
+        // returns an empty output with zeroed final states, but the fused path's
+        // CopyLastTimestepHidden would slice at (seq - 1) = -1.
+        if (timeSteps > 0
+            && !IsTrainingMode
             && typeof(T) == typeof(float)
             && Engine is AiDotNet.Tensors.Engines.CpuEngine cpuEngForFused
             && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
@@ -1330,6 +1334,12 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </summary>
     private static void CopyLastTimestepHidden(Tensor<T> source, Tensor<T> dest, int batch, int seq, int hidden)
     {
+        // No last timestep to copy for an empty sequence — leave dest zeroed
+        // (the caller already gates on timeSteps > 0, this is defence in depth
+        // against a (seq - 1) = -1 slice).
+        if (seq <= 0)
+            return;
+
         var src = source.AsSpan();
         var dst = dest.AsWritableSpan();
         for (int b = 0; b < batch; b++)
