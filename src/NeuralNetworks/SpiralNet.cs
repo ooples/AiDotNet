@@ -584,6 +584,23 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         writer.Write(_options.FullyConnectedSizes.Length);
         foreach (var fc in _options.FullyConnectedSizes)
             writer.Write(fc);
+
+        // Persist the spiral-index topology so a deserialized / cloned model can
+        // re-propagate it to its (freshly reconstructed) SpiralConvLayers. The
+        // layers' indices are network-owned state, not trainable parameters, so
+        // the flat-parameter clone path doesn't carry them; without this a clone
+        // throws "Spiral indices must be set" on its first forward (#1450).
+        writer.Write(_spiralIndicesPerLevel.Count);
+        foreach (var level in _spiralIndicesPerLevel)
+        {
+            int rows = level.GetLength(0);
+            int cols = level.GetLength(1);
+            writer.Write(rows);
+            writer.Write(cols);
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    writer.Write(level[r, c]);
+        }
     }
 
     /// <summary>
@@ -614,6 +631,25 @@ public class SpiralNet<T> : NeuralNetworkBase<T>
         _options.FullyConnectedSizes = new int[fcLen];
         for (int i = 0; i < fcLen; i++)
             _options.FullyConnectedSizes[i] = reader.ReadInt32();
+
+        // Restore the spiral-index topology and re-propagate it to the layers
+        // that were reconstructed during layer deserialization (the constructor's
+        // default propagation targeted the pre-deserialize layers, which have
+        // since been replaced). Without this a clone forward throws "Spiral
+        // indices must be set" (#1450).
+        int levelCount = reader.ReadInt32();
+        _spiralIndicesPerLevel.Clear();
+        for (int l = 0; l < levelCount; l++)
+        {
+            int rows = reader.ReadInt32();
+            int cols = reader.ReadInt32();
+            var level = new int[rows, cols];
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < cols; c++)
+                    level[r, c] = reader.ReadInt32();
+            _spiralIndicesPerLevel.Add(level);
+        }
+        PropagateSpiralIndicesToLayers();
     }
 
     /// <summary>

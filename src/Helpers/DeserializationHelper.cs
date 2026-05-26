@@ -535,6 +535,26 @@ public static class DeserializationHelper
             }
             instance = ctor.Invoke(args);
         }
+        else if (genericDef == typeof(SpiralConvLayer<>))
+        {
+            // SpiralConvLayer(int outputChannels, int spiralLength, IActivationFunction<T>?).
+            // OutputChannels + SpiralLength come from GetMetadata; InputChannels is lazy
+            // and re-derived from the resolved input shape on the first forward. Without
+            // these the generic ctor fallback picked a wrong SpiralLength, sizing the lazy
+            // weights differently than the original and breaking Clone (#1450).
+            int spOut = TryGetInt(additionalParams, "OutputChannels")
+                ?? (outputShape is { Length: > 0 } ? outputShape[^1] : throw new InvalidOperationException(
+                    "SpiralConvLayer deserialize: missing OutputChannels metadata and no usable output shape."));
+            int spLen = TryGetInt(additionalParams, "SpiralLength")
+                ?? throw new InvalidOperationException(
+                    "SpiralConvLayer deserialize: missing SpiralLength metadata — re-save the model on a build "
+                    + "that emits it via GetMetadata.");
+            var spAct = TryRestoreActivation<T>(additionalParams) as IActivationFunction<T>;
+            var spCtor = type.GetConstructor(new[] { typeof(int), typeof(int), typeof(IActivationFunction<T>) });
+            if (spCtor is null)
+                throw new MissingLayerCtorException("Cannot find SpiralConvLayer(int, int, IActivationFunction<T>) constructor.");
+            instance = spCtor.Invoke(new object?[] { spOut, spLen, spAct });
+        }
         else if (genericDef == typeof(PositionalEncodingLayer<>))
         {
             // PositionalEncodingLayer(int maxSequenceLength, int embeddingSize)
