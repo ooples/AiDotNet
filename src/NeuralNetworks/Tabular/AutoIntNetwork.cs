@@ -164,6 +164,10 @@ public class AutoIntNetwork<T> : NeuralNetworkBase<T>
         // body computed the loss gradient, dropped it without backpropagating, then
         // called _optimizer.UpdateParameters(Layers) — which throws "Backward pass must
         // be called before updating parameters" because no gradients exist.
+        //
+        // Honor the base Train contract: auto-promote unbatched single samples to [1, …] first.
+        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+
         SetTrainingMode(true);
         try
         {

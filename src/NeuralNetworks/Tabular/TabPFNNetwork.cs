@@ -164,6 +164,10 @@ public class TabPFNNetwork<T> : NeuralNetworkBase<T>
         // Tape-based training (post-#1209). The previous body computed `error` and
         // dropped it without backpropagating, then called _optimizer.UpdateParameters(Layers)
         // — which throws "Backward pass must be called before updating parameters".
+        //
+        // Honor the base Train contract: auto-promote unbatched single samples to [1, …] first.
+        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+
         SetTrainingMode(true);
         try
         {
