@@ -477,8 +477,12 @@ public class AiModelBuilderPredictIntegrationTests
         var model = new AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<float>(architecture);
 
         // Set explicit non-uniform weights to ensure permutation produces different output.
-        // DenseLayer weights shape: [outputSize, inputSize] = [1, 3], stored in row-major order.
+        // DenseLayer weights shape: [inputSize, outputSize] = [3, 1], stored in row-major order.
         var denseLayer = (AiDotNet.NeuralNetworks.Layers.DenseLayer<float>)layers[1];
+        // DenseLayer is lazy-only: resolve its input width (featureCount) so the
+        // weight tensor is allocated before GetWeights() reads it (otherwise the
+        // lazy [0,0] placeholder makes weights[0] out of range).
+        denseLayer.ResolveFromShape([featureCount]);
         var weights = denseLayer.GetWeights();
         weights[0] = 1.0f;  // weight for feature 0
         weights[1] = 2.0f;  // weight for feature 1

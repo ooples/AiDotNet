@@ -2146,6 +2146,21 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             _featureSelectionState = 2;
         }
 
+        // Rank-1 single feature vector: SelectFeatures' tensor path requires
+        // rank>=2 (batch axis + feature axis), but a 1D tensor is an unambiguous
+        // per-sample feature vector with no batch axis — gather the selected
+        // indices directly into a new 1D tensor. This lets callers do
+        // result.Predict(singleVector) with feature selection configured
+        // (e.g. a permutation or column subset) without first wrapping to
+        // [1, features]. Bounds were validated in the state==0 block above.
+        if (input is Tensor<T> tensorInput && tensorInput.Shape.Length == 1)
+        {
+            var selected = new Tensor<T>(new[] { featureIndices.Count });
+            for (int j = 0; j < featureIndices.Count; j++)
+                selected[j] = tensorInput[featureIndices[j]];
+            return (TInput)(object)selected;
+        }
+
         return Helpers.OptimizerHelper<T, TInput, TOutput>.SelectFeatures(input, featureIndices);
     }
 
