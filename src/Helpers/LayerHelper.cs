@@ -2121,37 +2121,33 @@ public static class LayerHelper<T>
             layerSizes = new List<int> { inputSize, 128, 64 };
         }
 
-        // Create layers
-        for (int i = 0; i < layerSizes.Count - 1; i++)
-        {
-            int currentSize = layerSizes[i];
-            int nextSize = layerSizes[i + 1];
+        // Hidden LIF layer sizes = the layer stack minus the input dimension
+        // (the readout projection to outputSize is owned by the core itself).
+        int[] hiddenSizes = layerSizes.Skip(1).ToArray();
+        if (hiddenSizes.Length == 0)
+            hiddenSizes = new[] { Math.Max(inputSize / 2, 8) };
 
-            // Add spiking layer
-            yield return new SpikingLayer<T>(
-                inputSize: currentSize,
-                outputSize: nextSize,
-                neuronType: neuronType,
-                tau: tau,
-                refractoryPeriod: refractoryPeriod
-            );
+        // Surrogate-gradient SNN core (Neftci et al. 2019): LIF hidden layers +
+        // a non-spiking leaky-integrator readout, unrolled over time and trained
+        // end-to-end by backprop-through-time with a straight-through surrogate
+        // gradient on the spike threshold. This replaces the prior
+        // SpikingLayer + STDP stack, whose unsupervised Spike-Timing-Dependent
+        // Plasticity could not minimize a supervised loss (it random-walked the
+        // objective). The core owns its synaptic weights and the readout
+        // projection; the output activation is applied by the layer below.
+        // (neuronType / tau / refractoryPeriod / useLayerNormalization no longer
+        // apply to the surrogate-gradient formulation and are ignored; the
+        // membrane decay/threshold are the core's LIF parameters.)
+        yield return new SpikingNetworkCore<T>(
+            inputSize: inputSize,
+            hiddenSizes: hiddenSizes,
+            outputSize: outputSize,
+            timeSteps: 20);
 
-            // Add normalization layer to stabilize spiking activity
-            if (useLayerNormalization)
-            {
-                yield return new LayerNormalizationLayer<T>();
-            }
-        }
-
-        // Add output layer - typically a dense layer to convert spikes to continuous values
+        // Output activation appropriate to the task (applied to the core's
+        // time-averaged readout membrane).
         if (useOutputConversion)
         {
-            yield return new DenseLayer<T>(
-                outputSize,
-                new IdentityActivation<T>() as IActivationFunction<T>
-            );
-
-            // Add appropriate activation based on task type
             if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
             {
                 yield return new ActivationLayer<T>(new SigmoidActivation<T>() as IActivationFunction<T>);

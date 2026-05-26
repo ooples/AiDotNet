@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -344,29 +345,6 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Aggregates a spike train (sequence of spikes over time) into a final output vector.
-    /// </summary>
-    /// <param name="spikeTrain">The list of spike vectors over time.</param>
-    /// <returns>The aggregated output vector.</returns>
-    private Vector<T> AggregateSpikeTrainToOutput(List<Vector<T>> spikeTrain)
-    {
-        int outputSize = spikeTrain[0].Length;
-        var output = new Vector<T>(outputSize);
-
-        for (int i = 0; i < outputSize; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int t = 0; t < spikeTrain.Count; t++)
-            {
-                sum = NumOps.Add(sum, spikeTrain[t][i]);
-            }
-            output[i] = NumOps.Divide(sum, NumOps.FromDouble(spikeTrain.Count));
-        }
-
-        return output;
-    }
-
-    /// <summary>
     /// Updates the parameters of the spiking neural network layers.
     /// </summary>
     /// <param name="parameters">The vector of parameter updates to apply.</param>
@@ -419,81 +397,36 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Reset network state (clears SpikingLayer internal states)
-        ResetState();
+        // The SpikingNetworkCore owns the temporal LIF simulation internally and
+        // unrolls it over its own time steps, so prediction is a plain forward
+        // sweep through the layers (core → output activation) in inference mode.
+        SetTrainingMode(false);
+        foreach (var layer in Layers)
+            layer.SetTrainingMode(false);
 
-        // SpikingLayers handle their own LIF dynamics (membrane, spikes, refractory).
-        // We run the simulation for multiple timesteps, feeding the same input each step
-        // and letting SpikingLayers accumulate membrane potential and generate spikes.
-        // The output layer's spike rates over time form the final prediction.
-
-        // Per Neftci et al. 2019: hidden spiking layers produce spikes over T time steps.
-        // The non-spiking readout (last DenseLayer) processes accumulated spike rates.
-        // Separate spiking layers from the readout layer.
-        int readoutIdx = -1;
-        for (int i = Layers.Count - 1; i >= 0; i--)
-        {
-            if (Layers[i] is not Layers.SpikingLayer<T>) { readoutIdx = i; break; }
-        }
-
-        // Accumulate spiking layer outputs over time. The readout layer may be
-        // lazy (reports input shape as [-1]); fall back to the last spiking
-        // layer's output, then to a single forward pass to discover the size.
-        // Each Get*Shape() may legitimately return an empty array for a
-        // freshly-constructed lazy layer — guard the [0] access against that
-        // case before the index throws an unhelpful IndexOutOfRangeException.
-        int spikingOutputSize = ReadFirstShapeAxis(readoutIdx >= 0
-            ? Layers[readoutIdx].GetInputShape()
-            : Layers[^1].GetOutputShape());
-        if (spikingOutputSize <= 0)
-        {
-            int lastSpikingIdx = readoutIdx >= 0 ? readoutIdx : Layers.Count;
-            if (lastSpikingIdx > 0)
-                spikingOutputSize = ReadFirstShapeAxis(Layers[lastSpikingIdx - 1].GetOutputShape());
-            if (spikingOutputSize <= 0)
-            {
-                Tensor<T> probe = input;
-                for (int i = 0; i < lastSpikingIdx; i++)
-                    probe = Layers[i].Forward(probe);
-                spikingOutputSize = probe.Length;
-                // The probe forward mutated SpikingLayer membrane / refractory state
-                // (each layer accumulates LIF dynamics across calls). If we leave
-                // that state in place, the simulation loop below would start from
-                // a non-zero baseline and produce different spike rates than a
-                // fresh run — which is the whole point of ResetState() above. Reset
-                // again so the simulation loop sees the same clean slate it would
-                // have seen without the probe.
-                ResetState();
-            }
-        }
-        var accumSpikes = new T[spikingOutputSize];
-
-        for (int step = 0; step < _simulationSteps; step++)
-        {
-            Tensor<T> current = input;
-            int lastSpikingIdx = readoutIdx >= 0 ? readoutIdx : Layers.Count;
-            for (int i = 0; i < lastSpikingIdx; i++)
-                current = Layers[i].Forward(current);
-
-            var vec = current.ToVector();
-            for (int i = 0; i < Math.Min(spikingOutputSize, vec.Length); i++)
-                accumSpikes[i] = NumOps.Add(accumSpikes[i], vec[i]);
-        }
-
-        // Average spike rate
-        for (int i = 0; i < spikingOutputSize; i++)
-            accumSpikes[i] = NumOps.Divide(accumSpikes[i], NumOps.FromDouble(_simulationSteps));
-
-        // Pass spike rates through non-spiking readout
-        var spikeRateTensor = Tensor<T>.FromVector(new Vector<T>(accumSpikes));
-        if (readoutIdx >= 0)
-        {
-            for (int i = readoutIdx; i < Layers.Count; i++)
-                spikeRateTensor = Layers[i].Forward(spikeRateTensor);
-        }
-
-        return spikeRateTensor;
+        var current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        return current;
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _spikingOptimizer;
+
+    /// <summary>
+    /// Uses an Adam (AMSGrad) optimizer at a reduced learning rate (1e-4 vs the
+    /// 1e-3 framework default). Surrogate-gradient backprop-through-time reuses
+    /// each synaptic weight across all unrolled time steps, so the accumulated
+    /// gradient is large; a smaller step keeps training from diverging while the
+    /// default per-optimizer gradient clipping bounds the recurrent gradient.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _spikingOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = true,
+                InitialLearningRate = 3e-4
+            });
 
     /// <summary>
     /// Trains the spiking neural network on input-output pairs.
@@ -524,290 +457,22 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Reset network state
-        ResetState();
-
-        // Convert input and expected output to vectors
-        Vector<T> inputVector = input.ToVector();
-        Vector<T> expectedOutputVector = expectedOutput.ToVector();
-
-        // Storage for spike history of all layers
-        List<List<Vector<T>>> layerSpikeHistory = new List<List<Vector<T>>>();
-        for (int i = 0; i < Layers.Count; i++)
+        // Surrogate-gradient backpropagation-through-time (Neftci et al. 2019):
+        // the SpikingNetworkCore unrolls the LIF dynamics over time on the
+        // gradient tape with a straight-through surrogate spike, so the standard
+        // tape trainer backpropagates a loss-directed gradient to every synaptic
+        // weight. This replaces the prior unsupervised Spike-Timing-Dependent
+        // Plasticity, which could not minimize a supervised loss (its hidden-layer
+        // updates were loss-agnostic and random-walked the objective).
+        SetTrainingMode(true);
+        try
         {
-            layerSpikeHistory.Add(new List<Vector<T>>(_simulationSteps));
+            TrainWithTape(input, expectedOutput);
         }
-
-        // Run simulation for training
-        for (int step = 0; step < _simulationSteps; step++)
+        finally
         {
-            // Process through layers
-            Vector<T> currentInput = inputVector;
-
-            for (int layerIndex = 0; layerIndex < Layers.Count; layerIndex++)
-            {
-                // Get current layer and its state
-                var layer = Layers[layerIndex];
-                var membranePotentials = _membranePotentials[layerIndex];
-                var refractoryCounters = _refractoryCounters[layerIndex];
-                var firingThresholds = _firingThresholds[layerIndex];
-
-                // Process input through layer
-                Tensor<T> layerInput = Tensor<T>.FromVector(currentInput);
-                Tensor<T> layerOutput = layer.Forward(layerInput);
-                Vector<T> layerOutputVector = layerOutput.ToVector();
-
-                // VECTORIZED: Membrane decay + input using Engine
-                var mTensor = Tensor<T>.FromVector(membranePotentials);
-                var mDecayed = Engine.TensorMultiplyScalar(mTensor, _membraneDecay);
-                var lOutTensor = Tensor<T>.FromVector(layerOutputVector);
-                if (lOutTensor.Length == mDecayed.Length)
-                {
-                    mTensor = Engine.TensorAdd(mDecayed, lOutTensor);
-                }
-                else
-                {
-                    mTensor = mDecayed;
-                    int ml = Math.Min(lOutTensor.Length, mTensor.Length);
-                    for (int m = 0; m < ml; m++)
-                        mTensor[m] = NumOps.Add(mTensor[m], lOutTensor[m]);
-                }
-                for (int m = 0; m < membranePotentials.Length; m++)
-                    membranePotentials[m] = mTensor[m];
-
-                // Generate spikes (branching per-neuron)
-                Vector<T> spikes = new Vector<T>(membranePotentials.Length);
-                for (int n = 0; n < membranePotentials.Length; n++)
-                {
-                    if (refractoryCounters[n] <= 0 && NumOps.GreaterThanOrEquals(membranePotentials[n], firingThresholds[n]))
-                    {
-                        spikes[n] = NumOps.One;
-                        membranePotentials[n] = NumOps.Zero;
-                        refractoryCounters[n] = _refractoryPeriod;
-                    }
-                    else
-                    {
-                        spikes[n] = NumOps.Zero;
-                        if (refractoryCounters[n] > 0) refractoryCounters[n]--;
-                    }
-                }
-
-                // Store spikes in history
-                layerSpikeHistory[layerIndex].Add(spikes);
-
-                // Set spikes as input to next layer
-                currentInput = spikes;
-            }
+            SetTrainingMode(false);
         }
-
-        // Calculate output layer spike statistics
-        Vector<T> outputLayerActivity = AggregateSpikeTrainToOutput(layerSpikeHistory[Layers.Count - 1]);
-
-        // Calculate error. The last layer's neuron count may differ from the test
-        // harness's expected-output dimension when the architecture wasn't sized
-        // exactly to OutputShape (lazy layers, generic test bases). Compare only
-        // the overlapping prefix so we don't index past either vector.
-        int errorLength = Math.Min(expectedOutputVector.Length, outputLayerActivity.Length);
-        Vector<T> outputError = new Vector<T>(errorLength);
-        for (int i = 0; i < errorLength; i++)
-        {
-            outputError[i] = NumOps.Subtract(expectedOutputVector[i], outputLayerActivity[i]);
-        }
-
-        // Calculate and store the loss. ValidateVectorLengths in the base class
-        // requires identical lengths; truncate to the overlapping prefix to
-        // match the error-vector logic above.
-        Vector<T> lossPredicted = outputLayerActivity.Length == errorLength
-            ? outputLayerActivity
-            : outputLayerActivity.GetSubVector(0, errorLength);
-        Vector<T> lossExpected = expectedOutputVector.Length == errorLength
-            ? expectedOutputVector
-            : expectedOutputVector.GetSubVector(0, errorLength);
-        LastLoss = LossFunction.CalculateLoss(lossPredicted, lossExpected);
-
-        // Backpropagate error and apply STDP learning
-        ApplySTDPLearning(layerSpikeHistory, outputError);
-    }
-
-    /// <summary>
-    /// Applies Spike-Timing-Dependent Plasticity (STDP) learning based on spike history.
-    /// </summary>
-    /// <param name="layerSpikeHistory">Spike history for each layer.</param>
-    /// <param name="outputError">Error at the output layer.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the STDP learning rule, which adjusts synaptic weights based on the
-    /// relative timing of spikes between pre-synaptic and post-synaptic neurons. Connections between
-    /// neurons that spike in close temporal proximity are strengthened, while others are weakened.
-    /// This biologically inspired learning rule allows the network to learn temporal patterns.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts connections based on spike timing.
-    /// 
-    /// The STDP learning rule works like this:
-    /// - If neuron A fires just before neuron B, strengthen the connection from A to B
-    /// - If neuron B fires just before neuron A, weaken the connection from A to B
-    /// - The closer in time the spikes occur, the stronger the effect
-    /// 
-    /// This mimics how real brains learn:
-    /// - "Neurons that fire together, wire together"
-    /// - But timing matters - the sequence of firing determines whether connections
-    ///   get strengthened or weakened
-    /// 
-    /// This learning approach is uniquely suited to spiking neural networks
-    /// because it depends on the precise timing of spikes.
-    /// </para>
-    /// </remarks>
-    private void ApplySTDPLearning(List<List<Vector<T>>> layerSpikeHistory, Vector<T> outputError)
-    {
-        // Learning rate and STDP window from configurable options
-        T learningRate = NumOps.FromDouble(_options.ReadoutLearningRate);
-        int stdpWindow = _options.StdpWindow;
-
-        // Process layers in reverse order (output to input)
-        for (int layerIndex = Layers.Count - 1; layerIndex > 0; layerIndex--)
-        {
-            var layer = Layers[layerIndex];
-
-            // Skip layers that don't support training
-            if (!layer.SupportsTraining)
-                continue;
-
-            // Get spike history for this layer and the previous layer
-            var postSynapticSpikes = layerSpikeHistory[layerIndex];
-            var preSynapticSpikes = layerSpikeHistory[layerIndex - 1];
-
-            // Calculate weight updates based on STDP
-            int postSize = postSynapticSpikes[0].Length;
-            int preSize = preSynapticSpikes[0].Length;
-
-            // Get layer parameters (weights)
-            Vector<T> parameters = layer.GetParameters();
-            Vector<T> parameterUpdates = new Vector<T>(parameters.Length);
-
-            // Simplified version - assumes weights are organized as [postNeuron][preNeuron]
-            for (int post = 0; post < postSize; post++)
-            {
-                for (int pre = 0; pre < preSize; pre++)
-                {
-                    // Calculate STDP weight change
-                    T weightChange = CalculateSTDPWeightChange(
-                        preSynapticSpikes,
-                        postSynapticSpikes,
-                        pre,
-                        post,
-                        stdpWindow);
-
-                    // For output layer, modulate weight change by output error
-                    if (layerIndex == Layers.Count - 1 && post < outputError.Length)
-                    {
-                        weightChange = NumOps.Multiply(weightChange, outputError[post]);
-                    }
-
-                    // Apply learning rate
-                    weightChange = NumOps.Multiply(weightChange, learningRate);
-
-                    // Store weight update
-                    int paramIndex = post * preSize + pre;
-                    if (paramIndex < parameterUpdates.Length)
-                    {
-                        parameterUpdates[paramIndex] = weightChange;
-                    }
-                }
-            }
-
-            // Apply weight updates
-            Vector<T> updatedParameters = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                if (i < parameterUpdates.Length)
-                {
-                    updatedParameters[i] = NumOps.Add(parameters[i], parameterUpdates[i]);
-                }
-                else
-                {
-                    updatedParameters[i] = parameters[i];
-                }
-            }
-
-            // Update layer parameters
-            layer.SetParameters(updatedParameters);
-        }
-    }
-
-    /// <summary>
-    /// Calculates weight change based on STDP rule for a specific connection.
-    /// </summary>
-    /// <param name="preSynapticSpikes">Spike history of pre-synaptic neuron.</param>
-    /// <param name="postSynapticSpikes">Spike history of post-synaptic neuron.</param>
-    /// <param name="preIndex">Index of pre-synaptic neuron.</param>
-    /// <param name="postIndex">Index of post-synaptic neuron.</param>
-    /// <param name="stdpWindow">Time window for STDP effect.</param>
-    /// <returns>The calculated weight change based on STDP.</returns>
-    private T CalculateSTDPWeightChange(
-        List<Vector<T>> preSynapticSpikes,
-        List<Vector<T>> postSynapticSpikes,
-        int preIndex,
-        int postIndex,
-        int stdpWindow)
-    {
-        // STDP Parameters
-        T stdpAmplitude = NumOps.FromDouble(0.1); // Maximum weight change
-        T stdpTimeFactor = NumOps.FromDouble(0.2); // How quickly effect decays with time
-
-        T totalChange = NumOps.Zero;
-
-        // Loop through all time steps
-        for (int t = 0; t < preSynapticSpikes.Count; t++)
-        {
-            // Skip if no spike in either neuron at this time
-            if (NumOps.Equals(preSynapticSpikes[t][preIndex], NumOps.Zero) &&
-                NumOps.Equals(postSynapticSpikes[t][postIndex], NumOps.Zero))
-            {
-                continue;
-            }
-
-            // If post-synaptic neuron spikes at this time
-            if (NumOps.Equals(postSynapticSpikes[t][postIndex], NumOps.One))
-            {
-                // Look for pre-synaptic spikes in the window before this spike
-                for (int dt = 1; dt <= stdpWindow && t - dt >= 0; dt++)
-                {
-                    if (NumOps.Equals(preSynapticSpikes[t - dt][preIndex], NumOps.One))
-                    {
-                        // Pre-synaptic neuron fired before post-synaptic neuron
-                        // This should strengthen the connection (positive change)
-                        T timeFactor = NumOps.Exp(NumOps.Multiply(
-                            NumOps.Negate(NumOps.FromDouble(dt)),
-                            stdpTimeFactor));
-
-                        T change = NumOps.Multiply(stdpAmplitude, timeFactor);
-                        totalChange = NumOps.Add(totalChange, change);
-                    }
-                }
-            }
-
-            // If pre-synaptic neuron spikes at this time
-            if (NumOps.Equals(preSynapticSpikes[t][preIndex], NumOps.One))
-            {
-                // Look for post-synaptic spikes in the window before this spike
-                for (int dt = 1; dt <= stdpWindow && t - dt >= 0; dt++)
-                {
-                    if (NumOps.Equals(postSynapticSpikes[t - dt][postIndex], NumOps.One))
-                    {
-                        // Post-synaptic neuron fired before pre-synaptic neuron
-                        // This should weaken the connection (negative change)
-                        T timeFactor = NumOps.Exp(NumOps.Multiply(
-                            NumOps.Negate(NumOps.FromDouble(dt)),
-                            stdpTimeFactor));
-
-                        T change = NumOps.Multiply(NumOps.Negate(stdpAmplitude), timeFactor);
-                        totalChange = NumOps.Add(totalChange, change);
-                    }
-                }
-            }
-        }
-
-        return totalChange;
     }
 
     /// <summary>
@@ -1315,16 +980,5 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
                 _scalarActivation,
                 LossFunction);
         }
-    }
-
-    /// <summary>
-    /// Safe-indexed first-axis read for lazy layers that may return an
-    /// empty shape array before resolution. Returns 0 (so the caller's
-    /// fallback path takes over) instead of throwing IndexOutOfRangeException.
-    /// </summary>
-    private static int ReadFirstShapeAxis(int[] shape)
-    {
-        if (shape is null || shape.Length == 0) return 0;
-        return shape[0];
     }
 }
