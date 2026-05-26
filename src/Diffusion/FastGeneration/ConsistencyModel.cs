@@ -246,23 +246,16 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 18,
-                // Song et al. 2023 ("Consistency Models") §4 — the entire
-                // point of consistency-model distillation is single-step
-                // sampling. The paper reports ImageNet-64 / LSUN single-step
-                // FID at 6.20 (vs DDPM's many-thousand-step quality at FID
-                // ~3-4), establishing single-step as the canonical fast-
-                // generation mode. 2-step (FID 4.70) is a quality refinement,
-                // 4-step (FID 4.29) is diminishing returns. The default-
-                // inference contract serves the "what does this model do
-                // out of the box?" question — for a Consistency Model, that
-                // is single-step inference per the paper. Callers who want
-                // the quality refinement still pass `numInferenceSteps=2`
-                // (or 4) explicitly to `GenerateFromText`. This also halves
-                // `Predict()`'s UNet forward count vs the prior 2-step
-                // default, giving #1305's `ScaledInput_ShouldChangeOutput`
-                // the per-budget headroom it needs on FP64 CPU CI runners
-                // without weakening the foundation-scale test fixture.
-                DefaultInferenceSteps = 1,
+                // Song et al. 2023 ("Consistency Models") §4 reports
+                // ImageNet-64 / LSUN single-step FID at 6.20 and 2-step
+                // FID at 4.70 — the entire point of consistency-model
+                // distillation is single-step or 2-step inference. Override
+                // the DiffusionModelOptions default of 10 to the
+                // paper-canonical 2 so `Predict()` doesn't run 10 redundant
+                // denoising loops (the failing ScaledInput_ShouldChangeOutput
+                // test calls `Predict` twice — at 10 steps that's 20 UNet
+                // forwards, which times out at the 120s budget on CPU).
+                DefaultInferenceSteps = 2,
                 BetaStart = 0.00085,
                 BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear

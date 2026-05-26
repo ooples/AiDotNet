@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using AiDotNet.Diffusion.FastGeneration;
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Tools.ConsistencyModelPerfDiag;
@@ -106,6 +110,58 @@ internal static class Program
         Log($"  mean:                 {meanUnet,8:F3} s");
         Log($"  max:                  {maxUnet,8:F3} s");
         Log($"  samples:              [{string.Join(", ", Array.ConvertAll(samples, x => x.ToString("F3")))}]");
+
+        // === Phase 6: sub-phase breakdown via ForwardProfilingSink ===
+        Log("--");
+        Log("Sub-phase breakdown of one warm PredictNoise:");
+        var sink = new ConcurrentQueue<(string section, double ms)>();
+        UNetNoisePredictor<double>.ForwardProfilingSink = sink;
+        try
+        {
+            var _ = unet.PredictNoise(input, timestep: 20, conditioning: null);
+        }
+        finally
+        {
+            UNetNoisePredictor<double>.ForwardProfilingSink = null;
+        }
+
+        var entries = sink.ToArray();
+        double totalSubMs = entries.Sum(e => e.ms);
+        // Aggregate by section kind: input_conv, output_conv, enc.*, mid.*, dec.*
+        var grouped = entries
+            .GroupBy(e =>
+            {
+                var s = e.section;
+                if (s.StartsWith("enc[")) return "encoder " + s.Substring(s.IndexOf(']') + 2);
+                if (s.StartsWith("mid[")) return "middle  " + s.Substring(s.IndexOf(']') + 2);
+                if (s.StartsWith("dec[")) return "decoder " + s.Substring(s.IndexOf(']') + 2);
+                return s;
+            })
+            .Select(g => new { Key = g.Key, TotalMs = g.Sum(e => e.ms), Count = g.Count() })
+            .OrderByDescending(g => g.TotalMs)
+            .ToArray();
+
+        Log($"  total sub-phase time:  {totalSubMs / 1000.0,8:F3} s  ({entries.Length} entries)");
+        Log($"  by kind (desc, top 20):");
+        foreach (var g in grouped.Take(20))
+        {
+            double share = totalSubMs > 0 ? 100.0 * g.TotalMs / totalSubMs : 0;
+            Log($"    {g.Key,-28} {g.TotalMs,10:F1} ms  ({share,5:F1}%)  ×{g.Count}");
+        }
+
+        // Per-individual-section dump for the dominant ones
+        Log($"  per-section detail (top 15 individual sections):");
+        var perSection = entries
+            .GroupBy(e => e.section)
+            .Select(g => new { Section = g.Key, TotalMs = g.Sum(e => e.ms) })
+            .OrderByDescending(g => g.TotalMs)
+            .Take(15)
+            .ToArray();
+        foreach (var p in perSection)
+        {
+            double share = totalSubMs > 0 ? 100.0 * p.TotalMs / totalSubMs : 0;
+            Log($"    {p.Section,-28} {p.TotalMs,10:F1} ms  ({share,5:F1}%)");
+        }
 
         // Step 5: report decomposition. Test does 2 Predicts. Each Predict runs
         // numSteps PredictNoise calls (numSteps = DefaultInferenceSteps from the
