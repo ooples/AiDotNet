@@ -4544,6 +4544,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // tripped ValidateInputShape.
             "DeepAR" => $"1, {ctx}, 1",
 
+            // Autoformer (Wu et al. 2021) RevIN/attention needs rank-3
+            // [batch, seqLen, features] with seqLen == LookbackWindow (96) and
+            // features == NumFeatures (= architecture InputSize, which the
+            // generator sizes to the paper context length, 512).
+            "Autoformer" => $"1, 96, {ctx}",
+
             _ => ctx,
         };
     }
