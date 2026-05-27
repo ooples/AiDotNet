@@ -4569,6 +4569,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // architecture InputSize = paper context length (512).
             "ETSformer" => $"1, 96, {ctx}",
 
+            // Informer (Zhou et al. 2021): seqLen=LookbackWindow (96), NumFeatures
+            // = architecture InputSize = paper context length (512).
+            "Informer" => $"1, 96, {ctx}",
+
             _ => ctx,
         };
     }
