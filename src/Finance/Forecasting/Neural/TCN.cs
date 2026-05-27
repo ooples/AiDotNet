@@ -590,6 +590,11 @@ public class TCN<T> : ForecastingModelBase<T>
         _numLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _useResidualConnections = reader.ReadBoolean();
+
+        // Re-bind cached layer references (_inputProjection, _tcnBlocks,
+        // _outputProjection) to the deserialized weight-loaded layers so a clone
+        // runs on the loaded weights, not random init.
+        ExtractLayerReferences();
     }
 
     #endregion
