@@ -5,14 +5,17 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.81.9 brings in six fixes accumulated since 0.81.3:
-         - 0.81.4 #367  GraphMode recording on 5 ops with silent gradient-drop bugs (closes #365)
-         - 0.81.5 #410  three FP64 SD UNet cliffs + compile-mode forward 2× faster than eager (#1305)
-         - 0.81.6 #412  shape catalog + DCGAN step probe + alloc profile (#403)
-         - 0.81.7 #416  drop IsDeterministicMode from CompiledModelCache shape-key (closes AiDotNet#1395 root cause — VGG fused-compiled training now engages on step 2)
-         - 0.81.8 #418  serialise clCreateCommandQueue across threads (dodges AMD driver race, #414)
-         - 0.81.9 #424  long-arithmetic dim-product in TensorAllocator (replaces silent `checked(int * int)` overflow — unblocks TimeMachine / DQN / OWLViT / DGCNN / TabTransformer / TabDPT / SlimSAM / TriaffineNER on SonarCloud run 26241806890) -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.82.5" />
+    <!-- AiDotNet.Tensors 0.84.1 — carries the blocker fixes for the previously-
+         draft framework PRs that depended on Tensors changes:
+           * #427 SgemmWithInt8RowScaledCachedB — per-row-scaled INT8 weight-only
+             GEMM (AiDotNet#1349 / PR #1417).
+           * #437 CpuEngine.LstmSequenceForward — fused recurrent forward
+             (AIsEval LSTM / PR #1457).
+           * #454 BroadcastElementwise SIMD perf (AiDotNet#1307 / PR #1448).
+         Plus the 0.81.4–0.82.5 fixes already in flight (GraphMode gradient
+         recording #367, FP64 SD UNet cliffs #410, fused-compiled VGG #416,
+         clCreateCommandQueue serialisation #418, TensorAllocator long-arith #424). -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.84.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.9" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.82.5" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.9" />
