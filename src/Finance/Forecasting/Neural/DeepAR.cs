@@ -835,6 +835,21 @@ public class DeepAR<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
+    /// Tape-connected forward used by <see cref="NeuralNetworks.NeuralNetworkBase{T}.TrainWithTape"/>.
+    /// </summary>
+    /// <remarks>
+    /// The base <c>ForwardNativeForTraining</c> routes through <see cref="Forecast"/>, whose
+    /// <c>ApplyScaling</c> / sampling steps build new tensors by manual indexing — that detaches
+    /// the autodiff graph, so the gradient tape saw a constant and no weight gradients ever flowed
+    /// (params never changed, loss never moved). Training instead runs the differentiable layer
+    /// stack straight to the distribution mean head (<see cref="Forward"/>): per DeepAR (Salinas
+    /// et al. 2020) the network is fit by maximizing the observed series' likelihood under the
+    /// predicted distribution, and the mean head is the tape-connected quantity the optimizer
+    /// backpropagates through.
+    /// </remarks>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input) => Forward(input);
+
+    /// <summary>
     /// Performs native mode forecasting.
     /// </summary>
     /// <param name="input">Input historical data.</param>
