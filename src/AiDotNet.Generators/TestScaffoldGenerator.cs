@@ -4505,6 +4505,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // so the lookback window matches the model's configured default.
             "NHiTSFinance" => "24",
 
+            // STGNN (Yu et al. 2018): per-node output [numNodes, forecastHorizon*
+            // numFeatures] = [207, 12] (METR-LA defaults numNodes=207,
+            // forecastHorizon=12, numFeatures=1). Pairs with input "207, 12, 1".
+            "STGNN" => "207, 12",
+
             // All others: [B, forecastHorizon]. Common paper defaults 96.
             _ => "96",
         };
@@ -4583,6 +4588,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // default 1). A 1-D default shape made the SSM flatten contextLength
             // into the weight dims (512*256 x 512*64), tripping the 2 GB allocator.
             "Hippo" => $"1, {ctx}, 1",
+
+            // STGNN (Yu et al. 2018) spatio-temporal GNN: rank-3
+            // [numNodes, sequenceLength, numFeatures] = [207, 12, 1] (METR-LA paper
+            // defaults). The model reshapes to [numNodes, sequenceLength*numFeatures]
+            // so its per-node MLPs apply shared weights across the 207 nodes.
+            "STGNN" => "207, 12, 1",
 
             _ => ctx,
         };

@@ -763,15 +763,25 @@ public class STGNN<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        var current = FlattenInput(input);
+        // Organize the input as [numNodes, featuresPerNode] (numNodes is the batch
+        // dimension) so every DenseLayer applies SHARED per-node weights — the
+        // paper-faithful design with O(hiddenDim^2) parameters instead of the old
+        // numNodes-wide flattened denses that OOM-crashed the optimizer. The
+        // tape-aware Engine.Reshape keeps gradients flowing back to the input.
+        int totalSize = input.Length;
+        int featuresPerNode = totalSize / _numNodes;
+        var current = featuresPerNode * _numNodes == totalSize
+            ? Engine.Reshape(input, new[] { _numNodes, featuresPerNode })
+            : FlattenInput(input);
 
-        // Apply layers
+        // Per-node temporal MLP stack (shared weights across nodes).
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
 
-        // Apply graph convolution (matrix multiplication with adjacency)
+        // Spatial graph convolution: mix node representations via the adjacency
+        // (H' = A H), the spatial half of the spatio-temporal architecture.
         if (_adjacencyMatrix is not null && _useNativeMode)
         {
             current = ApplyGraphConvolution(current);

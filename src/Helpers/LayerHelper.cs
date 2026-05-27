@@ -15471,50 +15471,48 @@ public static class LayerHelper<T>
         int numSpatialLayers = 2,
         int numTemporalLayers = 2)
     {
-        // Input size: nodes * sequence * features (flattened)
-        int inputSize = numNodes * sequenceLength * numFeatures;
-        int outputSize = numNodes * forecastHorizon * numFeatures;
+        // Paper-faithful STGNN (Yu et al. 2018): all temporal/projection weights are
+        // SHARED across the graph's nodes, not unique per node. The model runs these
+        // layers on a [numNodes, channels] tensor (numNodes as the batch dimension),
+        // so each DenseLayer is a per-node MLP with O(hiddenDim^2) parameters — NOT
+        // the old numNodes*hiddenDim-wide flattened denses (O(numNodes^2*hiddenDim^2)
+        // ≈ 1B params at the paper scale numNodes=207, which OOM-crashed the optimizer).
+        // The spatial graph convolution (adjacency mixing across nodes) is applied by
+        // the model's forward pass via ApplyGraphConvolution.
 
-        // === Input Embedding ===
-        // Project input features to hidden dimension
+        // === Input Embedding === (per node: sequenceLength*numFeatures -> hiddenDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new GELUActivation<T>());
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === ST-Conv Blocks ===
-        // Each block: Temporal -> Spatial -> Temporal
+        // === Temporal Conv Blocks === (per-node MLPs, shared weights)
         int numBlocks = Math.Max(numSpatialLayers, numTemporalLayers);
         for (int block = 0; block < numBlocks; block++)
         {
-            // Temporal convolution (simulated with dense layers for time processing)
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new GELUActivation<T>());
 
-            // Spatial convolution (graph aggregation simulated with dense)
-            // In practice, this would use actual graph convolution with adjacency matrix
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new GELUActivation<T>());
 
-            // Second temporal convolution
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new GELUActivation<T>());
 
             yield return new LayerNormalizationLayer<T>();
         }
 
-        // === Output Projection ===
-        // Project to forecast dimension
+        // === Output Projection === (per node: hiddenDim -> forecastHorizon*numFeatures)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim / 2,
+            outputSize: Math.Max(1, hiddenDim / 2),
             activationFunction: new GELUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: outputSize,
+            outputSize: forecastHorizon * numFeatures,
             activationFunction: null);
     }
 
