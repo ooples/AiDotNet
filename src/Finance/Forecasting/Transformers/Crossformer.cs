@@ -358,6 +358,13 @@ public class Crossformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
+        // Idempotent: runs in the ctor AND after deserialize; clear the per-block
+        // lists first so the second call rebinds rather than appending a doubled
+        // attention stack (which makes a clone diverge from the original).
+        _crossTimeAttentionLayers.Clear();
+        _crossDimAttentionLayers.Clear();
+        _dropoutLayers.Clear();
+
         int idx = 0;
 
         // DSE layer (first dense layer)
@@ -549,6 +556,10 @@ public class Crossformer<T> : ForecastingModelBase<T>
         _numLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _useInstanceNormalization = reader.ReadBoolean();
+
+        // Re-bind cached layer references to the deserialized (weight-loaded)
+        // layers so a clone runs on the loaded weights, not random init.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -730,6 +741,20 @@ public class Crossformer<T> : ForecastingModelBase<T>
             current = _outputProjection.Forward(current);
         }
 
+        // The output head projects each segment/dimension token to a flat
+        // predictionHorizon*numFeatures vector. Aggregate over the token axis and
+        // reshape into the forecast grid [batch, predictionHorizon, numFeatures]
+        // so downstream length adjustment and per-feature RevIN denorm align
+        // (previously the raw [batch, tokens, horizon*features] output left a
+        // 168-wide feature axis that could not be denormalized against the
+        // 7-feature instance stats). Tape-connected (ReduceMean + Reshape).
+        if (current.Rank == 3)
+        {
+            int batch = current.Shape[0];
+            current = Engine.ReduceMean(current, new[] { 1 }, keepDims: false);
+            current = Engine.Reshape(current, new[] { batch, _predictionHorizon, _numFeatures });
+        }
+
         return AdjustToPredictionHorizon(current);
     }
 
@@ -890,24 +915,13 @@ public class Crossformer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input._shape);
-            int batchSize = input.Shape[0];
-            int horizonLen = input.Shape[1];
-            int features = input.Shape[2];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int t = 0; t < horizonLen; t++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        var scaled = NumOps.Multiply(input[b, t, f], _instanceStd[b, 0, f]);
-                        denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[b, 0, f]);
-                    }
-                }
-            }
-
-            return denormalized;
+            // Tape-connected denormalization (output * std + mean, stats [B,1,F]
+            // broadcast over the time axis). The manual per-element copy detached
+            // the graph before the loss — training routes through Forecast, which
+            // calls this denorm, so the detach zeroed all gradients. Stats are
+            // constants (paper-faithful reversible affine).
+            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
+            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
         }
     }
 
@@ -928,21 +942,13 @@ public class Crossformer<T> : ForecastingModelBase<T>
         if (currentLen == _predictionHorizon)
             return output;
 
-        var adjusted = new Tensor<T>(new[] { output.Shape[0], _predictionHorizon, output.Shape[2] });
-        int copyLen = Math.Min(currentLen, _predictionHorizon);
+        // Tape-connected length adjustment along the time axis (the manual copy
+        // detached the graph before the loss + crashed on non-rank-3 input).
+        if (currentLen > _predictionHorizon)
+            return Engine.TensorNarrow(output, dim: 1, start: 0, length: _predictionHorizon);
 
-        for (int b = 0; b < output.Shape[0]; b++)
-        {
-            for (int t = 0; t < copyLen; t++)
-            {
-                for (int f = 0; f < output.Shape[2]; f++)
-                {
-                    adjusted[b, t, f] = output[b, t, f];
-                }
-            }
-        }
-
-        return adjusted;
+        var pad = new Tensor<T>(new[] { output.Shape[0], _predictionHorizon - currentLen, output.Shape[2] });
+        return Engine.Concat(new[] { output, pad }, 1);
     }
 
     #endregion

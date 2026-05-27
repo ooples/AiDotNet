@@ -4560,6 +4560,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // numFeatures=7.
             "PatchTST" => "1, 96, 7",
 
+            // Crossformer (Zhang & Yan 2023) dimension-segment embedding +
+            // two-stage attention over [batch, seqLen, features]; options defaults
+            // SequenceLength=96, NumFeatures=7.
+            "Crossformer" => "1, 96, 7",
+
             _ => ctx,
         };
     }
