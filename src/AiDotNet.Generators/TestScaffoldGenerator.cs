@@ -4573,6 +4573,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // = architecture InputSize = paper context length (512).
             "Informer" => $"1, 96, {ctx}",
 
+            // TFT (Lim et al. 2021): seqLen=LookbackWindow (24), NumFeatures =
+            // architecture InputSize = paper context length (512).
+            "TFT" => $"1, 24, {ctx}",
+
             _ => ctx,
         };
     }
