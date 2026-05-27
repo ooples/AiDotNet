@@ -4439,6 +4439,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Mismatch with the family default of 512 caused TensorSubtract to
             // see [1, 512] residual vs [1, 48] backcast.
             "NHiTSFinance" => 48,
+            // DeepAR: the generated CreateNetwork builds it with default (null)
+            // options, so SequenceLength falls back to 96 (options?.LookbackWindow ?? 96).
+            "DeepAR" => 96,
             // 512 is the modal paper default across the family.
             _ => 512,
         };
@@ -4533,6 +4536,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // (open/high/low/close/volume). The first ReshapeLayer expects
             // contextLength * numCandlestickFeatures elements.
             "Kronos" => $"{ctx}, 5",
+
+            // DeepAR (Salinas et al. 2020) strictly validates rank-3
+            // [batch, context, features] with context == SequenceLength (96 from
+            // the default-options fallback) and features == NumFeatures
+            // (univariate by default, CovariateSize = 0). A 1-D default shape
+            // tripped ValidateInputShape.
+            "DeepAR" => $"1, {ctx}, 1",
 
             _ => ctx,
         };
