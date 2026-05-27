@@ -430,6 +430,11 @@ public class PatchTST<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
+        // Idempotent: runs in the ctor AND after deserialize; clear the encoder
+        // list first so the second call rebinds rather than appending a doubled
+        // stack (which would make a clone diverge from the original).
+        _encoderLayers.Clear();
+
         // Extract layer references from the Layers collection
         int idx = 0;
         if (Layers.Count > idx)
@@ -693,6 +698,11 @@ public class PatchTST<T> : ForecastingModelBase<T>
         _channelIndependent = reader.ReadBoolean();
         _useInstanceNormalization = reader.ReadBoolean();
         _dropout = reader.ReadDouble();
+
+        // Re-bind cached layer references (_patchEmbedding, _encoderLayers,
+        // _finalNorm, _outputProjection) to the deserialized layers so a clone
+        // runs on the loaded weights, not construction-time random init.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -1085,25 +1095,37 @@ public class PatchTST<T> : ForecastingModelBase<T>
         int batchSize = input.Rank == 3 ? input.Shape[0] : 1;
         int numChannels = NumFeatures;
 
-        var outputShape = new[] { batchSize, PredictionHorizon, numChannels };
-        var outputData = new T[batchSize * PredictionHorizon * numChannels];
-
+        // Assemble the per-channel forecasts into [batch, horizon, channels] with
+        // tape-connected Engine ops. The previous version wrote each channel's
+        // output into a flat T[] by hand, which detached the autodiff graph right
+        // before the loss — the per-channel layer passes recorded their weight ops,
+        // but the manual recombination dropped every gradient (params never moved).
+        var batchTensors = new List<Tensor<T>>(batchSize);
         for (int b = 0; b < batchSize; b++)
         {
+            var channelTensors = new List<Tensor<T>>(numChannels);
             for (int c = 0; c < numChannels; c++)
             {
                 var channelSeq = ExtractChannel(input, b, c);
                 var channelOutput = ProcessSingleChannel(channelSeq);
 
-                for (int h = 0; h < PredictionHorizon; h++)
-                {
-                    int outIdx = (b * PredictionHorizon * numChannels) + (h * numChannels) + c;
-                    outputData[outIdx] = channelOutput.Data.Span[h];
-                }
+                // Normalize each channel forecast to [1, horizon, 1] so they can be
+                // concatenated along the channel axis. ProcessSingleChannel yields
+                // at least PredictionHorizon values; keep the leading horizon.
+                var flat = Engine.Reshape(channelOutput, new[] { channelOutput.Length });
+                if (flat.Length != PredictionHorizon)
+                    flat = Engine.TensorNarrow(flat, 0, 0, PredictionHorizon);
+                channelTensors.Add(Engine.Reshape(flat, new[] { 1, PredictionHorizon, 1 }));
             }
+
+            batchTensors.Add(numChannels == 1
+                ? channelTensors[0]
+                : Engine.Concat(channelTensors.ToArray(), 2));
         }
 
-        return new Tensor<T>(outputShape, new Vector<T>(outputData));
+        return batchSize == 1
+            ? batchTensors[0]
+            : Engine.Concat(batchTensors.ToArray(), 0);
     }
 
     /// <summary>
@@ -1387,12 +1409,12 @@ public class PatchTST<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            for (int i = 0; i < input.Length; i++)
-            {
-                int statIdx = i % NumFeatures;
-                T scaled = NumOps.Multiply(input.Data.Span[i], _instanceStd.Data.Span[statIdx]);
-                result.Data.Span[i] = NumOps.Add(scaled, _instanceMean.Data.Span[statIdx]);
-            }
+            // Tape-connected denormalization: output * std + mean, broadcasting the
+            // per-feature stats [NumFeatures] across the trailing feature axis.
+            // Manual per-element indexing detached the graph before the loss,
+            // zeroing gradients. Stats are constants (paper-faithful affine reverse).
+            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
+            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
         }
 
         return result;

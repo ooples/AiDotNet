@@ -4555,6 +4555,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // defaults seqLen=96, numFeatures=7.
             "ITransformer" => "1, 96, 7",
 
+            // PatchTST (Nie et al. 2023) is channel-independent and patches each
+            // channel of [batch, seqLen, features]; ctor defaults seqLen=96,
+            // numFeatures=7.
+            "PatchTST" => "1, 96, 7",
+
             _ => ctx,
         };
     }
