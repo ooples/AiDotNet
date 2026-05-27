@@ -331,6 +331,15 @@ public class Autoformer<T> : ForecastingModelBase<T>
         if (Layers.Count == 0)
             return;
 
+        // Idempotent: clear the per-block reference lists before repopulating.
+        // ExtractLayerReferences runs once in the ctor AND again after deserialize
+        // (to re-bind to the reloaded layers); without clearing, the second call
+        // APPENDED the deserialized layers onto the construction-time ones, so a
+        // clone ran a doubled/mixed encoder+decoder stack and its output drifted
+        // from the original.
+        _encoderLayers.Clear();
+        _decoderLayers.Clear();
+
         _inputEmbedding = Layers[0];
 
         int encoderStartIndex = 1;
