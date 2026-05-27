@@ -4565,6 +4565,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // SequenceLength=96, NumFeatures=7.
             "Crossformer" => "1, 96, 7",
 
+            // ETSformer (Woo et al. 2022): seqLen=96 (options), NumFeatures =
+            // architecture InputSize = paper context length (512).
+            "ETSformer" => $"1, 96, {ctx}",
+
             _ => ctx,
         };
     }
