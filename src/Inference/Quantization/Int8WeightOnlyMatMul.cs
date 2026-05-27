@@ -130,12 +130,15 @@ internal static class Int8WeightOnlyMatMul
                 "that fall-through must now either guard the call themselves or pre-fill the " +
                 "output span with the bias values before invocation (review #1363 C8QXn).");
 
-        // Single tiled INT8 GEMM call — weights stay int8 inside the cache
-        // and the macro-kernel's per-tile dequant, never materializing the
-        // full FP32 weight matrix. ChooseTileSize / per-call ArrayPool /
-        // outer dequant-then-Sgemm pattern were the source of the ~20×
-        // wall-clock gap reported in #1349; the new kernel collapses all
-        // of that to one call.
+#if !NETFRAMEWORK
+        // net10.0 fast path: single tiled INT8 GEMM call — weights stay int8
+        // inside the cache and the macro-kernel's per-tile dequant, never
+        // materializing the full FP32 weight matrix. ChooseTileSize / per-call
+        // ArrayPool / outer dequant-then-Sgemm pattern (the #if NETFRAMEWORK
+        // branch below) were the source of the ~20× wall-clock gap reported in
+        // #1349; this kernel collapses all of that to one call.
+        // SgemmWithInt8RowScaledCachedB (Tensors #427) ships only in the net10.0
+        // Tensors build, so net471 keeps the proven dequant+Sgemm path below.
         SimdGemm.SgemmWithInt8RowScaledCachedB(
             a: input,
             bInt8: weightsInt8,
@@ -159,5 +162,84 @@ internal static class Int8WeightOnlyMatMul
                     rowSpan, new ReadOnlySpan<float>(biases, 0, outputSize), rowSpan);
             }
         }
+#else
+        // net471 fallback: SgemmWithInt8RowScaledCachedB is not present in the
+        // net471 Tensors build, so use the original per-tile dequant-into-FP32-
+        // scratch + SimdGemm.Sgemm path (functionally identical, just without the
+        // INT8-resident macro-kernel's DRAM-bandwidth win). Verified equivalent by
+        // Int8WeightOnlyMatMulTests.MultiplyAddBias_MatchesScalarReference.
+        int outputTile = ChooseTileSize(outputSize, inputSize);
+
+        long dequantScratchLen = (long)outputTile * inputSize;
+        long tileOutputLen = (long)rows * outputTile;
+        if (dequantScratchLen > int.MaxValue || tileOutputLen > int.MaxValue)
+            throw new InvalidOperationException(
+                $"Tiled INT8 matmul exceeded int.MaxValue per-tile buffer (" +
+                $"dequantScratch={dequantScratchLen} from outputTile={outputTile}*inputSize={inputSize}; " +
+                $"tileOutput={tileOutputLen} from rows={rows}*outputTile={outputTile}). " +
+                "Split the call into smaller row batches, OR reduce inputSize / outputSize.");
+
+        var pool = ArrayPool<float>.Shared;
+        float[]? dequantScratch = null;
+        float[]? tileOutput = null;
+        try
+        {
+            dequantScratch = pool.Rent((int)dequantScratchLen);
+            tileOutput = pool.Rent((int)tileOutputLen);
+            for (int oBase = 0; oBase < outputSize; oBase += outputTile)
+            {
+                int tileN = Math.Min(outputTile, outputSize - oBase);
+                int dequantLen = tileN * inputSize;
+                int tileOutLen = rows * tileN;
+
+                for (int oo = 0; oo < tileN; oo++)
+                {
+                    int o = oBase + oo;
+                    int srcStart = o * inputSize;
+                    int dstStart = oo * inputSize;
+                    Int8Quantizer.DequantizeInt8ToFloat32(
+                        new ReadOnlySpan<sbyte>(weightsInt8, srcStart, inputSize),
+                        dequantScratch.AsSpan(dstStart, inputSize),
+                        rowScales[o]);
+                }
+
+                var tileSpan = tileOutput.AsSpan(0, tileOutLen);
+                tileSpan.Clear();
+                SimdGemm.Sgemm(
+                    a: input,
+                    lda: inputSize,
+                    transA: false,
+                    b: new ReadOnlySpan<float>(dequantScratch, 0, dequantLen),
+                    ldb: inputSize,
+                    transB: true,
+                    c: tileSpan,
+                    m: rows,
+                    k: inputSize,
+                    n: tileN);
+
+                for (int r = 0; r < rows; r++)
+                {
+                    int srcRow = r * tileN;
+                    int dstRow = r * outputSize + oBase;
+                    var srcSpan = tileOutput.AsSpan(srcRow, tileN);
+                    var dstSpan = output.Slice(dstRow, tileN);
+                    if (biases != null)
+                    {
+                        var biasSpan = new ReadOnlySpan<float>(biases, oBase, tileN);
+                        AiDotNet.Tensors.Engines.Simd.SimdKernels.VectorAdd(srcSpan, biasSpan, dstSpan);
+                    }
+                    else
+                    {
+                        srcSpan.CopyTo(dstSpan);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            if (dequantScratch is not null) pool.Return(dequantScratch);
+            if (tileOutput is not null) pool.Return(tileOutput);
+        }
+#endif
     }
 }
