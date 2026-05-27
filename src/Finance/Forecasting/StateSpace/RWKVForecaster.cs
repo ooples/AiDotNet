@@ -430,6 +430,61 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         return current;
     }
 
+    /// <summary>
+    /// Captures the per-layer activations along the model's real forward path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The default <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/> runs
+    /// the <c>Layers</c> list sequentially, but RWKVForecaster reshapes the tensor
+    /// between the embedding, the RWKV blocks, and the output projection (2D for the
+    /// per-time-step Dense layers, 3D for the RWKV recurrence). Threading the raw
+    /// layer list without those reshapes feeds the RWKV layer the wrong rank/feature
+    /// count. This override reproduces the genuine forward so the activations are both
+    /// non-empty and meaningful.
+    /// </para>
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+            return activations;
+
+        var current = NormalizeInputTo3D(input);
+        int batchSize = current.Shape[0];
+        int seqLen = current.Shape[1];
+
+        if (_inputEmbedding is not null)
+        {
+            current = current.Reshape(new[] { batchSize * seqLen, _numFeatures });
+            current = _inputEmbedding.Forward(current);
+            current = current.Reshape(new[] { batchSize, seqLen, _modelDimension });
+            activations["InputEmbedding"] = current.Clone();
+        }
+
+        if (_rwkvLayers is not null)
+        {
+            for (int i = 0; i < _rwkvLayers.Count; i++)
+            {
+                current = _rwkvLayers[i].Forward(current);
+                activations[$"RWKVLayer_{i}"] = current.Clone();
+            }
+        }
+
+        current = current.Reshape(new[] { batchSize, seqLen * _modelDimension });
+
+        if (_outputProjectionLayers is not null)
+        {
+            for (int i = 0; i < _outputProjectionLayers.Count; i++)
+            {
+                current = _outputProjectionLayers[i].Forward(current);
+                activations[$"OutputProjection_{i}"] = current.Clone();
+            }
+        }
+
+        return activations;
+    }
+
     private Tensor<T> NormalizeInputTo3D(Tensor<T> input)
     {
         if (input.Rank == 3) return input;
