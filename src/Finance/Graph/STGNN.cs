@@ -825,32 +825,34 @@ public class STGNN<T> : ForecastingModelBase<T>
         if (_adjacencyMatrix is null)
             return nodeFeatures;
 
-        var featureVec = nodeFeatures.ToVector();
-        int totalSize = featureVec.Length;
+        int totalSize = nodeFeatures.Length;
         int featuresPerNode = totalSize / _numNodes;
 
         if (featuresPerNode * _numNodes != totalSize)
             return nodeFeatures; // Can't reshape, return unchanged
 
-        var result = new T[totalSize];
+        // Graph convolution H' = A H. The previous manual triple-loop + fresh
+        // new Tensor<T> detached the autodiff graph right before the loss and
+        // zeroed every gradient. Express it as a tape-aware matmul against the
+        // constant adjacency so gradients flow back through the layer stack.
+        var adj = BuildConstantMatrix(_adjacencyMatrix);                 // [numNodes, numNodes]
+        var hMat = Engine.Reshape(nodeFeatures, new[] { _numNodes, featuresPerNode });
+        var conv = Engine.TensorMatMul(adj, hMat);                       // A H
+        return Engine.Reshape(conv, nodeFeatures._shape);
+    }
 
-        // Apply graph convolution: H' = A * H
-        for (int node = 0; node < _numNodes; node++)
-        {
-            for (int f = 0; f < featuresPerNode; f++)
-            {
-                double aggregated = 0;
-                for (int neighbor = 0; neighbor < _numNodes; neighbor++)
-                {
-                    double weight = _adjacencyMatrix[node, neighbor];
-                    double feature = NumOps.ToDouble(featureVec[neighbor * featuresPerNode + f]);
-                    aggregated += weight * feature;
-                }
-                result[node * featuresPerNode + f] = NumOps.FromDouble(aggregated);
-            }
-        }
-
-        return new Tensor<T>(nodeFeatures._shape, new Vector<T>(result));
+    /// <summary>
+    /// Builds a constant (non-trainable) <see cref="Tensor{T}"/> from the
+    /// adjacency matrix so it can participate in tape-aware matmuls without being
+    /// treated as a learnable parameter.
+    /// </summary>
+    private Tensor<T> BuildConstantMatrix(double[,] matrix)
+    {
+        var data = new T[_numNodes * _numNodes];
+        for (int i = 0; i < _numNodes; i++)
+            for (int j = 0; j < _numNodes; j++)
+                data[i * _numNodes + j] = NumOps.FromDouble(matrix[i, j]);
+        return new Tensor<T>(new[] { _numNodes, _numNodes }, new Vector<T>(data));
     }
 
     #endregion
