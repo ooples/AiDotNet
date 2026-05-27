@@ -4550,6 +4550,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // generator sizes to the paper context length, 512).
             "Autoformer" => $"1, 96, {ctx}",
 
+            // iTransformer (Liu et al. 2024) inverts [batch, seqLen, features] to
+            // attend over the variate dimension; needs rank-3 with the ctor
+            // defaults seqLen=96, numFeatures=7.
+            "ITransformer" => "1, 96, 7",
+
             _ => ctx,
         };
     }
