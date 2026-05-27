@@ -14783,67 +14783,38 @@ public static class LayerHelper<T>
         bool useNormalization = true,
         int numFeatures = 1)
     {
-        // Lazy weight init: the flattened-sequence layout below produces
-        // weight matrices of (modelDim·contextLength) × (stateDim·contextLength)
-        // — at paper defaults that's 131072 × 32768 ≈ 4.3B elements, which
-        // overflows int32 inside TensorAllocator.Rent. Lazy init defers the
-        // allocation to first Forward where lower-rank intermediate tensors
-        // can sidestep the overflow path.
-        var lazy = Initialization.InitializationStrategies<T>.Lazy;
+        // Paper-faithful HiPPO (Gu et al. 2020): a stack of diagonal state-space
+        // (S4D) layers whose A matrix is initialized with HiPPO-LegS, evolving the
+        // polynomial state per time step across the sequence. This is the genuine
+        // state-space recurrence — NOT a dense projection over the flattened
+        // sequence. The SSM parameters are O(modelDim·stateDim), so the paper-scale
+        // contextLength (512) no longer overflows TensorAllocator.
+        //
+        // Layer order (consumed by Hippo.ExtractLayerReferences):
+        //   [InputEmbedding Dense] ([InputNorm]) { S4DLayer ([BlockNorm]) [Dropout] }×numLayers [OutputHead Dense]
+        // The model's forward pass applies the residual connection, mean-pools the
+        // SSM output over time to [batch, modelDim], then runs the output head.
 
-        // === Input Embedding ===
+        // === Input Embedding === (features -> modelDim, per time step)
         yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: new GELUActivation<T>(),
-            initializationStrategy: lazy);
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
 
         if (useNormalization)
         {
             yield return new LayerNormalizationLayer<T>();
         }
 
-        // === HiPPO Layers ===
+        // === HiPPO state-space layers ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // === HiPPO Block ===
-            // Each block implements: x' = Ax + Bu, y = Cx + Du
+            // Diagonal SSM with HiPPO-LegS-initialized A (Gu et al. 2020):
+            //   x' = A x + B u,  y = C x + D u  evolved over the sequence.
+            yield return new S4DLayer<T>(
+                sequenceLength: contextLength,
+                modelDimension: modelDim,
+                stateDimension: stateDim);
 
-            // B projection (input to polynomial state space)
-            // B maps input u to state contribution
-            yield return new DenseLayer<T>(
-                outputSize: stateDim * contextLength,
-                activationFunction: null,
-                initializationStrategy: lazy);
-
-            // A matrix application (HiPPO state evolution)
-            // This simulates the HiPPO matrix A that defines optimal memory
-            // In HiPPO-LegS: A[i,j] = -sqrt(2i+1)*sqrt(2j+1) if i>j, -(2i+1) if i==j
-            yield return new DenseLayer<T>(
-                outputSize: stateDim * contextLength,
-                activationFunction: new TanhActivation<T>(),
-                initializationStrategy: lazy); // Tanh for stability
-
-            // Second A application for deeper state evolution
-            yield return new DenseLayer<T>(
-                outputSize: stateDim * contextLength,
-                activationFunction: new TanhActivation<T>(),
-                initializationStrategy: lazy);
-
-            // C projection (polynomial state to output)
-            // C reads out the polynomial coefficients to produce output
-            yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
-                activationFunction: null,
-                initializationStrategy: lazy);
-
-            // D feedthrough (skip connection from input to output)
-            // Allows direct information flow bypassing the state
-            yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
-                activationFunction: new GELUActivation<T>(),
-                initializationStrategy: lazy);
-
-            // Normalization and dropout
             if (useNormalization)
             {
                 yield return new LayerNormalizationLayer<T>();
@@ -14851,32 +14822,10 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(0.1);
         }
 
-        // === FFN Block (post-HiPPO processing) ===
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength * 2,
-            activationFunction: new GELUActivation<T>(),
-            initializationStrategy: lazy);
-
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: null,
-            initializationStrategy: lazy);
-
-        if (useNormalization)
-        {
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // === Output Projection ===
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * forecastHorizon / 4,
-            activationFunction: new GELUActivation<T>(),
-            initializationStrategy: lazy);
-
+        // === Output Head === (pooled modelDim -> forecastHorizon)
         yield return new DenseLayer<T>(
             outputSize: forecastHorizon,
-            activationFunction: null,
-            initializationStrategy: lazy);
+            activationFunction: null);
     }
 
     /// <summary>

@@ -4577,6 +4577,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // architecture InputSize = paper context length (512).
             "TFT" => $"1, 24, {ctx}",
 
+            // HiPPO (Gu et al. 2020) state-space memory: needs rank-3
+            // [batch, contextLength, features] with contextLength == SequenceLength
+            // (ContextLength default 512) and features == NumFeatures (univariate,
+            // default 1). A 1-D default shape made the SSM flatten contextLength
+            // into the weight dims (512*256 x 512*64), tripping the 2 GB allocator.
+            "Hippo" => $"1, {ctx}, 1",
+
             _ => ctx,
         };
     }
