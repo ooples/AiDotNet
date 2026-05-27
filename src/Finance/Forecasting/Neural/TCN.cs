@@ -487,6 +487,27 @@ public class TCN<T> : ForecastingModelBase<T>
         return Forward(input);
     }
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTcnOptimizer;
+
+    /// <summary>
+    /// Trains through an Adam (AMSGrad) optimizer at a reduced learning rate
+    /// (1e-5 vs the 1e-3 framework default). TCN's forecast is unnormalized, so the
+    /// MSE operates at a large scale (~30) with a sharp loss landscape; at 1e-3 the
+    /// cold-start Adam step diverges (loss rose ~32 -> ~48 in one step) and at 1e-4
+    /// the second step still overshoots, tripping MoreData_ShouldNotDegrade. The
+    /// smaller step keeps training stable and monotonic (loss still decreases) while
+    /// the default per-optimizer gradient clipping bounds the update. A fuller fix
+    /// would normalize the output scale (RevIN), tracked separately.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _baseTcnOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = true,
+                InitialLearningRate = 1e-5
+            });
+
     /// <inheritdoc/>
     /// <remarks>
     /// <para>
