@@ -15550,66 +15550,59 @@ public static class LayerHelper<T>
         int numGCNLayers = 2,
         int numTemporalLayers = 1)
     {
-        // Input size: nodes * sequence * features (flattened)
-        int inputSize = numNodes * sequenceLength * numFeatures;
-        int outputSize = numNodes * forecastHorizon * numFeatures;
+        // Paper-faithful TemporalGCN: weights are SHARED across the graph's nodes.
+        // The model runs these layers on a [numNodes, channels] tensor (numNodes as
+        // the batch dimension), so each DenseLayer is a per-node MLP with
+        // O(hiddenDim^2) parameters — NOT the old numNodes*hiddenDim-wide flattened
+        // denses (~1B params at the paper scale numNodes=207, which OOM-crashed the
+        // optimizer). The Chebyshev graph convolution (spatial aggregation across
+        // nodes) is applied by the model's forward via ApplyChebyshevConvolutionTape.
 
-        // === Input Projection ===
-        // Project input features to hidden dimension
+        // === Input Projection === (per node: sequenceLength*numFeatures -> hiddenDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
-        // === GCN Layers ===
-        // Stack graph convolution layers for spatial aggregation
+        // === GCN Layers === (per-node MLP; spatial mixing done in forward)
         for (int gcn = 0; gcn < numGCNLayers; gcn++)
         {
-            // Graph convolution (simulated with dense + aggregation pattern)
-            // Each GCN layer aggregates information from k-hop neighbors
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new ReLUActivation<T>());
 
             yield return new LayerNormalizationLayer<T>();
 
-            // Dropout for regularization
             yield return new DropoutLayer<T>(0.3);
         }
 
-        // === Temporal GRU Layers ===
-        // Process temporal sequence with recurrent layers
+        // === Temporal Layers === (per-node, shared weights)
         for (int t = 0; t < numTemporalLayers; t++)
         {
-            // GRU layer for temporal modeling (using dense layers as approximation)
-            // Real implementation would use proper GRU cells with gating
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new TanhActivation<T>());
 
-            // Update gate approximation
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new SigmoidActivation<T>());
 
             yield return new LayerNormalizationLayer<T>();
         }
 
         // === Spatio-Temporal Fusion ===
-        // Combine spatial and temporal features
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === Output Projection ===
-        // Project to forecast horizon
+        // === Output Projection === (per node: hiddenDim -> forecastHorizon*numFeatures)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim / 2,
+            outputSize: Math.Max(1, hiddenDim / 2),
             activationFunction: new ReLUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: outputSize,
+            outputSize: forecastHorizon * numFeatures,
             activationFunction: null);
     }
 

@@ -549,12 +549,26 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     /// </summary>
     protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
     {
-        var current = FlattenInput(input);
+        var current = ReshapeToNodes(input);
         foreach (var layer in Layers)
             current = layer.Forward(current);
         if (_normalizedLaplacian is not null && _useNativeMode)
             current = ApplyChebyshevConvolutionTape(current);
         return current;
+    }
+
+    /// <summary>
+    /// Reshapes the input to [numNodes, featuresPerNode] (numNodes as the batch
+    /// dimension) via the tape-aware Engine.Reshape so the per-node MLP layers
+    /// apply SHARED weights across nodes and gradients flow back to the input.
+    /// </summary>
+    private Tensor<T> ReshapeToNodes(Tensor<T> input)
+    {
+        int totalSize = input.Length;
+        int featuresPerNode = totalSize / _numNodes;
+        return featuresPerNode * _numNodes == totalSize
+            ? Engine.Reshape(input, new[] { _numNodes, featuresPerNode })
+            : FlattenInput(input);
     }
 
     /// <summary>
@@ -900,18 +914,20 @@ public class TemporalGCN<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        var current = FlattenInput(input);
+        var current = ReshapeToNodes(input);
 
-        // Apply layers
+        // Per-node MLP stack (shared weights across nodes).
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
 
-        // Apply Chebyshev graph convolution
+        // Chebyshev graph convolution (spatial aggregation). Use the tape-aware
+        // variant so inference matches the training forward exactly (determinism
+        // and Clone-parity invariants).
         if (_normalizedLaplacian is not null && _useNativeMode)
         {
-            current = ApplyChebyshevConvolution(current);
+            current = ApplyChebyshevConvolutionTape(current);
         }
 
         return current;

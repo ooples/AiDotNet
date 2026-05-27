@@ -4510,6 +4510,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // forecastHorizon=12, numFeatures=1). Pairs with input "207, 12, 1".
             "STGNN" => "207, 12",
 
+            // TemporalGCN: per-node output [numNodes, forecastHorizon*numFeatures]
+            // = [207, 12]. Pairs with input "207, 12, 1".
+            "TemporalGCN" => "207, 12",
+
             // All others: [B, forecastHorizon]. Common paper defaults 96.
             _ => "96",
         };
@@ -4594,6 +4598,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // defaults). The model reshapes to [numNodes, sequenceLength*numFeatures]
             // so its per-node MLPs apply shared weights across the 207 nodes.
             "STGNN" => "207, 12, 1",
+
+            // TemporalGCN: same METR-LA layout as STGNN — [numNodes, seqLen,
+            // numFeatures] = [207, 12, 1], reshaped per-node for shared-weight MLPs.
+            "TemporalGCN" => "207, 12, 1",
 
             _ => ctx,
         };
