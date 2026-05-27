@@ -539,6 +539,69 @@ public class AiModelBuilderPredictIntegrationTests
         Assert.Equal(outputSize, permutedPrediction.Shape[0]);
     }
 
+    // =====================================================
+    // Safety regression guard for the SafetyFilter fast paths (#1447 / #1458).
+    // The vectorized numeric-SafetyFilter fast paths in AiModelResult.Predict
+    // (ValidateAndSanitizeMatrix / FilterMatrixOutput) must NOT disable the
+    // SEPARATE string/LLM text-safety system (SafetyPipeline). This builds a
+    // numeric regression model WITH safety configured — so a numeric Predict
+    // exercises the fast-pathed numeric SafetyFilter — then asserts the
+    // SafetyPipeline string APIs on the SAME result still flag bad strings.
+    // =====================================================
+    [Fact(Timeout = 120000)]
+    public async Task Predict_WithSafetyConfigured_NumericWorks_AndStringSafetyStillFlagsBadStrings()
+    {
+        var (x, y) = CreateLinearDataset(samples: 60, features: 4, seed: 2024);
+        var loader = DataLoaders.FromMatrixVector(x, y);
+
+        var result = await new AiModelBuilder<double, Matrix<double>, Vector<double>>()
+            .ConfigureDataLoader(loader)
+            .ConfigureModel(new MultipleRegression<double>())
+            .ConfigureSafety(c =>
+            {
+                c.Text.ToxicityDetection = true;
+            })
+            .BuildAsync();
+
+        // 1. Numeric Predict still works (exercises the vectorized numeric
+        //    SafetyFilter input/output fast paths alongside the SafetyPipeline).
+        var newData = CreateMatrix(new double[,]
+        {
+            { 1.0, 2.0, 3.0, 4.0 },
+            { 5.0, 6.0, 7.0, 8.0 }
+        });
+        var predictions = result.Predict(newData);
+        Assert.NotNull(predictions);
+        Assert.Equal(2, predictions.Length);
+        for (int i = 0; i < predictions.Length; i++)
+        {
+            Assert.False(double.IsNaN(predictions[i]), $"Prediction {i} is NaN.");
+            Assert.False(double.IsInfinity(predictions[i]), $"Prediction {i} is Infinity.");
+        }
+
+        // 2. String/LLM text safety (SafetyPipeline — a SEPARATE system from the
+        //    numeric SafetyFilter the fast paths touch) must still flag bad text
+        //    when reached through the AiModelResult facade. (Jailbreak-specific
+        //    detection is covered by SafetyPipelineEndToEndTests; here the toxic
+        //    case proves the string pipeline survives the numeric fast paths.)
+        var toxicReport = result.EvaluateTextSafety(
+            "I will kill you and murder everyone in the building");
+        Assert.NotNull(toxicReport);
+        Assert.True(toxicReport.Findings.Count > 0,
+            "Toxic string must still produce safety findings after the numeric SafetyFilter fast paths.");
+        Assert.False(toxicReport.IsSafe, "Toxic string must be flagged unsafe.");
+
+        // 3. IsSafeOutput must still reject unsafe output text.
+        Assert.False(
+            result.IsSafeOutput("I will kill you and murder everyone in the building"),
+            "IsSafeOutput must reject toxic output text.");
+
+        // 4. Benign text passes — the safety system isn't blanket-blocking.
+        var benignReport = result.EvaluateTextSafety(
+            "The quarterly figures look healthy and the team is on track.");
+        Assert.True(benignReport.IsSafe, "Benign string should be reported safe.");
+    }
+
     #endregion
 
     #region Helper Methods
