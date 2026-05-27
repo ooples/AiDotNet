@@ -89,6 +89,7 @@ internal class SpikingNetworkCore<T> : LayerBase<T>
         if (timeSteps <= 0) throw new ArgumentOutOfRangeException(nameof(timeSteps), timeSteps, "timeSteps must be positive.");
         if (beta <= 0.0 || beta >= 1.0) throw new ArgumentOutOfRangeException(nameof(beta), beta, "beta must be in (0,1).");
         if (surrogateSlope <= 0.0) throw new ArgumentOutOfRangeException(nameof(surrogateSlope), surrogateSlope, "surrogateSlope must be positive.");
+        if (threshold <= 0.0) throw new ArgumentOutOfRangeException(nameof(threshold), threshold, "threshold must be positive (a non-positive threshold makes z = U - threshold >= 0 for any positive membrane potential, so neurons always spike).");
 
         _inputSize = inputSize;
         _hiddenSizes = (int[])hiddenSizes.Clone();

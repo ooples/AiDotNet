@@ -2086,7 +2086,8 @@ public static class LayerHelper<T>
             double tau = 10.0,
             double refractoryPeriod = 2.0,
             bool useLayerNormalization = false,
-            bool useOutputConversion = true)
+            bool useOutputConversion = true,
+            int timeSteps = 20)
     {
         // Get input and output dimensions
         var inputShape = architecture.GetInputShape();
@@ -2142,7 +2143,7 @@ public static class LayerHelper<T>
             inputSize: inputSize,
             hiddenSizes: hiddenSizes,
             outputSize: outputSize,
-            timeSteps: 20);
+            timeSteps: timeSteps);
 
         // Output activation appropriate to the task (applied to the core's
         // time-averaged readout membrane).

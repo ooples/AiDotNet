@@ -1368,6 +1368,15 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
         // width changes), so the gate matmul dimensions always line up. The
         // earlier Math.Min clamp masked the estimate being wrong but still fed a
         // mismatched [4H, estimate] x [actual, 1] product to the matmul.
+        //
+        // NOTE (CodeRabbit #1455): a stricter "resolve once, then fail fast on
+        // drift" was tried but the NTM train→predict flow legitimately presents
+        // different controller-input widths (the support- and query-set inputs
+        // differ in assembled width), so fail-fast crashes
+        // NTM_LstmController_And_MemoryCoverage. The genuine fix is to make the
+        // assembled input width identical across train/predict; that is a deeper
+        // task-shape change tracked separately rather than papered over with a
+        // throw that just converts a latent shape bug into a hard crash.
         if (_weightsInput.Shape[1] != inputLength)
         {
             double resolvedScale = Math.Sqrt(2.0 / (inputLength + _hiddenSize));

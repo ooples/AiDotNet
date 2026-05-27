@@ -400,9 +400,9 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
         // The SpikingNetworkCore owns the temporal LIF simulation internally and
         // unrolls it over its own time steps, so prediction is a plain forward
         // sweep through the layers (core → output activation) in inference mode.
+        // SetTrainingMode already propagates to every layer (NeuralNetworkBase
+        // iterates Layers), so no explicit per-layer loop is needed here.
         SetTrainingMode(false);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
 
         var current = input;
         foreach (var layer in Layers)
@@ -413,7 +413,7 @@ public class SpikingNeuralNetwork<T> : NeuralNetworkBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _spikingOptimizer;
 
     /// <summary>
-    /// Uses an Adam (AMSGrad) optimizer at a reduced learning rate (1e-4 vs the
+    /// Uses an Adam (AMSGrad) optimizer at a reduced learning rate (3e-4 vs the
     /// 1e-3 framework default). Surrogate-gradient backprop-through-time reuses
     /// each synaptic weight across all unrolled time steps, so the accumulated
     /// gradient is large; a smaller step keeps training from diverging while the
