@@ -1099,8 +1099,10 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         _lastInput = input3D;
 
-        // Use TensorAllocator.Rent for forward pass tensors to reduce GC pressure
-        var output = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        // Per-time-step hidden states collected for a tape-connected concat (the
+        // output must stay on the autodiff graph so gradients reach the weights; a
+        // pre-allocated tensor written with SetSlice would detach it).
+        var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
         _cachedHiddenStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
         _cachedCellStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
@@ -1161,11 +1163,16 @@ public partial class LSTMLayer<T> : LayerBase<T>
             var tanhC = Engine.Tanh(currentC);
             currentH = Engine.TensorMultiply(o, tanhC);
 
-            // Store results along the time dimension (dimension 1)
-            output.SetSlice(1, t, currentH);
+            // Collect the hidden state for the tape-connected output concat below.
+            hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
+            // Caches for the manual backward path (not on the tape).
             _cachedHiddenStates.SetSlice(1, t, currentH);
             _cachedCellStates.SetSlice(1, t, currentC);
         }
+
+        // Assemble the [batch, timeSteps, hiddenSize] output on the tape so gradients
+        // flow back through the recurrence to the gate weights.
+        var output = Engine.TensorConcatenate(hiddenStatesList.ToArray(), axis: 1);
 
         _lastHiddenState = currentH;
         _lastCellState = currentC;
