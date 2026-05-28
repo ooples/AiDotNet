@@ -2426,17 +2426,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // The memorization-task invariant defaults to 100 train steps. At
             // paper scale (e.g. Timer at HiddenDim=768 / NumLayers=12 ≈ 85 M
             // params takes multiple seconds per step) 100 steps overflow the
-            // 180 s xUnit per-test timeout. Apply the same override the
-            // paper-scale vision-language and language families use: 2 steps
-            // (1 baseline + 1 follow-on) still exercises the gradient-direction
-            // signals this test exists to catch (sign error, optimizer
-            // oscillation, first-step explosion) — a single paper-faithful
-            // AdamW step at the conservative paper learning rate produces a
-            // small but unambiguous monotonic MSE decrease on a fixed
-            // (input, target) pair, so the threshold is relaxed from the
-            // default 1 % to "any decrease above fp noise" (factor 0.99999).
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
-            sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+            // 180 s xUnit per-test timeout. Use 20 steps: enough to clear the
+            // first-step Adam warm-up overshoot (the moment estimates settle
+            // within ~2 steps) and still show the net monotonic decrease this
+            // test checks for, while staying well under the timeout even at
+            // ~3 s/step. The default 1 % threshold is retained — 1 % TOTAL over
+            // 19 follow-on steps is comfortably achievable for a working
+            // optimizer and still catches sign errors / oscillation / explosion.
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 20;");
             // Training_ShouldReduceLoss runs TrainingIterations*3 = 3 steps and
             // asserts finalLoss <= initialLoss + tolerance. At paper scale the
             // default 1e-6 tolerance is effectively "loss must not rise at all",
