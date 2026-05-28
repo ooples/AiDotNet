@@ -596,6 +596,16 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
         // forced the controller to silently resize its learned input-gate weights.
         if (inputs is Matrix<T> matrix)
         {
+            // Fail fast on empty matrices: a zero-row/column input would produce a
+            // degenerate (empty or width-1) sequence and silently corrupt the
+            // controller's learned input width later, rather than surfacing the
+            // misconfiguration here.
+            if (matrix.Rows <= 0 || matrix.Columns <= 0)
+                throw new ArgumentException(
+                    $"Matrix input must have positive dimensions for NTM sequence conversion; " +
+                    $"got [{matrix.Rows} x {matrix.Columns}].",
+                    nameof(inputs));
+
             var sequence = new Tensor<T>[matrix.Rows];
             for (int r = 0; r < matrix.Rows; r++)
             {

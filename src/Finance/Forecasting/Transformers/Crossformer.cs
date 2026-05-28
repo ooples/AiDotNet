@@ -748,7 +748,15 @@ public class Crossformer<T> : ForecastingModelBase<T>
         // (previously the raw [batch, tokens, horizon*features] output left a
         // 168-wide feature axis that could not be denormalized against the
         // 7-feature instance stats). Tape-connected (ReduceMean + Reshape).
-        if (current.Rank == 3)
+        //
+        // Guard by shape, not just rank: only collapse the token axis when the
+        // output actually carries the flat [batch, tokens, horizon*features]
+        // layout. A custom output head that already emits the forecast grid
+        // [batch, predictionHorizon, numFeatures] is left untouched — reducing it
+        // would distort the forecast (or throw on the reshape).
+        if (current.Rank == 3
+            && current.Shape[1] != _predictionHorizon
+            && current.Shape[2] == _predictionHorizon * _numFeatures)
         {
             int batch = current.Shape[0];
             current = Engine.ReduceMean(current, new[] { 1 }, keepDims: false);

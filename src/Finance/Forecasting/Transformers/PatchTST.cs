@@ -1110,11 +1110,20 @@ public class PatchTST<T> : ForecastingModelBase<T>
                 var channelOutput = ProcessSingleChannel(channelSeq);
 
                 // Normalize each channel forecast to [1, horizon, 1] so they can be
-                // concatenated along the channel axis. ProcessSingleChannel yields
-                // at least PredictionHorizon values; keep the leading horizon.
+                // concatenated along the channel axis. ProcessSingleChannel usually
+                // yields exactly PredictionHorizon values, but a custom layer stack
+                // may emit a longer or shorter projection — narrow the surplus, and
+                // zero-pad a short tail rather than throwing inside TensorNarrow.
                 var flat = Engine.Reshape(channelOutput, new[] { channelOutput.Length });
-                if (flat.Length != PredictionHorizon)
+                if (flat.Length > PredictionHorizon)
+                {
                     flat = Engine.TensorNarrow(flat, 0, 0, PredictionHorizon);
+                }
+                else if (flat.Length < PredictionHorizon)
+                {
+                    var pad = new Tensor<T>(new[] { PredictionHorizon - flat.Length });
+                    flat = Engine.Concat(new[] { flat, pad }, 0);
+                }
                 channelTensors.Add(Engine.Reshape(flat, new[] { 1, PredictionHorizon, 1 }));
             }
 
