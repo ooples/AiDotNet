@@ -14239,25 +14239,59 @@ public static class LayerHelper<T>
         int numHeads = 12,
         double dropout = 0.1)
     {
-        // Calculate number of patches
-        // Per Das et al. 2024 "A decoder-only foundation model for time-series forecasting":
-        // GPT-style decoder operating on patches. Per-token on hiddenDim.
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(patchLength), "Patch length must be at least 1.");
+        if (hiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be at least 1.");
+        if (numLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (numHeads < 1)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be at least 1.");
+
+        // Timer (Liu et al. 2024, "Timer: Generative Pre-trained Transformers Are
+        // Large Time Series Models") is a decoder-only transformer whose tokens are
+        // NON-OVERLAPPING time-series PATCHES (single-series sequences, S3 format).
+        // Patches are SEQUENCE POSITIONS — self-attention runs across the numPatches
+        // axis — so the stack is: per-patch embedding → GPT-style decoder blocks →
+        // a SHARED per-patch head that predicts the next patch (length patchLength).
+        // Flattening the per-patch predictions yields the generated continuation,
+        // from which the model's forward path slices the requested horizon.
+        int numPatches = contextLength / patchLength;
+        int patchInputSize = patchLength * numFeatures;
         int ffnDim = hiddenDim * 4;
 
-        // === Patch Embedding: per-patch projection ===
-        yield return new FeedForwardLayer<T>(hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
+        // === Patch tokenization + embedding:
+        //     [B, contextLength * numFeatures] → [B, numPatches, patchInputSize]
+        //                                       → [B, numPatches, hiddenDim] ===
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchInputSize });
+        yield return new DenseLayer<T>(
+            outputSize: hiddenDim,
+            activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
 
-        // === GPT-Style Transformer Stack ===
+        // === GPT-style decoder stack (the model's forward path applies a causal
+        //     mask for the decoder-only next-patch semantics) ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
 
-        // === Final Norm + Forecast Head ===
+        // === Final norm + shared per-patch next-patch head ===
+        // Dense operates on the last axis, so feeding [B, numPatches, hiddenDim]
+        // produces [B, numPatches, patchLength] with weights shared across patches.
+        // Flatten → [B, numPatches * patchLength] = the generated series.
         yield return new LayerNormalizationLayer<T>();
-        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(
+            outputSize: patchLength,
+            activationFunction: (IActivationFunction<T>?)null);
+        yield return new FlattenLayer<T>();
     }
 
     /// <summary>
