@@ -5,17 +5,35 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.81.9 brings in six fixes accumulated since 0.81.3:
-         - 0.81.4 #367  GraphMode recording on 5 ops with silent gradient-drop bugs (closes #365)
-         - 0.81.5 #410  three FP64 SD UNet cliffs + compile-mode forward 2× faster than eager (#1305)
-         - 0.81.6 #412  shape catalog + DCGAN step probe + alloc profile (#403)
-         - 0.81.7 #416  drop IsDeterministicMode from CompiledModelCache shape-key (closes AiDotNet#1395 root cause — VGG fused-compiled training now engages on step 2)
-         - 0.81.8 #418  serialise clCreateCommandQueue across threads (dodges AMD driver race, #414)
-         - 0.81.9 #424  long-arithmetic dim-product in TensorAllocator (replaces silent `checked(int * int)` overflow — unblocks TimeMachine / DQN / OWLViT / DGCNN / TabTransformer / TabDPT / SlimSAM / TriaffineNER on SonarCloud run 26241806890) -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.81.9" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.9" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.81.9" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.9" />
+    <!-- AiDotNet.Tensors 0.86.1 — bumped from 0.81.9 to land the SD-UNet
+         attention perf block this PR (#1456) is blocked on. New since 0.81.9:
+           * Tensors #413 [CLOSED] — three FP64 SD UNet cliffs, the AiDotNet#1305
+             root cause cited in this PR's body.
+           * Tensors #415 [CLOSED] — FP64 Conv2DBackward at ImageNet shapes
+             (ResNet50/VGG16 train-step path; co-blocker for #1305 / #1307).
+           * Tensors #472 — Float32Precision opt-in for FusedAttention<double>
+             (FP64 attention internally runs on float32, dodges the FP64-AVX
+             half-lane penalty) + fix float SDPA nested-parallelism starvation.
+             Wired through DiffusionAttention in this PR.
+           * Tensors #485 — output-only SDPA for fused MHA forward
+             (6.9x less alloc, 2.7x mean latency).
+           * Tensors #488 — fused QKV + transpose-fused SDPA
+             (MHA 5.31ms -> 2.26ms on the AIsEval shape, beats torch).
+           * Tensors #474 — small-batch native-BLAS thread cap inside MlpForward.
+           * Tensors #462 — hybrid hardware-aware GEMM strategy (seed table +
+             learned-cache).
+         Plus the original 0.81.9 block:
+           * 0.81.4 #367  GraphMode recording on 5 ops with silent gradient-drop bugs (closes #365)
+           * 0.81.5 #410  three FP64 SD UNet cliffs + compile-mode forward 2× faster than eager
+           * 0.81.6 #412  shape catalog + DCGAN step probe + alloc profile (#403)
+           * 0.81.7 #416  drop IsDeterministicMode from CompiledModelCache shape-key (#1395)
+           * 0.81.8 #418  serialise clCreateCommandQueue across threads (#414)
+           * 0.81.9 #424  long-arithmetic dim-product in TensorAllocator (unblocks 8+ models)
+         AiDotNet.Native.* coreleased to 0.86.1 in lockstep for ABI consistency. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.86.1" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
