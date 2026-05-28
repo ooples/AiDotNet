@@ -14681,117 +14681,66 @@ public static class LayerHelper<T>
         bool useMultiScaleAttention = true,
         int numFeatures = 1)
     {
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (modelDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(modelDim), "Model dimension must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+
         int innerDim = modelDim * expandFactor;
 
-        // === Input Embedding with Reversible Instance Normalization ===
-        // Project input features to model dimension
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: new GELUActivation<T>());
+        // TimeMachine (Ahamed & Cheng 2024, "A Time Series is Worth 4 Mambas")
+        // stacks Mamba-style selective SSM blocks that operate PER TIME-STEP on
+        // the model dimension. The original helper sized every projection at
+        // modelDim * sequenceLength, so the first two Dense layers alone formed a
+        // [modelDim·contextLength, modelDim·contextLength] = 131072² weight
+        // (≈17 G elements) that overflowed the allocator before any forecast was
+        // produced. Tokens are SEQUENCE POSITIONS: embed each step to modelDim,
+        // run the SSM blocks per-token, then a FlattenHead projects the flattened
+        // token representations to the forecast horizon.
 
-        // Layer normalization (simulates RevIN mean/variance tracking)
+        // === Input embedding: [B, contextLength * numFeatures]
+        //     → [B, contextLength, numFeatures] → [B, contextLength, modelDim] ===
+        yield return new ReshapeLayer<T>(new[] { contextLength, numFeatures });
+        yield return new DenseLayer<T>(
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
         yield return new LayerNormalizationLayer<T>();
 
-        // === Multi-Scale SSM Blocks (4 Mambas) ===
-        // Each scale processes at different temporal granularity
+        // === Stacked Mamba-style selective SSM blocks (numScales × numLayers) ===
+        // Each block: input/gate projection → local-context projection →
+        // B (input→state) → A (selective state, bounded by tanh) → C
+        // (state→output) → output projection back to modelDim, with a post-norm
+        // and dropout. All projections are per-token on modelDim/innerDim/stateDim.
         for (int scale = 0; scale < numScales; scale++)
         {
-            // Downsampling factor for this scale (scale 0 = finest, scale n-1 = coarsest)
-            // Scale-specific effective sequence length: contextLength / (2^scale)
-            int scaleSeqLen = Math.Max(contextLength / (1 << scale), 1);
-            int scaleDim = modelDim * scaleSeqLen;
-
-            // === Temporal Decomposition for this scale ===
-            // Simulates downsampling via dense projection
-            // (Conv1DLayer doesn't exist, so we use dense layers to approximate)
-            yield return new DenseLayer<T>(
-                outputSize: scaleDim,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new LayerNormalizationLayer<T>();
-
-            // === SSM Layers for this scale ===
             for (int layer = 0; layer < numLayers; layer++)
             {
-                // === Mamba-style SSM Block ===
-
-                // Input projection to expanded dimension
-                yield return new DenseLayer<T>(
-                    outputSize: innerDim * scaleSeqLen,
-                    activationFunction: new SiLUActivation<T>());
-
-                // Local context processing (simulates 1D convolution with dense layer)
-                yield return new DenseLayer<T>(
-                    outputSize: innerDim * scaleSeqLen,
-                    activationFunction: new SiLUActivation<T>());
-
-                // B projection (input to state)
-                yield return new DenseLayer<T>(
-                    outputSize: stateDim * scaleSeqLen,
-                    activationFunction: null);
-
-                // Selective state update (A diagonal)
-                yield return new DenseLayer<T>(
-                    outputSize: stateDim * scaleSeqLen,
-                    activationFunction: new TanhActivation<T>());
-
-                // C projection (state to output)
-                yield return new DenseLayer<T>(
-                    outputSize: innerDim * scaleSeqLen,
-                    activationFunction: null);
-
-                // Output projection back to model dimension
-                yield return new DenseLayer<T>(
-                    outputSize: scaleDim,
-                    activationFunction: null);
-
-                // Layer normalization and dropout
+                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: new SiLUActivation<T>());
+                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: new SiLUActivation<T>());
+                yield return new DenseLayer<T>(outputSize: stateDim, activationFunction: null);
+                yield return new DenseLayer<T>(outputSize: stateDim, activationFunction: new TanhActivation<T>());
+                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: null);
+                yield return new DenseLayer<T>(outputSize: modelDim, activationFunction: null);
                 yield return new LayerNormalizationLayer<T>();
                 yield return new DropoutLayer<T>(0.1);
             }
-
-            // === Upsampling back to original sequence length ===
-            if (scale > 0)
-            {
-                yield return new DenseLayer<T>(
-                    outputSize: modelDim * contextLength,
-                    activationFunction: new GELUActivation<T>());
-            }
-        }
-
-        // === Multi-Scale Fusion ===
-        if (useMultiScaleAttention)
-        {
-            // Attention-based fusion of multi-scale outputs
-            // Projects all scales to same dimension for attention
-            yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
-                activationFunction: new GELUActivation<T>());
-
-            // Simple self-attention mechanism for scale weighting
-            yield return new DenseLayer<T>(
-                outputSize: numScales,
-                activationFunction: new SoftmaxActivation<T>());
-
-            // Apply attention weights (simplified as dense)
-            yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
-                activationFunction: null);
         }
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === Reversible De-normalization ===
-        // (Learned affine transformation to restore original scale)
+        // === Output head: average-pool the token sequence, then project to the
+        //     forecast horizon. [B, contextLength, modelDim] → [B, modelDim] →
+        //     [B, forecastHorizon]. Pooling (not flatten) keeps the head weight
+        //     small — flattening contextLength·modelDim (= 512·256) tokens would
+        //     need a multi-GB projection. ===
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
         yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: null);
-
-        // === Output Projection ===
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * forecastHorizon / 4,
+            outputSize: Math.Max(modelDim, forecastHorizon),
             activationFunction: new GELUActivation<T>());
-
         yield return new DenseLayer<T>(
             outputSize: forecastHorizon,
             activationFunction: null);
