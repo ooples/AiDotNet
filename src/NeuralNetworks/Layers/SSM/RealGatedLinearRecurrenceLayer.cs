@@ -214,7 +214,24 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
 
+        // Register ALL trainable tensors (in GetAllTensors order) so tape-based
+        // training (GetTrainableParameters) trains the full layer. Previously only
+        // _decayParam was registered, so the source generator exposed just that one
+        // tensor to the tape optimizer and the input/gate/value/output projection
+        // weights never received gradients under the tape path (the manual
+        // Backward/UpdateParameters path trained them, but the tape path silently
+        // did not). The ordering matches GetAllTensors / GetParameters so the flat
+        // and tape parameter views stay consistent.
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_recurrenceGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_recurrenceGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_inputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_valueProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_decayParam, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor)
@@ -351,22 +368,17 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
-        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) once per forward as
-        // a Tensor<T>[recurrenceDim] so the inner loop body is a sequence of
-        // SIMD-accelerated Engine ops instead of (recDim × batchSize)
-        // NumOps virtual dispatches per timestep. Closes the hot inner loop
-        // PerfView identified in #1224's Hawk cluster — at recDim=256 this
-        // turned ~5000 NumOps calls per timestep into 8 vectorized engine
-        // ops over 256 doubles each (≈ 32 AVX2 vectors), which the JIT
-        // inlines into tight SIMD intrinsics.
-        var baseDecay = new Tensor<T>(new[] { _recurrenceDimension });
-        for (int d = 0; d < _recurrenceDimension; d++)
-        {
-            double cVal = NumOps.ToDouble(_decayParam[d]);
-            // Numerically stable softplus: for large x, softplus(x) ≈ x.
-            double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
-            baseDecay[d] = NumOps.FromDouble(Math.Exp(-softplusC));
-        }
+        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) once per forward as a
+        // [recurrenceDim] tensor. The closed form is
+        //     exp(-softplus(c)) = exp(-log(1 + e^c)) = 1 / (1 + e^c) = sigmoid(-c),
+        // so a single tape-connected Engine.Sigmoid(Engine.TensorNegate(_decayParam))
+        // both (a) keeps _decayParam on the autodiff graph — the prior
+        // NumOps.ToDouble/Math.Exp scalar loop detached it, so the learned decay
+        // never received a gradient under tape-based training — and (b) stays
+        // numerically stable, since sigmoid saturates gracefully for large |c|.
+        // It is also a single SIMD-accelerated engine op rather than the
+        // (recDim × batchSize) NumOps virtual dispatches per timestep the loop cost.
+        var baseDecay = Engine.Sigmoid(Engine.TensorNegate(_decayParam));
 
         // A constant `ones` tensor for the tape-connected (1 - a²) computation.
         // Engine.TensorMultiplyScalar / TensorAddScalar do NOT propagate on the
