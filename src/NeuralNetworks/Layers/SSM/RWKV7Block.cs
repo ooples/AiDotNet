@@ -520,13 +520,12 @@ public partial class RWKV7Block<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            // Engine.TensorSliceAxis (tape-tracked) rather than the raw
-            // GetSliceAlongDimension view: the gradient w.r.t. the sliced input must
-            // scatter back into the right sequence position. The raw view shares the
-            // parent's storage with no recorded backward, so gradients flowing back to
-            // the LayerNorm'd input were wrong — which corrupted the residual the next
-            // sub-layer adds to, and hence every time-mix parameter's gradient.
-            var x_t = Engine.TensorSliceAxis(x, 1, t);  // [batch, modelDim]
+            // GetSliceAlongDimension is a zero-copy view that records SliceAxisBackward
+            // on the tape (AiDotNet.Tensors >= 0.85.3, PR #487), so the slice's gradient
+            // scatters back into the right sequence position. Earlier it was a raw view
+            // with no recorded backward, leaking wrong input gradients via storage
+            // aliasing — which corrupted the residual every time-mix parameter feeds.
+            var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
             // Token shift: lerp between current and previous token (tape-connected,
             // fresh tensor per timestep).
@@ -664,9 +663,10 @@ public partial class RWKV7Block<T> : LayerBase<T>
 
         for (int t = 0; t < seqLen; t++)
         {
-            // Tape-tracked slice (see TimeMixingForward) so the gradient scatters back
-            // into normed2 — this feeds the residual added after the channel sub-layer.
-            var x_t = Engine.TensorSliceAxis(x, 1, t);
+            // Tape-tracked zero-copy view (see TimeMixingForward) so the gradient
+            // scatters back into normed2 — this feeds the residual added after the
+            // channel sub-layer.
+            var x_t = x.GetSliceAlongDimension(t, 1);
 
             // Token shift (tape-connected, fresh tensor per timestep).
             var rInput = Engine.TensorAdd(
