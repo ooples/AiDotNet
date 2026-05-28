@@ -607,6 +607,16 @@ public partial class LSTMLayer<T> : LayerBase<T>
     private IGpuBuffer? _gpuStackedBiasHh;
     private bool _gpuStackedWeightsValid;
 
+    // Cached CPU stacked weights for the fused LstmSequenceForward path (PyTorch
+    // [i, f, g, o] layout). Packing the 8 split tensors into the concatenated
+    // [4*hidden, *] arrays is invariant across forward calls while the weights are
+    // unchanged, so cache it and reuse on repeated inference. Invalidated alongside
+    // the GPU stacked weights whenever the underlying weights mutate.
+    private Tensor<float>? _cpuStackedWeightsIh;
+    private Tensor<float>? _cpuStackedWeightsHh;
+    private Tensor<float>? _cpuStackedBiasIh;
+    private bool _cpuStackedWeightsValid;
+
     // Fused kernel output cache buffers
     private IGpuBuffer? _gpuFusedAllH;
     private IGpuBuffer? _gpuFusedAllC;
@@ -1270,53 +1280,68 @@ public partial class LSTMLayer<T> : LayerBase<T>
         int gateRows = 4 * _hiddenSize;
         int inFeatures = _inputSize;
 
-        // PyTorch nn.LSTM gate order: [i, f, g, o] concat along the row axis.
-        // AiDotNet stores [I, F, C, O] separately, where C is the cell
-        // candidate (PyTorch's "g"). So the concat order here is:
-        //   row 0       .. hidden-1    = Ii
-        //   row hidden  .. 2*hidden-1  = Fi
-        //   row 2*hidden.. 3*hidden-1  = Ci
-        //   row 3*hidden.. 4*hidden-1  = Oi
-        // and analogously for the hidden weights and biases. AiDotNet's
-        // [hidden, in] storage matches PyTorch nn.Linear.weight's [out, in]
-        // convention, so each block is a straight tensor-to-tensor copy of
-        // the appropriate row range.
-        var wIhArr = new float[gateRows * inFeatures];
-        var wHhArr = new float[gateRows * _hiddenSize];
-        var bIhArr = new float[gateRows];
+        // Pack the 8 split weight tensors once and cache the result; reuse it on
+        // subsequent forward calls until the weights mutate (the cache is cleared
+        // by InvalidateCpuStackedWeights, called at the same sites that invalidate
+        // the GPU stacked weights). This keeps repeated inference allocation-free.
+        if (!_cpuStackedWeightsValid
+            || _cpuStackedWeightsIh is null
+            || _cpuStackedWeightsHh is null
+            || _cpuStackedBiasIh is null)
+        {
+            // PyTorch nn.LSTM gate order: [i, f, g, o] concat along the row axis.
+            // AiDotNet stores [I, F, C, O] separately, where C is the cell
+            // candidate (PyTorch's "g"). So the concat order here is:
+            //   row 0       .. hidden-1    = Ii
+            //   row hidden  .. 2*hidden-1  = Fi
+            //   row 2*hidden.. 3*hidden-1  = Ci
+            //   row 3*hidden.. 4*hidden-1  = Oi
+            // and analogously for the hidden weights and biases. AiDotNet's
+            // [hidden, in] storage matches PyTorch nn.Linear.weight's [out, in]
+            // convention, so each block is a straight tensor-to-tensor copy of
+            // the appropriate row range.
+            var wIhArr = new float[gateRows * inFeatures];
+            var wHhArr = new float[gateRows * _hiddenSize];
+            var bIhArr = new float[gateRows];
 
-        var wIiSpan = ((Tensor<float>)(object)_weightsIi).AsSpan();
-        var wFiSpan = ((Tensor<float>)(object)_weightsFi).AsSpan();
-        var wCiSpan = ((Tensor<float>)(object)_weightsCi).AsSpan();
-        var wOiSpan = ((Tensor<float>)(object)_weightsOi).AsSpan();
-        var wIhSpan = ((Tensor<float>)(object)_weightsIh).AsSpan();
-        var wFhSpan = ((Tensor<float>)(object)_weightsFh).AsSpan();
-        var wChSpan = ((Tensor<float>)(object)_weightsCh).AsSpan();
-        var wOhSpan = ((Tensor<float>)(object)_weightsOh).AsSpan();
-        var bISpan  = ((Tensor<float>)(object)_biasI).AsSpan();
-        var bFSpan  = ((Tensor<float>)(object)_biasF).AsSpan();
-        var bCSpan  = ((Tensor<float>)(object)_biasC).AsSpan();
-        var bOSpan  = ((Tensor<float>)(object)_biasO).AsSpan();
+            var wIiSpan = ((Tensor<float>)(object)_weightsIi).AsSpan();
+            var wFiSpan = ((Tensor<float>)(object)_weightsFi).AsSpan();
+            var wCiSpan = ((Tensor<float>)(object)_weightsCi).AsSpan();
+            var wOiSpan = ((Tensor<float>)(object)_weightsOi).AsSpan();
+            var wIhSpan = ((Tensor<float>)(object)_weightsIh).AsSpan();
+            var wFhSpan = ((Tensor<float>)(object)_weightsFh).AsSpan();
+            var wChSpan = ((Tensor<float>)(object)_weightsCh).AsSpan();
+            var wOhSpan = ((Tensor<float>)(object)_weightsOh).AsSpan();
+            var bISpan  = ((Tensor<float>)(object)_biasI).AsSpan();
+            var bFSpan  = ((Tensor<float>)(object)_biasF).AsSpan();
+            var bCSpan  = ((Tensor<float>)(object)_biasC).AsSpan();
+            var bOSpan  = ((Tensor<float>)(object)_biasO).AsSpan();
 
-        int blockIn = _hiddenSize * inFeatures;
-        int blockHh = _hiddenSize * _hiddenSize;
+            int blockIn = _hiddenSize * inFeatures;
+            int blockHh = _hiddenSize * _hiddenSize;
 
-        wIiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(0 * blockIn, blockIn));
-        wFiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(1 * blockIn, blockIn));
-        wCiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(2 * blockIn, blockIn));
-        wOiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(3 * blockIn, blockIn));
-        wIhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(0 * blockHh, blockHh));
-        wFhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(1 * blockHh, blockHh));
-        wChSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(2 * blockHh, blockHh));
-        wOhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(3 * blockHh, blockHh));
-        bISpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(0 * _hiddenSize, _hiddenSize));
-        bFSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(1 * _hiddenSize, _hiddenSize));
-        bCSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(2 * _hiddenSize, _hiddenSize));
-        bOSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(3 * _hiddenSize, _hiddenSize));
+            wIiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(0 * blockIn, blockIn));
+            wFiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(1 * blockIn, blockIn));
+            wCiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(2 * blockIn, blockIn));
+            wOiSpan.Slice(0, blockIn).CopyTo(wIhArr.AsSpan(3 * blockIn, blockIn));
+            wIhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(0 * blockHh, blockHh));
+            wFhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(1 * blockHh, blockHh));
+            wChSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(2 * blockHh, blockHh));
+            wOhSpan.Slice(0, blockHh).CopyTo(wHhArr.AsSpan(3 * blockHh, blockHh));
+            bISpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(0 * _hiddenSize, _hiddenSize));
+            bFSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(1 * _hiddenSize, _hiddenSize));
+            bCSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(2 * _hiddenSize, _hiddenSize));
+            bOSpan.Slice(0, _hiddenSize).CopyTo(bIhArr.AsSpan(3 * _hiddenSize, _hiddenSize));
 
-        var wIh = new Tensor<float>(wIhArr, new[] { gateRows, inFeatures });
-        var wHh = new Tensor<float>(wHhArr, new[] { gateRows, _hiddenSize });
-        var bIh = new Tensor<float>(bIhArr, new[] { gateRows });
+            _cpuStackedWeightsIh = new Tensor<float>(wIhArr, new[] { gateRows, inFeatures });
+            _cpuStackedWeightsHh = new Tensor<float>(wHhArr, new[] { gateRows, _hiddenSize });
+            _cpuStackedBiasIh = new Tensor<float>(bIhArr, new[] { gateRows });
+            _cpuStackedWeightsValid = true;
+        }
+
+        var wIh = _cpuStackedWeightsIh;
+        var wHh = _cpuStackedWeightsHh;
+        var bIh = _cpuStackedBiasIh;
 
         // returnSequences=true gives us the full [B, seq, hidden] stack —
         // the existing per-step loop also writes the full stack to its
@@ -1713,6 +1738,18 @@ public partial class LSTMLayer<T> : LayerBase<T>
     }
 
     /// <summary>
+    /// Drops the cached CPU stacked weights so the next fused forward repacks
+    /// them. Called whenever the underlying split weights/biases change.
+    /// </summary>
+    private void InvalidateCpuStackedWeights()
+    {
+        _cpuStackedWeightsIh = null;
+        _cpuStackedWeightsHh = null;
+        _cpuStackedBiasIh = null;
+        _cpuStackedWeightsValid = false;
+    }
+
+    /// <summary>
     /// Extracts per-gate gradients from stacked gradient buffers after fused backward kernel.
     /// </summary>
     private void UnstackGradients(
@@ -1833,6 +1870,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         // Invalidate stacked weight buffers since individual weights have been modified
         InvalidateGpuStackedWeights();
+        InvalidateCpuStackedWeights();
     }
 
     /// <summary>
@@ -2119,6 +2157,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         // Invalidate stacked weight buffers since weights have been modified
         InvalidateGpuStackedWeights();
+        InvalidateCpuStackedWeights();
     }
 
     /// <summary>
@@ -2206,6 +2245,7 @@ public partial class LSTMLayer<T> : LayerBase<T>
 
         // Invalidate stacked weight buffers since weights have been replaced from deserialization
         InvalidateGpuStackedWeights();
+        InvalidateCpuStackedWeights();
     }
 
     /// <summary>

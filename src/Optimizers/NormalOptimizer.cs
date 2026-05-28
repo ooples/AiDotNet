@@ -103,14 +103,17 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
         // the early-stopping patience (10) just refits the same normal equations
         // 10× on the full training set — the dominant cost in
         // AiModelBuilder<MultipleRegression> at scale (issue #1447 P2). Detect a
-        // bit-identical fitness plateau and stop: two identical best scores in a
-        // row prove the search has converged on a deterministic optimum. Stochastic
-        // models (whose fitness varies run-to-run) never hit the plateau, so their
-        // behavior is unchanged.
+        // bit-identical fitness plateau and stop: two identical *current-iteration*
+        // scores in a row prove the search has converged on a deterministic optimum.
+        // Comparing the current iteration's fitness (not the running best) is what
+        // makes this safe for stochastic models: their per-iteration fitness varies
+        // run-to-run so they never see two identical scores in a row, whereas the
+        // running best stalls whenever an iteration merely fails to improve — which
+        // would otherwise trip the plateau break prematurely.
         bool degenerateFeatureSearch =
             Options.MaximumFeatures >= totalFeatures && Options.MinimumFeatures >= totalFeatures;
-        T lastBestFitness = bestStepData.FitnessScore;
-        bool haveLastBest = false;
+        T lastIterationFitness = bestStepData.FitnessScore;
+        bool haveLastIterationFitness = false;
 
         for (int iteration = 0; iteration < Options.MaxIterations; iteration++)
         {
@@ -120,15 +123,16 @@ public class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInput, TOut
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             // Converged-plateau short-circuit for the degenerate (no-search) case.
-            T currentBest = bestStepData.FitnessScore;
-            bool identicalToLast = haveLastBest
-                && NumOps.Equals(currentBest, lastBestFitness);
+            // Compare consecutive current-iteration fitnesses, not the running best.
+            T currentFitness = currentStepData.FitnessScore;
+            bool identicalToLast = haveLastIterationFitness
+                && NumOps.Equals(currentFitness, lastIterationFitness);
             if (degenerateFeatureSearch && identicalToLast)
             {
                 break;
             }
-            lastBestFitness = currentBest;
-            haveLastBest = true;
+            lastIterationFitness = currentFitness;
+            haveLastIterationFitness = true;
 
             // Update adaptive parameters
             UpdateAdaptiveParameters(currentStepData, previousStepData);
