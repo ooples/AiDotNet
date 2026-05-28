@@ -117,8 +117,9 @@ public abstract class VisionLanguageTestBase<T> : NeuralNetworkModelTestBase<T>
         Assert.True(output.Length > 0, "VL model produced empty output for black image.");
         for (int i = 0; i < output.Length; i++)
         {
-            Assert.False(double.IsNaN(ConvertToDouble(output[i])),
-                $"Output[{i}] is NaN for all-zero image input.");
+            double v = ConvertToDouble(output[i]);
+            Assert.True(!double.IsNaN(v) && !double.IsInfinity(v),
+                $"Output[{i}] is not finite for all-zero image input.");
         }
     }
 }

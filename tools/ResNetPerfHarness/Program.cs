@@ -22,10 +22,12 @@ internal static class Program
         new(StringComparer.Ordinal) { "resnet50", "vgg11", "vgg16bn", "phi3vision" };
 
     private const string UsageText =
-        "Usage: ResNetPerfHarness [--warmup N] [--iters N] [--model NAME] [--dtype double|float] [--forward-only]\n" +
+        "Usage: ResNetPerfHarness [--warmup N] [--iters N] [--model NAME] [--dtype double|float] [--forward-only] [--cpu]\n" +
         "  --warmup N   Number of warm-up training iterations (default: 1).\n" +
         "  --iters  N   Number of measured training iterations (default: 3).\n" +
         "  --forward-only  Measure Predict() only (no training); for profiling the forward path.\n" +
+        "  --cpu        Force the CPU engine (disable GPU auto-select) — matches the model-family\n" +
+        "               test environment that runs under the 120s timeout. (float dtype only.)\n" +
         "  --model NAME One of: resnet50, vgg11, vgg16bn, phi3vision, hope, sgpt, siglip2-ctor, sd15-ctor, t5xxl-ctor (default: resnet50).\n" +
         "  --dtype TYPE One of: double, float (default: double). Models that support float run via the fused-compiled\n" +
         "               training path which is typically 5-10× faster than the eager autograd tape on CNNs.\n" +
