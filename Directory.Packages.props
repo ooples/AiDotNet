@@ -5,17 +5,19 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.84.1 — carries the blocker fixes for the previously-
-         draft framework PRs that depended on Tensors changes:
+    <!-- AiDotNet.Tensors 0.85.3 — unblocks this PR's paper-scale perf tests via
+         #454 BroadcastElementwise SIMD perf (AiDotNet#1307 / PR #1448), and adds
+         #487 GetSliceAlongDimension tape-backward (tape-safe per-timestep slicing
+         for recurrent / sequence / attention layers). Also carries the blocker
+         fixes for the other previously-draft framework PRs:
            * #427 SgemmWithInt8RowScaledCachedB — per-row-scaled INT8 weight-only
              GEMM (AiDotNet#1349 / PR #1417).
            * #437 CpuEngine.LstmSequenceForward — fused recurrent forward
              (AIsEval LSTM / PR #1457).
-           * #454 BroadcastElementwise SIMD perf (AiDotNet#1307 / PR #1448).
          Plus the 0.81.4–0.82.5 fixes already in flight (GraphMode gradient
          recording #367, FP64 SD UNet cliffs #410, fused-compiled VGG #416,
          clCreateCommandQueue serialisation #418, TensorAllocator long-arith #424). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.84.1" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.85.3" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.9" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.82.5" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.9" />
