@@ -2073,6 +2073,17 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // A lazily-constructed LSTM (hidden size given, input size deferred to the
+        // first forward) still has a well-defined parameter set once we adopt the
+        // standard square default (input size == hidden size, as in stacked recurrent
+        // stages). Resolve to that default when parameters are requested before any
+        // forward so they are materialized rather than reported as empty; a later
+        // forward with a different input width re-adapts via the input-adaptation path.
+        if (!IsShapeResolved && _hiddenSize > 0)
+        {
+            ResolveFromShape(new[] { _hiddenSize });
+        }
+
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weightsFi.Data),
