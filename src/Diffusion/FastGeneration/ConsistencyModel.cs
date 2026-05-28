@@ -309,7 +309,14 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             architecture: Architecture,
             seed: seed);
 
-        // Standard SD VAE (lazy — constructed on first VAE access)
+        // Standard SD VAE (lazy — constructed on first VAE access). Use
+        // ExecutionAndPublication, not PublicationOnly: PublicationOnly lets
+        // multiple threads run the factory concurrently on first access, which
+        // for a heavyweight VAE (3 input channels -> 4 latent channels, 128
+        // base, [1,2,4,4] multipliers, 2 resblocks/level) means duplicate
+        // multi-MB allocations and avoidable CPU spikes whenever the latent-
+        // input fast path is bypassed concurrently. ExecutionAndPublication
+        // serialises the factory so the VAE is constructed exactly once.
         _vae = new Lazy<StandardVAE<T>>(
             () => vae ?? new StandardVAE<T>(
                 inputChannels: 3,
@@ -318,7 +325,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
                 channelMultipliers: new[] { 1, 2, 4, 4 },
                 numResBlocksPerLevel: 2,
                 seed: seed),
-            LazyThreadSafetyMode.PublicationOnly);
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     #endregion

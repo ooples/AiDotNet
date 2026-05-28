@@ -31,8 +31,24 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
-        using var log = new System.IO.StreamWriter("perf-1305-consistencymodel.log") { AutoFlush = true };
-        void Log(string s) { Console.WriteLine(s); log.WriteLine(s); log.Flush(); }
+        // Fall back to console-only when the working directory isn't writable
+        // (CI sandboxes, read-only mounts) instead of crashing before any
+        // diagnostics run — the whole point of this tool is to capture data.
+        System.IO.StreamWriter? log = null;
+        try
+        {
+            log = new System.IO.StreamWriter("perf-1305-consistencymodel.log") { AutoFlush = true };
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[warn] perf log file disabled — could not open 'perf-1305-consistencymodel.log': {ex.Message}");
+        }
+        using var _logScope = log; // dispose if non-null
+        void Log(string s)
+        {
+            Console.WriteLine(s);
+            if (log is not null) { log.WriteLine(s); log.Flush(); }
+        }
 
         Log($"=== ConsistencyModel #1305 perf bottleneck — {DateTime.UtcNow:O} ===");
         Log($".NET {Environment.Version}, Processors: {Environment.ProcessorCount}");
@@ -114,6 +130,15 @@ internal static class Program
         // === Phase 6: sub-phase breakdown via ForwardProfilingSink ===
         Log("--");
         Log("Sub-phase breakdown of one warm PredictNoise:");
+        // Type-guard: the sink is a static field on UNetNoisePredictor<double>; if a
+        // different INoisePredictor implementation is wired in (e.g. a future swap),
+        // the sink would never fill and the breakdown would silently report empty —
+        // fail fast instead so the diagnostic never lies about what it measured.
+        if (unet is not UNetNoisePredictor<double>)
+        {
+            Log($"  (skipped — predictor is {unet.GetType().FullName}, not UNetNoisePredictor<double>; sub-phase sink unavailable for this implementation)");
+            return 1;
+        }
         var sink = new ConcurrentQueue<(string section, double ms)>();
         UNetNoisePredictor<double>.ForwardProfilingSink = sink;
         try

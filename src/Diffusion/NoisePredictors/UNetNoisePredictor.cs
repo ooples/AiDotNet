@@ -675,7 +675,11 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// <c>tools/ConsistencyModelPerfDiag</c> to break down the ~14.95 s/step
     /// UNet forward cost surfaced in #1305.
     /// </summary>
-    public static System.Collections.Concurrent.ConcurrentQueue<(string section, double ms)>? ForwardProfilingSink;
+    // Internal diagnostics plumbing — external consumers must NOT bind to it
+    // (per the facade contract: users only touch AiModelBuilder / AiModelResult).
+    // ConsistencyModelPerfDiag reads this via the InternalsVisibleTo grant on
+    // src/AiDotNet.csproj for that assembly.
+    internal static System.Collections.Concurrent.ConcurrentQueue<(string section, double ms)>? ForwardProfilingSink;
 
     /// <summary>
     /// Forward pass for inference (no skip storage needed).
