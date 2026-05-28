@@ -42,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, TrainsViaCustomLoss = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
