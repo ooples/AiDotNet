@@ -158,7 +158,7 @@ internal static class Int8WeightOnlyMatMul
             {
                 int dstRow = r * outputSize;
                 var rowSpan = output.Slice(dstRow, outputSize);
-                AiDotNet.Tensors.Engines.Simd.SimdKernels.VectorAdd(
+                SimdKernels.VectorAdd(
                     rowSpan, new ReadOnlySpan<float>(biases, 0, outputSize), rowSpan);
             }
         }
