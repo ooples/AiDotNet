@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -1163,7 +1164,11 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "CRF NLL accumulator was unexpectedly null after a non-empty batch loop.");
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
-        var meanNll = Engine.TensorMultiplyScalar(accumulated, invBatch); // shape [1]
+        // Tape-tracked scalar multiply: Engine.TensorMultiplyScalar bypasses the
+        // autodiff graph, which would detach meanNll from the accumulated NLL and
+        // leave the transition matrix without a gradient. TapeMultiplyScalar wraps
+        // it as TensorMultiply against a constant tensor (recorded on the tape).
+        var meanNll = TensorTapeOps.TapeMultiplyScalar(Engine, accumulated, invBatch); // shape [1]
         return meanNll;
     }
 
