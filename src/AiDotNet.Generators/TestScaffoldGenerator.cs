@@ -1755,7 +1755,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Vision/3D models need ThreeDimensional input; Audio needs TwoDimensional;
                 // others default to OneDimensional. Temporal video is handled above.
                 needsArchitectureUsing = true;
-                bool isVision = model.Domains.Contains(1) || model.Domains.Contains(11); // Vision=1, ThreeD=11
+                // A forecasting model that merely BORROWS a vision backbone (e.g.
+                // VisionTS, which renders the series as an image internally) still
+                // declares the Vision domain for discovery, but it is a time-series
+                // forecaster: its public input is a 1-D context, not an RGB image.
+                // Excluding forecasters here keeps the architecture (inputSize) and
+                // the InputShape (below) on the 1-D forecasting contract.
+                bool isVision = (model.Domains.Contains(1) || model.Domains.Contains(11)) // Vision=1, ThreeD=11
+                    && !model.ExtendsForecastingModelBase;
                 bool isAudio = model.Domains.Contains(3); // Audio=3 (enum ordinal, not Video=4)
                 // Use the shared two-frame helpers so the constructor /
                 // factory-body emission and the architecture-shape emission
@@ -1910,7 +1917,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // RGB frames stacked channel-wise; share the 2-frame concat path.
         bool isTwoFrameModel = IsTwoFrameModel(model);
         bool isTemporalVideoModel = isVideoModel && !isTwoFrameModel;
-        bool isVisionModel = model.Domains.Contains(1) || model.Domains.Contains(11);
+        // See the architecture-emission note above: a forecasting model that borrows
+        // a vision backbone (VisionTS) declares the Vision domain but takes a 1-D
+        // context, so it must route to the Forecasting InputShape branch, not the
+        // image branch (which would emit a [3, H, W] shape its forward rejects).
+        bool isVisionModel = (model.Domains.Contains(1) || model.Domains.Contains(11))
+            && !model.ExtendsForecastingModelBase;
         bool isAudioModel = model.Domains.Contains(3); // Audio=3 (was incorrectly 4)
         if (isTemporalVideoModel)
         {
