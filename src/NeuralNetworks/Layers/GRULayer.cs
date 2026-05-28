@@ -869,11 +869,16 @@ public partial class GRULayer<T> : LayerBase<T>
             _lastInput = input3D;
         }
 
-        // Reset hidden state if needed
-        if (_lastHiddenState == null)
-        {
-            _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
-        }
+        // Standard non-streaming RNN semantics: every forward starts from a ZERO
+        // initial hidden state. The previous code only allocated _lastHiddenState
+        // when null and then overwrote it with the final hidden state at the end of
+        // each pass, so independent forward calls leaked hidden state across one
+        // another. That broke Clone-after-training parity (a freshly-cloned model
+        // starts from zeros while the trained original carried leftover state) and
+        // repeated-Predict determinism. Reset to a zero hidden state at the start of
+        // every pass (TensorAllocator.Rent returns zero-initialized, engine-managed
+        // storage — the same call the original first-pass init used).
+        _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
 
         // Initialize list to store all hidden states if returning sequences
         if (_returnSequences)
