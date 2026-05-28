@@ -523,14 +523,14 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         _lastInput = input;
 
         // Transform path: transform = activation(input @ weights + bias)
-        var transformLinear = input.MatrixMultiply(_transformWeights);
+        var transformLinear = Engine.TensorMatMul(input, _transformWeights);
         var transformWithBias = Engine.TensorBroadcastAdd(transformLinear, _transformBias);
         _lastTransformPreActivation = transformWithBias; // Store pre-activation for backward pass
         var transformOutput = ApplyActivation(transformWithBias, _transformActivation, _vectorTransformActivation);
         _lastTransformOutput = transformOutput;
 
         // Gate path: gate = sigmoid(input @ weights + bias)
-        var gateLinear = input.MatrixMultiply(_gateWeights);
+        var gateLinear = Engine.TensorMatMul(input, _gateWeights);
         var gateWithBias = Engine.TensorBroadcastAdd(gateLinear, _gateBias);
         _lastGatePreActivation = gateWithBias; // Store pre-activation for backward pass
         var gateOutput = ApplyActivation(gateWithBias, _gateActivation, _vectorGateActivation);
@@ -697,13 +697,17 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
     /// </remarks>
     private Tensor<T> ApplyActivation(Tensor<T> input, IActivationFunction<T>? scalarActivation, IVectorActivationFunction<T>? vectorActivation)
     {
+        // Route through the central ActivationHelper dispatch so the activation runs
+        // on tape-connected Engine kernels (the old scalar path used input.Transform,
+        // which detaches the autodiff graph and stopped gradients reaching the
+        // transform/gate weights).
         if (vectorActivation != null)
         {
-            return vectorActivation.Activate(input);
+            return ActivationHelper.ApplyActivation(vectorActivation, input, Engine);
         }
         else if (scalarActivation != null)
         {
-            return input.Transform((x, _) => scalarActivation.Activate(x));
+            return ActivationHelper.ApplyActivation(scalarActivation, input, Engine);
         }
         else
         {
