@@ -2078,14 +2078,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             _preActivationCache.Push(input);
         }
 
+        // Route through the central ActivationHelper dispatch so the activation runs
+        // on tape-connected Engine kernels (the previous direct .Activate(Tensor)
+        // calls rebuild the tensor element-wise and detach the autodiff graph,
+        // stopping gradients reaching this layer's trainable parameters under
+        // tape-based training).
         if (VectorActivation != null)
         {
-            return VectorActivation.Activate(input);
+            return ActivationHelper.ApplyActivation(VectorActivation, input, Engine);
         }
 
         if (ScalarActivation != null)
         {
-            return ScalarActivation.Activate(input);
+            return ActivationHelper.ApplyActivation(ScalarActivation, input, Engine);
         }
 
         return input;
