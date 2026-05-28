@@ -921,14 +921,24 @@ public class GraphWaveNet<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        var current = FlattenInput(input);
+        // Organize the input as [numNodes, featuresPerNode] (numNodes as the batch
+        // dimension) so every DenseLayer applies SHARED per-node weights — the
+        // paper-faithful design with O(channels^2) parameters instead of the old
+        // numNodes-wide flattened denses that OOM-crashed the optimizer. The
+        // tape-aware Engine.Reshape keeps gradients flowing back to the input.
+        int totalSize = input.Length;
+        int featuresPerNode = totalSize / _numNodes;
+        var current = featuresPerNode * _numNodes == totalSize
+            ? Engine.Reshape(input, new[] { _numNodes, featuresPerNode })
+            : FlattenInput(input);
 
+        // Per-node WaveNet-style temporal stack (shared weights across nodes).
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
 
-        // Apply diffusion convolution
+        // Diffusion convolution: adaptive + predefined graph mixing across nodes.
         if (_useNativeMode)
         {
             current = ApplyDiffusionConvolution(current);

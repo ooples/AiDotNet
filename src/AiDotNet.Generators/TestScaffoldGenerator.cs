@@ -1426,7 +1426,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             return TestFamily.Embedding;
 
         // Priority 7: GraphNetwork
-        if (model.Categories.Contains(CategoryGraphNetwork))
+        // A model that is BOTH a graph network AND a forecasting model (the
+        // spatio-temporal GNN forecasters: DCRNN, GraphWaveNet, MTGNN, STGNN,
+        // TemporalGCN, RelationalGCN) is a forecasting model first — it has the
+        // forecasting I/O contract (a [numNodes, seqLen, features] sequence in, a
+        // [numNodes, horizon] forecast out) and its GRU/temporal layers need a real
+        // sequence dimension, which the generic GraphNN [nodes, features] test input
+        // can't supply. Let those fall through to the Forecasting family; only pure
+        // (non-forecasting) graph networks are classified as GraphNN here.
+        if (model.Categories.Contains(CategoryGraphNetwork) && !model.ExtendsForecastingModelBase)
             return TestFamily.GraphNN;
 
         // === TIER 2: Mid-level NN hierarchy (base class chain detection) ===
@@ -4514,6 +4522,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // = [207, 12]. Pairs with input "207, 12, 1".
             "TemporalGCN" => "207, 12",
 
+            // DCRNN: per-node output [numNodes, forecastHorizon] = [207, 12] (last-step
+            // readout projects hiddenDim -> forecastHorizon). Pairs with "207, 12, 2".
+            "DCRNN" => "207, 12",
+
+            // GraphWaveNet + MTGNN: per-node output [numNodes, forecastHorizon] = [207, 12].
+            "GraphWaveNet" => "207, 12",
+            "MTGNN" => "207, 12",
+
             // All others: [B, forecastHorizon]. Common paper defaults 96.
             _ => "96",
         };
@@ -4602,6 +4618,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // TemporalGCN: same METR-LA layout as STGNN — [numNodes, seqLen,
             // numFeatures] = [207, 12, 1], reshaped per-node for shared-weight MLPs.
             "TemporalGCN" => "207, 12, 1",
+
+            // DCRNN (Li et al. 2018): [numNodes, seqLen, numFeatures] = [207, 12, 2]
+            // (METR-LA; DCRNN uses numFeatures=2), reshaped per-node (GRUs as DCGRU).
+            "DCRNN" => "207, 12, 2",
+
+            // GraphWaveNet (Wu et al. 2019) + MTGNN: [numNodes, seqLen, numFeatures]
+            // = [207, 12, 2], reshaped per-node for shared-weight WaveNet layers.
+            "GraphWaveNet" => "207, 12, 2",
+            "MTGNN" => "207, 12, 2",
 
             _ => ctx,
         };

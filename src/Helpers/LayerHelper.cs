@@ -15640,59 +15640,55 @@ public static class LayerHelper<T>
         int numLayers = 3,
         int mixHopDepth = 2)
     {
-        // Input size: nodes * sequence * features (flattened)
-        int inputSize = numNodes * sequenceLength * numFeatures;
-        int outputSize = numNodes * forecastHorizon * numFeatures;
+        // Paper-faithful MTGNN (Wu et al. 2020): all temporal/projection weights are
+        // SHARED across the graph's nodes. The model runs these layers on a
+        // [numNodes, channels] tensor (numNodes as the batch dimension), so each
+        // DenseLayer is a per-node MLP with O(channels^2) parameters — NOT the old
+        // numNodes*hiddenDim-wide flattened denses (~1B params at numNodes=207 that
+        // OOM-crashed the optimizer). Mix-hop graph propagation across nodes is
+        // applied by the model's forward via ApplyMixHopPropagationTape.
 
-        // === Input Projection ===
-        // Project input to hidden dimension
+        // === Input Projection === (per node: seqLen*numFeatures -> hiddenDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === Node Embedding Layer ===
-        // Create learnable node embeddings for adaptive graph learning
+        // === Node Embedding === (per node: -> nodeEmbeddingDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * nodeEmbeddingDim,
+            outputSize: nodeEmbeddingDim,
             activationFunction: new TanhActivation<T>());
 
-        // === Graph-Temporal Processing Layers ===
+        // === Graph-Temporal Processing Layers === (per-node, shared weights)
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // Mix-hop graph convolution (simulated with dense layers)
-            // Aggregates 1-hop, 2-hop, ... k-hop neighbors
             for (int hop = 0; hop < mixHopDepth; hop++)
             {
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * hiddenDim,
+                    outputSize: hiddenDim,
                     activationFunction: new ReLUActivation<T>());
             }
 
-            // Dilated temporal convolution (simulated with dense)
-            // Different dilation rates capture different temporal scales
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new TanhActivation<T>());
 
-            // Gated skip connection
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new SigmoidActivation<T>());
 
             yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.3);
         }
 
-        // === Output Projection ===
-        // Project to forecast dimension
+        // === Output Projection === (per node: hiddenDim -> forecastHorizon*numFeatures)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: outputSize,
+            outputSize: forecastHorizon * numFeatures,
             activationFunction: null);
     }
 
@@ -15732,57 +15728,55 @@ public static class LayerHelper<T>
         int numBlocks = 4,
         int layersPerBlock = 2)
     {
-        // Input size: nodes * sequence * features (flattened)
-        int inputSize = numNodes * sequenceLength * numFeatures;
-        int outputSize = numNodes * forecastHorizon;
+        // Paper-faithful Graph WaveNet (Wu et al. 2019): all temporal/projection
+        // weights are SHARED across the graph's nodes. The model runs these layers on
+        // a [numNodes, channels] tensor (numNodes as the batch dimension), so each
+        // DenseLayer is a per-node MLP with O(channels^2) parameters — NOT the old
+        // numNodes*residualChannels-wide flattened denses (~1B params at numNodes=207
+        // that OOM-crashed the optimizer). The diffusion convolution (adaptive +
+        // predefined graph mixing across nodes) is applied by the model's forward.
 
-        // === Input Projection ===
-        // Project input to residual channels
+        // === Input Projection === (per node: seqLen*numFeatures -> residualChannels)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * residualChannels,
+            outputSize: residualChannels,
             activationFunction: new ReLUActivation<T>());
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === WaveNet-style Blocks ===
+        // === WaveNet-style Blocks === (per-node, shared weights)
         for (int block = 0; block < numBlocks; block++)
         {
             for (int layer = 0; layer < layersPerBlock; layer++)
             {
-                // Dilated convolution (filter branch) - captures temporal patterns
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * residualChannels,
+                    outputSize: residualChannels,
                     activationFunction: new TanhActivation<T>());
 
-                // Gate convolution - controls information flow
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * residualChannels,
+                    outputSize: residualChannels,
                     activationFunction: new SigmoidActivation<T>());
 
-                // Diffusion convolution placeholder (spatial aggregation)
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * residualChannels,
+                    outputSize: residualChannels,
                     activationFunction: new ReLUActivation<T>());
 
                 yield return new LayerNormalizationLayer<T>();
 
-                // Skip connection projection
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * skipChannels / numBlocks,
+                    outputSize: Math.Max(1, skipChannels / numBlocks),
                     activationFunction: null);
 
                 yield return new DropoutLayer<T>(0.3);
             }
         }
 
-        // === Output Processing ===
-        // Combine skip connections and project to output
+        // === Output Processing === (per node: -> endChannels -> forecastHorizon)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * endChannels,
+            outputSize: endChannels,
             activationFunction: new ReLUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: outputSize,
+            outputSize: forecastHorizon,
             activationFunction: null);
     }
 
@@ -15833,51 +15827,49 @@ public static class LayerHelper<T>
         int forecastHorizon = 12,
         int diffusionSteps = 2)
     {
-        // === Input Embedding ===
-        // Project input features to hidden dimension
+        // Paper-faithful DCRNN (Li et al. 2018): weights are SHARED across nodes.
+        // The model runs these layers on a [numNodes, seqLen, hiddenDim] tensor
+        // (numNodes as the batch dim), so each DenseLayer is a per-node MLP and each
+        // GRULayer a per-node DCGRU — O(hiddenDim^2) params, not the old
+        // numNodes*hiddenDim-wide flattened denses (~1B params at numNodes=207 that
+        // OOM-crashed the optimizer). Spatial diffusion is applied in the forward.
+
+        // === Input Embedding === (per node+step: numFeatures -> hiddenDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDimension,
+            outputSize: hiddenDimension,
             activationFunction: null);
 
         // === Encoder DCGRU Layers ===
-        // Each layer is a GRU where matrix multiplications are replaced with diffusion convolution
-        // Note: Diffusion convolution is applied in the model itself, not in layers
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            // GRU layer for temporal processing
             yield return new GRULayer<T>(
                 hiddenSize: hiddenDimension,
                 returnSequences: true,
                 activation: (IActivationFunction<T>?)null,
                 recurrentActivation: null);
 
-            // Dense layer for spatial mixing (simplified diffusion approximation)
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDimension,
+                outputSize: hiddenDimension,
                 activationFunction: new ReLUActivation<T>());
         }
 
         // === Decoder DCGRU Layers ===
-        // Decoder generates predictions autoregressively
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            // GRU layer for temporal processing
             yield return new GRULayer<T>(
                 hiddenSize: hiddenDimension,
                 returnSequences: true,
                 activation: (IActivationFunction<T>?)null,
                 recurrentActivation: null);
 
-            // Dense layer for spatial mixing
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDimension,
+                outputSize: hiddenDimension,
                 activationFunction: new ReLUActivation<T>());
         }
 
-        // === Output Projection ===
-        // Project hidden states to output predictions
+        // === Output Projection === (per node: hiddenDim -> forecastHorizon)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * forecastHorizon,
+            outputSize: forecastHorizon,
             activationFunction: null);
     }
 
