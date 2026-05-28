@@ -14044,22 +14044,39 @@ public static class LayerHelper<T>
         int numHeads = 8,
         double dropout = 0.1)
     {
-        // Per Jin et al. 2024 "Time-LLM: Time Series Forecasting by Reprogramming LLMs":
-        // 1. Patch embedding: project per-patch features → llmDim
-        // 2. Reprogramming layers: cross-attention with text prototypes
-        // 3. Simulated frozen LLM (transformer encoder)
-        // 4. Output projection: llmDim → forecast values
-        // All operations per-patch on llmDim, NOT flattened.
+        // Per Jin et al. 2024 "Time-LLM: Time Series Forecasting by Reprogramming
+        // LLMs". The input series is split into NON-OVERLAPPING patches that
+        // become the transformer's sequence tokens; each patch is embedded to the
+        // LLM width, reprogrammed against text prototypes (approximated here by
+        // self-attention transformer blocks), passed through a simulated frozen
+        // LLM, then a FlattenHead linearly projects the flattened patch
+        // representations to the forecast horizon (paper §3.3).
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(patchLength), "Patch length must be at least 1.");
+        if (llmDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(llmDim), "LLM dimension must be at least 1.");
+
+        int numPatches = contextLength / patchLength;
+        int patchInputSize = patchLength * numFeatures;
         int ffnDim = llmDim * 4;
 
-        // === Patch Embedding: per-patch projection ===
-        yield return new FeedForwardLayer<T>(llmDim, (IActivationFunction<T>?)null);
+        // === Patch tokenization + embedding:
+        //     [B, contextLength * numFeatures] → [B, numPatches, patchInputSize]
+        //                                       → [B, numPatches, llmDim] ===
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchInputSize });
+        yield return new DenseLayer<T>(outputSize: llmDim, activationFunction: (IActivationFunction<T>?)null);
         yield return new LayerNormalizationLayer<T>();
 
-        // === Reprogramming Transformer ===
+        // === Reprogramming Transformer (prototype cross-attention, approximated) ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -14067,13 +14084,15 @@ public static class LayerHelper<T>
         // === Simulated Frozen LLM (additional transformer layers) ===
         for (int i = 0; i < 2; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
         }
 
-        // === Final Layer Norm + Output Projection ===
+        // === FlattenHead output projection (paper §3.3): flatten the patch
+        //     tokens [B, numPatches, llmDim] → [B, numPatches * llmDim] and
+        //     linearly project to the forecast horizon ===
         yield return new LayerNormalizationLayer<T>();
-        yield return new FeedForwardLayer<T>(llmDim / 4, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FlattenLayer<T>();
+        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: (IActivationFunction<T>?)null);
     }
 
     /// <summary>
