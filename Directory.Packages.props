@@ -5,20 +5,32 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.84.1 — carries the blocker fixes for the previously-
-         draft framework PRs that depended on Tensors changes:
+    <!-- AiDotNet.Tensors 0.86.1 — bumped from 0.84.1 to land the inference-perf
+         block this PR (#1457) advertises. New since 0.84.1:
+           * Tensors #488 — fused QKV + transpose-fused SDPA, MHA 5.31ms -> 2.26ms
+             on the AIsEval shape (beats torch ~2.74ms). Closes the MHA gap from
+             #436 / Tensors #476 — picked up automatically by the existing
+             MultiHeadAttentionLayer wiring.
+           * Tensors #454 — BroadcastElementwise SIMD perf (unblocks AiDotNet
+             #1307 / PR #1448's paper-scale training budget).
+           * Tensors #474 — small-batch native-BLAS thread cap inside MlpForward;
+             the AIsEval MLP (Dense 784->512->128->10 bs=128) now measures
+             p95 1.75ms vs 3.24ms unbounded (~45% improvement, no API change).
+           * Tensors #462 — hybrid hardware-aware GEMM strategy (shipped seed
+             table + learned-cache; persists across runs).
+           * TensorArena.CreatePersistent / Activate — zero-GC training hot-loop
+             arena that survives across Train() steps (consumed by #1448).
+         Plus the original 0.84.1 block:
            * #427 SgemmWithInt8RowScaledCachedB — per-row-scaled INT8 weight-only
              GEMM (AiDotNet#1349 / PR #1417).
            * #437 CpuEngine.LstmSequenceForward — fused recurrent forward
              (AIsEval LSTM / PR #1457).
-           * #454 BroadcastElementwise SIMD perf (AiDotNet#1307 / PR #1448).
-         Plus the 0.81.4–0.82.5 fixes already in flight (GraphMode gradient
-         recording #367, FP64 SD UNet cliffs #410, fused-compiled VGG #416,
-         clCreateCommandQueue serialisation #418, TensorAllocator long-arith #424). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.84.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.9" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.82.5" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.9" />
+         All AiDotNet.Native packages are coreleased; bumped to 0.86.1 together so
+         no ABI skew with the Tensors load surface. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.86.1" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
