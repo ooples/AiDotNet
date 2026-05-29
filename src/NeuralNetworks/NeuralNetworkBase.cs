@@ -5325,7 +5325,12 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // training does nothing" is never invisible again. Skipped when mixed
         // precision is active (that path is an intentional, documented fallback,
         // not a misconfiguration). Suppressible via AIDOTNET_QUIET.
-        if (!_loggedFusedFallback && _mixedPrecisionContext is null)
+        // Don't warn when compilation is intentionally disabled — that's an explicit
+        // opt-out (TensorCodecOptions.EnableCompilation = false), not an unexpected
+        // fallback, so the "training is slower" warning would be noisy and misleading.
+        if (!_loggedFusedFallback
+            && _mixedPrecisionContext is null
+            && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
         {
             _loggedFusedFallback = true;
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
@@ -6665,11 +6670,13 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
-        // Standard Adam (UseAMSGrad stays at its false default) so the fused
-        // compiled-training kernel can map this optimizer and engage.
+        // Standard Adam with AMSGrad pinned OFF locally (not relying on the
+        // AdamOptimizerOptions default) so the fused compiled-training kernel can map
+        // this optimizer and engage — if that external default ever flips, the fused
+        // fast path must not silently regress.
         return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>());
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = false });
     }
 
     /// <summary>

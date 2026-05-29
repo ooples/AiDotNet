@@ -32,7 +32,7 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
 {
     /// <inheritdoc/>
     // SiLU is f(x) = x·sigmoid(x) — the same function as the fused Swish kernel.
-    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
     {
         type = AiDotNet.Tensors.Engines.FusedActivationType.Swish;
         return true;
