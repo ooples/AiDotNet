@@ -5,44 +5,40 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.86.1 — the inference-perf block this PR (#1457)
-         advertises plus the SD-UNet attention block landed via #1456's earlier
-         merge. Both sides settled on the same 0.86.1 pin; comment unified to
-         the comprehensive cross-ref list so master has one source of truth.
-           * Tensors #413 [CLOSED] — three FP64 SD UNet cliffs (AiDotNet#1305).
-           * Tensors #415 [CLOSED] — FP64 Conv2DBackward at ImageNet shapes
-             (ResNet50/VGG16 train-step path; co-blocker for #1305 / #1307).
+    <!-- AiDotNet.Tensors 0.86.1 — bumped from 0.84.1 to unblock this PR (#1417).
+         The dep that gated this PR's INT8 wiring shipped: Tensors PR #427
+         (SgemmWithInt8RowScaledCachedB — per-row-scaled INT8 weight-only GEMM)
+         was merged 2026-05-22 and is published from 0.85.x onward; 0.86.1 is the
+         latest stable, so Int8WeightOnlyMatMul.cs's new single-call body now
+         compiles against the real Tensors API surface instead of a localverify.
+
+         Full v0.84.1 -> v0.86.1 delta picks up:
+           * Tensors #427 — SgemmWithInt8RowScaledCachedB (THIS PR's gating dep).
+           * Tensors #437 — CpuEngine.LstmSequenceForward (AIsEval LSTM / PR #1457).
+           * Tensors #454 — BroadcastElementwise SIMD perf (#1307 / PR #1448).
            * Tensors #472 — Float32Precision opt-in for FusedAttention<double>
              (FP64 attention internally runs on float32, dodges the FP64-AVX
              half-lane penalty) + fix float SDPA nested-parallelism starvation.
              Wired through DiffusionAttention in #1456.
-           * Tensors #485 — output-only SDPA for fused MHA forward
-             (6.9x less alloc, 2.7x mean latency).
+           * Tensors #485 — output-only SDPA (6.9x less alloc, 2.7x mean latency).
+           * Tensors #487 — GetSliceAlongDimension tape-backward.
            * Tensors #488 — fused QKV + transpose-fused SDPA. MHA on the AIsEval
              [128, 32, 64] h=4 shape: 5.31 -> 2.26 ms (beats torch ~2.74 ms).
              Closes the MHA gap from #436 / Tensors #476 — picked up automatically
              by the existing MultiHeadAttentionLayer wiring.
-           * Tensors #487 — GetSliceAlongDimension tape-backward (tape-safe
-             per-timestep slicing for recurrent / sequence / attention layers).
-           * Tensors #454 — BroadcastElementwise SIMD perf (unblocks AiDotNet
-             #1307 / PR #1448's paper-scale training budget).
+           * Tensors #413 [CLOSED] — three FP64 SD UNet cliffs (AiDotNet#1305).
+           * Tensors #415 [CLOSED] — FP64 Conv2DBackward at ImageNet shapes
+             (ResNet50/VGG16 train-step path; co-blocker for #1305 / #1307).
            * Tensors #474 — small-batch native-BLAS thread cap inside MlpForward;
-             the AIsEval MLP (Dense 784->512->128->10 bs=128) now measures
-             p95 1.75 ms vs 3.24 ms unbounded (~45% improvement, no API change).
-           * Tensors #462 — hybrid hardware-aware GEMM strategy (seed table +
-             learned-cache; persists across runs).
-           * TensorArena.CreatePersistent / Activate — zero-GC training hot-loop
-             arena that survives across Train() steps (consumed by #1448).
-           * Tensors #427 — SgemmWithInt8RowScaledCachedB (per-row-scaled INT8
-             weight-only GEMM, AiDotNet#1349 / PR #1417).
-           * Tensors #437 — CpuEngine.LstmSequenceForward (fused recurrent
-             forward, AIsEval LSTM / PR #1457).
-         Plus the original 0.81.4–0.82.5 fixes already in flight (GraphMode
-         gradient recording #367, FP64 SD UNet cliffs #410, fused-compiled VGG
-         #416, clCreateCommandQueue serialisation #418, TensorAllocator
-         long-arith #424 — unblocks 8+ models on SonarCloud).
-         All AiDotNet.Native packages are coreleased; bumped to 0.86.1 together
-         so no ABI skew with the Tensors load surface. -->
+             the AIsEval MLP (Dense 784->512->128->10 bs=128) measures p95
+             1.75 ms vs 3.24 ms unbounded (~45% improvement, no API change).
+           * Tensors #462 — hybrid hardware-aware GEMM strategy (seed + learned).
+           * TensorArena.CreatePersistent / Activate — zero-GC training arena
+             that survives across Train() steps (consumed by #1448).
+         Plus the 0.81.4–0.82.5 baseline (GraphMode gradient recording #367,
+         FP64 SD UNet cliffs #410, fused-compiled VGG #416, clCreateCommandQueue
+         serialisation #418, TensorAllocator long-arith #424).
+         All AiDotNet.Native packages coreleased to 0.86.1 in lockstep. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.86.1" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.86.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.86.1" />
