@@ -1,0 +1,4 @@
+# PyTorch side of the parity benchmark. CPU wheels are sufficient for the
+# CPU-vs-CPU comparison; install a CUDA build if you want --device cuda.
+torch>=2.2
+psutil>=5.9
