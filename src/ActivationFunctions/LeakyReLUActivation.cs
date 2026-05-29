@@ -29,8 +29,20 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = true, Cost = ComputeCost.Low)]
-public class LeakyReLUActivation<T> : ActivationFunctionBase<T>
+public class LeakyReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    // The fused LeakyReLU kernel hardcodes slope=0.01; only fuse when this
+    // instance's alpha matches, else fall back so the result stays exact.
+    // Tolerance is float-grade (1e-6), not 1e-12: when T is float the default
+    // 0.01 round-trips through ToDouble as 0.009999999776, which differs from
+    // the literal 0.01 by ~2.2e-10 — a 1e-12 guard would reject the *default*.
+    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.LeakyReLU;
+        return Math.Abs(NumOps.ToDouble(_alpha) - 0.01) < 1e-6;
+    }
+
     /// <summary>
     /// The slope coefficient for negative input values.
     /// </summary>

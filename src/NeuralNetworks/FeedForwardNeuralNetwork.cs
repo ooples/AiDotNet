@@ -233,10 +233,11 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
             Tensors.Engines.FusedActivationType act;
             if (dense.ScalarActivation is null)
                 act = Tensors.Engines.FusedActivationType.None;
-            else if (dense.ScalarActivation is ActivationFunctions.Fused.IFusedActivation fused)
-                act = fused.FusedActivationType;
+            else if (dense.ScalarActivation is ActivationFunctions.Fused.IFusedActivation fused
+                     && fused.TryGetFusedActivation(out var ft))
+                act = ft;
             else
-                return false; // activation has no exact fused equivalent
+                return false; // activation has no exact fused equivalent (or custom param)
 
             if (i == layers.Count - 1)
             {
@@ -254,7 +255,14 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
                 return false;
             }
 
-            weights.Add(dense.GetWeights());
+            // DenseLayer initializes its weights lazily on first Forward. On a
+            // fresh network's very first inference the weights are still the [0,0]
+            // sentinel, which MlpForward would reject. Bail to the generic Forward
+            // (which runs the lazy shape resolution); subsequent inferences, with
+            // weights materialized, take the fused path.
+            var w = dense.GetWeights();
+            if (w.Rank != 2 || w.Shape[0] == 0 || w.Shape[1] == 0) return false;
+            weights.Add(w);
             biases.Add(dense.GetBiases());
         }
 
