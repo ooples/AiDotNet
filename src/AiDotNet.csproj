@@ -57,6 +57,9 @@
     <InternalsVisibleTo Include="AiDotNetBenchmarkTests" />
     <InternalsVisibleTo Include="HarmonicEngine" />
     <InternalsVisibleTo Include="HarmonicEngine.Tests" />
+    <!-- ConsistencyModelPerfDiag reads UNetNoisePredictor.ForwardProfilingSink
+         (internal diagnostics plumbing); without this it can't see the sink. -->
+    <InternalsVisibleTo Include="ConsistencyModelPerfDiag" />
   </ItemGroup>
 
   <!-- Exclude other projects from this build -->

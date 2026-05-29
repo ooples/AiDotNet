@@ -115,6 +115,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "QVQ72B", "SkyworkR1V", "SkyworkR1V2",
         "GeoChat", "RSGPT", "SkyEyeGPT",
 
+        // Janus / Janus-Pro (DeepSeek): paper-faithful unified understanding +
+        // generation VLMs at ~1.5B (Janus, decoderDim=2048) / ~7B (Janus-Pro,
+        // decoderDim=4096, 24 vision + 32 decoder layers). At paper scale a
+        // single backward+optimizer step is >70s on CPU (dominated by the
+        // parameter COUNT, not image size), so the model-family training
+        // invariants can't fit the 120s CI budget without a GPU. Manual <float>
+        // scaffolds in ModelFamilyTests/NeuralNetworks (JanusTests /
+        // JanusProTests) run a reduced-scale config — same architecture shape,
+        // ~8x smaller dims — that exercises every code path in seconds on CPU.
+        "Janus", "JanusPro",
+
         // GAN models with non-default latent / image shapes that the generic
         // GAN-family scaffold ([16] rank-1 input) can't supply correctly.
         // Manual test classes in ModelFamilyTests/NeuralNetworks supply the

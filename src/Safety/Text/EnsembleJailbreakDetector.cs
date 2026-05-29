@@ -176,11 +176,30 @@ public class EnsembleJailbreakDetector<T> : TextSafetyModuleBase<T>
 
         var results = new List<SafetyFinding>();
 
-        if (weightedScore >= _threshold)
+        // A single High/Critical-severity hit from any sub-detector is a definitive
+        // jailbreak signal and flags on its own — independent of the weighted-sum
+        // rule below. The weighted sum aggregates WEAK/corroborating signals, but a
+        // strong deterministic match (e.g. PatternJailbreakDetector's High-severity
+        // "ignore all previous instructions" regex) must not be diluted below the
+        // ensemble threshold by the absence of a borderline semantic match. Without
+        // this, detection of an explicit jailbreak hinged on the embedding-cosine
+        // semantic detector clearing its own knife-edge threshold — and that cosine
+        // was floating-point-sensitive to the globally-active engine / determinism
+        // mode, so jailbreak detection silently flipped off after an unrelated
+        // AiModelBuilder.BuildAsync swapped the global engine. Severity is set by
+        // deterministic regex matches, so this rule is reproducible regardless of
+        // engine state. Safety-conservative: it can only flag more, never fewer.
+        bool strongSingleSignal = maxSeverity >= SafetySeverity.High;
+
+        if (weightedScore >= _threshold || strongSingleSignal)
         {
             // Boost score if multiple detectors agree
             double agreementBoost = detectorsTriggered > 1 ? 1.1 : 1.0;
-            double finalScore = Math.Min(1.0, weightedScore * agreementBoost);
+            // Floor the reported confidence at the ensemble threshold when a strong
+            // single signal triggered the flag, so a High/Critical match isn't
+            // reported with a misleadingly low sub-threshold confidence.
+            double baseScore = strongSingleSignal ? Math.Max(weightedScore, _threshold) : weightedScore;
+            double finalScore = Math.Min(1.0, baseScore * agreementBoost);
 
             results.Add(new SafetyFinding
             {
