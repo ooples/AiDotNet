@@ -38,11 +38,18 @@
          Plus the 0.81.4–0.82.5 baseline (GraphMode gradient recording #367,
          FP64 SD UNet cliffs #410, fused-compiled VGG #416, clCreateCommandQueue
          serialisation #418, TensorAllocator long-arith #424).
-         All AiDotNet.Native packages coreleased to 0.86.1 in lockstep. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.86.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.86.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.86.1" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.86.1" />
+         All AiDotNet.Native packages coreleased in lockstep.
+         Bumped 0.86.1 -> 0.86.6 for the DirectGpu element-wise output fix
+         (Tensors #497): the array/span Engine.Add/Subtract/Multiply/Divide
+         deferred their output download, but the IEngine vector/matrix ops wrap
+         the result in a copying Vector<T>/Matrix<T> ctor, orphaning the
+         materializer so fresh-Vector ops returned all-zeros on the GPU backend
+         (corrupted GAMLSS and any model trained via AiModelBuilder's
+         auto-detected GPU path). 0.86.6 materializes those immediately. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.86.6" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.86.6" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.86.6" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.86.6" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
