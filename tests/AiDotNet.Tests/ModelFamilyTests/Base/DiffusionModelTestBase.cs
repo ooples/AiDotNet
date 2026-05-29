@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Runtime;
+using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -38,8 +39,73 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     /// </summary>
     private static readonly object _lohCompactionGate = new();
 
-    /// <summary>Before-test hook. No-op — the base has no ambient state to initialize.</summary>
-    public Task InitializeAsync() => Task.CompletedTask;
+    /// <summary>
+    /// Caps concurrent foundation-scale diffusion tests to avoid BLAS thread-
+    /// pool oversubscription when many SD-UNet-scale Predicts run in parallel
+    /// on the same machine. xUnit's parallelizeTestCollections=true puts one
+    /// test class per core; if 16 of them are simultaneously inside an FP64
+    /// SD-UNet forward (each wanting all 16 cores via OpenBLAS), every test
+    /// gets ~1 core and the per-step latency multiplies by 4-8×, blowing the
+    /// 120 s <c>[Fact(Timeout)]</c> envelope even though each test fits the
+    /// budget in isolation. See <c>tools/ConsistencyModelPerfDiag</c> for the
+    /// measurement that motivated this (issue #1305 ConsistencyModel:
+    /// 76 s isolated vs 120 s under-contention timeout).
+    /// </summary>
+    private const int HeavyConcurrencyCap = 2;
+
+    /// <summary>
+    /// Element-count threshold above which a test counts as "heavy" and gates
+    /// through <see cref="_heavyTestGate"/>. 16,384 = the latent-shape product
+    /// for the canonical SD pipeline at [1, 4, 64, 64]; everything at or above
+    /// this scale uses an SD-UNet-class noise predictor whose FP64 forward
+    /// saturates the BLAS thread pool. Smaller-scale diffusion tests (tabular
+    /// [1, 4] or single-channel [1, 1, 16, 16]) bypass the gate so they can
+    /// stay fully parallel.
+    /// </summary>
+    private const int HeavyInputElementThreshold = 16_384;
+
+    private static readonly SemaphoreSlim _heavyTestGate =
+        new(HeavyConcurrencyCap, HeavyConcurrencyCap);
+
+    /// <summary>
+    /// Per-test-instance flag tracking whether this instance acquired
+    /// <see cref="_heavyTestGate"/>. Only released in <see cref="DisposeAsync"/>
+    /// if acquired here, so a failure during InitializeAsync (gate not yet
+    /// acquired) can't trigger a release-without-acquire.
+    /// </summary>
+    private bool _heavyGateAcquired;
+
+    /// <summary>
+    /// Before-test hook. Acquires the heavy-diffusion gate if this test's
+    /// <see cref="InputShape"/> implies foundation-scale (≥ 16,384 elements).
+    /// </summary>
+    public async Task InitializeAsync()
+    {
+        if (IsHeavyScale(InputShape))
+        {
+            await _heavyTestGate.WaitAsync().ConfigureAwait(false);
+            _heavyGateAcquired = true;
+        }
+    }
+
+    /// <summary>
+    /// True when the supplied input shape implies foundation-scale work
+    /// (SD-UNet or larger). Computed from product-of-dims so a future
+    /// [1, 16, 32, 32] (Flux/SD3) or [1, 8, 64, 64] (CogVideo) shape
+    /// auto-gates without any per-class plumbing.
+    /// </summary>
+    private static bool IsHeavyScale(int[] shape)
+    {
+        if (shape is null || shape.Length == 0) return false;
+        long elements = 1;
+        foreach (int d in shape)
+        {
+            if (d <= 0) return false;
+            elements *= d;
+            if (elements >= HeavyInputElementThreshold) return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// After-test hook. Forces a blocking compacting Gen-2 GC (with explicit
@@ -62,18 +128,29 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     /// </remarks>
     public Task DisposeAsync()
     {
-        lock (_lohCompactionGate)
+        try
         {
-            // First pass: compacting Gen-2 + LOH reclaims everything unreachable
-            // including the just-Disposed model's weight tensors.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-            GC.WaitForPendingFinalizers();
+            lock (_lohCompactionGate)
+            {
+                // First pass: compacting Gen-2 + LOH reclaims everything unreachable
+                // including the just-Disposed model's weight tensors.
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
 
-            // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
-            // and any LOH allocations from finalizers.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+                // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
+                // and any LOH allocations from finalizers.
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            }
+        }
+        finally
+        {
+            if (_heavyGateAcquired)
+            {
+                _heavyTestGate.Release();
+                _heavyGateAcquired = false;
+            }
         }
         return Task.CompletedTask;
     }

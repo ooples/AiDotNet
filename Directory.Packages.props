@@ -16,14 +16,25 @@
            * Tensors #427 — SgemmWithInt8RowScaledCachedB (THIS PR's gating dep).
            * Tensors #437 — CpuEngine.LstmSequenceForward (AIsEval LSTM / PR #1457).
            * Tensors #454 — BroadcastElementwise SIMD perf (#1307 / PR #1448).
-           * Tensors #472 — Float32Precision opt-in for FusedAttention<double>.
+           * Tensors #472 — Float32Precision opt-in for FusedAttention<double>
+             (FP64 attention internally runs on float32, dodges the FP64-AVX
+             half-lane penalty) + fix float SDPA nested-parallelism starvation.
+             Wired through DiffusionAttention in #1456.
            * Tensors #485 — output-only SDPA (6.9x less alloc, 2.7x mean latency).
            * Tensors #487 — GetSliceAlongDimension tape-backward.
-           * Tensors #488 — fused QKV + transpose-fused SDPA
-             (MHA 5.31 -> 2.26 ms; beats torch ~2.74 ms).
-           * Tensors #474 — small-batch native-BLAS thread cap inside MlpForward.
+           * Tensors #488 — fused QKV + transpose-fused SDPA. MHA on the AIsEval
+             [128, 32, 64] h=4 shape: 5.31 -> 2.26 ms (beats torch ~2.74 ms).
+             Closes the MHA gap from #436 / Tensors #476 — picked up automatically
+             by the existing MultiHeadAttentionLayer wiring.
+           * Tensors #413 [CLOSED] — three FP64 SD UNet cliffs (AiDotNet#1305).
+           * Tensors #415 [CLOSED] — FP64 Conv2DBackward at ImageNet shapes
+             (ResNet50/VGG16 train-step path; co-blocker for #1305 / #1307).
+           * Tensors #474 — small-batch native-BLAS thread cap inside MlpForward;
+             the AIsEval MLP (Dense 784->512->128->10 bs=128) measures p95
+             1.75 ms vs 3.24 ms unbounded (~45% improvement, no API change).
            * Tensors #462 — hybrid hardware-aware GEMM strategy (seed + learned).
-           * TensorArena.CreatePersistent / Activate — zero-GC training arena.
+           * TensorArena.CreatePersistent / Activate — zero-GC training arena
+             that survives across Train() steps (consumed by #1448).
          Plus the 0.81.4–0.82.5 baseline (GraphMode gradient recording #367,
          FP64 SD UNet cliffs #410, fused-compiled VGG #416, clCreateCommandQueue
          serialisation #418, TensorAllocator long-arith #424).
