@@ -5,12 +5,15 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.86.1 — bumped from 0.84.1 to land the inference-perf
-         block this PR (#1457) advertises. New since 0.84.1:
+    <!-- AiDotNet.Tensors 0.86.1 — bumped from 0.84.1 (supersedes the in-flight
+         0.85.3 bump from master) to land the inference-perf block this PR (#1457)
+         advertises. New since 0.84.1:
            * Tensors #488 — fused QKV + transpose-fused SDPA, MHA 5.31ms -> 2.26ms
              on the AIsEval shape (beats torch ~2.74ms). Closes the MHA gap from
              #436 / Tensors #476 — picked up automatically by the existing
              MultiHeadAttentionLayer wiring.
+           * Tensors #487 — GetSliceAlongDimension tape-backward (tape-safe
+             per-timestep slicing for recurrent / sequence / attention layers).
            * Tensors #454 — BroadcastElementwise SIMD perf (unblocks AiDotNet
              #1307 / PR #1448's paper-scale training budget).
            * Tensors #474 — small-batch native-BLAS thread cap inside MlpForward;
@@ -25,6 +28,9 @@
              GEMM (AiDotNet#1349 / PR #1417).
            * #437 CpuEngine.LstmSequenceForward — fused recurrent forward
              (AIsEval LSTM / PR #1457).
+         Plus the 0.81.4–0.82.5 fixes already in flight (GraphMode gradient
+         recording #367, FP64 SD UNet cliffs #410, fused-compiled VGG #416,
+         clCreateCommandQueue serialisation #418, TensorAllocator long-arith #424).
          All AiDotNet.Native packages are coreleased; bumped to 0.86.1 together so
          no ABI skew with the Tensors load surface. -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.86.1" />
