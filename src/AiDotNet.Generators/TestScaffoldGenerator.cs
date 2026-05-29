@@ -126,6 +126,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ~8x smaller dims — that exercises every code path in seconds on CPU.
         "Janus", "JanusPro",
 
+        // Donut (Kim et al. 2022, VisionLanguage.Document): paper-scale Swin+BART defaults
+        // (VisionDim=1024, DecoderDim=1024, 12+4 layers, NumHeads=16, ImageSize=2560) make
+        // a single AdamW train step ~9s on CPU, so the training-invariant counts overflow
+        // the 120s budget; the memorization invariant also needs dropout disabled for a
+        // clean monotonic decrease. The manual DonutTests scaffold in
+        // ModelFamilyTests/NeuralNetworks runs a reduced-scale config (same architecture
+        // shape, ~4x smaller dims, DropoutRate=0) that exercises every code path in seconds.
+        "Donut",
+
         // GAN models with non-default latent / image shapes that the generic
         // GAN-family scaffold ([16] rank-1 input) can't supply correctly.
         // Manual test classes in ModelFamilyTests/NeuralNetworks supply the
