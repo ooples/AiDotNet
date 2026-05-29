@@ -5,16 +5,17 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.85.3 — adds the GetSliceAlongDimension tape-backward
-         fix (Tensors PR #487): the raw slice view now records SliceAxisBackward
-         when a GradientTape is active, so per-timestep slicing in recurrent /
-         sequence / attention layers no longer leaks wrong input gradients via
-         storage aliasing. Supersedes the 0.84.1 pin, which carried:
+    <!-- AiDotNet.Tensors 0.85.3 — unblocks this PR's paper-scale perf tests via
+         #454 BroadcastElementwise SIMD perf (AiDotNet#1307 / PR #1448), and adds
+         #487 GetSliceAlongDimension tape-backward (tape-safe per-timestep slicing
+         for recurrent / sequence / attention layers — the raw slice view now
+         records SliceAxisBackward when a GradientTape is active, so per-timestep
+         slicing no longer leaks wrong input gradients via storage aliasing).
+         Also carries the blocker fixes for the other previously-draft framework PRs:
            * #427 SgemmWithInt8RowScaledCachedB — per-row-scaled INT8 weight-only
              GEMM (AiDotNet#1349 / PR #1417).
            * #437 CpuEngine.LstmSequenceForward — fused recurrent forward
              (AIsEval LSTM / PR #1457).
-           * #454 BroadcastElementwise SIMD perf (AiDotNet#1307 / PR #1448).
          Plus the 0.81.4–0.82.5 fixes already in flight (GraphMode gradient
          recording #367, FP64 SD UNet cliffs #410, fused-compiled VGG #416,
          clCreateCommandQueue serialisation #418, TensorAllocator long-arith #424). -->
