@@ -24,7 +24,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 ///   - numHeads=4 (paper: 12) — preserves multi-head structure, head_dim=16
 ///   - 2 encoder layers each (paper: 12) — minimal depth to test gradient flow
 ///   - 4 frames (paper: 8) — temporal aggregation test
-///   - LR=1e-4 (paper §4: AdamW with 1e-5 to 3e-4 and warm-up)
+///   - Adam (β1=0.9, β2=0.98), LR=5e-5, grad-clip 2.0 (paper "Training Details")
 /// </summary>
 public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
 {
@@ -50,13 +50,18 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
             inputDepth: 3,
             outputSize: 64);
 
-        // Paper §4: AdamW with LR 1e-5 to 3e-4 and cosine warm-up schedule. Use
-        // the peak of that range (3e-4) for a static-LR test — the warm-up's
-        // purpose is to ramp UP to the peak, so steady-state training without
-        // warm-up should use the peak, not the midpoint.
+        // Paper "Training Details": Adam (β1 = 0.9, β2 = 0.98) with an initial
+        // learning rate of 5e-5, 1,000 warm-up steps followed by polynomial
+        // decay, and gradients clipped to a norm of 2.0. This scaled-down test
+        // runs only a handful of memorization steps, so the warm-up +
+        // polynomial-decay schedule collapses to a static learning rate; the
+        // paper-faithful Adam betas and gradient-clip norm are kept as-is.
         var optimizerOptions = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
         {
-            InitialLearningRate = 3e-4
+            InitialLearningRate = 5e-5,  // Paper: initial LR 5e-5
+            Beta1 = 0.9,                 // Paper: Adam β1 = 0.9
+            Beta2 = 0.98,                // Paper: Adam β2 = 0.98
+            MaxGradientNorm = 2.0        // Paper: gradients clipped at 2.0
         };
 
         // Paper §3 defines training in unit-norm embedding space via cosine
