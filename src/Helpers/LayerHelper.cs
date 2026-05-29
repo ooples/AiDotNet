@@ -24326,6 +24326,17 @@ public static class LayerHelper<T>
         int visionFfnDim = visionDim * 4;
         int decoderFfnDim = decoderDim * 4;
 
+        // === Patch Embedding ===
+        // Donut's encoder is a Swin Transformer (Kim et al. 2022, "OCR-free Document
+        // Understanding Transformer"), and a Swin/ViT encoder tokenizes the raw
+        // [B, 3, H, W] document image into patch embeddings BEFORE any attention block —
+        // MHA's input dim is visionDim, not the image's spatial dim. Without this layer a
+        // raw image flows straight into the first MHA whose Q/K/V weights expect
+        // visionDim, throwing "Input embedding dimension (N) does not match weight
+        // dimension (visionDim)". Standard ViT-Base patch size is 16.
+        const int patchSize = 16;
+        yield return new PatchEmbeddingLayer<T>(patchSize, visionDim);
+
         // === Vision Encoder (Swin/ViT for document images) ===
         yield return new LayerNormalizationLayer<T>();
 

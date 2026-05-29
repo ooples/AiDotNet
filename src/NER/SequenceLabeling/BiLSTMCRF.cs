@@ -892,34 +892,38 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         if (rawEmbeddings.Rank < 2)
             return rawEmbeddings;
 
-        // Handle rank-3 [batch, seqLen, embDim] by processing each batch element
+        // A BiLSTM-CRF processes the actual sequence length (Lample et al. 2016); the
+        // BiLSTM, per-timestep emission projection, and CRF are all length-agnostic.
+        // MaxSequenceLength is an UPPER BOUND, so only TRUNCATE inputs longer than it and
+        // otherwise pass the sequence through unchanged. Padding every input UP to
+        // MaxSequenceLength made a short sequence emit a MaxSequenceLength-long output
+        // (shape mismatch vs the gold labels) and trained the CRF NLL over a
+        // mostly-padding sequence (no mask), which slowed training and degraded the loss.
         if (rawEmbeddings.Rank == 3)
         {
             int batch = rawEmbeddings.Shape[0];
             int seqLen3 = rawEmbeddings.Shape[1];
-            if (seqLen3 == maxLen) return rawEmbeddings;
+            if (seqLen3 <= maxLen) return rawEmbeddings;
 
-            var padded3 = new Tensor<T>([batch, maxLen, embDim]);
-            int copyLen3 = Math.Min(seqLen3, maxLen);
+            var truncated3 = new Tensor<T>([batch, maxLen, embDim]);
             for (int b = 0; b < batch; b++)
-                for (int s = 0; s < copyLen3; s++)
+                for (int s = 0; s < maxLen; s++)
                     for (int d = 0; d < embDim; d++)
-                        padded3[b, s, d] = rawEmbeddings[b, s, d];
-            return padded3;
+                        truncated3[b, s, d] = rawEmbeddings[b, s, d];
+            return truncated3;
         }
 
         // Rank-2 [seqLen, embDim]
         int seqLen = rawEmbeddings.Shape[0];
-        if (seqLen == maxLen)
+        if (seqLen <= maxLen)
             return rawEmbeddings;
 
-        var padded = new Tensor<T>([maxLen, embDim]);
-        int copyLen = Math.Min(seqLen, maxLen);
-        for (int s = 0; s < copyLen; s++)
+        var truncated = new Tensor<T>([maxLen, embDim]);
+        for (int s = 0; s < maxLen; s++)
             for (int d = 0; d < embDim; d++)
-                padded[s, d] = rawEmbeddings[s, d];
+                truncated[s, d] = rawEmbeddings[s, d];
 
-        return padded;
+        return truncated;
     }
 
     /// <summary>
