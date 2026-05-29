@@ -551,6 +551,12 @@ public class TFC<T> : TimeSeriesFoundationModelBase<T>
         _numFreqLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _contrastiveTemperature = reader.ReadDouble();
+
+        // The base deserializer has already recreated every layer in Layers with the
+        // copied weights. Re-point the cached encoder/projection/head references at
+        // those layers; otherwise they keep pointing at the stale random-initialized
+        // layers from CreateNewInstance and a clone diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion

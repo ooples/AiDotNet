@@ -700,6 +700,12 @@ public class LagLlama<T> : ForecastingModelBase<T>
         _dropout = reader.ReadDouble();
         _distributionOutput = reader.ReadString();
         _useRoPE = reader.ReadBoolean();
+
+        // The base deserializer has already recreated every layer in Layers with the
+        // copied weights. Re-point the cached projection/transformer/head references at
+        // those layers; otherwise they keep pointing at the stale random-initialized
+        // layers from CreateNewInstance and a clone diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion

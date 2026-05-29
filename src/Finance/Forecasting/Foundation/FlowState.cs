@@ -330,6 +330,14 @@ public class FlowState<T> : TimeSeriesFoundationModelBase<T>
         _ssmRank = reader.ReadInt32();
         _useDiscretization = reader.ReadBoolean();
         _modelSize = (FoundationModelSize)reader.ReadInt32();
+
+        // The base deserializer has already recreated every layer in Layers with
+        // the copied weights before reaching this point. Re-point the cached
+        // _inputProjection / _ssmLayers / _outputProjection references at those
+        // freshly deserialized layer objects; otherwise they keep pointing at the
+        // stale random-initialized layers created by CreateNewInstance, and the
+        // clone's forward diverges from the original at the very first layer.
+        ExtractLayerReferences();
     }
 
     #endregion

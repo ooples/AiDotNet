@@ -532,6 +532,12 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         {
             InitializeCodebooks();
         }
+
+        // The base deserializer has already recreated every layer in Layers with the
+        // copied weights. Re-point the cached encoder/decoder/projection references at
+        // those layers; otherwise they keep pointing at the stale random-initialized
+        // layers from CreateNewInstance and a clone diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion
