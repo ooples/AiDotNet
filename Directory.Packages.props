@@ -5,20 +5,33 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.84.1 — carries the blocker fixes for the previously-
-         draft framework PRs that depended on Tensors changes:
-           * #427 SgemmWithInt8RowScaledCachedB — per-row-scaled INT8 weight-only
-             GEMM (AiDotNet#1349 / PR #1417).
-           * #437 CpuEngine.LstmSequenceForward — fused recurrent forward
-             (AIsEval LSTM / PR #1457).
-           * #454 BroadcastElementwise SIMD perf (AiDotNet#1307 / PR #1448).
-         Plus the 0.81.4–0.82.5 fixes already in flight (GraphMode gradient
-         recording #367, FP64 SD UNet cliffs #410, fused-compiled VGG #416,
-         clCreateCommandQueue serialisation #418, TensorAllocator long-arith #424). -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.84.1" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.81.9" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.82.5" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.81.9" />
+    <!-- AiDotNet.Tensors 0.86.1 — bumped from 0.84.1 to unblock this PR (#1417).
+         The dep that gated this PR's INT8 wiring shipped: Tensors PR #427
+         (SgemmWithInt8RowScaledCachedB — per-row-scaled INT8 weight-only GEMM)
+         was merged 2026-05-22 and is published from 0.85.x onward; 0.86.1 is the
+         latest stable, so Int8WeightOnlyMatMul.cs's new single-call body now
+         compiles against the real Tensors API surface instead of a localverify.
+
+         Full v0.84.1 -> v0.86.1 delta picks up:
+           * Tensors #427 — SgemmWithInt8RowScaledCachedB (THIS PR's gating dep).
+           * Tensors #437 — CpuEngine.LstmSequenceForward (AIsEval LSTM / PR #1457).
+           * Tensors #454 — BroadcastElementwise SIMD perf (#1307 / PR #1448).
+           * Tensors #472 — Float32Precision opt-in for FusedAttention<double>.
+           * Tensors #485 — output-only SDPA (6.9x less alloc, 2.7x mean latency).
+           * Tensors #487 — GetSliceAlongDimension tape-backward.
+           * Tensors #488 — fused QKV + transpose-fused SDPA
+             (MHA 5.31 -> 2.26 ms; beats torch ~2.74 ms).
+           * Tensors #474 — small-batch native-BLAS thread cap inside MlpForward.
+           * Tensors #462 — hybrid hardware-aware GEMM strategy (seed + learned).
+           * TensorArena.CreatePersistent / Activate — zero-GC training arena.
+         Plus the 0.81.4–0.82.5 baseline (GraphMode gradient recording #367,
+         FP64 SD UNet cliffs #410, fused-compiled VGG #416, clCreateCommandQueue
+         serialisation #418, TensorAllocator long-arith #424).
+         All AiDotNet.Native packages coreleased to 0.86.1 in lockstep. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.86.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.86.1" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
