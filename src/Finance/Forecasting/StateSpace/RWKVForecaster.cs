@@ -309,6 +309,11 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
         _numLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _numFeatures = reader.ReadInt32();
+
+        // Re-point cached layer references at the freshly deserialized Layers;
+        // otherwise a clone's forward uses the stale random-initialized layers
+        // created by CreateNewInstance and diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion
