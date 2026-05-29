@@ -668,6 +668,27 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>
         _mlpFc2.SetParameters(new Vector<T>(parameters.AsSpan().Slice(offset, fc2Count).ToArray()));
     }
 
+    /// <summary>
+    /// Emits the constructor-level settings that cannot be inferred from the layer's
+    /// input/output shapes alone, so the deserializer can rebuild this block with the
+    /// exact same configuration (and therefore the exact same per-sublayer parameter
+    /// counts). Without these keys the reflection-driven deserialization fallback
+    /// reconstructs the block with default head/window/MLP settings, producing a
+    /// different ParameterCount than was serialized and throwing in SetParameters.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        // dim is recoverable from the input shape, but persist it too so the
+        // metadata-match scorer locks onto the intended constructor unambiguously.
+        metadata["Dim"] = _dim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["WindowSize"] = _windowSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["ShiftSize"] = _shiftSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["MlpRatio"] = _mlpRatio.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {

@@ -195,6 +195,21 @@ public class SwinPatchEmbeddingLayer<T> : LayerBase<T>
         return normalized;
     }
 
+    /// <summary>
+    /// Emits the constructor settings (patch size + embedding dim) that cannot be
+    /// inferred from shapes alone. Without these the reflection-driven deserialization
+    /// fallback rebuilds the projection conv with a default embedding dim, producing a
+    /// different ParameterCount than was serialized and throwing when the buffered
+    /// parameters are replayed on the first forward.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var metadata = base.GetMetadata();
+        metadata["PatchSize"] = _patchSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["EmbedDim"] = _embedDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
+    }
+
     /// <inheritdoc/>
     public override Vector<T> GetParameters()
     {

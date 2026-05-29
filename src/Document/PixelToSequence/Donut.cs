@@ -468,6 +468,69 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         }
     }
 
+    /// <summary>
+    /// Re-derives the per-group mirror lists from the layers already present in
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> (e.g. after deserialization, where the
+    /// base recreated every layer with its saved weights). Uses the same type-based
+    /// classification as <see cref="PopulateLayerGroups(IEnumerable{ILayer{T}})"/> but
+    /// does NOT add to <c>Layers</c> — it only re-points the mirror views at the
+    /// existing layer instances, preserving their loaded weights.
+    /// </summary>
+    private void RebuildLayerGroupsFromLayers()
+    {
+        _patchEmbeddingLayers.Clear();
+        _encoderLayers.Clear();
+        _decoderEmbeddingLayers.Clear();
+        _decoderLayers.Clear();
+        _outputLayers.Clear();
+
+        bool inDecoder = false;
+        foreach (var layer in Layers)
+        {
+            if (layer is SwinPatchEmbeddingLayer<T>)
+            {
+                _patchEmbeddingLayers.Add(layer);
+                continue;
+            }
+
+            if (layer is EmbeddingLayer<T>)
+            {
+                inDecoder = true;
+                _decoderEmbeddingLayers.Add(layer);
+                continue;
+            }
+
+            if (layer is TransformerDecoderLayer<T>)
+            {
+                inDecoder = true;
+                _decoderLayers.Add(layer);
+                continue;
+            }
+
+            if (layer is DenseLayer<T>)
+            {
+                if (inDecoder)
+                {
+                    _outputLayers.Add(layer);
+                }
+                else
+                {
+                    _encoderLayers.Add(layer);
+                }
+                continue;
+            }
+
+            if (inDecoder)
+            {
+                _decoderLayers.Add(layer);
+            }
+            else
+            {
+                _encoderLayers.Add(layer);
+            }
+        }
+    }
+
     private void InitializeEmbeddings()
     {
         var random = RandomHelper.CreateSeededRandom(42);
@@ -1124,6 +1187,47 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         writer.Write(_useNativeMode);
         writer.Write(_onnxEncoderModelPath ?? string.Empty);
         writer.Write(_onnxDecoderModelPath ?? string.Empty);
+
+        // The token + decoder-position embeddings are network-level trainable tensors
+        // that live OUTSIDE Layers (they are looked up directly in the decoder forward
+        // and trained via the custom gradient path), so the base layer serialization
+        // does not cover them. Persist them here; otherwise they would be re-randomized
+        // on load and break save/load + clone-after-training parity.
+        WriteOptionalTensor(writer, _tokenEmbeddings);
+        WriteOptionalTensor(writer, _decoderPositionEmbeddings);
+    }
+
+    private void WriteOptionalTensor(BinaryWriter writer, Tensor<T>? tensor)
+    {
+        if (tensor is null)
+        {
+            writer.Write(false);
+            return;
+        }
+
+        writer.Write(true);
+        int rank = tensor.Shape.Length;
+        writer.Write(rank);
+        for (int i = 0; i < rank; i++) writer.Write(tensor.Shape[i]);
+        var span = tensor.Data.Span;
+        for (int i = 0; i < span.Length; i++)
+            writer.Write(Convert.ToDouble(span[i]));
+    }
+
+    private Tensor<T>? ReadOptionalTensor(BinaryReader reader)
+    {
+        bool present = reader.ReadBoolean();
+        if (!present) return null;
+
+        int rank = reader.ReadInt32();
+        int[] shape = new int[rank];
+        for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
+
+        var tensor = Tensor<T>.CreateDefault(shape, NumOps.Zero);
+        var span = tensor.Data.Span;
+        for (int i = 0; i < span.Length; i++)
+            span[i] = NumOps.FromDouble(reader.ReadDouble());
+        return tensor;
     }
 
     /// <inheritdoc/>
@@ -1181,28 +1285,42 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         ImageSize = Math.Max(imageHeight, imageWidth);
         MaxSequenceLength = maxGenLength;
 
-        // NOTE: ideally the native-mode layers reconstructed by the base
-        // DeserializeInternalUnchecked would be reused here (re-deriving the per-group
-        // mirror lists from Layers) instead of clearing + re-initializing, which
-        // discards the deserialized weights. That fix is currently BLOCKED by a separate
-        // SwinTransformerBlockLayer round-trip bug: its SetParameters throws because the
-        // recreated block resolves a different parameter count than was serialized
-        // (the block does not restore _dim/_mlpRatio from serialized metadata). Until
-        // that layer-level serialization contract is fixed, rebuilding from scratch here
-        // is the only path that does not throw. Tracked separately from issue #1465.
-        Layers.Clear();
-        _patchEmbeddingLayers.Clear();
-        _encoderLayers.Clear();
-        _decoderEmbeddingLayers.Clear();
-        _decoderLayers.Clear();
-        _outputLayers.Clear();
-
+        // The native-mode layers (with their trained weights) are already reconstructed
+        // by the base DeserializeInternalUnchecked before this override runs. Do NOT
+        // clear Layers + call InitializeLayers — that would discard the deserialized
+        // weights and re-randomize the model. Instead re-derive the per-group mirror
+        // lists (_patchEmbeddingLayers / _encoderLayers / _decoderEmbeddingLayers /
+        // _decoderLayers / _outputLayers) from the freshly deserialized Layers so the
+        // forward pass routes through the loaded weights.
         if (_useNativeMode)
         {
-            InitializeLayers();
+            RebuildLayerGroupsFromLayers();
         }
 
-        InitializeEmbeddings();
+        // Restore the network-level embeddings if they were serialized; fall back to a
+        // fresh initialization for models saved before embedding serialization existed.
+        Tensor<T>? restoredTokenEmbeddings = null;
+        Tensor<T>? restoredPositionEmbeddings = null;
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            restoredTokenEmbeddings = ReadOptionalTensor(reader);
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+                restoredPositionEmbeddings = ReadOptionalTensor(reader);
+        }
+
+        if (restoredTokenEmbeddings is not null && restoredPositionEmbeddings is not null)
+        {
+            _tokenEmbeddings = restoredTokenEmbeddings;
+            _decoderPositionEmbeddings = restoredPositionEmbeddings;
+            // The gradient accumulator is not serialized (it is transient training state);
+            // recreate it to match the restored position-embedding shape.
+            _decoderPositionEmbeddingsGradients = Tensor<T>.CreateDefault(
+                [_maxGenerationLength, _decoderHiddenDim], NumOps.Zero);
+        }
+        else
+        {
+            InitializeEmbeddings();
+        }
     }
 
     /// <inheritdoc/>
