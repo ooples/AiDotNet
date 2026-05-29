@@ -5319,6 +5319,28 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
             return;
 
+        // Loud one-time fallback warning. The fused path above is the fast path;
+        // when it doesn't engage we drop to the eager tape every step — a large,
+        // previously-SILENT perf cliff. Surface it once per model so "compiled
+        // training does nothing" is never invisible again. Skipped when mixed
+        // precision is active (that path is an intentional, documented fallback,
+        // not a misconfiguration). Suppressible via AIDOTNET_QUIET.
+        if (!_loggedFusedFallback && _mixedPrecisionContext is null)
+        {
+            _loggedFusedFallback = true;
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+            {
+                var reason = _pendingFusedMissReason ?? "(unspecified gate)";
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[AiDotNet] Compiled fused-training fast path is OFF for {GetType().Name} — " +
+                    $"every Train() step falls back to the eager autograd tape (reason: {reason}). " +
+                    "Training is substantially slower than the compiled path. To re-enable it, use a " +
+                    "fused-compatible optimizer (plain Adam/AdamW/SGD, no adaptive-rate/AMSGrad, float/double) " +
+                    "and keep TensorCodecOptions.EnableCompilation = true. Set TrainingDiagnosticsConfig.Level " +
+                    "= PerStep for per-step path detail, or AIDOTNET_QUIET to silence this warning.");
+            }
+        }
+
         // The parameter walk here exists only to size the buffer on first Train()
         // call. On every subsequent call the buffer is already the right size, and
         // GetOrCreateParameterBuffer short-circuits to return it. Skipping the
@@ -6193,6 +6215,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// call so a prior step's bail-out can't leak into this one.
     /// </summary>
     private string? _pendingFusedMissReason;
+
+    /// <summary>
+    /// One-shot guard for the loud fused-fallback warning emitted by
+    /// <see cref="TrainWithTape"/>. The compiled fused-training fast path
+    /// silently falls back to the eager autograd tape when its gates aren't
+    /// met (incompatible optimizer config, non-float/double type, mixed
+    /// precision, tracing failure). That fallback is a multi-× perf cliff
+    /// with — until now — zero signal at the default diagnostic level: a user
+    /// could "enable compilation" and unknowingly train on the slow path
+    /// forever (the AIsEval benchmark hit exactly this — the default Adam was
+    /// rejected by <see cref="TryMapToFusedOptimizerConfig"/> and every step
+    /// fell back, invisibly). We surface it ONCE per model instance via
+    /// <see cref="System.Diagnostics.Trace"/> (suppressible with
+    /// <c>AIDOTNET_QUIET</c>); the flag keeps the hot training loop quiet
+    /// after the first warning. <see cref="Configuration.TrainingDiagnosticsConfig"/>
+    /// at PerStep still gives per-step detail for those who want it.
+    /// </summary>
+    private bool _loggedFusedFallback;
 
     /// <summary>
     /// Attempts the fused-compiled training path — forward + backward + fused
