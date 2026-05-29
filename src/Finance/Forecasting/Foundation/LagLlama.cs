@@ -170,6 +170,12 @@ public class LagLlama<T> : ForecastingModelBase<T>
     private int _numLayers;
     private int _numHeads;
     private int _intermediateSize;
+
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
+    // Lag-Llama's RMSNorm blocks are scale-invariant, so without restoring the
+    // input level the predicted location (mu) ignores the input's magnitude.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
     private int[] _lagIndices;
     private double _dropout;
     private string _distributionOutput;
@@ -505,7 +511,9 @@ public class LagLlama<T> : ForecastingModelBase<T>
         // "Tensor shapes must match. Got [1, 8] and [1, 8, 12]".
         var distributionParams = ForecastNative(input);
         int paramsAxis = distributionParams.Rank - 1;
-        return Engine.TensorSliceAxis(distributionParams, axis: paramsAxis, index: 0);
+        var mu = Engine.TensorSliceAxis(distributionParams, axis: paramsAxis, index: 0);
+        // RevIN reverse: restore mu to the input's per-instance level/scale.
+        return DenormalizeForecast(mu);
     }
 
     /// <inheritdoc/>
@@ -564,7 +572,9 @@ public class LagLlama<T> : ForecastingModelBase<T>
         // rank-3 once a batch dim is present. Slicing at that axis with
         // index 0 yields the [..., horizon] tensor the loss expects.
         int paramsAxis = distributionParams.Rank - 1;
-        return Engine.TensorSliceAxis(distributionParams, axis: paramsAxis, index: 0);
+        var mu = Engine.TensorSliceAxis(distributionParams, axis: paramsAxis, index: 0);
+        // RevIN reverse on mu so training targets the input-scale location.
+        return DenormalizeForecast(mu);
     }
 
     /// <inheritdoc/>
@@ -791,7 +801,96 @@ public class LagLlama<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        return input;
+        // RevIN forward (Kim et al. 2022): subtract each instance's mean and
+        // divide by its std. Stats taken over every non-batch element of each row.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
+        if (instanceSize <= 0)
+            return input;
+
+        var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int start = b * instanceSize;
+
+            T mean = NumOps.Zero;
+            for (int t = 0; t < instanceSize; t++)
+                mean = NumOps.Add(mean, input[start + t]);
+            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
+
+            T variance = NumOps.Zero;
+            for (int t = 0; t < instanceSize; t++)
+            {
+                var diff = NumOps.Subtract(input[start + t], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
+            for (int t = 0; t < instanceSize; t++)
+                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the
+    /// predicted location (mu) so the point forecast is on the input's original scale.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
+
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
+    }
+
+    /// <summary>
+    /// Builds Lag-Llama's lag-feature representation (Rasul et al. 2024 §3.1): for
+    /// each time step t the feature vector is [x_t, x_{t-lag_1}, …, x_{t-lag_L}],
+    /// zero-padded where a lag reaches before the start of the series. Produces a
+    /// rank-3 [1, contextLength, 1 + numLags] tensor for the per-token embedding.
+    /// The input is a constant leaf (already RevIN-normalized), so the manual fill
+    /// does not break the tape — the embedding records its own weight gradients.
+    /// </summary>
+    private Tensor<T> BuildLagFeatures(Tensor<T> series)
+    {
+        int ctx = series.Length;
+        int numLags = _lagIndices.Length;
+        int featDim = 1 + numLags;
+        var result = new Tensor<T>(new[] { 1, ctx, featDim });
+        var span = result.Data.Span;
+        for (int t = 0; t < ctx; t++)
+        {
+            int baseIdx = t * featDim;
+            span[baseIdx] = series[t];
+            for (int l = 0; l < numLags; l++)
+            {
+                int src = t - _lagIndices[l];
+                span[baseIdx + 1 + l] = src >= 0 ? series[src] : NumOps.Zero;
+            }
+        }
+        return result;
     }
 
     /// <inheritdoc/>
@@ -849,7 +948,13 @@ public class LagLlama<T> : ForecastingModelBase<T>
         if (!_useNativeMode)
             return ForecastOnnx(input);
 
-        var current = input;
+        // RevIN forward: normalize so the RMSNorm-based blocks see a zero-mean
+        // unit-std series; mu is restored to the input scale after slicing.
+        var normalized = ApplyInstanceNormalization(input);
+
+        // Lag-feature tokenization: [contextLength] → [1, contextLength, 1+numLags].
+        // The embedding then projects each per-step lag vector to the model width.
+        var current = BuildLagFeatures(normalized);
 
         // Input embedding
         if (_inputEmbedding is not null)
@@ -865,11 +970,44 @@ public class LagLlama<T> : ForecastingModelBase<T>
         if (_finalNorm is not null)
             current = _finalNorm.Forward(current);
 
-        // Distribution output head
+        // Pool the token sequence to a single summary vector so the distribution
+        // head emits one [horizon, 3] forecast for the series rather than one per
+        // token (mean over the time axis).
+        if (current.Rank == 3)
+            current = Engine.ReduceMean(current, new[] { 1 }, keepDims: false);
+
+        // Distribution output head → [1, forecastHorizon * 3]
         if (_distributionHead is not null)
             current = _distributionHead.Forward(current);
 
+        // Reshape to [1, forecastHorizon, 3] (mu, sigma, nu per step) so Predict /
+        // training can slice the location parameter on the last axis.
+        if (current.Rank == 2 && current.Shape[1] == _forecastHorizon * 3)
+            current = Engine.Reshape(current, new[] { current.Shape[0], _forecastHorizon, 3 });
+
         return current;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Mirrors <see cref="Forward"/>'s preprocessing so the captured activations match the real
+    /// forward pass: the context is RevIN-normalized and turned into the lag-feature
+    /// [1, contextLength, 1+numLags] representation before it reaches the embedding (which would
+    /// otherwise reject the bare rank-1 context).
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = BuildLagFeatures(ApplyInstanceNormalization(input));
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+        return activations;
     }
 
     #endregion
