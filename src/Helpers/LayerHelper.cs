@@ -523,7 +523,27 @@ public static class LayerHelper<T>
         {
             layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
         }
-        layers.Add(new DenseLayer<T>(outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>));
+        // Output activation MUST match the task — the previous unconditional
+        // Softmax silently broke every regression / single-output model that
+        // relies on this generic builder: softmax over a length-1 output is
+        // ALWAYS 1.0, so the network ignored its input entirely (NeuralVaR /
+        // NeuralCVaR collapsed to a constant 1.0 risk estimate regardless of
+        // market data). Pick by task type, and never apply softmax to a
+        // single-logit output (use identity for regression, sigmoid for a
+        // single binary logit).
+        IActivationFunction<T> outputActivation = architecture.TaskType switch
+        {
+            NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
+            NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => outputSize > 1
+                ? new SoftmaxActivation<T>()
+                : new SigmoidActivation<T>(),
+            _ => outputSize > 1
+                ? new SoftmaxActivation<T>()
+                : new IdentityActivation<T>(),
+        };
+        layers.Add(new DenseLayer<T>(outputSize, outputActivation));
 
         ChainResolveLazyLayers(layers, new[] { inputSize });
         foreach (var layer in layers) yield return layer;
