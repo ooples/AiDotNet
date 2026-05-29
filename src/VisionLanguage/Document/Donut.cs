@@ -297,14 +297,22 @@ public class Donut<T> : VisionLanguageModelBase<T>, IDocumentUnderstandingModel<
         _options.MaxOutputTokens = reader.ReadInt32();
         _options.EncoderType = reader.ReadString();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            // Release any existing session before replacing it so repeated
+            // deserialize / clone round-trips don't leak native ONNX resources.
+            OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()
     {
+        // Copy the options so the new instance doesn't share — and mutate, via its
+        // deserialize path — the source instance's options object.
+        var optionsCopy = new DonutOptions(_options);
         if (!_useNativeMode && _options.ModelPath is { } mp && !string.IsNullOrEmpty(mp))
-            return new Donut<T>(Architecture, mp, _options);
-        return new Donut<T>(Architecture, _options);
+            return new Donut<T>(Architecture, mp, optionsCopy);
+        return new Donut<T>(Architecture, optionsCopy);
     }
 
     private void ThrowIfDisposed()

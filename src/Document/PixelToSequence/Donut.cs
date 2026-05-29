@@ -1211,7 +1211,7 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         for (int i = 0; i < rank; i++) writer.Write(tensor.Shape[i]);
         var span = tensor.Data.Span;
         for (int i = 0; i < span.Length; i++)
-            writer.Write(Convert.ToDouble(span[i]));
+            writer.Write(NumOps.ToDouble(span[i]));
     }
 
     private Tensor<T>? ReadOptionalTensor(BinaryReader reader)

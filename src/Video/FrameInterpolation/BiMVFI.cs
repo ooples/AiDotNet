@@ -220,7 +220,12 @@ public class BiMVFI<T> : FrameInterpolationBase<T>
         _options.ConfidenceThreshold = r.ReadDouble();
         _options.DropoutRate = r.ReadDouble();
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
+        {
+            // Release any existing session before replacing it so repeated
+            // deserialize / clone round-trips don't leak native ONNX resources.
+            OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
+        }
         // Native-mode layers (with their trained weights) are already reconstructed by
         // the base deserializer before this override runs; re-initializing here would
         // discard them and leave the model randomly initialized.
