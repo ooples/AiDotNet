@@ -28,8 +28,16 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationTask(ActivationTask.TransformerFFN)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
-public class SwishActivation<T> : ActivationFunctionBase<T>
+public class SwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    // f(x) = x·sigmoid(x), identical to the fused Swish epilogue kernel.
+    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.Swish;
+        return true;
+    }
+
     /// <inheritdoc/>
     public override bool SupportsJitCompilation => true;
 

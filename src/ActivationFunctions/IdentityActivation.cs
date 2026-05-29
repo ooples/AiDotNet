@@ -33,8 +33,11 @@ namespace AiDotNet.ActivationFunctions;
 public class IdentityActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
     /// <inheritdoc/>
-    public AiDotNet.Tensors.Engines.FusedActivationType FusedActivationType
-        => AiDotNet.Tensors.Engines.FusedActivationType.None;
+    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.None;
+        return true;
+    }
 
     /// <summary>
     /// Applies the Identity activation function to a single value.

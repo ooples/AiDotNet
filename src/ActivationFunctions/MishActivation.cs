@@ -29,6 +29,14 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
+// NOTE: Mish intentionally does NOT implement IFusedActivation. The shipped
+// Tensors FusedLinear/MlpForward path resolves pointwise activations through
+// CpuFusedOperations._floatActivations/_doubleActivations, which currently
+// register only None/ReLU/GELU/Sigmoid/Tanh/LeakyReLU/Swish — Mish has no
+// kernel there (it exists only in the unrelated BlasManaged ActivationEpilogue
+// path). Claiming a fused Mish kernel would make MlpForward throw. Wiring it
+// is tracked by AiDotNet.Tensors #499 (add Mish to the FusedLinear tables);
+// once a Tensors release ships the kernel, re-add IFusedActivation here.
 public class MishActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

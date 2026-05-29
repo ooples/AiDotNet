@@ -44,8 +44,11 @@ namespace AiDotNet.ActivationFunctions;
 public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>, Fused.IFusedActivation
 {
     /// <inheritdoc/>
-    public AiDotNet.Tensors.Engines.FusedActivationType FusedActivationType
-        => AiDotNet.Tensors.Engines.FusedActivationType.Tanh;
+    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.Tanh;
+        return true;
+    }
 
     /// <summary>
     /// Indicates that this activation function supports operations on individual scalar values.

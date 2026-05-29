@@ -27,8 +27,11 @@ namespace AiDotNet.ActivationFunctions;
 public class ReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
     /// <inheritdoc/>
-    public AiDotNet.Tensors.Engines.FusedActivationType FusedActivationType
-        => AiDotNet.Tensors.Engines.FusedActivationType.ReLU;
+    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.ReLU;
+        return true;
+    }
 
     /// <summary>
     /// Indicates whether this activation function supports scalar operations.

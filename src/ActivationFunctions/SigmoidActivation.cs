@@ -36,8 +36,11 @@ namespace AiDotNet.ActivationFunctions;
 public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>, Fused.IFusedActivation
 {
     /// <inheritdoc/>
-    public AiDotNet.Tensors.Engines.FusedActivationType FusedActivationType
-        => AiDotNet.Tensors.Engines.FusedActivationType.Sigmoid;
+    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.Sigmoid;
+        return true;
+    }
 
     /// <summary>
     /// Indicates whether this activation function supports scalar operations.

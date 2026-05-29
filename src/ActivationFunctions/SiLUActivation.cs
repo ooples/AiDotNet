@@ -28,8 +28,16 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationTask(ActivationTask.TransformerFFN)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
-public class SiLUActivation<T> : ActivationFunctionBase<T>
+public class SiLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    // SiLU is f(x) = x·sigmoid(x) — the same function as the fused Swish kernel.
+    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.Swish;
+        return true;
+    }
+
     /// <summary>
     /// Indicates whether this activation function supports scalar operations.
     /// </summary>
