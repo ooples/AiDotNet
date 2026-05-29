@@ -498,8 +498,15 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
                 current = layer.Forward(current);
         }
 
-        // Output projection: flatten and project to forecast horizon
-        current = current.Reshape(new[] { batchSize, seqLen * _modelDimension });
+        // Output projection: take the last timestep's hidden state instead of flattening
+        // [seqLen × modelDim]. RWKV is a causal recurrence whose final state has
+        // integrated the entire context, so it is the natural fixed-size [batch,
+        // modelDim] summary for the forecast head. The old flatten sized the first
+        // output-projection Dense at seqLen·modelDim inputs at paper scale (a
+        // multi-hundred-million-parameter, multi-GB weight) which overflowed the
+        // serializer and OOM-cascaded the suite.
+        if (current.Rank == 3)
+            current = Engine.TensorSliceAxis(current, axis: 1, index: current.Shape[1] - 1);
 
         if (_outputProjectionLayers is not null)
         {
@@ -562,7 +569,9 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
             }
         }
 
-        current = current.Reshape(new[] { batchSize, seqLen * _modelDimension });
+        // Mirror Forward: take the last timestep's hidden state rather than flattening.
+        if (current.Rank == 3)
+            current = Engine.TensorSliceAxis(current, axis: 1, index: current.Shape[1] - 1);
 
         if (_outputProjectionLayers is not null)
         {

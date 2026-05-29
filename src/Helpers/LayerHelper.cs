@@ -31629,6 +31629,12 @@ public static class LayerHelper<T>
         }
 
         // === Output Projection ===
+        // The model's forward takes the last timestep of the [B, seqLen, modelDim]
+        // block output as a fixed [B, modelDim] summary BEFORE these layers (Mamba is a
+        // causal SSM, so the final state has integrated the whole context), so the
+        // first projection sees modelDim inputs (NOT seqLen·modelDim). This avoids the
+        // old flatten that sized this Dense at seqLen·modelDim = 131072 inputs at paper
+        // scale (an ~805M-parameter, 6.4 GB weight).
         yield return new DenseLayer<T>(
             outputSize: modelDim * forecastHorizon / 4,
             activationFunction: new GELUActivation<T>());
