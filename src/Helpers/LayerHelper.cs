@@ -33942,30 +33942,43 @@ public static class LayerHelper<T>
 
         int intermediateDim = hiddenDimension * 4;
 
-        // Encoder input projection
-        yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+        // TOTEM (Talukder et al. 2024) is a VQ-VAE over time-series tokens. Tokens
+        // are SEQUENCE POSITIONS: each timestep is embedded to hiddenDimension and
+        // the encoder/decoder operate PER TOKEN. The old helper sized every Dense
+        // at contextLength*hiddenDimension, so two consecutive layers formed a
+        // [contextLength·hiddenDim, contextLength·hiddenDim] = 131072² (≈17 G
+        // element) weight that overflowed the allocator before any forecast was
+        // produced. All projections below are per-token on hiddenDimension /
+        // intermediateDim / codebookDimension. The model's forward reshapes the
+        // input to [1, contextLength, 1], pools the decoded sequence, then applies
+        // the forecast head. The number of layers PER BLOCK here (6, or 8 with
+        // dropout) MUST match TOTEM.ExtractLayerReferences.
 
-        // Transformer encoder layers
+        // Encoder input projection: [B, contextLength, 1] → [B, contextLength, hiddenDim]
+        yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
+
+        // Transformer encoder blocks (per-token)
         for (int layer = 0; layer < numLayers; layer++)
         {
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: contextLength * intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Quantization projection
-        yield return new DenseLayer<T>( outputSize: contextLength * codebookDimension, activationFunction: null);
+        // Quantization projection: hiddenDim → codebookDimension (per token)
+        yield return new DenseLayer<T>(outputSize: codebookDimension, activationFunction: null);
 
-        // Decoder projection
-        yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: new GELUActivation<T>());
+        // Decoder projection: codebookDimension → hiddenDim (per token)
+        yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: new GELUActivation<T>());
 
-        // Forecast head
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        // Forecast head: applied AFTER the model pools the token sequence to a
+        // single [B, hiddenDim] vector, producing [B, forecastHorizon].
+        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
