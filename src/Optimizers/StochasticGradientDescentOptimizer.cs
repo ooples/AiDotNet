@@ -68,7 +68,7 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     /// <inheritdoc/>
-    public bool TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
         if (_options.UseAdaptiveLearningRate) return false;

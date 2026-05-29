@@ -117,6 +117,16 @@ public static class CompiledTapeTrainingStep<T>
     [ThreadStatic]
     private static long _fusedStepCount;
 
+    /// <summary>
+    /// Set once on the calling thread when an AMSGrad fused step fails because the
+    /// linked Tensors build can't run the AMSGrad kernel. Subsequent AMSGrad steps
+    /// then skip the fused attempt outright (returning false straight to the eager
+    /// tape) instead of reconfiguring → throwing → catching → warning every step,
+    /// which would turn a one-time capability gap into per-step exception + log churn.
+    /// </summary>
+    [ThreadStatic]
+    private static bool _amsgradFusedUnavailable;
+
     /// <summary>Gets the count of successful fused-step executions on the calling thread.</summary>
     public static long GetFusedStepCount() => _fusedStepCount;
 
@@ -408,6 +418,14 @@ public static class CompiledTapeTrainingStep<T>
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AMSGrad))
             return false;
 
+        // If a prior AMSGrad fused step already proved this thread's Tensors build
+        // can't run the AMSGrad kernel, don't retry the fused path — go straight to
+        // the eager tape. Otherwise every step would reconfigure, throw, catch and
+        // warn, turning a one-time capability gap into per-step exception/log churn.
+        if (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.AMSGrad
+            && _amsgradFusedUnavailable)
+            return false;
+
         try
         {
             // AiDotNet#1406: drop the cached compiled plan + parameter array
@@ -640,6 +658,10 @@ public static class CompiledTapeTrainingStep<T>
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
                 $"{ex}");
+            // Latch AMSGrad-unsupported so we don't reconfigure/throw/warn every step
+            // for a capability gap that won't change within this process.
+            if (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.AMSGrad)
+                _amsgradFusedUnavailable = true;
             _configuredPlan = null;
             _configuredOptimizerConfig = null;
             return false;

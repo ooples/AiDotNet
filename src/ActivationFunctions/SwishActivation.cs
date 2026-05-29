@@ -32,7 +32,7 @@ public class SwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivat
 {
     /// <inheritdoc/>
     // f(x) = x·sigmoid(x), identical to the fused Swish epilogue kernel.
-    public bool TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
     {
         type = AiDotNet.Tensors.Engines.FusedActivationType.Swish;
         return true;

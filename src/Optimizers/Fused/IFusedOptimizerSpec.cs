@@ -15,7 +15,7 @@ namespace AiDotNet.Optimizers.Fused;
 /// <param name="Epsilon">Denominator epsilon (0 for SGD).</param>
 /// <param name="WeightDecay">Decoupled weight decay (AdamW); 0 otherwise.</param>
 /// <param name="Schedule">Optional fused-side LR schedule, or null for constant LR.</param>
-public readonly record struct FusedOptimizerConfig(
+internal readonly record struct FusedOptimizerConfig(
     OptimizerType Type,
     float LearningRate,
     float Beta1,
@@ -48,7 +48,7 @@ public readonly record struct FusedOptimizerConfig(
 /// optimizer family can still fall back per-instance.
 /// </para>
 /// </remarks>
-public interface IFusedOptimizerSpec
+internal interface IFusedOptimizerSpec
 {
     /// <summary>
     /// Describes this optimizer for the fused kernel, or returns <c>false</c> to

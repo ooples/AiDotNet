@@ -124,7 +124,7 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
     }
 
     /// <inheritdoc/>
-    public bool TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
         // Adaptive LR mutates the rate between steps; the fused kernel bakes a
