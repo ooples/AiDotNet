@@ -14354,7 +14354,10 @@ public static class LayerHelper<T>
         double dropout = 0.0)
     {
         // Per Garza et al. 2023 "TimeGPT-1": GPT-style transformer foundation model.
-        // Per-token operations on hiddenDim, NOT flattened.
+        // Per-token operations on hiddenDim, NOT flattened. The model feeds a
+        // rank-3 [batch, seqLen, numFeatures] series, so the embedding projects
+        // per timestep and the head pools the token sequence to a single vector
+        // before projecting to the forecast horizon.
         int ffnDim = hiddenDim * 4;
 
         // === Input Embedding: per-token projection ===
@@ -14369,7 +14372,11 @@ public static class LayerHelper<T>
         }
 
         // === Final Norm + Forecast Head ===
+        // Average-pool over the token sequence [B, seqLen, hiddenDim] → [B, hiddenDim]
+        // so the head emits a single forecastHorizon vector for the whole series
+        // instead of one per token.
         yield return new LayerNormalizationLayer<T>();
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
         yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
     }
 
