@@ -33,8 +33,12 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationTask(ActivationTask.RecurrentGating)]
 [ActivationTask(ActivationTask.OutputLayer)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = false, IsBounded = true, Cost = ComputeCost.Medium)]
-public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
+public class SigmoidActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    public AiDotNet.Tensors.Engines.FusedActivationType FusedActivationType
+        => AiDotNet.Tensors.Engines.FusedActivationType.Sigmoid;
+
     /// <summary>
     /// Indicates whether this activation function supports scalar operations.
     /// </summary>

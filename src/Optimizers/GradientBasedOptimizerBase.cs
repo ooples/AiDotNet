@@ -270,6 +270,42 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     public ILearningRateScheduler? LearningRateScheduler => _learningRateScheduler;
 
     /// <summary>
+    /// Resolves this optimizer's attached LR scheduler (if any) into a fused-side
+    /// <see cref="Tensors.Engines.Compilation.LrSchedule"/> for
+    /// <see cref="Fused.IFusedOptimizerSpec"/> implementations. Shared so the
+    /// per-optimizer specs don't each repeat the mapping.
+    /// <para>
+    /// Returns <c>false</c> only for an UNKNOWN scheduler type (so a configured
+    /// schedule is never silently dropped — the caller falls back to eager). A
+    /// null scheduler or a constant scheduler yields <c>true</c> with
+    /// <paramref name="schedule"/> = null (constant LR; the spec's
+    /// <c>GetCurrentLearningRate</c> supplies the rate). The supported set mirrors
+    /// the fused kernel's implemented schedule shapes; new shapes are added here
+    /// alongside their kernel support.
+    /// </para>
+    /// </summary>
+    protected bool TryGetFusedLrSchedule(out Tensors.Engines.Compilation.LrSchedule? schedule)
+    {
+        schedule = null;
+        switch (_learningRateScheduler)
+        {
+            case null:
+            case LearningRateSchedulers.ConstantLRScheduler:
+                return true;
+            case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
+                schedule = Tensors.Engines.Compilation.LrSchedule.Cosine(
+                    cosine.BaseLearningRate, cosine.TMax, cosine.EtaMin);
+                return true;
+            case LearningRateSchedulers.ExponentialLRScheduler expo:
+                schedule = Tensors.Engines.Compilation.LrSchedule.Exponential(
+                    expo.BaseLearningRate, expo.Gamma);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
     /// Gets the current scheduler step mode.
     /// </summary>
     public SchedulerStepMode SchedulerStepMode => _schedulerStepMode;

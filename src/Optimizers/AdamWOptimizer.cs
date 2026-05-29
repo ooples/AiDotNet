@@ -46,7 +46,7 @@ namespace AiDotNet.Optimizers;
 /// </example>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// The options specific to the AdamW optimizer.
@@ -142,6 +142,24 @@ public class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, 
     /// Gets whether AMSGrad variant is enabled.
     /// </summary>
     public bool UseAMSGrad => _options.UseAMSGrad;
+
+    /// <inheritdoc/>
+    public bool TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        // AdamW + AMSGrad uses the same max-second-moment kernel; decoupled weight
+        // decay is carried in WeightDecay and applied by the AdamW update path.
+        config = new Fused.FusedOptimizerConfig(
+            _options.UseAMSGrad
+                ? Tensors.Engines.Compilation.OptimizerType.AMSGrad
+                : Tensors.Engines.Compilation.OptimizerType.AdamW,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            (float)_options.WeightDecay, schedule);
+        return true;
+    }
 
     /// <summary>
     /// Performs the optimization process using the AdamW algorithm.
