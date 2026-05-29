@@ -7715,6 +7715,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     var srcLayer = _layers[i];
                     var dstLayer = largeBase._layers[i];
+
+                    // The freshly-constructed destination may carry lazy layers whose
+                    // weight tensors aren't materialized yet (ParameterCount == 0 until
+                    // a forward pass resolves their shape). The source layer has already
+                    // run a forward (its ParameterCount is concrete), so resolve the
+                    // destination from the source's input shape before copying — otherwise
+                    // the ParameterCount guard below skips the copy and the clone keeps the
+                    // destination's random-initialized weights, diverging from the original.
+                    if (dstLayer is LayerBase<T> dstLazy && !dstLazy.IsShapeResolved
+                        && srcLayer.ParameterCount > 0)
+                    {
+                        int[] srcInputShape = srcLayer.GetInputShape();
+                        if (srcInputShape is { Length: > 0 } && Array.TrueForAll(srcInputShape, d => d > 0))
+                        {
+                            try { dstLazy.ResolveFromShape(srcInputShape); }
+                            catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
+                        }
+                    }
+
                     if (srcLayer.ParameterCount > 0 && dstLayer.ParameterCount == srcLayer.ParameterCount)
                     {
                         dstLayer.SetParameters(srcLayer.GetParameters());
