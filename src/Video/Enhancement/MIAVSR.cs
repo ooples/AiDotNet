@@ -221,11 +221,9 @@ public class MIAVSR<T> : VideoSuperResolutionBase<T>
         ScaleFactor = _options.ScaleFactor;
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        else if (_useNativeMode)
-        {
-            Layers.Clear();
-            InitializeLayers();
-        }
+        // Native-mode layers (with their trained weights) are already reconstructed by
+        // the base deserializer before this override runs; re-initializing here would
+        // discard them and leave the model randomly initialized.
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance()

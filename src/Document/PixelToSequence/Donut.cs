@@ -1181,6 +1181,15 @@ public class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDocumentQA<
         ImageSize = Math.Max(imageHeight, imageWidth);
         MaxSequenceLength = maxGenLength;
 
+        // NOTE: ideally the native-mode layers reconstructed by the base
+        // DeserializeInternalUnchecked would be reused here (re-deriving the per-group
+        // mirror lists from Layers) instead of clearing + re-initializing, which
+        // discards the deserialized weights. That fix is currently BLOCKED by a separate
+        // SwinTransformerBlockLayer round-trip bug: its SetParameters throws because the
+        // recreated block resolves a different parameter count than was serialized
+        // (the block does not restore _dim/_mlpRatio from serialized metadata). Until
+        // that layer-level serialization contract is fixed, rebuilding from scratch here
+        // is the only path that does not throw. Tracked separately from issue #1465.
         Layers.Clear();
         _patchEmbeddingLayers.Clear();
         _encoderLayers.Clear();
