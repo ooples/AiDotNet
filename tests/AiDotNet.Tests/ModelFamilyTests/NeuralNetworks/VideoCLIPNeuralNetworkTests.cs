@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
@@ -49,13 +50,27 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
             inputDepth: 3,
             outputSize: 64);
 
-        // Paper §4: AdamW with LR 1e-5 to 3e-4 and cosine warm-up schedule.
-        // Default Adam LR=0.001 is too aggressive for L2-normalized contrastive embeddings.
+        // Paper §4: AdamW with LR 1e-5 to 3e-4 and cosine warm-up schedule. Use
+        // the peak of that range (3e-4) for a static-LR test — the warm-up's
+        // purpose is to ramp UP to the peak, so steady-state training without
+        // warm-up should use the peak, not the midpoint.
         var optimizerOptions = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
         {
-            InitialLearningRate = 1e-4  // Paper mid-range LR
+            InitialLearningRate = 3e-4
         };
 
+        // Paper §3 defines training in unit-norm embedding space via cosine
+        // similarity (the InfoNCE numerator is exp(cos_sim/τ)). VideoCLIP's
+        // forward returns an L2-normalized embedding [1, embeddingDim], so the
+        // paper-faithful single-pair training signal is "drive cosine(output,
+        // target) toward 1" — exactly what CosineSimilarityLoss computes
+        // (1 − cos(o, t)). The model's default constructor sets
+        // CrossEntropyWithLogitsLoss as a generic fallback, which is wrong for
+        // a unit-norm output (it routes the embedding through softmax and
+        // computes class-CE against a continuous target, producing a ~136
+        // baseline that barely moves regardless of training success — the loss
+        // formula plateau, not a gradient bug). Override here so the test
+        // measures actual embedding alignment.
         var model = new VideoCLIPNeuralNetwork<double>(
             architecture,
             imageSize: 32,              // Paper: 224 (ViT-B/16 input resolution)
@@ -73,7 +88,8 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
             numFrames: 4,               // Paper: 8 (sampled frames per video)
             frameRate: 1.0,             // Paper: 1 FPS sampling
             temporalAggregation: TemporalAggregationType.TemporalTransformer,
-            optimizer: new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, optimizerOptions));
+            optimizer: new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, optimizerOptions),
+            lossFunction: new CosineSimilarityLoss<double>());
 
         return model;
     }
