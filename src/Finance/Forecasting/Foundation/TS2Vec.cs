@@ -339,6 +339,11 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
         _dropout = reader.ReadDouble();
         _temporalContrastiveWeight = reader.ReadDouble();
         _instanceContrastiveWeight = reader.ReadDouble();
+
+        // Re-point cached layer references at the freshly deserialized Layers;
+        // otherwise a clone's forward uses the stale random-initialized layers
+        // created by CreateNewInstance and diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion
