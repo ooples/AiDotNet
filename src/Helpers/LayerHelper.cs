@@ -16885,6 +16885,32 @@ public static class LayerHelper<T>
     }
 
     /// <summary>
+    /// Selects the final-layer activation for a tabular prediction head from the
+    /// task type. A hardcoded Softmax (the previous default across the tabular
+    /// model family) is only valid for multi-class classification: Softmax over a
+    /// single logit is identically 1.0, which collapses every input to the same
+    /// output, zeros the output Jacobian, and freezes training. Models in this
+    /// family that default to regression (OutputSize=1) hit exactly that
+    /// degeneracy. Returns linear (null) for regression and other non-classification
+    /// task types, matching the codebase-wide output-activation convention.
+    /// </summary>
+    // Returns the task-appropriate output-head activation. The linear cases return an explicit
+    // IdentityActivation rather than null: DenseLayer(outputSize, null) falls back to ReLU (see its
+    // ctor), so returning null would silently clip a regression head to non-negative outputs. A
+    // regression/unknown head must be linear, so we return IdentityActivation. (Classification heads
+    // get Sigmoid/Softmax matched to the loss.) Never returns null.
+    private static IActivationFunction<T> GetTabularOutputActivation(NeuralNetworkArchitecture<T> architecture)
+        => architecture.TaskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.SequenceClassification => new SoftmaxActivation<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
+            _ => new IdentityActivation<T>()
+        };
+
+    /// <summary>
     /// Creates default layers for a TabNet model.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultTabNetLayers(
@@ -16895,20 +16921,21 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Feature transformer (shared)
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new BatchNormalizationLayer<T>();
+        // TabNet (Arik & Pfister 2019) is a sequential sparse-attention encoder, not a
+        // plain MLP. The decision-step loop (attentive transformer -> sparsemax mask ->
+        // masked feature transformer -> ReLU decision accumulation -> prior relaxation)
+        // is encapsulated in TabNetEncoderLayer, which emits the aggregated
+        // [batch, decisionDim] representation; a linear head maps it to the output.
+        // decisionDim = attentionDim = hiddenDimension (n_d = n_a).
+        yield return new TabNetEncoderLayer<T>(
+            numFeatures: numFeatures,
+            decisionDim: hiddenDimension,
+            attentionDim: hiddenDimension,
+            numSteps: numSteps,
+            relaxationFactor: 1.5);
 
-        // Decision steps
-        for (int i = 0; i < numSteps; i++)
-        {
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-        }
-
-        // Output layer
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        // Linear prediction head (activation is task-dependent — see GetTabularOutputActivation).
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -16924,25 +16951,29 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Input embedding
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its OWN learnable token, producing a real
+        // [features, embedding] sequence. SAINT (Somepalli et al. 2021, "SAINT: Improved Neural
+        // Networks for Tabular Data via Row Attention and Contrastive Pre-Training") operates on
+        // per-feature tokens — the prior single-Dense projection collapsed all features into one
+        // vector (length-1 self-attention, no real column attention) and trained unstably
+        // (MoreData_ShouldNotDegrade diverged with more iterations).
+        yield return new FeatureTokenizerLayer<T>(numFeatures, hiddenDimension);
 
-        // Transformer layers with inter-sample attention
+        // SAINT alternates two attention types per stage:
+        //   1. Self-attention ACROSS features within each sample (column attention) — the standard
+        //      transformer encoder block (residual + layer norm built in).
+        //   2. Intersample attention ACROSS samples for each feature (row attention) — SAINT's
+        //      defining contribution, letting a sample attend to other rows in the batch.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
+            yield return new IntersampleAttentionLayer<T>(hiddenDimension, numHeads, dropoutRate);
         }
 
-        // Classification head
-        yield return new DenseLayer<T>(hiddenDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
+        // training). Final activation is task-dependent (GetTabularOutputActivation).
+        yield return new DenseLayer<T>(hiddenDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -16958,26 +16989,35 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Column embedding
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization. Turn the flat [features] vector into a real
+        // [features, embedding] token sequence so self-attention operates ACROSS
+        // features — the defining idea of TabTransformer (Huang et al. 2020) /
+        // FT-Transformer (Gorishniy et al. 2021). The previous design projected
+        // [features] -> [hidden] (a SINGLE vector), so self-attention ran over a
+        // length-1 sequence (no real attention) through a stack with no residual
+        // path, and the network froze on the memorization task. Per-feature
+        // embeddings (each feature its own direction) also avoid the collinear-
+        // token collapse a shared projection suffers when LayerNorm strips the
+        // per-feature scale.
+        yield return new FeatureTokenizerLayer<T>(numFeatures, hiddenDimension);
 
-        // Transformer encoder for categorical columns
+        // Transformer encoder blocks over the F feature-tokens. TransformerEncoderLayer
+        // carries the residual connections + layer norm that keep deep attention
+        // stacks trainable — the same encoder block ViT / BERT are built from.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(hiddenDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
         }
 
-        // MLP head
-        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        // MLP head, matching the ViT/BERT readout (GELU projection -> output, no dropout). A ReLU
+        // projection + dropout here drove the output layer into a dead/bias-only state during
+        // training; the smooth GELU keeps the head's units alive so the projection stays
+        // input-sensitive. The head runs per feature-token (this family's readout convention —
+        // tape-safe sequence pooling is not available, so flatten/mean reductions break gradient
+        // flow). The final activation is task-dependent (GetTabularOutputActivation) — a hardcoded
+        // Softmax collapses a single-output regression head to a constant 1.0.
+        yield return new DenseLayer<T>(hiddenDimension, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17028,56 +17068,22 @@ public static class LayerHelper<T>
         bool useBatchNorm = true,
         double dropoutRate = 0.1)
     {
-        // ============================================
-        // 1. GATING NETWORK - learns feature importance
-        // ============================================
-        int prevDim = numFeatures;
+        // GANDALF (Joseph & Raj 2022) is a stack of Gated Feature Learning Units (GFLUs) — NOT a
+        // soft-decision-tree ensemble (that is NODE). Each GFLU does learnable softmax feature
+        // selection + a GLU-gated transformation + a gated residual update of the running
+        // representation, so later stages build hierarchically on earlier feature selections.
+        // GandalfGFLULayer encapsulates the whole stack and emits a [batch, numFeatures]
+        // representation; a linear head maps it to the prediction. (The earlier design — a sigmoid
+        // gating MLP feeding a stack of SoftTreeLayers — was a NODE-style tree ensemble mislabeled
+        // as GANDALF, and the trees crashed on unbatched input.)
+        //
+        // treeDepth doubles as the GFLU stage count (its default of 6 matches GANDALF's default
+        // n_stages); the tree-specific parameters are not used by the GFLU backbone.
+        int numStages = Math.Max(2, treeDepth);
+        yield return new GandalfGFLULayer<T>(numFeatures, numStages);
 
-        // Gating hidden layers with ReLU activation
-        for (int i = 0; i < numGatingLayers; i++)
-        {
-            yield return new DenseLayer<T>(gatingHiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
-
-            if (useBatchNorm)
-            {
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
-
-            prevDim = gatingHiddenDim;
-        }
-
-        // Gating output layer - sigmoid produces [0,1] feature importance weights
-        yield return new DenseLayer<T>(numFeatures, (IActivationFunction<T>)new SigmoidActivation<T>());
-
-        // ============================================
-        // 2. SOFT DECISION TREE ENSEMBLE
-        // ============================================
-        // Each tree processes the gated features independently
-        for (int t = 0; t < numTrees; t++)
-        {
-            yield return new SoftTreeLayer<T>(
-                inputDim: numFeatures,
-                depth: treeDepth,
-                outputDim: leafDimension,
-                temperature: temperature,
-                initScale: initScale);
-        }
-
-        // ============================================
-        // 3. OUTPUT PROJECTION
-        // ============================================
-        // Aggregate tree outputs to final prediction dimension
-        int treeTotalOutputDim = numTrees * leafDimension;
-
-        if (treeTotalOutputDim != outputSize)
-        {
-            yield return new DenseLayer<T>(outputSize, (IActivationFunction<T>?)null);
-        }
+        // Linear prediction head (task-dependent output activation; linear for regression).
+        yield return new DenseLayer<T>(outputSize, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17102,34 +17108,16 @@ public static class LayerHelper<T>
         bool useBatchNorm = true,
         double dropoutRate = 0.0)
     {
-        // Optional input batch normalization
-        if (useBatchNorm)
-        {
-            yield return new BatchNormalizationLayer<T>();
-        }
+        // NODE (Popov et al. 2019) is a PARALLEL ensemble of differentiable oblivious decision
+        // trees: every tree sees the full feature vector and their outputs are concatenated, then a
+        // linear head maps to the prediction. NodeEnsembleLayer encapsulates the parallel ensemble.
+        // (The previous design stacked SoftTreeLayers SEQUENTIALLY — each tree consumed the prior
+        // tree's [treeOutputDim] output as its input, a feature-dimension mismatch and not an
+        // ensemble at all.)
+        yield return new NodeEnsembleLayer<T>(numFeatures, numTrees, treeDepth, treeOutputDim);
 
-        // Feature preprocessing layer
-        yield return new DenseLayer<T>(numFeatures * 2, (IActivationFunction<T>)new ReLUActivation<T>());
-
-        if (useBatchNorm)
-        {
-            yield return new BatchNormalizationLayer<T>();
-        }
-
-        // Soft tree ensemble (using SoftTreeLayer)
-        for (int t = 0; t < numTrees; t++)
-        {
-            yield return new SoftTreeLayer<T>(
-                inputDim: numFeatures * 2,
-                depth: treeDepth,
-                outputDim: treeOutputDim,
-                temperature: 1.0,
-                initScale: 0.01);
-        }
-
-        // Aggregate tree outputs
-        int totalTreeOutput = numTrees * treeOutputDim;
-        yield return new DenseLayer<T>(outputSize, (IActivationFunction<T>?)null);
+        // Linear prediction head (task-dependent output activation; linear for regression).
+        yield return new DenseLayer<T>(outputSize, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17152,26 +17140,25 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.0)
     {
-        // Feature embedding layer
-        yield return new DenseLayer<T>(numFeatures * embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its own learnable vector,
+        // producing a real [features, embedding] token sequence. AutoInt (Song et al.
+        // 2019) models feature interactions with multi-head self-attention over these
+        // per-feature embeddings — the prior single-Dense projection collapsed all
+        // features into one vector (length-1 attention, no interactions).
+        yield return new FeatureTokenizerLayer<T>(numFeatures, embeddingDimension);
 
-        // Multi-head self-attention layers for feature interactions
+        // Multi-head self-attention layers for feature interactions (residual + LN
+        // built in — keeps the attention stack trainable).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
+            yield return new TransformerEncoderLayer<T>(numHeads, embeddingDimension * 4);
         }
 
-        // MLP head for final prediction
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(32, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        // MLP head (GELU readout; a ReLU head drives the output projection dead
+        // during training). Final activation is task-dependent.
+        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(32, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17194,33 +17181,29 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Feature embedding
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its OWN learnable token, producing a
+        // [features, embedding] sequence that the Mamba blocks scan. Mambular (Thielmann et al.
+        // 2024, "Mambular: A Sequential Model for Tabular Deep Learning") treats the features as
+        // the sequence dimension of a Mamba model.
+        yield return new FeatureTokenizerLayer<T>(numFeatures, embeddingDimension);
 
-        // Mamba-style layers (approximated with dense + gating)
+        // Real Mamba blocks (selective SSM): input projection + depthwise Conv1D + selective scan
+        // (S6) + output gating, each with a residual connection. Replaces the previous
+        // dense+gating "approximation" (which was not a state-space model and trained unstably —
+        // MoreData_ShouldNotDegrade diverged). The features are the sequence (length = numFeatures).
         for (int i = 0; i < numLayers; i++)
         {
-            // Expand dimension
-            yield return new DenseLayer<T>(embeddingDimension * 2, (IActivationFunction<T>)new SiLUActivation<T>());
-
-            // State space processing (simplified)
-            yield return new DenseLayer<T>(embeddingDimension * 2, (IActivationFunction<T>?)null);
-
-            // Contract back
-            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
+            yield return new MambaBlock<T>(
+                sequenceLength: numFeatures,
+                modelDimension: embeddingDimension,
+                stateDimension: stateDimension);
         }
 
-        // MLP head
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(32, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        // Per-token MLP head (GELU readout; tape-safe sequence pooling is unavailable so the head
+        // runs per feature-token, matching the sibling tabular models). Final activation is
+        // task-dependent (GetTabularOutputActivation).
+        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17243,25 +17226,27 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Input projection
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its OWN learnable vector, producing a
+        // real [features, embedding] token sequence. TabDPT (Ma et al. 2024, "TabDPT: Scaling
+        // Tabular Foundation Models") is a transformer over tokenized table cells — the prior
+        // single-Dense projection collapsed all features into one vector (length-1 attention,
+        // no feature interaction) and drove the output projection to an input-independent state
+        // during training (DifferentInputs_AfterTraining collapse). Per-feature embeddings give
+        // real self-attention across features, the encoder backbone TabDPT's retrieval-based
+        // in-context learning is built on (see InContextLearning<T>).
+        yield return new FeatureTokenizerLayer<T>(numFeatures, embeddingDimension);
 
-        // Transformer encoder layers
+        // Transformer encoder blocks over the feature tokens (residual + layer norm built in —
+        // the ViT/BERT encoder block that keeps deep attention stacks trainable).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, embeddingDimension * 4);
         }
 
-        // Output head
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
+        // training). Final activation is task-dependent (GetTabularOutputActivation).
+        yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17305,7 +17290,7 @@ public static class LayerHelper<T>
 
         // Output head
         yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17326,22 +17311,20 @@ public static class LayerHelper<T>
     {
         hiddenDimensions ??= [256, 256];
 
-        int prevDim = numFeatures;
+        // TabM (Gorishniy et al. 2024) is a BatchEnsemble MLP: k members share each linear
+        // layer's weight matrix via per-member rank-1 adapters, run in parallel on a tiled
+        // batch, and their predictions are averaged — parameter-efficient deep ensembling.
+        // Encapsulated in TabMEnsembleLayer (the previous plain Dense+LayerNorm MLP was not
+        // TabM, and its single-member MLP had no ensembling).
+        yield return new TabMEnsembleLayer<T>(numFeatures, hiddenDimensions, numClasses);
 
-        // Hidden layers
-        foreach (int hiddenDim in hiddenDimensions)
+        // The ensemble emits raw averaged logits; apply the task-dependent output activation.
+        // A linear (Identity) head needs no layer — skip it so regression stays a pure pass-through.
+        var outputActivation = GetTabularOutputActivation(architecture);
+        if (outputActivation is not IdentityActivation<T>)
         {
-            yield return new DenseLayer<T>(hiddenDim, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
-            prevDim = hiddenDim;
+            yield return new ActivationLayer<T>(outputActivation);
         }
-
-        // Output layer
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
     }
 
     /// <summary>
@@ -17364,26 +17347,24 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        // Feature tokenization (embedding each feature)
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
+        // Feature tokenization: embed each feature into its OWN learnable vector,
+        // producing a real [features, embedding] token sequence (FT-Transformer,
+        // Gorishniy et al. 2021). Replaces the prior single-Dense projection that
+        // collapsed all features to one vector (length-1 attention, no real
+        // tokenization).
+        yield return new FeatureTokenizerLayer<T>(numFeatures, embeddingDimension);
 
-        // Transformer encoder layers
+        // Transformer encoder blocks over the feature tokens (residual + layer norm
+        // built in — the ViT/BERT encoder block).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (embeddingDimension) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            // ReGLU-style feed-forward (using GELU approximation)
-            yield return new DenseLayer<T>(embeddingDimension * 4, (IActivationFunction<T>)new GELUActivation<T>());
-            yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(numHeads, embeddingDimension * 4);
         }
 
-        // CLS token aggregation and classification head
-        yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        // GELU readout head (ViT/BERT-style; a ReLU + dropout head drives the output
+        // projection dead during training). Final activation is task-dependent.
+        yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>
@@ -17404,28 +17385,30 @@ public static class LayerHelper<T>
         int numClasses = 2,
         double dropoutRate = 0.1)
     {
-        int prevDim = numFeatures;
-
-        // Feature encoder MLP
+        // Encoder E + Predictor P: a feed-forward MLP that embeds the whole feature vector into a
+        // d-dim representation and projects to the output. TabR (Gorishniy et al. 2023, "TabR:
+        // Tabular Deep Learning Meets Nearest Neighbors") embeds each object to one vector (not a
+        // per-feature token sequence), then a retrieval module enriches it with similar objects
+        // from the candidate pool; with the single-sample training/inference path that module
+        // reduces to this encoder + predictor backbone (see RetrievalModule<T> / ContextEncoder<T>
+        // for the retrieval components used when a candidate pool is supplied).
+        //
+        // No LayerNorm and no dropout in the backbone:
+        //   * Stacked LayerNorm strips the per-sample magnitude, so constant inputs differing only
+        //     in scale (all-0.1 vs all-0.9) collapse to identical outputs (the previous design
+        //     only passed ScaledInput / DifferentInputs by accident, via training-mode dropout
+        //     noise). Plain Dense layers preserve the input differences.
+        //   * Per-layer dropout makes optimization stochastic, so the longer training run lands at
+        //     a worse loss than the shorter one (MoreData_ShouldNotDegrade diverged). A
+        //     deterministic feed-forward stack trains monotonically.
         for (int i = 0; i < numLayers; i++)
         {
-            int nextDim = i == 0 ? embeddingDimension : embeddingDimension;
-            yield return new DenseLayer<T>(nextDim, (IActivationFunction<T>)new ReLUActivation<T>());
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate: dropoutRate);
-            }
-            prevDim = nextDim;
+            yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
         }
 
-        // Context encoding (simplified - full implementation would include retrieval)
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new LayerNormalizationLayer<T>();
-
-        // Classification head
+        // Predictor P.
         yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new ReLUActivation<T>());
-        yield return new DenseLayer<T>(numClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
     /// <summary>

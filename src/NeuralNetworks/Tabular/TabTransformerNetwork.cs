@@ -129,8 +129,15 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// </code>
     /// </para>
     /// </remarks>
+    // The transformer encoder produces one contextual embedding per feature token and the head runs
+    // per token. With a single output, the per-token logits are all trained toward the one
+    // regression target and collapse to a constant, input-independent value. Default to a
+    // multi-output head (10), matching the sibling tabular transformers (FT-Transformer / AutoInt /
+    // TabDPT / SAINT), which keeps the per-token projection input-sensitive. (Mean-pooling the token
+    // sequence to a single per-sample vector is tape-safe at multi-output, but pooling + a single
+    // output zeroes the gradient — a separate narrow issue — so the per-token readout is kept.)
     public TabTransformerNetwork()
-        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 1))
+        : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 16, outputSize: 10))
     {
     }
 
@@ -257,19 +264,29 @@ public class TabTransformerNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass to get prediction
-        Tensor<T> prediction = Predict(input);
+        // Tape-based training (matches the path every other NN model in the
+        // codebase uses post-#1209). The previous body computed `error` but
+        // dropped it without backpropagating, then called
+        // _optimizer.UpdateParameters(Layers) — which dispatches to each
+        // DenseLayer.UpdateParameters(learningRate), and that overload
+        // throws "Backward pass must be called before updating parameters"
+        // when no gradients exist. Surfaced as 13 TabTransformerNetworkTests
+        // failures on PR #1408's Generated Layers shard.
+        // Honor the base Train contract: auto-promote an unbatched single sample
+        // ([features] / [seq, features]) to a leading unit batch dim before the tape
+        // forward, exactly as NeuralNetworkBase.Train does. Without this, callers
+        // passing single-sample tensors would bypass the canonical [B, …] promotion.
+        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
 
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate error gradient
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-
-        // Backpropagate error through network
-
-        // Update network parameters
-        UpdateNetworkParameters();
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

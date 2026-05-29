@@ -5,8 +5,9 @@
   <ItemGroup>
     <!-- AiDotNet ecosystem -->
     <PackageVersion Include="AiDotNet" Version="0.113.0" />
-    <!-- AiDotNet.Tensors 0.86.1 — bumped from 0.81.9 to land the SD-UNet
-         attention perf block this PR (#1456) is blocked on. New since 0.81.9:
+    <!-- AiDotNet.Tensors 0.86.1 — bumped from 0.81.9 (supersedes the in-flight
+         0.85.3 bump from master) to land the SD-UNet attention perf block this
+         PR (#1456) is blocked on. New since 0.81.9:
            * Tensors #413 [CLOSED] — three FP64 SD UNet cliffs, the AiDotNet#1305
              root cause cited in this PR's body.
            * Tensors #415 [CLOSED] — FP64 Conv2DBackward at ImageNet shapes
@@ -19,9 +20,17 @@
              (6.9x less alloc, 2.7x mean latency).
            * Tensors #488 — fused QKV + transpose-fused SDPA
              (MHA 5.31ms -> 2.26ms on the AIsEval shape, beats torch).
+           * Tensors #487 — GetSliceAlongDimension tape-backward (tape-safe
+             per-timestep slicing for recurrent / sequence / attention layers).
+           * Tensors #454 — BroadcastElementwise SIMD perf (also unblocks
+             AiDotNet#1307 / PR #1448's paper-scale training budget).
            * Tensors #474 — small-batch native-BLAS thread cap inside MlpForward.
            * Tensors #462 — hybrid hardware-aware GEMM strategy (seed table +
              learned-cache).
+           * Tensors #427 — SgemmWithInt8RowScaledCachedB (per-row-scaled INT8
+             weight-only GEMM, AiDotNet#1349 / PR #1417).
+           * Tensors #437 — CpuEngine.LstmSequenceForward (fused recurrent
+             forward, AIsEval LSTM / PR #1457).
          Plus the original 0.81.9 block:
            * 0.81.4 #367  GraphMode recording on 5 ops with silent gradient-drop bugs (closes #365)
            * 0.81.5 #410  three FP64 SD UNet cliffs + compile-mode forward 2× faster than eager
@@ -69,7 +78,7 @@
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="2.1.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
     <!-- Serialization and data -->
-    <PackageVersion Include="Google.Protobuf" Version="3.34.1" />
+    <PackageVersion Include="Google.Protobuf" Version="3.35.0" />
     <PackageVersion Include="MatFileHandler" Version="1.3.0" />
     <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageVersion Include="Parquet.Net" Version="5.5.0" />
@@ -79,7 +88,7 @@
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.61" />
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
     <!-- Infrastructure -->
-    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.0" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.4.1" />
     <PackageVersion Include="Pinecone.Client" Version="4.0.2" />
     <PackageVersion Include="StackExchange.Redis" Version="2.13.1" />
     <PackageVersion Include="Stripe.net" Version="50.4.1" />

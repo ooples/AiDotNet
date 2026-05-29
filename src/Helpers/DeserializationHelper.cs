@@ -231,6 +231,113 @@ public static class DeserializationHelper
 
             instance = ctor.Invoke(new object[0]);
         }
+        else if (genericDef == typeof(TabNetEncoderLayer<>))
+        {
+            // TabNetEncoderLayer(numFeatures, decisionDim, attentionDim, numSteps,
+            // numSharedLayers, numStepSpecificLayers, relaxationFactor, virtualBatchSize,
+            // momentum, epsilon). numFeatures comes from the input shape; the rest are
+            // persisted by the layer's GetMetadata.
+            int tnNumFeatures = inputShape.Length > 0 ? inputShape[inputShape.Length - 1]
+                : (TryGetInt(additionalParams, "NumFeatures") ?? 16);
+            int tnDecisionDim = TryGetInt(additionalParams, "DecisionDim")
+                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] : 64);
+            int tnAttentionDim = TryGetInt(additionalParams, "AttentionDim") ?? tnDecisionDim;
+            int tnNumSteps = TryGetInt(additionalParams, "NumSteps") ?? 3;
+            int tnNumShared = TryGetInt(additionalParams, "NumSharedLayers") ?? 2;
+            int tnNumStep = TryGetInt(additionalParams, "NumStepSpecificLayers") ?? 2;
+            double tnRelax = TryGetDouble(additionalParams, "RelaxationFactor") ?? 1.5;
+            int tnVbs = TryGetInt(additionalParams, "VirtualBatchSize") ?? 128;
+            double tnMomentum = TryGetDouble(additionalParams, "Momentum") ?? 0.02;
+            double tnEpsilon = TryGetDouble(additionalParams, "Epsilon") ?? 1e-5;
+
+            var tnCtor = type.GetConstructor(new[]
+            {
+                typeof(int), typeof(int), typeof(int), typeof(int), typeof(int),
+                typeof(int), typeof(double), typeof(int), typeof(double), typeof(double)
+            });
+            if (tnCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find TabNetEncoderLayer 10-arg constructor.");
+            }
+
+            instance = tnCtor.Invoke(new object[]
+            {
+                tnNumFeatures, tnDecisionDim, tnAttentionDim, tnNumSteps, tnNumShared,
+                tnNumStep, tnRelax, tnVbs, tnMomentum, tnEpsilon
+            });
+        }
+        else if (genericDef == typeof(TabMEnsembleLayer<>))
+        {
+            // TabMEnsembleLayer(numFeatures, int[] hiddenDimensions, outputDim, numMembers).
+            // numFeatures from input shape; the rest from the layer's GetMetadata.
+            int tmNumFeatures = inputShape.Length > 0 ? inputShape[inputShape.Length - 1]
+                : (TryGetInt(additionalParams, "NumFeatures") ?? 16);
+            int tmOutputDim = TryGetInt(additionalParams, "OutputDim")
+                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] : 1);
+            int tmNumMembers = TryGetInt(additionalParams, "NumMembers") ?? 8;
+            int[] tmHidden = TryGetIntArray(additionalParams, "HiddenDimensions") ?? new[] { 256, 256 };
+
+            var tmCtor = type.GetConstructor(new[] { typeof(int), typeof(int[]), typeof(int), typeof(int) });
+            if (tmCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find TabMEnsembleLayer(int, int[], int, int) constructor.");
+            }
+
+            instance = tmCtor.Invoke(new object[] { tmNumFeatures, tmHidden, tmOutputDim, tmNumMembers });
+        }
+        else if (genericDef == typeof(FeatureTokenizerLayer<>))
+        {
+            // FeatureTokenizerLayer(int numFeatures, int embeddingDim) — both constructor dims are
+            // the TRAILING two axes of the output shape: [..., numFeatures, embeddingDim]. Reading
+            // the trailing axes (not [0],[1]) handles a saved batched shape [batch, F, E] correctly
+            // — using the leading axes there would mistake `batch` for `numFeatures`.
+            if (outputShape.Length < 2)
+            {
+                throw new MissingLayerCtorException(
+                    "FeatureTokenizerLayer requires an output shape of rank >= 2 ending in "
+                    + "[numFeatures, embeddingDim]; got [" + string.Join(",", outputShape) + "].");
+            }
+
+            var ctor = type.GetConstructor(new[] { typeof(int), typeof(int) });
+            if (ctor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find FeatureTokenizerLayer(int, int) constructor.");
+            }
+
+            instance = ctor.Invoke(new object[] { outputShape[^2], outputShape[^1] });
+        }
+        else if (genericDef == typeof(GandalfGFLULayer<>))
+        {
+            // GandalfGFLULayer(int numFeatures, int numStages). numFeatures is the trailing output
+            // dim; numStages comes from metadata. The ctor eagerly resolves its sub-layers (probe
+            // forward), so the constructed instance already has the right ParameterCount.
+            int gfFeatures = outputShape.Length > 0 ? outputShape[^1] : inputShape[^1];
+            int gfStages = TryGetInt(additionalParams, "NumStages") ?? 6;
+            var gfCtor = type.GetConstructor(new[] { typeof(int), typeof(int) });
+            if (gfCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find GandalfGFLULayer(int, int) constructor.");
+            }
+            instance = gfCtor.Invoke(new object[] { gfFeatures, gfStages });
+        }
+        else if (genericDef == typeof(NodeEnsembleLayer<>))
+        {
+            // NodeEnsembleLayer(int numFeatures, int numTrees, int treeDepth, int treeOutputDim).
+            // numFeatures is the input width; the rest come from metadata. Output is
+            // [numTrees * treeOutputDim], so derive numFeatures from the SAVED input shape.
+            int neFeatures = inputShape.Length > 0 ? inputShape[^1]
+                : TryGetInt(additionalParams, "NumFeatures") ?? 1;
+            int neTrees = TryGetInt(additionalParams, "NumTrees") ?? 20;
+            int neDepth = TryGetInt(additionalParams, "TreeDepth") ?? 6;
+            int neOutDim = TryGetInt(additionalParams, "TreeOutputDim") ?? 3;
+            if (neFeatures <= 0) neFeatures = TryGetInt(additionalParams, "NumFeatures") ?? 1;
+            var neCtor = type.GetConstructor(new[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) });
+            if (neCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find NodeEnsembleLayer(int, int, int, int, double) constructor.");
+            }
+            instance = neCtor.Invoke(new object[] { neFeatures, neTrees, neDepth, neOutDim, 0.01 });
+        }
         else if (genericDef == typeof(TransposeLayer<>))
         {
             // TransposeLayer(int[] inputShape, int[] permutation)
@@ -528,6 +635,23 @@ public static class DeserializationHelper
                     resolvedShape[^1] = numHeads > 0 ? numHeads * 64 : 64;
                 layerBase.ResolveFromShape(resolvedShape);
             }
+        }
+        else if (genericDef == typeof(IntersampleAttentionLayer<>))
+        {
+            // IntersampleAttentionLayer(int embeddingDim, int numHeads = 8, double dropoutRate = 0.1).
+            // The embedding dim is the trailing axis of the saved shape; the four FC projections are
+            // resolved eagerly in the ctor (probe forward), so the constructed instance already has
+            // the right ParameterCount for SetParameters — no post-hoc ResolveFromShape needed.
+            int embDim = outputShape.Length > 0 ? outputShape[^1] : inputShape[^1];
+            int isaHeads = TryGetInt(additionalParams, "NumHeads") ?? ResolveDefaultHeadCount(embDim);
+            double isaDropout = TryGetDouble(additionalParams, "DropoutRate") ?? 0.1;
+
+            var isaCtor = type.GetConstructor(new[] { typeof(int), typeof(int), typeof(double) });
+            if (isaCtor is null)
+            {
+                throw new MissingLayerCtorException("Cannot find IntersampleAttentionLayer(int, int, double) constructor.");
+            }
+            instance = isaCtor.Invoke(new object[] { embDim, isaHeads, isaDropout });
         }
         else if (genericDef == typeof(TransformerDecoderLayer<>))
         {
