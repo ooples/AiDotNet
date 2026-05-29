@@ -270,7 +270,9 @@ public class LSTMCRFOptions : NeuralNetworkOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Default of 1e-3 for AdamW optimizer. For SGD, use 1e-2.
+    /// Default of 0.01, matching the SGD learning rate from Lample et al. 2016 ("Neural
+    /// Architectures for Named Entity Recognition", §4), which the model pairs with
+    /// gradient clipping at 5.0.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> Controls how fast the model learns. Default works for most cases.
@@ -288,7 +290,7 @@ public class LSTMCRFOptions : NeuralNetworkOptions
             _learningRate = value;
         }
     }
-    private double _learningRate = 1e-3;
+    private double _learningRate = 0.01;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization.

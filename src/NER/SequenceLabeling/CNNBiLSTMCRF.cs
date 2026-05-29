@@ -193,10 +193,20 @@ public class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         ValidateOptions();
         ApplyOptionsToBase();
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // Ma & Hovy 2016 ("End-to-end Sequence Labeling via Bi-directional LSTM-CNNs-CRF",
+        // §3.3) trains with SGD (lr≈0.015), a learning-rate decay of 0.05 per epoch, and a
+        // gradient clipping threshold of 5.0 — not an adaptive optimizer. Match the paper
+        // with clipped SGD and the lr_t = lr_0 / (1 + 0.05*t) decay schedule, which is
+        // stable over long runs where AdamW's adaptive steps oscillate.
+        _optimizer = optimizer ?? new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = 5.0,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(
+                    _options.LearningRate, step => 1.0 / (1.0 + 0.05 * step))
             });
 
         InitializeLayers();

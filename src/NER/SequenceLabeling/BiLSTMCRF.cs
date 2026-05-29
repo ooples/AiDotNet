@@ -374,10 +374,20 @@ public class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         _options = options ?? new BiLSTMCRFOptions();
         ValidateOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        // Lample et al. 2016 ("Neural Architectures for Named Entity Recognition", §4)
+        // trains the BiLSTM-CRF with SGD at learning rate 0.01, a learning-rate decay of
+        // 0.05, and gradient clipping at 5.0 — not an adaptive optimizer. Match the paper
+        // exactly: clipped SGD with the lr_t = lr_0 / (1 + 0.05*t) decay schedule, which
+        // is stable over long runs where AdamW's adaptive steps oscillate.
+        _optimizer = optimizer ?? new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = true,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = 5.0,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(
+                    _options.LearningRate, step => 1.0 / (1.0 + 0.05 * step))
             });
         NumLabels = _options.NumLabels;
         EmbeddingDimension = _options.EmbeddingDimension;
