@@ -869,11 +869,16 @@ public partial class GRULayer<T> : LayerBase<T>
             _lastInput = input3D;
         }
 
-        // Reset hidden state if needed
-        if (_lastHiddenState == null)
-        {
-            _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
-        }
+        // Standard non-streaming RNN semantics: every forward starts from a ZERO
+        // initial hidden state. The previous code only allocated _lastHiddenState
+        // when null and then overwrote it with the final hidden state at the end of
+        // each pass, so independent forward calls leaked hidden state across one
+        // another. That broke Clone-after-training parity (a freshly-cloned model
+        // starts from zeros while the trained original carried leftover state) and
+        // repeated-Predict determinism. Reset to a zero hidden state at the start of
+        // every pass (TensorAllocator.Rent returns zero-initialized, engine-managed
+        // storage — the same call the original first-pass init used).
+        _lastHiddenState = TensorAllocator.Rent<T>([batchSize, _hiddenSize]);
 
         // Initialize list to store all hidden states if returning sequences
         if (_returnSequences)
@@ -902,9 +907,22 @@ public partial class GRULayer<T> : LayerBase<T>
             // Extract current time step input: slice axis 1 (sequence) at timestep t
             var xt = Engine.Reshape(input3D.Slice(1, t, t + 1), [batchSize, _inputSize]);
 
-            var z = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WzT), Engine.TensorMatMul(currentHiddenState, UzT)), _bz), true);
-            var r = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br), true);
-            var h_candidate = ApplyActivation(Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(r.ElementwiseMultiply(currentHiddenState), UhT)), _bh), false);
+            // GRU recurrence (Cho et al. 2014; PyTorch nn.GRU update convention).
+            // Every step uses tape-connected Engine ops — gate/candidate activations
+            // via ActivateTape and the gating products via Engine.TensorMultiply — so
+            // gradients flow back to W*/U*/b*. The old code applied activations with
+            // input.Transform and gated with the instance .ElementwiseMultiply/.Add,
+            // which detached the autodiff graph and left the GRU weights ungradiented.
+            var zPre = Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WzT), Engine.TensorMatMul(currentHiddenState, UzT)), _bz);
+            var z = ActivateTape(zPre, _vectorRecurrentActivation, _recurrentActivation, gate: true);
+
+            var rPre = Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WrT), Engine.TensorMatMul(currentHiddenState, UrT)), _br);
+            var r = ActivateTape(rPre, _vectorRecurrentActivation, _recurrentActivation, gate: true);
+
+            var rh = Engine.TensorMultiply(r, currentHiddenState);
+            var hPre = Engine.TensorBroadcastAdd(Engine.TensorAdd(Engine.TensorMatMul(xt, WhT), Engine.TensorMatMul(rh, UhT)), _bh);
+            var h_candidate = ActivateTape(hPre, _vectorActivation, _activation, gate: false);
+
             // Compute (1 - z) using cached ones tensor — avoids per-timestep allocation
             if (_cachedOnesForGate == null || !_cachedOnesForGate._shape.SequenceEqual(z._shape))
             {
@@ -912,12 +930,9 @@ public partial class GRULayer<T> : LayerBase<T>
             }
             var oneMinusZ = Engine.TensorSubtract(_cachedOnesForGate, z);
 
-
-            var h = z.ElementwiseMultiply(currentHiddenState).Add(
-
-                oneMinusZ.ElementwiseMultiply(h_candidate)
-
-            );
+            var h = Engine.TensorAdd(
+                Engine.TensorMultiply(z, currentHiddenState),
+                Engine.TensorMultiply(oneMinusZ, h_candidate));
 
             currentHiddenState = h;
 
@@ -1189,6 +1204,32 @@ public partial class GRULayer<T> : LayerBase<T>
     /// - New information is often kept between -1 and 1 for stability
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Applies a gate/candidate activation through tape-connected engine ops so the
+    /// GRU recurrence stays on the autodiff graph (the legacy scalar path used
+    /// <c>input.Transform</c>, which detaches gradients). Vector activations dispatch
+    /// through the engine via <see cref="ActivationHelper"/>; scalar activations map
+    /// to their engine op, defaulting to the GRU's paper-standard sigmoid (gates) /
+    /// tanh (candidate) when the configured activation has no direct engine mapping.
+    /// </summary>
+    private Tensor<T> ActivateTape(
+        Tensor<T> input,
+        IVectorActivationFunction<T>? vectorActivation,
+        IActivationFunction<T>? scalarActivation,
+        bool gate)
+    {
+        // Delegate to the central ActivationHelper dispatch (tape-connected engine
+        // ops for known activations, polymorphic fallback otherwise) — the GRU does
+        // not re-implement the activation→engine mapping. When no activation is
+        // configured, fall back to the paper-standard GRU defaults (Cho et al. 2014):
+        // sigmoid for the update/reset gates, tanh for the candidate state.
+        if (vectorActivation != null)
+            return ActivationHelper.ApplyActivation(vectorActivation, input, Engine);
+        if (scalarActivation != null)
+            return ActivationHelper.ApplyActivation(scalarActivation, input, Engine);
+        return gate ? Engine.Sigmoid(input) : Engine.Tanh(input);
+    }
+
     private Tensor<T> ApplyActivation(Tensor<T> input, bool isRecurrent)
     {
         if (isRecurrent)
@@ -1457,6 +1498,17 @@ public partial class GRULayer<T> : LayerBase<T>
 
     public override Vector<T> GetParameters()
     {
+        // A lazily-constructed GRU (hidden size given, input size deferred to the
+        // first forward) still has a well-defined parameter set once we adopt the
+        // standard square default (input size == hidden size, as in stacked recurrent
+        // stages). Resolve to that default when parameters are requested before any
+        // forward so they are materialized rather than reported as empty; a later
+        // forward with a different input width re-adapts via the input-adaptation path.
+        if (!IsShapeResolved && _hiddenSize > 0)
+        {
+            ResolveFromShape(new[] { _hiddenSize });
+        }
+
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_Wz.Data),

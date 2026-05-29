@@ -892,68 +892,50 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // Store original dimensions for reshape calculations
-        int origBatch = input.Rank >= 1 ? input.Shape[0] : 1;
-        int origSeq = input.Rank >= 2 ? input.Shape[1] : 1;
-
-        var current = FlattenInput(input);
-
-        // Apply all layers with proper reshape between Dense and GRU
-        foreach (var layer in Layers)
+        // Paper-faithful per-node DCRNN (Li et al. 2018): organize the input as
+        // [numNodes, seqLen, numFeatures] with numNodes as the batch dimension, so
+        // every GRULayer is a per-node DCGRU and every DenseLayer a per-node MLP, all
+        // with SHARED weights (O(hiddenDim^2) params instead of the old
+        // numNodes*hiddenDim-wide flattened denses that OOM-crashed the optimizer).
+        Tensor<T> current;
+        if (input.Rank == 3 && input.Shape[0] == _numNodes)
         {
-            // Before GRU layer, reshape from 2D to 3D
-            // Dense outputs [batch*seq, numNodes*hiddenDim] but GRU expects [batch, seq, hiddenDim]
-            if (layer is GRULayer<T> && current.Rank == 2)
-            {
-                int totalSamples = current.Shape[0];
-                int totalFeatures = current.Shape[1];
-
-                // GRU expects inputSize = hiddenDimension
-                // Dense output has numNodes * hiddenDim features
-                int gruInputSize = _hiddenDimension;
-                if (totalFeatures % gruInputSize == 0)
-                {
-                    int nodesPerSample = totalFeatures / gruInputSize;
-                    int totalSeqLen = totalSamples * nodesPerSample;
-                    // Use batch=1 and expand sequence dimension to include nodes
-                    current = current.Reshape(new[] { 1, totalSeqLen, gruInputSize });
-                }
-                else
-                {
-                    // Features don't divide evenly by hiddenDim - use as-is but add batch dim
-                    current = current.Reshape(new[] { 1, totalSamples, totalFeatures });
-                }
-            }
-
-            // Before Dense layer (not the final output projection), reshape from 3D to 2D
-            // GRU outputs [batch, seq, hiddenDim] but Dense expects [batch*seq, numNodes*hiddenDim]
-            if (layer is DenseLayer<T> && current.Rank == 3)
-            {
-                int batch = current.Shape[0];
-                int seqLen = current.Shape[1];
-                int hidden = current.Shape[2];
-
-                // Flatten to 2D: [batch * seq / numNodes, numNodes * hidden]
-                // This preserves total elements while matching Dense input expectations
-                int totalElements = batch * seqLen * hidden;
-                int denseFeatures = _numNodes * _hiddenDimension;
-
-                if (totalElements % denseFeatures == 0)
-                {
-                    int denseBatch = totalElements / denseFeatures;
-                    current = current.Reshape(new[] { denseBatch, denseFeatures });
-                }
-                else
-                {
-                    // Fallback: flatten to [total_samples, hidden]
-                    current = current.Reshape(new[] { batch * seqLen, hidden });
-                }
-            }
-
-            current = layer.Forward(current);
+            current = input;                                       // [numNodes, seqLen, features]
+        }
+        else if (_numNodes > 0 && input.Length % _numNodes == 0)
+        {
+            current = Engine.Reshape(input, new[] { _numNodes, input.Length / _numNodes, 1 });
+        }
+        else
+        {
+            current = FlattenInput(input);
         }
 
-        // Apply diffusion convolution
+        // Run embedding / encoder / decoder (all layers but the output projection),
+        // keeping the [numNodes, seqLen, hiddenDim] layout; GRUs (returnSequences=true)
+        // process each node's sequence with shared weights.
+        int lastIndex = Layers.Count - 1;
+        for (int i = 0; i < lastIndex; i++)
+        {
+            current = Layers[i].Forward(current);
+        }
+
+        // Last-step readout -> [numNodes, hiddenDim].
+        if (current.Rank == 3)
+        {
+            int seqLen = current.Shape[1];
+            int hidden = current.Shape[2];
+            current = Engine.TensorNarrow(current, 1, seqLen - 1, 1);
+            current = Engine.Reshape(current, new[] { current.Shape[0], hidden });
+        }
+
+        // Output projection -> [numNodes, forecastHorizon].
+        if (lastIndex >= 0)
+        {
+            current = Layers[lastIndex].Forward(current);
+        }
+
+        // Diffusion convolution (spatial aggregation across nodes).
         if (_forwardDiffusion is not null && _useNativeMode)
         {
             current = ApplyDiffusionConvolution(current);
@@ -1124,32 +1106,27 @@ public class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> ApplyMatrixToTensor(double[,] matrix, Tensor<T> tensor, int n, int featuresPerNode)
     {
-        var result = new Tensor<T>(tensor._shape);
+        // Transition-matrix product P X along the node dimension. The previous
+        // manual element loop + fresh new Tensor<T> detached the autodiff graph and
+        // zeroed gradients; express it as a tape-aware matmul against the constant
+        // transition matrix so gradients flow back through the layer stack.
+        var p = BuildConstantMatrix(matrix, n);                         // [n, n]
+        var xMat = Engine.Reshape(tensor, new[] { n, featuresPerNode });
+        var conv = Engine.TensorMatMul(p, xMat);                        // P X
+        return Engine.Reshape(conv, tensor._shape);
+    }
 
+    /// <summary>
+    /// Builds a constant (non-trainable) <see cref="Tensor{T}"/> from an n x n
+    /// transition/adjacency matrix so it can participate in tape-aware matmuls.
+    /// </summary>
+    private Tensor<T> BuildConstantMatrix(double[,] matrix, int n)
+    {
+        var data = new T[n * n];
         for (int i = 0; i < n; i++)
-        {
             for (int j = 0; j < n; j++)
-            {
-                double weight = matrix[i, j];
-                if (Math.Abs(weight) < 1e-10)
-                    continue;
-
-                T weightT = NumOps.FromDouble(weight);
-                for (int f = 0; f < featuresPerNode; f++)
-                {
-                    int srcIdx = j * featuresPerNode + f;
-                    int dstIdx = i * featuresPerNode + f;
-                    if (srcIdx < tensor.Data.Length && dstIdx < result.Data.Length)
-                    {
-                        result.Data.Span[dstIdx] = NumOps.Add(
-                            result.Data.Span[dstIdx],
-                            NumOps.Multiply(weightT, tensor.Data.Span[srcIdx]));
-                    }
-                }
-            }
-        }
-
-        return result;
+                data[i * n + j] = NumOps.FromDouble(matrix[i, j]);
+        return new Tensor<T>(new[] { n, n }, new Vector<T>(data));
     }
 
     #endregion

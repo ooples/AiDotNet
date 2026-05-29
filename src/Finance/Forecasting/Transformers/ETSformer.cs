@@ -562,6 +562,10 @@ public class ETSformer<T> : ForecastingModelBase<T>
         _dropout = reader.ReadDouble();
         _topK = reader.ReadInt32();
         _useInstanceNormalization = reader.ReadBoolean();
+
+        // Re-bind cached layer references to the deserialized (weight-loaded)
+        // layers so a clone runs on the loaded weights, not random init.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -812,25 +816,12 @@ public class ETSformer<T> : ForecastingModelBase<T>
         if (_instanceMean is null || _instanceStd is null)
             return output;
 
-        int batchSize = output.Shape[0];
-        int seqLen = output.Shape[1];
-        int features = output.Shape[2];
-
-        var denormalized = new Tensor<T>(output._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    T scaled = NumOps.Multiply(output[b, t, f], _instanceStd[b, 0, f]);
-                    denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[b, 0, f]);
-                }
-            }
-        }
-
-        return denormalized;
+        // Tape-connected denormalization: output * std + mean, stats [B,1,F]
+        // broadcast across the time axis. Training routes through Forecast, which
+        // calls this; the manual per-element copy detached the graph before the
+        // loss and zeroed all gradients. Stats are constants (paper-faithful).
+        var scaled = Engine.TensorBroadcastMultiply(output, _instanceStd);
+        return Engine.TensorBroadcastAdd(scaled, _instanceMean);
     }
 
     /// <summary>
@@ -852,26 +843,26 @@ public class ETSformer<T> : ForecastingModelBase<T>
         if (output.Shape.Length == 3 && output.Shape[1] == horizon && output.Shape[2] == features)
             return output;
 
-        var reshaped = new Tensor<T>(new[] { batchSize, horizon, features });
-        int totalElements = horizon * features;
-
-        for (int b = 0; b < batchSize; b++)
+        // Tape-connected reshape into the forecast grid [batch, horizon, features].
+        // Flatten per batch, keep (or zero-pad to) the leading horizon*features,
+        // then reshape. The previous manual per-element copy built a detached
+        // tensor right before the loss, zeroing all gradients, and indexed
+        // output[b, h, f] out of bounds when the layer output didn't already
+        // match the forecast grid.
+        int perBatch = output.Length / batchSize;
+        int need = horizon * features;
+        var flat = Engine.Reshape(output, new[] { batchSize, perBatch });
+        if (perBatch > need)
         {
-            for (int i = 0; i < totalElements && i < output.Length / batchSize; i++)
-            {
-                int h = i / features;
-                int f = i % features;
-                if (h < horizon && f < features)
-                {
-                    if (output.Shape.Length == 2)
-                        reshaped[b, h, f] = output[b, i];
-                    else
-                        reshaped[b, h, f] = output[b, h, f];
-                }
-            }
+            flat = Engine.TensorNarrow(flat, 1, 0, need);
+        }
+        else if (perBatch < need)
+        {
+            var pad = new Tensor<T>(new[] { batchSize, need - perBatch });
+            flat = Engine.Concat(new[] { flat, pad }, 1);
         }
 
-        return reshaped;
+        return Engine.Reshape(flat, new[] { batchSize, horizon, features });
     }
 
     /// <summary>

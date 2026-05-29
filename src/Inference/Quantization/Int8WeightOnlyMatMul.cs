@@ -4,24 +4,31 @@ using AiDotNet.Tensors.Engines.Simd;
 namespace AiDotNet.Inference.Quantization;
 
 /// <summary>
-/// Per-output-row INT8 weight-only matmul accelerated via the AiDotNet.Tensors
-/// SIMD GEMM. Replaces the scalar dequant-on-fly inner loop used by
-/// <see cref="QuantizedDenseLayer"/> and <see cref="QuantizedAttentionLayer"/>.
-///
-/// <para>The shape contract matches both consumers' existing layout:
+/// Per-output-row INT8 weight-only matmul. The shape contract:
 ///   C[m, n] = bias[n] + A[m, k] · dequant(B_int8[n, k], rowScales[n])
 /// where dequant(B[r, c], rowScales[r]) = B[r, c] * rowScales[r]. B is stored
 /// row-major as [n, k] (one int8 row per output column, the same convention
 /// <see cref="Int8WeightOnlyQuantization.QuantizePerRow(Tensor{float})"/>
-/// produces).</para>
+/// produces).
 ///
-/// <para>Implementation strategy: tile the output dimension so that each
-/// dequant-tile of B fits in L2 (≤192 KB by default), call the
-/// AVX2-vectorized <see cref="Int8Quantizer.DequantizeInt8ToFloat32"/> per row
-/// using that row's scale, then dispatch the FP32 tile through the public
-/// <see cref="SimdGemm.Sgemm"/> kernel (transposed B). This composes existing
-/// engine-level SIMD primitives — no System.Numerics, no scalar inner loop.
-/// Weights stay int8 in DRAM; only the active tile is materialized in FP32.</para>
+/// <para>Implementation: routes through
+/// <see cref="SimdGemm.SgemmWithInt8RowScaledCachedB"/> — a tiled GEMM that
+/// keeps weights in INT8 all the way through the macro-kernel and folds the
+/// per-row scales into the per-tile dequant. The pre-packed cache is keyed
+/// on the <c>sbyte[]</c> reference and survives across <c>Predict</c> calls,
+/// so the per-call cost reduces to PackA (activations only) + macro-kernel
+/// dispatch. INT8 weights stay 4× smaller than FP32 in DRAM, finally
+/// realizing the bandwidth saving that motivated the quantization in the
+/// first place. Closes AiDotNet#1349 once the Tensors NuGet ships with
+/// <see cref="SimdGemm.SgemmWithInt8RowScaledCachedB"/> (Tensors PR #427 /
+/// issue ooples/AiDotNet.Tensors#401).</para>
+///
+/// <para>Pre-#1349-fix path was: per-call ArrayPool rent + AVX2 dequant per
+/// tile into FP32 scratch + standard FP32 Sgemm + bias-scatter. That
+/// defeated the INT8 memory-bandwidth advantage because the FP32 scratch
+/// was the size of the active weight tile (and grew with batch). The new
+/// path never materializes the full FP32 weights — dequant is L1-resident
+/// inside the macro-kernel.</para>
 /// </summary>
 internal static class Int8WeightOnlyMatMul
 {
@@ -123,21 +130,46 @@ internal static class Int8WeightOnlyMatMul
                 "that fall-through must now either guard the call themselves or pre-fill the " +
                 "output span with the bias values before invocation (review #1363 C8QXn).");
 
+#if !NETFRAMEWORK
+        // net10.0 fast path: single tiled INT8 GEMM call — weights stay int8
+        // inside the cache and the macro-kernel's per-tile dequant, never
+        // materializing the full FP32 weight matrix. ChooseTileSize / per-call
+        // ArrayPool / outer dequant-then-Sgemm pattern (the #if NETFRAMEWORK
+        // branch below) were the source of the ~20× wall-clock gap reported in
+        // #1349; this kernel collapses all of that to one call.
+        // SgemmWithInt8RowScaledCachedB (Tensors #427) ships only in the net10.0
+        // Tensors build, so net471 keeps the proven dequant+Sgemm path below.
+        SimdGemm.SgemmWithInt8RowScaledCachedB(
+            a: input,
+            bInt8: weightsInt8,
+            rowScales: new ReadOnlySpan<float>(rowScales, 0, outputSize),
+            c: output.Slice(0, rows * outputSize),
+            m: rows,
+            k: inputSize,
+            n: outputSize);
+
+        // Bias-add. The new kernel writes C without bias; fold biases in
+        // via the same SimdKernels.VectorAdd primitive used before — one
+        // call per output row, AVX2-accelerated when available, scalar
+        // epilogue for the unaligned tail.
+        if (biases != null)
+        {
+            for (int r = 0; r < rows; r++)
+            {
+                int dstRow = r * outputSize;
+                var rowSpan = output.Slice(dstRow, outputSize);
+                SimdKernels.VectorAdd(
+                    rowSpan, new ReadOnlySpan<float>(biases, 0, outputSize), rowSpan);
+            }
+        }
+#else
+        // net471 fallback: SgemmWithInt8RowScaledCachedB is not present in the
+        // net471 Tensors build, so use the original per-tile dequant-into-FP32-
+        // scratch + SimdGemm.Sgemm path (functionally identical, just without the
+        // INT8-resident macro-kernel's DRAM-bandwidth win). Verified equivalent by
+        // Int8WeightOnlyMatMulTests.MultiplyAddBias_MatchesScalarReference.
         int outputTile = ChooseTileSize(outputSize, inputSize);
 
-        // Allocate using long-typed sizes so overflow against int.MaxValue
-        // surfaces explicitly (e.g. outputTile=3000 × inputSize=4096 +
-        // future scale-up to 1M-row batches would silently wrap to a
-        // negative int and pass to Rent — review #1363 C6XFg). At the
-        // canary shapes covered by tests these products stay well under
-        // 2 GiB / 4 bytes per float, but the bound check matters once
-        // wider FFN / longer sequences land.
-        //
-        // Both products are guaranteed > 0 here (rows >= 1 by the
-        // outputSize/rows==0 early-return; inputSize > 0 by the
-        // inputSize==0 throw above; outputTile > 0 by ChooseTileSize's
-        // ≥ 1 contract). So this check is purely an overflow ceiling,
-        // not a positivity check (review #1363 C8QY_).
         long dequantScratchLen = (long)outputTile * inputSize;
         long tileOutputLen = (long)rows * outputTile;
         if (dequantScratchLen > int.MaxValue || tileOutputLen > int.MaxValue)
@@ -145,17 +177,9 @@ internal static class Int8WeightOnlyMatMul
                 $"Tiled INT8 matmul exceeded int.MaxValue per-tile buffer (" +
                 $"dequantScratch={dequantScratchLen} from outputTile={outputTile}*inputSize={inputSize}; " +
                 $"tileOutput={tileOutputLen} from rows={rows}*outputTile={outputTile}). " +
-                "outputTile is chosen internally by ChooseTileSize; the caller-actionable knob is to " +
-                "split the call into smaller row batches (rows-by-rows external loop) before invoking " +
-                "MultiplyAddBias, OR to reduce inputSize / outputSize at the layer-shape level " +
-                "(review #1363 C8QXT).");
+                "Split the call into smaller row batches, OR reduce inputSize / outputSize.");
 
         var pool = ArrayPool<float>.Shared;
-        // Both rents inside the try block so that if the SECOND rent
-        // throws (rare: pool exhaustion / OOM), the first buffer is
-        // still returned to the pool by the finally (review #1363
-        // C6XF6 — prior code rented before try and leaked dequantScratch
-        // on a tileOutput rent throw).
         float[]? dequantScratch = null;
         float[]? tileOutput = null;
         try
@@ -168,12 +192,6 @@ internal static class Int8WeightOnlyMatMul
                 int dequantLen = tileN * inputSize;
                 int tileOutLen = rows * tileN;
 
-                // Dequantize tileN consecutive rows of int8 weights with per-row
-                // scale into the scratch buffer. Each call uses AVX2 internally
-                // when supported (see Int8Quantizer.DequantizeInt8ToFloat32) and
-                // fully writes its destination row from the int8 source, so the
-                // ArrayPool-returned uninitialized scratch is safe even though
-                // ArrayPool<T>.Shared.Rent does not zero on rent.
                 for (int oo = 0; oo < tileN; oo++)
                 {
                     int o = oBase + oo;
@@ -185,11 +203,6 @@ internal static class Int8WeightOnlyMatMul
                         rowScales[o]);
                 }
 
-                // C_tile [rows, tileN] = A [rows, inputSize] @ B_tile^T (Sgemm
-                // overload with transB=true). Explicit tileSpan.Clear() is
-                // belt-and-braces against a future SimdGemm.Sgemm refactor
-                // that drops its implicit clear of c (review #1363 C6XGz
-                // shortened from the 8-line line-number reference).
                 var tileSpan = tileOutput.AsSpan(0, tileOutLen);
                 tileSpan.Clear();
                 SimdGemm.Sgemm(
@@ -204,25 +217,6 @@ internal static class Int8WeightOnlyMatMul
                     k: inputSize,
                     n: tileN);
 
-                // Scatter tile into the strided output [rows, outputSize],
-                // adding the bias for this output-column block via
-                // AiDotNet.Tensors' SimdKernels.VectorAdd — the same
-                // accelerated SIMD primitive SimdGemm uses. Per the
-                // project-level rule, AiDotNet.Tensors is the in-tree
-                // SIMD library (full PyTorch parity); System.Numerics is
-                // banned. VectorAdd is one call per output row.
-                //
-                // tileN alignment: INTERIOR tiles (where oBase + outputTile
-                // < outputSize) are exactly outputTile elements wide,
-                // which ChooseTileSize sizes as a multiple of 16 for the
-                // AVX2 best-case path. The TAIL tile (last iteration when
-                // outputSize % outputTile != 0) is the remainder
-                // outputSize - oBase, which may not be a multiple of 16 —
-                // VectorAdd's scalar epilogue handles the unaligned tail
-                // correctly, just without the best-case throughput
-                // (review #1363 C8QW7 — earlier comment claimed all
-                // tiles are 16-aligned which was only true for interior
-                // tiles).
                 for (int r = 0; r < rows; r++)
                 {
                     int srcRow = r * tileN;
@@ -243,10 +237,9 @@ internal static class Int8WeightOnlyMatMul
         }
         finally
         {
-            // Null-conditional Return so a mid-rent throw (only the FIRST
-            // rent succeeded) still returns what we have without an NRE.
             if (dequantScratch is not null) pool.Return(dequantScratch);
             if (tileOutput is not null) pool.Return(tileOutput);
         }
+#endif
     }
 }

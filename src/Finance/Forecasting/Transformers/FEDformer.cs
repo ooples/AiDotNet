@@ -933,12 +933,12 @@ public class FEDformer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            for (int i = 0; i < input.Length; i++)
-            {
-                int statIdx = i % _numFeatures;
-                T scaled = NumOps.Multiply(input.Data.Span[i], _instanceStd.Data.Span[statIdx]);
-                result.Data.Span[i] = NumOps.Add(scaled, _instanceMean.Data.Span[statIdx]);
-            }
+            // Tape-connected denormalization (output * std + mean, per-feature
+            // stats broadcast over the trailing feature axis). The manual copy
+            // detached the graph before the loss, zeroing gradients. Stats are
+            // constants (paper-faithful reversible affine).
+            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
+            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
         }
 
         return result;

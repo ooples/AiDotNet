@@ -227,6 +227,16 @@ public class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     /// </remarks>
     public override void Fit(Matrix<T> X, Vector<T> y)
     {
+        // Invalidate the Gaussian posterior cache up front. Predict reuses
+        // _KPlusNoise / _alpha whenever they are non-null; if a retrain mutates
+        // _X / _y but then throws before OptimizeGaussianLikelihood repopulates
+        // the cache, a stale (K+σ²I) / α from the previous fit would otherwise
+        // be combined with the new kStar, producing wrong predictions or a
+        // dimension mismatch. Clear it so the cache is only ever live after a
+        // successful Gaussian fit.
+        _KPlusNoise = null;
+        _alpha = null;
+
         _X = X;
         _y = y;
 

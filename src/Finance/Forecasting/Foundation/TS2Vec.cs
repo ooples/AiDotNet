@@ -88,6 +88,14 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     private double _temporalContrastiveWeight;
     private double _instanceContrastiveWeight;
 
+    // Per-instance RevIN statistics (Kim et al. 2022, "Reversible Instance
+    // Normalization"). ApplyInstanceNormalization removes each series' mean/std;
+    // the forecast head output must be denormalized with the same stats so the
+    // forecast tracks the input's level. Without the reverse step, level-shifted
+    // (e.g. constant) inputs collapse to an identical normalized forecast.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
     #endregion
 
     #region Properties
@@ -331,6 +339,11 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
         _dropout = reader.ReadDouble();
         _temporalContrastiveWeight = reader.ReadDouble();
         _instanceContrastiveWeight = reader.ReadDouble();
+
+        // Re-point cached layer references at the freshly deserialized Layers;
+        // otherwise a clone's forward uses the stale random-initialized layers
+        // created by CreateNewInstance and diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -395,9 +408,13 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
+        // A rank-1 input is a single univariate series (one instance), not one
+        // instance per element — RevIN normalizes over the whole series.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
 
         for (int b = 0; b < batchSize; b++)
         {
@@ -423,6 +440,10 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
             variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
             T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
 
+            // Store per-instance stats so DenormalizeForecast can restore the scale.
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
             for (int t = 0; t < seqLen; t++)
             {
                 int idx = b * seqLen + t;
@@ -432,6 +453,36 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step: restores each instance's mean/std to the forecast so it
+    /// is expressed on the input's original scale (Kim et al. 2022). The forecast
+    /// rows align with the instances normalized in <see cref="ApplyInstanceNormalization"/>.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch)
+            return forecast;
+
+        // Build per-instance scale/shift as [batch, 1] constants that broadcast
+        // over the forecast's trailing dimension. The multiply/add go through the
+        // Engine so the forecast stays on the autodiff tape (a manual element fill
+        // would detach it and starve the forecast head of gradients).
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank < 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -476,6 +527,11 @@ public class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
 
         if (_forecastHead is not null)
             current = _forecastHead.Forward(current);
+
+        // RevIN reverse: put the forecast back on the input's scale so distinct
+        // input levels yield distinct forecasts (the encoder sees only the
+        // mean/std-normalized series).
+        current = DenormalizeForecast(current);
 
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
