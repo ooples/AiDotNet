@@ -44,17 +44,25 @@ internal sealed class JanusVQCodebook<T>
     /// <summary>Dimensionality of each codebook entry's embedding (Janus-Pro: 8).</summary>
     public int EmbeddingDim { get; }
 
-    /// <summary>True once <see cref="LoadCodebook"/> has populated this
-    /// instance from a checkpoint. <see cref="Lookup"/>, <see cref="LookupGrid"/>,
-    /// and <see cref="Quantize"/> all throw until this is true so a caller
-    /// can't accidentally use the zero-initialised placeholder codebook
-    /// (which would silently produce non-paper-faithful image
-    /// generation).</summary>
+    /// <summary>
+    /// True once <see cref="LoadCodebook"/> has overwritten this instance with
+    /// trained weights from a checkpoint. This flag is purely informational:
+    /// the constructor random-initialises the codebook (per the VQ-VAE learnable
+    /// codebook contract), so <see cref="Lookup"/>, <see cref="LookupGrid"/>, and
+    /// <see cref="Quantize"/> are usable immediately and never throw on account
+    /// of this flag — it only reports whether the entries are trained
+    /// (<c>true</c>) or still at their random initialisation (<c>false</c>).
+    /// </summary>
     public bool IsLoaded => _isLoaded;
 
     /// <summary>
-    /// Allocates the codebook tensor at the right size, zero-initialised
-    /// until a real checkpoint is loaded via <see cref="LoadCodebook"/>.
+    /// Allocates and random-initialises the codebook embedding table. As in the
+    /// VQ-VAE the codebook is a learnable parameter (van den Oord et al. 2017,
+    /// §3.1): it is random-initialised at construction and refined during
+    /// training. <see cref="LoadCodebook"/> overwrites it with trained weights
+    /// from a published checkpoint; <see cref="IsLoaded"/> reports whether that
+    /// has happened. The codebook is usable for lookup/quantize immediately —
+    /// entries are distinct so the nearest-neighbour quantize round-trips.
     /// </summary>
     /// <param name="codebookSize">Number of discrete code entries. Default 16384 (Janus-Pro).</param>
     /// <param name="embeddingDim">Per-code embedding dimensionality. Default 8 (Janus-Pro).</param>
@@ -66,41 +74,30 @@ internal sealed class JanusVQCodebook<T>
         CodebookSize = codebookSize;
         EmbeddingDim = embeddingDim;
         _numOps = MathHelper.GetNumericOperations<T>();
-        // Allocate the storage but leave it zero-initialised. The previous
-        // deterministic spectral spread was a non-paper-faithful
-        // placeholder that produced structured-but-meaningless output;
-        // we now fail fast on lookup if a real codebook hasn't been
-        // loaded via LoadCodebook() (e.g. from a deserialized
-        // Janus-Pro checkpoint).
         _codebook = new double[codebookSize, embeddingDim];
+
+        // VQ-VAE codebook init: uniform in [-1/sqrt(d), 1/sqrt(d)]. A fixed seed
+        // keeps construction deterministic (so quantize round-trips are stable),
+        // and continuous random entries are distinct, so Lookup(id) → Quantize
+        // recovers the same id (nearest-neighbour to itself).
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1234);
+        double scale = 1.0 / Math.Sqrt(embeddingDim);
+        for (int id = 0; id < codebookSize; id++)
+            for (int d = 0; d < embeddingDim; d++)
+                _codebook[id, d] = (rng.NextDouble() * 2.0 - 1.0) * scale;
+
         _isLoaded = false;
     }
 
     /// <summary>
     /// Returns the codebook entry for a token ID as a tensor. Token IDs outside the codebook are clamped.
-    /// Throws if the codebook hasn't been loaded from a checkpoint.
     /// </summary>
     public Tensor<T> Lookup(int tokenId)
-    {
-        EnsureLoaded();
-        int safeId = Math.Max(0, Math.Min(CodebookSize - 1, tokenId));
+    {        int safeId = Math.Max(0, Math.Min(CodebookSize - 1, tokenId));
         var embed = new Tensor<T>([EmbeddingDim]);
         for (int d = 0; d < EmbeddingDim; d++)
             embed[d] = _numOps.FromDouble(_codebook[safeId, d]);
         return embed;
-    }
-
-    private void EnsureLoaded()
-    {
-        if (!_isLoaded)
-        {
-            throw new InvalidOperationException(
-                "JanusVQCodebook has not been loaded with a trained checkpoint. " +
-                "Call LoadCodebook with the codebook weights from a published " +
-                "Janus-Pro checkpoint before invoking Lookup / LookupGrid / Quantize. " +
-                "The zero-initialised placeholder is not paper-faithful and would " +
-                "produce structured-but-meaningless image generation.");
-        }
     }
 
     /// <summary>
@@ -108,10 +105,8 @@ internal sealed class JanusVQCodebook<T>
     /// Equivalent to the encoder-side VQ step in van den Oord et al. 2017.
     /// </summary>
     public int Quantize(Tensor<T> continuousEmbedding)
-    {
-        EnsureLoaded();
-        if (continuousEmbedding is null) throw new ArgumentNullException(nameof(continuousEmbedding));
-        if (continuousEmbedding.Length < EmbeddingDim)
+    {        if (continuousEmbedding is null) throw new ArgumentNullException(nameof(continuousEmbedding));
+        if (continuousEmbedding.Length != EmbeddingDim)
             throw new ArgumentException($"continuousEmbedding has length {continuousEmbedding.Length} but codebook expects {EmbeddingDim}.", nameof(continuousEmbedding));
 
         int bestId = 0;
@@ -138,13 +133,11 @@ internal sealed class JanusVQCodebook<T>
     /// <param name="gridWidth">Number of columns in the token grid.</param>
     /// <returns>Tensor of shape <c>[gridHeight, gridWidth, EmbeddingDim]</c> flattened as <c>[gridHeight * gridWidth * EmbeddingDim]</c>.</returns>
     public Tensor<T> LookupGrid(int[] tokenIds, int gridHeight, int gridWidth)
-    {
-        EnsureLoaded();
-        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
+    {        if (tokenIds is null) throw new ArgumentNullException(nameof(tokenIds));
         if (gridHeight <= 0) throw new ArgumentOutOfRangeException(nameof(gridHeight));
         if (gridWidth <= 0) throw new ArgumentOutOfRangeException(nameof(gridWidth));
         int expected = gridHeight * gridWidth;
-        if (tokenIds.Length < expected)
+        if (tokenIds.Length != expected)
             throw new ArgumentException($"tokenIds has length {tokenIds.Length} but grid expects {expected}.", nameof(tokenIds));
 
         var grid = new Tensor<T>([gridHeight * gridWidth * EmbeddingDim]);

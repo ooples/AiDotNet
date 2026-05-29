@@ -86,6 +86,12 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     private double _dropout;
     private FoundationModelSize _modelSize;
 
+    // Per-feature RevIN statistics (Kim et al. 2022) captured during
+    // ApplyInstanceNormalization, used to denormalize the forecast back to the
+    // input's scale so level-shifted inputs yield distinct forecasts.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
     #endregion
 
     #region Properties
@@ -167,6 +173,11 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
+        // Size the context window to the architecture's actual input so the patch
+        // layers match the input the model is given (the options default assumes
+        // paper scale, which need not match the configured architecture).
+        if (architecture.InputSize > 0)
+            _contextLength = architecture.InputSize;
         InitializeLayers();
     }
 
@@ -385,44 +396,71 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        // For rank-1 inputs, treat as single sequence (batch=1, seqLen=input.Length)
-        int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
-        int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
+        // RevIN over a single series: normalize EACH feature (last axis) over the
+        // time axis and store per-feature mean/std for the reverse denormalization.
+        // Univariate inputs have features == 1 (one global mean/std).
+        int features = input.Rank > 1 ? input.Shape[input.Rank - 1] : 1;
+        int steps = features > 0 ? input.Length / features : input.Length;
         var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(features);
+        _revinStd = new Vector<T>(features);
 
-        for (int b = 0; b < batchSize; b++)
+        for (int f = 0; f < features; f++)
         {
             T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
+            for (int t = 0; t < steps; t++)
             {
-                int idx = b * seqLen + t;
+                int idx = t * features + f;
                 if (idx < input.Length)
                     mean = NumOps.Add(mean, input[idx]);
             }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
+            mean = NumOps.Divide(mean, NumOps.FromDouble(steps));
 
             T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
+            for (int t = 0; t < steps; t++)
             {
-                int idx = b * seqLen + t;
+                int idx = t * features + f;
                 if (idx < input.Length)
                 {
                     var diff = NumOps.Subtract(input[idx], mean);
                     variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
                 }
             }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
+            variance = NumOps.Divide(variance, NumOps.FromDouble(steps));
             T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+            _revinMean[f] = mean;
+            _revinStd[f] = std;
 
-            for (int t = 0; t < seqLen; t++)
+            for (int t = 0; t < steps; t++)
             {
-                int idx = b * seqLen + t;
+                int idx = t * features + f;
                 if (idx < input.Length && idx < result.Length)
                     result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
             }
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each feature's mean/std to
+    /// the forecast so it is on the input's original scale. Tape-connected.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int features = _revinMean.Length;
+        if (features <= 0 || forecast.Length % features != 0)
+            return forecast;
+
+        var meanRow = new Tensor<T>(new[] { 1, features });
+        var stdRow = new Tensor<T>(new[] { 1, features });
+        for (int f = 0; f < features; f++) { meanRow.Data.Span[f] = _revinMean[f]; stdRow.Data.Span[f] = _revinStd[f]; }
+
+        int rows = forecast.Length / features;
+        var fc2d = Engine.Reshape(forecast, new[] { rows, features });
+        var scaled = Engine.TensorBroadcastMultiply(fc2d, stdRow);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanRow);
+        return Engine.Reshape(shifted, forecast._shape);
     }
 
     /// <inheritdoc/>
@@ -446,15 +484,14 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
-        var normalized = ApplyInstanceNormalization(input);
-        var current = normalized;
+        var current = ApplyInstanceNormalization(input);
 
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
+        // Flatten the whole series to a single batch row [1, length] so the patch
+        // ReshapeLayer reshapes the entire sequence rather than mis-reading the
+        // leading dimension as a batch axis.
+        bool flattened = !(current.Rank == 2 && current.Shape[0] == 1);
+        if (flattened)
             current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
 
         // Helper emits a flat, sequentially-composable Layers list
         // (Reshape → Dense(patch) → N × TransformerEncoderLayer
@@ -462,7 +499,10 @@ public class TOTO<T> : TimeSeriesFoundationModelBase<T>
         foreach (var layer in Layers)
             current = layer.Forward(current);
 
-        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+        // RevIN reverse: put the forecast back on the input's per-feature scale.
+        current = DenormalizeForecast(current);
+
+        if (flattened && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
 
         return current;

@@ -1170,8 +1170,12 @@ public partial class LSTMLayer<T> : LayerBase<T>
             }
         }
 
-        // Use TensorAllocator.Rent for forward pass tensors to reduce GC pressure
-        var output = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
+        // Per-time-step hidden states collected for a tape-connected concat (the
+        // output must stay on the autodiff graph so gradients reach the weights; a
+        // pre-allocated tensor written with SetSlice would detach it). This runs only
+        // when the fused inference fast path above did not return (training, FP64,
+        // non-CpuEngine, or an active autograd tape).
+        var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
         _cachedHiddenStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
         _cachedCellStates = TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize });
@@ -1232,11 +1236,16 @@ public partial class LSTMLayer<T> : LayerBase<T>
             var tanhC = Engine.Tanh(currentC);
             currentH = Engine.TensorMultiply(o, tanhC);
 
-            // Store results along the time dimension (dimension 1)
-            output.SetSlice(1, t, currentH);
+            // Collect the hidden state for the tape-connected output concat below.
+            hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
+            // Caches for the manual backward path (not on the tape).
             _cachedHiddenStates.SetSlice(1, t, currentH);
             _cachedCellStates.SetSlice(1, t, currentC);
         }
+
+        // Assemble the [batch, timeSteps, hiddenSize] output on the tape so gradients
+        // flow back through the recurrence to the gate weights.
+        var output = Engine.TensorConcatenate(hiddenStatesList.ToArray(), axis: 1);
 
         _lastHiddenState = currentH;
         _lastCellState = currentC;
@@ -2273,6 +2282,17 @@ public partial class LSTMLayer<T> : LayerBase<T>
     /// </remarks>
     public override Vector<T> GetParameters()
     {
+        // A lazily-constructed LSTM (hidden size given, input size deferred to the
+        // first forward) still has a well-defined parameter set once we adopt the
+        // standard square default (input size == hidden size, as in stacked recurrent
+        // stages). Resolve to that default when parameters are requested before any
+        // forward so they are materialized rather than reported as empty; a later
+        // forward with a different input width re-adapts via the input-adaptation path.
+        if (!IsShapeResolved && _hiddenSize > 0)
+        {
+            ResolveFromShape(new[] { _hiddenSize });
+        }
+
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
             Vector<T>.FromMemory(_weightsFi.Data),

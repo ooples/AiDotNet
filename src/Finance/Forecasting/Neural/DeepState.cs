@@ -391,6 +391,10 @@ public class DeepState<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
+        // Idempotent: clear the RNN list first so a re-extract (after deserialize)
+        // rebinds rather than appending a doubled stack.
+        _rnnLayers.Clear();
+
         int idx = 0;
 
         // Input projection
@@ -646,6 +650,10 @@ public class DeepState<T> : ForecastingModelBase<T>
         _useTrend = reader.ReadBoolean();
         _useSeasonality = reader.ReadBoolean();
         _dropout = reader.ReadDouble();
+
+        // Re-bind cached layer references so a deserialized/cloned model runs on
+        // the restored layers, not the construction-time random ones.
+        ExtractLayerReferences();
     }
 
     #endregion
