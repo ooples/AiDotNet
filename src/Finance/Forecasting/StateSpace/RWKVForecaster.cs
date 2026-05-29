@@ -95,6 +95,13 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     private int _numLayers;
     private double _dropout;
     private int _numFeatures;
+
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
+    // RWKVForecaster normalizes each input series before the embedding and
+    // restores the level on the output so distinct input scales produce
+    // distinct forecasts.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
     #endregion
 
     #region IForecastingModel Properties
@@ -365,7 +372,73 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     }
 
     /// <inheritdoc/>
-    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) => input;
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
+    {
+        // RevIN forward (Kim et al. 2022): subtract each instance's mean and
+        // divide by its std. Stats are taken over every non-batch element of each
+        // row so this works for 1-D / 2-D / 3-D inputs alike.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
+        if (instanceSize <= 0)
+            return input;
+
+        var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            int start = b * instanceSize;
+
+            T mean = NumOps.Zero;
+            for (int t = 0; t < instanceSize; t++)
+                mean = NumOps.Add(mean, input[start + t]);
+            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
+
+            T variance = NumOps.Zero;
+            for (int t = 0; t < instanceSize; t++)
+            {
+                var diff = NumOps.Subtract(input[start + t], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
+            for (int t = 0; t < instanceSize; t++)
+                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the
+    /// forecast so it is expressed on the input's original scale. The multiply/add go
+    /// through the Engine so the forecast stays on the autodiff tape.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
+
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
+    }
 
     /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()
@@ -388,7 +461,9 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
     private Tensor<T> Forward(Tensor<T> input)
     {
-        var current = NormalizeInputTo3D(input);
+        // RevIN forward: normalize so the embedding + RWKV recurrence see a
+        // zero-mean unit-std series; the level is restored after the projection.
+        var current = NormalizeInputTo3D(ApplyInstanceNormalization(input));
         int batchSize = current.Shape[0];
         int seqLen = current.Shape[1];
 
@@ -427,7 +502,18 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
                 current = layer.Forward(current);
         }
 
-        return current;
+        // RevIN reverse: restore the input's per-instance level/scale.
+        return DenormalizeForecast(current);
+    }
+
+    /// <summary>
+    /// Training-mode forward. Routes through <see cref="Forward"/> so training uses the
+    /// same RevIN normalize/denormalize as inference and keeps training mode (dropout)
+    /// active, instead of the base default that flips to inference.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
     }
 
     /// <summary>
