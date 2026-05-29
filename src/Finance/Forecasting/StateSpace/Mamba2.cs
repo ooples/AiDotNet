@@ -447,6 +447,53 @@ public class Mamba2<T> : ForecastingModelBase<T>
         return current;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Reproduces the genuine forward (input → 3-D normalize → embedding → Mamba-2 blocks →
+    /// output projection) with the reshapes between stages. The default base implementation
+    /// runs the flat <c>Layers</c> list and would feed the Mamba-2 block the wrong rank.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+            return activations;
+
+        var current = NormalizeInputTo3D(input);
+        int batchSize = current.Shape[0];
+        int seqLen = current.Shape[1];
+
+        if (_inputEmbedding is not null)
+        {
+            current = current.Reshape(new[] { batchSize * seqLen, _numFeatures });
+            current = _inputEmbedding.Forward(current);
+            current = current.Reshape(new[] { batchSize, seqLen, _modelDimension });
+            activations["InputEmbedding"] = current.Clone();
+        }
+
+        if (_mamba2Blocks is not null)
+        {
+            for (int i = 0; i < _mamba2Blocks.Count; i++)
+            {
+                current = _mamba2Blocks[i].Forward(current);
+                activations[$"Mamba2Block_{i}"] = current.Clone();
+            }
+        }
+
+        current = current.Reshape(new[] { batchSize, seqLen * _modelDimension });
+
+        if (_outputProjectionLayers is not null)
+        {
+            for (int i = 0; i < _outputProjectionLayers.Count; i++)
+            {
+                current = _outputProjectionLayers[i].Forward(current);
+                activations[$"OutputProjection_{i}"] = current.Clone();
+            }
+        }
+
+        return activations;
+    }
+
     private Tensor<T> NormalizeInputTo3D(Tensor<T> input)
     {
         if (input.Rank == 3) return input;
