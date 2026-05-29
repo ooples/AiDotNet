@@ -204,6 +204,14 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     private int _numQuantiles;
     private int _quantileHeadDimension;
 
+    // RevIN (reversible instance normalization, Kim et al. 2022). TimesFM (Das
+    // et al. 2024 §3.1) scales each input context by its mean/std before the
+    // patch embedding and reverses the transform on the output, so the decoder
+    // only ever sees a zero-mean unit-std series and the forecast is restored to
+    // the input's level. Per-instance stats keyed by batch row.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
     #endregion
 
     #region IForecastingModel Properties
@@ -894,7 +902,82 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
     /// </remarks>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        return input;
+        // RevIN forward (Das et al. 2024 §3.1, Kim et al. 2022): subtract each
+        // instance's mean and divide by its std so the decoder sees a normalized
+        // series. A rank-1 input is a single univariate context (one instance),
+        // not one instance per time step.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
+
+        for (int b = 0; b < batchSize; b++)
+        {
+            T mean = NumOps.Zero;
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length)
+                    mean = NumOps.Add(mean, input[idx]);
+            }
+            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
+
+            T variance = NumOps.Zero;
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length)
+                {
+                    var diff = NumOps.Subtract(input[idx], mean);
+                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
+                }
+            }
+            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
+            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
+            for (int t = 0; t < seqLen; t++)
+            {
+                int idx = b * seqLen + t;
+                if (idx < input.Length && idx < result.Length)
+                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step: restores each instance's mean/std to the forecast so it
+    /// is expressed on the input's original scale (Kim et al. 2022). The forecast
+    /// rows align with the instances normalized in <see cref="ApplyInstanceNormalization"/>.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch)
+            return forecast;
+
+        // Build per-instance scale/shift as [batch, 1] constants that broadcast
+        // over the forecast's trailing dimension. The multiply/add go through the
+        // Engine so the forecast stays on the autodiff tape (a manual element fill
+        // would detach it and starve the forecast head of gradients).
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank < 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -918,6 +1001,33 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             ["NumHeads"] = NumOps.FromDouble(_numHeads),
             ["LastLoss"] = lastLoss
         };
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Mirrors <see cref="Forward"/>'s preprocessing so the captured activations match the
+    /// real forward pass: a bare rank-1 context is RevIN-normalized and given a leading batch
+    /// axis before it reaches the patch <c>ReshapeLayer</c> (which would otherwise misread the
+    /// 512-element vector as a 512-row batch and fail to reshape into patches).
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     #endregion
@@ -966,7 +1076,19 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
         // "the last window of output_patch_length forecast values is used
         // when the horizon is shorter; longer horizons are produced by
         // autoregressively feeding back predictions").
-        var current = input;
+        // RevIN forward: normalize the context so the decoder sees a zero-mean
+        // unit-std series. The reverse transform after the head restores the
+        // input level, which is what makes distinct input levels produce
+        // distinct forecasts (paper §3.1).
+        var current = ApplyInstanceNormalization(input);
+
+        bool addedBatchDim = false;
+        if (current.Rank == 1)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+            addedBatchDim = true;
+        }
+
         foreach (var layer in Layers)
             current = layer.Forward(current);
 
@@ -988,6 +1110,12 @@ public class TimesFM<T> : TimeSeriesFoundationModelBase<T>
             int offset = total - _forecastHorizon;
             current = Engine.TensorNarrow(current, current.Rank - 1, offset, _forecastHorizon);
         }
+
+        // RevIN reverse: restore the input's per-instance level/scale.
+        current = DenormalizeForecast(current);
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+            current = current.Reshape(new[] { current.Shape[1] });
 
         return current;
     }

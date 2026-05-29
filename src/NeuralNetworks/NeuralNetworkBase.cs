@@ -3347,6 +3347,20 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         }
     }
 
+    /// <summary>
+    /// Runs <see cref="WireLayerRandomSeeds"/> exactly once, before the first training forward.
+    /// Subclasses that override <see cref="ForwardForTraining"/> without calling the base
+    /// implementation (e.g. finance models that route through their own native forward) MUST call
+    /// this first, or their stochastic layers (DropoutLayer) train with order-dependent masks and
+    /// the training-trajectory invariants flake / fail only when other tests advance the shared RNG.
+    /// </summary>
+    protected void EnsureLayerRandomSeedsWired()
+    {
+        if (_layerRandomSeedsWired) return;
+        _layerRandomSeedsWired = true;
+        WireLayerRandomSeeds();
+    }
+
     private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng)
     {
         if (layer is Layers.LayerBase<T> baseLayer)
@@ -3370,11 +3384,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         // or the test harness's process-wide DefaultRandomSeedOverride); production with no seed is
         // unaffected. Eager-init layers already chose their weights, but the loss-comparison tests
         // clone a single network so init is shared — the dropout stream is the run-to-run variable.
-        if (!_layerRandomSeedsWired)
-        {
-            _layerRandomSeedsWired = true;
-            WireLayerRandomSeeds();
-        }
+        EnsureLayerRandomSeedsWired();
 
         // Gradient checkpointing opt-in path. Unify on a single source of
         // truth by consulting BOTH:
@@ -7705,6 +7715,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     var srcLayer = _layers[i];
                     var dstLayer = largeBase._layers[i];
+
+                    // The freshly-constructed destination may carry lazy layers whose
+                    // weight tensors aren't materialized yet (ParameterCount == 0 until
+                    // a forward pass resolves their shape). The source layer has already
+                    // run a forward (its ParameterCount is concrete), so resolve the
+                    // destination from the source's input shape before copying — otherwise
+                    // the ParameterCount guard below skips the copy and the clone keeps the
+                    // destination's random-initialized weights, diverging from the original.
+                    if (dstLayer is LayerBase<T> dstLazy && !dstLazy.IsShapeResolved
+                        && srcLayer.ParameterCount > 0)
+                    {
+                        int[] srcInputShape = srcLayer.GetInputShape();
+                        if (srcInputShape is { Length: > 0 } && Array.TrueForAll(srcInputShape, d => d > 0))
+                        {
+                            try { dstLazy.ResolveFromShape(srcInputShape); }
+                            catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
+                        }
+                    }
+
                     if (srcLayer.ParameterCount > 0 && dstLayer.ParameterCount == srcLayer.ParameterCount)
                     {
                         dstLayer.SetParameters(srcLayer.GetParameters());

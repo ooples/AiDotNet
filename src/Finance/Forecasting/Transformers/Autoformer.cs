@@ -331,6 +331,15 @@ public class Autoformer<T> : ForecastingModelBase<T>
         if (Layers.Count == 0)
             return;
 
+        // Idempotent: clear the per-block reference lists before repopulating.
+        // ExtractLayerReferences runs once in the ctor AND again after deserialize
+        // (to re-bind to the reloaded layers); without clearing, the second call
+        // APPENDED the deserialized layers onto the construction-time ones, so a
+        // clone ran a doubled/mixed encoder+decoder stack and its output drifted
+        // from the original.
+        _encoderLayers.Clear();
+        _decoderLayers.Clear();
+
         _inputEmbedding = Layers[0];
 
         int encoderStartIndex = 1;
@@ -532,6 +541,12 @@ public class Autoformer<T> : ForecastingModelBase<T>
         _topKFactor = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _useInstanceNormalization = reader.ReadBoolean();
+
+        // Re-bind the cached layer references to the layers the base deserializer
+        // just rebuilt with the loaded weights — otherwise Forward (and therefore
+        // a clone) runs on the construction-time random-init layers instead of the
+        // deserialized weights (Clone_ShouldProduceIdenticalOutput divergence).
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -887,24 +902,16 @@ public class Autoformer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input._shape);
-            int batchSize = input.Shape[0];
-            int horizonLen = input.Shape[1];
-            int features = input.Shape[2];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int t = 0; t < horizonLen; t++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        var scaled = NumOps.Multiply(input[b, t, f], _instanceStd[b, 0, f]);
-                        denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[b, 0, f]);
-                    }
-                }
-            }
-
-            return denormalized;
+            // Tape-connected denormalization: output * std + mean, broadcasting the
+            // per-instance stats [B,1,F] across the time dimension. Doing this with
+            // manual per-element indexing built a fresh tensor that was detached
+            // from the autodiff graph, so the loss had no gradient path back to the
+            // layers — training produced zero gradients (params never changed). The
+            // RevIN stats themselves are treated as constants (paper-faithful: the
+            // reversible affine just rescales the prediction), so d(output)/d(input)
+            // = std and gradients flow through the layer stack.
+            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
+            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
         }
     }
 
@@ -922,21 +929,20 @@ public class Autoformer<T> : ForecastingModelBase<T>
         if (currentLen == _predictionHorizon)
             return output;
 
-        var adjusted = new Tensor<T>(new[] { output.Shape[0], _predictionHorizon, output.Shape[2] });
-        int copyLen = Math.Min(currentLen, _predictionHorizon);
-
-        for (int b = 0; b < output.Shape[0]; b++)
+        // Tape-connected length adjustment along the time axis. The previous
+        // manual per-element copy built a fresh tensor that detached the autodiff
+        // graph right before the loss, so no gradient reached the layers.
+        if (currentLen > _predictionHorizon)
         {
-            for (int t = 0; t < copyLen; t++)
-            {
-                for (int f = 0; f < output.Shape[2]; f++)
-                {
-                    adjusted[b, t, f] = output[b, t, f];
-                }
-            }
+            // Keep the first _predictionHorizon steps.
+            return Engine.TensorNarrow(output, dim: 1, start: 0, length: _predictionHorizon);
         }
 
-        return adjusted;
+        // currentLen < _predictionHorizon: pad with zeros along the time axis.
+        // The zero pad carries no gradient; Concat keeps the real-output portion
+        // tape-connected.
+        var pad = new Tensor<T>(new[] { output.Shape[0], _predictionHorizon - currentLen, output.Shape[2] });
+        return Engine.Concat(new[] { output, pad }, 1);
     }
 
     #endregion

@@ -244,6 +244,13 @@ public class AdvancedNeuralNetworkModelsIntegrationTests
         var network = new LSTMNeuralNetwork<float>(architecture, lossFunction: null, outputActivation: null);
         var input = CreateSequenceInput(8, 6);
 
+        // The LSTM layer is lazy-input (PyTorch-style): its gate weights are
+        // allocated on the first forward, which resolves the input feature count.
+        // Warm up once so the diagnostic block below (which reads WeightsFi /
+        // BiasI and does a manual matmul) sees materialized weights instead of
+        // the [0, 0] lazy placeholders.
+        network.Predict(input);
+
         // Debug: Print layer structure and trace forward pass
         var debugOutput = new System.Text.StringBuilder();
         debugOutput.AppendLine($"Input shape: [{string.Join(", ", input.Shape.ToArray())}]");

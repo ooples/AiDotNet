@@ -117,6 +117,13 @@ public class TimeMachine<T> : ForecastingModelBase<T>
     private bool _useReversibleNormalization;
     private string _decompositionMethod;
     private int _numFeatures;
+
+    // RevIN reverse-step statistics (Kim et al. 2022). ApplyInstanceNormalization
+    // stores the instance mean/std here so the forecast can be restored to the
+    // input's original scale; FlattenInput collapses the input to a single
+    // instance, so one (mean, std) pair suffices.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
     #endregion
 
     #region IForecastingModel Properties
@@ -732,6 +739,13 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         variance = NumOps.Divide(variance, NumOps.FromDouble(length));
         T std = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)) + 1e-8);
 
+        // Store the instance mean/std so DenormalizeForecast can reverse the
+        // transform — the original code dropped these, so the forecast was never
+        // restored to the input scale and constant inputs of different levels
+        // collapsed to identical forecasts.
+        _revinMean = new Vector<T>(1) { [0] = mean };
+        _revinStd = new Vector<T>(1) { [0] = std };
+
         // Normalize
         var normalized = new Tensor<T>(input._shape);
         for (int i = 0; i < length; i++)
@@ -742,6 +756,29 @@ public class TimeMachine<T> : ForecastingModelBase<T>
         }
 
         return normalized;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores the instance mean/std stored
+    /// by <see cref="ApplyInstanceNormalization"/> to the forecast so it is
+    /// expressed on the input's original scale. The multiply/add go through the
+    /// Engine so the forecast stays on the autodiff tape.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        if (_revinMean.Length != 1 || _revinStd.Length != 1)
+            return forecast;
+
+        var meanT = new Tensor<T>(new[] { 1, 1 }) ;
+        var stdT = new Tensor<T>(new[] { 1, 1 });
+        meanT.Data.Span[0] = _revinMean[0];
+        stdT.Data.Span[0] = _revinStd[0];
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { 1, forecast.Length }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <summary>
@@ -799,12 +836,71 @@ public class TimeMachine<T> : ForecastingModelBase<T>
             current = ApplyInstanceNormalization(current);
         }
 
+        // Add a leading batch axis so the embedding ReshapeLayer tokenizes the
+        // flattened context into per-timestep tokens [1, contextLength,
+        // numFeatures] instead of misreading the contextLength vector as a batch.
+        bool addedBatchDim = current.Rank == 1;
+        if (addedBatchDim)
+        {
+            current = current.Reshape(new[] { 1, current.Length });
+        }
+
         foreach (var layer in Layers)
         {
             current = layer.Forward(current);
         }
 
+        // Apply RevIN reverse step so the forecast is on the input's scale.
+        if (_useReversibleNormalization)
+        {
+            current = DenormalizeForecast(current);
+        }
+
+        if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
+        {
+            current = current.Reshape(new[] { current.Shape[1] });
+        }
+
         return current;
+    }
+
+    /// <summary>
+    /// Training-mode forward. Routes through <see cref="Forward"/> so training uses
+    /// the same RevIN normalize/denormalize as inference (and keeps training mode
+    /// active for dropout), instead of the base default that flips to inference.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return Forward(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Mirrors <see cref="Forward"/>'s preprocessing so the captured activations match the
+    /// real forward pass: the input is flattened, RevIN-normalized and given a leading batch
+    /// axis before it reaches the embedding <c>ReshapeLayer</c> (which would otherwise misread
+    /// the flattened context vector as a multi-row batch).
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+
+        var current = FlattenInput(input);
+        if (_useReversibleNormalization)
+            current = ApplyInstanceNormalization(current);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+
+        return activations;
     }
 
     /// <summary>

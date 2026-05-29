@@ -972,6 +972,25 @@ public partial class SpiralConvLayer<T> : LayerBase<T>
     public override long ParameterCount => _weights.Length + _biases.Length;
 
     /// <summary>
+    /// Emits the construction parameters the network's flat-parameter
+    /// serialization path (GetMetadata + GetParameters, used by Clone /
+    /// DeepCopy) needs to rebuild this layer. Without OutputChannels and
+    /// SpiralLength here, deserialize fell back to a generic ctor with the
+    /// wrong SpiralLength, sizing the lazy weights differently than the
+    /// original and breaking Clone with a parameter-count mismatch.
+    /// InputChannels is intentionally omitted — it is re-derived from the
+    /// resolved input shape on the deserialize-time forward.
+    /// </summary>
+    internal override Dictionary<string, string> GetMetadata()
+    {
+        var meta = base.GetMetadata();
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        meta["OutputChannels"] = OutputChannels.ToString(inv);
+        meta["SpiralLength"] = SpiralLength.ToString(inv);
+        return meta;
+    }
+
+    /// <summary>
     /// Creates a deep copy of this layer.
     /// </summary>
     /// <returns>A new SpiralConvLayer with identical configuration and parameters.</returns>

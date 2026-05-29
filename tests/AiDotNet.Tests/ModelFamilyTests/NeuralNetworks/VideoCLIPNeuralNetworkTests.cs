@@ -1,5 +1,6 @@
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
@@ -23,7 +24,7 @@ namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 ///   - numHeads=4 (paper: 12) — preserves multi-head structure, head_dim=16
 ///   - 2 encoder layers each (paper: 12) — minimal depth to test gradient flow
 ///   - 4 frames (paper: 8) — temporal aggregation test
-///   - LR=1e-4 (paper §4: AdamW with 1e-5 to 3e-4 and warm-up)
+///   - Adam (β1=0.9, β2=0.98), LR=5e-5, grad-clip 2.0 (paper "Training Details")
 /// </summary>
 public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
 {
@@ -49,13 +50,32 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
             inputDepth: 3,
             outputSize: 64);
 
-        // Paper §4: AdamW with LR 1e-5 to 3e-4 and cosine warm-up schedule.
-        // Default Adam LR=0.001 is too aggressive for L2-normalized contrastive embeddings.
+        // Paper "Training Details": Adam (β1 = 0.9, β2 = 0.98) with an initial
+        // learning rate of 5e-5, 1,000 warm-up steps followed by polynomial
+        // decay, and gradients clipped to a norm of 2.0. This scaled-down test
+        // runs only a handful of memorization steps, so the warm-up +
+        // polynomial-decay schedule collapses to a static learning rate; the
+        // paper-faithful Adam betas and gradient-clip norm are kept as-is.
         var optimizerOptions = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
         {
-            InitialLearningRate = 1e-4  // Paper mid-range LR
+            InitialLearningRate = 5e-5,  // Paper: initial LR 5e-5
+            Beta1 = 0.9,                 // Paper: Adam β1 = 0.9
+            Beta2 = 0.98,                // Paper: Adam β2 = 0.98
+            MaxGradientNorm = 2.0        // Paper: gradients clipped at 2.0
         };
 
+        // Paper §3 defines training in unit-norm embedding space via cosine
+        // similarity (the InfoNCE numerator is exp(cos_sim/τ)). VideoCLIP's
+        // forward returns an L2-normalized embedding [1, embeddingDim], so the
+        // paper-faithful single-pair training signal is "drive cosine(output,
+        // target) toward 1" — exactly what CosineSimilarityLoss computes
+        // (1 − cos(o, t)). The model's default constructor sets
+        // CrossEntropyWithLogitsLoss as a generic fallback, which is wrong for
+        // a unit-norm output (it routes the embedding through softmax and
+        // computes class-CE against a continuous target, producing a ~136
+        // baseline that barely moves regardless of training success — the loss
+        // formula plateau, not a gradient bug). Override here so the test
+        // measures actual embedding alignment.
         var model = new VideoCLIPNeuralNetwork<double>(
             architecture,
             imageSize: 32,              // Paper: 224 (ViT-B/16 input resolution)
@@ -73,7 +93,8 @@ public class VideoCLIPNeuralNetworkTests : NeuralNetworkModelTestBase
             numFrames: 4,               // Paper: 8 (sampled frames per video)
             frameRate: 1.0,             // Paper: 1 FPS sampling
             temporalAggregation: TemporalAggregationType.TemporalTransformer,
-            optimizer: new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, optimizerOptions));
+            optimizer: new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, optimizerOptions),
+            lossFunction: new CosineSimilarityLoss<double>());
 
         return model;
     }

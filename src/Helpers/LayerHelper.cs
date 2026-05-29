@@ -523,7 +523,27 @@ public static class LayerHelper<T>
         {
             layers.Add(new DenseLayer<T>(hiddenLayerSize, new ReLUActivation<T>() as IActivationFunction<T>));
         }
-        layers.Add(new DenseLayer<T>(outputSize, new SoftmaxActivation<T>() as IActivationFunction<T>));
+        // Output activation MUST match the task — the previous unconditional
+        // Softmax silently broke every regression / single-output model that
+        // relies on this generic builder: softmax over a length-1 output is
+        // ALWAYS 1.0, so the network ignored its input entirely (NeuralVaR /
+        // NeuralCVaR collapsed to a constant 1.0 risk estimate regardless of
+        // market data). Pick by task type, and never apply softmax to a
+        // single-logit output (use identity for regression, sigmoid for a
+        // single binary logit).
+        IActivationFunction<T> outputActivation = architecture.TaskType switch
+        {
+            NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
+            NeuralNetworkTaskType.BinaryClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new SigmoidActivation<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => outputSize > 1
+                ? new SoftmaxActivation<T>()
+                : new SigmoidActivation<T>(),
+            _ => outputSize > 1
+                ? new SoftmaxActivation<T>()
+                : new IdentityActivation<T>(),
+        };
+        layers.Add(new DenseLayer<T>(outputSize, outputActivation));
 
         ChainResolveLazyLayers(layers, new[] { inputSize });
         foreach (var layer in layers) yield return layer;
@@ -937,46 +957,31 @@ public static class LayerHelper<T>
         ValidateLayerParameters(1, 32, architecture.OutputSize);
 
         var inputShape = architecture.GetInputShape();
-        int inputFeatures = inputShape[0];
+        int pointDim = inputShape[0];
 
-        // Dense layers for processing input features.
-        // LayerNormalization (Ba et al. 2016) — not BatchNormalization — to
-        // keep the per-sample normalization mathematically well-defined at
-        // any batch size. Occupancy detection is a small-MLP regime where
-        // BN at batch=1 collapses to y = β (μ_B = x, σ²_B = 0), zeroing the
-        // gradient signal through the normalization layer and stalling
-        // memorization-style training. LayerNorm normalizes across the
-        // feature axis within each sample and is the modern default for
-        // small dense MLPs.
+        // Occupancy Network decoder (Mescheder et al., CVPR 2019, arXiv:1812.03828):
+        // a conditional-normalization fully-connected ResNet that maps a queried
+        // point p ∈ ℝ^pointDim to an occupancy probability, conditioned on a latent
+        // shape code. The single composite layer carries the linear point
+        // embedding, the pre-activation Conditional-ResNet blocks, and the final
+        // conditional-norm → ReLU → sigmoid occupancy head; see
+        // OccupancyNetworkDecoder<T> for the full equations and the
+        // Conditional-Layer- vs Conditional-Batch-Normalization rationale (the
+        // model evaluates one point at a time, where batch statistics are
+        // undefined). The latent code is a learnable auto-decoder vector
+        // (DeepSDF-style, Park et al. 2019) since this model has no
+        // encoder/observation to condition on.
         //
-        // Dropout removed (#1304 cluster-6 follow-up): the prior layout
-        // applied Dropout(0.3) + Dropout(0.2) on a tiny 3 → 64 → 32 → 16
-        // → 1 MLP (~2k params). On a memorization task that trains the
-        // same (x, target) pair for 100 iterations, every forward sees a
-        // DIFFERENT random sub-network (roughly 56% of hidden units
-        // active = 0.7 × 0.8) so the optimizer can never learn the pair
-        // — Dropout's per-step mask injects more variance than the
-        // gradient can subtract over 100 steps, leaving loss flat or
-        // slightly RISING at the BCE-ln(2) baseline. PR #1329 fixed the
-        // BN-at-batch-1 layer of this stack but the Dropout layer's
-        // memorization-blocking effect was left. At this network size
-        // Dropout adds no useful regularization (the model has fewer
-        // params than typical sensor batches have rows); callers who
-        // genuinely need regularization on a larger Occupancy MLP can
-        // pass an explicit architecture with their preferred Dropout
-        // rate. Closes the LossStrictlyDecreasesOnMemorizationTask
-        // signal that's been red on OccupancyNeuralNetworkTests since
-        // the cluster-6 sweep.
-        yield return new DenseLayer<T>(64, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new LayerNormalizationLayer<T>();
-
-        yield return new DenseLayer<T>(32, new ReLUActivation<T>() as IActivationFunction<T>);
-        yield return new LayerNormalizationLayer<T>();
-
-        yield return new DenseLayer<T>(16, new ReLUActivation<T>() as IActivationFunction<T>);
-
-        // Output layer
-        yield return new DenseLayer<T>(architecture.OutputSize, new SigmoidActivation<T>() as IActivationFunction<T>);
+        // The paper's full decoder is hidden 256 / c_dim 128 / 5 blocks (sized for
+        // encoder-conditioned 3D shape reconstruction). This encoderless default
+        // single-field decoder uses a lighter 128 / 128 / 3 trunk, which is
+        // well-conditioned for the single-point regime this model is exercised in;
+        // callers reconstructing full shapes can pass a larger explicit decoder.
+        yield return new OccupancyNetworkDecoder<T>(
+            pointDim: pointDim,
+            hidden: 128,
+            latentDim: 128,
+            numBlocks: 3);
     }
 
     /// <summary>
@@ -1312,17 +1317,21 @@ public static class LayerHelper<T>
 
         yield return new PositionalEncodingLayer<T>(sequenceLength, embeddingSize);
 
-        // Multiple transformer blocks
+        // Transformer encoder blocks WITH residual connections. The prior layout
+        // (MHA → LayerNorm → FFN → LayerNorm) had NO residual paths, so the
+        // 3-block stack was ill-conditioned: activations and gradients
+        // accumulated through the depth without the identity shortcut, and under
+        // the small perturbations of parallel-reduction non-determinism the loss
+        // diverged to NaN (the MoreData_ShouldNotDegrade failure). Each
+        // TransformerEncoderLayer implements the paper's sub-layer residuals
+        // (Vaswani et al. 2017, "Attention Is All You Need", §3.1):
+        // LayerNorm(x + SelfAttention(x)) then LayerNorm(h + FFN(h)). The
+        // identity shortcuts keep deep-stack training stable, and the block is a
+        // self-contained, serializable composite (so clone/round-trip works).
+        // FFN inner dim is 4× the model dim, per the paper.
         for (int i = 0; i < 3; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(headCount, (embeddingSize) / (headCount), new GELUActivation<T>() as IActivationFunction<T>);
-
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(embeddingSize * 4, new ReLUActivation<T>() as IActivationFunction<T>);
-            yield return new DenseLayer<T>(embeddingSize, new ReLUActivation<T>() as IActivationFunction<T>);
-
-            yield return new LayerNormalizationLayer<T>();
+            yield return new TransformerEncoderLayer<T>(headCount, embeddingSize * 4, embeddingSize);
         }
 
         yield return new DenseLayer<T>(architecture.OutputSize, new SoftmaxActivation<T>() as IActivationFunction<T>);
@@ -2097,7 +2106,8 @@ public static class LayerHelper<T>
             double tau = 10.0,
             double refractoryPeriod = 2.0,
             bool useLayerNormalization = false,
-            bool useOutputConversion = true)
+            bool useOutputConversion = true,
+            int timeSteps = 20)
     {
         // Get input and output dimensions
         var inputShape = architecture.GetInputShape();
@@ -2132,37 +2142,33 @@ public static class LayerHelper<T>
             layerSizes = new List<int> { inputSize, 128, 64 };
         }
 
-        // Create layers
-        for (int i = 0; i < layerSizes.Count - 1; i++)
-        {
-            int currentSize = layerSizes[i];
-            int nextSize = layerSizes[i + 1];
+        // Hidden LIF layer sizes = the layer stack minus the input dimension
+        // (the readout projection to outputSize is owned by the core itself).
+        int[] hiddenSizes = layerSizes.Skip(1).ToArray();
+        if (hiddenSizes.Length == 0)
+            hiddenSizes = new[] { Math.Max(inputSize / 2, 8) };
 
-            // Add spiking layer
-            yield return new SpikingLayer<T>(
-                inputSize: currentSize,
-                outputSize: nextSize,
-                neuronType: neuronType,
-                tau: tau,
-                refractoryPeriod: refractoryPeriod
-            );
+        // Surrogate-gradient SNN core (Neftci et al. 2019): LIF hidden layers +
+        // a non-spiking leaky-integrator readout, unrolled over time and trained
+        // end-to-end by backprop-through-time with a straight-through surrogate
+        // gradient on the spike threshold. This replaces the prior
+        // SpikingLayer + STDP stack, whose unsupervised Spike-Timing-Dependent
+        // Plasticity could not minimize a supervised loss (it random-walked the
+        // objective). The core owns its synaptic weights and the readout
+        // projection; the output activation is applied by the layer below.
+        // (neuronType / tau / refractoryPeriod / useLayerNormalization no longer
+        // apply to the surrogate-gradient formulation and are ignored; the
+        // membrane decay/threshold are the core's LIF parameters.)
+        yield return new SpikingNetworkCore<T>(
+            inputSize: inputSize,
+            hiddenSizes: hiddenSizes,
+            outputSize: outputSize,
+            timeSteps: timeSteps);
 
-            // Add normalization layer to stabilize spiking activity
-            if (useLayerNormalization)
-            {
-                yield return new LayerNormalizationLayer<T>();
-            }
-        }
-
-        // Add output layer - typically a dense layer to convert spikes to continuous values
+        // Output activation appropriate to the task (applied to the core's
+        // time-averaged readout membrane).
         if (useOutputConversion)
         {
-            yield return new DenseLayer<T>(
-                outputSize,
-                new IdentityActivation<T>() as IActivationFunction<T>
-            );
-
-            // Add appropriate activation based on task type
             if (architecture.TaskType == NeuralNetworkTaskType.BinaryClassification)
             {
                 yield return new ActivationLayer<T>(new SigmoidActivation<T>() as IActivationFunction<T>);
@@ -14058,22 +14064,39 @@ public static class LayerHelper<T>
         int numHeads = 8,
         double dropout = 0.1)
     {
-        // Per Jin et al. 2024 "Time-LLM: Time Series Forecasting by Reprogramming LLMs":
-        // 1. Patch embedding: project per-patch features → llmDim
-        // 2. Reprogramming layers: cross-attention with text prototypes
-        // 3. Simulated frozen LLM (transformer encoder)
-        // 4. Output projection: llmDim → forecast values
-        // All operations per-patch on llmDim, NOT flattened.
+        // Per Jin et al. 2024 "Time-LLM: Time Series Forecasting by Reprogramming
+        // LLMs". The input series is split into NON-OVERLAPPING patches that
+        // become the transformer's sequence tokens; each patch is embedded to the
+        // LLM width, reprogrammed against text prototypes (approximated here by
+        // self-attention transformer blocks), passed through a simulated frozen
+        // LLM, then a FlattenHead linearly projects the flattened patch
+        // representations to the forecast horizon (paper §3.3).
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(patchLength), "Patch length must be at least 1.");
+        if (llmDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(llmDim), "LLM dimension must be at least 1.");
+
+        int numPatches = contextLength / patchLength;
+        int patchInputSize = patchLength * numFeatures;
         int ffnDim = llmDim * 4;
 
-        // === Patch Embedding: per-patch projection ===
-        yield return new FeedForwardLayer<T>(llmDim, (IActivationFunction<T>?)null);
+        // === Patch tokenization + embedding:
+        //     [B, contextLength * numFeatures] → [B, numPatches, patchInputSize]
+        //                                       → [B, numPatches, llmDim] ===
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchInputSize });
+        yield return new DenseLayer<T>(outputSize: llmDim, activationFunction: (IActivationFunction<T>?)null);
         yield return new LayerNormalizationLayer<T>();
 
-        // === Reprogramming Transformer ===
+        // === Reprogramming Transformer (prototype cross-attention, approximated) ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
@@ -14081,13 +14104,15 @@ public static class LayerHelper<T>
         // === Simulated Frozen LLM (additional transformer layers) ===
         for (int i = 0; i < 2; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
         }
 
-        // === Final Layer Norm + Output Projection ===
+        // === FlattenHead output projection (paper §3.3): flatten the patch
+        //     tokens [B, numPatches, llmDim] → [B, numPatches * llmDim] and
+        //     linearly project to the forecast horizon ===
         yield return new LayerNormalizationLayer<T>();
-        yield return new FeedForwardLayer<T>(llmDim / 4, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new FlattenLayer<T>();
+        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: (IActivationFunction<T>?)null);
     }
 
     /// <summary>
@@ -14253,25 +14278,59 @@ public static class LayerHelper<T>
         int numHeads = 12,
         double dropout = 0.1)
     {
-        // Calculate number of patches
-        // Per Das et al. 2024 "A decoder-only foundation model for time-series forecasting":
-        // GPT-style decoder operating on patches. Per-token on hiddenDim.
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+        if (patchLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(patchLength), "Patch length must be at least 1.");
+        if (hiddenDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be at least 1.");
+        if (numLayers < 1)
+            throw new ArgumentOutOfRangeException(nameof(numLayers), "Number of layers must be at least 1.");
+        if (numHeads < 1)
+            throw new ArgumentOutOfRangeException(nameof(numHeads), "Number of heads must be at least 1.");
+
+        // Timer (Liu et al. 2024, "Timer: Generative Pre-trained Transformers Are
+        // Large Time Series Models") is a decoder-only transformer whose tokens are
+        // NON-OVERLAPPING time-series PATCHES (single-series sequences, S3 format).
+        // Patches are SEQUENCE POSITIONS — self-attention runs across the numPatches
+        // axis — so the stack is: per-patch embedding → GPT-style decoder blocks →
+        // a SHARED per-patch head that predicts the next patch (length patchLength).
+        // Flattening the per-patch predictions yields the generated continuation,
+        // from which the model's forward path slices the requested horizon.
+        int numPatches = contextLength / patchLength;
+        int patchInputSize = patchLength * numFeatures;
         int ffnDim = hiddenDim * 4;
 
-        // === Patch Embedding: per-patch projection ===
-        yield return new FeedForwardLayer<T>(hiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
+        // === Patch tokenization + embedding:
+        //     [B, contextLength * numFeatures] → [B, numPatches, patchInputSize]
+        //                                       → [B, numPatches, hiddenDim] ===
+        yield return new ReshapeLayer<T>(new[] { numPatches, patchInputSize });
+        yield return new DenseLayer<T>(
+            outputSize: hiddenDim,
+            activationFunction: (IActivationFunction<T>)new GELUActivation<T>());
 
-        // === GPT-Style Transformer Stack ===
+        // === GPT-style decoder stack (the model's forward path applies a causal
+        //     mask for the decoder-only next-patch semantics) ===
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>( numHeads, ffnDim);
+            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
             if (dropout > 0)
                 yield return new DropoutLayer<T>(dropout);
         }
 
-        // === Final Norm + Forecast Head ===
+        // === Final norm + shared per-patch next-patch head ===
+        // Dense operates on the last axis, so feeding [B, numPatches, hiddenDim]
+        // produces [B, numPatches, patchLength] with weights shared across patches.
+        // Flatten → [B, numPatches * patchLength] = the generated series.
         yield return new LayerNormalizationLayer<T>();
-        yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
+        yield return new DenseLayer<T>(
+            outputSize: patchLength,
+            activationFunction: (IActivationFunction<T>?)null);
+        yield return new FlattenLayer<T>();
     }
 
     /// <summary>
@@ -14315,7 +14374,10 @@ public static class LayerHelper<T>
         double dropout = 0.0)
     {
         // Per Garza et al. 2023 "TimeGPT-1": GPT-style transformer foundation model.
-        // Per-token operations on hiddenDim, NOT flattened.
+        // Per-token operations on hiddenDim, NOT flattened. The model feeds a
+        // rank-3 [batch, seqLen, numFeatures] series, so the embedding projects
+        // per timestep and the head pools the token sequence to a single vector
+        // before projecting to the forecast horizon.
         int ffnDim = hiddenDim * 4;
 
         // === Input Embedding: per-token projection ===
@@ -14330,7 +14392,11 @@ public static class LayerHelper<T>
         }
 
         // === Final Norm + Forecast Head ===
+        // Average-pool over the token sequence [B, seqLen, hiddenDim] → [B, hiddenDim]
+        // so the head emits a single forecastHorizon vector for the whole series
+        // instead of one per token.
         yield return new LayerNormalizationLayer<T>();
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
         yield return new FeedForwardLayer<T>(forecastHorizon, (IActivationFunction<T>?)null);
     }
 
@@ -14642,117 +14708,66 @@ public static class LayerHelper<T>
         bool useMultiScaleAttention = true,
         int numFeatures = 1)
     {
+        if (contextLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(contextLength), "Context length must be at least 1.");
+        if (forecastHorizon < 1)
+            throw new ArgumentOutOfRangeException(nameof(forecastHorizon), "Forecast horizon must be at least 1.");
+        if (modelDim < 1)
+            throw new ArgumentOutOfRangeException(nameof(modelDim), "Model dimension must be at least 1.");
+        if (numFeatures < 1)
+            throw new ArgumentOutOfRangeException(nameof(numFeatures), "Number of features must be at least 1.");
+
         int innerDim = modelDim * expandFactor;
 
-        // === Input Embedding with Reversible Instance Normalization ===
-        // Project input features to model dimension
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: new GELUActivation<T>());
+        // TimeMachine (Ahamed & Cheng 2024, "A Time Series is Worth 4 Mambas")
+        // stacks Mamba-style selective SSM blocks that operate PER TIME-STEP on
+        // the model dimension. The original helper sized every projection at
+        // modelDim * sequenceLength, so the first two Dense layers alone formed a
+        // [modelDim·contextLength, modelDim·contextLength] = 131072² weight
+        // (≈17 G elements) that overflowed the allocator before any forecast was
+        // produced. Tokens are SEQUENCE POSITIONS: embed each step to modelDim,
+        // run the SSM blocks per-token, then a FlattenHead projects the flattened
+        // token representations to the forecast horizon.
 
-        // Layer normalization (simulates RevIN mean/variance tracking)
+        // === Input embedding: [B, contextLength * numFeatures]
+        //     → [B, contextLength, numFeatures] → [B, contextLength, modelDim] ===
+        yield return new ReshapeLayer<T>(new[] { contextLength, numFeatures });
+        yield return new DenseLayer<T>(
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
         yield return new LayerNormalizationLayer<T>();
 
-        // === Multi-Scale SSM Blocks (4 Mambas) ===
-        // Each scale processes at different temporal granularity
+        // === Stacked Mamba-style selective SSM blocks (numScales × numLayers) ===
+        // Each block: input/gate projection → local-context projection →
+        // B (input→state) → A (selective state, bounded by tanh) → C
+        // (state→output) → output projection back to modelDim, with a post-norm
+        // and dropout. All projections are per-token on modelDim/innerDim/stateDim.
         for (int scale = 0; scale < numScales; scale++)
         {
-            // Downsampling factor for this scale (scale 0 = finest, scale n-1 = coarsest)
-            // Scale-specific effective sequence length: contextLength / (2^scale)
-            int scaleSeqLen = Math.Max(contextLength / (1 << scale), 1);
-            int scaleDim = modelDim * scaleSeqLen;
-
-            // === Temporal Decomposition for this scale ===
-            // Simulates downsampling via dense projection
-            // (Conv1DLayer doesn't exist, so we use dense layers to approximate)
-            yield return new DenseLayer<T>(
-                outputSize: scaleDim,
-                activationFunction: new GELUActivation<T>());
-
-            yield return new LayerNormalizationLayer<T>();
-
-            // === SSM Layers for this scale ===
             for (int layer = 0; layer < numLayers; layer++)
             {
-                // === Mamba-style SSM Block ===
-
-                // Input projection to expanded dimension
-                yield return new DenseLayer<T>(
-                    outputSize: innerDim * scaleSeqLen,
-                    activationFunction: new SiLUActivation<T>());
-
-                // Local context processing (simulates 1D convolution with dense layer)
-                yield return new DenseLayer<T>(
-                    outputSize: innerDim * scaleSeqLen,
-                    activationFunction: new SiLUActivation<T>());
-
-                // B projection (input to state)
-                yield return new DenseLayer<T>(
-                    outputSize: stateDim * scaleSeqLen,
-                    activationFunction: null);
-
-                // Selective state update (A diagonal)
-                yield return new DenseLayer<T>(
-                    outputSize: stateDim * scaleSeqLen,
-                    activationFunction: new TanhActivation<T>());
-
-                // C projection (state to output)
-                yield return new DenseLayer<T>(
-                    outputSize: innerDim * scaleSeqLen,
-                    activationFunction: null);
-
-                // Output projection back to model dimension
-                yield return new DenseLayer<T>(
-                    outputSize: scaleDim,
-                    activationFunction: null);
-
-                // Layer normalization and dropout
+                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: new SiLUActivation<T>());
+                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: new SiLUActivation<T>());
+                yield return new DenseLayer<T>(outputSize: stateDim, activationFunction: null);
+                yield return new DenseLayer<T>(outputSize: stateDim, activationFunction: new TanhActivation<T>());
+                yield return new DenseLayer<T>(outputSize: innerDim, activationFunction: null);
+                yield return new DenseLayer<T>(outputSize: modelDim, activationFunction: null);
                 yield return new LayerNormalizationLayer<T>();
                 yield return new DropoutLayer<T>(0.1);
             }
-
-            // === Upsampling back to original sequence length ===
-            if (scale > 0)
-            {
-                yield return new DenseLayer<T>(
-                    outputSize: modelDim * contextLength,
-                    activationFunction: new GELUActivation<T>());
-            }
-        }
-
-        // === Multi-Scale Fusion ===
-        if (useMultiScaleAttention)
-        {
-            // Attention-based fusion of multi-scale outputs
-            // Projects all scales to same dimension for attention
-            yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
-                activationFunction: new GELUActivation<T>());
-
-            // Simple self-attention mechanism for scale weighting
-            yield return new DenseLayer<T>(
-                outputSize: numScales,
-                activationFunction: new SoftmaxActivation<T>());
-
-            // Apply attention weights (simplified as dense)
-            yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
-                activationFunction: null);
         }
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === Reversible De-normalization ===
-        // (Learned affine transformation to restore original scale)
+        // === Output head: average-pool the token sequence, then project to the
+        //     forecast horizon. [B, contextLength, modelDim] → [B, modelDim] →
+        //     [B, forecastHorizon]. Pooling (not flatten) keeps the head weight
+        //     small — flattening contextLength·modelDim (= 512·256) tokens would
+        //     need a multi-GB projection. ===
+        yield return new GlobalPoolingLayer<T>(PoolingType.Average, (IActivationFunction<T>?)null);
         yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: null);
-
-        // === Output Projection ===
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * forecastHorizon / 4,
+            outputSize: Math.Max(modelDim, forecastHorizon),
             activationFunction: new GELUActivation<T>());
-
         yield return new DenseLayer<T>(
             outputSize: forecastHorizon,
             activationFunction: null);
@@ -14797,67 +14812,38 @@ public static class LayerHelper<T>
         bool useNormalization = true,
         int numFeatures = 1)
     {
-        // Lazy weight init: the flattened-sequence layout below produces
-        // weight matrices of (modelDim·contextLength) × (stateDim·contextLength)
-        // — at paper defaults that's 131072 × 32768 ≈ 4.3B elements, which
-        // overflows int32 inside TensorAllocator.Rent. Lazy init defers the
-        // allocation to first Forward where lower-rank intermediate tensors
-        // can sidestep the overflow path.
-        var lazy = Initialization.InitializationStrategies<T>.Lazy;
+        // Paper-faithful HiPPO (Gu et al. 2020): a stack of diagonal state-space
+        // (S4D) layers whose A matrix is initialized with HiPPO-LegS, evolving the
+        // polynomial state per time step across the sequence. This is the genuine
+        // state-space recurrence — NOT a dense projection over the flattened
+        // sequence. The SSM parameters are O(modelDim·stateDim), so the paper-scale
+        // contextLength (512) no longer overflows TensorAllocator.
+        //
+        // Layer order (consumed by Hippo.ExtractLayerReferences):
+        //   [InputEmbedding Dense] ([InputNorm]) { S4DLayer ([BlockNorm]) [Dropout] }×numLayers [OutputHead Dense]
+        // The model's forward pass applies the residual connection, mean-pools the
+        // SSM output over time to [batch, modelDim], then runs the output head.
 
-        // === Input Embedding ===
+        // === Input Embedding === (features -> modelDim, per time step)
         yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: new GELUActivation<T>(),
-            initializationStrategy: lazy);
+            outputSize: modelDim,
+            activationFunction: new GELUActivation<T>());
 
         if (useNormalization)
         {
             yield return new LayerNormalizationLayer<T>();
         }
 
-        // === HiPPO Layers ===
+        // === HiPPO state-space layers ===
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // === HiPPO Block ===
-            // Each block implements: x' = Ax + Bu, y = Cx + Du
+            // Diagonal SSM with HiPPO-LegS-initialized A (Gu et al. 2020):
+            //   x' = A x + B u,  y = C x + D u  evolved over the sequence.
+            yield return new S4DLayer<T>(
+                sequenceLength: contextLength,
+                modelDimension: modelDim,
+                stateDimension: stateDim);
 
-            // B projection (input to polynomial state space)
-            // B maps input u to state contribution
-            yield return new DenseLayer<T>(
-                outputSize: stateDim * contextLength,
-                activationFunction: null,
-                initializationStrategy: lazy);
-
-            // A matrix application (HiPPO state evolution)
-            // This simulates the HiPPO matrix A that defines optimal memory
-            // In HiPPO-LegS: A[i,j] = -sqrt(2i+1)*sqrt(2j+1) if i>j, -(2i+1) if i==j
-            yield return new DenseLayer<T>(
-                outputSize: stateDim * contextLength,
-                activationFunction: new TanhActivation<T>(),
-                initializationStrategy: lazy); // Tanh for stability
-
-            // Second A application for deeper state evolution
-            yield return new DenseLayer<T>(
-                outputSize: stateDim * contextLength,
-                activationFunction: new TanhActivation<T>(),
-                initializationStrategy: lazy);
-
-            // C projection (polynomial state to output)
-            // C reads out the polynomial coefficients to produce output
-            yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
-                activationFunction: null,
-                initializationStrategy: lazy);
-
-            // D feedthrough (skip connection from input to output)
-            // Allows direct information flow bypassing the state
-            yield return new DenseLayer<T>(
-                outputSize: modelDim * contextLength,
-                activationFunction: new GELUActivation<T>(),
-                initializationStrategy: lazy);
-
-            // Normalization and dropout
             if (useNormalization)
             {
                 yield return new LayerNormalizationLayer<T>();
@@ -14865,32 +14851,10 @@ public static class LayerHelper<T>
             yield return new DropoutLayer<T>(0.1);
         }
 
-        // === FFN Block (post-HiPPO processing) ===
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength * 2,
-            activationFunction: new GELUActivation<T>(),
-            initializationStrategy: lazy);
-
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * contextLength,
-            activationFunction: null,
-            initializationStrategy: lazy);
-
-        if (useNormalization)
-        {
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // === Output Projection ===
-        yield return new DenseLayer<T>(
-            outputSize: modelDim * forecastHorizon / 4,
-            activationFunction: new GELUActivation<T>(),
-            initializationStrategy: lazy);
-
+        // === Output Head === (pooled modelDim -> forecastHorizon)
         yield return new DenseLayer<T>(
             outputSize: forecastHorizon,
-            activationFunction: null,
-            initializationStrategy: lazy);
+            activationFunction: null);
     }
 
     /// <summary>
@@ -15536,50 +15500,48 @@ public static class LayerHelper<T>
         int numSpatialLayers = 2,
         int numTemporalLayers = 2)
     {
-        // Input size: nodes * sequence * features (flattened)
-        int inputSize = numNodes * sequenceLength * numFeatures;
-        int outputSize = numNodes * forecastHorizon * numFeatures;
+        // Paper-faithful STGNN (Yu et al. 2018): all temporal/projection weights are
+        // SHARED across the graph's nodes, not unique per node. The model runs these
+        // layers on a [numNodes, channels] tensor (numNodes as the batch dimension),
+        // so each DenseLayer is a per-node MLP with O(hiddenDim^2) parameters — NOT
+        // the old numNodes*hiddenDim-wide flattened denses (O(numNodes^2*hiddenDim^2)
+        // ≈ 1B params at the paper scale numNodes=207, which OOM-crashed the optimizer).
+        // The spatial graph convolution (adjacency mixing across nodes) is applied by
+        // the model's forward pass via ApplyGraphConvolution.
 
-        // === Input Embedding ===
-        // Project input features to hidden dimension
+        // === Input Embedding === (per node: sequenceLength*numFeatures -> hiddenDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new GELUActivation<T>());
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === ST-Conv Blocks ===
-        // Each block: Temporal -> Spatial -> Temporal
+        // === Temporal Conv Blocks === (per-node MLPs, shared weights)
         int numBlocks = Math.Max(numSpatialLayers, numTemporalLayers);
         for (int block = 0; block < numBlocks; block++)
         {
-            // Temporal convolution (simulated with dense layers for time processing)
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new GELUActivation<T>());
 
-            // Spatial convolution (graph aggregation simulated with dense)
-            // In practice, this would use actual graph convolution with adjacency matrix
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new GELUActivation<T>());
 
-            // Second temporal convolution
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new GELUActivation<T>());
 
             yield return new LayerNormalizationLayer<T>();
         }
 
-        // === Output Projection ===
-        // Project to forecast dimension
+        // === Output Projection === (per node: hiddenDim -> forecastHorizon*numFeatures)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim / 2,
+            outputSize: Math.Max(1, hiddenDim / 2),
             activationFunction: new GELUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: outputSize,
+            outputSize: forecastHorizon * numFeatures,
             activationFunction: null);
     }
 
@@ -15617,66 +15579,59 @@ public static class LayerHelper<T>
         int numGCNLayers = 2,
         int numTemporalLayers = 1)
     {
-        // Input size: nodes * sequence * features (flattened)
-        int inputSize = numNodes * sequenceLength * numFeatures;
-        int outputSize = numNodes * forecastHorizon * numFeatures;
+        // Paper-faithful TemporalGCN: weights are SHARED across the graph's nodes.
+        // The model runs these layers on a [numNodes, channels] tensor (numNodes as
+        // the batch dimension), so each DenseLayer is a per-node MLP with
+        // O(hiddenDim^2) parameters — NOT the old numNodes*hiddenDim-wide flattened
+        // denses (~1B params at the paper scale numNodes=207, which OOM-crashed the
+        // optimizer). The Chebyshev graph convolution (spatial aggregation across
+        // nodes) is applied by the model's forward via ApplyChebyshevConvolutionTape.
 
-        // === Input Projection ===
-        // Project input features to hidden dimension
+        // === Input Projection === (per node: sequenceLength*numFeatures -> hiddenDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
-        // === GCN Layers ===
-        // Stack graph convolution layers for spatial aggregation
+        // === GCN Layers === (per-node MLP; spatial mixing done in forward)
         for (int gcn = 0; gcn < numGCNLayers; gcn++)
         {
-            // Graph convolution (simulated with dense + aggregation pattern)
-            // Each GCN layer aggregates information from k-hop neighbors
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new ReLUActivation<T>());
 
             yield return new LayerNormalizationLayer<T>();
 
-            // Dropout for regularization
             yield return new DropoutLayer<T>(0.3);
         }
 
-        // === Temporal GRU Layers ===
-        // Process temporal sequence with recurrent layers
+        // === Temporal Layers === (per-node, shared weights)
         for (int t = 0; t < numTemporalLayers; t++)
         {
-            // GRU layer for temporal modeling (using dense layers as approximation)
-            // Real implementation would use proper GRU cells with gating
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new TanhActivation<T>());
 
-            // Update gate approximation
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new SigmoidActivation<T>());
 
             yield return new LayerNormalizationLayer<T>();
         }
 
         // === Spatio-Temporal Fusion ===
-        // Combine spatial and temporal features
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === Output Projection ===
-        // Project to forecast horizon
+        // === Output Projection === (per node: hiddenDim -> forecastHorizon*numFeatures)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim / 2,
+            outputSize: Math.Max(1, hiddenDim / 2),
             activationFunction: new ReLUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: outputSize,
+            outputSize: forecastHorizon * numFeatures,
             activationFunction: null);
     }
 
@@ -15714,59 +15669,55 @@ public static class LayerHelper<T>
         int numLayers = 3,
         int mixHopDepth = 2)
     {
-        // Input size: nodes * sequence * features (flattened)
-        int inputSize = numNodes * sequenceLength * numFeatures;
-        int outputSize = numNodes * forecastHorizon * numFeatures;
+        // Paper-faithful MTGNN (Wu et al. 2020): all temporal/projection weights are
+        // SHARED across the graph's nodes. The model runs these layers on a
+        // [numNodes, channels] tensor (numNodes as the batch dimension), so each
+        // DenseLayer is a per-node MLP with O(channels^2) parameters — NOT the old
+        // numNodes*hiddenDim-wide flattened denses (~1B params at numNodes=207 that
+        // OOM-crashed the optimizer). Mix-hop graph propagation across nodes is
+        // applied by the model's forward via ApplyMixHopPropagationTape.
 
-        // === Input Projection ===
-        // Project input to hidden dimension
+        // === Input Projection === (per node: seqLen*numFeatures -> hiddenDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === Node Embedding Layer ===
-        // Create learnable node embeddings for adaptive graph learning
+        // === Node Embedding === (per node: -> nodeEmbeddingDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * nodeEmbeddingDim,
+            outputSize: nodeEmbeddingDim,
             activationFunction: new TanhActivation<T>());
 
-        // === Graph-Temporal Processing Layers ===
+        // === Graph-Temporal Processing Layers === (per-node, shared weights)
         for (int layer = 0; layer < numLayers; layer++)
         {
-            // Mix-hop graph convolution (simulated with dense layers)
-            // Aggregates 1-hop, 2-hop, ... k-hop neighbors
             for (int hop = 0; hop < mixHopDepth; hop++)
             {
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * hiddenDim,
+                    outputSize: hiddenDim,
                     activationFunction: new ReLUActivation<T>());
             }
 
-            // Dilated temporal convolution (simulated with dense)
-            // Different dilation rates capture different temporal scales
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new TanhActivation<T>());
 
-            // Gated skip connection
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDim,
+                outputSize: hiddenDim,
                 activationFunction: new SigmoidActivation<T>());
 
             yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.3);
         }
 
-        // === Output Projection ===
-        // Project to forecast dimension
+        // === Output Projection === (per node: hiddenDim -> forecastHorizon*numFeatures)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDim,
+            outputSize: hiddenDim,
             activationFunction: new ReLUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: outputSize,
+            outputSize: forecastHorizon * numFeatures,
             activationFunction: null);
     }
 
@@ -15806,57 +15757,55 @@ public static class LayerHelper<T>
         int numBlocks = 4,
         int layersPerBlock = 2)
     {
-        // Input size: nodes * sequence * features (flattened)
-        int inputSize = numNodes * sequenceLength * numFeatures;
-        int outputSize = numNodes * forecastHorizon;
+        // Paper-faithful Graph WaveNet (Wu et al. 2019): all temporal/projection
+        // weights are SHARED across the graph's nodes. The model runs these layers on
+        // a [numNodes, channels] tensor (numNodes as the batch dimension), so each
+        // DenseLayer is a per-node MLP with O(channels^2) parameters — NOT the old
+        // numNodes*residualChannels-wide flattened denses (~1B params at numNodes=207
+        // that OOM-crashed the optimizer). The diffusion convolution (adaptive +
+        // predefined graph mixing across nodes) is applied by the model's forward.
 
-        // === Input Projection ===
-        // Project input to residual channels
+        // === Input Projection === (per node: seqLen*numFeatures -> residualChannels)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * residualChannels,
+            outputSize: residualChannels,
             activationFunction: new ReLUActivation<T>());
 
         yield return new LayerNormalizationLayer<T>();
 
-        // === WaveNet-style Blocks ===
+        // === WaveNet-style Blocks === (per-node, shared weights)
         for (int block = 0; block < numBlocks; block++)
         {
             for (int layer = 0; layer < layersPerBlock; layer++)
             {
-                // Dilated convolution (filter branch) - captures temporal patterns
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * residualChannels,
+                    outputSize: residualChannels,
                     activationFunction: new TanhActivation<T>());
 
-                // Gate convolution - controls information flow
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * residualChannels,
+                    outputSize: residualChannels,
                     activationFunction: new SigmoidActivation<T>());
 
-                // Diffusion convolution placeholder (spatial aggregation)
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * residualChannels,
+                    outputSize: residualChannels,
                     activationFunction: new ReLUActivation<T>());
 
                 yield return new LayerNormalizationLayer<T>();
 
-                // Skip connection projection
                 yield return new DenseLayer<T>(
-                    outputSize: numNodes * skipChannels / numBlocks,
+                    outputSize: Math.Max(1, skipChannels / numBlocks),
                     activationFunction: null);
 
                 yield return new DropoutLayer<T>(0.3);
             }
         }
 
-        // === Output Processing ===
-        // Combine skip connections and project to output
+        // === Output Processing === (per node: -> endChannels -> forecastHorizon)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * endChannels,
+            outputSize: endChannels,
             activationFunction: new ReLUActivation<T>());
 
         yield return new DenseLayer<T>(
-            outputSize: outputSize,
+            outputSize: forecastHorizon,
             activationFunction: null);
     }
 
@@ -15907,51 +15856,49 @@ public static class LayerHelper<T>
         int forecastHorizon = 12,
         int diffusionSteps = 2)
     {
-        // === Input Embedding ===
-        // Project input features to hidden dimension
+        // Paper-faithful DCRNN (Li et al. 2018): weights are SHARED across nodes.
+        // The model runs these layers on a [numNodes, seqLen, hiddenDim] tensor
+        // (numNodes as the batch dim), so each DenseLayer is a per-node MLP and each
+        // GRULayer a per-node DCGRU — O(hiddenDim^2) params, not the old
+        // numNodes*hiddenDim-wide flattened denses (~1B params at numNodes=207 that
+        // OOM-crashed the optimizer). Spatial diffusion is applied in the forward.
+
+        // === Input Embedding === (per node+step: numFeatures -> hiddenDim)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * hiddenDimension,
+            outputSize: hiddenDimension,
             activationFunction: null);
 
         // === Encoder DCGRU Layers ===
-        // Each layer is a GRU where matrix multiplications are replaced with diffusion convolution
-        // Note: Diffusion convolution is applied in the model itself, not in layers
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            // GRU layer for temporal processing
             yield return new GRULayer<T>(
                 hiddenSize: hiddenDimension,
                 returnSequences: true,
                 activation: (IActivationFunction<T>?)null,
                 recurrentActivation: null);
 
-            // Dense layer for spatial mixing (simplified diffusion approximation)
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDimension,
+                outputSize: hiddenDimension,
                 activationFunction: new ReLUActivation<T>());
         }
 
         // === Decoder DCGRU Layers ===
-        // Decoder generates predictions autoregressively
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            // GRU layer for temporal processing
             yield return new GRULayer<T>(
                 hiddenSize: hiddenDimension,
                 returnSequences: true,
                 activation: (IActivationFunction<T>?)null,
                 recurrentActivation: null);
 
-            // Dense layer for spatial mixing
             yield return new DenseLayer<T>(
-                outputSize: numNodes * hiddenDimension,
+                outputSize: hiddenDimension,
                 activationFunction: new ReLUActivation<T>());
         }
 
-        // === Output Projection ===
-        // Project hidden states to output predictions
+        // === Output Projection === (per node: hiddenDim -> forecastHorizon)
         yield return new DenseLayer<T>(
-            outputSize: numNodes * forecastHorizon,
+            outputSize: forecastHorizon,
             activationFunction: null);
     }
 
@@ -31693,6 +31640,12 @@ public static class LayerHelper<T>
         }
 
         // === Output Projection ===
+        // The model's forward takes the last timestep of the [B, seqLen, modelDim]
+        // block output as a fixed [B, modelDim] summary BEFORE these layers (Mamba is a
+        // causal SSM, so the final state has integrated the whole context), so the
+        // first projection sees modelDim inputs (NOT seqLen·modelDim). This avoids the
+        // old flatten that sized this Dense at seqLen·modelDim = 131072 inputs at paper
+        // scale (an ~805M-parameter, 6.4 GB weight).
         yield return new DenseLayer<T>(
             outputSize: modelDim * forecastHorizon / 4,
             activationFunction: new GELUActivation<T>());
@@ -34006,30 +33959,43 @@ public static class LayerHelper<T>
 
         int intermediateDim = hiddenDimension * 4;
 
-        // Encoder input projection
-        yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+        // TOTEM (Talukder et al. 2024) is a VQ-VAE over time-series tokens. Tokens
+        // are SEQUENCE POSITIONS: each timestep is embedded to hiddenDimension and
+        // the encoder/decoder operate PER TOKEN. The old helper sized every Dense
+        // at contextLength*hiddenDimension, so two consecutive layers formed a
+        // [contextLength·hiddenDim, contextLength·hiddenDim] = 131072² (≈17 G
+        // element) weight that overflowed the allocator before any forecast was
+        // produced. All projections below are per-token on hiddenDimension /
+        // intermediateDim / codebookDimension. The model's forward reshapes the
+        // input to [1, contextLength, 1], pools the decoded sequence, then applies
+        // the forecast head. The number of layers PER BLOCK here (6, or 8 with
+        // dropout) MUST match TOTEM.ExtractLayerReferences.
 
-        // Transformer encoder layers
+        // Encoder input projection: [B, contextLength, 1] → [B, contextLength, hiddenDim]
+        yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
+
+        // Transformer encoder blocks (per-token)
         for (int layer = 0; layer < numLayers; layer++)
         {
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: contextLength * intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: intermediateDim, activationFunction: new GELUActivation<T>());
+            yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
         }
 
-        // Quantization projection
-        yield return new DenseLayer<T>( outputSize: contextLength * codebookDimension, activationFunction: null);
+        // Quantization projection: hiddenDim → codebookDimension (per token)
+        yield return new DenseLayer<T>(outputSize: codebookDimension, activationFunction: null);
 
-        // Decoder projection
-        yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: new GELUActivation<T>());
+        // Decoder projection: codebookDimension → hiddenDim (per token)
+        yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: new GELUActivation<T>());
 
-        // Forecast head
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        // Forecast head: applied AFTER the model pools the token sequence to a
+        // single [B, hiddenDim] vector, producing [B, forecastHorizon].
+        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null);
     }
 
     /// <summary>

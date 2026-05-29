@@ -260,11 +260,34 @@ public partial class GatedSlotAttentionLayer<T> : LayerBase<T>
             _forgetGateBias[i] = NumOps.FromDouble(2.0);
         _inputGateBias.Fill(NumOps.FromDouble(0.1));
         InitializeSlots();
-        RegisterTrainableParameter(_initialSlots, PersistentTensorRole.Weights);
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
+
+        // Register ALL trainable tensors (in GetAllTensors order) so tape-based
+        // training (GetTrainableParameters) exposes the full parameter set, not
+        // just _initialSlots. Previously only _initialSlots was registered — and
+        // because the slot recurrence is a manual NumOps loop that detaches the
+        // autodiff tape, that single registered tensor received a null tape
+        // gradient, so TapeGradient_ShouldReach failed. The post-recurrence
+        // output-gate and output-projection weights ARE tape-connected (they enter
+        // via Engine.TensorMatMul on the gated slot output), so registering the
+        // full set gives those a proper gradient under tape-based training. The
+        // Q/K/V/gate/slot params upstream of the manual recurrence continue to
+        // train via the layer's manual Backward/UpdateParameters path.
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_forgetGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_forgetGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_inputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_initialSlots, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor2D(Tensor<T> tensor)

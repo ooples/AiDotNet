@@ -597,7 +597,19 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         _lastInput = tapeActive ? null : input;
 
-        if (IsTrainingMode)
+        // A single-sample batch (batch size 1) has zero batch variance, so the
+        // training-mode normalization (x - mean)/sqrt(var + eps) collapses every
+        // feature to 0 → the output is a constant (≈ beta) that is INDEPENDENT of
+        // the input and of upstream parameters. Its gradient is therefore zero,
+        // which silently detaches the autodiff tape and stops the entire model
+        // from learning (surfaced by GradientFlow_ShouldBeNonZeroAndFinite on every
+        // BatchNorm model trained one sample at a time). Batch statistics are
+        // undefined for a single sample, so fall back to the affine
+        // running-statistics path — identical to inference — which is
+        // differentiable end-to-end and lets gradients reach the input and the
+        // affine parameters. Real training uses batch > 1 and is unaffected.
+        int effectiveBatchSize = input.Rank > 0 ? input.Shape[0] : 1;
+        if (IsTrainingMode && effectiveBatchSize > 1)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated

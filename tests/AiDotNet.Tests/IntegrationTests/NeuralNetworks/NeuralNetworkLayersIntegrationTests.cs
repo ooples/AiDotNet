@@ -265,6 +265,12 @@ public class NeuralNetworkLayersIntegrationTests
         IActivationFunction<double> tanh = new TanhActivation<double>();
         var layer = new LSTMLayer<double>( 20, tanh);
 
+        // LSTMLayer is lazy-input (PyTorch-style): its gate weights are allocated
+        // on the first forward, which resolves the input feature count from the
+        // input's last axis. Run one forward so GetParameters returns the
+        // materialized gate weights.
+        layer.Forward(new Tensor<double>(inputShape));
+
         // Act
         var parameters = layer.GetParameters();
 

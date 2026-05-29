@@ -503,62 +503,70 @@ public partial class Mamba2Block<T> : LayerBase<T>
         // Process in chunks of _chunkSize (Mamba-2 SSD structure).
         // Within each chunk, tokens are processed sequentially with the SSM recurrence.
         // Chunk boundaries allow state snapshots for efficient backward pass.
+        // Flat-buffer scan. The previous loop indexed every tensor with the
+        // multi-dimensional indexer (tensor[new[]{bi,hi,di,n}]), which allocates a
+        // fresh int[] on EVERY read/write. Across seqLen × numHeads × headDim ×
+        // stateDim that was billions of array allocations — the scan timed out at
+        // paper scale. Index the backing buffers directly with precomputed flat
+        // offsets, and read the full x/delta/B/C tensors in place instead of
+        // slicing them per step (the per-step GetSliceAlongDimension + Rent of
+        // y_t/h_flat are gone too).
+        var xSpan = x.Data.Span;              // [batch, seqLen, innerDim]
+        var deltaSpan = delta.Data.Span;      // [batch, seqLen, numHeads]
+        var bSpan = b.Data.Span;              // [batch, seqLen, stateDim]
+        var cSpan = c.Data.Span;              // [batch, seqLen, stateDim]
+        var hsSpan = hiddenState.Data.Span;   // [batch, numHeads, headDim, stateDim]
+        var ahsSpan = allHiddenStates.Data.Span; // [batch, seqLen+1, innerDim, stateDim]
+        var outSpan = output.Data.Span;       // [batch, seqLen, innerDim]
+        int sd = _stateDimension;
+        int innerDim = _innerDimension;
+
         for (int t = 0; t < seqLen; t++)
         {
-            var x_t = x.GetSliceAlongDimension(t, 1);         // [batch, innerDim]
-            var delta_t = delta.GetSliceAlongDimension(t, 1);  // [batch, numHeads]
-            var B_t = b.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
-            var C_t = c.GetSliceAlongDimension(t, 1);          // [batch, stateDim]
-
-            // For each head, apply the SSM recurrence
-            var y_t = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension });
-            var h_flat = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
-
-            for (int hi = 0; hi < _numHeads; hi++)
+            for (int bi = 0; bi < batchSize; bi++)
             {
-                int dimStart = hi * _headDimension;
-                T negA = negAPerHead[hi];
+                int btInner = (bi * seqLen + t) * innerDim;   // x/output [bi, t, *]
+                int btState = (bi * seqLen + t) * sd;         // B/C [bi, t, *]
+                int btHead = (bi * seqLen + t) * _numHeads;   // delta [bi, t, *]
 
-                for (int bi = 0; bi < batchSize; bi++)
+                for (int hi = 0; hi < _numHeads; hi++)
                 {
-                    T dt = delta_t[new[] { bi, hi }];
-                    T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Multiply(dt, negA))));
+                    int dimStart = hi * _headDimension;
+                    T dt = deltaSpan[btHead + hi];
+                    T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Multiply(dt, negAPerHead[hi]))));
+                    T dVal = _dParam[hi];
 
                     for (int di = 0; di < _headDimension; di++)
                     {
                         int flatD = dimStart + di;
-                        T x_val = x_t[new[] { bi, flatD }];
+                        T x_val = xSpan[btInner + flatD];
+                        // hiddenState[bi, hi, di, *]
+                        int hsBase = (((bi * _numHeads + hi) * _headDimension) + di) * sd;
+                        // allHiddenStates[bi, t+1, flatD, *]
+                        int ahsBase = (((bi * (seqLen + 1) + (t + 1)) * innerDim) + flatD) * sd;
+                        T yAccum = NumOps.Zero;
 
-                        for (int n = 0; n < _stateDimension; n++)
+                        for (int n = 0; n < sd; n++)
                         {
-                            T hPrev = hiddenState[new[] { bi, hi, di, n }];
-                            T bVal = B_t[new[] { bi, n }];
+                            T hPrev = hsSpan[hsBase + n];
+                            T bVal = bSpan[btState + n];
 
                             // h_new = A_bar * h_prev + dt * B * x
                             T hNew = NumOps.Add(
                                 NumOps.Multiply(aBar, hPrev),
                                 NumOps.Multiply(dt, NumOps.Multiply(bVal, x_val)));
-                            hiddenState[new[] { bi, hi, di, n }] = hNew;
-                            h_flat[new[] { bi, flatD, n }] = hNew;
+                            hsSpan[hsBase + n] = hNew;
+                            ahsSpan[ahsBase + n] = hNew;
 
                             // y += C * h
-                            T cVal = C_t[new[] { bi, n }];
-                            y_t[new[] { bi, flatD }] = NumOps.Add(
-                                y_t[new[] { bi, flatD }],
-                                NumOps.Multiply(cVal, hNew));
+                            yAccum = NumOps.Add(yAccum, NumOps.Multiply(cSpan[btState + n], hNew));
                         }
 
                         // D skip connection
-                        T dVal = _dParam[hi];
-                        y_t[new[] { bi, flatD }] = NumOps.Add(
-                            y_t[new[] { bi, flatD }],
-                            NumOps.Multiply(dVal, x_val));
+                        outSpan[btInner + flatD] = NumOps.Add(yAccum, NumOps.Multiply(dVal, x_val));
                     }
                 }
             }
-
-            allHiddenStates.SetSlice(1, t + 1, h_flat);
-            output.SetSlice(1, t, y_t);
         }
 
         _lastHiddenStates = allHiddenStates;
