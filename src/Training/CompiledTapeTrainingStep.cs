@@ -394,10 +394,18 @@ public static class CompiledTapeTrainingStep<T>
         // overloads + CompiledTrainingPlan.ConfigureOptimizerDouble). Other
         // numeric types still fall through to the eager autograd path.
         if (typeof(T) != typeof(float) && typeof(T) != typeof(double)) return false;
-        // Only SGD, Adam, AdamW are wired through ConfigureOptimizer.
+        // SGD, Adam, AdamW, and AMSGrad are wired through ConfigureOptimizer.
+        // AMSGrad reuses the Adam/AdamW second-moment state plus the vMax buffer
+        // (FusedOptimizer.AMSGradUpdateSimd); the Tensors-side plan selects the
+        // AMSGrad kernel and allocates vMax when ConfigureOptimizer sees the
+        // AMSGrad type. If the linked Tensors build predates that wiring, the
+        // plan reports the type unsupported and TryStepWithFusedOptimizer's
+        // catch falls back to the eager tape (with the one-time warning) — never
+        // a wrong update.
         if (optimizerType is not (AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam
-            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW))
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AMSGrad))
             return false;
 
         try

@@ -185,11 +185,92 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
 
         ValidateInputShape(input, "prediction");
 
+        // Fused fast path: a pure stack of dense layers with fused-eligible scalar
+        // activations runs as ONE IEngine.MlpForward call instead of a per-layer
+        // tape/dispatch walk — the kernel the AiDotNet.Tensors MLP micro-benchmarks
+        // beat PyTorch-CPU on. Falls back to the generic Forward for any layer the
+        // kernel can't represent (non-dense, vector activation, unmapped activation,
+        // mixed hidden activations) or if the kernel declines (e.g. active tape).
+        if (TryFusedDensePredict(input, out var fused))
+        {
+            IsTrainingMode = true;
+            return fused;
+        }
+
         var predictions = Forward(input);
 
         IsTrainingMode = true;
 
         return predictions;
+    }
+
+    /// <summary>
+    /// Attempts the fused multi-layer-perceptron inference kernel for a pure
+    /// dense+activation stack. Returns false (and the caller uses the generic
+    /// per-layer <see cref="Forward"/>) whenever the stack isn't representable by
+    /// <c>IEngine.MlpForward</c>. Activation→kernel mapping is open/closed: each
+    /// activation that has an exact fused equivalent implements
+    /// <see cref="ActivationFunctions.Fused.IFusedActivation"/>; there is no switch.
+    /// </summary>
+    private bool TryFusedDensePredict(Tensor<T> input, out Tensor<T> output)
+    {
+        output = Tensor<T>.Empty();
+        var layers = Layers;
+        if (layers is null || layers.Count == 0) return false;
+
+        var weights = new List<Tensor<T>>(layers.Count);
+        var biases = new List<Tensor<T>?>(layers.Count);
+        var hiddenActivation = Tensors.Engines.FusedActivationType.None;
+        bool hiddenActivationSet = false;
+        var outputActivation = Tensors.Engines.FusedActivationType.None;
+
+        for (int i = 0; i < layers.Count; i++)
+        {
+            if (layers[i] is not Layers.DenseLayer<T> dense) return false;
+            // Vector activations aren't covered by the scalar fused kernels.
+            if (dense.VectorActivation is not null) return false;
+
+            Tensors.Engines.FusedActivationType act;
+            if (dense.ScalarActivation is null)
+                act = Tensors.Engines.FusedActivationType.None;
+            else if (dense.ScalarActivation is ActivationFunctions.Fused.IFusedActivation fused)
+                act = fused.FusedActivationType;
+            else
+                return false; // activation has no exact fused equivalent
+
+            if (i == layers.Count - 1)
+            {
+                outputActivation = act;
+            }
+            else if (!hiddenActivationSet)
+            {
+                hiddenActivation = act;
+                hiddenActivationSet = true;
+            }
+            else if (hiddenActivation != act)
+            {
+                // MlpForward applies a single hidden activation to every non-final
+                // layer; a stack with mixed hidden activations can't use it.
+                return false;
+            }
+
+            weights.Add(dense.GetWeights());
+            biases.Add(dense.GetBiases());
+        }
+
+        try
+        {
+            output = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.MlpForward(
+                input, weights, biases, hiddenActivation, outputActivation);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            // MlpForward is forward-only and throws under an active GradientTape;
+            // fall back to the generic path rather than failing the prediction.
+            output = Tensor<T>.Empty();
+            return false;
+        }
     }
 
     /// <summary>

@@ -34,6 +34,11 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
 public class GELUActivation<T> : ActivationFunctionBase<T>
 {
+    // Intentionally NOT IFusedActivation: GELU has tanh-approx vs exact-erf
+    // variants, and the fused kernel's GELU must be numerically identical to this
+    // class's formula before it can be mapped. Left on the generic path until that
+    // equivalence is verified, so fused routing never changes GELU outputs.
+
     /// <summary>
     /// Indicates that this activation function supports operations on individual scalar values.
     /// </summary>
