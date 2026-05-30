@@ -154,7 +154,6 @@ public partial class RWKV7Block<T> : LayerBase<T>
     private Tensor<T>? _cachedChannelRGate;   // [batch, seqLen, modelDim] sigmoid(W_r * rInput)
     private Tensor<T>? _cachedChannelSiLU;    // [batch, seqLen, ffnDim] SiLU(W_k * kInput)
     private Tensor<T>? _cachedChannelVProj;   // [batch, seqLen, modelDim] W_v * SiLU(k)
-    private Tensor<T>? _cachedChannelKProj;   // [batch, seqLen, ffnDim] W_k * kInput (pre-SiLU)
 
     // ============ Gradients ============
 
@@ -598,79 +597,41 @@ public partial class RWKV7Block<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        // Per-step outputs concatenated on the tape (end of loop), not SafeSetSlice (detaches).
-        var outputSlices = new System.Collections.Generic.List<Tensor<T>>(seqLen);
-        var xPrev = (!IsTrainingMode && _prevChannelToken != null)
-            ? _prevChannelToken
-            : new Tensor<T>(new[] { batchSize, _modelDimension });
-
-        // Caches for backward pass — use workspace for modelDim-shaped buffers
-        var allRGate = Ws.Sequence(SqCmAllRGate);
-        var allSiLU = Ws.Sequence(SqCmAllSiLU);
-        var allVProj = Ws.Sequence(SqCmAllVProj);
-        var allKProj = Ws.Sequence(SqCmAllKProj);
-
-        // Token-shift mix coefficients as [1, modelDim] rows (see TimeMixingForward
-        // for why this is Engine-op based: fresh-per-timestep matmul inputs + the
-        // mix coefficients stay tape-connected).
+        // ---- #1464: channel mixing is purely position-wise (token-shift + a SiLU-gated FFN, NO
+        // recurrence), so the whole sub-layer runs as batched GEMMs over [batch*seqLen, modelDim]
+        // — no per-timestep loop. The previous per-step loop issued ~8 Engine dispatches × seqLen ×
+        // numLayers (≈16K dispatches/forward at seqLen=512, 4 layers); that per-op DISPATCH overhead
+        // — NOT GEMM FLOPs (the GEMMs run at 30–90 GFLOP/s) — dominated the forward (~9.5s measured
+        // for one Predict) and the training step. The tape backs the gradients automatically (the
+        // layer has no manual backward), so weights/activations are identical to the per-step form.
+        int bsl = batchSize * seqLen;
         var ones1D = Tensor<T>.CreateDefault(new[] { _modelDimension }, NumOps.One);
-        var mixRRow = Engine.Reshape(_channelMixR, new[] { 1, _modelDimension });
-        var mixKRow = Engine.Reshape(_channelMixK, new[] { 1, _modelDimension });
-        var invRRow = Engine.Reshape(Engine.TensorSubtract(ones1D, _channelMixR), new[] { 1, _modelDimension });
-        var invKRow = Engine.Reshape(Engine.TensorSubtract(ones1D, _channelMixK), new[] { 1, _modelDimension });
+        var mixR3 = Engine.Reshape(_channelMixR, new[] { 1, 1, _modelDimension });
+        var mixK3 = Engine.Reshape(_channelMixK, new[] { 1, 1, _modelDimension });
+        var invR3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _channelMixR), new[] { 1, 1, _modelDimension });
+        var invK3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _channelMixK), new[] { 1, 1, _modelDimension });
 
-        for (int t = 0; t < seqLen; t++)
-        {
-            // Tape-tracked zero-copy view (see TimeMixingForward) so the gradient
-            // scatters back into normed2 — this feeds the residual added after the
-            // channel sub-layer.
-            var x_t = x.GetSliceAlongDimension(t, 1);
+        // Token-shift over the whole sequence: xShifted[:, t, :] = x[:, t-1, :].
+        var xPrev0 = (!IsTrainingMode && _prevChannelToken != null)
+            ? Engine.Reshape(_prevChannelToken, new[] { batchSize, 1, _modelDimension })
+            : new Tensor<T>(new[] { batchSize, 1, _modelDimension });
+        Tensor<T> xShifted = seqLen > 1
+            ? Engine.TensorConcatenate(new[] { xPrev0, Engine.TensorNarrow(x, 1, 0, seqLen - 1) }, axis: 1)
+            : xPrev0;
 
-            // Token shift (tape-connected, fresh tensor per timestep).
-            var rInput = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(x_t, mixRRow),
-                Engine.TensorBroadcastMultiply(xPrev, invRRow));
-            var kInput = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(x_t, mixKRow),
-                Engine.TensorBroadcastMultiply(xPrev, invKRow));
+        var rIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixR3), Engine.TensorBroadcastMultiply(xShifted, invR3));
+        var kIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixK3), Engine.TensorBroadcastMultiply(xShifted, invK3));
 
-            // r = sigmoid(W_r * rInput)
-            var rProj = Engine.TensorMatMul(rInput, _channelReceptanceWeights);
-            var rGate = Engine.Sigmoid(rProj);
+        // r = sigmoid(W_r · rIn); k = W_k · kIn; SiLU(k); v = W_v · SiLU(k); out = sigmoid(r) · v.
+        var rGate = Engine.Sigmoid(Engine.TensorMatMul(Engine.Reshape(rIn, new[] { bsl, _modelDimension }), _channelReceptanceWeights)); // [bsl, modelDim]
+        var kProj = Engine.TensorMatMul(Engine.Reshape(kIn, new[] { bsl, _modelDimension }), _channelKeyWeights); // [bsl, ffnDim]
+        var kSiLU = Engine.TensorMultiply(kProj, Engine.Sigmoid(kProj));
+        var vProj = Engine.TensorMatMul(kSiLU, _channelValueWeights); // [bsl, modelDim]
+        var y = Engine.TensorMultiply(rGate, vProj); // [bsl, modelDim]
 
-            // k = W_k * kInput, then SiLU activation
-            var kProj = Engine.TensorMatMul(kInput, _channelKeyWeights);  // [batch, ffnDim]
+        if (seqLen > 0) _prevChannelToken = x.GetSliceAlongDimension(seqLen - 1, 1);
 
-            // SiLU: x * sigmoid(x) — tape-connected so W_k receives gradients and each
-            // timestep's activation is a fresh tensor (no reused workspace buffer that
-            // would corrupt the tape's saved matmul input on the next timestep).
-            var kSiLU = Engine.TensorMultiply(kProj, Engine.Sigmoid(kProj));
-
-            // v = W_v * SiLU(k)
-            var vProj = Engine.TensorMatMul(kSiLU, _channelValueWeights);  // [batch, modelDim]
-
-            // output = sigmoid(r) * v
-            var y_t = Engine.TensorMultiply(rGate, vProj);
-            outputSlices.Add(Engine.Reshape(y_t, new[] { batchSize, 1, _modelDimension }));
-
-            // Cache for backward
-            SafeSetSlice(allRGate, t, rGate, batchSize, _modelDimension);
-            SafeSetSlice(allSiLU, t, kSiLU, batchSize, _ffnDimension);
-            SafeSetSlice(allVProj, t, vProj, batchSize, _modelDimension);
-            SafeSetSlice(allKProj, t, kProj, batchSize, _ffnDimension);
-
-            xPrev = x_t;
-        }
-
-        _cachedChannelRGate = allRGate;
-        _cachedChannelSiLU = allSiLU;
-        _cachedChannelVProj = allVProj;
-        _cachedChannelKProj = allKProj;
-        _prevChannelToken = xPrev;
-
-        // Tape-connected output assembly so the channel-mix projection weights get gradients.
-        var output = Engine.TensorConcatenate(outputSlices.ToArray(), axis: 1);
-        return output;
+        return Engine.Reshape(y, new[] { batchSize, seqLen, _modelDimension });
     }
 
     /// <summary>
