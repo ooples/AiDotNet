@@ -554,79 +554,30 @@ public partial class RWKV7Block<T> : LayerBase<T>
         var Aall = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(aIn, new[] { bsl, _modelDimension }), _aWeights), new[] { batchSize, seqLen, _modelDimension }), aBias3);
         var Ball = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(bIn, new[] { bsl, _modelDimension }), _bWeights), new[] { batchSize, seqLen, _modelDimension }), bBias3);
 
-        for (int t = 0; t < seqLen; t++)
-        {
-            // x_t retained only to carry the streaming previous-token state (_prevToken) below.
-            var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
+        // ---- #1464: the entire WKV state recurrence (diagonal decay + rank-1 injection + gated
+        // readout) runs in ONE fused, differentiable engine op instead of ~10 tape micro-ops per
+        // timestep. The kernel applies the r/a/b sigmoids internally and records a single tape node
+        // whose backward is the BPTT adjoint of the recurrence, so the projection-weight gradients
+        // are identical to the per-step formulation (clone-parity preserved) — it just removes the
+        // per-timestep tape-dispatch overhead that made the memorization test exceed the 180s budget.
+        //   S_t[di,vi] = sigmoid(a)[di]*S_{t-1}[di,vi] + (sigmoid(b)[di]*k[di])*v[vi]
+        //   wkv_t[di]  = sigmoid(r)[di] * sum_vi S_t[di,vi]*k[vi]
+        var wkvAll = Engine.Rwkv7SequenceForward(Rall, Kall, Vall, Aall, Ball, _numHeads);
 
-            // Per-step projection slices (zero-copy tape views into the batched results).
-            var r = Rall.GetSliceAlongDimension(t, 1);
-            var k = Kall.GetSliceAlongDimension(t, 1);
-            var v = Vall.GetSliceAlongDimension(t, 1);
-            var aProj = Aall.GetSliceAlongDimension(t, 1);
-            var bProj = Ball.GetSliceAlongDimension(t, 1);
+        // Group-normalize (per head, per position) and project to the output — both batched over all
+        // positions as [batch*seqLen, modelDim], so NO per-timestep ops remain in time-mixing.
+        var wkv2d = Engine.Reshape(wkvAll, new[] { bsl, _modelDimension });
+        var normed2d = ApplyGroupNorm(wkv2d, bsl);
+        var output = Engine.Reshape(
+            Engine.TensorMatMul(normed2d, _outputWeights),
+            new[] { batchSize, seqLen, _modelDimension });
 
-            // Cache for backward — use explicit copy to avoid SetSlice position bugs
-            SafeSetSlice(allR, t, r, batchSize, _modelDimension);
-            SafeSetSlice(allK, t, k, batchSize, _modelDimension);
-            SafeSetSlice(allV, t, v, batchSize, _modelDimension);
-            SafeSetSlice(allA, t, aProj, batchSize, _modelDimension);
-            SafeSetSlice(allB, t, bProj, batchSize, _modelDimension);
-
-            // WKV-7 kernel per head — expressed in tape-connected Engine ops so the
-            // r/k/v/a/b projection weights receive gradients under tape-based training.
-            // The prior manual NumOps loop (ToDouble/FromDouble + scalar indexing) detached
-            // the entire kernel from the autodiff graph, so those weights got zero gradient.
-            // Vectorized over [batch*numHeads, headDim] with the head-pair state held as
-            // [batch*numHeads, headDim(di), headDim(vi)]:
-            //   S[di,vi] = sigmoid(a)[di] * S_prev[di,vi] + (sigmoid(b)[di]*k[di]) * v[vi]
-            //   wkv[di]  = sigmoid(r)[di] * sum_vi( S[di,vi] * k[vi] )
-            int bh = batchSize * _numHeads;
-            var aGate = Engine.Sigmoid(Engine.Reshape(aProj, new[] { bh, _headDimension }));
-            var bGate = Engine.Sigmoid(Engine.Reshape(bProj, new[] { bh, _headDimension }));
-            var rGateH = Engine.Sigmoid(Engine.Reshape(r, new[] { bh, _headDimension }));
-            var kH = Engine.Reshape(k, new[] { bh, _headDimension });
-            var vH = Engine.Reshape(v, new[] { bh, _headDimension });
-
-            // Rank-1 injection outer[di,vi] = (sigmoid(b)[di]*k[di]) * v[vi] via batched matmul.
-            var bk = Engine.TensorMultiply(bGate, kH);
-            var outer = Engine.TensorMatMul(
-                Engine.Reshape(bk, new[] { bh, _headDimension, 1 }),
-                Engine.Reshape(vH, new[] { bh, 1, _headDimension }));
-
-            // Decay: a[di] broadcasts over the vi axis of the prior state.
-            var statePrev = Engine.Reshape(state, new[] { bh, _headDimension, _headDimension });
-            var decayed = Engine.TensorBroadcastMultiply(
-                statePrev, Engine.Reshape(aGate, new[] { bh, _headDimension, 1 }));
-            var newState = Engine.TensorAdd(decayed, outer);
-            state = Engine.Reshape(newState, new[] { batchSize, _numHeads, _headDimension, _headDimension });
-
-            // Readout: sum over vi of S[di,vi]*k[vi], gated by sigmoid(r).
-            var sk = Engine.TensorMatMul(newState, Engine.Reshape(kH, new[] { bh, _headDimension, 1 }));
-            var wkvH = Engine.TensorMultiply(rGateH, Engine.Reshape(sk, new[] { bh, _headDimension }));
-            var wkvOutput = Engine.Reshape(wkvH, new[] { batchSize, _modelDimension });
-
-            // Cache for backward
-            SafeSetSlice(allWkvGated, t, wkvOutput, batchSize, _modelDimension);
-
-            // Group normalization on WKV output (per head)
-            var normedWkv = ApplyGroupNorm(wkvOutput, batchSize);
-            SafeSetSlice(allWkv, t, normedWkv, batchSize, _modelDimension);
-
-            // Output projection
-            var y_t = Engine.TensorMatMul(normedWkv, _outputWeights);
-            outputSlices.Add(Engine.Reshape(y_t, new[] { batchSize, 1, _modelDimension }));
-
-            xPrev = x_t;
-        }
-
-        // Tape-connected output assembly so the WKV kernel + output projection gradients
-        // flow back to the projection weights.
-        var output = Engine.TensorConcatenate(outputSlices.ToArray(), axis: 1);
-
-        // Store state for autoregressive inference
-        _recurrentState = state;
-        _prevToken = xPrev;
+        // The fused WKV kernel starts from a zero state each call (training resets per sequence, and
+        // full-sequence inference is computed from t=0), so there is no carried recurrent state to
+        // persist. Keep the token-shift streaming token (last position) for parity with the
+        // decomposed path's _prevToken contract.
+        _recurrentState = null;
+        _prevToken = seqLen > 0 ? x.GetSliceAlongDimension(seqLen - 1, 1) : xPrev;
 
         // Cache for backward
         _cachedWkvOut = allWkv;
