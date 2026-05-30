@@ -293,8 +293,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             case LearningRateSchedulers.ConstantLRScheduler:
                 return true;
             case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
+                // Denominator reconciliation: eager CosineAnnealing uses
+                // cos(π·(N-1)/tMax) on batch N, but the fused CosineLr uses
+                // cos(π·(s-1)/(totalSteps-1)). Passing totalSteps = tMax+1 makes
+                // (s-1)/(totalSteps-1) = (N-1)/tMax, so the fused per-step
+                // sequence is bit-identical to eager (previously off by ~4e-6/
+                // step from passing tMax directly).
                 schedule = Tensors.Engines.Compilation.LrSchedule.Cosine(
-                    cosine.BaseLearningRate, cosine.TMax, cosine.EtaMin);
+                    cosine.BaseLearningRate, cosine.TMax + 1, cosine.EtaMin);
                 return true;
             case LearningRateSchedulers.ExponentialLRScheduler expo:
                 schedule = Tensors.Engines.Compilation.LrSchedule.Exponential(
@@ -308,6 +314,21 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 // no constant-rate freeze (AiDotNet#1470).
                 schedule = Tensors.Engines.Compilation.LrSchedule.Noam(
                     noam.ModelDimension, noam.WarmupSteps, noam.Factor);
+                return true;
+            case LearningRateSchedulers.StepLRScheduler stepLr:
+                // lr0 · gamma^decayCount. The Tensors StepLr's max(0, step-1)/stepSize
+                // exactly matches the eager (N-1)/stepSize decay count on batch N.
+                schedule = Tensors.Engines.Compilation.LrSchedule.Step(
+                    stepLr.BaseLearningRate, stepLr.StepSize, stepLr.Gamma);
+                return true;
+            case LearningRateSchedulers.CyclicLRScheduler cyclic
+                    when cyclic.Mode == LearningRateSchedulers.CyclicLRScheduler.CyclicMode.Triangular
+                         && cyclic.StepSizeUp == cyclic.StepSizeDown:
+                // Fused Cyclic is symmetric-triangular only (single stepSize).
+                // Triangular2 / ExponentialRange / asymmetric up≠down have no
+                // fused equivalent → fall through to eager.
+                schedule = Tensors.Engines.Compilation.LrSchedule.Cyclic(
+                    cyclic.BaseLearningRate, cyclic.MaxLearningRate, cyclic.StepSizeUp);
                 return true;
             default:
                 return false;
