@@ -172,10 +172,12 @@ public class RWKVLayerTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task SupportsTraining_ReturnsFalse_InferenceOnlyLayer()
+    public async Task SupportsTraining_ReturnsTrue_FullyDifferentiableLayer()
     {
+        // RWKVLayer's forward is now expressed entirely in tape-connected engine ops (issue #1464),
+        // so every parameter trains through the autodiff tape — it is no longer inference-only.
         var layer = new RWKVLayer<float>(4, 32, 4);
-        Assert.False(layer.SupportsTraining);
+        Assert.True(layer.SupportsTraining);
     }
 
     [Fact(Timeout = 120000)]
