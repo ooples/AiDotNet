@@ -37,8 +37,15 @@ namespace AiDotNet.ActivationFunctions;
 // path). Claiming a fused Mish kernel would make MlpForward throw. Wiring it
 // is tracked by AiDotNet.Tensors #499 (add Mish to the FusedLinear tables);
 // once a Tensors release ships the kernel, re-add IFusedActivation here.
-public class MishActivation<T> : ActivationFunctionBase<T>
+public class MishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.Mish;
+        return true;
+    }
+
     /// <summary>
     /// Determines if the activation function supports operations on individual scalar values.
     /// </summary>

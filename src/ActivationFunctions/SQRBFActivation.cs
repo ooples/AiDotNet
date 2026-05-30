@@ -31,8 +31,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = false, IsBounded = true, Cost = ComputeCost.Low)]
-public class SQRBFActivation<T> : ActivationFunctionBase<T>
+public class SQRBFActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.SQRBF;
+        return true;
+    }
+
     /// <summary>
     /// The width parameter that controls the shape of the Gaussian bell curve.
     /// </summary>
