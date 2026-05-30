@@ -117,6 +117,14 @@ public class NoamSchedule : LearningRateSchedulerBase
     /// <summary>Model dimension this schedule was configured for.</summary>
     public int ModelDimension => _modelDimension;
 
+    /// <summary>
+    /// Multiplicative scale on the schedule (1.0 = paper-faithful). Exposed so
+    /// the fused-training path can reconstruct an equivalent
+    /// <c>AiDotNet.Tensors.Engines.Compilation.LrSchedule.Noam(...)</c> and run
+    /// Adam+Noam on the fused fast path with an identical per-step LR ramp.
+    /// </summary>
+    public double Factor => _factor;
+
     /// <inheritdoc />
     /// <remarks>
     /// <c>step</c> here is the library's "batches completed so far" counter
