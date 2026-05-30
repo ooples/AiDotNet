@@ -300,6 +300,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 schedule = Tensors.Engines.Compilation.LrSchedule.Exponential(
                     expo.BaseLearningRate, expo.Gamma);
                 return true;
+            case LearningRateSchedulers.NoamSchedule noam:
+                // Vaswani-2017 warmup + inverse-sqrt. The fused kernel evaluates
+                // GetLr(step) per optimizer step, so the Noam ramp runs on the
+                // fused fast path with the SAME per-step LR sequence as the eager
+                // NoamSchedule (both use t = step, 1-based) — no eager fallback,
+                // no constant-rate freeze (AiDotNet#1470).
+                schedule = Tensors.Engines.Compilation.LrSchedule.Noam(
+                    noam.ModelDimension, noam.WarmupSteps, noam.Factor);
+                return true;
             default:
                 return false;
         }
