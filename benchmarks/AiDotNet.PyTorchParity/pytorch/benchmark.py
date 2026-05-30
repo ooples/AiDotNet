@@ -303,6 +303,10 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         model, shape = make_model(name)
         model.to(device)
         parameters = sum(parameter.numel() for parameter in model.parameters())
+        if args.compile:
+            # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
+            # Counts params BEFORE compile (the wrapper hides .parameters()).
+            model = torch.compile(model)
         training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size)
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations)
@@ -332,6 +336,8 @@ def main() -> None:
     parser.add_argument("--threads", type=int, default=0,
                         help="Pin CPU thread count (0 = PyTorch default = all cores). "
                              "Match the AiDotNet side's AIDOTNET_BLAS_THREADS for a fair comparison.")
+    parser.add_argument("--compile", action="store_true",
+                        help="Wrap each model in torch.compile (TorchInductor) — the 'PyTorch compiled' head-to-head.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
     args = parser.parse_args()
 
