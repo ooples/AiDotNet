@@ -62,13 +62,14 @@ public class FusedOptimizerParityTests
     /// <see cref="Steps"/> steps and returns the max abs parameter divergence
     /// plus the number of fused steps that actually engaged.
     /// </summary>
-    private (double maxAbsDiff, long fusedSteps) Divergence(
+    private (double maxAbsDiff, long fusedSteps, double trainDelta) Divergence(
         Func<IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> optFactory)
     {
         var fused = new FeedForwardNeuralNetwork<float>(MakeArch(), optFactory(), new MeanSquaredErrorLoss<float>());
         var eager = new FeedForwardNeuralNetwork<float>(MakeArch(), optFactory(), new MeanSquaredErrorLoss<float>());
         // Identical initial weights: copy the fused model's init into the eager one.
-        eager.UpdateParameters(fused.GetParameters());
+        var init = fused.GetParameters();
+        eager.UpdateParameters(init);
         fused.SetTrainingMode(true);
         eager.SetTrainingMode(true);
         var (x, y) = MakeData();
@@ -98,10 +99,13 @@ public class FusedOptimizerParityTests
         var pf = fused.GetParameters();
         var pe = eager.GetParameters();
         Assert.Equal(pf.Length, pe.Length);
-        double maxAbs = 0;
+        double maxAbs = 0, trainDelta = 0;
         for (int i = 0; i < pf.Length; i++)
+        {
             maxAbs = Math.Max(maxAbs, Math.Abs((double)pf[i] - (double)pe[i]));
-        return (maxAbs, fusedSteps);
+            trainDelta = Math.Max(trainDelta, Math.Abs((double)pf[i] - (double)init[i]));
+        }
+        return (maxAbs, fusedSteps, trainDelta);
     }
 
     private static AdamOptimizer<float, Tensor<float>, Tensor<float>> Adam() =>
@@ -110,7 +114,7 @@ public class FusedOptimizerParityTests
     [Fact]
     public void Adam_Control_FusedMatchesEager()
     {
-        var (diff, fusedSteps) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(Adam);
         _output.WriteLine($"Adam control: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}");
         Assert.True(fusedSteps > 0, "Adam must engage the fused path (control is meaningless otherwise).");
         Assert.True(diff < 1e-3, $"Adam fused-vs-eager divergence {diff:E3} unexpectedly large — forward/backward float-order issue?");
@@ -119,8 +123,8 @@ public class FusedOptimizerParityTests
     [Fact]
     public void AdaMax_FusedMatchesEager_NoWorseThanAdam()
     {
-        var (adamDiff, _) = Divergence(Adam);
-        var (diff, fusedSteps) = Divergence(() =>
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
             new AdaMaxOptimizer<float, Tensor<float>, Tensor<float>>(
                 null, new AdaMaxOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
         _output.WriteLine($"AdaMax: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
@@ -134,8 +138,8 @@ public class FusedOptimizerParityTests
     [Fact]
     public void Nadam_FusedMatchesEager_NoWorseThanAdam()
     {
-        var (adamDiff, _) = Divergence(Adam);
-        var (diff, fusedSteps) = Divergence(() =>
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
             new NadamOptimizer<float, Tensor<float>, Tensor<float>>(
                 null, new NadamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
         _output.WriteLine($"Nadam: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
@@ -144,5 +148,70 @@ public class FusedOptimizerParityTests
         Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
             $"Nadam fused-vs-eager divergence {diff:E3} ≫ Adam control {adamDiff:E3} — the fused Nadam kernel does " +
             "not match AiDotNet's eager Nadam update. Do NOT wire this mapping until reconciled.");
+    }
+
+    private void AssertOptimizerParity(
+        string name, long fusedSteps, double diff, double trainDelta, double adamDiff)
+    {
+        _output.WriteLine($"{name}: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}, trainDelta={trainDelta:E3} (Adam control {adamDiff:E3})");
+        Assert.True(fusedSteps > 0,
+            $"{name} must engage the fused path — fusedSteps==0 means the mapping didn't take (allowlist/spec).");
+        // Non-vacuous guard: training must actually move the parameters, else a
+        // 0 divergence is meaningless (two un-trained models trivially match).
+        Assert.True(trainDelta > 1e-6,
+            $"{name}: training did not change parameters (trainDelta={trainDelta:E3}); the parity comparison is vacuous.");
+        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
+            $"{name} fused-vs-eager divergence {diff:E3} ≫ Adam control {adamDiff:E3} — the fused kernel does not " +
+            $"match AiDotNet's eager {name} update. Do NOT wire this mapping until reconciled.");
+    }
+
+    [Fact]
+    public void RMSprop_FusedMatchesEager_NoWorseThanAdam()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new RootMeanSquarePropagationOptimizer<float, Tensor<float>, Tensor<float>>(
+                null, new RootMeanSquarePropagationOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+        AssertOptimizerParity("RMSprop", fusedSteps, diff, trainDelta, adamDiff);
+    }
+
+    [Fact]
+    public void Adagrad_FusedMatchesEager_NoWorseThanAdam()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new AdagradOptimizer<float, Tensor<float>, Tensor<float>>(
+                null, new AdagradOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+        AssertOptimizerParity("Adagrad", fusedSteps, diff, trainDelta, adamDiff);
+    }
+
+    [Fact]
+    public void Lion_FusedMatchesEager_NoWorseThanAdam()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new LionOptimizer<float, Tensor<float>, Tensor<float>>(
+                null, new LionOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+        AssertOptimizerParity("Lion", fusedSteps, diff, trainDelta, adamDiff);
+    }
+
+    [Fact]
+    public void AdaDelta_FusedMatchesEager_NoWorseThanAdam()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new AdaDeltaOptimizer<float, Tensor<float>, Tensor<float>>(
+                null, new AdaDeltaOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+        AssertOptimizerParity("AdaDelta", fusedSteps, diff, trainDelta, adamDiff);
+    }
+
+    [Fact]
+    public void LAMB_FusedMatchesEager_NoWorseThanAdam()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new LAMBOptimizer<float, Tensor<float>, Tensor<float>>(
+                null, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+        AssertOptimizerParity("LAMB", fusedSteps, diff, trainDelta, adamDiff);
     }
 }
