@@ -21,7 +21,7 @@ import json
 from pathlib import Path
 
 
-def _get(d: dict, *names: str, default=None):
+def _get(d: dict, *names: str, default=None) -> object:
     """Fetch the first present key from a set of casing variants."""
     for n in names:
         if n in d:

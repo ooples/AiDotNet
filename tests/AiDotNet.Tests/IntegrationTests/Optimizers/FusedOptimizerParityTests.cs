@@ -117,6 +117,8 @@ public class FusedOptimizerParityTests
         var (diff, fusedSteps, trainDelta) = Divergence(Adam);
         _output.WriteLine($"Adam control: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}");
         Assert.True(fusedSteps > 0, "Adam must engage the fused path (control is meaningless otherwise).");
+        Assert.True(trainDelta > 1e-6,
+            $"Adam control: training did not move parameters (trainDelta={trainDelta:E3}); the fused-vs-eager parity comparison is vacuous.");
         Assert.True(diff < 1e-3, $"Adam fused-vs-eager divergence {diff:E3} unexpectedly large — forward/backward float-order issue?");
     }
 
@@ -130,6 +132,8 @@ public class FusedOptimizerParityTests
         _output.WriteLine($"AdaMax: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
         Assert.True(fusedSteps > 0,
             "AdaMax must engage the fused path (OptimizerType.AdaMax) — fusedSteps==0 means the mapping didn't take.");
+        Assert.True(trainDelta > 1e-6,
+            $"AdaMax: training did not move parameters (trainDelta={trainDelta:E3}); the fused-vs-eager parity comparison is vacuous.");
         Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
             $"AdaMax fused-vs-eager divergence {diff:E3} ≫ Adam control {adamDiff:E3} — the fused AdaMax kernel does " +
             "not match AiDotNet's eager AdaMax update. Do NOT wire this mapping until reconciled.");
@@ -145,6 +149,8 @@ public class FusedOptimizerParityTests
         _output.WriteLine($"Nadam: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
         Assert.True(fusedSteps > 0,
             "Nadam must engage the fused path (OptimizerType.Nadam) — fusedSteps==0 means the mapping didn't take.");
+        Assert.True(trainDelta > 1e-6,
+            $"Nadam: training did not move parameters (trainDelta={trainDelta:E3}); the fused-vs-eager parity comparison is vacuous.");
         Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
             $"Nadam fused-vs-eager divergence {diff:E3} ≫ Adam control {adamDiff:E3} — the fused Nadam kernel does " +
             "not match AiDotNet's eager Nadam update. Do NOT wire this mapping until reconciled.");

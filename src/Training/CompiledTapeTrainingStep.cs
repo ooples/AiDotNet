@@ -339,6 +339,11 @@ public static class CompiledTapeTrainingStep<T>
         // assertion about "fused ran at least N times" should reflect the
         // new lifecycle.
         _fusedStepCount = 0;
+        // AiDotNet#1469 review: a fresh lifecycle must be able to re-enable fused execution. The
+        // unavailable-type latch records capability gaps seen during the PREVIOUS lifecycle; clear
+        // it here so a re-traced plan (e.g. a different model on this thread) retries the fused path
+        // instead of inheriting a stale "disabled" verdict.
+        _fusedUnavailableTypes?.Clear();
     }
 
     /// <summary>
@@ -672,12 +677,19 @@ public static class CompiledTapeTrainingStep<T>
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
                 $"{ex}");
-            // Latch THIS optimizer type as fused-unsupported on this thread so we
-            // don't reconfigure/throw/warn every step for a capability gap that
-            // won't change within this process (e.g. the linked Tensors build
-            // lacks the kernel). Generalized from the original AMSGrad-only latch.
-            (_fusedUnavailableTypes ??= new System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>())
-                .Add(optimizerType);
+            // Latch THIS optimizer type as fused-unsupported on this thread ONLY for capability-gap
+            // exceptions — a missing kernel/method/type/native-entry won't change within this
+            // process, so latching avoids reconfigure/throw/warn churn every step. Transient runtime
+            // failures (shape mismatch, NaN guard, a one-off non-contiguous CPU layout) must fall
+            // back THIS step but NOT permanently disable fused for the type on this thread, since a
+            // later unrelated model could engage it fine (AiDotNet#1469 review). Generalized from the
+            // original AMSGrad-only latch.
+            if (ex is NotSupportedException or MissingMethodException or TypeLoadException
+                or EntryPointNotFoundException or DllNotFoundException)
+            {
+                (_fusedUnavailableTypes ??= new System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>())
+                    .Add(optimizerType);
+            }
             _configuredPlan = null;
             _configuredOptimizerConfig = null;
             return false;

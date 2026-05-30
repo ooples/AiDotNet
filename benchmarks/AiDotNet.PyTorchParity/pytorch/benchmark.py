@@ -86,7 +86,7 @@ class ResourceMonitor:
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._sample, daemon=True)
 
-    def __enter__(self) -> "ResourceMonitor":
+    def __enter__(self) -> ResourceMonitor:
         self.process.cpu_percent(interval=None)
         self._thread.start()
         return self
@@ -273,7 +273,7 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
         cuda_peak = torch.cuda.max_memory_allocated(device) / 1024 / 1024 if device.type == "cuda" else 0.0
         # p95 latency: robust to rig-contention noise that swings the mean.
         steady_sorted = sorted(steady)
-        p95_idx = min(len(steady_sorted) - 1, int(round(0.95 * (len(steady_sorted) - 1))))
+        p95_idx = min(len(steady_sorted) - 1, round(0.95 * (len(steady_sorted) - 1)))
         results.append(InferenceBatchResult(
             batch_size=batch_size,
             warmup_seconds_avg=round(statistics.fmean(warmup_times), 6),
