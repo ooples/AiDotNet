@@ -31799,9 +31799,13 @@ public static class LayerHelper<T>
             activationFunction: new GELUActivation<T>());
 
         // === RWKV Layers ===
+        // RWKV-7 block (Peng et al.): tape-connected time-mixing whose WKV recurrence runs through
+        // the fused CpuEngine.Rwkv7SequenceForward kernel, with batched token-shift/projections and
+        // channel-mix. This replaces the older RWKVLayer whose scalar per-timestep/per-element
+        // NumOps recurrence dominated forecaster training throughput (issue #1464).
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new RWKVLayer<T>(
+            yield return new RWKV7Block<T>(
                 sequenceLength: contextLength,
                 modelDimension: modelDim,
                 numHeads: numHeads);

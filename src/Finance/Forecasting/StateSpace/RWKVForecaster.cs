@@ -74,7 +74,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
 
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
-    private List<RWKVLayer<T>>? _rwkvLayers;
+    private List<RWKV7Block<T>>? _rwkvLayers;
     private List<DenseLayer<T>>? _outputProjectionLayers;
     #endregion
 
@@ -212,7 +212,7 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     private void ExtractLayerReferences()
     {
         _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
-        _rwkvLayers = Layers.OfType<RWKVLayer<T>>().ToList();
+        _rwkvLayers = Layers.OfType<RWKV7Block<T>>().ToList();
         _outputProjectionLayers = Layers.OfType<DenseLayer<T>>().Skip(1).ToList();
     }
 
@@ -221,8 +221,8 @@ public class RWKVForecaster<T> : ForecastingModelBase<T>
     {
         base.ValidateCustomLayers(layers);
 
-        if (layers.OfType<RWKVLayer<T>>().Count() < 1)
-            throw new ArgumentException("RWKV Forecaster requires at least one RWKVLayer.");
+        if (layers.OfType<RWKV7Block<T>>().Count() < 1)
+            throw new ArgumentException("RWKV Forecaster requires at least one RWKV7Block.");
 
         if (layers.OfType<DenseLayer<T>>().Count() < 2)
             throw new ArgumentException("RWKV Forecaster requires at least input embedding and output projection DenseLayer layers.");
