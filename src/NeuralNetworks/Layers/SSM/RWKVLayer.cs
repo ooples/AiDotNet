@@ -354,24 +354,6 @@ public partial class RWKVLayer<T> : LayerBase<T>
         {
             var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
-            // Token shift: mix current and previous token
-            var shifted = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T mu_r = _timeMixR[d];
-                    T mu_k = _timeMixK[d];
-                    T mu_v = _timeMixV[d];
-                    T curr = x_t[bi, d];
-                    T prev = xPrev[bi, d];
-
-                    // For receptance, key, value: different shifts stored in 'shifted' temporarily
-                    // We compute all three at once for each position
-                    shifted[bi, d] = curr;  // Will be used for individual projections
-                }
-            }
-
             // Compute receptance, key, value with token-shifted inputs
             var rInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
             var kInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
@@ -431,14 +413,21 @@ public partial class RWKVLayer<T> : LayerBase<T>
                         T num = NumOps.Zero;
                         T den = NumOps.Zero;
 
+                        // exp(k) and exp(k + bonus) depend only on di (kVal/bonusVal are fixed for
+                        // this di), so hoist them out of the vi loop — the previous code recomputed
+                        // both Math.Exp calls headDim times per di (≈ headDim× too many exponentials,
+                        // the dominant cost of this recurrence). Bit-identical result for every T.
+                        double kValD = Math.Min(NumOps.ToDouble(kVal), 80.0);
+                        T expK = NumOps.FromDouble(Math.Exp(kValD));
+                        double kBonusD = Math.Min(NumOps.ToDouble(NumOps.Add(kVal, bonusVal)), 80.0);
+                        T expKBonus = NumOps.FromDouble(Math.Exp(kBonusD));
+
                         for (int vi = 0; vi < _headDimension; vi++)
                         {
                             int flatV = dimStart + vi;
                             T vVal = v[bi, flatV];
 
                             T prevNum = stateNum[bi, hi, di, vi];
-                            double kValD = Math.Min(NumOps.ToDouble(kVal), 80.0);
-                            T expK = NumOps.FromDouble(Math.Exp(kValD));
 
                             // Update: state = decay * state + exp(k) * v
                             T newNum = NumOps.Add(
@@ -447,9 +436,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
                             stateNum[bi, hi, di, vi] = newNum;
 
                             // Current token bonus (clamped)
-                            double kBonusD = Math.Min(NumOps.ToDouble(NumOps.Add(kVal, bonusVal)), 80.0);
-                            T bonusContrib = NumOps.Multiply(
-                                NumOps.FromDouble(Math.Exp(kBonusD)), vVal);
+                            T bonusContrib = NumOps.Multiply(expKBonus, vVal);
 
                             if (vi == di)  // Diagonal contribution for denominator
                             {
