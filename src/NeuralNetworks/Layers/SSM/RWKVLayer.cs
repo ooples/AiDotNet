@@ -342,50 +342,60 @@ public partial class RWKVLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> TimeMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
         // State for WKV: numerator [batch, numHeads, headDim, headDim] and denominator [batch, numHeads, headDim]
         var stateNum = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
         var stateDen = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension });
 
-        var xPrev = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });  // initialized to zeros (token shift)
+        // ---- #1464: the token-shift + r/k/v projections and the data-dependent decay are
+        // position-wise (no WKV-state dependence), so batch them across the whole sequence — ONE
+        // GEMM each instead of seqLen per-step matmuls + a scalar per-element token-shift. The
+        // token-shift inputs are built as DETACHED leaf tensors via element writes (exactly like the
+        // original per-step rInput/kInput/vInput), so the autodiff graph — hence the trained params
+        // and gradients — is bit-identical to the per-step form; only the per-timestep dispatch
+        // overhead is removed. The WKV recurrence below stays sequential.
+        int bsl = batchSize * seqLen;
+        var rInAll = TensorAllocator.Rent<T>(new[] { bsl, _modelDimension });
+        var kInAll = TensorAllocator.Rent<T>(new[] { bsl, _modelDimension });
+        var vInAll = TensorAllocator.Rent<T>(new[] { bsl, _modelDimension });
+        {
+            var xs = x.Data.Span;
+            var rs = rInAll.Data.Span; var ks = kInAll.Data.Span; var vs = vInAll.Data.Span;
+            var mr = _timeMixR.Data.Span; var mk = _timeMixK.Data.Span; var mv = _timeMixV.Data.Span;
+            for (int bi = 0; bi < batchSize; bi++)
+            {
+                for (int t = 0; t < seqLen; t++)
+                {
+                    int row = (bi * seqLen + t) * _modelDimension;
+                    bool hasPrev = t > 0;
+                    int prevRow = hasPrev ? (bi * seqLen + (t - 1)) * _modelDimension : 0;
+                    for (int d = 0; d < _modelDimension; d++)
+                    {
+                        T curr = xs[row + d];
+                        T prev = hasPrev ? xs[prevRow + d] : NumOps.Zero;
+                        rs[row + d] = NumOps.Add(NumOps.Multiply(mr[d], curr), NumOps.Multiply(NumOps.Subtract(NumOps.One, mr[d]), prev));
+                        ks[row + d] = NumOps.Add(NumOps.Multiply(mk[d], curr), NumOps.Multiply(NumOps.Subtract(NumOps.One, mk[d]), prev));
+                        vs[row + d] = NumOps.Add(NumOps.Multiply(mv[d], curr), NumOps.Multiply(NumOps.Subtract(NumOps.One, mv[d]), prev));
+                    }
+                }
+            }
+        }
+
+        var Rall = Engine.Reshape(Engine.TensorMatMul(rInAll, _receptanceWeights), new[] { batchSize, seqLen, _modelDimension });
+        var Kall = Engine.Reshape(Engine.TensorMatMul(kInAll, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
+        var Vall = Engine.Reshape(Engine.TensorMatMul(vInAll, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
+        var DecayAll = Engine.TensorBroadcastAdd(
+            Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(x, new[] { bsl, _modelDimension }), _decayWeights), new[] { batchSize, seqLen, _modelDimension }),
+            Engine.Reshape(_decayBias, new[] { 1, 1, _modelDimension }));
+
+        var wkvAll = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
 
         for (int t = 0; t < seqLen; t++)
         {
-            var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
-
-            // Compute receptance, key, value with token-shifted inputs
-            var rInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
-            var kInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
-            var vInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
-
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T curr = x_t[bi, d];
-                    T prev = xPrev[bi, d];
-                    rInput[bi, d] = NumOps.Add(
-                        NumOps.Multiply(_timeMixR[d], curr),
-                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixR[d]), prev));
-                    kInput[bi, d] = NumOps.Add(
-                        NumOps.Multiply(_timeMixK[d], curr),
-                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixK[d]), prev));
-                    vInput[bi, d] = NumOps.Add(
-                        NumOps.Multiply(_timeMixV[d], curr),
-                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixV[d]), prev));
-                }
-            }
-
-            // Project to r, k, v
-            var r = Engine.TensorMatMul(rInput, _receptanceWeights);  // [batch, modelDim]
-            var k = Engine.TensorMatMul(kInput, _keyWeights);
-            var v = Engine.TensorMatMul(vInput, _valueWeights);
-
-            // Compute data-dependent decay
-            var decay = Engine.TensorMatMul(x_t, _decayWeights);
-            var decayBias2D = _decayBias.Reshape(1, _modelDimension);
-            decay = Engine.TensorBroadcastAdd(decay, decayBias2D);
+            // Per-step views into the batched projections; the recurrence body is unchanged.
+            var r = Rall.GetSliceAlongDimension(t, 1);     // [batch, modelDim]
+            var k = Kall.GetSliceAlongDimension(t, 1);
+            var v = Vall.GetSliceAlongDimension(t, 1);
+            var decay = DecayAll.GetSliceAlongDimension(t, 1);
 
             // WKV computation per head with exponential decay
             var wkvOutput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
@@ -465,15 +475,20 @@ public partial class RWKVLayer<T> : LayerBase<T>
                 }
             }
 
-            // Output projection
-            var y_t = Engine.TensorMatMul(wkvOutput, _outputWeights);
-            output.SetSlice(1, t, y_t);
-
-            // Update previous token for next step
-            xPrev = x_t;
+            // Collect this step's WKV output; the output projection is batched after the loop.
+            wkvAll.SetSlice(1, t, wkvOutput);
         }
 
-        _lastState = xPrev.Clone();  // Store final token state for potential autoregressive continuation
+        // Batched output projection. wkvAll is a detached leaf (same as each per-step wkvOutput in
+        // the original), so the matmul still feeds outputWeights its gradient — bit-identical graph.
+        var output = Engine.Reshape(
+            Engine.TensorMatMul(Engine.Reshape(wkvAll, new[] { bsl, _modelDimension }), _outputWeights),
+            new[] { batchSize, seqLen, _modelDimension });
+
+        // Final token state for autoregressive continuation (token-shift is batched above).
+        _lastState = seqLen > 0
+            ? x.GetSliceAlongDimension(seqLen - 1, 1).Clone()
+            : new Tensor<T>(new[] { batchSize, _modelDimension });
         _lastReceptance = output;  // Cache for backward
         _lastWkv = output;
         return output;
@@ -484,62 +499,55 @@ public partial class RWKVLayer<T> : LayerBase<T>
     /// </summary>
     private Tensor<T> ChannelMixingForward(Tensor<T> x, int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        var xPrev = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
+        int bsl = batchSize * seqLen;
         int expandedDim = _modelDimension * 4;
 
-        for (int t = 0; t < seqLen; t++)
+        // ---- #1464: channel mixing is purely position-wise (token-shift + a squared-ReLU FFN, no
+        // recurrence), so batch the whole sub-layer over the sequence — ONE GEMM each instead of
+        // seqLen per-step matmuls + scalar per-element loops. The token-shift inputs are DETACHED
+        // leaves built via element writes (exactly like the original per-step rInput/kInput), so the
+        // autodiff graph (trained params + gradients) is bit-identical to the per-step form.
+        var rInAll = TensorAllocator.Rent<T>(new[] { bsl, _modelDimension });
+        var kInAll = TensorAllocator.Rent<T>(new[] { bsl, _modelDimension });
         {
-            var x_t = x.GetSliceAlongDimension(t, 1);
-
-            // Token shift for channel mixing
-            var rInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
-            var kInput = TensorAllocator.Rent<T>(new[] { batchSize, _modelDimension });
-
+            var xs = x.Data.Span;
+            var rs = rInAll.Data.Span; var ks = kInAll.Data.Span;
+            var mr = _channelMixR.Data.Span; var mk = _channelMixK.Data.Span;
             for (int bi = 0; bi < batchSize; bi++)
             {
-                for (int d = 0; d < _modelDimension; d++)
+                for (int t = 0; t < seqLen; t++)
                 {
-                    T curr = x_t[bi, d];
-                    T prev = xPrev[bi, d];
-                    rInput[bi, d] = NumOps.Add(
-                        NumOps.Multiply(_channelMixR[d], curr),
-                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _channelMixR[d]), prev));
-                    kInput[bi, d] = NumOps.Add(
-                        NumOps.Multiply(_channelMixK[d], curr),
-                        NumOps.Multiply(NumOps.Subtract(NumOps.One, _channelMixK[d]), prev));
+                    int row = (bi * seqLen + t) * _modelDimension;
+                    bool hasPrev = t > 0;
+                    int prevRow = hasPrev ? (bi * seqLen + (t - 1)) * _modelDimension : 0;
+                    for (int d = 0; d < _modelDimension; d++)
+                    {
+                        T curr = xs[row + d];
+                        T prev = hasPrev ? xs[prevRow + d] : NumOps.Zero;
+                        rs[row + d] = NumOps.Add(NumOps.Multiply(mr[d], curr), NumOps.Multiply(NumOps.Subtract(NumOps.One, mr[d]), prev));
+                        ks[row + d] = NumOps.Add(NumOps.Multiply(mk[d], curr), NumOps.Multiply(NumOps.Subtract(NumOps.One, mk[d]), prev));
+                    }
                 }
             }
-
-            // r = sigmoid(W_r * rInput)
-            var rProj = Engine.TensorMatMul(rInput, _channelReceptanceWeights);
-            var rGate = Engine.Sigmoid(rProj);
-
-            // k = W_k * kInput, then squared ReLU
-            var kProj = Engine.TensorMatMul(kInput, _channelKeyWeights);  // [batch, expandedDim]
-
-            // Squared ReLU: max(0, k)^2
-            var kSquared = TensorAllocator.Rent<T>(new[] { batchSize, expandedDim });
-            for (int bi = 0; bi < batchSize; bi++)
-            {
-                for (int d = 0; d < expandedDim; d++)
-                {
-                    T val = kProj[bi, d];
-                    if (NumOps.GreaterThan(val, NumOps.Zero))
-                        kSquared[bi, d] = NumOps.Multiply(val, val);
-                }
-            }
-
-            // v = W_v * kSquared
-            var vProj = Engine.TensorMatMul(kSquared, _channelValueWeights);  // [batch, modelDim]
-
-            // output = sigmoid(r) * v
-            var y_t = Engine.TensorMultiply(rGate, vProj);
-            output.SetSlice(1, t, y_t);
-
-            xPrev = x_t;
         }
 
+        // r = sigmoid(W_r · rIn); k = W_k · kIn; squared-ReLU; v = W_v · kSquared; out = sigmoid(r)·v.
+        var rGate = Engine.Sigmoid(Engine.TensorMatMul(rInAll, _channelReceptanceWeights)); // [bsl, modelDim]
+        var kProj = Engine.TensorMatMul(kInAll, _channelKeyWeights); // [bsl, expandedDim]
+
+        // Squared ReLU: max(0, k)^2 — detached elementwise over [bsl, expandedDim] (matches per-step).
+        var kSquared = new Tensor<T>(new[] { bsl, expandedDim });
+        {
+            var kp = kProj.Data.Span; var kq = kSquared.Data.Span;
+            for (int i = 0; i < kp.Length; i++)
+            {
+                T val = kp[i];
+                if (NumOps.GreaterThan(val, NumOps.Zero)) kq[i] = NumOps.Multiply(val, val);
+            }
+        }
+
+        var vProj = Engine.TensorMatMul(kSquared, _channelValueWeights); // [bsl, modelDim]
+        var output = Engine.Reshape(Engine.TensorMultiply(rGate, vProj), new[] { batchSize, seqLen, _modelDimension });
         return output;
     }
 
