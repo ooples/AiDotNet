@@ -470,7 +470,8 @@ public class CNNBiLSTMCRFOptions : NeuralNetworkOptions
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> The learning rate controls how fast the model learns. The default
-    /// of 0.001 works well with AdamW. If training is unstable, try halving it.
+    /// of 0.015 matches Ma &amp; Hovy 2016's SGD learning rate (paired with gradient clipping
+    /// at 5.0). If training is unstable, try halving it.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
@@ -485,7 +486,7 @@ public class CNNBiLSTMCRFOptions : NeuralNetworkOptions
             _learningRate = value;
         }
     }
-    private double _learningRate = 1e-3;
+    private double _learningRate = 0.015;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization during training.

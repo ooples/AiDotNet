@@ -603,7 +603,19 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var noiseTensor = new Tensor<T>(predicted._shape, noiseVector);
         var diff = Engine.TensorSubtract(predicted, noiseTensor);
         var sq = Engine.TensorMultiply(diff, diff);
-        var loss = Engine.ReduceSum(sq, null);
+        // DDPM training objective (Ho et al. 2020, the simplified loss L_simple =
+        // E[||ε − ε_θ||²]) is the MEAN squared error between predicted and true
+        // noise — matching the reference implementations (HuggingFace diffusers
+        // trains with F.mse_loss, which uses mean reduction). A SUM here scales
+        // the gradient by the element count (e.g. 1024× for a [1,4,16,16] latent),
+        // which destabilised the plain-SGD update: Imagen2's
+        // Training_ShouldReducePredictionError saw the error RISE (0.317 → 0.321)
+        // over 10 steps because each step overshot. Mean keeps the gradient scale
+        // invariant to latent size, so the same LearningRate is stable regardless
+        // of resolution. d(mean)/dparam = (1/N)·d(sum)/dparam, so this is exactly
+        // the mean-MSE gradient.
+        var loss = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(sq, null), NumOps.FromDouble(1.0 / sq.Length));
 
         // Backward pass via graph-based autodiff.
         var grads = tape.ComputeGradients(loss, paramTensors);
@@ -975,7 +987,19 @@ public abstract class DiffusionModelBase<T> : IDiffusionModel<T>, IConfigurableM
         var noiseTensor = new Tensor<T>(predicted._shape, noiseVector);
         var diff = Engine.TensorSubtract(predicted, noiseTensor);
         var sq = Engine.TensorMultiply(diff, diff);
-        var loss = Engine.ReduceSum(sq, null);
+        // DDPM training objective (Ho et al. 2020, the simplified loss L_simple =
+        // E[||ε − ε_θ||²]) is the MEAN squared error between predicted and true
+        // noise — matching the reference implementations (HuggingFace diffusers
+        // trains with F.mse_loss, which uses mean reduction). A SUM here scales
+        // the gradient by the element count (e.g. 1024× for a [1,4,16,16] latent),
+        // which destabilised the plain-SGD update: Imagen2's
+        // Training_ShouldReducePredictionError saw the error RISE (0.317 → 0.321)
+        // over 10 steps because each step overshot. Mean keeps the gradient scale
+        // invariant to latent size, so the same LearningRate is stable regardless
+        // of resolution. d(mean)/dparam = (1/N)·d(sum)/dparam, so this is exactly
+        // the mean-MSE gradient.
+        var loss = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(sq, null), NumOps.FromDouble(1.0 / sq.Length));
         var grads = tape.ComputeGradients(loss, paramTensors);
 
         // Flatten gradients into a single vector matching the tape-collected

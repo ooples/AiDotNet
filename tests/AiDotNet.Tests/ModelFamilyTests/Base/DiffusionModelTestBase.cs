@@ -187,8 +187,25 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Training Should Reduce Prediction Error
-    // After training on a fixed (input, target) pair, the predict output
-    // should move closer to the target — verifying gradient flow works.
+    //
+    // Per DDPM (Ho et al. 2020, Algorithm 1), diffusion training minimizes the
+    // MEAN squared error between the true noise ε and the model's predicted noise
+    // ε_θ(√ᾱₜ·x₀ + √(1−ᾱₜ)·ε, t). There is NO supervised "target output" in
+    // diffusion — the data point is the clean sample x₀, noise is added, and the
+    // model predicts that noise. So the valid, paper-faithful "training reduces
+    // error" check is: does the noise-prediction MSE at a FIXED probe (x₀, ε, t)
+    // go down (or at least not up) after training?
+    //
+    // The earlier formulation measured MSE(Generate(x₀), random_target). That is
+    // not a paper quantity and is causally unrelated to the training objective:
+    // `Train` ignores the target argument (it self-samples noise, exactly per the
+    // paper), so Generate(x₀) drifts toward the model's own learned denoising
+    // fixed point — away from an arbitrary random target — for ANY model whose
+    // sampler genuinely depends on its weights. Expressive models (e.g. the
+    // attention-UNet Imagen2 config) therefore "failed" that check while training
+    // perfectly correctly (output bounded, converges to a fixed point). The probe
+    // below measures the actual objective and only fails if training makes
+    // noise-prediction WORSE — a real gradient-sign / divergence bug.
     // =====================================================
 
     [Fact(Timeout = 120000)]
@@ -198,25 +215,37 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
-        var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
 
-        // Initial error
-        var initialOutput = model.Predict(input);
-        double initialError = ComputeMSE(initialOutput, target);
+        // Treat the random tensor as the clean sample x₀ (the diffusion data point).
+        var x0 = CreateRandomTensor(InputShape, rng);
 
-        // Train
+        // Fixed noise-prediction probe held constant across the before/after
+        // measurement: a single (noise ε, timestep t) so we compare like-for-like.
+        // (Per-step Train uses a random t internally, so raw per-step loss values
+        // are confounded by timestep magnitude; a fixed probe is not.) Mid-range t.
+        int probeT = System.Math.Max(1, model.Scheduler.TrainTimesteps / 2);
+        var probeNoiseVec = new Vector<double>(x0.Length);
+        for (int i = 0; i < probeNoiseVec.Length; i++)
+            probeNoiseVec[i] = rng.NextDouble() * 2.0 - 1.0;
+        var noisyProbe = new Tensor<double>(x0._shape, model.Scheduler.AddNoise(x0.ToVector(), probeNoiseVec, probeT));
+        var probeNoise = new Tensor<double>(x0._shape, probeNoiseVec);
+
+        double errBefore = ComputeMSE(model.PredictNoise(noisyProbe, probeT), probeNoise);
+
+        // Train on x₀ (the diffusion data point). The target argument is unused by
+        // the diffusion training path per the paper; pass x₀ for clarity.
         for (int i = 0; i < TrainingIterations; i++)
-            model.Train(input, target);
+            model.Train(x0, x0);
 
-        // Final error
-        var finalOutput = model.Predict(input);
-        double finalError = ComputeMSE(finalOutput, target);
+        double errAfter = ComputeMSE(model.PredictNoise(noisyProbe, probeT), probeNoise);
 
-        if (!double.IsNaN(initialError) && !double.IsNaN(finalError))
+        if (!double.IsNaN(errBefore) && !double.IsNaN(errAfter))
         {
-            Assert.True(finalError <= initialError + 1e-6,
-                $"Training did not reduce error: initial={initialError:F6}, final={finalError:F6}.");
+            Assert.True(errAfter <= errBefore + 1e-6,
+                $"Training increased the noise-prediction error: before={errBefore:F6}, after={errAfter:F6}. " +
+                "DDPM training (Ho et al. 2020, Alg. 1) minimizes MSE(ε, ε_θ); after training on x₀ the model " +
+                "must predict the noise at a fixed (x₀, ε, t) probe at least as well as before — an increase " +
+                "indicates a gradient-sign error, divergence, or first-step explosion in the training path.");
         }
     }
 

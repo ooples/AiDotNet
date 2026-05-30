@@ -469,9 +469,10 @@ public class FastDVDNet<T> : VideoDenoisingBase<T>
         _imageHeight = reader.ReadInt32();
         _imageWidth = reader.ReadInt32();
 
-        // Reinitialize layers with restored configuration
-        ClearLayers();
-        InitializeLayers();
+        // The layers (with their trained weights) are already reconstructed by the base
+        // DeserializeInternalUnchecked before this override runs, so do NOT clear +
+        // re-initialize them here — that would discard the deserialized weights and leave
+        // the model randomly initialized.
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>

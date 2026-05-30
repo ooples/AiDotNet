@@ -101,15 +101,21 @@ public class CCMAlgorithm<T> : TimeSeriesCausalBase<T>
                     for (int e = 0; e < embDim; e++)
                         embeddings[t, e] = data[t + (embDim - 1) * tau - e * tau, j];
 
-                // Cross-map at full and half library to test convergence
+                // CCM convergence (Sugihara et al. 2012, Science): an edge is accepted
+                // only when cross-map skill ρ INCREASES as the library grows from a
+                // small size toward the full series and plateaus at a high value. The
+                // signature must be measured from a SMALL fixed library (minLib) to the
+                // full library — not half-vs-full, where both endpoints scale with n and
+                // already sit on ρ's plateau, so the measured gain vanishes for large n.
+                // (The previous code measured validN/2-vs-validN and papered over the
+                // resulting collapse by also accepting any ρ > 0.95; on correlated data
+                // that made nearly every pair an edge once n grew, so false positives
+                // increased with more data — the opposite of CCM's convergence promise.)
+                double rhoSmall = ComputeCrossMapCorrelation(data, embeddings, i, minLib, embDim);
                 double rhoFull = ComputeCrossMapCorrelation(data, embeddings, i, validN, embDim);
-                double rhoHalf = ComputeCrossMapCorrelation(data, embeddings, i, validN / 2, embDim);
 
-                double convergence = rhoFull - rhoHalf;
-                // Accept edge if: convergence is positive (standard CCM) OR
-                // rhoFull is very high (near-perfect prediction, common for deterministic data)
-                const double highCorrelationThreshold = 0.95;
-                if ((convergence > _convergenceThreshold || rhoFull > highCorrelationThreshold) && rhoFull > _correlationThreshold)
+                double convergence = rhoFull - rhoSmall;
+                if (convergence > _convergenceThreshold && rhoFull > _correlationThreshold)
                     result[i, j] = NumOps.FromDouble(rhoFull);
             }
 
