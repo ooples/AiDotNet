@@ -268,12 +268,15 @@ public partial class RWKVLayer<T> : LayerBase<T>
         InitializeTensor(_receptanceWeights);
         InitializeTensor(_keyWeights);
         InitializeTensor(_valueWeights);
-        InitializeTensor(_outputWeights);
+        // RWKV init: the projections that write INTO the residual stream — the time-mix output
+        // (_outputWeights) and the channel-mix value (_channelValueWeights) — are ZERO-initialized
+        // (left at the new-tensor zero) so every block starts as an identity residual. This keeps a
+        // deep stack numerically stable at init (no compounding noise across layers) and is what
+        // lets RWKV train without the gradient explosion a non-zero output init causes.
         _decayBias.Fill(NumOps.FromDouble(-5.0));  // RWKV-4 time_decay init; effective decay = -exp(-5) ≈ -0.0067
         _bonus.Fill(NumOps.FromDouble(0.5));  // Small bonus for current token
 
         InitializeTensor(_channelKeyWeights);
-        InitializeTensor(_channelValueWeights);
         InitializeTensor(_channelReceptanceWeights);
 
         _normGamma1.Fill(NumOps.One);
