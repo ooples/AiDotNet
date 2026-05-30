@@ -104,10 +104,13 @@ internal class InferenceOptimizer<T>
 
         _config.Validate();
 
-        // Clone only when we might rewrite layers; otherwise keep original reference.
+        // Clone only when we might mutate layers; otherwise keep original reference.
+        // Layer fusion (BatchNorm folding) rewrites conv weights in place and drops
+        // the BN layer, so it also requires a clone to avoid mutating the user's model.
         bool mayRewriteAttention = _config.EnableFlashAttention || _config.EnableKVCache || _config.EnableWeightOnlyQuantization;
+        bool mayFoldLayers = _config.EnableLayerFusion && HasFoldableBatchNorm(model);
         var workingModel = model;
-        if (cloneModel && mayRewriteAttention && HasOptimizableAttentionLayers(model))
+        if (cloneModel && ((mayRewriteAttention && HasOptimizableAttentionLayers(model)) || mayFoldLayers))
         {
             try
             {
@@ -130,12 +133,47 @@ internal class InferenceOptimizer<T>
 
         ResolveLazyLayers(workingModel);
 
-        bool anyApplied = ApplyAttentionOptimizations(workingModel);
+        bool anyApplied = ApplyLayerFusion(workingModel);
+        anyApplied |= ApplyAttentionOptimizations(workingModel);
         InferenceDiagnostics.RecordDecision("InferenceOptimizer", "AttentionRewrites", enabled: anyApplied, reason: anyApplied ? "Applied" : "NoApplicableLayersOrDisabled");
         anyApplied |= ApplyWeightOnlyQuantization(workingModel);
         anyApplied |= Initialize(workingModel);
 
         return (workingModel, anyApplied);
+    }
+
+    /// <summary>
+    /// Freeze-time layer fusion: folds BatchNorm into a preceding identity-activation
+    /// linear op (Conv→BN). Lossless at inference; eliminates the BN layer. Runs
+    /// before attention rewrites / quantization so the folded weights flow into them.
+    /// </summary>
+    private bool ApplyLayerFusion(NeuralNetworkBase<T> model)
+    {
+        if (!_config.EnableLayerFusion)
+        {
+            InferenceDiagnostics.RecordDecision("InferenceOptimizer", "LayerFusion", enabled: false, reason: "DisabledByConfig");
+            return false;
+        }
+
+        int folded = model.FoldBatchNormForInference();
+        InferenceDiagnostics.RecordDecision("InferenceOptimizer", "LayerFusion",
+            enabled: folded > 0, reason: folded > 0 ? $"FoldedBatchNorm({folded})" : "NoFoldableBatchNorm");
+        return folded > 0;
+    }
+
+    /// <summary>True if the model has a BatchNorm layer directly after an
+    /// identity-activation convolution — the pattern <see cref="ApplyLayerFusion"/>
+    /// can fold. Used to decide whether a clone is needed before mutating.</summary>
+    private static bool HasFoldableBatchNorm(NeuralNetworkBase<T> model)
+    {
+        var layers = model.Layers;
+        for (int i = 1; i < layers.Count; i++)
+        {
+            if (layers[i] is BatchNormalizationLayer<T>
+                && (layers[i - 1] is ConvolutionalLayer<T> || layers[i - 1] is DenseLayer<T>))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
