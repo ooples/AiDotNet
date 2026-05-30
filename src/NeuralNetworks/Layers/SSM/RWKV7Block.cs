@@ -506,58 +506,65 @@ public partial class RWKV7Block<T> : LayerBase<T>
         // tape (which saves references, not snapshots) read only the LAST timestep's
         // values during backward and produced wrong projection-weight gradients — and
         // (b) the mix coefficients stay on the autodiff graph.
+        // ---- #1464 throughput: token-shift + the r/k/v/a/b projections do NOT depend on the
+        // recurrent WKV state, so they are computed for the WHOLE sequence in ONE batched GEMM each
+        // (over [batch*seqLen, modelDim]) instead of seqLen separate per-timestep GEMMs. Only the
+        // WKV state recurrence below stays sequential. Every op is still on the autodiff tape, so
+        // the projection-weight gradients are identical to the per-step formulation — clone-parity
+        // and training results are unchanged; this is purely a per-step-overhead reduction.
         var ones1D = Tensor<T>.CreateDefault(new[] { _modelDimension }, NumOps.One);
-        var mixRRow = Engine.Reshape(_timeMixR, new[] { 1, _modelDimension });
-        var mixKRow = Engine.Reshape(_timeMixK, new[] { 1, _modelDimension });
-        var mixVRow = Engine.Reshape(_timeMixV, new[] { 1, _modelDimension });
-        var mixARow = Engine.Reshape(_timeMixA, new[] { 1, _modelDimension });
-        var mixBRow = Engine.Reshape(_timeMixB, new[] { 1, _modelDimension });
-        var invRRow = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixR), new[] { 1, _modelDimension });
-        var invKRow = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixK), new[] { 1, _modelDimension });
-        var invVRow = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixV), new[] { 1, _modelDimension });
-        var invARow = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixA), new[] { 1, _modelDimension });
-        var invBRow = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixB), new[] { 1, _modelDimension });
+        // Mix coefficients as [1, 1, modelDim] so they broadcast over [batch, seqLen, modelDim].
+        var mixR3 = Engine.Reshape(_timeMixR, new[] { 1, 1, _modelDimension });
+        var mixK3 = Engine.Reshape(_timeMixK, new[] { 1, 1, _modelDimension });
+        var mixV3 = Engine.Reshape(_timeMixV, new[] { 1, 1, _modelDimension });
+        var mixA3 = Engine.Reshape(_timeMixA, new[] { 1, 1, _modelDimension });
+        var mixB3 = Engine.Reshape(_timeMixB, new[] { 1, 1, _modelDimension });
+        var invR3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixR), new[] { 1, 1, _modelDimension });
+        var invK3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixK), new[] { 1, 1, _modelDimension });
+        var invV3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixV), new[] { 1, 1, _modelDimension });
+        var invA3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixA), new[] { 1, 1, _modelDimension });
+        var invB3 = Engine.Reshape(Engine.TensorSubtract(ones1D, _timeMixB), new[] { 1, 1, _modelDimension });
+
+        // Token-shifted input over the whole sequence: xShifted[:, t, :] = x[:, t-1, :], with the
+        // t=0 slot taken from the previous token (zeros in training; the streaming cache otherwise).
+        // GetSliceAlongDimension / TensorSliceAxis / TensorConcatenate record their backward on the
+        // tape (AiDotNet.Tensors >= 0.85.3, PR #487), so the shift's gradient scatters to the right
+        // positions exactly as the prior per-step zero-copy slice did.
+        var xPrev0 = (!IsTrainingMode && _prevToken != null)
+            ? Engine.Reshape(_prevToken, new[] { batchSize, 1, _modelDimension })
+            : new Tensor<T>(new[] { batchSize, 1, _modelDimension });
+        Tensor<T> xShifted = seqLen > 1
+            ? Engine.TensorConcatenate(new[] { xPrev0, Engine.TensorNarrow(x, 1, 0, seqLen - 1) }, axis: 1)
+            : xPrev0;
+
+        // Batched token-shift lerps: mix*x_t + (1-mix)*x_prev over all timesteps at once.
+        var rIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixR3), Engine.TensorBroadcastMultiply(xShifted, invR3));
+        var kIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixK3), Engine.TensorBroadcastMultiply(xShifted, invK3));
+        var vIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixV3), Engine.TensorBroadcastMultiply(xShifted, invV3));
+        var aIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixA3), Engine.TensorBroadcastMultiply(xShifted, invA3));
+        var bIn = Engine.TensorAdd(Engine.TensorBroadcastMultiply(x, mixB3), Engine.TensorBroadcastMultiply(xShifted, invB3));
+
+        // Batched projections: [batch*seqLen, modelDim] @ [modelDim, modelDim] -> reshape back to 3D.
+        int bsl = batchSize * seqLen;
+        var Rall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(rIn, new[] { bsl, _modelDimension }), _receptanceWeights), new[] { batchSize, seqLen, _modelDimension });
+        var Kall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(kIn, new[] { bsl, _modelDimension }), _keyWeights), new[] { batchSize, seqLen, _modelDimension });
+        var Vall = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(vIn, new[] { bsl, _modelDimension }), _valueWeights), new[] { batchSize, seqLen, _modelDimension });
+        var aBias3 = Engine.Reshape(_aBias, new[] { 1, 1, _modelDimension });
+        var bBias3 = Engine.Reshape(_bBias, new[] { 1, 1, _modelDimension });
+        var Aall = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(aIn, new[] { bsl, _modelDimension }), _aWeights), new[] { batchSize, seqLen, _modelDimension }), aBias3);
+        var Ball = Engine.TensorBroadcastAdd(Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(bIn, new[] { bsl, _modelDimension }), _bWeights), new[] { batchSize, seqLen, _modelDimension }), bBias3);
 
         for (int t = 0; t < seqLen; t++)
         {
-            // GetSliceAlongDimension is a zero-copy view that records SliceAxisBackward
-            // on the tape (AiDotNet.Tensors >= 0.85.3, PR #487), so the slice's gradient
-            // scatters back into the right sequence position. Earlier it was a raw view
-            // with no recorded backward, leaking wrong input gradients via storage
-            // aliasing — which corrupted the residual every time-mix parameter feeds.
+            // x_t retained only to carry the streaming previous-token state (_prevToken) below.
             var x_t = x.GetSliceAlongDimension(t, 1);  // [batch, modelDim]
 
-            // Token shift: lerp between current and previous token (tape-connected,
-            // fresh tensor per timestep).
-            var rInput = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(x_t, mixRRow),
-                Engine.TensorBroadcastMultiply(xPrev, invRRow));
-            var kInput = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(x_t, mixKRow),
-                Engine.TensorBroadcastMultiply(xPrev, invKRow));
-            var vInput = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(x_t, mixVRow),
-                Engine.TensorBroadcastMultiply(xPrev, invVRow));
-            var aInput = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(x_t, mixARow),
-                Engine.TensorBroadcastMultiply(xPrev, invARow));
-            var bInput = Engine.TensorAdd(
-                Engine.TensorBroadcastMultiply(x_t, mixBRow),
-                Engine.TensorBroadcastMultiply(xPrev, invBRow));
-
-            // Project to r, k, v, a, b
-            var r = Engine.TensorMatMul(rInput, _receptanceWeights);
-            var k = Engine.TensorMatMul(kInput, _keyWeights);
-            var v = Engine.TensorMatMul(vInput, _valueWeights);
-
-            // v7: Dynamic state evolution parameters
-            var aProj = Engine.TensorMatMul(aInput, _aWeights);
-            var aBias2D = Engine.Reshape(_aBias, new[] { 1, _modelDimension });
-            aProj = Engine.TensorBroadcastAdd(aProj, aBias2D);
-
-            var bProj = Engine.TensorMatMul(bInput, _bWeights);
-            var bBias2D = Engine.Reshape(_bBias, new[] { 1, _modelDimension });
-            bProj = Engine.TensorBroadcastAdd(bProj, bBias2D);
+            // Per-step projection slices (zero-copy tape views into the batched results).
+            var r = Rall.GetSliceAlongDimension(t, 1);
+            var k = Kall.GetSliceAlongDimension(t, 1);
+            var v = Vall.GetSliceAlongDimension(t, 1);
+            var aProj = Aall.GetSliceAlongDimension(t, 1);
+            var bProj = Ball.GetSliceAlongDimension(t, 1);
 
             // Cache for backward — use explicit copy to avoid SetSlice position bugs
             SafeSetSlice(allR, t, r, batchSize, _modelDimension);
