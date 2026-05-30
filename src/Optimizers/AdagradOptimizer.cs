@@ -30,8 +30,27 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this Adagrad instance for the fused kernel (Tensors
+    /// <c>OptimizerType.Adagrad</c> = <c>AdagradUpdateSimd(lr, eps)</c>):
+    /// Epsilon → eps; the running squared-gradient accumulator lives in the plan.
+    /// The adaptive LR-increase/decrease factors only fire under
+    /// UseAdaptiveLearningRate, which is declined here (→ eager). Parity-gated.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.Adagrad,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, (float)_options.Epsilon, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The configuration options specific to the Adagrad optimizer.
     /// </summary>
