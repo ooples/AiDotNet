@@ -268,6 +268,16 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         return base.Predict(input);
     }
 
+    // Cached scratch feature-map buffers for the conv/pool prefix (one per layer).
+    // Reused across Predict calls so the stem allocates none of the intermediate
+    // tensors per inference — a profiler showed the parity CNN allocated ~100 KB
+    // PER Predict (the Conv2D/MaxPool result tensors), driving 27 gen1 GCs / 2000
+    // calls and inflating p95. The buffers depend only on batch + layer geometry
+    // (weights are read fresh each call), so they're rebuilt only when the batch
+    // size changes; weight updates need no invalidation.
+    private Tensor<T>[]? _convStemBuf;
+    private int _convStemBatch = -1;
+
     private bool TryFusedConvStemPredict(Tensor<T> input, out Tensor<T> output)
     {
         output = Tensor<T>.Empty();
@@ -308,36 +318,88 @@ public class ConvolutionalNeuralNetwork<T> : NeuralNetworkBase<T>
         if (!t.IsContiguous) return false;
         int batch = t.Shape[0];
 
+        // The zero-alloc path uses CpuEngine's into-variant conv/pool kernels (not on
+        // IEngine); fall back for any other engine (e.g. GPU).
+        if (Engine is not AiDotNet.Tensors.Engines.CpuEngine cpu) return false;
+
         try
         {
-            // Conv / pool prefix.
+            // Validate conv activations + materialized weights up front (so we can bail
+            // cleanly before touching the buffer cache).
             for (int li = 0; li < flattenIdx; li++)
             {
                 if (layers[li] is Layers.ConvolutionalLayer<T> conv)
                 {
                     if (conv.VectorActivation is not null) return false;
-                    // FusedConv2D's in-place epilogue fast path covers identity + ReLU.
-                    var act = Tensors.Engines.FusedActivationType.None;
-                    if (conv.ScalarActivation is not null)
+                    if (conv.ScalarActivation is not null
+                        && !(conv.ScalarActivation is ActivationFunctions.Fused.IFusedActivation cf
+                             && cf.TryGetFusedActivation(out var cft)
+                             && (cft == Tensors.Engines.FusedActivationType.None || cft == Tensors.Engines.FusedActivationType.ReLU)))
+                        return false;   // conv epilogue fast path covers identity + ReLU only
+                    var k = conv.GetFilters();
+                    if (k.Rank != 4 || k.Shape[0] == 0) return false;   // lazy → bail
+                }
+            }
+
+            // (Re)build the per-layer scratch buffers when the batch geometry changes.
+            // Shapes are fully determined by batch + layer config; weights are read
+            // fresh per call, so no weight-based invalidation is needed.
+            if (_convStemBuf is null || _convStemBuf.Length != flattenIdx || _convStemBatch != batch)
+            {
+                _convStemBuf = new Tensor<T>[flattenIdx];
+                int curC = t.Shape[1], curH = t.Shape[2], curW = t.Shape[3];
+                for (int li = 0; li < flattenIdx; li++)
+                {
+                    int[] sh;
+                    if (layers[li] is Layers.ConvolutionalLayer<T> conv)
                     {
-                        if (conv.ScalarActivation is ActivationFunctions.Fused.IFusedActivation cf
-                            && cf.TryGetFusedActivation(out var cft)
-                            && (cft == Tensors.Engines.FusedActivationType.None || cft == Tensors.Engines.FusedActivationType.ReLU))
-                            act = cft;
-                        else
-                            return false;
+                        var k = conv.GetFilters();
+                        int outC = k.Shape[0], kh = k.Shape[2], kw = k.Shape[3];
+                        int oh = (curH + 2 * conv.Padding - kh) / conv.Stride + 1;
+                        int ow = (curW + 2 * conv.Padding - kw) / conv.Stride + 1;
+                        if (oh <= 0 || ow <= 0) return false;
+                        sh = new[] { batch, outC, oh, ow }; curC = outC; curH = oh; curW = ow;
                     }
-                    var kernels = conv.GetFilters();
-                    if (kernels.Rank != 4 || kernels.Shape[0] == 0) return false;   // lazy → bail
-                    t = Engine.FusedConv2D(t, kernels, conv.GetBiases(),
-                        conv.Stride, conv.Stride, conv.Padding, conv.Padding, 1, 1, act);
+                    else
+                    {
+                        var pool = (Layers.MaxPoolingLayer<T>)layers[li];
+                        int oh = (curH - pool.PoolSize) / pool.Stride + 1;
+                        int ow = (curW - pool.PoolSize) / pool.Stride + 1;
+                        if (oh <= 0 || ow <= 0) return false;
+                        sh = new[] { batch, curC, oh, ow }; curH = oh; curW = ow;
+                    }
+                    _convStemBuf[li] = new Tensor<T>(sh);
+                }
+                _convStemBatch = batch;
+            }
+
+            // Conv / pool prefix — into the reused buffers (zero per-call allocation;
+            // conv = Conv2DInto + in-place SIMD bias/ReLU epilogue, pool = index-free
+            // MaxPool2DInto).
+            var cur = t;
+            for (int li = 0; li < flattenIdx; li++)
+            {
+                var buf = _convStemBuf[li];
+                if (layers[li] is Layers.ConvolutionalLayer<T> conv)
+                {
+                    var act = Tensors.Engines.FusedActivationType.None;
+                    if (conv.ScalarActivation is ActivationFunctions.Fused.IFusedActivation cf2
+                        && cf2.TryGetFusedActivation(out var cft2))
+                        act = cft2;
+                    cpu.Conv2DInto(buf, cur, conv.GetFilters(),
+                        new[] { conv.Stride, conv.Stride }, new[] { conv.Padding, conv.Padding }, new[] { 1, 1 });
+                    AiDotNet.Tensors.Helpers.CpuFusedOperations.ApplyBiasActivationNCHWInPlace(
+                        (float[])(object)buf.GetDataArray(), (float[])(object)conv.GetBiases().GetDataArray(),
+                        buf.Shape[0], buf.Shape[1], buf.Shape[2], buf.Shape[3], act);
                 }
                 else
                 {
                     var pool = (Layers.MaxPoolingLayer<T>)layers[li];
-                    t = Engine.MaxPool2D(t, pool.PoolSize, pool.Stride);   // index-free (inference)
+                    cpu.MaxPool2DInto(buf, cur, pool.PoolSize, pool.Stride);
                 }
+                cur = buf;
             }
+            t = cur;
 
             // Flatten [B, C, H, W] → [B, C·H·W].
             int flat = 1;
