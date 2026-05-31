@@ -56,11 +56,21 @@
          fused=True, which takes lr as a per-step scalar); Noam was the only
          missing schedule shape. Closes AiDotNet#1470 (Transformer per-call
          training stalled because the Noam LR stayed frozen at warmup-step-1
-         on the fused path). All AiDotNet.Native packages coreleased in lockstep. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.88.0" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.88.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.88.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.88.0" />
+         on the fused path). All AiDotNet.Native packages coreleased in lockstep.
+
+         Bumped 0.88.0 -> 0.90.2 to pick up the merged compiled-inference work
+         (AiDotNet.Tensors#513 — CompiledMlp self-tuning kernel selection, CNN conv
+         im2col fast path, MlpForward small-batch native-BLAS routing, public
+         CpuInferenceConfig.PinBlasThreadsForLatency) so the AIsEval inference
+         benchmark exercises those wins end-to-end. 0.90.2 also carries Tensors#520
+         (ISparseEngine.SpMM<T> made unconstrained again — #379 had leaked a
+         `where T : unmanaged` into the public API, breaking unconstrained-T
+         consumers like SparseLinearLayer<T>; 0.90.0/0.90.1 do NOT build against
+         AiDotNet, 0.90.2 is the first 0.90.x that does). -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.90.2" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.90.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.90.2" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.90.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
