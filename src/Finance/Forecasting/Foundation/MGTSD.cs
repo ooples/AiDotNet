@@ -95,6 +95,14 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     private Vector<T> _sqrtAlphasCumprod = Vector<T>.Empty();
     private Vector<T> _sqrtOneMinusAlphasCumprod = Vector<T>.Empty();
 
+    // Diffusion-training scratch state. Train() samples (timestep, noise) and the
+    // normalized target before each base.Train() call so ForwardForTraining can build
+    // x_t = √ᾱ_t·x_0 + √(1-ᾱ_t)·ε and run the denoising network as an x0-predictor.
+    private Tensor<T>? _trainX0;
+    private Tensor<T>? _trainNoise;
+    private int _trainTimestep;
+    private int _trainStepCounter;
+
     #endregion
 
     #region Properties
@@ -247,19 +255,132 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     /// in <see cref="ForwardNative"/> for probabilistic inference via
     /// <see cref="Predict"/>/<see cref="Forecast"/>.
     /// </remarks>
+    /// <summary>
+    /// Paper-faithful DDPM training step (x0-parameterization; MG-TSD §3, Ho et al. 2020).
+    /// </summary>
+    /// <remarks>
+    /// Samples a diffusion timestep t and Gaussian noise ε, then trains the denoising network
+    /// to reconstruct the clean (RevIN-normalized) target x_0 from the noised sample
+    /// x_t = √ᾱ_t·x_0 + √(1-ᾱ_t)·ε conditioned on the encoded history — the x0-prediction form of
+    /// the DDPM objective. x0-prediction (rather than ε-prediction) keeps the regression target
+    /// FIXED across steps, so the loss is driveable toward 0 on a memorization task; the
+    /// ε-prediction loss instead has an irreducible noise floor. Crucially, the denoising network
+    /// here is fed the SAME [x_t | cond | guidance | t] pack used at inference
+    /// (<see cref="ForwardNative"/>), so its shared BatchNorm layers see one consistent feature
+    /// width in both paths — fixing the train(128)/inference(177) shape mismatch that previously
+    /// made the whole training-test family throw broadcast errors (issue #1464).
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+    {
+        if (!_useNativeMode) { base.Train(input, expected); return; }
+
+        // RevIN: normalize the target by the INPUT's instance statistics. The same statistics
+        // de-normalize the forecast in ForwardNative, so a scaled/shifted input yields a
+        // scaled/shifted forecast (ScaledInput_ShouldChangeOutput) rather than being washed out
+        // by the input-side instance normalization.
+        var (mean, std) = ComputeInstanceStats(input);
+        int fh = _forecastHorizon;
+        var x0 = new Tensor<T>(new[] { 1, fh });
+        for (int i = 0; i < fh; i++)
+        {
+            T tv = i < expected.Length ? expected[i] : NumOps.Zero;
+            x0.Data.Span[i] = NumOps.Divide(NumOps.Subtract(tv, mean), std);
+        }
+
+        // Reproducible-but-varying (t, ε) per step: seed off the architecture seed plus a
+        // per-call counter so the trajectory is deterministic across runs (stable tests) yet
+        // still sweeps timesteps/noise so the denoiser learns the full reverse process.
+        int baseSeed = Architecture?.RandomSeed ?? 12345;
+        var trainRand = RandomHelper.CreateSeededRandom(baseSeed + _trainStepCounter);
+        _trainStepCounter++;
+        _trainTimestep = trainRand.Next(_diffusionSteps);
+        var noise = new Tensor<T>(new[] { 1, fh });
+        for (int i = 0; i < fh; i++) noise.Data.Span[i] = SampleStandardNormal(trainRand);
+
+        _trainX0 = x0;
+        _trainNoise = noise;
+        try
+        {
+            // base.Train compares ForwardForTraining(input) == x̂_0 against the loss target x_0.
+            base.Train(input, x0);
+        }
+        finally
+        {
+            _trainX0 = null;
+            _trainNoise = null;
+        }
+    }
+
+    /// <summary>
+    /// Tape-aware training forward: builds x_t from the stored (target, noise, timestep) and runs
+    /// the denoising network as an x0-predictor over the same [x_t | cond | guidance | t] pack
+    /// used at inference. Returns the predicted clean target x̂_0.
+    /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        var x = ApplyInstanceNormalization(input);
-        if (x.Rank == 3 && x.Shape[2] == 1)
-            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] });
-        else if (x.Rank == 1)
-            x = x.Reshape(new[] { 1, x.Length });
+        var conditioned = ApplyInstanceNormalization(input);
+        if (conditioned.Rank == 3 && conditioned.Shape[2] == 1)
+            conditioned = conditioned.Reshape(new[] { conditioned.Shape[0], conditioned.Shape[1] });
+        else if (conditioned.Rank == 1)
+            conditioned = conditioned.Reshape(new[] { 1, conditioned.Length });
 
-        foreach (var layer in Layers) x = layer.Forward(x);
-        return x;
+        Tensor<T> condHidden = _inputProjection is not null ? _inputProjection.Forward(conditioned) : conditioned;
+
+        int segLen = _forecastHorizon;
+        int condLen = Math.Min(condHidden.Length, _hiddenDimension);
+        int denoiseLen = segLen + condLen + segLen + 1;
+        int t = _trainTimestep;
+        T sqrtAbar = _sqrtAlphasCumprod[t];
+        T sqrtOneMinus = _sqrtOneMinusAlphasCumprod[t];
+
+        // Build the SAME [x_t | cond | guidance | t] pack used at inference, as a fresh leaf
+        // tensor (Span copy). Only the denoising-network Forward passes need to be tape-tracked —
+        // they ARE (the layers record their ops onto the active GradientTape), so gradients flow to
+        // _denoisingLayers + _outputProjection. We deliberately do NOT route the conditioning
+        // through a tape-connected concat (the sibling diffusion forecasters, e.g. CSDI, take the
+        // same copy-the-pack approach): the concat's gradient-split mis-mapped the per-segment
+        // gradients onto the wrong layers during the tape backward.
+        var denoisingInput = new Tensor<T>(new[] { 1, denoiseLen });
+        var span = denoisingInput.Data.Span;
+        var x0 = _trainX0;
+        var noise = _trainNoise;
+        for (int i = 0; i < segLen; i++)
+        {
+            // x_t = √ᾱ_t·x_0 + √(1-ᾱ_t)·ε  (guidance segment stays zero during training).
+            T x0i = (x0 is not null && i < x0.Length) ? x0[i] : NumOps.Zero;
+            T ei = (noise is not null && i < noise.Length) ? noise[i] : NumOps.Zero;
+            span[i] = NumOps.Add(NumOps.Multiply(sqrtAbar, x0i), NumOps.Multiply(sqrtOneMinus, ei));
+        }
+        condHidden.Data.Span.Slice(0, condLen).CopyTo(span.Slice(segLen, condLen));
+        span[segLen + condLen + segLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
+
+        var predicted = denoisingInput;
+        foreach (var layer in _denoisingLayers) predicted = layer.Forward(predicted);
+        if (_outputProjection is not null) predicted = _outputProjection.Forward(predicted);
+        return predicted; // x̂_0 (length _forecastHorizon)
+    }
+
+    /// <summary>
+    /// Per-instance (RevIN) statistics over the input series: mean and (eps-stabilized) std.
+    /// </summary>
+    private (T mean, T std) ComputeInstanceStats(Tensor<T> input)
+    {
+        int len = Math.Max(1, input.Length);
+        T mean = NumOps.Zero;
+        for (int i = 0; i < input.Length; i++) mean = NumOps.Add(mean, input[i]);
+        mean = NumOps.Divide(mean, NumOps.FromDouble(len));
+        T variance = NumOps.Zero;
+        for (int i = 0; i < input.Length; i++)
+        {
+            T d = NumOps.Subtract(input[i], mean);
+            variance = NumOps.Add(variance, NumOps.Multiply(d, d));
+        }
+        variance = NumOps.Divide(variance, NumOps.FromDouble(len));
+        T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+        return (mean, std);
     }
 
     public override void UpdateParameters(Vector<T> gradients)
@@ -318,7 +439,23 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             condHidden = conditioned;
 
         int outputLen = _forecastHorizon;
-        var rand = RandomHelper.CreateSecureRandom();
+
+        // RevIN: capture the input's instance statistics to de-normalize the forecast at the end,
+        // mirroring the normalization applied to the training target in Train(). The denoising
+        // network operates entirely in the normalized domain (its conditioning comes from the
+        // instance-normalized history), so without de-normalization the forecast is invariant to
+        // input scale/shift (ScaledInput_ShouldChangeOutput) and collapses to the same values for
+        // different constant inputs (DifferentInputs_ShouldProduceDifferentOutputs).
+        var (inMean, inStd) = ComputeInstanceStats(input);
+
+        // Point-forecast inference must be DETERMINISTIC (Predict/Clone must reproduce the same
+        // output for the same input + weights), so the DDPM reverse process is driven by a seeded
+        // RNG keyed off the architecture seed rather than a fresh cryptographic RNG. Clone copies
+        // the same Architecture (hence the same seed), so the cloned model walks an identical
+        // noise trajectory. This is the established "deterministic point-forecast" convention for
+        // the foundation forecasters.
+        int diffusionSeed = Architecture?.RandomSeed ?? 12345;
+        var rand = RandomHelper.CreateSeededRandom(diffusionSeed);
 
         // Multi-granularity: generate coarse predictions first, then refine
         // Granularity levels: g=0 (coarsest, len/2^(G-1)) to g=G-1 (finest, full length)
@@ -335,51 +472,84 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             for (int i = 0; i < granLen; i++)
                 xt.Data.Span[i] = SampleStandardNormal(rand);
 
+            // Pack layout is constant across the reverse-diffusion steps:
+            // [x_t | condHidden | coarseGuidance | timestep]. Only the x_t segment and the
+            // single timestep slot change per step, so allocate the denoising-input buffer ONCE
+            // per granularity and pre-fill the conditioning + guidance segments here instead of
+            // rebuilding a fresh tensor and re-copying those segments on every one of the
+            // _diffusionSteps iterations (issue #1464: per-step allocation + scalar-copy overhead).
+            // The denoising network's input length is held CONSTANT across granularities so the
+            // shared denoising layers — whose BatchNorm caches fixed per-feature statistics on its
+            // first forward — see the same feature dimension at every granularity. The x_t and
+            // coarse-guidance segments are sized to the maximum granularity length
+            // (_forecastHorizon) and zero-padded beyond the current granularity's granLen; only the
+            // first granLen denoiser outputs are consumed in the DDPM update below. Without this,
+            // denoiseLen drifted per granularity (g0 = granLen0 + cond + 0 + 1 = 135,
+            // g1 = granLen1 + cond + guideLen1 + 1 = 147, ...) and BatchNorm threw a broadcast
+            // shape mismatch on the second granularity (issue #1464; previously masked because the
+            // 21,504-wide layers timed the test out before inference was reached).
+            int segLen = _forecastHorizon;
+            int condLen = Math.Min(condHidden.Length, _hiddenDimension);
+            int denoiseLen = segLen + condLen + segLen + 1;
+            var denoisingInput = new Tensor<T>(new[] { 1, denoiseLen });
+            var denoiseSpan = denoisingInput.Data.Span;
+            int condOffset = segLen;
+            int guideOffset = segLen + condLen;
+            int timestepOffset = segLen + condLen + segLen;
+            int xtFill = Math.Min(granLen, segLen);
+
+            // condHidden segment — invariant across steps.
+            condHidden.Data.Span.Slice(0, condLen).CopyTo(denoiseSpan.Slice(condOffset, condLen));
+
+            // coarse-guidance segment (upsampled to granLen, weighted, zero-padded to segLen) —
+            // also invariant across steps.
+            if (coarseGuidance is not null)
+            {
+                T guidanceWeightT = NumOps.FromDouble(_guidanceWeight);
+                int guideFill = Math.Min(granLen, segLen);
+                for (int i = 0; i < guideFill; i++)
+                {
+                    int coarseIdx = Math.Min(i * coarseGuidance.Length / Math.Max(1, granLen), coarseGuidance.Length - 1);
+                    denoiseSpan[guideOffset + i] = NumOps.Multiply(coarseGuidance[coarseIdx], guidanceWeightT);
+                }
+            }
+
             // DDPM reverse process at this granularity
             for (int t = _diffusionSteps - 1; t >= 0; t--)
             {
-                int xtLen = Math.Min(xt.Length, granLen);
-                int condLen = Math.Min(condHidden.Length, _hiddenDimension);
-                int guideLen = coarseGuidance is not null ? Math.Min(coarseGuidance.Length, granLen) : 0;
-                var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + guideLen + 1 });
+                // Refresh only the per-step segments: x_t (zero-padded to segLen) and the
+                // timestep embedding. The padding region [xtFill, segLen) stays zero across steps.
+                xt.Data.Span.Slice(0, xtFill).CopyTo(denoiseSpan.Slice(0, xtFill));
+                denoiseSpan[timestepOffset] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
 
-                // Pack: [x_t | condHidden | coarseGuidance | timestep]
-                int offset = 0;
-                for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[offset + i] = xt[i];
-                offset += xtLen;
-                for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[offset + i] = condHidden[i];
-                offset += condLen;
+                // The denoising network predicts the clean sample x̂_0 (x0-parameterization,
+                // matching the training objective in ForwardForTraining), NOT the noise ε.
+                var x0Pred = denoisingInput;
+                foreach (var layer in _denoisingLayers) x0Pred = layer.Forward(x0Pred);
+                if (_outputProjection is not null) x0Pred = _outputProjection.Forward(x0Pred);
 
-                // Inject coarse guidance (upsampled) weighted by guidanceWeight
-                if (coarseGuidance is not null)
-                {
-                    T guidanceWeightT = NumOps.FromDouble(_guidanceWeight);
-                    for (int i = 0; i < guideLen; i++)
-                    {
-                        int coarseIdx = Math.Min(i * coarseGuidance.Length / Math.Max(1, granLen), coarseGuidance.Length - 1);
-                        denoisingInput.Data.Span[offset + i] = NumOps.Multiply(coarseGuidance[coarseIdx], guidanceWeightT);
-                    }
-                    offset += guideLen;
-                }
-
-                denoisingInput.Data.Span[offset] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _diffusionSteps - 1)));
-
-                var eps = denoisingInput;
-                foreach (var layer in _denoisingLayers) eps = layer.Forward(eps);
-                if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
-
-                T alphaT = _alphas[t];
-                T betaT = _betas[t];
+                // Posterior q(x_{t-1} | x_t, x̂_0) mean + variance (Ho et al. 2020, eqs. 6–7):
+                //   μ = (√ᾱ_{t-1}·β_t / (1-ᾱ_t))·x̂_0 + (√α_t·(1-ᾱ_{t-1}) / (1-ᾱ_t))·x_t
+                //   σ² = β_t·(1-ᾱ_{t-1}) / (1-ᾱ_t)
                 T eps10 = NumOps.FromDouble(1e-10);
-                T sqrtOneMinusAlphaBarT = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
-                T noiseCoeffT = NumOps.Divide(betaT, NumOps.Add(sqrtOneMinusAlphaBarT, eps10));
-                T sqrtAlphaT = NumOps.Sqrt(alphaT);
-                T sigmaT = t > 0 ? NumOps.Sqrt(betaT) : NumOps.Zero;
+                T betaT = _betas[t];
+                T alphaT = _alphas[t];
+                T abarT = _alphasCumprod[t];
+                T abarPrev = t > 0 ? _alphasCumprod[t - 1] : NumOps.One;
+                T oneMinusAbarT = NumOps.Add(NumOps.Subtract(NumOps.One, abarT), eps10);
+                // Apply the same eps10 stabilization as oneMinusAbarT for defensive consistency:
+                // although the linear beta schedule keeps ᾱ_{t-1} < 1 for t > 0 (and the t = 0 branch
+                // forces σ_t = 0 / z = 0, so the value is unused), this guards any future schedule
+                // whose ᾱ_{t-1} → 1 underflows the numerator/denominator below.
+                T oneMinusAbarPrev = NumOps.Add(NumOps.Subtract(NumOps.One, abarPrev), eps10);
+                T coefX0 = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(abarPrev), betaT), oneMinusAbarT);
+                T coefXt = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(alphaT), oneMinusAbarPrev), oneMinusAbarT);
+                T sigmaT = t > 0 ? NumOps.Sqrt(NumOps.Divide(NumOps.Multiply(betaT, oneMinusAbarPrev), oneMinusAbarT)) : NumOps.Zero;
 
                 for (int i = 0; i < granLen && i < xt.Length; i++)
                 {
-                    T epsVal = i < eps.Length ? eps[i] : NumOps.Zero;
-                    T meanT = NumOps.Divide(NumOps.Subtract(xt[i], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
+                    T x0i = i < x0Pred.Length ? x0Pred[i] : NumOps.Zero;
+                    T meanT = NumOps.Add(NumOps.Multiply(coefX0, x0i), NumOps.Multiply(coefXt, xt[i]));
                     T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
                     xt.Data.Span[i] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
                 }
@@ -388,8 +558,12 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             coarseGuidance = xt; // This granularity's output guides the next finer level
         }
 
-        // Final output from finest granularity
+        // Final output from finest granularity (in normalized space) — de-normalize via RevIN so
+        // the forecast carries the input series' scale/offset.
         var result = coarseGuidance ?? new Tensor<T>(new[] { 1, outputLen });
+        for (int i = 0; i < result.Length; i++)
+            result.Data.Span[i] = NumOps.Add(NumOps.Multiply(result[i], inStd), inMean);
+
         if (addedBatchDim && result.Rank == 2 && result.Shape[0] == 1) result = result.Reshape(new[] { result.Shape[1] });
         return result;
     }

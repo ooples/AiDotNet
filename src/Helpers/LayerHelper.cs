@@ -31799,9 +31799,13 @@ public static class LayerHelper<T>
             activationFunction: new GELUActivation<T>());
 
         // === RWKV Layers ===
+        // RWKV-7 block (Peng et al.): tape-connected time-mixing whose WKV recurrence runs through
+        // the fused CpuEngine.Rwkv7SequenceForward kernel, with batched token-shift/projections and
+        // channel-mix. This replaces the older RWKVLayer whose scalar per-timestep/per-element
+        // NumOps recurrence dominated forecaster training throughput (issue #1464).
         for (int layer = 0; layer < numLayers; layer++)
         {
-            yield return new RWKVLayer<T>(
+            yield return new RWKV7Block<T>(
                 sequenceLength: contextLength,
                 modelDimension: modelDim,
                 numHeads: numHeads);
@@ -33860,10 +33864,16 @@ public static class LayerHelper<T>
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
         if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
 
-        int intermediateDim = hiddenDimension * 4;
+        // The denoising MLP runs ONCE PER reverse-diffusion step (DiffusionSteps x
+        // NumGranularities times per Predict), so its hidden width must be the per-position model
+        // width (hiddenDimension), NOT contextLength * hiddenDimension. The latter
+        // (168*128 = 21,504) is the FLATTENED-sequence size — using it here made every hidden
+        // Dense a 21,504 x 21,504 (~462M-param) matmul and the whole denoiser ~4B params, which is
+        // the throughput bottleneck in issue #1464 (the same flattened-dim-as-hidden-width
+        // anti-pattern class as the PR #1455 fixes). Layer count/structure is unchanged.
 
         // Input projection (includes granularity embeddings)
-        yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+        yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
 
         // Multi-granularity denoiser layers
         for (int layer = 0; layer < numLayers; layer++)
@@ -33872,11 +33882,11 @@ public static class LayerHelper<T>
             for (int g = 0; g < numGranularities; g++)
             {
                 yield return new BatchNormalizationLayer<T>();
-                yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: new GELUActivation<T>());
+                yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: new GELUActivation<T>());
             }
             if (dropout > 0) yield return new DropoutLayer<T>(dropout);
             // Cross-granularity fusion
-            yield return new DenseLayer<T>( outputSize: contextLength * hiddenDimension, activationFunction: null);
+            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
         }
 
         // Output projection
