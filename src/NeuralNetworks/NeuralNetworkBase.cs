@@ -11,6 +11,7 @@ using AiDotNet.MixedPrecision;
 // repo asked for in ooples/AiDotNet.Tensors#276). Alias the local one to a
 // distinct name so the two coexist without ambiguity at every reference.
 using LocalMixedPrecisionConfig = AiDotNet.MixedPrecision.MixedPrecisionConfig;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
@@ -2011,6 +2012,150 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             InvalidateParameterCountCache();
         }
         return removed;
+    }
+
+    /// <summary>
+    /// Freeze-time BatchNorm folding (compiled-inference, Phase 6). Folds every
+    /// <see cref="BatchNormalizationLayer{T}"/> that directly follows a linear op
+    /// with identity activation (a <see cref="ConvolutionalLayer{T}"/> here) into
+    /// that op's weights and bias, then removes the BatchNorm layer. At inference a
+    /// BatchNorm is the fixed per-channel affine
+    /// <c>y = γ·(x − μ)/√(σ² + ε) + β</c>; for the preceding linear
+    /// <c>z = W·x + b</c> the composition <c>BN(z)</c> equals
+    /// <c>W'·x + b'</c> with per-output-channel <c>s = γ/√(σ² + ε)</c>,
+    /// <c>W' = W·s</c>, <c>b' = (b − μ)·s + β</c> — so folding is lossless (to
+    /// floating-point rounding) and eliminates a full per-element pass plus an
+    /// intermediate tensor per block.
+    ///
+    /// <para><b>Safety:</b> only folds when the preceding layer's activation is the
+    /// identity (no activation, or <see cref="IdentityActivation{T}"/>) — BatchNorm
+    /// must sit directly on the linear output, before any nonlinearity, or the fold
+    /// is invalid. Channel counts must match. Anything else is left untouched.</para>
+    /// </summary>
+    /// <returns>The number of BatchNorm layers folded (0 if none applicable).</returns>
+    internal int FoldBatchNormForInference()
+    {
+        int folded = 0;
+        // Walk back-to-front so removing a BN doesn't shift the indices of layers
+        // we still have to examine.
+        for (int i = _layers.Count - 1; i >= 1; i--)
+        {
+            if (_layers[i] is not BatchNormalizationLayer<T> bn)
+                continue;
+            var prev = _layers[i - 1];
+            if (!IsIdentityActivation(prev))
+                continue;
+            bool didFold = prev switch
+            {
+                ConvolutionalLayer<T> conv => TryFoldBatchNormIntoConv(conv, bn),
+                DenseLayer<T> dense => TryFoldBatchNormIntoDense(dense, bn),
+                _ => false,
+            };
+            if (didFold)
+            {
+                RemoveLayerFromCollection(bn);
+                folded++;
+            }
+        }
+        return folded;
+    }
+
+    /// <summary>A layer's activation is the identity iff it applies no activation
+    /// or an <see cref="IdentityActivation{T}"/> (folding across a real nonlinearity
+    /// would be incorrect).</summary>
+    private static bool IsIdentityActivation(ILayer<T> layer)
+    {
+        if (layer is not LayerBase<T> lb)
+            return false;
+        bool scalarOk = lb.ScalarActivation is null || lb.ScalarActivation is IdentityActivation<T>;
+        bool vectorOk = lb.VectorActivation is null;
+        return scalarOk && vectorOk;
+    }
+
+    /// <summary>
+    /// Folds <paramref name="bn"/>'s inference affine into <paramref name="conv"/>'s
+    /// kernels/biases in place. Kernel layout is <c>[outChannels, inChannels, kH, kW]</c>;
+    /// the BatchNorm operates per output channel. Returns false (folding nothing) when
+    /// the channel counts don't line up.
+    /// </summary>
+    private bool TryFoldBatchNormIntoConv(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> bn)
+    {
+        var kernels = conv.GetFilters();   // live [outC, inC, kH, kW]
+        var biases = conv.GetBiases();     // live [outC]
+        int outC = kernels.Shape[0];
+        if (biases.Length != outC) return false;
+
+        var gamma = bn.GetGamma();
+        var beta = bn.GetBeta();
+        var mean = bn.GetRunningMean();
+        var variance = bn.GetRunningVariance();
+        if (gamma.Length != outC || beta.Length != outC || mean.Length != outC || variance.Length != outC)
+            return false;
+
+        T eps = bn.GetEpsilon();
+        int perChannel = kernels.Length / outC;   // inC * kH * kW
+        var kSpan = kernels.Data.Span;
+        var bSpan = biases.Data.Span;
+        var gSpan = gamma.Data.Span;
+        var beSpan = beta.Data.Span;
+        var mSpan = mean.Data.Span;
+        var vSpan = variance.Data.Span;
+
+        for (int oc = 0; oc < outC; oc++)
+        {
+            // s = γ / sqrt(var + ε);  W'[oc] = W[oc]·s;  b'[oc] = (b[oc] − μ)·s + β
+            T denom = NumOps.Sqrt(NumOps.Add(vSpan[oc], eps));
+            T scale = NumOps.Divide(gSpan[oc], denom);
+            int baseIdx = oc * perChannel;
+            for (int j = 0; j < perChannel; j++)
+                kSpan[baseIdx + j] = NumOps.Multiply(kSpan[baseIdx + j], scale);
+            bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Folds <paramref name="bn"/>'s inference affine into <paramref name="dense"/>'s
+    /// weights/biases in place. Weight layout is <c>[inputSize, outputSize]</c> and the
+    /// BatchNorm operates per output feature, so the scale for output <c>oc</c> multiplies
+    /// column <c>oc</c> of the weight matrix (stride <c>outputSize</c>). Returns false when
+    /// the feature counts don't line up.
+    /// </summary>
+    private bool TryFoldBatchNormIntoDense(DenseLayer<T> dense, BatchNormalizationLayer<T> bn)
+    {
+        var weights = dense.GetWeights();   // live [inputSize, outputSize]
+        var biases = dense.GetBiases();     // live [outputSize]
+        if (weights.Rank != 2) return false;
+        int inSize = weights.Shape[0];
+        int outSize = weights.Shape[1];
+        if (biases.Length != outSize) return false;
+
+        var gamma = bn.GetGamma();
+        var beta = bn.GetBeta();
+        var mean = bn.GetRunningMean();
+        var variance = bn.GetRunningVariance();
+        if (gamma.Length != outSize || beta.Length != outSize || mean.Length != outSize || variance.Length != outSize)
+            return false;
+
+        T eps = bn.GetEpsilon();
+        var wSpan = weights.Data.Span;
+        var bSpan = biases.Data.Span;
+        var gSpan = gamma.Data.Span;
+        var beSpan = beta.Data.Span;
+        var mSpan = mean.Data.Span;
+        var vSpan = variance.Data.Span;
+
+        for (int oc = 0; oc < outSize; oc++)
+        {
+            T scale = NumOps.Divide(gSpan[oc], NumOps.Sqrt(NumOps.Add(vSpan[oc], eps)));
+            for (int i = 0; i < inSize; i++)
+            {
+                int idx = i * outSize + oc;   // row-major [inputSize, outputSize]
+                wSpan[idx] = NumOps.Multiply(wSpan[idx], scale);
+            }
+            bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
+        }
+        return true;
     }
 
     /// <summary>
