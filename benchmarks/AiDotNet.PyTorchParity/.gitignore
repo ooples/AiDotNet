@@ -1,0 +1,6 @@
+# Machine-specific benchmark outputs — never commit timing JSON.
+results/
+# Python side
+pytorch/__pycache__/
+pytorch/.venv/
+*.pyc

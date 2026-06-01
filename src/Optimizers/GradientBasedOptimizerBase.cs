@@ -270,6 +270,72 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     public ILearningRateScheduler? LearningRateScheduler => _learningRateScheduler;
 
     /// <summary>
+    /// Resolves this optimizer's attached LR scheduler (if any) into a fused-side
+    /// <see cref="Tensors.Engines.Compilation.LrSchedule"/> for
+    /// <see cref="Fused.IFusedOptimizerSpec"/> implementations. Shared so the
+    /// per-optimizer specs don't each repeat the mapping.
+    /// <para>
+    /// Returns <c>false</c> only for an UNKNOWN scheduler type (so a configured
+    /// schedule is never silently dropped — the caller falls back to eager). A
+    /// null scheduler or a constant scheduler yields <c>true</c> with
+    /// <paramref name="schedule"/> = null (constant LR; the spec's
+    /// <c>GetCurrentLearningRate</c> supplies the rate). The supported set mirrors
+    /// the fused kernel's implemented schedule shapes; new shapes are added here
+    /// alongside their kernel support.
+    /// </para>
+    /// </summary>
+    protected bool TryGetFusedLrSchedule(out Tensors.Engines.Compilation.LrSchedule? schedule)
+    {
+        schedule = null;
+        switch (_learningRateScheduler)
+        {
+            case null:
+            case LearningRateSchedulers.ConstantLRScheduler:
+                return true;
+            case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
+                // Denominator reconciliation: eager CosineAnnealing uses
+                // cos(π·(N-1)/tMax) on batch N, but the fused CosineLr uses
+                // cos(π·(s-1)/(totalSteps-1)). Passing totalSteps = tMax+1 makes
+                // (s-1)/(totalSteps-1) = (N-1)/tMax, so the fused per-step
+                // sequence is bit-identical to eager (previously off by ~4e-6/
+                // step from passing tMax directly).
+                schedule = Tensors.Engines.Compilation.LrSchedule.Cosine(
+                    cosine.BaseLearningRate, cosine.TMax + 1, cosine.EtaMin);
+                return true;
+            case LearningRateSchedulers.ExponentialLRScheduler expo:
+                schedule = Tensors.Engines.Compilation.LrSchedule.Exponential(
+                    expo.BaseLearningRate, expo.Gamma);
+                return true;
+            case LearningRateSchedulers.NoamSchedule noam:
+                // Vaswani-2017 warmup + inverse-sqrt. The fused kernel evaluates
+                // GetLr(step) per optimizer step, so the Noam ramp runs on the
+                // fused fast path with the SAME per-step LR sequence as the eager
+                // NoamSchedule (both use t = step, 1-based) — no eager fallback,
+                // no constant-rate freeze (AiDotNet#1470).
+                schedule = Tensors.Engines.Compilation.LrSchedule.Noam(
+                    noam.ModelDimension, noam.WarmupSteps, noam.Factor);
+                return true;
+            case LearningRateSchedulers.StepLRScheduler stepLr:
+                // lr0 · gamma^decayCount. The Tensors StepLr's max(0, step-1)/stepSize
+                // exactly matches the eager (N-1)/stepSize decay count on batch N.
+                schedule = Tensors.Engines.Compilation.LrSchedule.Step(
+                    stepLr.BaseLearningRate, stepLr.StepSize, stepLr.Gamma);
+                return true;
+            case LearningRateSchedulers.CyclicLRScheduler cyclic
+                    when cyclic.Mode == LearningRateSchedulers.CyclicLRScheduler.CyclicMode.Triangular
+                         && cyclic.StepSizeUp == cyclic.StepSizeDown:
+                // Fused Cyclic is symmetric-triangular only (single stepSize).
+                // Triangular2 / ExponentialRange / asymmetric up≠down have no
+                // fused equivalent → fall through to eager.
+                schedule = Tensors.Engines.Compilation.LrSchedule.Cyclic(
+                    cyclic.BaseLearningRate, cyclic.MaxLearningRate, cyclic.StepSizeUp);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
     /// Gets the current scheduler step mode.
     /// </summary>
     public SchedulerStepMode SchedulerStepMode => _schedulerStepMode;

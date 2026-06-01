@@ -5464,6 +5464,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
             return;
 
+        // Loud one-time fallback warning. The fused path above is the fast path;
+        // when it doesn't engage we drop to the eager tape every step — a large,
+        // previously-SILENT perf cliff. Surface it once per model so "compiled
+        // training does nothing" is never invisible again. Skipped when mixed
+        // precision is active (that path is an intentional, documented fallback,
+        // not a misconfiguration). Suppressible via AIDOTNET_QUIET.
+        // Don't warn when compilation is intentionally disabled — that's an explicit
+        // opt-out (TensorCodecOptions.EnableCompilation = false), not an unexpected
+        // fallback, so the "training is slower" warning would be noisy and misleading.
+        if (!_loggedFusedFallback
+            && _mixedPrecisionContext is null
+            && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+        {
+            _loggedFusedFallback = true;
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+            {
+                var reason = _pendingFusedMissReason ?? "(unspecified gate)";
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[AiDotNet] Compiled fused-training fast path is OFF for {GetType().Name} — " +
+                    $"every Train() step falls back to the eager autograd tape (reason: {reason}). " +
+                    "Training is substantially slower than the compiled path. To re-enable it, use a " +
+                    "fused-compatible optimizer (plain Adam/AdamW/SGD, no adaptive-rate/AMSGrad, float/double) " +
+                    "and keep TensorCodecOptions.EnableCompilation = true. Set TrainingDiagnosticsConfig.Level " +
+                    "= PerStep for per-step path detail, or AIDOTNET_QUIET to silence this warning.");
+            }
+        }
+
         // The parameter walk here exists only to size the buffer on first Train()
         // call. On every subsequent call the buffer is already the right size, and
         // GetOrCreateParameterBuffer short-circuits to return it. Skipping the
@@ -6340,6 +6367,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private string? _pendingFusedMissReason;
 
     /// <summary>
+    /// One-shot guard for the loud fused-fallback warning emitted by
+    /// <see cref="TrainWithTape"/>. The compiled fused-training fast path
+    /// silently falls back to the eager autograd tape when its gates aren't
+    /// met (incompatible optimizer config, non-float/double type, mixed
+    /// precision, tracing failure). That fallback is a multi-× perf cliff
+    /// with — until now — zero signal at the default diagnostic level: a user
+    /// could "enable compilation" and unknowingly train on the slow path
+    /// forever (the AIsEval benchmark hit exactly this — the default Adam was
+    /// rejected by <see cref="TryMapToFusedOptimizerConfig"/> and every step
+    /// fell back, invisibly). We surface it ONCE per model instance via
+    /// <see cref="System.Diagnostics.Trace"/> (suppressible with
+    /// <c>AIDOTNET_QUIET</c>); the flag keeps the hot training loop quiet
+    /// after the first warning. <see cref="Configuration.TrainingDiagnosticsConfig"/>
+    /// at PerStep still gives per-step detail for those who want it.
+    /// </summary>
+    private bool _loggedFusedFallback;
+
+    /// <summary>
     /// Attempts the fused-compiled training path — forward + backward + fused
     /// optimizer update all in one compiled kernel. Engages when conditions
     /// permit, returns <c>false</c> to signal the caller to fall back to the
@@ -6576,6 +6621,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         out float weightDecay,
         out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule)
     {
+        // Open/closed-compliant dispatch: the optimizer self-describes its fused
+        // config (incl. selecting the AMSGrad kernel variant when it opts in, and
+        // converting any attached LR scheduler) via IFusedOptimizerSpec. Replaces
+        // the old type-switch that had to be edited for every new optimizer and
+        // silently rejected AMSGrad. Only optimizers that actually have a fused
+        // SIMD kernel implement the interface, so there is no central whitelist to
+        // maintain — an optimizer without a kernel simply isn't an
+        // IFusedOptimizerSpec and uses the eager tape.
         optimizerType = default;
         learningRate = 0f;
         beta1 = 0f;
@@ -6584,85 +6637,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         weightDecay = 0f;
         lrSchedule = null;
 
-        // When an LR scheduler is attached, try to convert it to a fused-side
-        // LrSchedule. The fused kernel evaluates the schedule per Step() — no
-        // performance penalty vs constant-LR — so paper-faithful training
-        // recipes (cosine annealing, OneCycle, linear-warmup-cosine, etc.)
-        // get full compile-mode perf. Only unknown / unsupported scheduler
-        // types fall back to eager.
-        if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradBase
-            && gradBase.LearningRateScheduler is not null)
-        {
-            switch (gradBase.LearningRateScheduler)
-            {
-                case AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
-                    lrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule.Cosine(
-                        cosine.BaseLearningRate, cosine.TMax, cosine.EtaMin);
-                    break;
-                case AiDotNet.LearningRateSchedulers.ExponentialLRScheduler expo:
-                    lrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule.Exponential(
-                        expo.BaseLearningRate, expo.Gamma);
-                    break;
-                case AiDotNet.LearningRateSchedulers.ConstantLRScheduler:
-                    // Constant scheduler = effectively no schedule; let the
-                    // GetCurrentLearningRate path below handle the rate.
-                    break;
-                default:
-                    // Unknown scheduler type — fall back to eager so the
-                    // configured schedule isn't silently ignored.
-                    return false;
-            }
-        }
+        if (optimizer is not Optimizers.Fused.IFusedOptimizerSpec spec
+            || !spec.TryGetFusedOptimizerConfig(out var cfg))
+            return false;
 
-        switch (optimizer)
-        {
-            case Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>> adam:
-            {
-                if (adam.GetOptions() is not Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
-                    return false;
-                if (opts.UseAdaptiveLearningRate) return false;
-                // Fused Adam kernel doesn't implement AMSGrad's max-of-second-
-                // moment update rule. Fall back to the eager Adam step which
-                // does (see AdamOptimizer.Step). Mirrors the AdamW + AMSGrad
-                // bail-out a few cases below.
-                if (opts.UseAMSGrad) return false;
-                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam;
-                learningRate = (float)adam.GetCurrentLearningRate();
-                beta1 = (float)opts.Beta1;
-                beta2 = (float)opts.Beta2;
-                epsilon = (float)opts.Epsilon;
-                weightDecay = 0f;
-                return true;
-            }
-            case Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>> adamW:
-            {
-                if (adamW.GetOptions() is not Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
-                    return false;
-                if (opts.UseAdaptiveLearningRate) return false;
-                // Fused AdamW kernel does not implement AMSGrad's max-of-second-moment
-                // update rule. If the user enabled it, fall back to eager so the
-                // configured update rule isn't silently swapped for standard AdamW.
-                if (adamW.UseAMSGrad) return false;
-                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW;
-                learningRate = (float)adamW.GetCurrentLearningRate();
-                beta1 = (float)opts.Beta1;
-                beta2 = (float)opts.Beta2;
-                epsilon = (float)opts.Epsilon;
-                weightDecay = (float)opts.WeightDecay;
-                return true;
-            }
-            case Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> sgd:
-            {
-                if (sgd.GetOptions() is not Models.Options.StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
-                    return false;
-                if (opts.UseAdaptiveLearningRate) return false;
-                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD;
-                learningRate = (float)sgd.GetCurrentLearningRate();
-                return true;
-            }
-            default:
-                return false;
-        }
+        optimizerType = cfg.Type;
+        learningRate = cfg.LearningRate;
+        beta1 = cfg.Beta1;
+        beta2 = cfg.Beta2;
+        epsilon = cfg.Epsilon;
+        weightDecay = cfg.WeightDecay;
+        lrSchedule = cfg.Schedule;
+        return true;
     }
 
     /// <summary>
@@ -6807,24 +6793,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Used when a network doesn't provide its own optimizer.
     /// </summary>
     /// <remarks>
-    /// Default is AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). Standard
-    /// Adam's bias-corrected m̂ / √v̂ ratio doesn't decay fast enough after
-    /// gradient convergence on some models, so AMSGrad's running v̂_max
-    /// (which guarantees the denominator can only grow) bounds post-
-    /// convergence drift to negligible levels on the base-optimizer path.
-    /// Scope: improves stability for models that go through this
-    /// <c>GetOrCreateBaseOptimizer</c> path. <c>Training_ShouldChangeParameters</c>
-    /// was addressed separately by the ESN parameter-chunk work, and
-    /// <c>MoreData_ShouldNotDegrade</c> failures remain unresolved in other
-    /// areas tracked under #1332. Note that the fused-Adam fast path falls
-    /// back to eager training because the fused kernel does not implement
-    /// AMSGrad's max-second-moment update.
+    /// Default is <b>standard Adam</b> (Kingma &amp; Ba 2015) — matching the
+    /// industry default in PyTorch (<c>torch.optim.Adam(amsgrad=False)</c>),
+    /// TensorFlow/Keras, and Optax. AMSGrad is a niche opt-in variant, not a
+    /// default anywhere; callers who want it set <c>UseAMSGrad = true</c> on a
+    /// supplied optimizer.
+    /// <para>
+    /// History: #1350 flipped this default to AMSGrad to suppress
+    /// post-convergence drift on a couple of recurrent models'
+    /// <c>MoreData_ShouldNotDegrade</c> invariant. That was the wrong lever — it
+    /// only partially helped those models (GRU still drifted past tolerance
+    /// even with AMSGrad; DBM was unchanged), yet it <b>silently disabled the
+    /// compiled fused-training fast path for EVERY model</b> (the fused Adam
+    /// kernel implements standard Adam, correctly omitting the non-standard
+    /// AMSGrad max-second-moment rule), so all models fell back to the slow
+    /// eager tape. The proper drift fix is LR-decay scheduling past convergence
+    /// (as #1350 itself noted), applied per-model — not a non-standard global
+    /// optimizer default. Reverting to standard Adam restores both the industry
+    /// default and the fused fast path.
+    /// </para>
     /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
+        // Standard Adam with AMSGrad pinned OFF locally (not relying on the
+        // AdamOptimizerOptions default) so the fused compiled-training kernel can map
+        // this optimizer and engage — if that external default ever flips, the fused
+        // fast path must not silently regress.
         return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = false });
     }
 
     /// <summary>

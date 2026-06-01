@@ -45,7 +45,35 @@
          the result in a copying Vector<T>/Matrix<T> ctor, orphaning the
          materializer so fresh-Vector ops returned all-zeros on the GPU backend
          (corrupted GAMLSS and any model trained via AiModelBuilder's
-         auto-detected GPU path). 0.86.6 materializes those immediately. -->
+         auto-detected GPU path). 0.86.6 materializes those immediately.
+
+         Bumped 0.86.6 -> 0.88.0 for the Noam fused LR schedule (Tensors #504):
+         LrSchedule.Noam(modelDim, warmup, factor) lets the default Transformer
+         recipe (Adam beta2=0.98 + Noam warmup) run on the fused-compiled
+         training path with a correct per-step LR ramp instead of falling back
+         to the slower eager tape. The fused plan already evaluates
+         LrSchedule.GetLr(step) every optimizer step (same model as PyTorch
+         fused=True, which takes lr as a per-step scalar); Noam was the only
+         missing schedule shape. Closes AiDotNet#1470 (Transformer per-call
+         training stalled because the Noam LR stayed frozen at warmup-step-1
+         on the fused path). All AiDotNet.Native packages coreleased in lockstep.
+
+         Bumped 0.88.0 -> 0.90.2 to pick up the merged compiled-inference work
+         (AiDotNet.Tensors#513 — CompiledMlp self-tuning kernel selection, CNN conv
+         im2col fast path, MlpForward small-batch native-BLAS routing, public
+         CpuInferenceConfig.PinBlasThreadsForLatency) so the AIsEval inference
+         benchmark exercises those wins end-to-end. 0.90.2 also carries Tensors#520
+         (ISparseEngine.SpMM<T> made unconstrained again — #379 had leaked a
+         `where T : unmanaged` into the public API, breaking unconstrained-T
+         consumers like SparseLinearLayer<T>; 0.90.0/0.90.1 do NOT build against
+         AiDotNet, 0.90.2 is the first 0.90.x that does).
+
+         Bumped 0.90.2 -> 0.90.3 for two any-rank / fast-path fixes that unblock the
+         CNN + unbatched inference wiring: Tensors#521 (FusedLinear accepts rank-1 [K]
+         input — promotes to [1,K] and squeezes back, so unbatched FeedForward Predict
+         no longer throws "TensorMatMul requires rank >= 2") and Tensors#522 (the
+         int-overload Conv2DInto routes through the im2col-GEMM fast path instead of
+         the ~15x-slower SIMD-direct cascade). -->
     <PackageVersion Include="AiDotNet.Tensors" Version="0.90.3" />
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.90.3" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.90.3" />
