@@ -4,7 +4,7 @@ namespace AiDotNet.Configuration;
 /// Default implementation of <see cref="IAiModelCrossValidation{T,TInput,TOutput}"/>.
 /// Audit-2026-05 phase-2a slice 3.
 /// </summary>
-public class AiModelCrossValidation<T, TInput, TOutput> : IAiModelCrossValidation<T, TInput, TOutput>
+internal class AiModelCrossValidation<T, TInput, TOutput> : IAiModelCrossValidation<T, TInput, TOutput>
 {
     /// <inheritdoc/>
     public ICrossValidator<T, TInput, TOutput>? CrossValidator { get; private set; }

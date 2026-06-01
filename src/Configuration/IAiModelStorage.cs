@@ -8,7 +8,7 @@ namespace AiDotNet.Configuration;
 /// control. Extracted from <c>AiModelBuilder</c> as slice 9 of the audit-2026-05 phase-2a DI
 /// refactor.
 /// </summary>
-public interface IAiModelStorage<T, TInput, TOutput>
+internal interface IAiModelStorage<T, TInput, TOutput>
 {
     CacheConfig? CacheConfig { get; }
     VersioningConfig? VersioningConfig { get; }

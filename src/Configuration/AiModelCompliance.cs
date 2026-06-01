@@ -9,7 +9,7 @@ namespace AiDotNet.Configuration;
 /// phase-2a slice 4. Mirrors pre-refactor inline logic verbatim, including the
 /// <c>?? new SomethingConfig()</c> fallback patterns for the null-arg overloads.
 /// </summary>
-public class AiModelCompliance<T, TInput, TOutput> : IAiModelCompliance<T, TInput, TOutput>
+internal class AiModelCompliance<T, TInput, TOutput> : IAiModelCompliance<T, TInput, TOutput>
 {
     /// <inheritdoc/>
     public IBiasDetector<T>? BiasDetector { get; private set; }

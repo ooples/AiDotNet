@@ -6,7 +6,7 @@ namespace AiDotNet.Configuration;
 /// Component that owns the observability configuration for an AI model build: benchmarking,
 /// profiling, telemetry, and GPU diagnostics. Audit-2026-05 phase-2a slice 10.
 /// </summary>
-public interface IAiModelObservability
+internal interface IAiModelObservability
 {
     BenchmarkingOptions? BenchmarkingOptions { get; }
     ProfilingConfig? ProfilingConfig { get; }

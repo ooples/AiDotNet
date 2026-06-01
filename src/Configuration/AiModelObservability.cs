@@ -3,7 +3,7 @@ using AiDotNet.Deployment.Configuration;
 namespace AiDotNet.Configuration;
 
 /// <summary>Default implementation of <see cref="IAiModelObservability"/>. Audit-2026-05 phase-2a slice 10.</summary>
-public class AiModelObservability : IAiModelObservability
+internal class AiModelObservability : IAiModelObservability
 {
     public BenchmarkingOptions? BenchmarkingOptions { get; private set; }
     public ProfilingConfig? ProfilingConfig { get; private set; }

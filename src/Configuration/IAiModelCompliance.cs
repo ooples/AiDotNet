@@ -13,7 +13,7 @@ namespace AiDotNet.Configuration;
 /// <typeparam name="T">Element numeric type.</typeparam>
 /// <typeparam name="TInput">Model input tensor type.</typeparam>
 /// <typeparam name="TOutput">Model output tensor type.</typeparam>
-public interface IAiModelCompliance<T, TInput, TOutput>
+internal interface IAiModelCompliance<T, TInput, TOutput>
 {
     /// <summary>The configured bias detector, or <c>null</c> if not configured.</summary>
     IBiasDetector<T>? BiasDetector { get; }

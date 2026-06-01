@@ -3,7 +3,7 @@ using AiDotNet.Deployment.Configuration;
 namespace AiDotNet.Configuration;
 
 /// <summary>Default implementation of <see cref="IAiModelStorage{T,TInput,TOutput}"/>. Audit-2026-05 phase-2a slice 9.</summary>
-public class AiModelStorage<T, TInput, TOutput> : IAiModelStorage<T, TInput, TOutput>
+internal class AiModelStorage<T, TInput, TOutput> : IAiModelStorage<T, TInput, TOutput>
 {
     public CacheConfig? CacheConfig { get; private set; }
     public VersioningConfig? VersioningConfig { get; private set; }

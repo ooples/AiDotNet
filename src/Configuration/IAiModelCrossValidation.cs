@@ -7,7 +7,7 @@ namespace AiDotNet.Configuration;
 /// <typeparam name="T">Element numeric type.</typeparam>
 /// <typeparam name="TInput">Model input tensor type.</typeparam>
 /// <typeparam name="TOutput">Model output tensor type.</typeparam>
-public interface IAiModelCrossValidation<T, TInput, TOutput>
+internal interface IAiModelCrossValidation<T, TInput, TOutput>
 {
     /// <summary>The configured cross-validator, or <c>null</c> if not configured.</summary>
     ICrossValidator<T, TInput, TOutput>? CrossValidator { get; }
