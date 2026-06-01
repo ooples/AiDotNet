@@ -165,6 +165,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private readonly AiDotNet.Configuration.IAiModelCompliance<T, TInput, TOutput> _compliance
         = new AiDotNet.Configuration.AiModelCompliance<T, TInput, TOutput>();
 
+    // audit-2026-05 phase 2a slice 12 — license / enterprise-gate concern. Holds both the user-
+    // supplied AiDotNetLicenseKey and the cached LicenseValidator; ConfigureLicenseKey resets
+    // the validator any time the key changes.
+    private AiDotNet.Configuration.IAiModelLicensing? _licensing;
+
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
@@ -515,7 +520,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
         }
 
-        _licenseKey = licenseKey;
+        _licensing = new AiDotNet.Configuration.AiModelLicensing(licenseKey);
+        _licenseKey = _licensing.LicenseKey;
 
         var fullPath = Path.GetFullPath(configFilePath);
         if (!File.Exists(fullPath))
@@ -538,7 +544,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public AiModelBuilder(AiDotNetLicenseKey? licenseKey = null)
     {
-        _licenseKey = licenseKey;
+        _licensing = new AiDotNet.Configuration.AiModelLicensing(licenseKey);
+        _licenseKey = _licensing.LicenseKey;
     }
 
     /// <summary>
@@ -812,9 +819,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <inheritdoc />
     public IAiModelBuilder<T, TInput, TOutput> ConfigureLicenseKey(AiDotNetLicenseKey licenseKey)
     {
-        Guard.NotNull(licenseKey);
-        _licenseKey = licenseKey;
-        _licenseValidator = null; // Reset cached validator when key changes
+        _licensing!.ConfigureLicenseKey(licenseKey);
+        _licenseKey = _licensing.LicenseKey;
+        _licenseValidator = _licensing.Validator;
         return this;
     }
 
