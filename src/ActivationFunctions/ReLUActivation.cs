@@ -24,8 +24,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
-public class ReLUActivation<T> : ActivationFunctionBase<T>
+public class ReLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.ReLU;
+        return true;
+    }
+
     /// <summary>
     /// Indicates whether this activation function supports scalar operations.
     /// </summary>

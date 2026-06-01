@@ -210,11 +210,29 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>
         InitializeTensor2D(_keyWeights);
         InitializeTensor2D(_valueWeights);
         InitializeHouseholderVectors();
-        RegisterTrainableParameter(_householderVectors, PersistentTensorRole.Weights);
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
+
+        // Register ALL trainable tensors (in GetAllTensors order) so tape-based
+        // training exposes the full parameter set, not just _householderVectors.
+        // The PaTH (parallel-transport / Householder) attention core uses manual
+        // NumOps loops that detach the tape, so the single previously-registered
+        // _householderVectors received a null tape gradient and
+        // TapeGradient_ShouldReach failed. The post-core output-gate and
+        // output-projection weights are tape-connected (Engine.TensorMatMul), so
+        // registering the full set gives those proper gradients; the Q / K / V /
+        // Householder params upstream of the manual core continue to train via the
+        // manual Backward/UpdateParameters path.
+        RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_householderVectors, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor2D(Tensor<T> tensor)

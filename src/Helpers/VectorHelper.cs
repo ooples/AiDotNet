@@ -91,22 +91,48 @@ public static class VectorHelper
     }
 
     /// <summary>
-    /// Computes the cosine similarity between two vectors, returning a value in [0, 1].
-    /// Uses hardware-accelerated dot product operations.
+    /// Stable CPU engine used for similarity reductions so the result does not
+    /// depend on whichever engine is globally active. See
+    /// <see cref="CosineSimilarity{T}"/> for why this matters.
+    /// </summary>
+    private static readonly AiDotNet.Tensors.Engines.CpuEngine _cosineEngine =
+        new AiDotNet.Tensors.Engines.CpuEngine();
+
+    /// <summary>
+    /// Computes the cosine similarity between two vectors, returning a value in [-1, 1].
     /// </summary>
     /// <typeparam name="T">The numeric type of the vector elements.</typeparam>
     /// <param name="a">First vector.</param>
     /// <param name="b">Second vector.</param>
     /// <param name="epsilon">Minimum denominator threshold. Default: 1e-10.</param>
     /// <returns>Cosine similarity in [-1, 1]. Returns 0 if either vector has near-zero norm.</returns>
+    /// <remarks>
+    /// The dot products run on a fixed CPU engine, NOT <c>AiDotNetEngine.Current</c>.
+    /// Routing through the mutable global engine made the result depend on whichever
+    /// engine happened to be active: <c>AiModelBuilder.BuildAsync</c> auto-enables the
+    /// Direct GPU engine, and the GPU's differently-rounded floating-point reduction
+    /// changed cosine similarities process-wide. That non-determinism flipped
+    /// borderline threshold comparisons in safety detectors — e.g.
+    /// <c>SemanticJailbreakDetector</c> (and the ensemble it feeds) stopped flagging
+    /// jailbreak strings after ANY build, process-wide, including freshly created
+    /// pipelines. A similarity primitive must be deterministic regardless of global
+    /// engine state. Pinning to the CPU engine (rather than a naive scalar loop)
+    /// preserves the exact accelerated-reduction values callers were validated
+    /// against, so only the source of non-determinism is removed.
+    /// </remarks>
     public static double CosineSimilarity<T>(Vector<T> a, Vector<T> b, double epsilon = 1e-10)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var engine = AiDotNetEngine.Current;
+        if (a is null) throw new ArgumentNullException(nameof(a));
+        if (b is null) throw new ArgumentNullException(nameof(b));
+        if (a.Length != b.Length)
+            throw new ArgumentException(
+                $"Vectors must have equal length for cosine similarity; got {a.Length} and {b.Length}.");
 
-        double dot = numOps.ToDouble(engine.DotProduct(a, b));
-        double normA = numOps.ToDouble(engine.DotProduct(a, a));
-        double normB = numOps.ToDouble(engine.DotProduct(b, b));
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        double dot = numOps.ToDouble(_cosineEngine.DotProduct(a, b));
+        double normA = numOps.ToDouble(_cosineEngine.DotProduct(a, a));
+        double normB = numOps.ToDouble(_cosineEngine.DotProduct(b, b));
 
         double denom = Math.Sqrt(normA * normB);
         return denom > epsilon ? Math.Max(-1.0, Math.Min(1.0, dot / denom)) : 0;

@@ -214,7 +214,24 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
 
+        // Register ALL trainable tensors (in GetAllTensors order) so tape-based
+        // training (GetTrainableParameters) trains the full layer. Previously only
+        // _decayParam was registered, so the source generator exposed just that one
+        // tensor to the tape optimizer and the input/gate/value/output projection
+        // weights never received gradients under the tape path (the manual
+        // Backward/UpdateParameters path trained them, but the tape path silently
+        // did not). The ordering matches GetAllTensors / GetParameters so the flat
+        // and tape parameter views stay consistent.
+        RegisterTrainableParameter(_inputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputProjectionBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_recurrenceGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_recurrenceGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_inputGateWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_inputGateBias, PersistentTensorRole.Biases);
+        RegisterTrainableParameter(_valueProjectionWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_decayParam, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionWeights, PersistentTensorRole.Weights);
+        RegisterTrainableParameter(_outputProjectionBias, PersistentTensorRole.Biases);
     }
 
     private void InitializeTensor(Tensor<T> tensor)
@@ -284,9 +301,12 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _recurrenceDimension });
         _lastProjectedInput = projected3D;
 
-        // Step 2: Compute gates and value projection
-        var recGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
-        var inpGate3D = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
+        // Step 2: Compute gates. Collect the per-time-step gates and assemble them
+        // with a tape-connected Engine.TensorConcatenate — the previous SetSlice into
+        // rented buffers detached the gates from the gate weights, so
+        // _recurrenceGateWeights / _inputGateWeights never received a gradient.
+        var recGateList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
+        var inpGateList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -299,9 +319,12 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
                 Engine.TensorMatMul(p_t, _inputGateWeights),
                 Engine.Reshape(_inputGateBias, new[] { 1, _recurrenceDimension })));
 
-            recGate3D.SetSlice(1, t, rGate);
-            inpGate3D.SetSlice(1, t, iGate);
+            recGateList.Add(Engine.Reshape(rGate, new[] { batchSize, 1, _recurrenceDimension }));
+            inpGateList.Add(Engine.Reshape(iGate, new[] { batchSize, 1, _recurrenceDimension }));
         }
+
+        var recGate3D = Engine.TensorConcatenate(recGateList.ToArray(), axis: 1);
+        var inpGate3D = Engine.TensorConcatenate(inpGateList.ToArray(), axis: 1);
 
         _lastRecurrenceGate = recGate3D;
         _lastInputGate = inpGate3D;
@@ -340,30 +363,29 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
         Tensor<T> x, Tensor<T> recGate, Tensor<T> inpGate,
         int batchSize, int seqLen)
     {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
+        var hiddenList = new System.Collections.Generic.List<Tensor<T>>(seqLen);
         var h = TensorAllocator.Rent<T>(new[] { batchSize, _recurrenceDimension });
         var allHidden = new Tensor<T>(new[] { batchSize, seqLen + 1, _recurrenceDimension });
         var allDecay = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _recurrenceDimension });
 
-        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) once per forward as
-        // a Tensor<T>[recurrenceDim] so the inner loop body is a sequence of
-        // SIMD-accelerated Engine ops instead of (recDim × batchSize)
-        // NumOps virtual dispatches per timestep. Closes the hot inner loop
-        // PerfView identified in #1224's Hawk cluster — at recDim=256 this
-        // turned ~5000 NumOps calls per timestep into 8 vectorized engine
-        // ops over 256 doubles each (≈ 32 AVX2 vectors), which the JIT
-        // inlines into tight SIMD intrinsics.
-        var baseDecay = new Tensor<T>(new[] { _recurrenceDimension });
-        for (int d = 0; d < _recurrenceDimension; d++)
-        {
-            double cVal = NumOps.ToDouble(_decayParam[d]);
-            // Numerically stable softplus: for large x, softplus(x) ≈ x.
-            double softplusC = cVal > 20.0 ? cVal : Math.Log(1.0 + Math.Exp(cVal));
-            baseDecay[d] = NumOps.FromDouble(Math.Exp(-softplusC));
-        }
+        // Pre-compute baseDecay[d] = exp(-softplus(c[d])) once per forward as a
+        // [recurrenceDim] tensor. The closed form is
+        //     exp(-softplus(c)) = exp(-log(1 + e^c)) = 1 / (1 + e^c) = sigmoid(-c),
+        // so a single tape-connected Engine.Sigmoid(Engine.TensorNegate(_decayParam))
+        // both (a) keeps _decayParam on the autodiff graph — the prior
+        // NumOps.ToDouble/Math.Exp scalar loop detached it, so the learned decay
+        // never received a gradient under tape-based training — and (b) stays
+        // numerically stable, since sigmoid saturates gracefully for large |c|.
+        // It is also a single SIMD-accelerated engine op rather than the
+        // (recDim × batchSize) NumOps virtual dispatches per timestep the loop cost.
+        var baseDecay = Engine.Sigmoid(Engine.TensorNegate(_decayParam));
 
-        T one = NumOps.FromDouble(1.0);
-        T negOne = NumOps.FromDouble(-1.0);
+        // A constant `ones` tensor for the tape-connected (1 - a²) computation.
+        // Engine.TensorMultiplyScalar / TensorAddScalar do NOT propagate on the
+        // autodiff tape (LayerTestBase's error message calls this out by name),
+        // so we use TensorSubtract against this constant instead.
+        var onesForMagnitude = Tensor<T>.CreateDefault(
+            new[] { batchSize, _recurrenceDimension }, NumOps.One);
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -377,15 +399,10 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             // Decay: a_t = r_t * baseDecay (broadcast [batch, recDim] × [recDim])
             var a_t = Engine.TensorBroadcastMultiply(r_t, baseDecay);
 
-            // Magnitude-preserving factor: sqrtFactor = sqrt(max(0, 1 - a²))
-            // Build via element-wise tensor ops:
-            //   neg_a_squared = -1 × a²
-            //   one_minus = neg_a_squared + 1
-            //   clamped = ReLU(one_minus)   (== max(0, .))
-            //   sqrtFactor = sqrt(clamped)
+            // Magnitude-preserving factor: sqrtFactor = sqrt(max(0, 1 - a²)),
+            // composed from tape-connected element-wise tensor ops.
             var aSquared = Engine.TensorSquare(a_t);
-            var negASquared = Engine.TensorMultiplyScalar(aSquared, negOne);
-            var oneMinusASquared = Engine.TensorAddScalar(negASquared, one);
+            var oneMinusASquared = Engine.TensorSubtract(onesForMagnitude, aSquared);
             var clamped = Engine.TensorReLU(oneMinusASquared);
             var sqrtFactor = Engine.TensorSqrt(clamped);
 
@@ -406,12 +423,21 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>
             // computation above. Engine.TensorCopy dispatches to the
             // SIMD-aware bulk path used by ConvLSTMLayer / Bidirectional
             // and friends.
-            Engine.TensorCopy(hNext, h);
+            // Keep the tape node as the running hidden state so the time recurrence
+            // stays on the autodiff graph. The previous Engine.TensorCopy into a
+            // rented buffer detached h from hNext, breaking gradient flow through the
+            // recurrence (and the SetSlice-assembled output) so the gate/value/decay
+            // weights never received a gradient.
+            h = hNext;
+            hiddenList.Add(Engine.Reshape(h, new[] { batchSize, 1, _recurrenceDimension }));
 
-            allDecay.SetSlice(1, t, a_t);
+            allDecay.SetSlice(1, t, a_t);       // caches for the manual backward path
             allHidden.SetSlice(1, t + 1, h);
-            output.SetSlice(1, t, h);
         }
+
+        // Assemble the [batch, seqLen, recDim] output on the tape so gradients flow
+        // back through the recurrence to the weights.
+        var output = Engine.TensorConcatenate(hiddenList.ToArray(), axis: 1);
 
         _lastHiddenStates = allHidden;
         _lastDecayFactors = allDecay;

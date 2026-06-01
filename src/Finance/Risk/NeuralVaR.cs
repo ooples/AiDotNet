@@ -206,6 +206,14 @@ public class NeuralVaR<T> : RiskModelBase<T>
     /// </remarks>
     public override Tensor<T> Predict(Tensor<T> input)
     {
+        // Inference mode is REQUIRED here: the stack contains
+        // BatchNormalizationLayers, which in training mode normalize across the
+        // batch axis. A single-instance prediction (batch = 1) then has each
+        // feature's batch-mean equal to its own value, so the normalized output
+        // is ~0 regardless of input and every constant input collapses to the
+        // same VaR estimate. Inference mode uses the running statistics instead.
+        SetTrainingMode(false);
+
         var current = input;
         foreach (var layer in Layers) current = layer.Forward(current);
         return current;

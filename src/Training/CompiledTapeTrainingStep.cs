@@ -117,6 +117,16 @@ public static class CompiledTapeTrainingStep<T>
     [ThreadStatic]
     private static long _fusedStepCount;
 
+    /// <summary>
+    /// Set once on the calling thread when an AMSGrad fused step fails because the
+    /// linked Tensors build can't run the AMSGrad kernel. Subsequent AMSGrad steps
+    /// then skip the fused attempt outright (returning false straight to the eager
+    /// tape) instead of reconfiguring → throwing → catching → warning every step,
+    /// which would turn a one-time capability gap into per-step exception + log churn.
+    /// </summary>
+    [ThreadStatic]
+    private static System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? _fusedUnavailableTypes;
+
     /// <summary>Gets the count of successful fused-step executions on the calling thread.</summary>
     public static long GetFusedStepCount() => _fusedStepCount;
 
@@ -329,6 +339,11 @@ public static class CompiledTapeTrainingStep<T>
         // assertion about "fused ran at least N times" should reflect the
         // new lifecycle.
         _fusedStepCount = 0;
+        // AiDotNet#1469 review: a fresh lifecycle must be able to re-enable fused execution. The
+        // unavailable-type latch records capability gaps seen during the PREVIOUS lifecycle; clear
+        // it here so a re-traced plan (e.g. a different model on this thread) retries the fused path
+        // instead of inheriting a stale "disabled" verdict.
+        _fusedUnavailableTypes?.Clear();
     }
 
     /// <summary>
@@ -394,10 +409,40 @@ public static class CompiledTapeTrainingStep<T>
         // overloads + CompiledTrainingPlan.ConfigureOptimizerDouble). Other
         // numeric types still fall through to the eager autograd path.
         if (typeof(T) != typeof(float) && typeof(T) != typeof(double)) return false;
-        // Only SGD, Adam, AdamW are wired through ConfigureOptimizer.
+        // Allowlist of optimizer kernels wired through ConfigureOptimizer in the
+        // linked AiDotNet.Tensors build (0.88.0: ConfigureOptimizerFloat handles
+        // all of these on CPU). Only OptimizerTypes an IFusedOptimizerSpec
+        // actually emits are reachable here; the allowlist is the belt-and-braces
+        // guard so a spec that names a type the linked Tensors build can't run
+        // falls back loudly (via the catch below + the per-type latch) rather
+        // than throwing per step — never a wrong update.
         if (optimizerType is not (AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGDMomentum
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam
-            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW))
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AMSGrad
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Nadam
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.RAdam
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdaMax
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdaDelta
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adagrad
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.RMSprop
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Lion
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.LARS
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.LAMB
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.FTRL
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.ASGD
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Rprop
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.HypergradientSGD
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.ScheduleFreeSGD
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.DAdaptationSGD))
+            return false;
+
+        // If a prior fused step already proved this thread's Tensors build can't
+        // run THIS optimizer kernel, don't retry the fused path — go straight to
+        // the eager tape. Otherwise every step would reconfigure, throw, catch and
+        // warn, turning a one-time capability gap into per-step exception/log churn.
+        if (_fusedUnavailableTypes is not null && _fusedUnavailableTypes.Contains(optimizerType))
             return false;
 
         try
@@ -632,6 +677,19 @@ public static class CompiledTapeTrainingStep<T>
             System.Diagnostics.Trace.TraceWarning(
                 $"CompiledTapeTrainingStep.TryStepWithFusedOptimizer failed, falling back to eager: " +
                 $"{ex}");
+            // Latch THIS optimizer type as fused-unsupported on this thread ONLY for capability-gap
+            // exceptions — a missing kernel/method/type/native-entry won't change within this
+            // process, so latching avoids reconfigure/throw/warn churn every step. Transient runtime
+            // failures (shape mismatch, NaN guard, a one-off non-contiguous CPU layout) must fall
+            // back THIS step but NOT permanently disable fused for the type on this thread, since a
+            // later unrelated model could engage it fine (AiDotNet#1469 review). Generalized from the
+            // original AMSGrad-only latch.
+            if (ex is NotSupportedException or MissingMethodException or TypeLoadException
+                or EntryPointNotFoundException or DllNotFoundException)
+            {
+                (_fusedUnavailableTypes ??= new System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>())
+                    .Add(optimizerType);
+            }
             _configuredPlan = null;
             _configuredOptimizerConfig = null;
             return false;

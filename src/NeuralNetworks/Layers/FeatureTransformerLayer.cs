@@ -56,6 +56,13 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
     private Tensor<T>? _inputCache;
     private readonly List<Tensor<T>> _intermediateOutputs = [];
 
+    // Cached constant 0/1 selection matrices for the GLU column split (see ApplyGLU). They depend
+    // only on the input width, so they're built once and reused across forward passes instead of
+    // being reallocated + refilled (O(dim^2)) every call.
+    private Tensor<T>? _gluValueSelector;
+    private Tensor<T>? _gluGateSelector;
+    private int _gluCachedFullDim = -1;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
@@ -105,22 +112,38 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
         _epsilon = epsilon;
 
         // Initialize or reuse shared layers
+        bool ownsSharedLayers;
         if (sharedLayers != null && sharedBNLayers != null)
         {
             _sharedFCLayers = sharedLayers;
             _sharedBNLayers = sharedBNLayers;
+            ownsSharedLayers = false;
         }
         else
         {
             _sharedFCLayers = [];
             _sharedBNLayers = [];
             InitializeSharedLayers();
+            ownsSharedLayers = true;
         }
 
         // Initialize step-specific layers
         _stepFCLayers = [];
         _stepBNLayers = [];
         InitializeStepSpecificLayers();
+
+        // Register the FC sub-layers so the trainable-parameter walk
+        // (CollectTrainableLayers -> GetSubLayers) reaches their weights and the
+        // optimizer updates them. Register shared layers only when THIS instance
+        // created them (ownsSharedLayers) so that, when shared across decision
+        // steps, exactly one owner registers them — avoiding double-counting.
+        // (GhostBatchNormalization is not an ILayer<T>, so its gamma/beta are not
+        // collected here; the FC weights are the load-bearing learnable parameters.)
+        if (ownsSharedLayers)
+        {
+            foreach (var fc in _sharedFCLayers) RegisterSubLayer(fc);
+        }
+        foreach (var fc in _stepFCLayers) RegisterSubLayer(fc);
     }
 
     /// <summary>
@@ -198,24 +221,31 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
     /// </remarks>
     private Tensor<T> ApplyGLU(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
         int fullDim = input.Shape[1];
         int halfDim = fullDim / 2;
 
-        // Split input into value (first half) and gate (second half)
-        var values = TensorAllocator.Rent<T>([batchSize, halfDim]);
-        var gates = TensorAllocator.Rent<T>([batchSize, halfDim]);
-
-        for (int b = 0; b < batchSize; b++)
+        // Tape-safe column split via a constant 0/1 selection-matrix matmul:
+        // values = input[:, :halfDim], gates = input[:, halfDim:]. The previous
+        // manual element-copy split created fresh tensors disconnected from the
+        // autodiff tape, so gradients could not flow back to the upstream FC layers.
+        // The selectors are constant for a given fullDim, so build them once and cache —
+        // GLU runs many times per training step and reallocating/refilling these every call
+        // is avoidable O(dim^2) work (and extra GPU transfers).
+        if (_gluCachedFullDim != fullDim || _gluValueSelector is null || _gluGateSelector is null)
         {
-            for (int d = 0; d < halfDim; d++)
-            {
-                values[b * halfDim + d] = input[b * fullDim + d];
-                gates[b * halfDim + d] = input[b * fullDim + halfDim + d];
-            }
+            var vSel = new Tensor<T>(new[] { fullDim, halfDim });
+            for (int i = 0; i < halfDim; i++) vSel[i, i] = NumOps.One;
+            var gSel = new Tensor<T>(new[] { fullDim, halfDim });
+            for (int j = 0; j < halfDim; j++) gSel[halfDim + j, j] = NumOps.One;
+            _gluValueSelector = vSel;
+            _gluGateSelector = gSel;
+            _gluCachedFullDim = fullDim;
         }
 
-        // Apply sigmoid to gates and multiply with values
+        var values = Engine.TensorMatMul(input, _gluValueSelector);
+        var gates = Engine.TensorMatMul(input, _gluGateSelector);
+
+        // Apply sigmoid to gates and multiply with values (GLU).
         var sigmoidGates = Engine.Sigmoid(gates);
         return Engine.TensorMultiply(values, sigmoidGates);
     }
@@ -461,5 +491,9 @@ public class FeatureTransformerLayer<T> : LayerBase<T>
     {
         foreach (var fc in _sharedFCLayers) fc.SetTrainingMode(isTraining);
         foreach (var fc in _stepFCLayers) fc.SetTrainingMode(isTraining);
+        // GhostBatchNormalization is not an ILayer<T>, so propagate mode explicitly so
+        // it uses running stats at inference (and for under-sized batches in training).
+        foreach (var bn in _sharedBNLayers) bn.SetTrainingMode(isTraining);
+        foreach (var bn in _stepBNLayers) bn.SetTrainingMode(isTraining);
     }
 }

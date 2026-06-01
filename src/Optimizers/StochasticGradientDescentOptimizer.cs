@@ -30,7 +30,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     private StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> _options;
 
@@ -65,6 +65,19 @@ public class StochasticGradientDescentOptimizer<T, TInput, TOutput> : GradientBa
         : base(model, options ?? new())
     {
         _options = options ?? new();
+    }
+
+    /// <inheritdoc/>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.SGD,
+            (float)GetCurrentLearningRate(),
+            0f, 0f, 0f, 0f, schedule);
+        return true;
     }
 
     /// <summary>

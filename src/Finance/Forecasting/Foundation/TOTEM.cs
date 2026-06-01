@@ -97,6 +97,13 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private Tensor<T>? _codebooks;
     private T _lastCommitmentLoss;
 
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
+    // The VQ bottleneck snaps the encoder output to a discrete codebook entry, so
+    // constant inputs of different levels map to the same token and decode
+    // identically — restoring the input level keeps the forecast input-dependent.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
     #endregion
 
     #region Properties
@@ -272,7 +279,10 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
             _encoder = Layers[idx++];
 
         _transformerLayers.Clear();
-        int layersPerBlock = _dropout > 0 ? 9 : 7;
+        // Must match CreateDefaultTOTEMLayers' per-block layer count: BatchNorm,
+        // Dense, Dense, [Dropout], BatchNorm, Dense, Dense, [Dropout] = 6, or 8
+        // when dropout > 0.
+        int layersPerBlock = _dropout > 0 ? 8 : 6;
         int totalTransformerLayers = _numLayers * layersPerBlock;
 
         for (int i = 0; i < totalTransformerLayers && idx < Layers.Count; i++)
@@ -367,9 +377,9 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private (Tensor<T> forecast, Tensor<T> commitmentLoss) ForwardNativeForTrainingWithCommitment(Tensor<T> input)
     {
         var normalized = ApplyInstanceNormalization(input);
-        var current = normalized;
-        if (current.Rank == 1)
-            current = Engine.Reshape(current, new[] { 1, current.Length });
+        // Tokenize to [1, contextLength, 1] for the per-token encoder/decoder.
+        int seqLen = normalized.Length;
+        var current = Engine.Reshape(normalized, new[] { 1, seqLen, 1 });
 
         if (_encoder is not null)
             current = _encoder.Forward(current);
@@ -406,8 +416,16 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         var decoded = quantizedST;
         if (_decoder is not null)
             decoded = _decoder.Forward(decoded);
+
+        // Pool the token sequence so the head emits one [1, forecastHorizon] forecast.
+        if (decoded.Rank == 3)
+            decoded = Engine.ReduceMean(decoded, new[] { 1 }, keepDims: false);
+
         if (_forecastHead is not null)
             decoded = _forecastHead.Forward(decoded);
+
+        // RevIN reverse: train against the input-scale forecast.
+        decoded = DenormalizeForecast(decoded);
 
         return (decoded, commitmentLoss);
     }
@@ -514,6 +532,12 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
         {
             InitializeCodebooks();
         }
+
+        // The base deserializer has already recreated every layer in Layers with the
+        // copied weights. Re-point the cached encoder/decoder/projection references at
+        // those layers; otherwise they keep pointing at the stale random-initialized
+        // layers from CreateNewInstance and a clone diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -581,43 +605,69 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     /// <inheritdoc/>
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length;
+        // RevIN forward (Kim et al. 2022). Stats over every non-batch element of
+        // each row (a rank-1 input is a single instance), stored for the reverse.
+        int batchSize = input.Shape.Length > 1 ? input.Shape[0] : 1;
+        int instanceSize = batchSize > 0 ? input.Length / batchSize : input.Length;
+        if (instanceSize <= 0)
+            return input;
+
         var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
 
         for (int b = 0; b < batchSize; b++)
         {
+            int start = b * instanceSize;
+
             T mean = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                    mean = NumOps.Add(mean, input[idx]);
-            }
-            mean = NumOps.Divide(mean, NumOps.FromDouble(seqLen));
+            for (int t = 0; t < instanceSize; t++)
+                mean = NumOps.Add(mean, input[start + t]);
+            mean = NumOps.Divide(mean, NumOps.FromDouble(instanceSize));
 
             T variance = NumOps.Zero;
-            for (int t = 0; t < seqLen; t++)
+            for (int t = 0; t < instanceSize; t++)
             {
-                int idx = b * seqLen + t;
-                if (idx < input.Length)
-                {
-                    var diff = NumOps.Subtract(input[idx], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
+                var diff = NumOps.Subtract(input[start + t], mean);
+                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
             }
-            variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
+            variance = NumOps.Divide(variance, NumOps.FromDouble(instanceSize));
             T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
 
-            for (int t = 0; t < seqLen; t++)
-            {
-                int idx = b * seqLen + t;
-                if (idx < input.Length && idx < result.Length)
-                    result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std);
-            }
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
+
+            for (int t = 0; t < instanceSize; t++)
+                result.Data.Span[start + t] = NumOps.Divide(NumOps.Subtract(input[start + t], mean), std);
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the
+    /// forecast so it is expressed on the input's original scale, via tape-connected
+    /// Engine ops.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
+
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -647,39 +697,43 @@ public class TOTEM<T> : TimeSeriesFoundationModelBase<T>
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
         var normalized = ApplyInstanceNormalization(input);
-        var current = normalized;
 
-        bool addedBatchDim = false;
-        if (current.Rank == 1)
-        {
-            current = current.Reshape(new[] { 1, current.Length });
-            addedBatchDim = true;
-        }
+        // Tokenize: [contextLength] (or [1, contextLength]) → [1, contextLength, 1]
+        // so the per-token encoder/decoder project each timestep.
+        int seqLen = normalized.Length;
+        var current = Engine.Reshape(normalized, new[] { 1, seqLen, 1 });
 
-        // Encoder
+        // Encoder → [1, seqLen, hiddenDim]
         if (_encoder is not null)
             current = _encoder.Forward(current);
 
-        // Transformer layers
+        // Transformer layers (per-token)
         foreach (var layer in _transformerLayers)
             current = layer.Forward(current);
 
-        // Project to codebook dimension
+        // Project to codebook dimension → [1, seqLen, codebookDim]
         if (_quantizationProjection is not null)
             current = _quantizationProjection.Forward(current);
 
-        // Vector Quantization: find nearest codebook entry for each position
+        // Vector Quantization: snap each position to its nearest codebook entry.
         var quantized = VectorQuantize(current);
 
-        // Straight-through estimator: use quantized for forward, but pass gradient through
-        // In this simplified version, we just use the quantized output
+        // Decoder → [1, seqLen, hiddenDim]
         if (_decoder is not null)
             quantized = _decoder.Forward(quantized);
+
+        // Pool the token sequence so the head emits one [1, forecastHorizon] forecast.
+        if (quantized.Rank == 3)
+            quantized = Engine.ReduceMean(quantized, new[] { 1 }, keepDims: false);
 
         if (_forecastHead is not null)
             quantized = _forecastHead.Forward(quantized);
 
-        if (addedBatchDim && quantized.Rank == 2 && quantized.Shape[0] == 1)
+        // RevIN reverse: restore the input's per-instance level/scale so distinct
+        // input levels yield distinct forecasts despite the VQ bottleneck.
+        quantized = DenormalizeForecast(quantized);
+
+        if (quantized.Rank == 2 && quantized.Shape[0] == 1)
             quantized = quantized.Reshape(new[] { quantized.Shape[1] });
 
         return quantized;

@@ -47,10 +47,15 @@ public class GAMLSSOptions
     public double Tolerance { get; set; } = 1e-6;
 
     /// <summary>
-    /// Gets or sets the learning rate for parameter updates.
+    /// Gets or sets the learning rate (step size) for the IRLS / Fisher-scoring parameter updates.
     /// </summary>
-    /// <value>Default is 0.1.</value>
-    public double LearningRate { get; set; } = 0.1;
+    /// <value>
+    /// Default is 1.0 — the full Fisher-scoring step used by the RS algorithm in Rigby &amp;
+    /// Stasinopoulos (2005) and the reference <c>gamlss</c> R package (its <c>step</c> argument
+    /// defaults to 1). A damped step (&lt; 1) slows convergence and, within a finite iteration
+    /// budget, leaves the model under-fit (near-zero coefficients) on well-conditioned data.
+    /// </value>
+    public double LearningRate { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the type of distribution family to use.

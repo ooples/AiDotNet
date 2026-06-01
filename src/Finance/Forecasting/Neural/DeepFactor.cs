@@ -396,6 +396,11 @@ public class DeepFactor<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
+        // Idempotent: clear the RNN/local lists first so a re-extract (after
+        // deserialize) rebinds rather than appending a doubled stack.
+        _factorRnnLayers.Clear();
+        _localLayers.Clear();
+
         int idx = 0;
 
         // Factor model: Input projection
@@ -649,6 +654,10 @@ public class DeepFactor<T> : ForecastingModelBase<T>
         _numFactorLayers = reader.ReadInt32();
         _numLocalLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
+
+        // Re-bind cached layer references so a deserialized/cloned model runs on
+        // the restored layers, not the construction-time random ones.
+        ExtractLayerReferences();
     }
 
     #endregion

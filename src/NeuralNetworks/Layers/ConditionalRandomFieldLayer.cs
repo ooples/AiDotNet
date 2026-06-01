@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -41,7 +42,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [LayerCategory(LayerCategory.Other)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(NormalizesInput = true, IsTrainable = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
+[LayerProperty(NormalizesInput = true, IsTrainable = true, TrainsViaCustomLoss = true, TestInputShape = "4, 4", TestConstructorArgs = "4, 4, (AiDotNet.Interfaces.IActivationFunction<double>?)null")]
 public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 {
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -71,6 +72,11 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
     // OnFirstForward resolves it from input.Shape[0]. Eager ctor sets
     // it at construction.
     private int _sequenceLength;
+    // The sequence length of the most recent Forward input. The CRF is length-agnostic
+    // (params depend only on numClasses), so Backward / gradient reshaping must use the
+    // ACTUAL length of the input that produced the cached activations, not the
+    // first-resolved _sequenceLength.
+    private int _lastSeqLen;
     private bool _isInitialized;
 
     /// <summary>
@@ -123,7 +129,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         // Input normalization [Batch, Seq, Class]. Mirror the CPU Forward
         // contract: validate rank, numClasses, sequence length BEFORE
         // touching the Viterbi loops below — the GPU kernels assume the
-        // tensor is already in [B, S, C] with S == _sequenceLength and
+        // tensor is already in [B, S, C] with a positive S and
         // C == _numClasses.
         int rank = input.Shape.Length;
         if (rank < 2)
@@ -142,13 +148,9 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             throw new ArgumentException(
                 $"ConditionalRandomFieldLayer.ForwardGpu sequence length must be " +
                 $"positive; got {gpuSeenSeqLen}.", nameof(inputs));
-        if (gpuSeenSeqLen != _sequenceLength)
-            throw new ArgumentException(
-                $"ConditionalRandomFieldLayer.ForwardGpu sequence length mismatch: " +
-                $"layer was resolved with sequenceLength={_sequenceLength}, but " +
-                $"this input's sequence dimension is {gpuSeenSeqLen}. CRF transition " +
-                $"buffer and Viterbi backpointers are sized to _sequenceLength.",
-                nameof(inputs));
+        // The CRF is length-agnostic (transition matrix + start/end scores depend only
+        // on numClasses). The GPU Viterbi below sizes its buffers from the local seqLen
+        // computed per call, so any positive sequence length is valid.
 
         int batchSize, seqLen, numClasses;
         Tensor<T> input3D;
@@ -172,6 +174,8 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             // Handle other ranks if necessary or throw
             throw new ArgumentException($"CRF input rank {rank} not supported directly in ForwardGpu.");
         }
+
+        _lastSeqLen = seqLen;
 
         // We will perform Viterbi on GPU
         // Initialize with Start Scores + First Emission
@@ -660,16 +664,13 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             throw new ArgumentException(
                 $"ConditionalRandomFieldLayer's sequence length must be positive; got " +
                 $"{seenSeqLen} from input shape.", nameof(input));
-        if (seenSeqLen != _sequenceLength)
-            throw new ArgumentException(
-                $"ConditionalRandomFieldLayer's sequence length mismatch: layer was " +
-                $"resolved with sequenceLength={_sequenceLength} (from constructor or " +
-                $"first forward pass), but this input's sequence dimension is " +
-                $"{seenSeqLen}. Viterbi decoding, transitions buffer, and gradient " +
-                $"reshape are all sized to _sequenceLength; a different value would " +
-                $"silently truncate or run out of bounds. If you need variable-length " +
-                $"sequences, pad to a fixed length and mask, or construct one CRF per " +
-                $"length bucket.", nameof(input));
+        // A CRF's parameters — the transition matrix [numClasses, numClasses] and the
+        // start/end score vectors [numClasses] — are INDEPENDENT of sequence length
+        // (Lample et al. 2016). Viterbi decoding and the forward/backward recursions run
+        // over whatever sequence length the input provides, so we operate on the actual
+        // per-call length rather than a fixed one. This lets a single trained CRF label
+        // sequences of any length (the standard NER use case) instead of requiring every
+        // input to be padded to one bucket size.
 
         // Store original shape for any-rank tensor support
         _originalInputShape = input._shape;
@@ -710,6 +711,11 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
         }
 
         _lastInput = input3D;
+
+        // The actual sequence length of THIS input. Used for all Viterbi buffers and
+        // loops below so the layer handles variable-length sequences (see note above).
+        int seqLen = input3D.Shape[1];
+        _lastSeqLen = seqLen;
 
         // Apply the configured activation BEFORE the training-mode short-
         // circuit so training and inference both decode the SAME score
@@ -757,17 +763,17 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
                 : sequenceScores;
         }
 
-        var output = TensorAllocator.Rent<T>([batchSize, _sequenceLength, _numClasses]);
+        var output = TensorAllocator.Rent<T>([batchSize, seqLen, _numClasses]);
 
         // Process each batch item (Viterbi requires sequential time processing)
         for (int b = 0; b < batchSize; b++)
         {
             // === VECTORIZED: Extract sequence for this batch item ===
-            var batchSeq = sequenceScores.GetSliceAlongDimension(b, 0); // [sequenceLength, numClasses]
+            var batchSeq = sequenceScores.GetSliceAlongDimension(b, 0); // [seqLen, numClasses]
 
             // === VECTORIZED Viterbi Algorithm ===
-            var viterbi = new Tensor<T>([_sequenceLength, _numClasses]);
-            var backpointers = new Matrix<int>(_sequenceLength, _numClasses);
+            var viterbi = new Tensor<T>([seqLen, _numClasses]);
+            var backpointers = new Matrix<int>(seqLen, _numClasses);
 
             // VECTORIZED: Initialize first timestep - startScores + emissions[0]
             var firstEmissions = batchSeq.GetSliceAlongDimension(0, 0); // [numClasses]
@@ -775,7 +781,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             viterbi.SetSlice(0, 0, firstViterbi);
 
             // Recursion over time (inherently sequential)
-            for (int t = 1; t < _sequenceLength; t++)
+            for (int t = 1; t < seqLen; t++)
             {
                 var currentEmissions = batchSeq.GetSliceAlongDimension(t, 0); // [numClasses]
                 var prevViterbi = viterbi.GetSliceAlongDimension(t - 1, 0); // [numClasses]
@@ -819,7 +825,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             }
 
             // === VECTORIZED Termination ===
-            var lastViterbi = viterbi.GetSliceAlongDimension(_sequenceLength - 1, 0);
+            var lastViterbi = viterbi.GetSliceAlongDimension(seqLen - 1, 0);
             var finalScores = Engine.TensorAdd(lastViterbi, _endScores);
 
             // Find argmax
@@ -835,9 +841,9 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             }
 
             // Backtracking (inherently sequential)
-            var bestPath = new int[_sequenceLength];
-            bestPath[_sequenceLength - 1] = maxFinalClass;
-            for (int t = _sequenceLength - 2; t >= 0; t--)
+            var bestPath = new int[seqLen];
+            bestPath[seqLen - 1] = maxFinalClass;
+            for (int t = seqLen - 2; t >= 0; t--)
             {
                 bestPath[t] = backpointers[t + 1, bestPath[t + 1]];
             }
@@ -845,7 +851,7 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             // Inference-only path (training-mode short-circuits at the top
             // of Forward and never reaches the Viterbi loop): write the
             // one-hot encoded best path into the output tensor.
-            for (int t = 0; t < _sequenceLength; t++)
+            for (int t = 0; t < seqLen; t++)
             {
                 output[b, t, bestPath[t]] = NumOps.One;
             }
@@ -876,10 +882,10 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
 
         if (_originalInputShape.Length == 1)
         {
-            int expected = _sequenceLength * _numClasses;
+            int expected = _lastSeqLen * _numClasses;
             if (outputGradient.Length == expected)
             {
-                return outputGradient.Reshape([1, _sequenceLength, _numClasses]);
+                return outputGradient.Reshape([1, _lastSeqLen, _numClasses]);
             }
 
             return outputGradient.Reshape([1, 1, outputGradient.Shape[0]]);
@@ -891,7 +897,10 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             flatBatch *= _originalInputShape[d];
         }
 
-        return outputGradient.Reshape([flatBatch, _sequenceLength, _numClasses]);
+        // Use the actual sequence axis of the recorded input, not the first-resolved
+        // length — the CRF is length-agnostic and inputs may vary in length.
+        int gradSeqLen = _originalInputShape[_originalInputShape.Length - 2];
+        return outputGradient.Reshape([flatBatch, gradSeqLen, _numClasses]);
     }
 
     /// <summary>
@@ -1163,7 +1172,11 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>
             throw new InvalidOperationException(
                 "CRF NLL accumulator was unexpectedly null after a non-empty batch loop.");
         var invBatch = NumOps.FromDouble(1.0 / batchSize);
-        var meanNll = Engine.TensorMultiplyScalar(accumulated, invBatch); // shape [1]
+        // Tape-tracked scalar multiply: Engine.TensorMultiplyScalar bypasses the
+        // autodiff graph, which would detach meanNll from the accumulated NLL and
+        // leave the transition matrix without a gradient. TapeMultiplyScalar wraps
+        // it as TensorMultiply against a constant tensor (recorded on the tape).
+        var meanNll = TensorTapeOps.TapeMultiplyScalar(Engine, accumulated, invBatch); // shape [1]
         return meanNll;
     }
 

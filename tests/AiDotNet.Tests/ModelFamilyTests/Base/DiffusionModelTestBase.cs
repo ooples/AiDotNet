@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Runtime;
+using System.Threading;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -38,8 +39,73 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     /// </summary>
     private static readonly object _lohCompactionGate = new();
 
-    /// <summary>Before-test hook. No-op — the base has no ambient state to initialize.</summary>
-    public Task InitializeAsync() => Task.CompletedTask;
+    /// <summary>
+    /// Caps concurrent foundation-scale diffusion tests to avoid BLAS thread-
+    /// pool oversubscription when many SD-UNet-scale Predicts run in parallel
+    /// on the same machine. xUnit's parallelizeTestCollections=true puts one
+    /// test class per core; if 16 of them are simultaneously inside an FP64
+    /// SD-UNet forward (each wanting all 16 cores via OpenBLAS), every test
+    /// gets ~1 core and the per-step latency multiplies by 4-8×, blowing the
+    /// 120 s <c>[Fact(Timeout)]</c> envelope even though each test fits the
+    /// budget in isolation. See <c>tools/ConsistencyModelPerfDiag</c> for the
+    /// measurement that motivated this (issue #1305 ConsistencyModel:
+    /// 76 s isolated vs 120 s under-contention timeout).
+    /// </summary>
+    private const int HeavyConcurrencyCap = 2;
+
+    /// <summary>
+    /// Element-count threshold above which a test counts as "heavy" and gates
+    /// through <see cref="_heavyTestGate"/>. 16,384 = the latent-shape product
+    /// for the canonical SD pipeline at [1, 4, 64, 64]; everything at or above
+    /// this scale uses an SD-UNet-class noise predictor whose FP64 forward
+    /// saturates the BLAS thread pool. Smaller-scale diffusion tests (tabular
+    /// [1, 4] or single-channel [1, 1, 16, 16]) bypass the gate so they can
+    /// stay fully parallel.
+    /// </summary>
+    private const int HeavyInputElementThreshold = 16_384;
+
+    private static readonly SemaphoreSlim _heavyTestGate =
+        new(HeavyConcurrencyCap, HeavyConcurrencyCap);
+
+    /// <summary>
+    /// Per-test-instance flag tracking whether this instance acquired
+    /// <see cref="_heavyTestGate"/>. Only released in <see cref="DisposeAsync"/>
+    /// if acquired here, so a failure during InitializeAsync (gate not yet
+    /// acquired) can't trigger a release-without-acquire.
+    /// </summary>
+    private bool _heavyGateAcquired;
+
+    /// <summary>
+    /// Before-test hook. Acquires the heavy-diffusion gate if this test's
+    /// <see cref="InputShape"/> implies foundation-scale (≥ 16,384 elements).
+    /// </summary>
+    public async Task InitializeAsync()
+    {
+        if (IsHeavyScale(InputShape))
+        {
+            await _heavyTestGate.WaitAsync().ConfigureAwait(false);
+            _heavyGateAcquired = true;
+        }
+    }
+
+    /// <summary>
+    /// True when the supplied input shape implies foundation-scale work
+    /// (SD-UNet or larger). Computed from product-of-dims so a future
+    /// [1, 16, 32, 32] (Flux/SD3) or [1, 8, 64, 64] (CogVideo) shape
+    /// auto-gates without any per-class plumbing.
+    /// </summary>
+    private static bool IsHeavyScale(int[] shape)
+    {
+        if (shape is null || shape.Length == 0) return false;
+        long elements = 1;
+        foreach (int d in shape)
+        {
+            if (d <= 0) return false;
+            elements *= d;
+            if (elements >= HeavyInputElementThreshold) return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// After-test hook. Forces a blocking compacting Gen-2 GC (with explicit
@@ -62,18 +128,29 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
     /// </remarks>
     public Task DisposeAsync()
     {
-        lock (_lohCompactionGate)
+        try
         {
-            // First pass: compacting Gen-2 + LOH reclaims everything unreachable
-            // including the just-Disposed model's weight tensors.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
-            GC.WaitForPendingFinalizers();
+            lock (_lohCompactionGate)
+            {
+                // First pass: compacting Gen-2 + LOH reclaims everything unreachable
+                // including the just-Disposed model's weight tensors.
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
 
-            // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
-            // and any LOH allocations from finalizers.
-            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-            GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+                // Second pass: finalizer-released memory (e.g. GPU-pool return paths)
+                // and any LOH allocations from finalizers.
+                GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+                GC.Collect(generation: 2, mode: GCCollectionMode.Forced, blocking: true, compacting: true);
+            }
+        }
+        finally
+        {
+            if (_heavyGateAcquired)
+            {
+                _heavyTestGate.Release();
+                _heavyGateAcquired = false;
+            }
         }
         return Task.CompletedTask;
     }
@@ -110,8 +187,25 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
 
     // =====================================================
     // MATHEMATICAL INVARIANT: Training Should Reduce Prediction Error
-    // After training on a fixed (input, target) pair, the predict output
-    // should move closer to the target — verifying gradient flow works.
+    //
+    // Per DDPM (Ho et al. 2020, Algorithm 1), diffusion training minimizes the
+    // MEAN squared error between the true noise ε and the model's predicted noise
+    // ε_θ(√ᾱₜ·x₀ + √(1−ᾱₜ)·ε, t). There is NO supervised "target output" in
+    // diffusion — the data point is the clean sample x₀, noise is added, and the
+    // model predicts that noise. So the valid, paper-faithful "training reduces
+    // error" check is: does the noise-prediction MSE at a FIXED probe (x₀, ε, t)
+    // go down (or at least not up) after training?
+    //
+    // The earlier formulation measured MSE(Generate(x₀), random_target). That is
+    // not a paper quantity and is causally unrelated to the training objective:
+    // `Train` ignores the target argument (it self-samples noise, exactly per the
+    // paper), so Generate(x₀) drifts toward the model's own learned denoising
+    // fixed point — away from an arbitrary random target — for ANY model whose
+    // sampler genuinely depends on its weights. Expressive models (e.g. the
+    // attention-UNet Imagen2 config) therefore "failed" that check while training
+    // perfectly correctly (output bounded, converges to a fixed point). The probe
+    // below measures the actual objective and only fails if training makes
+    // noise-prediction WORSE — a real gradient-sign / divergence bug.
     // =====================================================
 
     [Fact(Timeout = 120000)]
@@ -121,25 +215,37 @@ public abstract class DiffusionModelTestBase : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
-        var input = CreateRandomTensor(InputShape, rng);
-        var target = CreateRandomTensor(OutputShape, rng);
 
-        // Initial error
-        var initialOutput = model.Predict(input);
-        double initialError = ComputeMSE(initialOutput, target);
+        // Treat the random tensor as the clean sample x₀ (the diffusion data point).
+        var x0 = CreateRandomTensor(InputShape, rng);
 
-        // Train
+        // Fixed noise-prediction probe held constant across the before/after
+        // measurement: a single (noise ε, timestep t) so we compare like-for-like.
+        // (Per-step Train uses a random t internally, so raw per-step loss values
+        // are confounded by timestep magnitude; a fixed probe is not.) Mid-range t.
+        int probeT = System.Math.Max(1, model.Scheduler.TrainTimesteps / 2);
+        var probeNoiseVec = new Vector<double>(x0.Length);
+        for (int i = 0; i < probeNoiseVec.Length; i++)
+            probeNoiseVec[i] = rng.NextDouble() * 2.0 - 1.0;
+        var noisyProbe = new Tensor<double>(x0._shape, model.Scheduler.AddNoise(x0.ToVector(), probeNoiseVec, probeT));
+        var probeNoise = new Tensor<double>(x0._shape, probeNoiseVec);
+
+        double errBefore = ComputeMSE(model.PredictNoise(noisyProbe, probeT), probeNoise);
+
+        // Train on x₀ (the diffusion data point). The target argument is unused by
+        // the diffusion training path per the paper; pass x₀ for clarity.
         for (int i = 0; i < TrainingIterations; i++)
-            model.Train(input, target);
+            model.Train(x0, x0);
 
-        // Final error
-        var finalOutput = model.Predict(input);
-        double finalError = ComputeMSE(finalOutput, target);
+        double errAfter = ComputeMSE(model.PredictNoise(noisyProbe, probeT), probeNoise);
 
-        if (!double.IsNaN(initialError) && !double.IsNaN(finalError))
+        if (!double.IsNaN(errBefore) && !double.IsNaN(errAfter))
         {
-            Assert.True(finalError <= initialError + 1e-6,
-                $"Training did not reduce error: initial={initialError:F6}, final={finalError:F6}.");
+            Assert.True(errAfter <= errBefore + 1e-6,
+                $"Training increased the noise-prediction error: before={errBefore:F6}, after={errAfter:F6}. " +
+                "DDPM training (Ho et al. 2020, Alg. 1) minimizes MSE(ε, ε_θ); after training on x₀ the model " +
+                "must predict the noise at a fixed (x₀, ε, t) probe at least as well as before — an increase " +
+                "indicates a gradient-sign error, divergence, or first-step explosion in the training path.");
         }
     }
 

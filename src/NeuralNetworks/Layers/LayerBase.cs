@@ -2078,14 +2078,19 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
             _preActivationCache.Push(input);
         }
 
+        // Route through the central ActivationHelper dispatch so the activation runs
+        // on tape-connected Engine kernels (the previous direct .Activate(Tensor)
+        // calls rebuild the tensor element-wise and detach the autodiff graph,
+        // stopping gradients reaching this layer's trainable parameters under
+        // tape-based training).
         if (VectorActivation != null)
         {
-            return VectorActivation.Activate(input);
+            return ActivationHelper.ApplyActivation(VectorActivation, input, Engine);
         }
 
         if (ScalarActivation != null)
         {
-            return ScalarActivation.Activate(input);
+            return ActivationHelper.ApplyActivation(ScalarActivation, input, Engine);
         }
 
         return input;
@@ -3255,6 +3260,68 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IDisposable
     /// </para>
     /// </remarks>
     public virtual IReadOnlyList<Tensor<T>> GetTrainableParameters() => _registeredTensors;
+
+    /// <summary>
+    /// Registers a single custom autograd node on the active gradient tape for a layer whose
+    /// <see cref="Forward"/> is a manual (non-Engine-op) computation but which can supply a
+    /// hand-written backward. This is the layer-level analog of PyTorch's
+    /// <c>torch.autograd.Function</c>: the manual forward stays exactly as written (fast,
+    /// paper-faithful) and the supplied <paramref name="backward"/> delegate becomes a node on
+    /// the tape, so the layer's trainable parameters receive gradients under tape-based training
+    /// even though no <see cref="IEngine"/> op recorded them.
+    /// </summary>
+    /// <param name="output">The tensor returned by the manual forward — becomes the node's output.</param>
+    /// <param name="differentiableInputs">
+    /// The differentiable inputs to the node, in a fixed order the <paramref name="backward"/>
+    /// delegate mirrors. Conventionally <c>[layerInput, param0, param1, ...]</c> where the params
+    /// are exactly <see cref="GetTrainableParameters"/>. Non-differentiable inputs are omitted.
+    /// </param>
+    /// <param name="backward">
+    /// Given the gradient flowing into <paramref name="output"/>, returns the gradient w.r.t. each
+    /// entry of <paramref name="differentiableInputs"/> in the same order (use <c>null</c> for an
+    /// entry that receives no gradient). The hand-written gradient is taken as authoritative — it
+    /// must match the manual forward (verified by the finite-difference invariant).
+    /// </param>
+    /// <returns><paramref name="output"/> unchanged, for fluent use as the Forward return value.</returns>
+    /// <remarks>
+    /// No-op when no tape is recording (eager inference), so this adds zero overhead off the tape.
+    /// The node is recorded all-or-nothing: the layer's Forward must be wholly manual, otherwise
+    /// any Engine ops it also ran would double-count against this node's hand-written gradient.
+    /// </remarks>
+    protected Tensor<T> RegisterManualBackwardNode(
+        Tensor<T> output,
+        Tensor<T>[] differentiableInputs,
+        Func<Tensor<T>, Tensor<T>?[]> backward)
+    {
+        var tape = GradientTape<T>.Current;
+        if (tape is null) return output;
+
+        var entry = new TapeEntry<T>
+        {
+            OperationName = GetType().Name + ".ManualBackward",
+            Output = output,
+            InputCount = 0xFF,
+            InputsOverflow = differentiableInputs,
+            Backward = (gradOutput, inputs, _, _, eng, grads) =>
+            {
+                var inputGrads = backward(gradOutput);
+                for (int i = 0; i < inputs.Length && i < inputGrads.Length; i++)
+                {
+                    var g = inputGrads[i];
+                    if (g is null) continue;
+                    if (grads.TryGetValue(inputs[i], out var existing))
+                        eng.TensorAddInPlace(existing, g);
+                    else
+                        grads[inputs[i]] = g;
+                }
+            }
+        };
+        if (differentiableInputs.Length > 0) entry.Input0 = differentiableInputs[0];
+        if (differentiableInputs.Length > 1) entry.Input1 = differentiableInputs[1];
+        if (differentiableInputs.Length > 2) entry.Input2 = differentiableInputs[2];
+        tape.Record(entry);
+        return output;
+    }
 
     /// <summary>
     /// Replaces this layer's trainable parameter tensors with the provided tensors.
