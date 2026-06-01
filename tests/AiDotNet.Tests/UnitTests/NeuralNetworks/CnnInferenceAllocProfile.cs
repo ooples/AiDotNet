@@ -71,11 +71,22 @@ public class CnnInferenceAllocProfile
         const int reps = 2000;
         GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
         int g0 = GC.CollectionCount(0), g1 = GC.CollectionCount(1), g2 = GC.CollectionCount(2);
+        // GetAllocatedBytesForCurrentThread is net5+; on net471 fall back to
+        // GetTotalMemory (less precise but always available) so this profiler
+        // compiles on every target framework.
+#if NET5_0_OR_GREATER
         long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+#else
+        long allocBefore = GC.GetTotalMemory(forceFullCollection: false);
+#endif
         var sw = System.Diagnostics.Stopwatch.StartNew();
         for (int i = 0; i < reps; i++) { var _ = predict(); }
         sw.Stop();
+#if NET5_0_OR_GREATER
         long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+#else
+        long allocAfter = GC.GetTotalMemory(forceFullCollection: false);
+#endif
         int d0 = GC.CollectionCount(0) - g0, d1 = GC.CollectionCount(1) - g1, d2 = GC.CollectionCount(2) - g2;
 
         double usPer = sw.Elapsed.TotalMilliseconds * 1000.0 / reps;
