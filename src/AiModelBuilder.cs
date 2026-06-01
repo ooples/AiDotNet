@@ -139,6 +139,16 @@ namespace AiDotNet;
 public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TInput, TOutput>, IWeightStreamingCapableBuilder<T, TInput, TOutput>, AiDotNet.Configuration.IConfiguredView<T, TInput, TOutput>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
+
+    // audit-2026-05 phase 2a slice 1 — data-pipeline concern extracted into a separately-testable
+    // component. The Configure{Preprocessing,Postprocessing,DataLoader,DataPreparation,Augmentation}
+    // methods + SetPostprocessingFitMaxRows delegate here; the legacy private fields below stay as
+    // synced caches that BuildAsync and partial-class siblings continue to read until slice 2
+    // migrates those callsites to the component's properties. See
+    // docs/internal/audit-2026-05-phase2a-aimodelbuilder-refactor.md for the full migration plan.
+    private readonly AiDotNet.Configuration.IAiModelDataPipeline<T, TInput, TOutput> _dataPipeline
+        = new AiDotNet.Configuration.AiModelDataPipeline<T, TInput, TOutput>();
+
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
@@ -539,24 +549,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
         Action<PreprocessingPipeline<T, TInput, TInput>>? pipelineBuilder = null)
     {
-        _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
-
-        if (pipelineBuilder is not null)
-        {
-            pipelineBuilder(_preprocessingPipeline);
-        }
-        else
-        {
-            // Industry standard AutoML-style defaults:
-            // 1. Handle missing values with mean imputation (most common strategy)
-            // 2. Standardize features to zero mean and unit variance
-            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
-            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
-                new SimpleImputer<T>(ImputationStrategy.Mean));
-            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
-                new StandardScaler<T>());
-        }
-
+        _dataPipeline.ConfigurePreprocessing(pipelineBuilder);
+        _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;
         return this;
     }
 
@@ -580,24 +574,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
         IDataTransformer<T, TInput, TInput>? transformer = null)
     {
-        _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
-
-        if (transformer is not null)
-        {
-            _preprocessingPipeline.Add(transformer);
-        }
-        else
-        {
-            // Industry standard AutoML-style defaults:
-            // 1. Handle missing values with mean imputation (most common strategy)
-            // 2. Standardize features to zero mean and unit variance
-            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
-            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
-                new SimpleImputer<T>(ImputationStrategy.Mean));
-            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
-                new StandardScaler<T>());
-        }
-
+        _dataPipeline.ConfigurePreprocessing(transformer);
+        _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;
         return this;
     }
 
@@ -623,23 +601,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigurePreprocessing(
         PreprocessingPipeline<T, TInput, TInput>? pipeline = null)
     {
-        if (pipeline is not null)
-        {
-            _preprocessingPipeline = pipeline;
-        }
-        else
-        {
-            // Industry standard AutoML-style defaults:
-            // 1. Handle missing values with mean imputation (most common strategy)
-            // 2. Standardize features to zero mean and unit variance
-            // 3. These are the minimum recommended preprocessing steps for most ML algorithms
-            _preprocessingPipeline = new PreprocessingPipeline<T, TInput, TInput>();
-            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
-                new SimpleImputer<T>(ImputationStrategy.Mean));
-            _preprocessingPipeline.Add((IDataTransformer<T, TInput, TInput>)(object)
-                new StandardScaler<T>());
-        }
-
+        _dataPipeline.ConfigurePreprocessing(pipeline);
+        _preprocessingPipeline = _dataPipeline.PreprocessingPipeline;
         return this;
     }
 
@@ -665,16 +628,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
         Action<PostprocessingPipeline<T, TOutput, TOutput>>? pipelineBuilder = null)
     {
-        _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
-
-        if (pipelineBuilder is not null)
-        {
-            pipelineBuilder(_postprocessingPipeline);
-        }
-        // Note: Unlike preprocessing, postprocessing doesn't have universal defaults
-        // because the appropriate postprocessing depends heavily on the model type
-        // (classification vs regression vs generation, etc.)
-
+        _dataPipeline.ConfigurePostprocessing(pipelineBuilder);
+        _postprocessingPipeline = _dataPipeline.PostprocessingPipeline;
         return this;
     }
 
@@ -696,15 +651,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
         IDataTransformer<T, TOutput, TOutput>? transformer = null)
     {
-        _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
-
-        if (transformer is not null)
-        {
-            _postprocessingPipeline.Add(transformer);
-        }
-        // Note: Unlike preprocessing, postprocessing doesn't have universal defaults
-        // because the appropriate postprocessing depends heavily on the model type
-
+        _dataPipeline.ConfigurePostprocessing(transformer);
+        _postprocessingPipeline = _dataPipeline.PostprocessingPipeline;
         return this;
     }
 
@@ -728,17 +676,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigurePostprocessing(
         PostprocessingPipeline<T, TOutput, TOutput>? pipeline = null)
     {
-        if (pipeline is not null)
-        {
-            _postprocessingPipeline = pipeline;
-        }
-        else
-        {
-            // Create empty pipeline - no default postprocessing
-            // because appropriate postprocessing depends on model type
-            _postprocessingPipeline = new PostprocessingPipeline<T, TOutput, TOutput>();
-        }
-
+        _dataPipeline.ConfigurePostprocessing(pipeline);
+        _postprocessingPipeline = _dataPipeline.PostprocessingPipeline;
         return this;
     }
 
@@ -762,7 +701,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // a YAML model recipe.
     public AiModelBuilder<T, TInput, TOutput> SetPostprocessingFitMaxRows(int? maxRows)
     {
-        _postprocessingFitMaxRows = maxRows is int v && v > 0 ? v : (int?)null;
+        _dataPipeline.SetPostprocessingFitMaxRows(maxRows);
+        _postprocessingFitMaxRows = _dataPipeline.PostprocessingFitMaxRows;
         return this;
     }
 
@@ -1363,7 +1303,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDataLoader(IDataLoader<T> dataLoader)
     {
-        _dataLoader = dataLoader;
+        _dataPipeline.ConfigureDataLoader(dataLoader);
+        _dataLoader = _dataPipeline.DataLoader;
         return this;
     }
 
@@ -1393,14 +1334,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDataPreparation(
         Action<DataPreparationPipeline<T>> pipelineBuilder)
     {
-        if (pipelineBuilder is null)
-        {
-            throw new ArgumentNullException(nameof(pipelineBuilder));
-        }
-
-        _dataPreparationPipeline = new DataPreparationPipeline<T>();
-        pipelineBuilder(_dataPreparationPipeline);
-        DataPreparationRegistry<T>.Current = _dataPreparationPipeline;
+        _dataPipeline.ConfigureDataPreparation(pipelineBuilder);
+        _dataPreparationPipeline = _dataPipeline.DataPreparationPipeline;
         return this;
     }
 
@@ -6868,7 +6803,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAugmentation(
         Augmentation.AugmentationConfig? config = null)
     {
-        _augmentationConfig = config ?? CreateDefaultAugmentationConfig();
+        _dataPipeline.ConfigureAugmentation(config);
+        _augmentationConfig = _dataPipeline.AugmentationConfig;
         return this;
     }
 
