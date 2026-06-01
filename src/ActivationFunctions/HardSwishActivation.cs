@@ -33,8 +33,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, IsDifferentiable = false, Cost = ComputeCost.Low)]
-public class HardSwishActivation<T> : ActivationFunctionBase<T>
+public class HardSwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.HardSwish;
+        return true;
+    }
+
     private readonly T _three;
     private readonly T _six;
     private readonly T _negThree;

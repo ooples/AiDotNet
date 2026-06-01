@@ -30,8 +30,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, BoundLower = 0.0, BoundUpper = 6.0, IsDifferentiable = false, Cost = ComputeCost.Low)]
-public class ReLU6Activation<T> : ActivationFunctionBase<T>
+public class ReLU6Activation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.ReLU6;
+        return true;
+    }
+
     private readonly T _six;
 
     /// <summary>

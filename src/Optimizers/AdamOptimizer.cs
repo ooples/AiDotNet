@@ -24,7 +24,7 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
     /// The options specific to the Adam optimizer.
@@ -121,6 +121,26 @@ public class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, T
         // which syncs CurrentLearningRate with the scheduler. We don't set it here.
         _currentBeta1 = NumOps.FromDouble(_options.Beta1);
         _currentBeta2 = NumOps.FromDouble(_options.Beta2);
+    }
+
+    /// <inheritdoc/>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        // Adaptive LR mutates the rate between steps; the fused kernel bakes a
+        // constant rate, so it can't reproduce that — fall back to eager.
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        // AMSGrad opt-in selects the AMSGrad kernel variant (max-second-moment),
+        // which keeps the fast path instead of falling back.
+        config = new Fused.FusedOptimizerConfig(
+            _options.UseAMSGrad
+                ? Tensors.Engines.Compilation.OptimizerType.AMSGrad
+                : Tensors.Engines.Compilation.OptimizerType.Adam,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            0f, schedule);
+        return true;
     }
 
     /// <summary>

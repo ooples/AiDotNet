@@ -678,6 +678,11 @@ public class LSTNet<T> : ForecastingModelBase<T>
         _autoregressiveWindow = reader.ReadInt32();
         _useHighway = reader.ReadBoolean();
         _dropout = reader.ReadDouble();
+
+        // Re-bind cached layer references to the deserialized (weight-loaded)
+        // layers so a clone runs on the loaded weights, not construction-time
+        // random init (ExtractLayerReferences uses direct assignment, idempotent).
+        ExtractLayerReferences();
     }
 
     #endregion

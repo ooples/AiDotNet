@@ -238,19 +238,26 @@ public class GANDALFNetwork<T> : NeuralNetworkBase<T>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Forward pass to get prediction
-        Tensor<T> prediction = Predict(input);
+        // Tape-based training. Same cascade pattern as TabTransformerNetwork /
+        // SAINTNetwork / TabFlowGenerator — the previous body computed `error`
+        // but never backpropagated, then called the layer-style
+        // _optimizer.UpdateParameters(Layers) which throws "Backward pass must
+        // be called before updating parameters" when no gradients exist.
+        // Honor the base Train contract: auto-promote an unbatched single sample
+        // ([features] / [seq, features]) to a leading unit batch dim before the tape
+        // forward, exactly as NeuralNetworkBase.Train does. Without this, callers
+        // passing single-sample tensors would bypass the canonical [B, …] promotion.
+        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
 
-        // Calculate loss
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-
-        // Calculate error gradient
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-
-        // Backpropagate error through network
-
-        // Update network parameters
-        UpdateNetworkParameters();
+        SetTrainingMode(true);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

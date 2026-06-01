@@ -68,7 +68,22 @@ public class NeuralNetworkArchitecture<T>
     /// consumer will see different init weights than the same network
     /// built in a fresh process.
     /// </summary>
-    public int? RandomSeed { get; set; }
+    public int? RandomSeed
+    {
+        get => _randomSeed ?? DefaultRandomSeedOverride;
+        set => _randomSeed = value;
+    }
+    private int? _randomSeed;
+
+    /// <summary>
+    /// Process-wide fallback for <see cref="RandomSeed"/> when no explicit per-architecture seed
+    /// was set. Null in production (so weight init stays entropy-seeded and repeated
+    /// default-constructed models differ). Test harnesses set this so model invariants that depend
+    /// on the initial weights — e.g. the "more training never degrades loss" comparison — are
+    /// reproducible run-to-run instead of flaking on an unlucky random init. An explicit
+    /// <see cref="RandomSeed"/> on a given architecture always wins over this fallback.
+    /// </summary>
+    public static int? DefaultRandomSeedOverride { get; set; }
 
     /// <summary>
     /// Gets the type of input the neural network is designed to handle.

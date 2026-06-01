@@ -1,6 +1,7 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
@@ -444,6 +445,27 @@ public class OccupancyNeuralNetwork<T> : NeuralNetworkBase<T>
 
         return current.ToVector();
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _occupancyOptimizer;
+
+    /// <summary>
+    /// Uses an Adam (AMSGrad) optimizer whose learning rate comes from
+    /// <see cref="OccupancyNeuralNetworkOptions.BaseOptimizerInitialLearningRate"/>
+    /// (default 0.01, vs the framework default of 0.001). The
+    /// Conditional-LayerNorm ResNet decoder normalizes the pre-output
+    /// activation, which damps how fast the occupancy head's bias moves; at the
+    /// default rate a short single-pair memorization run only shifts the output
+    /// a few percent. Surfacing the rate through options keeps this
+    /// model-specific training knob tunable by callers.
+    /// </summary>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _occupancyOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                UseAMSGrad = true,
+                InitialLearningRate = _options.BaseOptimizerInitialLearningRate
+            });
 
     /// <summary>
     /// Trains the neural network on sensor data and occupancy labels.

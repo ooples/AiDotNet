@@ -120,9 +120,17 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     private UNetNoisePredictor<T> _noisePredictor;
 
     /// <summary>
-    /// The VAE for encoding/decoding.
+    /// The VAE for encoding/decoding. Lazy so latent-input Predict (the
+    /// model-family test path) doesn't pay VAE construction cost — the
+    /// VAE is unused when <c>Generate</c>'s <c>inputIsLatent</c> branch
+    /// short-circuits the DecodeFromLatent tail. Materialized on first
+    /// access from <see cref="VAE"/>, <see cref="ParameterCount"/>,
+    /// <see cref="GetParameters"/>, or <see cref="SetParameters"/>.
+    /// Not <c>readonly</c> because <see cref="InitializeLayers"/> (called
+    /// from ctor) assigns it; <c>[MemberNotNull]</c> on that method tells
+    /// the nullable-analysis it will be non-null on return.
     /// </summary>
-    private StandardVAE<T> _vae;
+    private Lazy<StandardVAE<T>> _vae;
 
     /// <summary>
     /// The conditioning module for text encoding.
@@ -167,7 +175,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     public override INoisePredictor<T> NoisePredictor => _noisePredictor;
 
     /// <inheritdoc />
-    public override IVAEModel<T> VAE => _vae;
+    public override IVAEModel<T> VAE => _vae.Value;
 
     /// <inheritdoc />
     public override IConditioningModule<T>? Conditioner => _conditioner;
@@ -177,7 +185,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
 
     /// <inheritdoc />
     public override long ParameterCount =>
-        _noisePredictor.ParameterCount + _vae.ParameterCount;
+        _noisePredictor.ParameterCount + _vae.Value.ParameterCount;
 
     /// <summary>
     /// Gets the minimum sigma value used by this model.
@@ -273,7 +281,15 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     #region Layer Initialization
 
     /// <summary>
-    /// Initializes the noise predictor and VAE layers.
+    /// Initializes the noise predictor (eager) and the lazy-VAE factory.
+    /// UNet stays eager because PredictNoise runs every inference step
+    /// (~95% of Predict cost per #1305 bottleneck analysis); deferring it
+    /// would just shift cost. VAE is wrapped in <see cref="Lazy{T}"/> so
+    /// latent-input Predict (skips DecodeFromLatent) avoids paying VAE
+    /// construction. <see cref="LazyThreadSafetyMode.PublicationOnly"/>
+    /// is appropriate because StandardVAE ctor is idempotent (no shared
+    /// mutable state) and we don't want to pay full-locking ExecutionAndPublication
+    /// overhead on every Predict.
     /// </summary>
     [MemberNotNull(nameof(_noisePredictor), nameof(_vae))]
     private void InitializeLayers(
@@ -281,7 +297,7 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
         StandardVAE<T>? vae,
         int? seed)
     {
-        // Consistency-distilled U-Net
+        // Consistency-distilled U-Net (eager — used on every PredictNoise)
         _noisePredictor = noisePredictor ?? new UNetNoisePredictor<T>(
             inputChannels: CM_LATENT_CHANNELS,
             outputChannels: CM_LATENT_CHANNELS,
@@ -293,14 +309,23 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             architecture: Architecture,
             seed: seed);
 
-        // Standard SD VAE
-        _vae = vae ?? new StandardVAE<T>(
-            inputChannels: 3,
-            latentChannels: CM_LATENT_CHANNELS,
-            baseChannels: 128,
-            channelMultipliers: new[] { 1, 2, 4, 4 },
-            numResBlocksPerLevel: 2,
-            seed: seed);
+        // Standard SD VAE (lazy — constructed on first VAE access). Use
+        // ExecutionAndPublication, not PublicationOnly: PublicationOnly lets
+        // multiple threads run the factory concurrently on first access, which
+        // for a heavyweight VAE (3 input channels -> 4 latent channels, 128
+        // base, [1,2,4,4] multipliers, 2 resblocks/level) means duplicate
+        // multi-MB allocations and avoidable CPU spikes whenever the latent-
+        // input fast path is bypassed concurrently. ExecutionAndPublication
+        // serialises the factory so the VAE is constructed exactly once.
+        _vae = new Lazy<StandardVAE<T>>(
+            () => vae ?? new StandardVAE<T>(
+                inputChannels: 3,
+                latentChannels: CM_LATENT_CHANNELS,
+                baseChannels: 128,
+                channelMultipliers: new[] { 1, 2, 4, 4 },
+                numResBlocksPerLevel: 2,
+                seed: seed),
+            LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     #endregion
@@ -595,7 +620,8 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     public override Vector<T> GetParameters()
     {
         var noisePredParams = _noisePredictor.GetParameters();
-        var vaeParams = _vae.GetParameters();
+        var vae = _vae.Value;
+        var vaeParams = vae.GetParameters();
         int totalLength = noisePredParams.Length + vaeParams.Length;
         var combined = new Vector<T>(totalLength);
         for (int i = 0; i < noisePredParams.Length; i++)
@@ -608,12 +634,13 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
     /// <inheritdoc />
     public override void SetParameters(Vector<T> parameters)
     {
-        int expectedCount = (int)(_noisePredictor.ParameterCount + _vae.ParameterCount);
+        var vae = _vae.Value;
+        int expectedCount = (int)(_noisePredictor.ParameterCount + vae.ParameterCount);
         if (parameters.Length != expectedCount)
         {
             throw new ArgumentException(
                 $"Expected {expectedCount} parameters (noise predictor: {_noisePredictor.ParameterCount}, " +
-                $"VAE: {_vae.ParameterCount}), got {parameters.Length}.",
+                $"VAE: {vae.ParameterCount}), got {parameters.Length}.",
                 nameof(parameters));
         }
 
@@ -623,11 +650,11 @@ public class ConsistencyModel<T> : LatentDiffusionModelBase<T>
             noisePredParams[i] = parameters[i];
         _noisePredictor.SetParameters(noisePredParams);
 
-        int vaeCount = checked((int)_vae.ParameterCount);
+        int vaeCount = checked((int)vae.ParameterCount);
         var vaeParams = new Vector<T>(vaeCount);
         for (int i = 0; i < vaeCount; i++)
             vaeParams[i] = parameters[npCount + i];
-        _vae.SetParameters(vaeParams);
+        vae.SetParameters(vaeParams);
     }
 
     #endregion

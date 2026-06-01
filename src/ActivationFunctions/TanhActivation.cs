@@ -41,8 +41,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationTask(ActivationTask.RecurrentGating)]
 [ActivationTask(ActivationTask.GenerativeOutput)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = true, Cost = ComputeCost.Medium)]
-public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
+public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.Tanh;
+        return true;
+    }
+
     /// <summary>
     /// Indicates that this activation function supports operations on individual scalar values.
     /// </summary>

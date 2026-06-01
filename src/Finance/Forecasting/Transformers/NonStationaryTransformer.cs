@@ -477,6 +477,12 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
+        // Idempotent: runs in the ctor AND after deserialize; clear the encoder/
+        // decoder lists first so the second call rebinds rather than appending a
+        // doubled stack (which makes a clone diverge from the original).
+        _encoderLayers.Clear();
+        _decoderLayers.Clear();
+
         int layerIndex = 0;
 
         // Input projection (first dense layer)
@@ -779,6 +785,10 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
         _useDeStationaryAttention = reader.ReadBoolean();
         _dropout = reader.ReadDouble();
         _useNativeMode = reader.ReadBoolean();
+
+        // Re-bind cached layer references to the deserialized (weight-loaded)
+        // layers so a clone runs on the loaded weights, not random init.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -1117,16 +1127,12 @@ public class NonStationaryTransformer<T> : ForecastingModelBase<T>
                 return input; // No stored statistics, return as-is
             }
 
-            var mean = _instanceMean.Data.Span[0];
-            var std = _instanceStd.Data.Span[0];
-
-            for (int i = 0; i < input.Length; i++)
-            {
-                var denormalized = NumOps.Add(
-                    NumOps.Multiply(input.Data.Span[i], std),
-                    mean);
-                result.Data.Span[i] = denormalized;
-            }
+            // Tape-connected denormalization: output * std + mean (scalar stats
+            // broadcast over the whole tensor). The manual per-element copy
+            // detached the graph before the loss, zeroing all gradients. Stats are
+            // constants (paper-faithful de-stationarization, Liu et al. 2022).
+            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
+            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
         }
 
         return result;

@@ -321,6 +321,11 @@ public class Mamba2<T> : ForecastingModelBase<T>
         _numLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _numFeatures = reader.ReadInt32();
+
+        // Re-point cached layer references at the freshly deserialized Layers;
+        // otherwise a clone's forward uses the stale random-initialized layers
+        // created by CreateNewInstance and diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -436,7 +441,14 @@ public class Mamba2<T> : ForecastingModelBase<T>
                 current = block.Forward(current);
         }
 
-        current = current.Reshape(new[] { batchSize, seqLen * _modelDimension });
+        // Take the last timestep's hidden state instead of flattening [seqLen ×
+        // modelDim]. Mamba is a causal SSM whose final recurrent state has integrated
+        // the entire context, so it is the natural fixed-size [batch, modelDim] summary
+        // for the forecast head. The old flatten sized the first output-projection
+        // Dense at seqLen·modelDim inputs (131072 at paper scale → an ~805M-parameter,
+        // 6.4 GB weight) which overflowed the serializer and OOM-cascaded the suite.
+        if (current.Rank == 3)
+            current = Engine.TensorSliceAxis(current, axis: 1, index: current.Shape[1] - 1);
 
         if (_outputProjectionLayers is not null)
         {
@@ -445,6 +457,55 @@ public class Mamba2<T> : ForecastingModelBase<T>
         }
 
         return current;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Reproduces the genuine forward (input → 3-D normalize → embedding → Mamba-2 blocks →
+    /// output projection) with the reshapes between stages. The default base implementation
+    /// runs the flat <c>Layers</c> list and would feed the Mamba-2 block the wrong rank.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode)
+            return activations;
+
+        var current = NormalizeInputTo3D(input);
+        int batchSize = current.Shape[0];
+        int seqLen = current.Shape[1];
+
+        if (_inputEmbedding is not null)
+        {
+            current = current.Reshape(new[] { batchSize * seqLen, _numFeatures });
+            current = _inputEmbedding.Forward(current);
+            current = current.Reshape(new[] { batchSize, seqLen, _modelDimension });
+            activations["InputEmbedding"] = current.Clone();
+        }
+
+        if (_mamba2Blocks is not null)
+        {
+            for (int i = 0; i < _mamba2Blocks.Count; i++)
+            {
+                current = _mamba2Blocks[i].Forward(current);
+                activations[$"Mamba2Block_{i}"] = current.Clone();
+            }
+        }
+
+        // Mirror Forward: take the last timestep's hidden state rather than flattening.
+        if (current.Rank == 3)
+            current = Engine.TensorSliceAxis(current, axis: 1, index: current.Shape[1] - 1);
+
+        if (_outputProjectionLayers is not null)
+        {
+            for (int i = 0; i < _outputProjectionLayers.Count; i++)
+            {
+                current = _outputProjectionLayers[i].Forward(current);
+                activations[$"OutputProjection_{i}"] = current.Clone();
+            }
+        }
+
+        return activations;
     }
 
     private Tensor<T> NormalizeInputTo3D(Tensor<T> input)

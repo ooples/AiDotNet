@@ -668,6 +668,20 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <summary>
+    /// Optional sub-phase profiling hook. When non-null, <see cref="ForwardUNet"/>
+    /// emits one entry per encoder/middle/decoder block + the input/output convs
+    /// containing the section name and elapsed milliseconds. No-op (and zero
+    /// alloc) when null — production callers don't pay the cost. Used by
+    /// <c>tools/ConsistencyModelPerfDiag</c> to break down the ~14.95 s/step
+    /// UNet forward cost surfaced in #1305.
+    /// </summary>
+    // Internal diagnostics plumbing — external consumers must NOT bind to it
+    // (per the facade contract: users only touch AiModelBuilder / AiModelResult).
+    // ConsistencyModelPerfDiag reads this via the InternalsVisibleTo grant on
+    // src/AiDotNet.csproj for that assembly.
+    internal static System.Collections.Concurrent.ConcurrentQueue<(string section, double ms)>? ForwardProfilingSink;
+
+    /// <summary>
     /// Forward pass for inference (no skip storage needed).
     /// </summary>
     private Tensor<T> ForwardUNet(Tensor<T> x, Tensor<T> timeEmbed, Tensor<T>? conditioning)
@@ -677,8 +691,19 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException("Convolutional layers not initialized.");
         }
 
+        var sink = ForwardProfilingSink;
+        var sw = sink is null ? null : System.Diagnostics.Stopwatch.StartNew();
+        void Tick(string section)
+        {
+            if (sw is null || sink is null) return;
+            sw.Stop();
+            sink.Enqueue((section, sw.Elapsed.TotalMilliseconds));
+            sw.Restart();
+        }
+
         // Input convolution
         x = _inputConv.Forward(x);
+        Tick("input_conv");
 
         // Store skip connections — pre-allocate capacity to avoid List resizing
         var skips = new List<Tensor<T>>(_encoderBlocks.Count);
@@ -690,17 +715,21 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             if (block.Downsample != null)
             {
                 x = block.Downsample.Forward(x);
+                Tick($"enc[{i}].downsample");
             }
             else
             {
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+                Tick($"enc[{i}].resblock");
                 if (block.AttentionBlock != null)
                 {
                     x = block.AttentionBlock.Forward(x);
+                    Tick($"enc[{i}].attn");
                 }
                 if (block.CrossAttentionBlock != null && conditioning != null)
                 {
                     x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                    Tick($"enc[{i}].xattn");
                 }
                 skips.Add(x);
             }
@@ -711,13 +740,16 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
         {
             var block = _middleBlocks[i];
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+            Tick($"mid[{i}].resblock");
             if (block.AttentionBlock != null)
             {
                 x = block.AttentionBlock.Forward(x);
+                Tick($"mid[{i}].attn");
             }
             if (block.CrossAttentionBlock != null && conditioning != null)
             {
                 x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                Tick($"mid[{i}].xattn");
             }
         }
 
@@ -729,6 +761,7 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
             if (block.Upsample != null)
             {
                 x = block.Upsample.Forward(x);
+                Tick($"dec[{i}].upsample");
             }
             else
             {
@@ -736,23 +769,28 @@ public class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 if (skipIdx >= 0)
                 {
                     x = ConcatenateChannels(x, skips[skipIdx]);
+                    Tick($"dec[{i}].concat");
                     skipIdx--;
                 }
 
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
+                Tick($"dec[{i}].resblock");
                 if (block.AttentionBlock != null)
                 {
                     x = block.AttentionBlock.Forward(x);
+                    Tick($"dec[{i}].attn");
                 }
                 if (block.CrossAttentionBlock != null && conditioning != null)
                 {
                     x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                    Tick($"dec[{i}].xattn");
                 }
             }
         }
 
         // Output convolution
         x = _outputConv.Forward(x);
+        Tick("output_conv");
 
         return x;
     }

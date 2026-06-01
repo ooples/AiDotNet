@@ -31,8 +31,27 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this AdaDelta instance for the fused kernel (Tensors
+    /// <c>OptimizerType.AdaDelta</c> = <c>AdaDeltaUpdateSimd(lr, rho, eps)</c>):
+    /// Rho → Beta2 slot, Epsilon → eps; the two accumulators live in the plan.
+    /// The adaptive rho schedule only fires under UseAdaptiveLearningRate, which
+    /// is declined here (→ eager). Parity-gated.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.AdaDelta,
+            (float)GetCurrentLearningRate(),
+            0f, (float)_options.Rho, (float)_options.Epsilon, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The configuration options specific to the AdaDelta optimizer.
     /// </summary>

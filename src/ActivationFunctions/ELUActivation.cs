@@ -26,6 +26,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Medium)]
+// NOTE: ELU intentionally does NOT implement IFusedActivation. The shipped
+// Tensors FusedLinear/MlpForward path resolves pointwise activations through
+// CpuFusedOperations._floatActivations/_doubleActivations, which currently
+// register only None/ReLU/GELU/Sigmoid/Tanh/LeakyReLU/Swish — ELU has no
+// kernel there (it exists only in the unrelated BlasManaged ActivationEpilogue
+// path). Claiming a fused ELU kernel would make MlpForward throw. Wiring it is
+// tracked by AiDotNet.Tensors #499 (add ELU to the FusedLinear tables); once a
+// Tensors release ships the kernel, re-add IFusedActivation here (guarding
+// alpha==1 since the kernel hardcodes that).
 public class ELUActivation<T> : ActivationFunctionBase<T>
 {
     /// <summary>

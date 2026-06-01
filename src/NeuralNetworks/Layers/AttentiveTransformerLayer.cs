@@ -104,6 +104,14 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
 
         // Sparsemax for sparse attention
         _sparsemax = new Sparsemax<T>();
+
+        // Register the FC sub-layer so the trainable-parameter walk
+        // (CollectTrainableLayers -> GetSubLayers) reaches its weights and the
+        // optimizer actually updates them. Without this the attentive transformer's
+        // weights never train. (GhostBatchNormalization is not an ILayer<T>, so its
+        // gamma/beta are not collected here; the FC weights are the load-bearing
+        // learnable parameters.)
+        RegisterSubLayer(_fcLayer);
     }
 
     /// <summary>
@@ -389,6 +397,8 @@ public class AttentiveTransformerLayer<T> : LayerBase<T>
     public override void SetTrainingMode(bool isTraining)
     {
         _fcLayer.SetTrainingMode(isTraining);
-        // GhostBatchNormalization uses Forward (training) vs ForwardInference (eval) internally
+        // GhostBatchNormalization is not an ILayer<T>; propagate mode explicitly so it
+        // normalizes with running stats at inference (and for under-sized batches).
+        _bnLayer.SetTrainingMode(isTraining);
     }
 }

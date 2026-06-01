@@ -29,8 +29,19 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationCategory(ActivationCategory.General)]
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationProperty(IsMonotonic = false, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.High)]
-public class MishActivation<T> : ActivationFunctionBase<T>
+// Mish implements IFusedActivation: the FusedLinear/MlpForward path now registers a
+// FusedActivationType.Mish kernel (AiDotNet.Tensors #499, shipped 0.90.0+), so routing Mish
+// through the fused inference path matches its scalar Activate (verified by
+// FusedInferenceParityTests.FusedActivationKernel_MatchesScalarActivation).
+public class MishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.Mish;
+        return true;
+    }
+
     /// <summary>
     /// Determines if the activation function supports operations on individual scalar values.
     /// </summary>

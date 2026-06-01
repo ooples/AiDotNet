@@ -11,6 +11,7 @@ using AiDotNet.MixedPrecision;
 // repo asked for in ooples/AiDotNet.Tensors#276). Alias the local one to a
 // distinct name so the two coexist without ambiguity at every reference.
 using LocalMixedPrecisionConfig = AiDotNet.MixedPrecision.MixedPrecisionConfig;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
@@ -2014,6 +2015,150 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     }
 
     /// <summary>
+    /// Freeze-time BatchNorm folding (compiled-inference, Phase 6). Folds every
+    /// <see cref="BatchNormalizationLayer{T}"/> that directly follows a linear op
+    /// with identity activation (a <see cref="ConvolutionalLayer{T}"/> here) into
+    /// that op's weights and bias, then removes the BatchNorm layer. At inference a
+    /// BatchNorm is the fixed per-channel affine
+    /// <c>y = γ·(x − μ)/√(σ² + ε) + β</c>; for the preceding linear
+    /// <c>z = W·x + b</c> the composition <c>BN(z)</c> equals
+    /// <c>W'·x + b'</c> with per-output-channel <c>s = γ/√(σ² + ε)</c>,
+    /// <c>W' = W·s</c>, <c>b' = (b − μ)·s + β</c> — so folding is lossless (to
+    /// floating-point rounding) and eliminates a full per-element pass plus an
+    /// intermediate tensor per block.
+    ///
+    /// <para><b>Safety:</b> only folds when the preceding layer's activation is the
+    /// identity (no activation, or <see cref="IdentityActivation{T}"/>) — BatchNorm
+    /// must sit directly on the linear output, before any nonlinearity, or the fold
+    /// is invalid. Channel counts must match. Anything else is left untouched.</para>
+    /// </summary>
+    /// <returns>The number of BatchNorm layers folded (0 if none applicable).</returns>
+    internal int FoldBatchNormForInference()
+    {
+        int folded = 0;
+        // Walk back-to-front so removing a BN doesn't shift the indices of layers
+        // we still have to examine.
+        for (int i = _layers.Count - 1; i >= 1; i--)
+        {
+            if (_layers[i] is not BatchNormalizationLayer<T> bn)
+                continue;
+            var prev = _layers[i - 1];
+            if (!IsIdentityActivation(prev))
+                continue;
+            bool didFold = prev switch
+            {
+                ConvolutionalLayer<T> conv => TryFoldBatchNormIntoConv(conv, bn),
+                DenseLayer<T> dense => TryFoldBatchNormIntoDense(dense, bn),
+                _ => false,
+            };
+            if (didFold)
+            {
+                RemoveLayerFromCollection(bn);
+                folded++;
+            }
+        }
+        return folded;
+    }
+
+    /// <summary>A layer's activation is the identity iff it applies no activation
+    /// or an <see cref="IdentityActivation{T}"/> (folding across a real nonlinearity
+    /// would be incorrect).</summary>
+    private static bool IsIdentityActivation(ILayer<T> layer)
+    {
+        if (layer is not LayerBase<T> lb)
+            return false;
+        bool scalarOk = lb.ScalarActivation is null || lb.ScalarActivation is IdentityActivation<T>;
+        bool vectorOk = lb.VectorActivation is null;
+        return scalarOk && vectorOk;
+    }
+
+    /// <summary>
+    /// Folds <paramref name="bn"/>'s inference affine into <paramref name="conv"/>'s
+    /// kernels/biases in place. Kernel layout is <c>[outChannels, inChannels, kH, kW]</c>;
+    /// the BatchNorm operates per output channel. Returns false (folding nothing) when
+    /// the channel counts don't line up.
+    /// </summary>
+    private bool TryFoldBatchNormIntoConv(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> bn)
+    {
+        var kernels = conv.GetFilters();   // live [outC, inC, kH, kW]
+        var biases = conv.GetBiases();     // live [outC]
+        int outC = kernels.Shape[0];
+        if (biases.Length != outC) return false;
+
+        var gamma = bn.GetGamma();
+        var beta = bn.GetBeta();
+        var mean = bn.GetRunningMean();
+        var variance = bn.GetRunningVariance();
+        if (gamma.Length != outC || beta.Length != outC || mean.Length != outC || variance.Length != outC)
+            return false;
+
+        T eps = bn.GetEpsilon();
+        int perChannel = kernels.Length / outC;   // inC * kH * kW
+        var kSpan = kernels.Data.Span;
+        var bSpan = biases.Data.Span;
+        var gSpan = gamma.Data.Span;
+        var beSpan = beta.Data.Span;
+        var mSpan = mean.Data.Span;
+        var vSpan = variance.Data.Span;
+
+        for (int oc = 0; oc < outC; oc++)
+        {
+            // s = γ / sqrt(var + ε);  W'[oc] = W[oc]·s;  b'[oc] = (b[oc] − μ)·s + β
+            T denom = NumOps.Sqrt(NumOps.Add(vSpan[oc], eps));
+            T scale = NumOps.Divide(gSpan[oc], denom);
+            int baseIdx = oc * perChannel;
+            for (int j = 0; j < perChannel; j++)
+                kSpan[baseIdx + j] = NumOps.Multiply(kSpan[baseIdx + j], scale);
+            bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Folds <paramref name="bn"/>'s inference affine into <paramref name="dense"/>'s
+    /// weights/biases in place. Weight layout is <c>[inputSize, outputSize]</c> and the
+    /// BatchNorm operates per output feature, so the scale for output <c>oc</c> multiplies
+    /// column <c>oc</c> of the weight matrix (stride <c>outputSize</c>). Returns false when
+    /// the feature counts don't line up.
+    /// </summary>
+    private bool TryFoldBatchNormIntoDense(DenseLayer<T> dense, BatchNormalizationLayer<T> bn)
+    {
+        var weights = dense.GetWeights();   // live [inputSize, outputSize]
+        var biases = dense.GetBiases();     // live [outputSize]
+        if (weights.Rank != 2) return false;
+        int inSize = weights.Shape[0];
+        int outSize = weights.Shape[1];
+        if (biases.Length != outSize) return false;
+
+        var gamma = bn.GetGamma();
+        var beta = bn.GetBeta();
+        var mean = bn.GetRunningMean();
+        var variance = bn.GetRunningVariance();
+        if (gamma.Length != outSize || beta.Length != outSize || mean.Length != outSize || variance.Length != outSize)
+            return false;
+
+        T eps = bn.GetEpsilon();
+        var wSpan = weights.Data.Span;
+        var bSpan = biases.Data.Span;
+        var gSpan = gamma.Data.Span;
+        var beSpan = beta.Data.Span;
+        var mSpan = mean.Data.Span;
+        var vSpan = variance.Data.Span;
+
+        for (int oc = 0; oc < outSize; oc++)
+        {
+            T scale = NumOps.Divide(gSpan[oc], NumOps.Sqrt(NumOps.Add(vSpan[oc], eps)));
+            for (int i = 0; i < inSize; i++)
+            {
+                int idx = i * outSize + oc;   // row-major [inputSize, outputSize]
+                wSpan[idx] = NumOps.Multiply(wSpan[idx], scale);
+            }
+            bSpan[oc] = NumOps.Add(NumOps.Multiply(NumOps.Subtract(bSpan[oc], mSpan[oc]), scale), beSpan[oc]);
+        }
+        return true;
+    }
+
+    /// <summary>
     /// Clears all layers from the internal layers collection and invalidates the parameter count cache.
     /// </summary>
     /// <remarks>
@@ -3326,8 +3471,66 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// <param name="input">The input tensor.</param>
     /// <returns>The network output.</returns>
     /// <inheritdoc />
+    private bool _layerRandomSeedsWired;
+
+    /// <summary>
+    /// Propagates <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> to every layer (and nested
+    /// sub-layer) so seed-respecting stochastic layers — chiefly <see cref="Layers.DropoutLayer{T}"/>,
+    /// whose mask derives from <see cref="Layers.LayerBase{T}.RandomSeed"/> plus a per-forward
+    /// counter — produce a reproducible stream. No-op when no seed is set (production default), so
+    /// it never changes entropy-seeded behavior; only the test harness's
+    /// <see cref="NeuralNetworkArchitecture{T}.DefaultRandomSeedOverride"/> (or an explicit seed)
+    /// engages it. Each layer gets a distinct derived seed so their RNG streams don't collide.
+    /// </summary>
+    private void WireLayerRandomSeeds()
+    {
+        if (Architecture?.RandomSeed is not int seed) return;
+        var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        foreach (var layer in Layers)
+        {
+            WireLayerRandomSeedRecursive(layer, seedRng);
+        }
+    }
+
+    /// <summary>
+    /// Runs <see cref="WireLayerRandomSeeds"/> exactly once, before the first training forward.
+    /// Subclasses that override <see cref="ForwardForTraining"/> without calling the base
+    /// implementation (e.g. finance models that route through their own native forward) MUST call
+    /// this first, or their stochastic layers (DropoutLayer) train with order-dependent masks and
+    /// the training-trajectory invariants flake / fail only when other tests advance the shared RNG.
+    /// </summary>
+    protected void EnsureLayerRandomSeedsWired()
+    {
+        if (_layerRandomSeedsWired) return;
+        _layerRandomSeedsWired = true;
+        WireLayerRandomSeeds();
+    }
+
+    private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng)
+    {
+        if (layer is Layers.LayerBase<T> baseLayer)
+        {
+            baseLayer.RandomSeed = seedRng.Next();
+            foreach (var sub in baseLayer.GetSubLayers())
+            {
+                WireLayerRandomSeedRecursive(sub, seedRng);
+            }
+        }
+    }
+
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
+        // Propagate the architecture's RandomSeed to every layer once, before the first training
+        // forward, so stochastic layers (notably DropoutLayer, whose mask derives from
+        // RandomSeed + a per-forward counter) produce a REPRODUCIBLE sequence. Without this a
+        // model whose CreateDefault layer chain wasn't seed-wired trains with fresh random dropout
+        // masks each run, making training-trajectory invariants (e.g. MoreData_ShouldNotDegrade)
+        // flake run-to-run. Only runs when a seed is actually set (explicit per-architecture seed,
+        // or the test harness's process-wide DefaultRandomSeedOverride); production with no seed is
+        // unaffected. Eager-init layers already chose their weights, but the loss-comparison tests
+        // clone a single network so init is shared — the dropout stream is the run-to-run variable.
+        EnsureLayerRandomSeedsWired();
+
         // Gradient checkpointing opt-in path. Unify on a single source of
         // truth by consulting BOTH:
         //   (a) the builder-set GradientCheckpointingSegmentSize (populated by
@@ -5064,7 +5267,7 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// double-promote is suppressed because their override is what's invoked
     /// (this base path runs only for models that don't override <c>Train</c>).
     /// </remarks>
-    private (Tensor<T> Input, Tensor<T> Target) NormalizeBatchDim(Tensor<T> input, Tensor<T> target)
+    protected (Tensor<T> Input, Tensor<T> Target) NormalizeBatchDim(Tensor<T> input, Tensor<T> target)
     {
         int expectedUnbatchedRank = GetExpectedUnbatchedInputRank();
         if (expectedUnbatchedRank <= 0) return (input, target);
@@ -5260,6 +5463,33 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         if (_mixedPrecisionContext is null
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer))
             return;
+
+        // Loud one-time fallback warning. The fused path above is the fast path;
+        // when it doesn't engage we drop to the eager tape every step — a large,
+        // previously-SILENT perf cliff. Surface it once per model so "compiled
+        // training does nothing" is never invisible again. Skipped when mixed
+        // precision is active (that path is an intentional, documented fallback,
+        // not a misconfiguration). Suppressible via AIDOTNET_QUIET.
+        // Don't warn when compilation is intentionally disabled — that's an explicit
+        // opt-out (TensorCodecOptions.EnableCompilation = false), not an unexpected
+        // fallback, so the "training is slower" warning would be noisy and misleading.
+        if (!_loggedFusedFallback
+            && _mixedPrecisionContext is null
+            && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+        {
+            _loggedFusedFallback = true;
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+            {
+                var reason = _pendingFusedMissReason ?? "(unspecified gate)";
+                System.Diagnostics.Trace.TraceWarning(
+                    $"[AiDotNet] Compiled fused-training fast path is OFF for {GetType().Name} — " +
+                    $"every Train() step falls back to the eager autograd tape (reason: {reason}). " +
+                    "Training is substantially slower than the compiled path. To re-enable it, use a " +
+                    "fused-compatible optimizer (plain Adam/AdamW/SGD, no adaptive-rate/AMSGrad, float/double) " +
+                    "and keep TensorCodecOptions.EnableCompilation = true. Set TrainingDiagnosticsConfig.Level " +
+                    "= PerStep for per-step path detail, or AIDOTNET_QUIET to silence this warning.");
+            }
+        }
 
         // The parameter walk here exists only to size the buffer on first Train()
         // call. On every subsequent call the buffer is already the right size, and
@@ -6137,6 +6367,24 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     private string? _pendingFusedMissReason;
 
     /// <summary>
+    /// One-shot guard for the loud fused-fallback warning emitted by
+    /// <see cref="TrainWithTape"/>. The compiled fused-training fast path
+    /// silently falls back to the eager autograd tape when its gates aren't
+    /// met (incompatible optimizer config, non-float/double type, mixed
+    /// precision, tracing failure). That fallback is a multi-× perf cliff
+    /// with — until now — zero signal at the default diagnostic level: a user
+    /// could "enable compilation" and unknowingly train on the slow path
+    /// forever (the AIsEval benchmark hit exactly this — the default Adam was
+    /// rejected by <see cref="TryMapToFusedOptimizerConfig"/> and every step
+    /// fell back, invisibly). We surface it ONCE per model instance via
+    /// <see cref="System.Diagnostics.Trace"/> (suppressible with
+    /// <c>AIDOTNET_QUIET</c>); the flag keeps the hot training loop quiet
+    /// after the first warning. <see cref="Configuration.TrainingDiagnosticsConfig"/>
+    /// at PerStep still gives per-step detail for those who want it.
+    /// </summary>
+    private bool _loggedFusedFallback;
+
+    /// <summary>
     /// Attempts the fused-compiled training path — forward + backward + fused
     /// optimizer update all in one compiled kernel. Engages when conditions
     /// permit, returns <c>false</c> to signal the caller to fall back to the
@@ -6373,6 +6621,14 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         out float weightDecay,
         out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule)
     {
+        // Open/closed-compliant dispatch: the optimizer self-describes its fused
+        // config (incl. selecting the AMSGrad kernel variant when it opts in, and
+        // converting any attached LR scheduler) via IFusedOptimizerSpec. Replaces
+        // the old type-switch that had to be edited for every new optimizer and
+        // silently rejected AMSGrad. Only optimizers that actually have a fused
+        // SIMD kernel implement the interface, so there is no central whitelist to
+        // maintain — an optimizer without a kernel simply isn't an
+        // IFusedOptimizerSpec and uses the eager tape.
         optimizerType = default;
         learningRate = 0f;
         beta1 = 0f;
@@ -6381,85 +6637,18 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
         weightDecay = 0f;
         lrSchedule = null;
 
-        // When an LR scheduler is attached, try to convert it to a fused-side
-        // LrSchedule. The fused kernel evaluates the schedule per Step() — no
-        // performance penalty vs constant-LR — so paper-faithful training
-        // recipes (cosine annealing, OneCycle, linear-warmup-cosine, etc.)
-        // get full compile-mode perf. Only unknown / unsupported scheduler
-        // types fall back to eager.
-        if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradBase
-            && gradBase.LearningRateScheduler is not null)
-        {
-            switch (gradBase.LearningRateScheduler)
-            {
-                case AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
-                    lrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule.Cosine(
-                        cosine.BaseLearningRate, cosine.TMax, cosine.EtaMin);
-                    break;
-                case AiDotNet.LearningRateSchedulers.ExponentialLRScheduler expo:
-                    lrSchedule = AiDotNet.Tensors.Engines.Compilation.LrSchedule.Exponential(
-                        expo.BaseLearningRate, expo.Gamma);
-                    break;
-                case AiDotNet.LearningRateSchedulers.ConstantLRScheduler:
-                    // Constant scheduler = effectively no schedule; let the
-                    // GetCurrentLearningRate path below handle the rate.
-                    break;
-                default:
-                    // Unknown scheduler type — fall back to eager so the
-                    // configured schedule isn't silently ignored.
-                    return false;
-            }
-        }
+        if (optimizer is not Optimizers.Fused.IFusedOptimizerSpec spec
+            || !spec.TryGetFusedOptimizerConfig(out var cfg))
+            return false;
 
-        switch (optimizer)
-        {
-            case Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>> adam:
-            {
-                if (adam.GetOptions() is not Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
-                    return false;
-                if (opts.UseAdaptiveLearningRate) return false;
-                // Fused Adam kernel doesn't implement AMSGrad's max-of-second-
-                // moment update rule. Fall back to the eager Adam step which
-                // does (see AdamOptimizer.Step). Mirrors the AdamW + AMSGrad
-                // bail-out a few cases below.
-                if (opts.UseAMSGrad) return false;
-                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam;
-                learningRate = (float)adam.GetCurrentLearningRate();
-                beta1 = (float)opts.Beta1;
-                beta2 = (float)opts.Beta2;
-                epsilon = (float)opts.Epsilon;
-                weightDecay = 0f;
-                return true;
-            }
-            case Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>> adamW:
-            {
-                if (adamW.GetOptions() is not Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
-                    return false;
-                if (opts.UseAdaptiveLearningRate) return false;
-                // Fused AdamW kernel does not implement AMSGrad's max-of-second-moment
-                // update rule. If the user enabled it, fall back to eager so the
-                // configured update rule isn't silently swapped for standard AdamW.
-                if (adamW.UseAMSGrad) return false;
-                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW;
-                learningRate = (float)adamW.GetCurrentLearningRate();
-                beta1 = (float)opts.Beta1;
-                beta2 = (float)opts.Beta2;
-                epsilon = (float)opts.Epsilon;
-                weightDecay = (float)opts.WeightDecay;
-                return true;
-            }
-            case Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> sgd:
-            {
-                if (sgd.GetOptions() is not Models.Options.StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>> opts)
-                    return false;
-                if (opts.UseAdaptiveLearningRate) return false;
-                optimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD;
-                learningRate = (float)sgd.GetCurrentLearningRate();
-                return true;
-            }
-            default:
-                return false;
-        }
+        optimizerType = cfg.Type;
+        learningRate = cfg.LearningRate;
+        beta1 = cfg.Beta1;
+        beta2 = cfg.Beta2;
+        epsilon = cfg.Epsilon;
+        weightDecay = cfg.WeightDecay;
+        lrSchedule = cfg.Schedule;
+        return true;
     }
 
     /// <summary>
@@ -6604,24 +6793,35 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
     /// Used when a network doesn't provide its own optimizer.
     /// </summary>
     /// <remarks>
-    /// Default is AMSGrad-mode Adam (Reddi, Kale, Kumar 2018). Standard
-    /// Adam's bias-corrected m̂ / √v̂ ratio doesn't decay fast enough after
-    /// gradient convergence on some models, so AMSGrad's running v̂_max
-    /// (which guarantees the denominator can only grow) bounds post-
-    /// convergence drift to negligible levels on the base-optimizer path.
-    /// Scope: improves stability for models that go through this
-    /// <c>GetOrCreateBaseOptimizer</c> path. <c>Training_ShouldChangeParameters</c>
-    /// was addressed separately by the ESN parameter-chunk work, and
-    /// <c>MoreData_ShouldNotDegrade</c> failures remain unresolved in other
-    /// areas tracked under #1332. Note that the fused-Adam fast path falls
-    /// back to eager training because the fused kernel does not implement
-    /// AMSGrad's max-second-moment update.
+    /// Default is <b>standard Adam</b> (Kingma &amp; Ba 2015) — matching the
+    /// industry default in PyTorch (<c>torch.optim.Adam(amsgrad=False)</c>),
+    /// TensorFlow/Keras, and Optax. AMSGrad is a niche opt-in variant, not a
+    /// default anywhere; callers who want it set <c>UseAMSGrad = true</c> on a
+    /// supplied optimizer.
+    /// <para>
+    /// History: #1350 flipped this default to AMSGrad to suppress
+    /// post-convergence drift on a couple of recurrent models'
+    /// <c>MoreData_ShouldNotDegrade</c> invariant. That was the wrong lever — it
+    /// only partially helped those models (GRU still drifted past tolerance
+    /// even with AMSGrad; DBM was unchanged), yet it <b>silently disabled the
+    /// compiled fused-training fast path for EVERY model</b> (the fused Adam
+    /// kernel implements standard Adam, correctly omitting the non-standard
+    /// AMSGrad max-second-moment rule), so all models fell back to the slow
+    /// eager tape. The proper drift fix is LR-decay scheduling past convergence
+    /// (as #1350 itself noted), applied per-model — not a non-standard global
+    /// optimizer default. Reverting to standard Adam restores both the industry
+    /// default and the fused fast path.
+    /// </para>
     /// </remarks>
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
+        // Standard Adam with AMSGrad pinned OFF locally (not relying on the
+        // AdamOptimizerOptions default) so the fused compiled-training kernel can map
+        // this optimizer and engage — if that external default ever flips, the fused
+        // fast path must not silently regress.
         return _baseTrainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
+            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = false });
     }
 
     /// <summary>
@@ -7657,6 +7857,25 @@ public abstract class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IInterpreta
                 {
                     var srcLayer = _layers[i];
                     var dstLayer = largeBase._layers[i];
+
+                    // The freshly-constructed destination may carry lazy layers whose
+                    // weight tensors aren't materialized yet (ParameterCount == 0 until
+                    // a forward pass resolves their shape). The source layer has already
+                    // run a forward (its ParameterCount is concrete), so resolve the
+                    // destination from the source's input shape before copying — otherwise
+                    // the ParameterCount guard below skips the copy and the clone keeps the
+                    // destination's random-initialized weights, diverging from the original.
+                    if (dstLayer is LayerBase<T> dstLazy && !dstLazy.IsShapeResolved
+                        && srcLayer.ParameterCount > 0)
+                    {
+                        int[] srcInputShape = srcLayer.GetInputShape();
+                        if (srcInputShape is { Length: > 0 } && Array.TrueForAll(srcInputShape, d => d > 0))
+                        {
+                            try { dstLazy.ResolveFromShape(srcInputShape); }
+                            catch (ArgumentException) { /* layer rejects this shape; leave lazy */ }
+                        }
+                    }
+
                     if (srcLayer.ParameterCount > 0 && dstLayer.ParameterCount == srcLayer.ParameterCount)
                     {
                         dstLayer.SetParameters(srcLayer.GetParameters());
