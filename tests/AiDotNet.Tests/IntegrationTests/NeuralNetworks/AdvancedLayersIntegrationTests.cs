@@ -811,6 +811,8 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task GatedLinearUnitLayer_ParameterCount_IsPositive()
     {
+        await Task.Yield(); // activate [Fact(Timeout=...)] enforcement for this async test
+
         // Arrange
         var layer = new GatedLinearUnitLayer<float>(32, (IActivationFunction<float>?)null);
 
@@ -1572,6 +1574,8 @@ public class AdvancedLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task LSTMLayer_ParameterCount_IsPositive()
     {
+        await Task.Yield(); // activate [Fact(Timeout=...)] enforcement for this async test
+
         // Arrange
         int inputSize = 16;
         int hiddenSize = 32;

@@ -113,7 +113,7 @@ public class FacadeMultiDimInputBuildAsyncTests
     [Fact(Timeout = 60000)]
     public async Task SetActiveFeatureIndices_MultiDimInputModel_DoesNotThrow()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
 
         const int side = 8, channels = 3, classes = 3;
         var cnn = BuildCnn(side, channels, classes);
@@ -138,7 +138,7 @@ public class FacadeMultiDimInputBuildAsyncTests
     [Fact(Timeout = 120000)]
     public async Task Autoencoder_CustomSymmetricLayers_ConstructsAndPredicts()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
 
         // A symmetric autoencoder built from DenseLayers: 64 -> 32 -> 8 -> 32 -> 64.
         // DenseLayer(int outputSize) lazy-initializes its input shape to [-1] (resolved on
@@ -179,7 +179,7 @@ public class FacadeMultiDimInputBuildAsyncTests
     [Fact(Timeout = 60000)]
     public async Task ResidualLayer_WrappingLazyInnerLayer_ConstructsWithoutThrowing()
     {
-        await Task.CompletedTask;
+        await Task.Yield();
 
         // A residual block wrapping a DenseLayer whose input shape is lazily [-1] (resolved
         // on first forward) must not throw at construction. The validation compared the

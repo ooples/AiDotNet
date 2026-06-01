@@ -1290,14 +1290,21 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     protected void UpdateBestSolution(OptimizationStepData<T, TInput, TOutput> currentStepData, ref OptimizationStepData<T, TInput, TOutput> bestStepData)
     {
-        // If bestStepData has never been set by a real evaluation (empty SelectedFeatures
-        // and default fitness), always accept the first real result. This prevents a bug
-        // where the default FitnessScore of 0 is considered "better" than real evaluations
-        // by fitness calculators that treat lower scores as better.
-        bool bestIsUninitialized = bestStepData.SelectedFeatures.Count == 0
-            && NumOps.Equals(bestStepData.FitnessScore, NumOps.Zero);
-
-        if (bestIsUninitialized)
+        // If bestStepData has never been set by a real evaluation, always accept the
+        // first real result. This prevents a bug where the default FitnessScore of 0 is
+        // considered "better" than real evaluations by fitness calculators that treat
+        // lower scores as better.
+        //
+        // The uninitialized signal is "no solution recorded yet" (Solution is null until
+        // the first accept below sets it). It must NOT key off SelectedFeatures.Count == 0:
+        // multi-dimensional-input models (CNN/RNN/etc.) legitimately produce an empty
+        // SelectedFeatures list (feature subsetting doesn't apply — #1468), so a Count==0
+        // sentinel would treat every such step as uninitialized and overwrite a real best
+        // without a fitness comparison whenever the score is 0.
+        // Captured as a local and tested inline (not via an intermediate bool) so the
+        // compiler narrows it to non-null past this guard for the bestResult build below.
+        var bestSolution = bestStepData.Solution;
+        if (bestSolution is null)
         {
             bestStepData.Solution = currentStepData.Solution;
             bestStepData.FitnessScore = currentStepData.FitnessScore;
@@ -1320,7 +1327,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
 
         var bestResult = new ModelResult<T, TInput, TOutput>
         {
-            Solution = bestStepData.Solution,
+            Solution = bestSolution,
             Fitness = bestStepData.FitnessScore,
             FitDetectionResult = bestStepData.FitDetectionResult,
             EvaluationData = bestStepData.EvaluationData,
