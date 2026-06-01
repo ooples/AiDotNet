@@ -149,6 +149,13 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private readonly AiDotNet.Configuration.IAiModelDataPipeline<T, TInput, TOutput> _dataPipeline
         = new AiDotNet.Configuration.AiModelDataPipeline<T, TInput, TOutput>();
 
+    // audit-2026-05 phase 2a slice 2 — training-core concern extracted similarly. The
+    // Configure{Model,Optimizer,Regularization,FitnessCalculator,FitDetector,TrainingPipeline,
+    // CheckpointManager,MemoryManagement,TrainingMonitor} methods delegate here. Legacy fields
+    // below stay as synced caches that BuildAsync and partial-class siblings read from.
+    private readonly AiDotNet.Configuration.IAiModelTrainingCore<T, TInput, TOutput> _trainingCore
+        = new AiDotNet.Configuration.AiModelTrainingCore<T, TInput, TOutput>();
+
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
@@ -719,7 +726,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureRegularization(IRegularization<T, TInput, TOutput> regularization)
     {
-        _regularization = regularization;
+        _trainingCore.ConfigureRegularization(regularization);
+        _regularization = _trainingCore.Regularization;
         return this;
     }
 
@@ -736,7 +744,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFitnessCalculator(IFitnessCalculator<T, TInput, TOutput> calculator)
     {
-        _fitnessCalculator = calculator;
+        _trainingCore.ConfigureFitnessCalculator(calculator);
+        _fitnessCalculator = _trainingCore.FitnessCalculator;
         return this;
     }
 
@@ -752,7 +761,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFitDetector(IFitDetector<T, TInput, TOutput> detector)
     {
-        _fitDetector = detector;
+        _trainingCore.ConfigureFitDetector(detector);
+        _fitDetector = _trainingCore.FitDetector;
         return this;
     }
 
@@ -768,7 +778,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureModel(IFullModel<T, TInput, TOutput> model)
     {
-        _model = model;
+        _trainingCore.ConfigureModel(model);
+        _model = _trainingCore.Model;
         return this;
     }
 
@@ -784,7 +795,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureOptimizer(IOptimizer<T, TInput, TOutput> optimizationAlgorithm)
     {
-        _optimizer = optimizationAlgorithm;
+        _trainingCore.ConfigureOptimizer(optimizationAlgorithm);
+        _optimizer = _trainingCore.Optimizer;
         return this;
     }
 
@@ -5398,7 +5410,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingPipeline(
         TrainingPipelineConfiguration<T, TInput, TOutput>? configuration = null)
     {
-        _trainingPipelineConfiguration = configuration;
+        _trainingCore.ConfigureTrainingPipeline(configuration);
+        _trainingPipelineConfiguration = _trainingCore.TrainingPipelineConfiguration;
         return this;
     }
 
@@ -6614,7 +6627,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager)
     {
-        _checkpointManager = manager;
+        _trainingCore.ConfigureCheckpointManager(manager);
+        _checkpointManager = _trainingCore.CheckpointManager;
         return this;
     }
 
@@ -6667,7 +6681,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureMemoryManagement(
         Training.Memory.TrainingMemoryConfig? configuration = null)
     {
-        _memoryConfig = configuration;
+        _trainingCore.ConfigureMemoryManagement(configuration);
+        _memoryConfig = _trainingCore.MemoryConfig;
         return this;
     }
 
@@ -6682,7 +6697,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTrainingMonitor(ITrainingMonitor<T> monitor)
     {
-        _trainingMonitor = monitor;
+        _trainingCore.ConfigureTrainingMonitor(monitor);
+        _trainingMonitor = _trainingCore.TrainingMonitor;
         return this;
     }
 
