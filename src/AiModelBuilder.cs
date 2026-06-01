@@ -174,6 +174,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private readonly AiDotNet.Configuration.IAiModelStorage<T, TInput, TOutput> _storage
         = new AiDotNet.Configuration.AiModelStorage<T, TInput, TOutput>();
 
+    // audit-2026-05 phase 2a slice 10 — observability concern (benchmarking, profiling,
+    // telemetry, GPU diagnostics).
+    private readonly AiDotNet.Configuration.IAiModelObservability _observability
+        = new AiDotNet.Configuration.AiModelObservability();
+
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
@@ -6251,7 +6256,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null)
     {
-        _telemetryConfig = config;
+        _observability.ConfigureTelemetry(config);
+        _telemetryConfig = _observability.TelemetryConfig;
         return this;
     }
 
@@ -6504,23 +6510,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureGpuDiagnostics(
         AiDotNet.Configuration.GpuDiagnosticsOptions? options = null)
     {
-        if (options is null) return this;
-
-        // Level wins over Verbose when both set — Level is the richer API.
-        if (options.Level is AiDotNet.Configuration.GpuDiagnosticLevel level)
-        {
-            AiDotNet.Configuration.GpuDiagnosticsConfig.Level = level;
-        }
-        else if (options.Verbose is bool verbose)
-        {
-            AiDotNet.Configuration.GpuDiagnosticsConfig.Verbose = verbose;
-        }
-
-        if (options.Sink is AiDotNet.Configuration.GpuDiagnosticSink sink)
-        {
-            AiDotNet.Configuration.GpuDiagnosticsConfig.Sink = sink;
-        }
-
+        _observability.ConfigureGpuDiagnostics(options);
         return this;
     }
 
@@ -6538,7 +6528,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null)
     {
-        _benchmarkingOptions = options ?? new BenchmarkingOptions();
+        _observability.ConfigureBenchmarking(options);
+        _benchmarkingOptions = _observability.BenchmarkingOptions;
         return this;
     }
 
@@ -6571,7 +6562,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null)
     {
-        _profilingConfig = config ?? new ProfilingConfig { Enabled = true };
+        _observability.ConfigureProfiling(config);
+        _profilingConfig = _observability.ProfilingConfig;
         return this;
     }
 
