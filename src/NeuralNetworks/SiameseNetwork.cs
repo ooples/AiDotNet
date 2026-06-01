@@ -658,6 +658,20 @@ public class SiameseNetwork<T> : NeuralNetworkBase<T>, IAuxiliaryLossLayer<T>
         int embeddingSize = Architecture.GetOutputShape()[0];
         _outputLayer = new DenseLayer<T>(1, new SigmoidActivation<T>() as IActivationFunction<T>);
         _outputLayer.SetParameters(outputLayerParams);
+
+        // Re-wire the base Layers list to the freshly deserialized _subnetwork /
+        // _outputLayer, exactly as the constructor does. The base deserialize
+        // populated Layers from the generic layer stream BEFORE this method ran,
+        // so without this call Layers would reference stale layer objects while
+        // _subnetwork/_outputLayer point to these new ones. Training would then
+        // forward through _subnetwork/_outputLayer (ForwardForTraining) but the
+        // optimizer would read and update the disconnected Layers parameters —
+        // the clone (DeepCopy/Clone routes through this path) trained on a
+        // mismatched parameter set and its loss diverged with more iterations
+        // (MoreData_ShouldNotDegrade: loss rose instead of falling). Re-running
+        // InitializeLayers binds Layers to the live objects so forward and
+        // update share one parameter surface.
+        InitializeLayers();
     }
 
     /// <summary>

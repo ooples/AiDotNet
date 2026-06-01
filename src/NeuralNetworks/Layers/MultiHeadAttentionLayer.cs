@@ -1098,11 +1098,19 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         if (_alibiLayer != null)
         {
-            // Use FlashAttention with ALiBi bias injection
+            // Use FlashAttention with ALiBi bias injection.
+            // queries/keys/values are non-contiguous views (Engine.TensorPermute above),
+            // and the fused-attention kernel's double->float conversion path
+            // (FusedAttention.DoubleToFloat) requires a contiguous span. The non-ALiBi
+            // branch routes through Engine.ScaledDotProductAttention, which tolerates
+            // views, so only this fused path needs the inputs materialized contiguous.
+            var qContig = queries.Contiguous();
+            var kContig = keys.Contiguous();
+            var vContig = values.Contiguous();
             var aliBiBias = _alibiLayer.ComputeBias(seqLengthQ, seqLengthKV, useCausalMask: UseCausalMask);
             var flashConfig = FlashAttentionConfig.Default;
             flashConfig.ReturnAttentionWeights = true;
-            var (flashOutput, flashWeights) = FlashAttention<T>.Forward(queries, keys, values, flashConfig, attentionBias: aliBiBias);
+            var (flashOutput, flashWeights) = FlashAttention<T>.Forward(qContig, kContig, vContig, flashConfig, attentionBias: aliBiBias);
             context_4D = flashOutput;
             attentionWeights4D = flashWeights ?? new Tensor<T>(new[] { batchSize, _headCount, seqLengthQ, seqLengthKV });
         }

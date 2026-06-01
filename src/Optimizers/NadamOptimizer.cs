@@ -25,8 +25,28 @@ namespace AiDotNet.Optimizers;
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this Nadam instance for the fused-compiled training kernel
+    /// (Tensors <c>OptimizerType.Nadam</c> — Nesterov-accelerated Adam). No
+    /// decoupled weight decay, so WeightDecay is 0. Declines (falls back to
+    /// eager) when an adaptive LR or an unmappable scheduler is configured.
+    /// Verified fused-vs-eager parity in FusedOptimizerParityTests.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.Nadam,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the Nadam optimizer.
     /// </summary>

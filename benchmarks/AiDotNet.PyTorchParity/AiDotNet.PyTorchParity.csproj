@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <!-- This is a manual benchmark harness, not a unit-test project. Exclude
+         it from coverage and keep it out of the default `dotnet test` run. -->
+    <IsTestProject>false</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- LOCAL project reference (NOT a NuGet package). This is the whole point
+         of mirroring AIsEval in-repo: the harness links the working-tree
+         AiDotNet source, so it measures the CURRENT branch's behaviour — e.g.
+         the PR #1469 fused-training gate + FeedForwardNeuralNetwork.Predict ->
+         MlpForward wiring — without waiting for a NuGet publish. AIsEval, by
+         contrast, can only benchmark a released package. -->
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -655,9 +655,21 @@ public class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>
         // Layer norm now supports any-rank tensors (normalizes over last dimension)
         var normalized1 = _norm1.Forward(residual1);
 
-        // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed)
-        var ffExpanded = _feedForward1.Forward(normalized1);
-        var ffProjected = _feedForward2.Forward(ffExpanded);
+        // Standard transformer FFN: Linear(embed -> ff) + GELU + Linear(ff -> embed),
+        // applied independently to every (batch, seq) position. The underlying
+        // DenseLayer collapses 3D input to 2D batch-features ([B, S, E] -> [B, E]),
+        // which broke the residual add at the bottom of this method (shape mismatch
+        // [B, S, E] vs [B, E] — every VideoCLIP test hit this with [1, 5, 128] vs
+        // [1, 128]). Flatten the leading [batch, seq] dims into one axis before the
+        // FFN, then reshape back; mathematically identical to running the FFN per
+        // position because the Linear layers don't mix the seq axis.
+        int ffBatch = normalized1.Shape[0];
+        int ffSeq = normalized1.Shape[1];
+        int ffEmbed = normalized1.Shape[2];
+        var ffInput2D = Engine.Reshape(normalized1, [ffBatch * ffSeq, ffEmbed]);
+        var ffExpanded = _feedForward1.Forward(ffInput2D);
+        var ffProjected2D = _feedForward2.Forward(ffExpanded);
+        var ffProjected = Engine.Reshape(ffProjected2D, [ffBatch, ffSeq, ffEmbed]);
 
         // Residual connection: normalized1 + ffProjected
         var residual2 = Engine.TensorAdd(normalized1, ffProjected);

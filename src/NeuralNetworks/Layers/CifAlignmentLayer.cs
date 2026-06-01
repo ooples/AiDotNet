@@ -56,7 +56,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.FeatureExtraction)]
 [LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
+[LayerProperty(IsTrainable = false, ChangesShape = false, ExpectedInputRank = 3, Cost = ComputeCost.Medium, TestInputShape = "1, 4, 8", TestConstructorArgs = "8")]
 public class CifAlignmentLayer<T> : LayerBase<T>
 {
     private readonly int _encoderDim;
@@ -64,8 +64,33 @@ public class CifAlignmentLayer<T> : LayerBase<T>
     private readonly T _tailThreshold;
     private readonly DenseLayer<T> _alphaPredictor;
 
-    /// <inheritdoc/>
-    public override bool SupportsTraining => true;
+    /// <summary>
+    /// Currently <c>false</c>: this layer's <see cref="Forward"/>
+    /// materializes α and the integrated hidden states into scalar T
+    /// values via per-element <see cref="Tensor{T}"/> indexers and
+    /// scalar <c>NumOps</c> arithmetic, which the tape autodiff
+    /// path cannot record. Returning <c>true</c> while no gradient
+    /// actually reaches <see cref="_alphaPredictor"/> would advertise
+    /// a learnable alignment head that's secretly frozen — that's
+    /// worse than a forward-only contract because callers would
+    /// expect the alpha predictor to converge but it never would.
+    /// </summary>
+    /// <remarks>
+    /// Fixing this to <c>true</c> requires one of:
+    /// <list type="bullet">
+    /// <item>A custom <c>Backward</c> implementation that walks
+    /// recorded CIF split decisions in reverse and accumulates
+    /// gradients for the alpha predictor (analytic derivatives of
+    /// the integrate-and-fire dynamics).</item>
+    /// <item>A soft / differentiable CIF re-formulation (e.g.
+    /// Zhao &amp; Gao 2024 "Distill the soft CIF") that replaces the
+    /// hard threshold-crossing with a continuous accumulation matrix
+    /// the tape can record through standard <c>Engine</c> ops.</item>
+    /// </list>
+    /// Tracked as a dedicated CIF-training follow-up; until then this
+    /// layer is inference-only (<see cref="SupportsTraining"/> is false).
+    /// </remarks>
+    public override bool SupportsTraining => false;
 
     /// <inheritdoc/>
     public override long ParameterCount => _alphaPredictor.ParameterCount;
@@ -85,7 +110,28 @@ public class CifAlignmentLayer<T> : LayerBase<T>
         : base(new[] { -1, -1, encoderDim }, new[] { -1, -1, encoderDim })
     {
         if (encoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(encoderDim));
-        if (threshold <= 0) throw new ArgumentOutOfRangeException(nameof(threshold));
+        // Reject non-finite thresholds first: NaN slips past every relational guard below
+        // (NaN < 1.0, NaN > threshold are both false), and ±Inf would corrupt the cumulative
+        // integrate-and-fire comparisons once converted to T.
+        if (double.IsNaN(threshold) || double.IsInfinity(threshold))
+            throw new ArgumentOutOfRangeException(nameof(threshold), threshold, "threshold must be a finite number.");
+        if (double.IsNaN(tailThreshold) || double.IsInfinity(tailThreshold))
+            throw new ArgumentOutOfRangeException(nameof(tailThreshold), tailThreshold, "tailThreshold must be a finite number.");
+        // Reject threshold < 1.0 — the single-fire-per-timestep
+        // assumption baked into the fixed [B, S, D] output shape only
+        // holds when α_t ∈ [0, 1] cannot cross the threshold more
+        // than once. For threshold < 1.0 a single α_t could cross
+        // multiple times; the loop would emit only one token per step
+        // (under-emitting) AND would carry an already-over-threshold
+        // remainder into the next step (further corrupting the
+        // accumulation invariant). The paper's stated value is 1.0;
+        // future support for multi-fire would need either a dynamic
+        // output shape or an inner "drain the remainder" loop.
+        if (threshold < 1.0)
+            throw new ArgumentOutOfRangeException(nameof(threshold), threshold,
+                "threshold must be >= 1.0 — values below 1.0 admit multi-fire-per-timestep " +
+                "which the single-fire output-shape assumption (S as upper bound on N) does not support. " +
+                "Gao 2022 §3.2 prescribes 1.0.");
         if (tailThreshold < 0 || tailThreshold > threshold)
             throw new ArgumentOutOfRangeException(nameof(tailThreshold),
                 $"tailThreshold must be in [0, threshold={threshold}].");

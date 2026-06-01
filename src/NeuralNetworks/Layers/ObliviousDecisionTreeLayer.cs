@@ -490,4 +490,23 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>
             result[offset++] = _leafValues[i];
         return result;
     }
+
+    /// <inheritdoc/>
+    public override void SetParameters(Vector<T> parameters)
+    {
+        // Mirror GetParameters' layout: feature-selection weights, then thresholds, then leaf
+        // values. Writing the elements in place updates the same registered tensors the tape
+        // trains, so the Clone serialize -> deserialize round-trip restores learned weights.
+        int expected = _featureSelectionWeights.Length + _thresholds.Length + _leafValues.Length;
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters, got {parameters.Length}.", nameof(parameters));
+        }
+
+        int offset = 0;
+        for (int i = 0; i < _featureSelectionWeights.Length; i++) _featureSelectionWeights[i] = parameters[offset++];
+        for (int i = 0; i < _thresholds.Length; i++) _thresholds[i] = parameters[offset++];
+        for (int i = 0; i < _leafValues.Length; i++) _leafValues[i] = parameters[offset++];
+    }
 }

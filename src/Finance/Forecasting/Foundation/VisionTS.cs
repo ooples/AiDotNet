@@ -89,6 +89,12 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
     private FoundationModelSize _modelSize;
     private double _maskRatio;
 
+    // RevIN (reversible instance normalization, Kim et al. 2022) statistics.
+    // VisionTS normalizes each input series before the ViT and restores the level
+    // on the output so distinct input scales produce distinct forecasts.
+    private Vector<T> _revinMean = new Vector<T>(0);
+    private Vector<T> _revinStd = new Vector<T>(0);
+
     #endregion
 
     #region Properties
@@ -378,6 +384,8 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         int batchSize = input.Rank > 1 ? input.Shape[0] : 1;
         int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length;
         var result = new Tensor<T>(input._shape);
+        _revinMean = new Vector<T>(batchSize);
+        _revinStd = new Vector<T>(batchSize);
         for (int b = 0; b < batchSize; b++)
         {
             T mean = NumOps.Zero;
@@ -387,9 +395,38 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
             for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length) { var diff = NumOps.Subtract(input[idx], mean); variance = NumOps.Add(variance, NumOps.Multiply(diff, diff)); } }
             variance = NumOps.Divide(variance, NumOps.FromDouble(seqLen));
             T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+            // Store per-instance stats so DenormalizeForecast can restore the scale.
+            _revinMean[b] = mean;
+            _revinStd[b] = std;
             for (int t = 0; t < seqLen; t++) { int idx = b * seqLen + t; if (idx < input.Length && idx < result.Length) result.Data.Span[idx] = NumOps.Divide(NumOps.Subtract(input[idx], mean), std); }
         }
         return result;
+    }
+
+    /// <summary>
+    /// RevIN reverse step (Kim et al. 2022): restores each instance's mean/std to the
+    /// forecast so it is expressed on the input's original scale. The multiply/add go
+    /// through the Engine so the forecast stays on the autodiff tape.
+    /// </summary>
+    private Tensor<T> DenormalizeForecast(Tensor<T> forecast)
+    {
+        int batch = forecast.Shape.Length > 1 ? forecast.Shape[0] : 1;
+        if (_revinMean.Length != batch || forecast.Length % batch != 0)
+            return forecast;
+
+        var meanT = new Tensor<T>(new[] { batch, 1 });
+        var stdT = new Tensor<T>(new[] { batch, 1 });
+        for (int b = 0; b < batch; b++)
+        {
+            meanT.Data.Span[b] = _revinMean[b];
+            stdT.Data.Span[b] = _revinStd[b];
+        }
+
+        bool reshaped = forecast.Rank != 2;
+        var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
+        var scaled = Engine.TensorBroadcastMultiply(work, stdT);
+        var shifted = Engine.TensorBroadcastAdd(scaled, meanT);
+        return reshaped ? Engine.Reshape(shifted, forecast._shape) : shifted;
     }
 
     /// <inheritdoc/>
@@ -417,9 +454,45 @@ public class VisionTS<T> : TimeSeriesFoundationModelBase<T>
         if (current.Rank == 1) { current = current.Reshape(new[] { 1, current.Length }); addedBatchDim = true; }
         foreach (var layer in Layers)
             current = layer.Forward(current);
+        // RevIN reverse: restore the input's per-instance level/scale so distinct
+        // input levels yield distinct forecasts (the ViT sees only the normalized series).
+        current = DenormalizeForecast(current);
         if (addedBatchDim && current.Rank == 2 && current.Shape[0] == 1)
             current = current.Reshape(new[] { current.Shape[1] });
         return current;
+    }
+
+    /// <summary>
+    /// Training-mode forward. Routes through <see cref="ForwardNative"/> so training
+    /// uses the same RevIN normalize/denormalize as inference and keeps training mode
+    /// (dropout) active, instead of the base default that flips to inference.
+    /// </summary>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
+    {
+        return ForwardNative(input);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Mirrors <see cref="ForwardNative"/>'s preprocessing so the captured activations match the
+    /// real forward pass: a bare rank-1 context is RevIN-normalized and given a leading batch
+    /// axis before it reaches the patch <c>ReshapeLayer</c>.
+    /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode)
+            return base.GetNamedLayerActivations(input);
+
+        var activations = new Dictionary<string, Tensor<T>>();
+        var current = ApplyInstanceNormalization(input);
+        if (current.Rank == 1)
+            current = current.Reshape(new[] { 1, current.Length });
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            current = Layers[i].Forward(current);
+            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
+        }
+        return activations;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

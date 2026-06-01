@@ -493,8 +493,8 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
     /// <para>
     /// <b>For Beginners:</b> The learning rate is like a step size when the model is learning.
     /// Too large and it overshoots the best answer; too small and it takes forever to learn.
-    /// The default of 0.001 works well with the AdamW optimizer. If training is unstable
-    /// (loss jumping up and down), try halving it.
+    /// The default of 0.01 matches Lample et al. 2016's SGD learning rate (paired with
+    /// gradient clipping at 5.0). If training is unstable (loss jumping up and down), try halving it.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when value is not positive.</exception>
@@ -509,7 +509,7 @@ public class BiLSTMCRFOptions : NeuralNetworkOptions
             _learningRate = value;
         }
     }
-    private double _learningRate = 1e-3;
+    private double _learningRate = 0.01;
 
     /// <summary>
     /// Gets or sets the dropout rate for regularization during training.

@@ -1237,10 +1237,14 @@ public class OpenSora<T> : NeuralNetworkBase<T>
         // Re-initialize noise schedule with restored inference steps
         (_betas, _alphasCumprod) = InitializeNoiseSchedule(_numInferenceSteps);
 
-        // Reinitialize layers with the restored configuration
-        // Clear existing layers and re-initialize using the proper pattern
-        Layers.Clear();
-        InitializeLayers();
+        // The layers (with their trained weights) are already reconstructed by the base
+        // DeserializeInternalUnchecked before this override runs. Do NOT clear Layers +
+        // call InitializeLayers — that would discard the deserialized weights and
+        // re-randomize the model. Instead re-point the cached DiT/VAE layer references
+        // (_patchEmbed, _ditQKV, _ditAttnProj, _ditFFN1/2, _textProjection, _timeEmbed,
+        // _finalLayer, _vaeDecoder, _vaeEncoder) at the freshly deserialized Layers so
+        // the forward pass routes through the loaded weights.
+        ExtractLayerReferences();
     }
 
     protected override IFullModel<T, Tensor<T>, Tensor<T>> CreateNewInstance() =>

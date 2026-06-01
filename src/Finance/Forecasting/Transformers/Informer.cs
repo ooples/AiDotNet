@@ -333,6 +333,12 @@ public class Informer<T> : ForecastingModelBase<T>
         if (Layers.Count == 0)
             return;
 
+        // Idempotent: runs in the ctor AND after deserialize; clear the encoder/
+        // decoder lists first so the second call rebinds rather than appending a
+        // doubled stack (which makes a clone diverge from the original).
+        _encoderLayers.Clear();
+        _decoderLayers.Clear();
+
         _inputEmbedding = Layers[0];
 
         int encoderStartIndex = 1;
@@ -531,6 +537,10 @@ public class Informer<T> : ForecastingModelBase<T>
         _distillingFactor = reader.ReadInt32();
         _dropout = reader.ReadDouble();
         _useInstanceNormalization = reader.ReadBoolean();
+
+        // Re-bind cached layer references to the deserialized (weight-loaded)
+        // layers so a clone runs on the loaded weights, not random init.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -813,24 +823,11 @@ public class Informer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            var denormalized = new Tensor<T>(input._shape);
-            int batchSize = input.Shape[0];
-            int horizonLen = input.Shape[1];
-            int features = input.Shape[2];
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int t = 0; t < horizonLen; t++)
-                {
-                    for (int f = 0; f < features; f++)
-                    {
-                        var scaled = NumOps.Multiply(input[b, t, f], _instanceStd[b, 0, f]);
-                        denormalized[b, t, f] = NumOps.Add(scaled, _instanceMean[b, 0, f]);
-                    }
-                }
-            }
-
-            return denormalized;
+            // Tape-connected denormalization (output * std + mean, stats [B,1,F]
+            // broadcast across time). Manual per-element copy detached the graph
+            // before the loss, zeroing gradients. Stats are constants (paper-faithful).
+            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
+            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
         }
     }
 
@@ -847,27 +844,27 @@ public class Informer<T> : ForecastingModelBase<T>
         int batchSize = input.Shape[0];
         int seqLen = input.Shape[1];
         int features = input.Shape[2];
+        int factor = _distillingFactor;
+        int newSeqLen = (seqLen + factor - 1) / factor;
 
-        int newSeqLen = (seqLen + 1) / _distillingFactor;
-        var distilled = new Tensor<T>(new[] { batchSize, newSeqLen, features });
-
-        for (int b = 0; b < batchSize; b++)
+        // Tape-connected distilling max-pool (stride = factor): pad the time axis
+        // up to newSeqLen*factor by repeating the last frame (matches the old
+        // idx2 clamp), reshape into [batch, newSeqLen, factor, features] and
+        // max over the window. The previous manual element copy built a detached
+        // tensor mid-encoder, so the loss had no gradient path back to the
+        // encoder layers (Informer distilling, Zhou et al. 2021).
+        var x = input;
+        int padded = newSeqLen * factor;
+        if (padded != seqLen)
         {
-            for (int t = 0; t < newSeqLen; t++)
-            {
-                int idx1 = t * _distillingFactor;
-                int idx2 = Math.Min(idx1 + 1, seqLen - 1);
-
-                for (int f = 0; f < features; f++)
-                {
-                    T val1 = input[b, idx1, f];
-                    T val2 = input[b, idx2, f];
-                    distilled[b, t, f] = NumOps.GreaterThan(val1, val2) ? val1 : val2;
-                }
-            }
+            var last = Engine.TensorNarrow(input, 1, seqLen - 1, 1);
+            var parts = new List<Tensor<T>> { input };
+            for (int i = 0; i < padded - seqLen; i++) parts.Add(last);
+            x = Engine.Concat(parts.ToArray(), 1);
         }
 
-        return distilled;
+        var windows = Engine.Reshape(x, new[] { batchSize, newSeqLen, factor, features });
+        return Engine.ReduceMax(windows, new[] { 2 }, false, out _);
     }
 
     /// <summary>
@@ -884,24 +881,22 @@ public class Informer<T> : ForecastingModelBase<T>
         int features = encoderOutput.Shape[2];
         int decoderLen = _labelLength + _predictionHorizon;
 
-        var decoderInput = new Tensor<T>(new[] { batchSize, decoderLen, features });
-
         int encoderLen = encoderOutput.Shape[1];
         int labelStart = Math.Max(0, encoderLen - _labelLength);
         int copyLen = Math.Min(_labelLength, encoderLen);
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < copyLen; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    decoderInput[b, t, f] = encoderOutput[b, labelStart + t, f];
-                }
-            }
-        }
+        // Tape-connected decoder-input assembly: the leading copyLen steps are the
+        // encoder's label window (tape-connected slice so its gradient — and thus
+        // the encoder's — flows), the prediction window is zero-initialised (the
+        // Informer "start token" placeholder). The previous manual element copy
+        // built a detached tensor, so the decoder's input carried no gradient and
+        // (with this tape requiring tracked inputs) the encoder never trained.
+        var labelSlice = Engine.TensorNarrow(encoderOutput, 1, labelStart, copyLen); // [b, copyLen, f]
+        if (copyLen >= decoderLen)
+            return Engine.TensorNarrow(labelSlice, 1, 0, decoderLen);
 
-        return decoderInput;
+        var placeholder = new Tensor<T>(new[] { batchSize, decoderLen - copyLen, features });
+        return Engine.Concat(new[] { labelSlice, placeholder }, 1);
     }
 
     /// <summary>
@@ -921,20 +916,15 @@ public class Informer<T> : ForecastingModelBase<T>
         int predStart = Math.Max(0, decoderLen - _predictionHorizon);
         int predLen = Math.Min(_predictionHorizon, decoderLen);
 
-        var prediction = new Tensor<T>(new[] { batchSize, _predictionHorizon, features });
+        // Tape-connected extraction of the last predictionHorizon steps. This sits
+        // BETWEEN the output projection and the loss, so the previous manual copy
+        // detached the entire forward graph — every parameter got a zero gradient.
+        var slice = Engine.TensorNarrow(decoderOutput, 1, predStart, predLen); // [b, predLen, f]
+        if (predLen >= _predictionHorizon)
+            return slice;
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < predLen; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    prediction[b, t, f] = decoderOutput[b, predStart + t, f];
-                }
-            }
-        }
-
-        return prediction;
+        var pad = new Tensor<T>(new[] { batchSize, _predictionHorizon - predLen, features });
+        return Engine.Concat(new[] { slice, pad }, 1);
     }
 
     #endregion

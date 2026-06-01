@@ -587,7 +587,36 @@ public class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutp
 
     private Tensor<T>[] ConvertToSequence(TInput inputs)
     {
-        // Convert input to sequence of tensors
+        // Convert input to sequence of tensors. A Matrix<T> [rows, cols] is the
+        // common meta-learning support/query shape: each row is one timestep and
+        // its `cols` entries are that step's feature vector. Handling it here (and
+        // identically in ConvertInputToTensor) is what keeps the controller's
+        // assembled input width stable across the train→predict flow — without it
+        // both methods fell through to mismatched defaults (width 1 vs 2), which
+        // forced the controller to silently resize its learned input-gate weights.
+        if (inputs is Matrix<T> matrix)
+        {
+            // Fail fast on empty matrices: a zero-row/column input would produce a
+            // degenerate (empty or width-1) sequence and silently corrupt the
+            // controller's learned input width later, rather than surfacing the
+            // misconfiguration here.
+            if (matrix.Rows <= 0 || matrix.Columns <= 0)
+                throw new ArgumentException(
+                    $"Matrix input must have positive dimensions for NTM sequence conversion; " +
+                    $"got [{matrix.Rows} x {matrix.Columns}].",
+                    nameof(inputs));
+
+            var sequence = new Tensor<T>[matrix.Rows];
+            for (int r = 0; r < matrix.Rows; r++)
+            {
+                var row = new Tensor<T>(new int[] { matrix.Columns });
+                for (int c = 0; c < matrix.Columns; c++)
+                    row[c] = matrix[r, c];
+                sequence[r] = row;
+            }
+            return sequence;
+        }
+
         if (inputs is Tensor<T> tensor)
         {
             if (tensor.Shape.Length == 1)
@@ -850,6 +879,19 @@ public class NTMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadat
             {
                 result[i] = vector[i];
             }
+            return result;
+        }
+
+        // A Matrix<T> [rows, cols] feature vector: take the first row's `cols`
+        // features. This MUST match ConvertToSequence's per-row featureSize (cols)
+        // so the controller's assembled input width is identical on the train
+        // (ConvertToSequence) and predict (here) paths — otherwise the input-gate
+        // weights silently resize between training and inference.
+        if (input is Matrix<T> matrix && matrix.Rows > 0)
+        {
+            var result = new Tensor<T>(new int[] { matrix.Columns });
+            for (int c = 0; c < matrix.Columns; c++)
+                result[c] = matrix[0, c];
             return result;
         }
 
@@ -1242,7 +1284,14 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
     private static IEngine Engine => AiDotNetEngine.Current;
 
     private readonly NTMOptions<T, TInput, TOutput> _options;
-    private readonly int _inputSize;
+    // Not readonly: the true controller input width (external input + read
+    // vectors) is only known at the first forward, so _inputSize and the
+    // input-gate weights are resolved there (see Forward).
+    private int _inputSize;
+    // True once the first forward has resolved the real input width. After that
+    // a width change is a caller bug (inconsistent input assembly), not a re-init
+    // trigger — re-init would silently wipe learned/loaded _weightsInput.
+    private bool _inputSizeResolved;
     private readonly int _hiddenSize;
     private readonly int _memoryWidth;
     private readonly int _numReadHeads;
@@ -1251,7 +1300,7 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
 
     // LSTM gate weights: input, forget, cell, output gates
     // Input weights: [4 * hiddenSize, inputSize]
-    private readonly Tensor<T> _weightsInput;
+    private Tensor<T> _weightsInput;
     // Hidden weights: [4 * hiddenSize, hiddenSize]
     private readonly Tensor<T> _weightsHidden;
     // Biases: [4 * hiddenSize]
@@ -1358,14 +1407,43 @@ public class LSTMNTMController<T, TInput, TOutput> : INTMController<T>
         var fullInput = input;
         int inputLength = GetTensorLength(fullInput);
 
+        // Lazy input resolution: the constructor can only ESTIMATE the controller
+        // input width; the real width (external input + read vectors) is known
+        // only at the first forward. Resolve the input-gate weights to that actual
+        // width exactly ONCE. After that the width must be stable — the NTM input
+        // is [external features + numReadHeads × memoryWidth], all fixed — so a
+        // later change means the caller assembled the input inconsistently (the
+        // train and predict paths now share one Matrix→features convention, see
+        // ConvertToSequence / ConvertInputToTensor). Reinitializing on drift would
+        // silently discard learned/loaded input-gate weights, so we fail fast
+        // instead (CodeRabbit #1455).
+        if (!_inputSizeResolved)
+        {
+            if (_weightsInput.Shape[1] != inputLength)
+            {
+                double resolvedScale = Math.Sqrt(2.0 / (inputLength + _hiddenSize));
+                _weightsInput = InitializeTensor(new int[] { 4 * _hiddenSize, inputLength }, resolvedScale);
+            }
+            _inputSize = inputLength;
+            _inputSizeResolved = true;
+        }
+        else if (inputLength != _inputSize)
+        {
+            throw new ArgumentException(
+                $"NTM controller input width changed from {_inputSize} to {inputLength} after the " +
+                "first forward. The controller input width (external features + read vectors) must be " +
+                "stable once resolved; reinitializing the input-gate weights would discard learned " +
+                "parameters. Check that the input is assembled consistently across train and predict.",
+                nameof(input));
+        }
+
         // LSTM forward pass: compute all four gates
         // gates = W_input * x + W_hidden * h + b
         var gates = new Tensor<T>(new int[] { 4 * _hiddenSize });
 
         // gates = W_input @ fullInput + W_hidden @ hiddenState + bias — vectorized
         int gateSize = 4 * _hiddenSize;
-        int validInputSize = Math.Min(inputLength, _weightsInput.Shape[1]);
-        var inputCol = fullInput.Reshape(validInputSize, 1);
+        var inputCol = fullInput.Reshape(inputLength, 1);
         var inputContrib = Engine.TensorMatMul(_weightsInput, inputCol).Reshape(gateSize);
         var hiddenCol = _hiddenState.Reshape(_hiddenSize, 1);
         var hiddenContrib = Engine.TensorMatMul(_weightsHidden, hiddenCol).Reshape(gateSize);

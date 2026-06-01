@@ -70,6 +70,8 @@ public class ModelStartupService : IHostedService
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        LogCpuInferenceThreadRecommendation();
+
         if (_options.StartupModels == null || _options.StartupModels.Count == 0)
         {
             _logger.LogInformation("No startup models configured");
@@ -109,6 +111,39 @@ public class ModelStartupService : IHostedService
         {
             _logger.LogWarning("{Failed} startup model(s) failed to load. Check configuration and file paths.",
                 failedCount);
+        }
+    }
+
+    /// <summary>
+    /// Logs the one-time CPU-inference thread-pin recommendation. All-core BLAS
+    /// saturates large batch/training GEMMs but oversubscribes the small-batch,
+    /// wide-but-short GEMMs typical of latency-sensitive serving — measured ~1.3×
+    /// faster on the wide layers at <c>ProcessorCount/2</c> threads. The pin must be
+    /// applied ONCE at process start (changing the BLAS thread count later rebuilds
+    /// the thread pool), so it's an operator/deployment action, not something this
+    /// service flips at runtime. We surface the recommendation and report whether a
+    /// thread cap is already in effect via the standard env vars.
+    /// </summary>
+    private void LogCpuInferenceThreadRecommendation()
+    {
+        string? omp = Environment.GetEnvironmentVariable("OMP_NUM_THREADS");
+        string? openblas = Environment.GetEnvironmentVariable("OPENBLAS_NUM_THREADS");
+        int recommended = Math.Max(1, Environment.ProcessorCount / 2);
+
+        if (!string.IsNullOrWhiteSpace(omp) || !string.IsNullOrWhiteSpace(openblas))
+        {
+            _logger.LogInformation(
+                "CPU inference: native BLAS thread cap detected (OMP_NUM_THREADS={Omp}, OPENBLAS_NUM_THREADS={OpenBlas}) on a {Cores}-core host.",
+                omp ?? "unset", openblas ?? "unset", Environment.ProcessorCount);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "CPU inference latency tip: BLAS threads are uncapped on this {Cores}-core host. For low-latency " +
+                "small-batch serving, pin them to ~{Recommended} (≈cores/2) before launch — e.g. set OMP_NUM_THREADS={Recommended} " +
+                "(and OPENBLAS_NUM_THREADS={Recommended}) — or call AiDotNet.Tensors.CpuInferenceConfig.PinBlasThreadsForLatency() " +
+                "once at startup. Measured ~1.3× faster on wide inference GEMMs; all-core oversubscribes small-batch work.",
+                Environment.ProcessorCount, recommended, recommended, recommended);
         }
     }
 

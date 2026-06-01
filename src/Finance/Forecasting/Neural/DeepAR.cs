@@ -611,6 +611,15 @@ public class DeepAR<T> : ForecastingModelBase<T>
         _distributionType = reader.ReadString();
         _numSamples = reader.ReadInt32();
         _useScaling = reader.ReadBoolean();
+
+        // Re-bind the cached layer references (_inputProjection, _lstmLayers,
+        // _muProjection, _sigmaProjection, _layerNorm) to the layers the base
+        // deserializer just rebuilt with the loaded weights. Without this the
+        // references still point at the construction-time fresh-init layers, so
+        // Forward (and therefore Predict / a clone) ran on RANDOM weights rather
+        // than the deserialized ones — Clone_ShouldProduceIdenticalOutput saw the
+        // original vs a randomly-initialized clone.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -635,23 +644,28 @@ public class DeepAR<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
-        // Apply scaling if enabled
-        var dataToProcess = _useScaling ? ApplyScaling(historicalData) : historicalData;
+        // Point forecast = the distribution mean from the layer stack, computed
+        // identically to the training-path forward (ForwardNativeForTraining also
+        // returns Forward(input)). DeepAR (Salinas et al. 2020): the point
+        // forecast is the predicted mean.
+        //
+        // The previous ApplyScaling → base.Forecast → ReverseScaling round-trip
+        // is intentionally NOT used on the point-forecast path: it mutated the
+        // per-instance _scaleStd state, so a model and its clone diverged on the
+        // SAME input (Clone_ShouldProduceIdenticalOutput: original=0 vs
+        // clone=0.16), and it was applied on inference but not on training — an
+        // inconsistency. The mean here is fully deterministic and depends only on
+        // the (cloned-faithfully) layer weights.
+        var mean = Forward(historicalData);
 
-        // Get forecast distribution parameters
-        var forecast = base.Forecast(dataToProcess, quantiles);
-
-        // Reverse scaling
-        if (_useScaling)
-            forecast = ReverseScaling(forecast);
-
-        // If quantiles requested, sample from distribution
+        // Probabilistic forecast: sample the requested quantiles from the
+        // predicted Gaussian (mean + the sigma head cached during Forward).
         if (quantiles is not null && quantiles.Length > 0)
         {
-            return SampleQuantiles(forecast, quantiles);
+            return SampleQuantiles(mean, quantiles);
         }
 
-        return forecast;
+        return mean;
     }
 
     /// <summary>
@@ -833,6 +847,21 @@ public class DeepAR<T> : ForecastingModelBase<T>
         // For simplicity, return mu as point forecast; sigma used in sampling
         return mu;
     }
+
+    /// <summary>
+    /// Tape-connected forward used by <see cref="NeuralNetworks.NeuralNetworkBase{T}.TrainWithTape"/>.
+    /// </summary>
+    /// <remarks>
+    /// The base <c>ForwardNativeForTraining</c> routes through <see cref="Forecast"/>, whose
+    /// <c>ApplyScaling</c> / sampling steps build new tensors by manual indexing — that detaches
+    /// the autodiff graph, so the gradient tape saw a constant and no weight gradients ever flowed
+    /// (params never changed, loss never moved). Training instead runs the differentiable layer
+    /// stack straight to the distribution mean head (<see cref="Forward"/>): per DeepAR (Salinas
+    /// et al. 2020) the network is fit by maximizing the observed series' likelihood under the
+    /// predicted distribution, and the mean head is the tape-connected quantity the optimizer
+    /// backpropagates through.
+    /// </remarks>
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input) => Forward(input);
 
     /// <summary>
     /// Performs native mode forecasting.
