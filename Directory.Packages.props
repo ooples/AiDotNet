@@ -46,10 +46,10 @@
          materializer so fresh-Vector ops returned all-zeros on the GPU backend
          (corrupted GAMLSS and any model trained via AiModelBuilder's
          auto-detected GPU path). 0.86.6 materializes those immediately. -->
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.86.7" />
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.86.6" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.86.6" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.86.6" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.90.3" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.90.3" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.90.3" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.90.3" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.8" />
