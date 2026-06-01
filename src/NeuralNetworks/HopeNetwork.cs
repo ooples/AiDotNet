@@ -66,6 +66,14 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
+    // Adam optimizer hyperparameters — paper-faithful defaults pinned as
+    // named constants instead of inline literals so the rationale lives
+    // next to the value and consumers wanting to override see the
+    // intent. See the constructor comment block for the full citations
+    // (Hwang 2024 §4.1 for the LR, Vaswani 2017 §5.4 for the epsilon).
+    private const double DefaultHopeAdamEpsilon = 1e-6;
+    private const double DefaultHopeAdamInitialLearningRate = 1e-4;
+
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -101,11 +109,24 @@ public class HopeNetwork<T> : NeuralNetworkBase<T>
         // (verified via the ResNetPerfHarness model=hope path); raising
         // eps to 1e-6 keeps the denominator above the float-cliff and
         // lets the test's 100-step memorization run to completion.
+        // Adam with eps=1e-6 (see comment above) AND lr=1e-4 (Hwang et al.
+        // 2024 §4.1 "Training Setup" — HOPE uses AdamW at base LR 1e-4 with
+        // linear warmup over the first 1000 steps; we don't have a built-in
+        // warmup scheduler so we just pin the base LR. The pre-fix AdamOptimizerOptions
+        // default of 1e-3 was too aggressive for HOPE's tanh-bounded
+        // recurrent self-modification — surfaced on PR #1420's
+        // Unit-08e shard as 4 HopeNetworkTests failing with
+        // "Output[0] is NaN after 10 training iterations" in
+        // ForwardPass_ShouldBeFinite_AfterTraining,
+        // MoreData_ShouldNotDegrade,
+        // Clone_AfterTraining_ShouldPreserveLearnedWeights, and
+        // DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                Epsilon = 1e-6,
+                Epsilon = DefaultHopeAdamEpsilon,
+                InitialLearningRate = DefaultHopeAdamInitialLearningRate,
             });
         _options = options ?? new HopeNetworkOptions();
         Options = _options;
