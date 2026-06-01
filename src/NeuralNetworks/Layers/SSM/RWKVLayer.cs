@@ -363,12 +363,12 @@ public partial class RWKVLayer<T> : LayerBase<T>
                     T mu_r = _timeMixR[d];
                     T mu_k = _timeMixK[d];
                     T mu_v = _timeMixV[d];
-                    T curr = x_t[new[] { bi, d }];
-                    T prev = xPrev[new[] { bi, d }];
+                    T curr = x_t[bi, d];
+                    T prev = xPrev[bi, d];
 
                     // For receptance, key, value: different shifts stored in 'shifted' temporarily
                     // We compute all three at once for each position
-                    shifted[new[] { bi, d }] = curr;  // Will be used for individual projections
+                    shifted[bi, d] = curr;  // Will be used for individual projections
                 }
             }
 
@@ -381,15 +381,15 @@ public partial class RWKVLayer<T> : LayerBase<T>
             {
                 for (int d = 0; d < _modelDimension; d++)
                 {
-                    T curr = x_t[new[] { bi, d }];
-                    T prev = xPrev[new[] { bi, d }];
-                    rInput[new[] { bi, d }] = NumOps.Add(
+                    T curr = x_t[bi, d];
+                    T prev = xPrev[bi, d];
+                    rInput[bi, d] = NumOps.Add(
                         NumOps.Multiply(_timeMixR[d], curr),
                         NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixR[d]), prev));
-                    kInput[new[] { bi, d }] = NumOps.Add(
+                    kInput[bi, d] = NumOps.Add(
                         NumOps.Multiply(_timeMixK[d], curr),
                         NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixK[d]), prev));
-                    vInput[new[] { bi, d }] = NumOps.Add(
+                    vInput[bi, d] = NumOps.Add(
                         NumOps.Multiply(_timeMixV[d], curr),
                         NumOps.Multiply(NumOps.Subtract(NumOps.One, _timeMixV[d]), prev));
                 }
@@ -417,11 +417,11 @@ public partial class RWKVLayer<T> : LayerBase<T>
                     for (int di = 0; di < _headDimension; di++)
                     {
                         int flatD = dimStart + di;
-                        T kVal = k[new[] { bi, flatD }];
-                        T bonusVal = _bonus[new[] { hi, di }];
+                        T kVal = k[bi, flatD];
+                        T bonusVal = _bonus[hi, di];
 
                         // Numerator and denominator update with decay (clamped to prevent overflow)
-                        double rawDecay = NumOps.ToDouble(decay[new[] { bi, flatD }]);
+                        double rawDecay = NumOps.ToDouble(decay[bi, flatD]);
                         double clampedDecay = Math.Min(rawDecay, 80.0);
                         T decayVal = NumOps.FromDouble(-Math.Exp(clampedDecay));
                         T decayFactor = NumOps.FromDouble(
@@ -434,9 +434,9 @@ public partial class RWKVLayer<T> : LayerBase<T>
                         for (int vi = 0; vi < _headDimension; vi++)
                         {
                             int flatV = dimStart + vi;
-                            T vVal = v[new[] { bi, flatV }];
+                            T vVal = v[bi, flatV];
 
-                            T prevNum = stateNum[new[] { bi, hi, di, vi }];
+                            T prevNum = stateNum[bi, hi, di, vi];
                             double kValD = Math.Min(NumOps.ToDouble(kVal), 80.0);
                             T expK = NumOps.FromDouble(Math.Exp(kValD));
 
@@ -444,7 +444,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
                             T newNum = NumOps.Add(
                                 NumOps.Multiply(decayFactor, prevNum),
                                 NumOps.Multiply(expK, vVal));
-                            stateNum[new[] { bi, hi, di, vi }] = newNum;
+                            stateNum[bi, hi, di, vi] = newNum;
 
                             // Current token bonus (clamped)
                             double kBonusD = Math.Min(NumOps.ToDouble(NumOps.Add(kVal, bonusVal)), 80.0);
@@ -453,10 +453,10 @@ public partial class RWKVLayer<T> : LayerBase<T>
 
                             if (vi == di)  // Diagonal contribution for denominator
                             {
-                                T prevDen = stateDen[new[] { bi, hi, di }];
+                                T prevDen = stateDen[bi, hi, di];
                                 T newDen = NumOps.Add(
                                     NumOps.Multiply(decayFactor, prevDen), expK);
-                                stateDen[new[] { bi, hi, di }] = newDen;
+                                stateDen[bi, hi, di] = newDen;
                                 den = newDen;
                             }
 
@@ -465,7 +465,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
 
                         // Normalize and apply receptance gate
                         T rVal = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(
-                            -NumOps.ToDouble(r[new[] { bi, flatD }]))));  // sigmoid(r)
+                            -NumOps.ToDouble(r[bi, flatD]))));  // sigmoid(r)
 
                         T safeDiv = NumOps.GreaterThan(
                             NumOps.FromDouble(Math.Abs(NumOps.ToDouble(den))),
@@ -473,7 +473,7 @@ public partial class RWKVLayer<T> : LayerBase<T>
                             ? NumOps.Divide(num, den)
                             : num;
 
-                        wkvOutput[new[] { bi, flatD }] = NumOps.Multiply(rVal, safeDiv);
+                        wkvOutput[bi, flatD] = NumOps.Multiply(rVal, safeDiv);
                     }
                 }
             }
@@ -513,12 +513,12 @@ public partial class RWKVLayer<T> : LayerBase<T>
             {
                 for (int d = 0; d < _modelDimension; d++)
                 {
-                    T curr = x_t[new[] { bi, d }];
-                    T prev = xPrev[new[] { bi, d }];
-                    rInput[new[] { bi, d }] = NumOps.Add(
+                    T curr = x_t[bi, d];
+                    T prev = xPrev[bi, d];
+                    rInput[bi, d] = NumOps.Add(
                         NumOps.Multiply(_channelMixR[d], curr),
                         NumOps.Multiply(NumOps.Subtract(NumOps.One, _channelMixR[d]), prev));
-                    kInput[new[] { bi, d }] = NumOps.Add(
+                    kInput[bi, d] = NumOps.Add(
                         NumOps.Multiply(_channelMixK[d], curr),
                         NumOps.Multiply(NumOps.Subtract(NumOps.One, _channelMixK[d]), prev));
                 }
@@ -537,9 +537,9 @@ public partial class RWKVLayer<T> : LayerBase<T>
             {
                 for (int d = 0; d < expandedDim; d++)
                 {
-                    T val = kProj[new[] { bi, d }];
+                    T val = kProj[bi, d];
                     if (NumOps.GreaterThan(val, NumOps.Zero))
-                        kSquared[new[] { bi, d }] = NumOps.Multiply(val, val);
+                        kSquared[bi, d] = NumOps.Multiply(val, val);
                 }
             }
 

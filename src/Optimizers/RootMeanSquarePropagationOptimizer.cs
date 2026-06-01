@@ -38,8 +38,26 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this RMSprop instance for the fused kernel (Tensors
+    /// <c>OptimizerType.RMSprop</c> = <c>RMSpropUpdateSimd(lr, decay, eps)</c>):
+    /// Decay → Beta2 slot, Epsilon → eps. No momentum/weight-decay term. Declines
+    /// (eager) on adaptive LR or an unmappable scheduler. Parity-gated.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.RMSprop,
+            (float)GetCurrentLearningRate(),
+            0f, (float)_options.Decay, (float)_options.Epsilon, 0f, schedule);
+        return true;
+    }
+
     /// <summary>
     /// Moving average of squared gradients for each parameter.
     /// </summary>

@@ -746,6 +746,11 @@ public class MQCNN<T> : ForecastingModelBase<T>
         _numEncoderLayers = reader.ReadInt32();
         _numDecoderLayers = reader.ReadInt32();
         _dropout = reader.ReadDouble();
+
+        // Re-point cached layer references at the freshly deserialized Layers;
+        // otherwise a clone's forward uses the stale random-initialized layers
+        // created by CreateNewInstance and diverges from the original.
+        ExtractLayerReferences();
     }
 
     #endregion

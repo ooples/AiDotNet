@@ -33,8 +33,26 @@ namespace AiDotNet.Optimizers;
 /// </remarks>
 [ComponentType(ComponentType.Optimizer)]
 [PipelineStage(PipelineStage.Training)]
-public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>
+public class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
+    /// <summary>
+    /// Describes this Lion instance for the fused kernel (Tensors
+    /// <c>OptimizerType.Lion</c> = <c>LionUpdateSimd(lr, b1, b2, wd)</c>):
+    /// Beta1/Beta2 → β1/β2, WeightDecay → wd. No epsilon term. Declines (eager)
+    /// on adaptive LR or an unmappable scheduler. Parity-gated.
+    /// </summary>
+    bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
+    {
+        config = default;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.Lion,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, 0f, (float)_options.WeightDecay, schedule);
+        return true;
+    }
+
     /// <summary>
     /// The options specific to the Lion optimizer.
     /// </summary>

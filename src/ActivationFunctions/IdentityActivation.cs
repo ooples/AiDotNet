@@ -30,8 +30,15 @@ namespace AiDotNet.ActivationFunctions;
 [ActivationTask(ActivationTask.HiddenLayer)]
 [ActivationTask(ActivationTask.OutputLayer)]
 [ActivationProperty(IsMonotonic = true, ZeroPreserving = true, IsBounded = false, Cost = ComputeCost.Low)]
-public class IdentityActivation<T> : ActivationFunctionBase<T>
+public class IdentityActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivation
 {
+    /// <inheritdoc/>
+    bool Fused.IFusedActivation.TryGetFusedActivation(out AiDotNet.Tensors.Engines.FusedActivationType type)
+    {
+        type = AiDotNet.Tensors.Engines.FusedActivationType.None;
+        return true;
+    }
+
     /// <summary>
     /// Applies the Identity activation function to a single value.
     /// </summary>

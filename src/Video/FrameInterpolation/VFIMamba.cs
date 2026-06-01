@@ -234,15 +234,15 @@ public class VFIMamba<T> : FrameInterpolationBase<T>
         _options.NumStages = reader.ReadInt32();
         _options.LearningRate = reader.ReadDouble();
         _options.DropoutRate = reader.ReadDouble();
+        // Native-mode layers (with their trained weights) are already reconstructed by
+        // the base DeserializeInternalUnchecked before this override runs, so do NOT
+        // clear + re-initialize them here — that would discard the deserialized weights
+        // and leave the model randomly initialized (breaking clone/load parity). Only an
+        // ONNX session needs rebuilding from its path.
         if (!_useNativeMode && _options.ModelPath is { } p && !string.IsNullOrEmpty(p))
         {
             OnnxModel?.Dispose();
             OnnxModel = new OnnxModel<T>(p, _options.OnnxOptions);
-        }
-        else if (_useNativeMode)
-        {
-            Layers.Clear();
-            InitializeLayers();
         }
     }
 

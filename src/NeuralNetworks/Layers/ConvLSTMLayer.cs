@@ -614,8 +614,11 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
 
         _lastInput = input5D;
 
-        // Rent output (fully overwritten), states need zero init for initial timestep
-        var output = TensorAllocator.Rent<T>([batchSize, timeSteps, height, width, _filters]);
+        // Collect per-time-step hidden states for a tape-connected concat (states
+        // need zero init for the initial timestep). A pre-allocated tensor written
+        // with SetSlice would detach the output from the recurrence and stop
+        // gradients reaching the conv-gate weights.
+        var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
         _lastHiddenState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
         _lastCellState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
 
@@ -624,9 +627,11 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>
             // Slice along dimension 1 (time) to get [batchSize, height, width, channels]
             var xt = input5D.GetSliceAlongDimension(t, 1);
             (_lastHiddenState, _lastCellState) = ConvLSTMCell(xt, _lastHiddenState, _lastCellState);
-            // Set slice along dimension 1 (time) in output
-            output.SetSlice(1, t, _lastHiddenState);
+            hiddenStatesList.Add(Engine.Reshape(_lastHiddenState, new[] { batchSize, 1, height, width, _filters }));
         }
+
+        // Assemble [batch, timeSteps, height, width, filters] on the tape.
+        var output = Engine.TensorConcatenate(hiddenStatesList.ToArray(), axis: 1);
 
         // Restore original batch dimensions for any-rank support (via Engine
         // so the reshape stays on the gradient tape).

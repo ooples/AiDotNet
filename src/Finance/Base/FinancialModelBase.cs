@@ -618,6 +618,15 @@ public abstract class FinancialModelBase<T> : NeuralNetworkBase<T>, IFinancialMo
         if (!UseNativeMode)
             throw new InvalidOperationException(
                 "Training is only supported in native mode.");
+
+        // This override bypasses NeuralNetworkBase.ForwardForTraining, which is
+        // where layer RandomSeeds are normally wired. Without this, stochastic
+        // layers (DropoutLayer) train with order-dependent masks drawn from the
+        // process-shared RNG, so memorization/loss-decrease invariants pass in
+        // isolation but fail once earlier tests advance that RNG. Wire the seeds
+        // here so the dropout stream is reproducible per (RandomSeed, forward).
+        EnsureLayerRandomSeedsWired();
+
         return ForwardNativeForTraining(input);
     }
 

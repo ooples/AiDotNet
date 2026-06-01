@@ -568,8 +568,11 @@ public class CRNN<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>
         ImageSize = imageSize;
         base.MaxSequenceLength = maxSeqLen;
 
-        Layers.Clear();
-        InitializeLayers();
+        // Native-mode layers (with their trained weights) are already reconstructed by
+        // the base DeserializeInternalUnchecked before this override runs, so do NOT
+        // clear + re-initialize them here — that would discard the deserialized weights
+        // and leave the model randomly initialized. (In ONNX mode InitializeLayers is a
+        // no-op, so dropping the call changes nothing there.)
     }
 
     /// <inheritdoc/>

@@ -302,12 +302,29 @@ public class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
     private Tensor<T> DetokenizeVQTokens(int[] visualTokenIds)
     {
         int outSize = _options.OutputImageSize;
-        int gridSize = (int)Math.Round(Math.Sqrt(visualTokenIds.Length));
+        // Floor (not round) the side length so gridSize² ≤ token count — the
+        // token stream may carry trailing tokens that don't complete another
+        // full grid row, and rounding up would demand more tokens than exist.
+        int gridSize = (int)Math.Floor(Math.Sqrt(visualTokenIds.Length));
         if (gridSize <= 0) gridSize = 24;
+
+        // LookupGrid requires an exact gridSize×gridSize token count, so pass
+        // precisely the leading square block (explicit, not a silent truncation).
+        int gridTokenCount = gridSize * gridSize;
+        int[] gridTokenIds;
+        if (visualTokenIds.Length == gridTokenCount)
+        {
+            gridTokenIds = visualTokenIds;
+        }
+        else
+        {
+            gridTokenIds = new int[gridTokenCount];
+            Array.Copy(visualTokenIds, gridTokenIds, Math.Min(gridTokenCount, visualTokenIds.Length));
+        }
 
         // Look up each token's codebook embedding to form an [gridSize, gridSize, embedDim] feature map.
         int embedDim = _vqCodebook.EmbeddingDim;
-        var embedGrid = _vqCodebook.LookupGrid(visualTokenIds, gridSize, gridSize);
+        var embedGrid = _vqCodebook.LookupGrid(gridTokenIds, gridSize, gridSize);
 
         // 4 × 2× nearest-neighbour upsamples + tanh-bounded 1×1 pixel projection: deterministic
         // analogue of the trained VQ-VAE-2 deconv decoder (Razavi et al. 2019).

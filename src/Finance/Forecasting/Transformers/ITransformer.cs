@@ -484,6 +484,12 @@ public class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
+        // Idempotent: ExtractLayerReferences runs in the ctor AND again after
+        // deserialize. Without clearing, the post-deserialize call appends onto
+        // the construction-time references, so a clone runs a doubled encoder
+        // stack and drifts from the original.
+        _encoderLayers.Clear();
+
         int idx = 0;
         if (Layers.Count > idx)
             _variateEmbedding = Layers[idx++];
@@ -742,6 +748,11 @@ public class ITransformer<T> : ForecastingModelBase<T>
         _feedForwardDimension = reader.ReadInt32();
         _useInstanceNormalization = reader.ReadBoolean();
         _dropout = reader.ReadDouble();
+
+        // Re-bind cached layer references to the deserialized (weight-loaded)
+        // layers so a clone runs on the trained weights, not construction-time
+        // random init.
+        ExtractLayerReferences();
     }
 
     #endregion
@@ -1070,26 +1081,13 @@ public class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> InvertInput(Tensor<T> input)
     {
-        int batchSize = input.Rank == 3 ? input.Shape[0] : 1;
-        int seqLen = input.Rank == 3 ? input.Shape[1] : input.Shape[0];
-        int features = input.Rank == 3 ? input.Shape[2] : input.Shape[1];
-
-        var invertedData = new T[input.Length];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                for (int t = 0; t < seqLen; t++)
-                {
-                    int srcIdx = (b * seqLen * features) + (t * features) + f;
-                    int dstIdx = (b * features * seqLen) + (f * seqLen) + t;
-                    invertedData[dstIdx] = input.Data.Span[srcIdx];
-                }
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, features, seqLen }, new Vector<T>(invertedData));
+        // Invert the sequence/feature axes so attention runs over variates
+        // (iTransformer, Liu et al. 2024). Tape-connected permute — the previous
+        // manual index copy built a detached tensor and crashed on non-rank-3
+        // input. [B, seq, feat] -> [B, feat, seq]; rank-2 [seq, feat] -> [feat, seq].
+        return input.Rank == 3
+            ? Engine.TensorPermute(input, new[] { 0, 2, 1 })
+            : Engine.TensorPermute(input, new[] { 1, 0 });
     }
 
     /// <summary>
@@ -1106,26 +1104,13 @@ public class ITransformer<T> : ForecastingModelBase<T>
     /// </remarks>
     private Tensor<T> UninvertOutput(Tensor<T> output)
     {
-        int batchSize = output.Shape[0];
-        int features = output.Shape[1];
-        int predHorizon = output.Shape[2];
-
-        var uninvertedData = new T[output.Length];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < predHorizon; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    int srcIdx = (b * features * predHorizon) + (f * predHorizon) + t;
-                    int dstIdx = (b * predHorizon * features) + (t * features) + f;
-                    uninvertedData[dstIdx] = output.Data.Span[srcIdx];
-                }
-            }
-        }
-
-        return new Tensor<T>(new[] { batchSize, predHorizon, features }, new Vector<T>(uninvertedData));
+        // Transpose back from [B, feat, pred] to [B, pred, feat]. This sits
+        // BETWEEN the layers and the loss, so it MUST be tape-connected or the
+        // gradient never reaches the layer weights — the manual index copy
+        // detached the graph (zero gradients). rank-2 [feat, pred] -> [pred, feat].
+        return output.Rank == 3
+            ? Engine.TensorPermute(output, new[] { 0, 2, 1 })
+            : Engine.TensorPermute(output, new[] { 1, 0 });
     }
 
     #endregion
@@ -1173,12 +1158,13 @@ public class ITransformer<T> : ForecastingModelBase<T>
             if (_instanceMean is null || _instanceStd is null)
                 return input;
 
-            for (int i = 0; i < input.Length; i++)
-            {
-                int statIdx = i % _numFeatures;
-                T scaled = NumOps.Multiply(input.Data.Span[i], _instanceStd.Data.Span[statIdx]);
-                result.Data.Span[i] = NumOps.Add(scaled, _instanceMean.Data.Span[statIdx]);
-            }
+            // Tape-connected denormalization: output * std + mean, broadcasting the
+            // per-feature stats [numFeatures] across the leading [batch, horizon]
+            // dims (features is the trailing axis). Manual per-element indexing here
+            // detached the graph right before the loss, zeroing all gradients. The
+            // RevIN stats are treated as constants (paper-faithful affine reverse).
+            var scaled = Engine.TensorBroadcastMultiply(input, _instanceStd);
+            return Engine.TensorBroadcastAdd(scaled, _instanceMean);
         }
 
         return result;
