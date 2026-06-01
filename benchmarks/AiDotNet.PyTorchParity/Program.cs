@@ -224,18 +224,24 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             // so both report the same kind of memory number.
             process.Refresh();
             var peakBefore = process.WorkingSet64 / 1024d / 1024d;
-            var steady = new List<double>();
-            var peak = peakBefore;
+            var steady = new List<double>(options.InferenceIterations);
 
+            // Steady-state latency: a TIGHT loop timing only model.Forward(). Do NOT
+            // sample process memory inside this loop — Process.Refresh()/WorkingSet64 is
+            // a per-call syscall that also allocates, and its GC churn fires during a
+            // later timed Forward, inflating the mean and especially p95 (it made the
+            // CNN read ~740 µs / p95 1.1 ms vs a clean ~270 µs steady state). RSS is a
+            // whole-process resident-set figure that barely moves per inference, so
+            // sampling it once after the loop is sufficient for the report.
             for (var i = 0; i < options.InferenceIterations; i++)
             {
                 var timer = Stopwatch.StartNew();
                 model.Forward();
                 timer.Stop();
                 steady.Add(timer.Elapsed.TotalSeconds);
-                process.Refresh();
-                peak = Math.Max(peak, process.WorkingSet64 / 1024d / 1024d);
             }
+            process.Refresh();
+            var peak = Math.Max(peakBefore, process.WorkingSet64 / 1024d / 1024d);
             var totalSteady = steady.Sum();
             // p95 latency (symmetric with the PyTorch side): robust to the
             // rig-contention noise that swings the mean. The Tensors perf gate is
