@@ -156,6 +156,29 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private readonly AiDotNet.Configuration.IAiModelTrainingCore<T, TInput, TOutput> _trainingCore
         = new AiDotNet.Configuration.AiModelTrainingCore<T, TInput, TOutput>();
 
+    // audit-2026-05 phase 2a slice 3 — cross-validation concern.
+    private readonly AiDotNet.Configuration.IAiModelCrossValidation<T, TInput, TOutput> _crossValidation
+        = new AiDotNet.Configuration.AiModelCrossValidation<T, TInput, TOutput>();
+
+    // audit-2026-05 phase 2a slice 4 — compliance concern (bias, fairness, interpretability,
+    // adversarial robustness, safety filtering).
+    private readonly AiDotNet.Configuration.IAiModelCompliance<T, TInput, TOutput> _compliance
+        = new AiDotNet.Configuration.AiModelCompliance<T, TInput, TOutput>();
+
+    // audit-2026-05 phase 2a slice 12 — license / enterprise-gate concern. Holds both the user-
+    // supplied AiDotNetLicenseKey and the cached LicenseValidator; ConfigureLicenseKey resets
+    // the validator any time the key changes.
+    private AiDotNet.Configuration.IAiModelLicensing? _licensing;
+
+    // audit-2026-05 phase 2a slice 9 — storage / artifact-management concern.
+    private readonly AiDotNet.Configuration.IAiModelStorage<T, TInput, TOutput> _storage
+        = new AiDotNet.Configuration.AiModelStorage<T, TInput, TOutput>();
+
+    // audit-2026-05 phase 2a slice 10 — observability concern (benchmarking, profiling,
+    // telemetry, GPU diagnostics).
+    private readonly AiDotNet.Configuration.IAiModelObservability _observability
+        = new AiDotNet.Configuration.AiModelObservability();
+
     private PreprocessingPipeline<T, TInput, TInput>? _preprocessingPipeline;
     private PostprocessingPipeline<T, TOutput, TOutput>? _postprocessingPipeline;
 
@@ -506,7 +529,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
             throw new ArgumentException("Config file path cannot be null or empty.", nameof(configFilePath));
         }
 
-        _licenseKey = licenseKey;
+        _licensing = new AiDotNet.Configuration.AiModelLicensing(licenseKey);
+        _licenseKey = _licensing.LicenseKey;
 
         var fullPath = Path.GetFullPath(configFilePath);
         if (!File.Exists(fullPath))
@@ -529,7 +553,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public AiModelBuilder(AiDotNetLicenseKey? licenseKey = null)
     {
-        _licenseKey = licenseKey;
+        _licensing = new AiDotNet.Configuration.AiModelLicensing(licenseKey);
+        _licenseKey = _licensing.LicenseKey;
     }
 
     /// <summary>
@@ -803,9 +828,9 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <inheritdoc />
     public IAiModelBuilder<T, TInput, TOutput> ConfigureLicenseKey(AiDotNetLicenseKey licenseKey)
     {
-        Guard.NotNull(licenseKey);
-        _licenseKey = licenseKey;
-        _licenseValidator = null; // Reset cached validator when key changes
+        _licensing!.ConfigureLicenseKey(licenseKey);
+        _licenseKey = _licensing.LicenseKey;
+        _licenseValidator = _licensing.Validator;
         return this;
     }
 
@@ -5137,7 +5162,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureBiasDetector(IBiasDetector<T> detector)
     {
-        _biasDetector = detector;
+        _compliance.ConfigureBiasDetector(detector);
+        _biasDetector = _compliance.BiasDetector;
         return this;
     }
 
@@ -5154,7 +5180,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureFairnessEvaluator(IFairnessEvaluator<T> evaluator)
     {
-        _fairnessEvaluator = evaluator;
+        _compliance.ConfigureFairnessEvaluator(evaluator);
+        _fairnessEvaluator = _compliance.FairnessEvaluator;
         return this;
     }
 
@@ -5198,7 +5225,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureInterpretability(InterpretabilityOptions? options = null)
     {
-        _interpretabilityOptions = options ?? new InterpretabilityOptions();
+        _compliance.ConfigureInterpretability(options);
+        _interpretabilityOptions = _compliance.InterpretabilityOptions;
         return this;
     }
 
@@ -5255,7 +5283,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureAdversarialRobustness(
         AdversarialRobustnessConfiguration<T, TInput, TOutput>? configuration = null)
     {
-        _adversarialRobustnessConfiguration = configuration ?? new AdversarialRobustnessConfiguration<T, TInput, TOutput>();
+        _compliance.ConfigureAdversarialRobustness(configuration);
+        _adversarialRobustnessConfiguration = _compliance.AdversarialRobustnessConfiguration;
         return this;
     }
 
@@ -5575,7 +5604,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCrossValidation(ICrossValidator<T, TInput, TOutput> crossValidator)
     {
-        _crossValidator = crossValidator;
+        _crossValidation.ConfigureCrossValidation(crossValidator);
+        _crossValidator = _crossValidation.CrossValidator;
         return this;
     }
 
@@ -6205,25 +6235,29 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     public IAiModelBuilder<T, TInput, TOutput> ConfigureCaching(CacheConfig? config = null)
     {
-        _cacheConfig = config;
+        _storage.ConfigureCaching(config);
+        _cacheConfig = _storage.CacheConfig;
         return this;
     }
 
     public IAiModelBuilder<T, TInput, TOutput> ConfigureVersioning(VersioningConfig? config = null)
     {
-        _versioningConfig = config;
+        _storage.ConfigureVersioning(config);
+        _versioningConfig = _storage.VersioningConfig;
         return this;
     }
 
     public IAiModelBuilder<T, TInput, TOutput> ConfigureABTesting(ABTestingConfig? config = null)
     {
-        _abTestingConfig = config;
+        _storage.ConfigureABTesting(config);
+        _abTestingConfig = _storage.ABTestingConfig;
         return this;
     }
 
     public IAiModelBuilder<T, TInput, TOutput> ConfigureTelemetry(TelemetryConfig? config = null)
     {
-        _telemetryConfig = config;
+        _observability.ConfigureTelemetry(config);
+        _telemetryConfig = _observability.TelemetryConfig;
         return this;
     }
 
@@ -6476,23 +6510,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     public IAiModelBuilder<T, TInput, TOutput> ConfigureGpuDiagnostics(
         AiDotNet.Configuration.GpuDiagnosticsOptions? options = null)
     {
-        if (options is null) return this;
-
-        // Level wins over Verbose when both set — Level is the richer API.
-        if (options.Level is AiDotNet.Configuration.GpuDiagnosticLevel level)
-        {
-            AiDotNet.Configuration.GpuDiagnosticsConfig.Level = level;
-        }
-        else if (options.Verbose is bool verbose)
-        {
-            AiDotNet.Configuration.GpuDiagnosticsConfig.Verbose = verbose;
-        }
-
-        if (options.Sink is AiDotNet.Configuration.GpuDiagnosticSink sink)
-        {
-            AiDotNet.Configuration.GpuDiagnosticsConfig.Sink = sink;
-        }
-
+        _observability.ConfigureGpuDiagnostics(options);
         return this;
     }
 
@@ -6510,7 +6528,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null)
     {
-        _benchmarkingOptions = options ?? new BenchmarkingOptions();
+        _observability.ConfigureBenchmarking(options);
+        _benchmarkingOptions = _observability.BenchmarkingOptions;
         return this;
     }
 
@@ -6543,7 +6562,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureProfiling(ProfilingConfig? config = null)
     {
-        _profilingConfig = config ?? new ProfilingConfig { Enabled = true };
+        _observability.ConfigureProfiling(config);
+        _profilingConfig = _observability.ProfilingConfig;
         return this;
     }
 
@@ -6577,8 +6597,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureSafety(Action<AiDotNet.Safety.SafetyConfig>? configure = null)
     {
-        _safetyPipelineConfig = new AiDotNet.Safety.SafetyConfig();
-        configure?.Invoke(_safetyPipelineConfig);
+        _compliance.ConfigureSafety(configure);
+        _safetyPipelineConfig = _compliance.SafetyPipelineConfig;
         return this;
     }
 
@@ -6612,7 +6632,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureExperimentTracker(IExperimentTracker<T> tracker)
     {
-        _experimentTracker = tracker;
+        _storage.ConfigureExperimentTracker(tracker);
+        _experimentTracker = _storage.ExperimentTracker;
         return this;
     }
 
@@ -6713,7 +6734,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureModelRegistry(IModelRegistry<T, TInput, TOutput> registry)
     {
-        _modelRegistry = registry;
+        _storage.ConfigureModelRegistry(registry);
+        _modelRegistry = _storage.ModelRegistry;
         return this;
     }
 
@@ -6728,7 +6750,8 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </remarks>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureDataVersionControl(IDataVersionControl<T> dataVersionControl)
     {
-        _dataVersionControl = dataVersionControl;
+        _storage.ConfigureDataVersionControl(dataVersionControl);
+        _dataVersionControl = _storage.DataVersionControl;
         return this;
     }
 
