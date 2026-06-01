@@ -537,7 +537,11 @@ public class MGTSD<T> : TimeSeriesFoundationModelBase<T>
                 T abarT = _alphasCumprod[t];
                 T abarPrev = t > 0 ? _alphasCumprod[t - 1] : NumOps.One;
                 T oneMinusAbarT = NumOps.Add(NumOps.Subtract(NumOps.One, abarT), eps10);
-                T oneMinusAbarPrev = NumOps.Subtract(NumOps.One, abarPrev);
+                // Apply the same eps10 stabilization as oneMinusAbarT for defensive consistency:
+                // although the linear beta schedule keeps ᾱ_{t-1} < 1 for t > 0 (and the t = 0 branch
+                // forces σ_t = 0 / z = 0, so the value is unused), this guards any future schedule
+                // whose ᾱ_{t-1} → 1 underflows the numerator/denominator below.
+                T oneMinusAbarPrev = NumOps.Add(NumOps.Subtract(NumOps.One, abarPrev), eps10);
                 T coefX0 = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(abarPrev), betaT), oneMinusAbarT);
                 T coefXt = NumOps.Divide(NumOps.Multiply(NumOps.Sqrt(alphaT), oneMinusAbarPrev), oneMinusAbarT);
                 T sigmaT = t > 0 ? NumOps.Sqrt(NumOps.Divide(NumOps.Multiply(betaT, oneMinusAbarPrev), oneMinusAbarT)) : NumOps.Zero;
