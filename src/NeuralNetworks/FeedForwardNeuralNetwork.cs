@@ -365,7 +365,10 @@ public class FeedForwardNeuralNetwork<T> : NeuralNetworkBase<T>
         if (inFeatures != plan.InputFeatures) return false;
 
         var inputArr = (float[])(object)input.GetDataArray();
-        var outArr = new float[(long)batch * plan.OutputFeatures];
+        // Array lengths are int in C#; compute the output element count in a checked int so an
+        // oversized batch×features product throws OverflowException rather than silently wrapping
+        // (the prior (long) length forced an int-narrowing conversion at the array creation site).
+        var outArr = new float[checked(batch * plan.OutputFeatures)];
         plan.Run(inputArr, batch, outArr);
 
         var resultShape = input.Rank == 2 ? new[] { batch, plan.OutputFeatures } : new[] { plan.OutputFeatures };

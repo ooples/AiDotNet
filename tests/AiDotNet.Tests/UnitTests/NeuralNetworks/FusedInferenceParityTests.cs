@@ -30,9 +30,10 @@ public class FusedInferenceParityTests
         new object[] { "Swish", new SwishActivation<float>() },
         new object[] { "SiLU", new SiLUActivation<float>() },
         new object[] { "LeakyReLU", new LeakyReLUActivation<float>() },
-        // Mish and ELU are intentionally excluded: the shipped Tensors
-        // FusedLinear/MlpForward path has no kernel for them (see
-        // MishAndElu_ReportNoFusedKernel below). Tracked by Tensors #499.
+        new object[] { "Mish", new MishActivation<float>() },
+        // ELU is intentionally excluded: the FusedLinear/MlpForward path still has
+        // no ELU kernel (see Elu_ReportsNoFusedKernel below). Mish's kernel shipped
+        // in Tensors #499 (0.90.0+), so it is now parity-checked above.
     };
 
     /// <summary>
@@ -98,20 +99,21 @@ public class FusedInferenceParityTests
     }
 
     /// <summary>
-    /// Mish and ELU must NOT advertise a fused kernel: the shipped Tensors
-    /// FusedLinear/MlpForward activation tables register only
-    /// None/ReLU/GELU/Sigmoid/Tanh/LeakyReLU/Swish, so routing Mish/ELU through
-    /// the fused path would throw. They stay on the exact generic path until the
-    /// kernels are added (Tensors #499). This test locks that contract so the
-    /// activations aren't silently re-wired before the kernel exists.
+    /// ELU must NOT advertise a fused kernel: the FusedLinear/MlpForward activation tables have no
+    /// ELU kernel, so routing it through the fused path would throw. It stays on the exact generic
+    /// path until a kernel is added. (Mish's kernel shipped in Tensors #499 / 0.90.0+, so Mish now
+    /// DOES advertise a fused kernel and is parity-checked in
+    /// <see cref="FusedActivationKernel_MatchesScalarActivation"/>.) This locks the contract so ELU
+    /// isn't silently re-wired before its kernel exists.
     /// </summary>
     [Fact]
-    public void MishAndElu_ReportNoFusedKernel()
+    public void Elu_ReportsNoFusedKernel()
     {
-        Assert.False(new MishActivation<float>() is AiDotNet.ActivationFunctions.Fused.IFusedActivation,
-            "Mish must not claim a fused kernel — the FusedLinear path has none (Tensors #499)");
         Assert.False(new ELUActivation<float>() is AiDotNet.ActivationFunctions.Fused.IFusedActivation,
-            "ELU must not claim a fused kernel — the FusedLinear path has none (Tensors #499)");
+            "ELU must not claim a fused kernel — the FusedLinear path has none");
+        // Mish, by contrast, now legitimately advertises a fused kernel (Tensors #499).
+        Assert.True(new MishActivation<float>() is AiDotNet.ActivationFunctions.Fused.IFusedActivation,
+            "Mish should claim a fused kernel — the FusedLinear Mish kernel shipped in Tensors #499 (0.90.0+)");
     }
 
     /// <summary>

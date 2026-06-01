@@ -452,7 +452,10 @@ internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
     protected override int OutputClasses => 10;
     protected override NeuralNetworkBase<float> BuildNetwork()
     {
-        // Conv2d(1,16,3,pad=1)+ReLU+MaxPool(2)+Conv2d(16,32,3,pad=1)+ReLU+MaxPool(2)+Flatten+Linear(10).
+        // Mirror the PyTorch CNN exactly (benchmark.py): Conv2d(1,16,3,pad=1)+ReLU+MaxPool(2) +
+        // Conv2d(16,32,3,pad=1)+ReLU+AdaptiveAvgPool2d((4,4)) + Flatten + Linear(32*4*4=512, 10).
+        // (Previously the second stage used MaxPool(2) → 32×7×7=1568-wide head, a different workload
+        // and head size than PyTorch's 512-wide head, making the parity numbers non-comparable.)
         var layers = new List<ILayer<float>>
         {
             new ConvolutionalLayer<float>(outputDepth: 16, kernelSize: 3, stride: 1, padding: 1,
@@ -460,7 +463,7 @@ internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
             new MaxPoolingLayer<float>(poolSize: 2, stride: 2),
             new ConvolutionalLayer<float>(outputDepth: 32, kernelSize: 3, stride: 1, padding: 1,
                                           activationFunction: new ReLUActivation<float>()),
-            new MaxPoolingLayer<float>(poolSize: 2, stride: 2),
+            new AdaptiveAveragePoolingLayer<float>(outputHeight: 4, outputWidth: 4),
             new FlattenLayer<float>(),
             new DenseLayer<float>(10, activationFunction: (IActivationFunction<float>?)null),
         };
